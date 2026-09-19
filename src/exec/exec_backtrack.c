@@ -91,6 +91,19 @@ typedef struct {
  * Only ever reached on the way *into* a state. A state that succeeded made
  * the whole run return, so a bit that is set is a state that failed, and a
  * state that failed once fails always.
+ *
+ * The bitmap is not cleared between starting positions, which is what makes
+ * the whole *search* linear rather than each attempt. That is sound for the
+ * same reason - but it takes one more step to see it for the one thing in
+ * this engine that is not a function of (pc, position): the empty-match
+ * rule, which reads the attempt's own start through `slots[0]`.
+ *
+ * It holds because the starts only increase. Suppose an attempt from `s`
+ * reaches MATCH at `p` and is refused for being empty; then `s == p`, and
+ * every later attempt starts after `p` and so cannot produce a match that
+ * *ends* at `p`. The refused state is therefore never reached again, and
+ * memoising it cannot hide an acceptance. If instead `s < p` the match is
+ * not empty, is accepted, and the run returns before anything is memoised.
  */
 static int already_tried(Backtrack * bt, uint32_t pc, size_t position) {
   if (!bt->visited) {

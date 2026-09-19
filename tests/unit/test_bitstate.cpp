@@ -228,6 +228,58 @@ TEST(BitState, AgreesWithTheOtherEnginesOnEveryGroup) {
   }
 }
 
+TEST(BitState, TheEmptyMatchRuleSurvivesTheMemo) {
+  // The one thing the memo's key does not capture is the attempt's own
+  // start, which the empty-match rule reads. The argument that this is still
+  // sound is in already_tried()'s comment; these are the cases it is about.
+  Regex regex("x*");
+  ASSERT_TRUE(regex.ok());
+
+  GRX_SearchOptions options;
+  grx_search_options_default(&options);
+  options.engine = GRX_ENGINE_BITSTATE;
+
+  // An empty match at the start is refused; the one at the next position is
+  // not, and must not have been memoised away by the refusal.
+  options.flags = GRX_SEARCH_NOTEMPTY_ATSTART;
+  Match match(regex);
+  int matched = 0;
+  ASSERT_EQ(grx_regex_search_ex(regex.get(), "ab", 2, &options, match.get(),
+                &matched),
+      GRX_OK);
+  EXPECT_EQ(spans_of(match.get(), matched), "1..1");
+
+  // And the three engines still agree about it.
+  for (const char * pattern : {"x*", "a*", "(a)?", ""}) {
+    Regex each(pattern);
+    ASSERT_TRUE(each.ok()) << pattern;
+    for (uint32_t flags : {(uint32_t)GRX_SEARCH_NOTEMPTY_ATSTART,
+             (uint32_t)GRX_SEARCH_NOTEMPTY}) {
+      GRX_SearchOptions probe;
+      grx_search_options_default(&probe);
+      probe.flags = flags;
+
+      Match bits(each);
+      Match back(each);
+      int a = 0;
+      int b = 0;
+      probe.engine = GRX_ENGINE_BITSTATE;
+      GRX_Result first = grx_regex_search_ex(each.get(), "aab", 3, &probe,
+          bits.get(), &a);
+      probe.engine = GRX_ENGINE_BACKTRACK;
+      ASSERT_EQ(grx_regex_search_ex(each.get(), "aab", 3, &probe, back.get(),
+                    &b),
+          GRX_OK);
+      if (first == GRX_ERR_UNSUPPORTED) {
+        continue;
+      }
+      ASSERT_EQ(first, GRX_OK) << pattern;
+      EXPECT_EQ(spans_of(bits.get(), a), spans_of(back.get(), b))
+          << "/" << pattern << "/ with flags " << flags;
+    }
+  }
+}
+
 TEST(BitState, LeftmostFirstSurvivesTheMemo) {
   // The memo skips a state that failed. A state that *succeeded* returned,
   // so the first success found is still the highest-priority one - which is
