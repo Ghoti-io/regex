@@ -145,14 +145,36 @@ static GRX_Result exec(const GRX_Regex * regex, const char * subject,
     empty_rule = GRX_EMPTY_REJECT_AT_START;
   }
 
+  // Engine selection. The table, and a test per row, is in
+  // tests/unit/test_exec.cpp:
+  //
+  //   | the program is           | AUTO picks  | PIKE       | BITSTATE   |
+  //   | ----------------------- | ----------- | ---------- | ---------- |
+  //   | regular                  | Pike        | runs it    | runs it    |
+  //   | not regular, memoizable  | bit-state   | refused    | runs it    |
+  //   | not regular, not memo.   | backtracker | refused    | refused    |
+  //
+  // AUTO prefers Pike for a regular program rather than the bit-state
+  // engine, even though both are linear: Pike's memory is bounded by the
+  // *program* and bit-state's by the program times the subject. Choosing
+  // bit-state for a regular program is a speed decision, and speed decisions
+  // are Phase 8 (documentation/design.md section 3.5.5).
   GRX_Engine engine = options->engine;
   int needs_backtracking = grx_exec_program_needs_backtracking(regex);
+  int memoizable = grx_exec_program_is_memoizable(regex);
   if (engine == GRX_ENGINE_AUTO) {
-    engine = needs_backtracking ? GRX_ENGINE_BACKTRACK : GRX_ENGINE_PIKE;
+    engine = !needs_backtracking ? GRX_ENGINE_PIKE
+        : memoizable             ? GRX_ENGINE_BITSTATE
+                                 : GRX_ENGINE_BACKTRACK;
   }
   else if (engine == GRX_ENGINE_PIKE && needs_backtracking) {
     // Asked for by name, so the answer is that it cannot be done, not a
     // silent substitution of the engine that can hang.
+    return GRX_ERR_UNSUPPORTED;
+  }
+  else if (engine == GRX_ENGINE_BITSTATE && !memoizable) {
+    // Same rule: the memo would be unsound for this program, and running it
+    // without the memo would be the backtracker under another name.
     return GRX_ERR_UNSUPPORTED;
   }
 
@@ -178,6 +200,7 @@ static GRX_Result exec(const GRX_Regex * regex, const char * subject,
     .limits = limits,
     .match = match,
     .out_steps = &steps,
+    .memoize = engine == GRX_ENGINE_BITSTATE,
   };
 
   GRX_Result result = engine == GRX_ENGINE_PIKE

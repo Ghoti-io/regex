@@ -75,6 +75,7 @@ typedef struct GRX_ExecRequest {
   const GRX_Limits * limits; ///< Caps to apply. Never NULL.
   GRX_Match * match;        ///< Receives the spans. May be NULL.
   size_t * out_steps;       ///< Receives the step count. May be NULL.
+  int memoize;              ///< Run the backtracker with a visited bitmap.
 } GRX_ExecRequest;
 
 /**
@@ -117,6 +118,38 @@ static inline int grx_exec_accepts(
  * @return Non-zero when only the backtracking engine can run it.
  */
 int grx_exec_program_needs_backtracking(const GRX_Regex * regex);
+
+/**
+ * @brief Whether a program's behaviour is a function of (instruction,
+ * position) alone.
+ *
+ * The bit-state engine memoises on exactly that pair, so anything the
+ * program carries *between* those two - a captured span a backreference will
+ * compare against, a progress register an empty-iteration guard will test -
+ * makes the memo unsound: two paths reaching the same instruction at the
+ * same position would behave differently, and the second would be wrongly
+ * skipped.
+ *
+ * Lookaround and recursion are excluded for the same reason a sub-run would
+ * need a bitmap of its own (documentation/design.md section 3.5.3).
+ *
+ * @param regex The compiled regex. NULL returns 0.
+ * @return Non-zero when the bit-state engine may run it.
+ */
+int grx_exec_program_is_memoizable(const GRX_Regex * regex);
+
+/**
+ * @brief Bytes the bit-state engine's bitmap would need for a subject.
+ *
+ * One bit per instruction per position, plus the end position. Returns
+ * GRX_NPOS when the product overflows, which a caller must treat as "will
+ * not fit" rather than as a small number.
+ *
+ * @param regex The compiled regex. NULL returns GRX_NPOS.
+ * @param length The subject length in bytes.
+ * @return The size in bytes, or GRX_NPOS on overflow.
+ */
+size_t grx_exec_bitmap_bytes(const GRX_Regex * regex, size_t length);
 
 /**
  * @brief Run one attempt on the Pike VM: lockstep, linear in the subject.

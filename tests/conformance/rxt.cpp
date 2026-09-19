@@ -225,6 +225,9 @@ bool parse_engines(
     else if (field == "backtrack") {
       record->engines.push_back(GRX_ENGINE_BACKTRACK);
     }
+    else if (field == "bitstate") {
+      record->engines.push_back(GRX_ENGINE_BITSTATE);
+    }
     else {
       *out_error = "unknown engine: " + field;
       return false;

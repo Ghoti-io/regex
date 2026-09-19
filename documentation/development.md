@@ -142,29 +142,32 @@ format changed and this page was not.
 
 ```
 regex: syntax=ecmascript options=0x00000040 captures=1 regular=yes
-program: flags=0x00000001 prefer=leftmost-first iterate=advance-one insts=15 classes=0 registers=1
+program: flags=0x00000001 prefer=leftmost-first iterate=advance-one insts=13 classes=0 registers=0
      0  save           0  (group 0 start)
      1  reset          slots 2..3
      2  save           2  (group 1 start)
      3  char           'a'
      4  save           3  (group 1 end)
-     5  split          6, 13
-     6  progress-set   r0
-     7  reset          slots 2..3
-     8  save           2  (group 1 start)
-     9  char           'a'
-    10  save           3  (group 1 end)
-    11  progress-check r0, 13  (fail)
-    12  jmp            5
-    13  save           1  (group 0 end)
-    14  match
+     5  split          6, 11
+     6  reset          slots 2..3
+     7  save           2  (group 1 start)
+     8  char           'a'
+     9  save           3  (group 1 end)
+    10  jmp            5
+    11  save           1  (group 0 end)
+    12  match
 ```
 
-Fifteen instructions for four characters of pattern is what expansion costs:
+Thirteen instructions for four characters of pattern is what expansion costs:
 the `+` is one mandatory copy of the body and then an unbounded loop over a
-second, and each copy carries the dialect's two loop rules as a `reset` and a
-`progress-check`. A `reverse` flag appears on the consuming instructions of a
-lookbehind body.
+second, and each copy carries the dialect's capture rule as a `reset`. There
+is no `progress-set`/`progress-check` pair here because `(a)` cannot match
+the empty string, so the loop cannot stall; write `/(a*)+/u` instead and the
+pair appears, with `registers=1`. That absence is not only two instructions
+saved - a progress register is per-thread history, and a program that has
+none is a program the bit-state engine can memoise
+([design.md](design.md) section 3.5.3). A `reverse` flag appears on the
+consuming instructions of a lookbehind body.
 
 Code points are escaped in all three (`\x0A`, `\u{1F600}`), so a pattern
 containing a newline still dumps as one line per node and a diff stays

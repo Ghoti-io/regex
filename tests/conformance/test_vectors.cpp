@@ -156,6 +156,15 @@ Outcome run_record(const grxtest::Record & record) {
     if (facts.is_regular) {
       engines.push_back(GRX_ENGINE_PIKE);
     }
+    // The bit-state engine is the backtracker with a memo, so asking it on
+    // every vector it is eligible for is how "the memo never changes an
+    // answer" gets checked - on a thousand real patterns rather than on the
+    // handful a unit test would think to write. A program it cannot run
+    // comes back GRX_ERR_UNSUPPORTED below, so asking costs nothing.
+    if (!facts.has_backreference && !facts.has_lookaround
+        && !facts.has_recursion) {
+      engines.push_back(GRX_ENGINE_BITSTATE);
+    }
     engines.push_back(GRX_ENGINE_BACKTRACK);
   }
 
@@ -175,8 +184,18 @@ Outcome run_record(const grxtest::Record & record) {
     GRX_Result result = grx_regex_search(regex, record.subject.data(),
         record.subject.size(), 0, engine, limits, match, &matched);
 
-    std::string engine_name
-        = engine == GRX_ENGINE_PIKE ? "pike" : "backtrack";
+    std::string engine_name = engine == GRX_ENGINE_PIKE ? "pike"
+        : engine == GRX_ENGINE_BITSTATE                   ? "bitstate"
+                                                          : "backtrack";
+
+    // A program whose behaviour depends on more than (instruction,
+    // position) is refused by the bit-state engine rather than run without
+    // its memo. That is an answer, not a failure, and the other engines
+    // have already covered the vector.
+    if (engine == GRX_ENGINE_BITSTATE && result == GRX_ERR_UNSUPPORTED) {
+      grx_match_destroy(match);
+      continue;
+    }
 
     if (record.expectation == grxtest::Expectation::Limit) {
       if (result != GRX_ERR_LIMIT) {

@@ -179,6 +179,7 @@
 // The intermediate representation, and lowering into it.
 #define GRX_NamedSet GHOTIIO_REGEX(GRX_NamedSet)
 #define grx_analyze_ir GHOTIIO_REGEX(grx_analyze_ir)
+#define grx_ir_can_match_empty GHOTIIO_REGEX(grx_ir_can_match_empty)
 #define grx_lower_pattern GHOTIIO_REGEX(grx_lower_pattern)
 #define grx_named_set GHOTIIO_REGEX(grx_named_set)
 #define grx_newline_set GHOTIIO_REGEX(grx_newline_set)
@@ -225,6 +226,9 @@
 #define grx_template_parse GHOTIIO_REGEX(grx_template_parse)
 #define grx_exec_program_needs_backtracking                                    \
   GHOTIIO_REGEX(grx_exec_program_needs_backtracking)
+#define grx_exec_program_is_memoizable                                         \
+  GHOTIIO_REGEX(grx_exec_program_is_memoizable)
+#define grx_exec_bitmap_bytes GHOTIIO_REGEX(grx_exec_bitmap_bytes)
 
 // Code-point ranges, the shape every set in the library has.
 #define GRX_CharRange GHOTIIO_REGEX(GRX_CharRange)

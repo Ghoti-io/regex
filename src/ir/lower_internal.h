@@ -123,6 +123,26 @@ GRX_Result grx_lower_pattern(const GRX_Pattern * pattern,
  */
 GRX_Result grx_analyze_ir(const GRX_IR * ir, GRX_Facts * out_facts);
 
+/**
+ * @brief Whether a subtree can match the empty string.
+ *
+ * The same walk grx_analyze_ir() uses, asked about one node. Codegen needs
+ * it to decide whether a repeat needs its empty-iteration guard at all: a
+ * body that cannot match empty cannot stall, so the guard - two instructions
+ * and a progress register per loop - is dead weight, and its absence is what
+ * makes a program memoizable by the bit-state engine.
+ *
+ * Asking analysis rather than deciding here is deliberate: "can this match
+ * empty" is already written down once, and a second implementation in
+ * codegen would be a second place for it to be wrong about `(?=x)` or an
+ * unset backreference.
+ *
+ * @param ir The lowered pattern.
+ * @param node_index The subtree root.
+ * @return Non-zero when it can match empty, or when that cannot be decided.
+ */
+int grx_ir_can_match_empty(const GRX_IR * ir, uint32_t node_index);
+
 #ifdef __cplusplus
 }
 #endif

@@ -396,3 +396,25 @@ GRX_Result grx_analyze_ir(const GRX_IR * ir, GRX_Facts * out_facts) {
 
   return GRX_OK;
 }
+
+int grx_ir_can_match_empty(const GRX_IR * ir, uint32_t node_index) {
+  // Conservative when it cannot tell: "yes" is the answer that makes the
+  // caller keep its empty-iteration guard, and a guard that was not needed
+  // costs two instructions. Answering "no" wrongly would remove the thing
+  // that stops `(a*)*` looping.
+  if (!ir || node_index == GRX_INDEX_NONE) {
+    return 1;
+  }
+
+  Analysis analysis = {
+    .ir = ir,
+    .is_regular = 1,
+    .has_backreference = 0,
+    .has_lookaround = 0,
+    .has_recursion = 0,
+    .max_lookbehind = 0,
+    .depth = 0,
+  };
+  Span span = walk(&analysis, node_index);
+  return span.min_length == 0;
+}

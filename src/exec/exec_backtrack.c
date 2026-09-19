@@ -70,7 +70,41 @@ typedef struct {
   size_t steps;          ///< Instructions executed, against max_steps.
   int utf;               ///< Whether a step is a code point or a byte.
   GRX_Result failure;    ///< Set when a limit stopped the run.
+
+  /**
+   * The bit-state engine's visited set: one bit per (instruction, position),
+   * or NULL when this run is the plain backtracker.
+   *
+   * Indexed pc * (length + 1) + position. It is *not* cleared between
+   * starting positions, and that is the whole of what makes the search
+   * linear rather than merely each attempt: a state that failed from an
+   * earlier start will fail from a later one, because what it does next
+   * depends on nothing else.
+   */
+  unsigned char * visited;
+  size_t stride;         ///< Positions per instruction: length + 1.
 } Backtrack;
+
+/**
+ * Whether (pc, position) has been tried already; records it if not.
+ *
+ * Only ever reached on the way *into* a state. A state that succeeded made
+ * the whole run return, so a bit that is set is a state that failed, and a
+ * state that failed once fails always.
+ */
+static int already_tried(Backtrack * bt, uint32_t pc, size_t position) {
+  if (!bt->visited) {
+    return 0;
+  }
+  size_t index = (size_t)pc * bt->stride + position;
+  size_t byte = index >> 3;
+  unsigned char bit = (unsigned char)(1u << (index & 7u));
+  if (bt->visited[byte] & bit) {
+    return 1;
+  }
+  bt->visited[byte] |= bit;
+  return 0;
+}
 
 /** The smallest stack the engine allocates, so a simple match grows nothing. */
 #define GRX_BACKTRACK_MIN_STACK 64
@@ -337,6 +371,13 @@ static int run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
     if (limits->max_steps && bt->steps > limits->max_steps) {
       bt->failure = GRX_ERR_LIMIT;
       return 0;
+    }
+
+    if (already_tried(bt, pc, position)) {
+      if (!backtrack(bt, &pc, &position, floor)) {
+        return 0;
+      }
+      continue;
     }
 
     const GRX_Inst * inst
@@ -630,6 +671,8 @@ GRX_Result grx_exec_backtrack(
     .steps = 0,
     .utf = (program->flags & GRX_PROGRAM_UTF) != 0,
     .failure = GRX_OK,
+    .visited = NULL,
+    .stride = request->length + 1,
   };
   if (!bt.allocator) {
     bt.allocator = grx_allocator_default();
@@ -639,6 +682,25 @@ GRX_Result grx_exec_backtrack(
       bt.allocator, (bt.captures + bt.registers) * sizeof(size_t));
   if (!bt.slots) {
     return GRX_ERR_OOM;
+  }
+
+  if (request->memoize) {
+    size_t bytes = grx_exec_bitmap_bytes(request->regex, request->length);
+    if (bytes == GRX_NPOS
+        || (request->limits->max_match_memory
+            && bytes > request->limits->max_match_memory)) {
+      // Refused rather than run without the bitmap: a caller who named this
+      // engine asked for the linear-time guarantee, and quietly giving them
+      // the exponential one is the substitution GRX_ENGINE_PIKE already
+      // refuses to make.
+      gcu_allocator_free(bt.allocator, bt.slots);
+      return GRX_ERR_LIMIT;
+    }
+    bt.visited = gcu_allocator_calloc(bt.allocator, bytes, 1);
+    if (!bt.visited) {
+      gcu_allocator_free(bt.allocator, bt.slots);
+      return GRX_ERR_OOM;
+    }
   }
 
   GRX_Result result = GRX_OK;
@@ -693,6 +755,7 @@ GRX_Result grx_exec_backtrack(
   if (request->out_steps) {
     *request->out_steps = bt.steps;
   }
+  gcu_allocator_free(bt.allocator, bt.visited);
   gcu_allocator_free(bt.allocator, bt.slots);
   gcu_allocator_free(bt.allocator, bt.stack);
   return result;

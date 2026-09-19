@@ -3,19 +3,22 @@
  *
  * Execution: running a compiled regex against a subject, and the match result.
  *
- * Two engines, because no single one covers the dialects:
+ * Three engines, because no single one covers the dialects:
  *
  * - The Pike VM runs the whole program in lockstep and so is linear in the
  *   subject length, but cannot express a backreference.
  * - The backtracking engine can, at the cost of an exponential worst case,
  *   which is what GRX_Limits::max_steps and max_backtrack exist to bound.
+ * - The bit-state engine is the backtracker with a memo, which buys back the
+ *   linear bound for the programs whose behaviour depends on nothing but
+ *   where they are.
  *
- * GRX_ENGINE_AUTO picks the first that can run the program. A caller that
- * needs the linear-time guarantee asks for GRX_ENGINE_PIKE by name and gets
- * GRX_ERR_UNSUPPORTED for a pattern that cannot have it, rather than silently
+ * GRX_ENGINE_AUTO picks the one with the strongest guarantee that can run the
+ * program. A caller who needs that guarantee asks for an engine by name and
+ * gets GRX_ERR_UNSUPPORTED for a pattern it cannot run, rather than silently
  * getting the engine that can hang.
  *
- * Status: both engines are built. The constructs neither runs yet -
+ * Status: all three are built. The constructs none of them runs yet -
  * conditionals, recursion and the backtracking control verbs - compile and
  * are then refused, rather than being ignored: a plausible wrong answer is
  * worse than no answer.
@@ -43,6 +46,24 @@ typedef enum {
   GRX_ENGINE_AUTO = 0, ///< The fastest engine that can run this program.
   GRX_ENGINE_PIKE,     ///< Lockstep NFA simulation; linear time, no backrefs.
   GRX_ENGINE_BACKTRACK, ///< Backtracking; every feature, bounded by the limits.
+  /**
+   * Backtracking with a visited bitmap over (instruction, position).
+   *
+   * The same engine as GRX_ENGINE_BACKTRACK and the same answers, with one
+   * addition: a state already tried and failed is not tried again. That
+   * turns the exponential case into a linear one, at the cost of one bit per
+   * instruction per subject position - which is why it is bounded by
+   * GRX_Limits::max_match_memory and refused rather than degraded when the
+   * bitmap will not fit.
+   *
+   * It is sound only for a program whose behaviour at a given instruction
+   * and position does not depend on how it got there: no backreference
+   * (which depends on what a group captured), no lookaround, no recursion,
+   * and no empty-iteration guard (whose progress register is per-thread
+   * history). grx_regex_facts() reports the first three; the fourth shows in
+   * a disassembly as `registers=0`.
+   */
+  GRX_ENGINE_BITSTATE,
   GRX_ENGINE_COUNT     ///< Closes the enum; not an engine.
 } GRX_Engine;
 

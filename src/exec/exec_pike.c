@@ -741,3 +741,37 @@ int grx_exec_program_needs_backtracking(const GRX_Regex * regex) {
   // anything rather than the one that cannot.
   return !regex->facts.is_regular;
 }
+
+int grx_exec_program_is_memoizable(const GRX_Regex * regex) {
+  if (!regex) {
+    return 0;
+  }
+
+  // Read from the facts for the first three, for the same reason the line
+  // above does. The fourth is read from the program, because "this loop
+  // needs an empty-iteration guard" is a codegen decision and the register
+  // count is where codegen records it: a program with no progress registers
+  // has no per-thread history at all, which is exactly the condition the
+  // memo needs.
+  return !regex->facts.has_backreference && !regex->facts.has_lookaround
+      && !regex->facts.has_recursion && regex->program.register_count == 0;
+}
+
+size_t grx_exec_bitmap_bytes(const GRX_Regex * regex, size_t length) {
+  if (!regex) {
+    return GRX_NPOS;
+  }
+  size_t instructions = regex->program.insts.count;
+  if (!instructions) {
+    return 0;
+  }
+  if (length == GRX_NPOS) {
+    return GRX_NPOS;
+  }
+  size_t positions = length + 1;
+  if (positions > GRX_NPOS / instructions) {
+    return GRX_NPOS;
+  }
+  size_t bits = instructions * positions;
+  return bits / 8 + 1;
+}

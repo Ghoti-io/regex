@@ -323,7 +323,14 @@ static GRX_Result gen_alternate(Codegen * codegen, const GRX_IRNode * node) {
 static GRX_Result gen_star(
     Codegen * codegen, const GRX_IRNode * node, uint32_t body_index) {
   int lazy = node->mode == GRX_REPEAT_LAZY;
-  uint32_t reg = codegen->registers++;
+
+  // A body that cannot match the empty string cannot stall, so it needs no
+  // guard. Emitting one anyway would be two dead instructions per loop and -
+  // the reason this is a decision rather than a tidy-up - would make the
+  // program unmemoizable: a progress register is history the bit-state
+  // engine's (pc, position) key does not capture.
+  int guard = grx_ir_can_match_empty(codegen->ir, body_index);
+  uint32_t reg = guard ? codegen->registers++ : 0;
 
   uint32_t top = here(codegen);
   uint32_t split = GRX_INDEX_NONE;
@@ -333,7 +340,10 @@ static GRX_Result gen_star(
   }
 
   uint32_t body_start = here(codegen);
-  result = emit(codegen, GRX_OP_PROGRESS_SET, 0, reg, 0, node, NULL);
+  result = GRX_OK;
+  if (guard) {
+    result = emit(codegen, GRX_OP_PROGRESS_SET, 0, reg, 0, node, NULL);
+  }
   if (result == GRX_OK) {
     result = emit_capture_reset(codegen, node, body_index);
   }
@@ -341,7 +351,7 @@ static GRX_Result gen_star(
     result = gen(codegen, body_index);
   }
   uint32_t check = GRX_INDEX_NONE;
-  if (result == GRX_OK) {
+  if (result == GRX_OK && guard) {
     result = emit(codegen, GRX_OP_PROGRESS_CHECK, node->empty_loop, reg, 0,
         node, &check);
   }
@@ -353,7 +363,9 @@ static GRX_Result gen_star(
   }
 
   uint32_t exit_target = here(codegen);
-  patch_y(codegen, check, exit_target);
+  if (guard) {
+    patch_y(codegen, check, exit_target);
+  }
   if (lazy) {
     patch_x(codegen, split, exit_target);
     patch_y(codegen, split, body_start);
@@ -411,8 +423,10 @@ static GRX_Result gen_repeat(Codegen * codegen, const GRX_IRNode * node) {
 
   // One register for the whole expansion. Each copy sets it immediately
   // before its body and checks it immediately after, and a thread meets those
-  // in that order, so the copies cannot tread on each other.
-  uint32_t reg = codegen->registers++;
+  // in that order, so the copies cannot tread on each other. A body that
+  // cannot match empty needs none of it; see gen_star().
+  int guard = grx_ir_can_match_empty(codegen->ir, body);
+  uint32_t reg = guard ? codegen->registers++ : 0;
 
   for (uint32_t i = 0; i < optional; i++) {
     uint32_t split = GRX_INDEX_NONE;
@@ -435,14 +449,17 @@ static GRX_Result gen_repeat(Codegen * codegen, const GRX_IRNode * node) {
     // remaining RepeatMatcher; `(a|){1,2}` against "ab" is what tells the
     // two apart, and the guard is why group 1 comes out as "a" rather than
     // as the empty string the second iteration would have set it to.
-    result = emit(codegen, GRX_OP_PROGRESS_SET, 0, reg, 0, node, NULL);
+    result = GRX_OK;
+    if (guard) {
+      result = emit(codegen, GRX_OP_PROGRESS_SET, 0, reg, 0, node, NULL);
+    }
     if (result == GRX_OK) {
       result = emit_capture_reset(codegen, node, body);
     }
     if (result == GRX_OK) {
       result = gen(codegen, body);
     }
-    if (result == GRX_OK) {
+    if (result == GRX_OK && guard) {
       result = emit(codegen, GRX_OP_PROGRESS_CHECK, node->empty_loop, reg,
           stub, node, NULL);
     }

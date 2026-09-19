@@ -97,57 +97,81 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t * data, size_t size) {
 
   GRX_Facts facts;
   grx_regex_facts(regex, &facts);
-  if (!facts.is_regular) {
+
+  // Every engine that can run this program, compared against the first.
+  // Which engines those are is a property of the program, not a fixed pair:
+  // the bit-state engine joined the set in WP-13 and its whole claim - that
+  // skipping an (instruction, position) already tried changes no answer -
+  // is checked here and nowhere else at this scale.
+  GRX_Engine engines[3];
+  size_t engine_count = 0;
+  if (facts.is_regular) {
+    engines[engine_count++] = GRX_ENGINE_PIKE;
+  }
+  if (!facts.has_backreference && !facts.has_lookaround
+      && !facts.has_recursion) {
+    engines[engine_count++] = GRX_ENGINE_BITSTATE;
+  }
+  engines[engine_count++] = GRX_ENGINE_BACKTRACK;
+  if (engine_count < 2) {
     // Only one engine can run it, so the invariant says nothing.
     grx_regex_free(regex);
     return 0;
   }
 
-  GRX_Match * pike = nullptr;
-  GRX_Match * backtrack = nullptr;
-  if (grx_match_create(regex, nullptr, &pike) != GRX_OK
-      || grx_match_create(regex, nullptr, &backtrack) != GRX_OK) {
-    grx_match_destroy(pike);
-    grx_match_destroy(backtrack);
-    grx_regex_free(regex);
-    return 0;
-  }
+  GRX_Match * first_match = nullptr;
+  int first_matched = 0;
+  size_t compared = 0;
 
-  int pike_matched = 0;
-  int backtrack_matched = 0;
-  GRX_Result pike_result = grx_regex_search(regex,
-      reinterpret_cast<const char *>(subject), subject_size, 0,
-      GRX_ENGINE_PIKE, &limits, pike, &pike_matched);
-  GRX_Result backtrack_result = grx_regex_search(regex,
-      reinterpret_cast<const char *>(subject), subject_size, 0,
-      GRX_ENGINE_BACKTRACK, &limits, backtrack, &backtrack_matched);
+  for (size_t i = 0; i < engine_count; i++) {
+    GRX_Match * match = nullptr;
+    if (grx_match_create(regex, nullptr, &match) != GRX_OK) {
+      break;
+    }
 
-  // A limit reached by the backtracker and not the Pike VM is expected and is
-  // not a disagreement: the exponential engine running out of budget is what
-  // the budget is for.
-  if (pike_result == GRX_OK && backtrack_result == GRX_OK) {
-    if (pike_matched != backtrack_matched) {
+    int matched = 0;
+    GRX_Result result = grx_regex_search(regex,
+        reinterpret_cast<const char *>(subject), subject_size, 0, engines[i],
+        &limits, match, &matched);
+
+    // A limit reached by one engine and not another is expected and is not a
+    // disagreement: the exponential engine running out of budget is what the
+    // budget is for, and the bit-state engine refusing a bitmap that will
+    // not fit is what max_match_memory is for.
+    if (result != GRX_OK) {
+      grx_match_destroy(match);
+      continue;
+    }
+
+    if (!compared) {
+      first_match = match;
+      first_matched = matched;
+      compared = 1;
+      continue;
+    }
+
+    if (matched != first_matched) {
       disagreement("one matched and the other did not",
           reinterpret_cast<const char *>(data), pattern_size, subject,
           subject_size);
     }
-    if (pike_matched) {
-      for (size_t i = 0; i < grx_match_count(pike); i++) {
-        GRX_Capture first;
-        GRX_Capture second;
-        grx_match_group(pike, i, &first);
-        grx_match_group(backtrack, i, &second);
-        if (first.start != second.start || first.end != second.end) {
+    if (matched) {
+      for (size_t group = 0; group < grx_match_count(match); group++) {
+        GRX_Capture a;
+        GRX_Capture b;
+        grx_match_group(first_match, group, &a);
+        grx_match_group(match, group, &b);
+        if (a.start != b.start || a.end != b.end) {
           disagreement("a group landed in a different place",
               reinterpret_cast<const char *>(data), pattern_size, subject,
               subject_size);
         }
       }
     }
+    grx_match_destroy(match);
   }
 
-  grx_match_destroy(pike);
-  grx_match_destroy(backtrack);
+  grx_match_destroy(first_match);
   grx_regex_free(regex);
   return 0;
 }

@@ -354,7 +354,19 @@ recursion. RE2 uses exactly this for small programs because it delivers
 leftmost-first captures more cheaply than the Pike VM. Here its second value
 is that it extends the linear-time guarantee to atomic groups, possessive
 quantifiers and conditionals on group-set, none of which the Pike VM can run.
-The memory budget is `max_match_memory` (§6.2).
+The memory budget is `max_match_memory` (§6.2), and a bitmap that will not
+fit in it is `GRX_ERR_LIMIT` rather than a silent fall back to the engine
+that can hang.
+
+**Built.** One condition was missing from the list above and is worth
+naming, because it is not obvious: a program carrying an *empty-iteration
+guard* is also not memoizable. The guard's progress register records where
+the current iteration began, and two paths reaching the same instruction at
+the same position with different register values behave differently - so
+the memo would skip a state that had not really been tried. Codegen
+therefore emits the guard only for a repeat whose body can match the empty
+string, which is both the condition for needing it and, as `registers=0` in
+a disassembly, the way to see that a program is memoizable.
 
 #### 3.5.4 The equivalence invariant
 

@@ -91,9 +91,10 @@ expect: limit
 - `expect`: `<start>-<end>` per group, `-` for a group that did not
   participate; `nomatch`; `error <syntax|unsupported|limit|invalid>`; or
   `limit` for a search that must hit `max_steps`.
-- `engines:` restricts which engines are asked (default: every eligible
-  one); `limits:` overrides a limit for the record; `skip: <reason>`
-  records a known deviation without deleting the evidence.
+- `engines:` restricts which engines are asked - `pike`, `backtrack`,
+  `bitstate` - and defaults to every eligible one; `limits:` overrides a
+  limit for the record; `skip: <reason>` records a known deviation without
+  deleting the evidence.
 - `unicode:` at file level: the oracle's Unicode version, for the skip rule
   in [unicode.md](unicode.md) §1.
 
@@ -208,9 +209,10 @@ spellings each side accepts is the syntax check's question.
 
 ### The cross-engine check
 
-`make check-engine-equivalence` runs the same rows through both engines and
-requires the same answer. design.md section 3.5.4 is the invariant; this is
-what enforces it, along with the `crossengine` fuzz harness.
+`make check-engine-equivalence` runs the same rows through every engine that
+can run them and requires the same answer. design.md section 3.5.4 is the
+invariant; this is what enforces it, along with the `crossengine` fuzz
+harness.
 
 It is the strongest cheap test the library has and it needs no oracle
 installed. The Pike VM merges threads in lockstep and the backtracker walks
@@ -218,9 +220,18 @@ one path with an explicit undo stack; they share the instruction set and
 nothing else, so a disagreement is a defect in one of them and there is
 nowhere for a shared mistake to hide.
 
-A limit reached by the backtracker and not by the Pike VM is not a
-disagreement. It is the exponential engine running out of budget, which is
-what the budget is for.
+The bit-state engine is the exception to "nothing else": it *is* the
+backtracker, with a visited bitmap over (instruction, position). Comparing
+it against the backtracker therefore checks one specific claim rather than
+two implementations - that skipping a state already tried changes no answer
+- and it checks that claim on 322 of the 1,567 vectors, which is every one
+whose program it is allowed to run. Against the Pike VM it is a real
+second opinion again.
+
+A limit reached by one engine and not another is not a disagreement. It is
+the exponential engine running out of budget, which is what the budget is
+for - or the bit-state engine refusing a bitmap that will not fit in
+`max_match_memory`, which is what that budget is for.
 
 ### The differential match check
 
