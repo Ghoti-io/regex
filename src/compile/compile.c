@@ -21,40 +21,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "../core/core_internal.h"
 #include "compile_internal.h"
-
-/** The mnemonic for one opcode, for grx_regex_dump(). */
-static const char * opcode_name(GRX_Opcode op) {
-  switch (op) {
-    case GRX_OP_MATCH:
-      return "match";
-    case GRX_OP_CHAR:
-      return "char";
-    case GRX_OP_CLASS:
-      return "class";
-    case GRX_OP_ANY:
-      return "any";
-    case GRX_OP_SPLIT:
-      return "split";
-    case GRX_OP_JMP:
-      return "jmp";
-    case GRX_OP_SAVE:
-      return "save";
-    case GRX_OP_ASSERT:
-      return "assert";
-    case GRX_OP_BACKREF:
-      return "backref";
-    case GRX_OP_LOOKAROUND:
-      return "lookaround";
-    case GRX_OP_ATOMIC:
-      return "atomic";
-    case GRX_OP_RECURSE:
-      return "recurse";
-    case GRX_OP_COUNT:
-    default:
-      return "?";
-  }
-}
 
 GRX_Result grx_compile_program(const GRX_Pattern * pattern,
     const GRX_Limits * limits, const GRX_Allocator * allocator,
@@ -66,15 +34,50 @@ GRX_Result grx_compile_program(const GRX_Pattern * pattern,
   if (!out_regex) {
     return GRX_ERR_INVALID;
   }
-  if (out_error) {
-    out_error->code = GRX_ERR_UNSUPPORTED;
-    out_error->offset = GRX_NPOS;
-    const char * message = "the compiler is not implemented yet";
-    size_t length = strlen(message);
-    memcpy(out_error->message, message, length + 1);
+
+  return grx_error_set(out_error, GRX_ERR_UNSUPPORTED,
+      GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, GRX_NPOS, 0);
+}
+
+void grx_facts_init(GRX_Facts * facts) {
+  if (!facts) {
+    return;
   }
 
-  return GRX_ERR_UNSUPPORTED;
+  // Every field is the value that claims nothing. A caller must be able to
+  // read facts from a regex that analysis has not touched and be misled by
+  // none of them, so "regular" is false, the length bounds are as wide as
+  // they go, and no prefilter is offered.
+  *facts = (GRX_Facts) {
+    .is_regular = 0,
+    .anchored_start = 0,
+    .anchored_end = 0,
+    .can_match_empty = 1,
+    .has_backreference = 0,
+    .has_lookaround = 0,
+    .has_recursion = 0,
+    .has_duplicate_names = 0,
+    .min_length = 0,
+    .max_length = GRX_NPOS,
+    .max_lookbehind = 0,
+    .capture_count = 0,
+    .program_size = 0,
+    .literal_prefix = NULL,
+    .literal_prefix_length = 0,
+    .required_literal = NULL,
+    .required_literal_length = 0,
+    .first_bytes_known = 0,
+    .first_bytes = {0},
+  };
+}
+
+GRX_Result grx_regex_facts(const GRX_Regex * regex, GRX_Facts * out_facts) {
+  if (!regex || !out_facts) {
+    return GRX_ERR_INVALID;
+  }
+
+  *out_facts = regex->facts;
+  return GRX_OK;
 }
 
 GRX_Result grx_regex_compile(const char * pattern, GRX_Syntax syntax,
@@ -177,7 +180,7 @@ GRX_Syntax grx_regex_syntax(const GRX_Regex * regex) {
 }
 
 size_t grx_regex_program_size(const GRX_Regex * regex) {
-  return regex ? regex->program.count : 0;
+  return regex ? regex->program.insts.count : 0;
 }
 
 GRX_Result grx_regex_dump(const GRX_Regex * regex, FILE * out) {
@@ -185,17 +188,11 @@ GRX_Result grx_regex_dump(const GRX_Regex * regex, FILE * out) {
     return GRX_ERR_INVALID;
   }
 
-  fprintf(out, "regex: syntax=%s options=0x%08x insts=%zu captures=%zu\n",
-      grx_syntax_name(regex->syntax), regex->options, regex->program.count,
-      regex->capture_count);
+  fprintf(out, "regex: syntax=%s options=0x%08x captures=%zu regular=%s\n",
+      grx_syntax_name(regex->syntax), regex->options, regex->capture_count,
+      regex->facts.is_regular ? "yes" : "no");
 
-  for (size_t i = 0; i < regex->program.count; i++) {
-    const GRX_Inst * inst = &regex->program.insts[i];
-    fprintf(out, "  %4zu  %-10s %10u %10u\n", i, opcode_name(inst->op),
-        inst->x, inst->y);
-  }
-
-  return GRX_OK;
+  return grx_program_dump(&regex->program, out);
 }
 
 void grx_regex_free(GRX_Regex * regex) {
@@ -213,6 +210,6 @@ void grx_regex_free(GRX_Regex * regex) {
     }
     gcu_allocator_free(allocator, regex->capture_names);
   }
-  gcu_allocator_free(allocator, regex->program.insts);
+  grx_program_clear(&regex->program);
   gcu_allocator_free(allocator, regex);
 }

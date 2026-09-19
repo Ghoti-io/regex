@@ -45,7 +45,9 @@ void grx_error_clear(GRX_Error * error) {
   }
 
   error->code = GRX_OK;
+  error->diag = GRX_DIAG_NONE;
   error->offset = GRX_NPOS;
+  error->length = 0;
   error->message[0] = '\0';
 }
 
@@ -63,8 +65,14 @@ void grx_limits_default(GRX_Limits * limits) {
   //
   // The values are first approximations, chosen to be far above any pattern a
   // human writes and far below anything that costs a visible amount of time
-  // or memory. They are the subject of documentation/dialects.md and are
-  // expected to change once the engines exist and can be measured.
+  // or memory. They are the subject of documentation/dialects.md section 7
+  // and are measured rather than guessed by WP-14; until then they are
+  // labelled first approximations and nothing depends on their exact value.
+  //
+  // max_subject_length is the one deliberate zero: a subject is a buffer the
+  // caller already holds, so its size is already bounded by something the
+  // caller decided, and a default cap here would reject a large document for
+  // no reason this library can justify.
   *limits = (GRX_Limits) {
     .max_pattern_length = 65536,
     .max_nesting_depth = 128,
@@ -73,8 +81,11 @@ void grx_limits_default(GRX_Limits * limits) {
     .max_captures = 1000,
     .max_repeat_count = 65536,
     .max_class_ranges = 10000,
+    .max_lookbehind_length = 255,
+    .max_recursion_depth = 256,
     .max_steps = 10000000,
     .max_backtrack = 100000,
+    .max_match_memory = 8 * 1024 * 1024,
     .max_subject_length = 0,
   };
 }

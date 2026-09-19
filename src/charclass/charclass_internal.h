@@ -22,6 +22,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "../core/arena_internal.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -73,6 +75,99 @@ int grx_charclass_contains(const GRX_CharClass * cls, uint32_t codepoint);
  * @param cls The class.
  */
 void grx_charclass_clear(GRX_CharClass * cls);
+
+/**
+ * @brief One canonical class in a @ref GRX_ClassTable: a span of ranges.
+ *
+ * A class becomes a span rather than an object once it is canonical, because
+ * from that point nothing edits it: lowering has applied negation, evaluated
+ * the set operations, expanded the properties and closed it under case
+ * folding, and what remains is a sorted disjoint array that the IR, the
+ * program and the engines all read and none of them writes.
+ */
+typedef struct GRX_ClassRef {
+  uint32_t first; ///< Index of the first range in the table's range arena.
+  uint32_t count; ///< Number of ranges.
+} GRX_ClassRef;
+
+/**
+ * @brief Every canonical class a pattern needs, in two flat arrays.
+ *
+ * Referred to by index from an IR node or an instruction, so that a class is
+ * stored once however many times it is used, and so that an instruction stays
+ * fixed-size however large its class is.
+ */
+typedef struct GRX_ClassTable {
+  GRX_Arena refs;   ///< GRX_ClassRef, one per class.
+  GRX_Arena ranges; ///< GRX_CharRange, shared by every class.
+} GRX_ClassTable;
+
+/**
+ * @brief Prepare an empty class table. Allocates nothing.
+ *
+ * @param table The table. NULL is ignored.
+ * @param allocator Where storage will come from. NULL uses the default.
+ * @param max_ranges Cap on the total range count; 0 for no cap.
+ */
+void grx_class_table_init(GRX_ClassTable * table,
+    const GRX_Allocator * allocator, size_t max_ranges);
+
+/**
+ * @brief Add one canonical class, copying its ranges in.
+ *
+ * The ranges must already be sorted and disjoint; this is the point at which
+ * a class stops being editable, not the point at which it is made canonical.
+ *
+ * @param table The table. NULL is GRX_ERR_INVALID.
+ * @param ranges The ranges. May be NULL only when `count` is 0, which adds
+ *   the empty class - a class that matches nothing, which is what a negated
+ *   class covering every code point canonicalises to.
+ * @param count Number of ranges.
+ * @param out_index Receives the new class's index. Optional.
+ * @return GRX_OK, GRX_ERR_LIMIT, GRX_ERR_OOM, or GRX_ERR_INVALID.
+ */
+GRX_Result grx_class_table_add(GRX_ClassTable * table,
+    const GRX_CharRange * ranges, size_t count, uint32_t * out_index);
+
+/**
+ * @brief The ranges of one class in a table.
+ *
+ * @param table The table.
+ * @param index The class index.
+ * @param out_count Receives the range count. Optional.
+ * @return The first range, or NULL when the index is out of range or the
+ *   class is empty.
+ */
+const GRX_CharRange * grx_class_table_get(
+    const GRX_ClassTable * table, uint32_t index, size_t * out_count);
+
+/**
+ * @brief Whether a class in a table contains a code point.
+ *
+ * A binary search, which is what the sorted disjoint representation buys.
+ *
+ * @param table The table.
+ * @param index The class index.
+ * @param codepoint The code point to test.
+ * @return Non-zero when the class matches it.
+ */
+int grx_class_table_contains(
+    const GRX_ClassTable * table, uint32_t index, uint32_t codepoint);
+
+/**
+ * @brief The number of classes in a table.
+ *
+ * @param table The table. NULL returns 0.
+ * @return The class count.
+ */
+size_t grx_class_table_count(const GRX_ClassTable * table);
+
+/**
+ * @brief Release a class table's storage. NULL is ignored.
+ *
+ * @param table The table.
+ */
+void grx_class_table_clear(GRX_ClassTable * table);
 
 #ifdef __cplusplus
 }

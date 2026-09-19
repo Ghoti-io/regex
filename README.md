@@ -123,18 +123,23 @@ Nothing is allocated for the caller to free on a failing call.
 
 | Part | State |
 | --- | --- |
-| Build, install, `check-symbols`, Doxygen | working |
+| Build, install, `check-symbols`, `check-layering`, Doxygen | working |
 | Result codes, limits, allocator, version | working |
+| Diagnostics and error reporting | working |
+| The arena behind every table | working |
+| AST, IR and instruction set, with their dumps | working |
+| `GRX_Facts` and `grx_regex_facts()` | working; analysis computes them in WP-07 |
+| Canonical character-class table | working |
 | Dialect table and lookup | working; the feature rows are provisional |
 | UTF-8 decode and encode | working, strict |
 | Character-class membership | working; `grx_charclass_add_range()` is a stub |
 | Simple case folding | ASCII only |
 | Parser | stub - `GRX_ERR_UNSUPPORTED` |
-| Compiler | stub - `GRX_ERR_UNSUPPORTED` |
+| Lowering and codegen | not started |
 | Pike VM, backtracking engine | stubs - `GRX_ERR_UNSUPPORTED` |
-| Substitution and splitting | not designed yet |
+| Substitution and splitting | designed, not started |
 
-60 tests, clean under Valgrind and under ASan+UBSan. The tests that record a
+127 tests, clean under Valgrind and under ASan+UBSan. The tests that record a
 stub's answer are marked `STUB` in a comment and are meant to be deleted with
 the stub.
 

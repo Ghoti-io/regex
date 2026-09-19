@@ -134,7 +134,7 @@ subsection:
 | --- | --- | --- | --- |
 | 5.1 | `(a\|ab)(c\|bcd)(d*)` | `abcd` | leftmost-first vs longest |
 | 5.1 | `x*` vs `x*?` as the first quantifier of `(x*?)(x*)` | `xxx` | `TCL_ARE` |
-| 5.2 | `.` | `\r`, ` `, `` | newline set for `.` |
+| 5.2 | `.` | `\r`, `U+2028`, `U+0085` | newline set for `.` |
 | 5.3 | `a$` | `a\n` | `$` before final newline |
 | 5.3 | `^b` | `a\nb` | multiline by default |
 | 5.4 | `(?<=a\|bc)d`, `(?<=a+)b` | `bcd`, `aab` | lookbehind constraint |
@@ -144,9 +144,9 @@ subsection:
 | 5.6 | `\1(a)` | `a` | forward reference |
 | 5.6 | `(a)\|b\1` | `b` | unset backreference |
 | 5.7 | `\1` with no groups; `(a)\10`; `\0`; `\012`; `\8` | `a`, `a\n` | backref vs octal |
-| 5.8 | `[a-z]` with `i` | `ſ`, `K`, `ß` | folding rule |
-| 5.8 | `ss` with `i` | `ß` | full folding |
-| 5.9 | `\w`, `\d`, `\s`, `\b` | `é`, `١`, ` `, `﻿`, ` ` | class definitions |
+| 5.8 | `[a-z]` with `i` | `U+017F (long s)`, `U+212A (Kelvin sign)`, `U+00DF (sharp s)` | folding rule |
+| 5.8 | `ss` with `i` | `U+00DF (sharp s)` | full folding |
+| 5.9 | `\w`, `\d`, `\s`, `\b` | `U+00E9`, `U+0661 (Arabic-Indic one)`, `U+00A0 (no-break space)`, `U+FEFF (BOM)`, `U+2028` | class definitions |
 | 5.9 | `\p{lowercase_letter}`, `\p{ LU }`, `\p{IsGreek}` | `a` | property-name matching |
 | 5.10 | `a*` find-all | `baab` | iteration rule |
 | 5.11 | replace `(a)(b)?` with `[$2][\2][${2}][$<x>]` | `a` | template grammar and unset groups |
@@ -163,9 +163,13 @@ project has had to ask.
 
 Run by `make test` alongside `check-symbols`:
 
-- **The dialect is gone after lowering:** no file under `src/exec/` or
-  `src/compile/` includes `syntax.h` or `syntax_internal.h`, and none
-  mentions a `GRX_SYNTAX_` constant. A grep, in the Makefile.
+- **The dialect is gone after lowering:** no file under `src/exec/` names a
+  `GRX_SYNTAX_` constant, a `GRX_SyntaxSpec` or a `grx_syntax_*` function.
+  A grep, in the Makefile. **Built:** `make check-layering`, in `TEST_GATES`.
+  It is scoped to `src/exec/` because `src/compile/compile.c` holds the
+  public accessors and `grx_regex_syntax()` legitimately *reports* the
+  dialect a regex was compiled from; reporting is not branching. The gate
+  grows to cover `codegen.c` when WP-07 splits it out from the API file.
 - **Every `GRX_Diag` has a string** and every string is used by some test
   (the catalogue is not allowed to accumulate dead entries).
 - **Every `GRX_Feature` bit is set in at least one profile row** and

@@ -48,6 +48,27 @@ TEST(Error, ClearLeavesNoPosition) {
   EXPECT_EQ(error.message[0], '\0');
 }
 
+TEST(Error, ClearResetsEveryField) {
+  GRX_Error error;
+  error.code = GRX_ERR_SYNTAX;
+  error.diag = GRX_DIAG_NOTHING_TO_REPEAT;
+  error.offset = 7;
+  error.length = 3;
+  error.message[0] = 'x';
+  error.message[1] = '\0';
+
+  grx_error_clear(&error);
+
+  // A caller may reuse one error across several compiles without clearing it
+  // between them, which only works if a cleared error carries nothing from
+  // the last one.
+  EXPECT_EQ(error.code, GRX_OK);
+  EXPECT_EQ(error.diag, GRX_DIAG_NONE);
+  EXPECT_EQ(error.offset, GRX_NPOS);
+  EXPECT_EQ(error.length, 0u);
+  EXPECT_STREQ(error.message, "");
+}
+
 TEST(Error, ClearTakesNull) {
   grx_error_clear(nullptr);
 }
@@ -67,8 +88,23 @@ TEST(Limits, DefaultsBoundEveryRunawayQuantity) {
   EXPECT_GT(limits.max_captures, 0u);
   EXPECT_GT(limits.max_repeat_count, 0u);
   EXPECT_GT(limits.max_class_ranges, 0u);
+  EXPECT_GT(limits.max_lookbehind_length, 0u);
+  EXPECT_GT(limits.max_recursion_depth, 0u);
   EXPECT_GT(limits.max_steps, 0u);
   EXPECT_GT(limits.max_backtrack, 0u);
+  EXPECT_GT(limits.max_match_memory, 0u);
+}
+
+TEST(Limits, SubjectLengthIsTheOneDeliberateZero) {
+  // Every other field caps something a small pattern can make large. A
+  // subject is a buffer the caller already holds, so its size is bounded by
+  // a decision the caller already made, and a default here would reject a
+  // large document for no reason the library can justify. Stated so that
+  // setting it to a number later is a deliberate change rather than a
+  // "missing default" someone fills in.
+  GRX_Limits limits;
+  grx_limits_default(&limits);
+  EXPECT_EQ(limits.max_subject_length, 0u);
 }
 
 TEST(Limits, DefaultTakesNull) {

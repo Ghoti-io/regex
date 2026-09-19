@@ -59,8 +59,24 @@ typedef enum {
   GRX_NODE_CONDITIONAL, ///< `(?(1)a|b)`.
   GRX_NODE_RECURSE,     ///< `(?R)`, `(?1)`, `(?&name)`.
   GRX_NODE_CONTROL,     ///< `(*SKIP)` and the other backtracking verbs.
+  GRX_NODE_OPTIONS,     ///< `(?i)` bare, or `(?i:a)` scoped.
+  GRX_NODE_CLASS_OP,    ///< A set operation between classes: `&&`, `--`.
+  GRX_NODE_STRING_SET,  ///< A set of strings: `\q{ab|cd}`, and `\R`.
+  GRX_NODE_KEEP,        ///< `\K`, which resets the reported match start.
+  GRX_NODE_BRANCH_RESET, ///< `(?|...)`, which renumbers per alternative.
   GRX_NODE_COUNT        ///< Closes the enum; not a node kind.
 } GRX_NodeKind;
+
+/**
+ * @brief The name of a node kind, for a dump or a diagnostic.
+ *
+ * The returned string is statically allocated and must not be freed.
+ *
+ * @param kind The node kind.
+ * @return A lowercase name such as "alternate", or "?" for a value out of
+ *   range. Never NULL.
+ */
+GRX_API const char * grx_node_kind_name(GRX_NodeKind kind);
 
 /**
  * @brief Parse a NUL-terminated pattern using the default limits and

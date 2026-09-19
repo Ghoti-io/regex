@@ -29,19 +29,18 @@ int grx_exec_program_needs_backtracking(const GRX_Regex * regex) {
     return 0;
   }
 
-  for (size_t i = 0; i < regex->program.count; i++) {
-    switch (regex->program.insts[i].op) {
-      case GRX_OP_BACKREF:
-      case GRX_OP_LOOKAROUND:
-      case GRX_OP_ATOMIC:
-      case GRX_OP_RECURSE:
-        return 1;
-      default:
-        break;
-    }
-  }
-
-  return 0;
+  // Read from the facts rather than by scanning the program again. Analysis
+  // computed this once at compile time, and a second opinion here is a second
+  // place to be wrong: an opcode added to the backtracking-only group without
+  // a matching case in a scan would route a program to the Pike VM, which
+  // would then mis-execute it far from the cause. That is the defect shape
+  // documentation/development.md warns about, and reading one field is how it
+  // stops being possible.
+  //
+  // GRX_Facts is conservative before analysis has run: grx_facts_init() sets
+  // is_regular to 0, so an unanalysed program goes to the engine that can run
+  // anything rather than the one that cannot.
+  return !regex->facts.is_regular;
 }
 
 GRX_Result grx_exec_pike(const GRX_ExecRequest * request, int * out_matched) {

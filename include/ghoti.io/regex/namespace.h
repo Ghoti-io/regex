@@ -9,6 +9,9 @@
  * declares the typedef.
  *
  * `make check-symbols` fails if an exported symbol is missing from this list.
+ * It cannot see a *type* that is missing, because a type emits no symbol -
+ * only the DWARF in a debug build records one. So the rule for types is kept
+ * by hand: every name in a typedef or struct tag here, public or internal.
  *
  * See CONVENTIONS.md section 4.
  *
@@ -26,8 +29,10 @@
 // structs differ in layout cannot be confused for one another.
 #define GRX_Allocator GHOTIIO_REGEX(GRX_Allocator)
 #define GRX_Capture GHOTIIO_REGEX(GRX_Capture)
+#define GRX_Diag GHOTIIO_REGEX(GRX_Diag)
 #define GRX_Engine GHOTIIO_REGEX(GRX_Engine)
 #define GRX_Error GHOTIIO_REGEX(GRX_Error)
+#define GRX_Facts GHOTIIO_REGEX(GRX_Facts)
 #define GRX_Feature GHOTIIO_REGEX(GRX_Feature)
 #define GRX_Limits GHOTIIO_REGEX(GRX_Limits)
 #define GRX_Match GHOTIIO_REGEX(GRX_Match)
@@ -41,7 +46,9 @@
 
 // Public functions.
 #define grx_allocator_default GHOTIIO_REGEX(grx_allocator_default)
+#define grx_diag_string GHOTIIO_REGEX(grx_diag_string)
 #define grx_error_clear GHOTIIO_REGEX(grx_error_clear)
+#define grx_facts_init GHOTIIO_REGEX(grx_facts_init)
 #define grx_limits_default GHOTIIO_REGEX(grx_limits_default)
 #define grx_match_count GHOTIIO_REGEX(grx_match_count)
 #define grx_match_create GHOTIIO_REGEX(grx_match_create)
@@ -50,6 +57,7 @@
 #define grx_match_engine GHOTIIO_REGEX(grx_match_engine)
 #define grx_match_group GHOTIIO_REGEX(grx_match_group)
 #define grx_match_group_named GHOTIIO_REGEX(grx_match_group_named)
+#define grx_node_kind_name GHOTIIO_REGEX(grx_node_kind_name)
 #define grx_pattern_capture_count GHOTIIO_REGEX(grx_pattern_capture_count)
 #define grx_pattern_dump GHOTIIO_REGEX(grx_pattern_dump)
 #define grx_pattern_free GHOTIIO_REGEX(grx_pattern_free)
@@ -66,6 +74,7 @@
 #define grx_regex_compile_with_allocator                                       \
   GHOTIIO_REGEX(grx_regex_compile_with_allocator)
 #define grx_regex_dump GHOTIIO_REGEX(grx_regex_dump)
+#define grx_regex_facts GHOTIIO_REGEX(grx_regex_facts)
 #define grx_regex_free GHOTIIO_REGEX(grx_regex_free)
 #define grx_regex_match GHOTIIO_REGEX(grx_regex_match)
 #define grx_regex_program_size GHOTIIO_REGEX(grx_regex_program_size)
@@ -81,21 +90,94 @@
 
 // Internal names. Hidden by -fvisibility=hidden and so unable to collide, but
 // renamed anyway: one rule is easier to keep than two.
+
+// The semantic vocabulary that survives lowering.
+#define GRX_AssertKind GHOTIIO_REGEX(GRX_AssertKind)
+#define GRX_BackrefUnsetMode GHOTIIO_REGEX(GRX_BackrefUnsetMode)
+#define GRX_CaptureResetMode GHOTIIO_REGEX(GRX_CaptureResetMode)
+#define GRX_CondKind GHOTIIO_REGEX(GRX_CondKind)
+#define GRX_EmptyLoopMode GHOTIIO_REGEX(GRX_EmptyLoopMode)
+#define GRX_LookKind GHOTIIO_REGEX(GRX_LookKind)
+#define GRX_MatchPreference GHOTIIO_REGEX(GRX_MatchPreference)
+#define GRX_RepeatMode GHOTIIO_REGEX(GRX_RepeatMode)
+#define GRX_VerbKind GHOTIIO_REGEX(GRX_VerbKind)
+
+// Storage.
+#define GRX_Arena GHOTIIO_REGEX(GRX_Arena)
+#define grx_arena_append GHOTIIO_REGEX(grx_arena_append)
+#define grx_arena_at GHOTIIO_REGEX(grx_arena_at)
+#define grx_arena_clear GHOTIIO_REGEX(grx_arena_clear)
+#define grx_arena_init GHOTIIO_REGEX(grx_arena_init)
+#define grx_arena_reserve GHOTIIO_REGEX(grx_arena_reserve)
+
+// Diagnostics.
+#define grx_diag_result GHOTIIO_REGEX(grx_diag_result)
+#define grx_error_set GHOTIIO_REGEX(grx_error_set)
+
+// Character classes.
 #define GRX_CharClass GHOTIIO_REGEX(GRX_CharClass)
-#define GRX_Node GHOTIIO_REGEX(GRX_Node)
-#define GRX_Parser GHOTIIO_REGEX(GRX_Parser)
-#define GRX_Program GHOTIIO_REGEX(GRX_Program)
-#define GRX_Inst GHOTIIO_REGEX(GRX_Inst)
-#define GRX_Opcode GHOTIIO_REGEX(GRX_Opcode)
+#define GRX_CharRange GHOTIIO_REGEX(GRX_CharRange)
+#define GRX_ClassRef GHOTIIO_REGEX(GRX_ClassRef)
+#define GRX_ClassTable GHOTIIO_REGEX(GRX_ClassTable)
 #define grx_charclass_add_range GHOTIIO_REGEX(grx_charclass_add_range)
 #define grx_charclass_clear GHOTIIO_REGEX(grx_charclass_clear)
 #define grx_charclass_contains GHOTIIO_REGEX(grx_charclass_contains)
+#define grx_class_table_add GHOTIIO_REGEX(grx_class_table_add)
+#define grx_class_table_clear GHOTIIO_REGEX(grx_class_table_clear)
+#define grx_class_table_contains GHOTIIO_REGEX(grx_class_table_contains)
+#define grx_class_table_count GHOTIIO_REGEX(grx_class_table_count)
+#define grx_class_table_get GHOTIIO_REGEX(grx_class_table_get)
+#define grx_class_table_init GHOTIIO_REGEX(grx_class_table_init)
+
+// The syntax tree.
+#define GRX_AnchorKind GHOTIIO_REGEX(GRX_AnchorKind)
+#define GRX_ClassItem GHOTIIO_REGEX(GRX_ClassItem)
+#define GRX_ClassItemKind GHOTIIO_REGEX(GRX_ClassItemKind)
+#define GRX_ClassOpKind GHOTIIO_REGEX(GRX_ClassOpKind)
+#define GRX_Node GHOTIIO_REGEX(GRX_Node)
+#define GRX_Parser GHOTIIO_REGEX(GRX_Parser)
+#define GRX_ShorthandKind GHOTIIO_REGEX(GRX_ShorthandKind)
+#define grx_parse_pattern GHOTIIO_REGEX(grx_parse_pattern)
+#define grx_pattern_add_child GHOTIIO_REGEX(grx_pattern_add_child)
+#define grx_pattern_add_name GHOTIIO_REGEX(grx_pattern_add_name)
+#define grx_pattern_add_node GHOTIIO_REGEX(grx_pattern_add_node)
+#define grx_pattern_create GHOTIIO_REGEX(grx_pattern_create)
+#define grx_pattern_name GHOTIIO_REGEX(grx_pattern_name)
+#define grx_pattern_node GHOTIIO_REGEX(grx_pattern_node)
+
+// The intermediate representation.
+#define GRX_IR GHOTIIO_REGEX(GRX_IR)
+#define GRX_IRKind GHOTIIO_REGEX(GRX_IRKind)
+#define GRX_IRNode GHOTIIO_REGEX(GRX_IRNode)
+#define grx_ir_add_child GHOTIIO_REGEX(grx_ir_add_child)
+#define grx_ir_add_name GHOTIIO_REGEX(grx_ir_add_name)
+#define grx_ir_add_node GHOTIIO_REGEX(grx_ir_add_node)
+#define grx_ir_create GHOTIIO_REGEX(grx_ir_create)
+#define grx_ir_dump GHOTIIO_REGEX(grx_ir_dump)
+#define grx_ir_free GHOTIIO_REGEX(grx_ir_free)
+#define grx_ir_name GHOTIIO_REGEX(grx_ir_name)
+#define grx_ir_node GHOTIIO_REGEX(grx_ir_node)
+
+// The compiled program.
+#define GRX_Inst GHOTIIO_REGEX(GRX_Inst)
+#define GRX_Opcode GHOTIIO_REGEX(GRX_Opcode)
+#define GRX_Program GHOTIIO_REGEX(GRX_Program)
 #define grx_compile_program GHOTIIO_REGEX(grx_compile_program)
+#define grx_opcode_name GHOTIIO_REGEX(grx_opcode_name)
+#define grx_program_add GHOTIIO_REGEX(grx_program_add)
+#define grx_program_at GHOTIIO_REGEX(grx_program_at)
+#define grx_program_clear GHOTIIO_REGEX(grx_program_clear)
+#define grx_program_dump GHOTIIO_REGEX(grx_program_dump)
+#define grx_program_init GHOTIIO_REGEX(grx_program_init)
+
+// Execution.
+#define GRX_ExecRequest GHOTIIO_REGEX(GRX_ExecRequest)
 #define grx_exec_backtrack GHOTIIO_REGEX(grx_exec_backtrack)
 #define grx_exec_pike GHOTIIO_REGEX(grx_exec_pike)
 #define grx_exec_program_needs_backtracking                                    \
   GHOTIIO_REGEX(grx_exec_program_needs_backtracking)
-#define grx_parse_pattern GHOTIIO_REGEX(grx_parse_pattern)
+
+// Dialects and Unicode.
 #define grx_syntax_spec_table GHOTIIO_REGEX(grx_syntax_spec_table)
 #define grx_unicode_fold_simple GHOTIIO_REGEX(grx_unicode_fold_simple)
 #define grx_unicode_utf8_decode GHOTIIO_REGEX(grx_unicode_utf8_decode)

@@ -71,3 +71,107 @@ void grx_charclass_clear(GRX_CharClass * cls) {
   cls->capacity = 0;
   cls->negated = 0;
 }
+
+void grx_class_table_init(GRX_ClassTable * table,
+    const GRX_Allocator * allocator, size_t max_ranges) {
+  if (!table) {
+    return;
+  }
+
+  grx_arena_init(&table->refs, allocator, sizeof(GRX_ClassRef), 0,
+      GRX_DIAG_NONE);
+  grx_arena_init(&table->ranges, allocator, sizeof(GRX_CharRange), max_ranges,
+      GRX_DIAG_LIMIT_CLASS_RANGES);
+}
+
+GRX_Result grx_class_table_add(GRX_ClassTable * table,
+    const GRX_CharRange * ranges, size_t count, uint32_t * out_index) {
+  if (!table || (!ranges && count)) {
+    return GRX_ERR_INVALID;
+  }
+
+  GRX_ClassRef ref = {
+    .first = (uint32_t)table->ranges.count,
+    .count = (uint32_t)count,
+  };
+
+  // Reserve first, so that a table which cannot hold the ranges is left
+  // exactly as it was rather than holding a prefix of them.
+  GRX_Result result
+      = grx_arena_reserve(&table->ranges, table->ranges.count + count);
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  for (size_t i = 0; i < count; i++) {
+    result = grx_arena_append(&table->ranges, &ranges[i], NULL);
+    if (result != GRX_OK) {
+      return result;
+    }
+  }
+
+  return grx_arena_append(&table->refs, &ref, out_index);
+}
+
+const GRX_CharRange * grx_class_table_get(
+    const GRX_ClassTable * table, uint32_t index, size_t * out_count) {
+  if (out_count) {
+    *out_count = 0;
+  }
+  if (!table) {
+    return NULL;
+  }
+
+  const GRX_ClassRef * ref = GRX_ARENA_AT(const GRX_ClassRef, &table->refs,
+      index);
+  if (!ref) {
+    return NULL;
+  }
+  if (out_count) {
+    *out_count = ref->count;
+  }
+  if (!ref->count) {
+    return NULL;
+  }
+
+  return GRX_ARENA_AT(const GRX_CharRange, &table->ranges, ref->first);
+}
+
+int grx_class_table_contains(
+    const GRX_ClassTable * table, uint32_t index, uint32_t codepoint) {
+  size_t count = 0;
+  const GRX_CharRange * ranges = grx_class_table_get(table, index, &count);
+  if (!ranges || !count) {
+    return 0;
+  }
+
+  size_t low = 0;
+  size_t high = count;
+  while (low < high) {
+    size_t mid = low + (high - low) / 2;
+    if (codepoint < ranges[mid].low) {
+      high = mid;
+    }
+    else if (codepoint > ranges[mid].high) {
+      low = mid + 1;
+    }
+    else {
+      return 1;
+    }
+  }
+
+  return 0;
+}
+
+size_t grx_class_table_count(const GRX_ClassTable * table) {
+  return table ? table->refs.count : 0;
+}
+
+void grx_class_table_clear(GRX_ClassTable * table) {
+  if (!table) {
+    return;
+  }
+
+  grx_arena_clear(&table->refs);
+  grx_arena_clear(&table->ranges);
+}

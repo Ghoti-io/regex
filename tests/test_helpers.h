@@ -10,8 +10,10 @@
 #define GHOTI_IO_GRX_TEST_HELPERS_H
 
 #include <cstddef>
+#include <cstdio>
 #include <cstdlib>
 #include <string>
+#include <vector>
 
 #include <gtest/gtest.h>
 
@@ -40,6 +42,37 @@ inline std::string data_dir() {
 /** Path to a checked-in fixture. */
 inline std::string data(const std::string & relative) {
   return data_dir() + "/" + relative;
+}
+
+/**
+ * Run a dump function against a temporary file and return what it wrote.
+ *
+ * The dumps take a FILE * because that is what a C library can portably
+ * write to; a test wants a string. tmpfile() rather than open_memstream()
+ * because the former is C and the latter is POSIX, and nothing here is worth
+ * a platform branch.
+ */
+template <typename Fn> inline std::string capture_dump(Fn && fn) {
+  FILE * file = std::tmpfile();
+  if (!file) {
+    return std::string();
+  }
+
+  fn(file);
+  std::fflush(file);
+
+  long size = std::ftell(file);
+  if (size < 0) {
+    std::fclose(file);
+    return std::string();
+  }
+  std::rewind(file);
+
+  std::vector<char> buffer(static_cast<size_t>(size) + 1, '\0');
+  size_t read = std::fread(buffer.data(), 1, static_cast<size_t>(size), file);
+  std::fclose(file);
+
+  return std::string(buffer.data(), read);
 }
 
 /**

@@ -98,6 +98,40 @@ TEST(CharClass, AddRangeIsStillAStub) {
       GRX_ERR_UNSUPPORTED);
 }
 
+TEST(CharClass, ClearReleasesTheRangesThroughItsOwnAllocator) {
+  // grx_charclass_add_range() is still a stub (WP-05), so the populated state
+  // is built here by hand. The contract is real either way, and it is the
+  // path every parser error unwind will take: clear frees through the
+  // allocator the class was given - not through malloc - and leaves the class
+  // empty and reusable.
+  grxtest::CountingAllocator allocator;
+
+  GRX_CharClass cls = {};
+  cls.allocator = allocator.get();
+  cls.ranges = (GRX_CharRange *)gcu_allocator_calloc(
+      allocator.get(), 4, sizeof(GRX_CharRange));
+  ASSERT_NE(cls.ranges, nullptr);
+  cls.ranges[0].low = 'a';
+  cls.ranges[0].high = 'z';
+  cls.count = 1;
+  cls.capacity = 4;
+  cls.negated = 1;
+
+  ASSERT_EQ(allocator.live(), 1);
+
+  grx_charclass_clear(&cls);
+
+  EXPECT_EQ(allocator.live(), 0) << "the ranges were not freed";
+  EXPECT_EQ(cls.ranges, nullptr);
+  EXPECT_EQ(cls.count, 0u);
+  EXPECT_EQ(cls.capacity, 0u);
+  EXPECT_EQ(cls.negated, 0);
+
+  // Clearing an already-empty class is not a double free.
+  grx_charclass_clear(&cls);
+  EXPECT_EQ(allocator.live(), 0);
+}
+
 int main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

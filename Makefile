@@ -237,7 +237,7 @@ TESTFLAGS := `PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs --cflags gtes
 # coverage target does, because --coverage links the gcov runtime, whose
 # mangle_path check-symbols is right to reject in a shipping library and
 # wrong to reject in an instrumented one. Spelled as text's TEST_GATES is.
-TEST_GATES ?= check-symbols
+TEST_GATES ?= check-symbols check-layering
 
 # Valgrind flags (exclude "still reachable" as it's not a leak)
 VALGRIND_FLAGS := --leak-check=full --show-leak-kinds=definite,indirect,possible --track-origins=yes --error-exitcode=1
@@ -418,7 +418,7 @@ $(APP_DIR)/examples/%$(EXE_EXTENSION): examples/%.c $(APP_DIR)/$(STATIC_TARGET) 
 ####################################################################
 
 # General commands
-.PHONY: clean cloc docs docs-pdf examples coverage check-symbols
+.PHONY: clean cloc docs docs-pdf examples coverage check-symbols check-layering
 # Release build commands
 .PHONY: all install test test-quiet test-asan test-valgrind test-valgrind-quiet test-watch uninstall watch
 # Debug build commands
@@ -481,6 +481,22 @@ TEST_LD_PATH := $(APP_DIR):$(LIB_INSTALL_PATH)/$(SUITE)
 ####################################################################
 # Symbol namespace check
 ####################################################################
+
+check-layering: ## Fail if an engine knows which dialect it is running
+	@leaked=$$(grep -lnE 'GRX_SYNTAX_|GRX_SyntaxSpec|grx_syntax_|regex/syntax\.h|syntax_internal\.h' \
+		src/exec/*.c src/exec/*.h 2>/dev/null || true); \
+	if [ -n "$$leaked" ]; then \
+		printf "\033[0;31m\n### An engine names a dialect ###\033[0m\n" >&2; \
+		printf "%s\n" "$$leaked" >&2; \
+		printf "\nThe dialect is resolved away by lowering: every dialect-dependent\n" >&2; \
+		printf "decision reaches an engine as an explicit opcode, mode or class index.\n" >&2; \
+		printf "An engine that consults GRX_Syntax has moved a dialect decision below\n" >&2; \
+		printf "the IR, where every dialect shares it. The construct it needs is\n" >&2; \
+		printf "missing from the IR; add it there.\n" >&2; \
+		printf "See documentation/design.md section 3 and section 9 invariant 1.\n" >&2; \
+		exit 1; \
+	fi
+	@printf "\033[0;32mNo engine names a dialect.\033[0m\n"
 
 check-symbols: ## Fail if any exported symbol lacks the version namespace
 check-symbols: $(APP_DIR)/$(TARGET)

@@ -63,6 +63,7 @@ the package makes obsolete deleted.
 ### Phase 0: foundations
 
 **WP-01 The contract: AST, IR, program, facts, diagnostics.** *core, M.*
+**Landed.**
 The data structures of [design.md](design.md) §3.1-3.4 as internal headers
 with full Doxygen; the growable arenas; `GRX_Diag` and the message
 catalogue; `GRX_Error` and `GRX_Limits` extended per §6; `GRX_Facts` and

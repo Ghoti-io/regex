@@ -20,26 +20,8 @@
 #include <stddef.h>
 #include <string.h>
 
+#include "../core/core_internal.h"
 #include "parse_internal.h"
-
-/**
- * Record a failure in the caller's error structure, when they supplied one.
- */
-static void set_error(GRX_Error * error, GRX_Result code, size_t offset,
-    const char * message) {
-  if (!error) {
-    return;
-  }
-
-  error->code = code;
-  error->offset = offset;
-  size_t length = strlen(message);
-  if (length >= sizeof(error->message)) {
-    length = sizeof(error->message) - 1;
-  }
-  memcpy(error->message, message, length);
-  error->message[length] = '\0';
-}
 
 GRX_Result grx_parse_pattern(const char * pattern, size_t length,
     GRX_Syntax syntax, uint32_t options, const GRX_Limits * limits,
@@ -55,12 +37,10 @@ GRX_Result grx_parse_pattern(const char * pattern, size_t length,
     return GRX_ERR_INVALID;
   }
   if (limits->max_pattern_length && length > limits->max_pattern_length) {
-    set_error(out_error, GRX_ERR_LIMIT, limits->max_pattern_length,
-        "pattern is longer than max_pattern_length");
-    return GRX_ERR_LIMIT;
+    return grx_error_set(out_error, GRX_ERR_LIMIT,
+        GRX_DIAG_LIMIT_PATTERN_LENGTH, limits->max_pattern_length, 0);
   }
 
-  set_error(out_error, GRX_ERR_UNSUPPORTED, GRX_NPOS,
-      "the parser is not implemented yet");
-  return GRX_ERR_UNSUPPORTED;
+  return grx_error_set(out_error, GRX_ERR_UNSUPPORTED,
+      GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, GRX_NPOS, 0);
 }

@@ -210,9 +210,19 @@ group names live in side tables the node indexes.
 The IR is the same node-array shape with a different vocabulary, and it is
 the point at which the dialect's semantics are applied and then discarded:
 
-- **Options are scoped and resolved.** Each IR node knows the effective
-  caseless/multiline/dotall/... bits under which it was written;
-  `GRX_NODE_OPTIONS` does not survive.
+- **Options are resolved away, not carried.** An earlier draft of this page
+  said each IR node knows the effective caseless/multiline/dotall bits it was
+  written under. Building it showed that is weaker than what the design
+  actually needs and than what is achievable: every option becomes something
+  explicit instead. Caseless folds literals into classes; multiline chooses
+  between the subject and line assertion kinds; dot-all chooses what `ANY`
+  excludes; extended and literal are consumed by the lexer; ungreedy chooses a
+  repeat mode. `GRX_NODE_OPTIONS` does not survive, and neither does an
+  options field. The single survivor is UTF mode, which decides whether a step
+  is a byte or a code point and so belongs to the whole program rather than to
+  any node. A node that still needed to know its options would be a node an
+  engine has to interpret two ways, which is the thing §3's invariant
+  forbids.
 - **Case is folded at compile time.** Under caseless, a literal becomes a
   class containing its fold orbit (every code point with the same simple
   case fold), and a class is closed under the same operation. The fold

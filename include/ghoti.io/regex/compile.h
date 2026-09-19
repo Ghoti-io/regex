@@ -21,6 +21,7 @@
 #include <ghoti.io/regex/macros.h>
 #include <ghoti.io/regex/pattern.h>
 #include <ghoti.io/regex/syntax.h>
+#include <stdint.h>
 #include <stdio.h>
 
 #ifdef __cplusplus
@@ -89,6 +90,71 @@ GRX_API GRX_Result grx_regex_compile_with_allocator(const char * pattern,
 GRX_API GRX_Result grx_regex_compile_pattern(const GRX_Pattern * pattern,
     const GRX_Limits * limits, const GRX_Allocator * allocator,
     GRX_Error * out_error, GRX_Regex ** out_regex);
+
+/**
+ * @brief What compiling a pattern discovered about it.
+ *
+ * Computed once, at compile time, and exposed because the most important of
+ * them is one a caller wants *before* deciding to run anything: `is_regular`
+ * says whether the linear-time engine can run this program, and so whether
+ * matching it against hostile input is safe. A validator handed a pattern by
+ * an untrusted schema can refuse what it cannot run in linear time, rather
+ * than discovering the cost at match time.
+ *
+ * The prefilter fields are populated by a later phase
+ * (documentation/design.md section 3.5.5). Until then `literal_prefix` and
+ * `required_literal` are NULL and `first_bytes_known` is 0, which is what a
+ * consumer must check rather than assuming an empty prefix means "no prefix
+ * exists".
+ *
+ * Pointers in this structure are owned by the @ref GRX_Regex it was read
+ * from and are valid until that regex is freed.
+ */
+typedef struct GRX_Facts {
+  int is_regular;        ///< No construct that needs a backtracking engine.
+  int anchored_start;    ///< Every match must begin where the search began.
+  int anchored_end;      ///< Every match must end at the end of the subject.
+  int can_match_empty;   ///< The empty string is a possible match.
+  int has_backreference; ///< The program contains a backreference.
+  int has_lookaround;    ///< The program contains a lookahead or lookbehind.
+  int has_recursion;     ///< The program recurses or calls a subroutine.
+  int has_duplicate_names; ///< Two capturing groups share a name.
+  size_t min_length;     ///< Shortest possible match, in bytes.
+  size_t max_length;     ///< Longest possible match, or GRX_NPOS if unbounded.
+  size_t max_lookbehind; ///< Bytes a lookbehind may need before the start.
+  size_t capture_count;  ///< Capturing groups, excluding group 0.
+  size_t program_size;   ///< Instructions in the compiled program.
+  const char * literal_prefix;   ///< Bytes every match starts with, or NULL.
+  size_t literal_prefix_length;  ///< Length of `literal_prefix`.
+  const char * required_literal; ///< Bytes every match contains, or NULL.
+  size_t required_literal_length; ///< Length of `required_literal`.
+  int first_bytes_known;   ///< Non-zero when `first_bytes` has been computed.
+  uint8_t first_bytes[32]; ///< Bitmap of bytes a match may start with.
+} GRX_Facts;
+
+/**
+ * @brief Read what compiling a pattern discovered about it.
+ *
+ * @param regex The regex. NULL is invalid.
+ * @param out_facts Receives the facts on success.
+ * @return GRX_OK, or GRX_ERR_INVALID for a NULL argument.
+ */
+GRX_API GRX_Result grx_regex_facts(
+    const GRX_Regex * regex, GRX_Facts * out_facts);
+
+/**
+ * @brief Set a facts structure to "nothing is known".
+ *
+ * Every flag 0, every length its widest value, and no prefilter. This is the
+ * state from which analysis narrows, and it is the state a compiled program
+ * is in before analysis has run, so that a consumer reading facts from a
+ * regex compiled by an earlier phase is told nothing rather than something
+ * false.
+ *
+ * @param facts Structure to populate. NULL is ignored.
+ */
+GRX_API void grx_facts_init(GRX_Facts * facts);
+
 
 /**
  * @brief The number of capturing groups.
