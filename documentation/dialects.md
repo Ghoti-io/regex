@@ -497,7 +497,7 @@ checked.
 
 ### What real patterns cost
 
-251 distinct patterns: every `.rxt` vector this repository holds, plus
+264 distinct patterns: every `.rxt` vector this repository holds, plus
 `tools/limits/real_world.txt` - the patterns that appear in JSON Schemas,
 configuration files and validation code, collected for their *upper* end.
 For each, the smallest value of each limit at which the pattern still
@@ -523,10 +523,12 @@ alternation added, the same default has 5× headroom and a p99 five times
 higher. Nothing about the library changed; the measurement stopped
 flattering it.
 
-Nothing in the corpus is refused by a default, and the two tightest -
-`max_nodes` and `max_program_size`, at six and seven times - are both bound
-by the same pattern: `\p{RGI_Emoji}` is the largest thing ECMAScript can
-name, and it lowers to an alternation of 3,953 sequences.
+Nothing in the corpus is refused by a default. The tightest is now
+`max_pattern_length` at five times, bound by the generated alternation added
+when the corpus grew its long tail; `max_program_size` and `max_nodes`
+follow at six and seven, and both are bound by the same pattern:
+`\p{RGI_Emoji}` is the largest thing ECMAScript can name, and it lowers to an
+alternation of 3,953 sequences.
 
 Where the ceiling actually is depends on how that atom is spelled, which is
 worth knowing before a caller meets it. `^\p{RGI_Emoji}{n}$` is one node

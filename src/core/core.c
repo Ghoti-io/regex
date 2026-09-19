@@ -65,8 +65,8 @@ void grx_limits_default(GRX_Limits * limits) {
   //
   // The values are measured, not guessed. documentation/dialects.md section
   // 7 has the report `tools/limits/measure.py` produces and the reasoning
-  // for each number; the short version is that 251 real patterns were asked
-  // how much of each resource they need, the tightest default leaves six
+  // for each number; the short version is that 264 real patterns were asked
+  // how much of each resource they need, the tightest default leaves five
   // times what the costliest of them uses, and the 17 pairs in the ReDoS
   // corpus are refused in 105 to 173 milliseconds on an idle machine and in
   // 276 to 414 on a busy one. Two tests keep the halves of that true:

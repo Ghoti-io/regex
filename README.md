@@ -108,11 +108,20 @@ asks for `GRX_ENGINE_PIKE` by name and gets `GRX_ERR_UNSUPPORTED` for a
 pattern that cannot have it, rather than silently getting the engine whose
 worst case is exponential.
 
-**Limits.** `GRX_Limits` caps every unbounded quantity, and unlike the rest of
-the suite every field has a non-zero default. A regular expression is the one
-input where a small pattern can cost unbounded time: `(a+)+$` against thirty
-`a`s is the standard demonstration. `max_steps` and `max_backtrack` are what
-turn that into `GRX_ERR_LIMIT` instead of a hang.
+**Limits.** `GRX_Limits` caps every unbounded quantity, and unlike the rest
+of the suite most fields have a non-zero default. A regular expression is the
+one input where a small pattern can cost unbounded time: `(a+)+$` against
+thirty `a`s is the standard demonstration. `max_steps` and `max_backtrack`
+are what turn that into `GRX_ERR_LIMIT` instead of a hang.
+
+Every field is tunable and `0` means no limit, with `grx_limits_unlimited()`
+for the all-zero structure. That sentence was in the header for a long time
+before anything checked it, and checking it found two fields that were in the
+documentation while nothing read them - a limit a caller can set and cannot
+feel is a defence they only think they have. Twelve of the thirteen are
+enforced now, each refusing with its own diagnostic so a caller who has to
+raise one is told which; the thirteenth is `max_recursion_depth`, reserved
+until a dialect has recursion, with a test that fails the moment one does.
 
 **Errors.** Every call that can fail returns `GRX_Result`; `0` is success.
 `GRX_ERR_SYNTAX` is this library's one addition to the suite vocabulary, and
@@ -188,7 +197,7 @@ One `v`-mode rule goes the other way and the oracle is not followed:
 [dialects.md](documentation/dialects.md) §8.6.1 has the table and the
 reasoning.
 
-**Vectors.** 1,567 checked-in `.rxt` records run in `make test`, with no
+**Vectors.** 1,596 checked-in `.rxt` records run in `make test`, with no
 oracle needed: 100% pass. Their expectations are Node's, not this library's.
 A deliberately wrong record sits beside them in a self-test corpus, and a
 test expects the runner to fail it - so that "the suite passes" cannot mean
@@ -198,15 +207,17 @@ test expects the runner to fail it - so that "the suite passes" cannot mean
 backtracking engine hang - run against 100,000 characters in around fifty
 milliseconds, and a test asserts the *scaling* rather than the wall clock.
 
-**Limits.** Measured, not guessed. 251 real patterns were asked how much of
-each resource they need and the tightest default leaves six times what the
+**Limits.** Measured, not guessed. 264 real patterns were asked how much of
+each resource they need and the tightest default leaves five times what the
 costliest of them uses; the 17 pairs in the ReDoS corpus are refused in 105
 to 173 milliseconds on an idle machine - 276 to 414 on a busy one, which is
 the number that matters - and answered by another engine in under one.
 [dialects.md](documentation/dialects.md) §7 is the report.
 
-339 tests plus the vector corpus, clean under Valgrind and under
-ASan+UBSan. `make coverage` reports 89%. The tests that record a
+348 tests plus the vector corpus, clean under Valgrind and under
+ASan+UBSan. `make coverage` reports 89.6%. The most recent fuzz campaign was
+3,834,620 runs across the three harnesses in two modes - length-controlled
+and full-length - with no crash. The tests that record a
 stub's answer are marked `STUB` in a comment and are meant to be deleted with
 the stub.
 
