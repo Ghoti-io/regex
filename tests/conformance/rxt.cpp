@@ -290,6 +290,28 @@ bool parse_limits(
     else if (name == "max_match_memory") {
       record->limits.max_match_memory = number;
     }
+    // The rest of GRX_Limits, so that a vector can tune any field rather
+    // than the seven somebody happened to need first. Every one of them
+    // reads 0 as "no limit"; core.h says so and
+    // tests/unit/test_limits.cpp checks it field by field.
+    else if (name == "max_pattern_length") {
+      record->limits.max_pattern_length = number;
+    }
+    else if (name == "max_captures") {
+      record->limits.max_captures = number;
+    }
+    else if (name == "max_class_ranges") {
+      record->limits.max_class_ranges = number;
+    }
+    else if (name == "max_lookbehind_length") {
+      record->limits.max_lookbehind_length = number;
+    }
+    else if (name == "max_recursion_depth") {
+      record->limits.max_recursion_depth = number;
+    }
+    else if (name == "max_subject_length") {
+      record->limits.max_subject_length = number;
+    }
     else {
       *out_error = "unknown limit: " + name;
       return false;

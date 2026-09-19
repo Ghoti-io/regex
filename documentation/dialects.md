@@ -557,11 +557,58 @@ subject those callers need `max_backtrack` raised to match.
 `tests/data/vectors/ecmascript/long_limits.rxt` pins all of this, so the
 ceiling moves deliberately rather than silently.
 
-`max_lookbehind_length` is not in the table. Its default is 255, the corpus
-says nothing about it, and it does not apply to ECMAScript at all -
-ECMAScript's lookbehind is unbounded (§5.4) and the profile says so, so the
-field is inert until a dialect that bounds one lands. Measuring it against
-an ECMAScript corpus would have produced a number that meant nothing.
+### Every limit is tunable, and zero means none
+
+`core.h` has said "zero means no limit for every field" since the structure
+existed. Checking that sentence found it was not quite true:
+`max_lookbehind_length` and `max_recursion_depth` were in the structure and
+in the documentation while nothing read either, so setting one to 1 was
+exactly as unbounded as setting it to 0. A limit a caller can set and cannot
+feel is worse than no limit, because it is a defence they believe they have.
+
+Twelve of the thirteen are now enforced and each refuses with its own
+diagnostic, so a caller who has to raise one is told which. The matrix is a
+test rather than a paragraph:
+`tests/unit/test_limits.cpp:EveryEnforcedLimitRefusesWhenTightAndCapsNothingAtZero`
+sets each field tight, checks the refusal names that field, sets it to zero
+and checks the same input goes through.
+
+`grx_limits_unlimited()` fills in the all-zero structure, which is the shape
+you want when measuring what a pattern costs rather than defending against
+it. It is a loaded foot-gun: with `max_steps` and `max_backtrack` at zero
+there is nothing between the backtracker and an unbounded run.
+
+`max_recursion_depth` is the thirteenth, and is reserved rather than
+enforced: no dialect here has recursion or subroutine calls, which arrive
+with Perl and PCRE2 in WP-18. A test pins that, so the first dialect to
+compile `(?R)` fails until the limit is wired up with it.
+
+### `max_lookbehind_length`, and what a caller's policy means
+
+`max_lookbehind_length`'s default is now 0 rather than 255. The field had a number while nothing enforced it; enforcing
+it meant deciding what the default should *do*, and 255 would have started
+refusing `(?<=a+)x` - valid ECMAScript, and in the corpus. ECMAScript's
+lookbehind is unbounded (§5.4) and the profile says so, so a bound here is
+the caller's own policy on top of the dialect rather than a property of it.
+The default is to have no policy. A dialect that bounds its own lookbehind
+enforces that through its profile, which is a different check with a
+different diagnostic.
+
+Enforcing it also fixed the fact it reads. `GRX_Facts::max_lookbehind` used
+to report **0** for `(?<=a+)x` - the same answer as a pattern with no
+lookbehind at all - because the analysis skipped a body whose length it
+could not bound. That is backwards: the body it cannot bound is the one that
+may read the whole subject. It is `GRX_NPOS` now, which is what
+`GRX_Facts::max_length` has always meant by unbounded, and which exceeds
+every finite cap.
+
+`max_lookbehind_length` is measured now and was not when this table was
+written - it was inert then, and "measuring an inert field against an
+ECMAScript corpus would produce a number that meant nothing" was the reason
+given. Enforcing it made the number mean something: the corpus's longest
+lookbehind body is **4 bytes** (`(?<=\{\{)` in a template pattern), p99 is
+2, and the default is `none`. There is no headroom column for it because
+there is no cap to have headroom against, which is the point.
 
 ### The C stack, which is what `max_nesting_depth` is really about
 

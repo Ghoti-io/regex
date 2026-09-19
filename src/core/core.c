@@ -72,10 +72,27 @@ void grx_limits_default(GRX_Limits * limits) {
   // 276 to 414 on a busy one. Two tests keep the halves of that true:
   // tests/unit/test_limits.cpp and tests/conformance/test_redos.cpp.
   //
-  // max_subject_length is the one deliberate zero: a subject is a buffer the
-  // caller already holds, so its size is already bounded by something the
-  // caller decided, and a default cap here would reject a large document for
-  // no reason this library can justify.
+  // Two deliberate zeros, for different reasons.
+  //
+  // max_subject_length: a subject is a buffer the caller already holds, so
+  // its size is already bounded by something the caller decided, and a
+  // default cap here would reject a large document for no reason this
+  // library can justify.
+  //
+  // max_lookbehind_length: this was 255 while nothing enforced it, and
+  // making it enforced meant choosing what the default should *do*.
+  // ECMAScript's lookbehind is unbounded (dialects.md section 5.4), an
+  // unbounded body reports GRX_NPOS, and GRX_NPOS exceeds every finite cap -
+  // so a default of 255 would have started refusing `(?<=a+)x`, which is
+  // valid ECMAScript. The limit is a caller's own policy on top of the
+  // dialect rather than a property of it, so the default is to have no
+  // policy. A dialect that bounds its own lookbehind enforces that through
+  // its profile, which is a different check.
+  //
+  // max_recursion_depth is not a third: it has a number, but no dialect this
+  // library implements has recursion or subroutine calls, so nothing reads
+  // it yet. tests/unit/test_limits.cpp pins that, so the first dialect that
+  // grows recursion fails the test and has to wire it up.
   *limits = (GRX_Limits) {
     .max_pattern_length = 65536,
     .max_nesting_depth = 128,
@@ -84,7 +101,7 @@ void grx_limits_default(GRX_Limits * limits) {
     .max_captures = 1000,
     .max_repeat_count = 65536,
     .max_class_ranges = 10000,
-    .max_lookbehind_length = 255,
+    .max_lookbehind_length = 0,
     .max_recursion_depth = 256,
     .max_steps = 10000000,
     .max_backtrack = 100000,
@@ -92,3 +109,29 @@ void grx_limits_default(GRX_Limits * limits) {
     .max_subject_length = 0,
   };
 }
+
+void grx_limits_unlimited(GRX_Limits * limits) {
+  if (!limits) {
+    return;
+  }
+
+  // Every field, by name rather than by memset, so that adding a field to
+  // GRX_Limits without deciding what "unlimited" means for it is a compiler
+  // warning rather than a silent zero.
+  *limits = (GRX_Limits) {
+    .max_pattern_length = 0,
+    .max_nesting_depth = 0,
+    .max_nodes = 0,
+    .max_program_size = 0,
+    .max_captures = 0,
+    .max_repeat_count = 0,
+    .max_class_ranges = 0,
+    .max_lookbehind_length = 0,
+    .max_recursion_depth = 0,
+    .max_steps = 0,
+    .max_backtrack = 0,
+    .max_match_memory = 0,
+    .max_subject_length = 0,
+  };
+}
+

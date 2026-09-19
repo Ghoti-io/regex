@@ -571,15 +571,20 @@ need:
 | `max_repeat_count` | parser | any bound in `{m,n}` |
 | `max_class_ranges` | lowering | ranges in one canonical class, after expansion of properties and folding |
 | `max_program_size` | codegen | instructions, after repeat expansion |
-| `max_lookbehind_length` *(new)* | lowering | maximum length of a lookbehind body, for dialects that bound it; also caps the reverse scan |
-| `max_recursion_depth` *(new)* | backtracker | nested `CALL` frames |
+| `max_lookbehind_length` | analysis, after lowering | maximum length of a lookbehind body. `GRX_NPOS` for an unbounded body, which exceeds every finite cap. A *caller's* policy rather than a dialect's rule, so its default is 0; a dialect that bounds its own lookbehind enforces that through its profile instead |
+| `max_recursion_depth` | *reserved* | nested `CALL` frames. Nothing reads it: no dialect here has recursion, which arrives with WP-18. `tests/unit/test_limits.cpp` fails the moment one does |
 | `max_subject_length` | entry | bytes of subject |
 | `max_steps` | all engines | instructions executed in one search |
 | `max_backtrack` | backtracker | frames on the stack |
 | `max_match_memory` *(new)* | exec | bytes of scratch a match object may grow to; selects bit-state eligibility |
 
-Defaults are non-zero for every field, as scaffolded, because a regular
-expression is the one input whose cost is not bounded by its size. The
+Every field reads 0 as "no limit", `grx_limits_unlimited()` fills in the
+all-zero structure, and
+`tests/unit/test_limits.cpp:EveryEnforcedLimitRefusesWhenTightAndCapsNothingAtZero`
+checks both halves of that per field rather than leaving it a sentence.
+
+Defaults are non-zero for every field except the two noted above, because a
+regular expression is the one input whose cost is not bounded by its size. The
 default values are measured, not guessed: [plan.md](plan.md) WP-14 sets them
 from the conformance corpus so that no pattern in any oracle's own test suite
 hits a default limit, and from the ReDoS corpus so that every known

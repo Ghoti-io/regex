@@ -88,23 +88,32 @@ TEST(Limits, DefaultsBoundEveryRunawayQuantity) {
   EXPECT_GT(limits.max_captures, 0u);
   EXPECT_GT(limits.max_repeat_count, 0u);
   EXPECT_GT(limits.max_class_ranges, 0u);
-  EXPECT_GT(limits.max_lookbehind_length, 0u);
   EXPECT_GT(limits.max_recursion_depth, 0u);
   EXPECT_GT(limits.max_steps, 0u);
   EXPECT_GT(limits.max_backtrack, 0u);
   EXPECT_GT(limits.max_match_memory, 0u);
 }
 
-TEST(Limits, SubjectLengthIsTheOneDeliberateZero) {
-  // Every other field caps something a small pattern can make large. A
-  // subject is a buffer the caller already holds, so its size is bounded by
-  // a decision the caller already made, and a default here would reject a
-  // large document for no reason the library can justify. Stated so that
-  // setting it to a number later is a deliberate change rather than a
+TEST(Limits, TwoFieldsAreDeliberatelyZero) {
+  // Every other field caps something a small pattern can make large. These
+  // two do not, for different reasons, and both are stated here so that
+  // giving either a number later is a deliberate change rather than a
   // "missing default" someone fills in.
   GRX_Limits limits;
   grx_limits_default(&limits);
+
+  // A subject is a buffer the caller already holds, so its size is bounded
+  // by a decision the caller already made, and a default here would reject a
+  // large document for no reason the library can justify.
   EXPECT_EQ(limits.max_subject_length, 0u);
+
+  // max_lookbehind_length was 255 while nothing enforced it. Now that it is
+  // enforced, 255 would refuse `(?<=a+)x` - valid ECMAScript, whose
+  // lookbehind is unbounded, and whose unbounded body reports GRX_NPOS and
+  // so exceeds every finite cap. Bounding a lookbehind is a caller's policy
+  // on top of a dialect rather than a property of one, so the default is to
+  // have no policy. tests/unit/test_limits.cpp checks that setting it works.
+  EXPECT_EQ(limits.max_lookbehind_length, 0u);
 }
 
 TEST(Limits, DefaultTakesNull) {

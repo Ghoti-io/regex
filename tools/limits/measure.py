@@ -203,10 +203,15 @@ def report_compile_limits(driver, rows, defaults):
     for name, values, _ in measured:
         default = defaults[name]
         top = max(values) if values else 0
-        print("%-24s %8d %8d %8d %10d %8.0fx"
+        # A default of 0 is "no limit", not a limit of nothing. Reading it as
+        # a number made this report fail the moment max_lookbehind_length's
+        # default became 0, claiming a corpus pattern needing 4 exceeded it -
+        # a headroom division by a cap that does not exist.
+        print("%-24s %8d %8d %8d %10s %8s"
               % (name, percentile(values, 0.5), percentile(values, 0.99),
-                 top, default, default / max(1, top)))
-        if top > default:
+                 top, default if default else "none",
+                 "-" if not default else "%.0fx" % (default / max(1, top))))
+        if default and top > default:
             exceeded.append((name, top, default))
 
     print()

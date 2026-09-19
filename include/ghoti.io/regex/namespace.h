@@ -57,6 +57,7 @@
 #define grx_error_clear GHOTIIO_REGEX(grx_error_clear)
 #define grx_facts_init GHOTIIO_REGEX(grx_facts_init)
 #define grx_limits_default GHOTIIO_REGEX(grx_limits_default)
+#define grx_limits_unlimited GHOTIIO_REGEX(grx_limits_unlimited)
 #define grx_match_count GHOTIIO_REGEX(grx_match_count)
 #define grx_match_create GHOTIIO_REGEX(grx_match_create)
 #define grx_match_destroy GHOTIIO_REGEX(grx_match_destroy)

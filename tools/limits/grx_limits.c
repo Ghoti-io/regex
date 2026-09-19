@@ -67,9 +67,6 @@ static const char * const kFieldNames[FIELD_COUNT] = {
 };
 
 /** Everything unlimited, so that one field at a time is the only bound. */
-static void unlimited(GRX_Limits * limits) {
-  memset(limits, 0, sizeof(*limits));
-}
 
 static void set_field(GRX_Limits * limits, Field field, size_t value) {
   switch (field) {
@@ -88,7 +85,7 @@ static void set_field(GRX_Limits * limits, Field field, size_t value) {
 static int compiles(const char * pattern, size_t length, uint32_t options,
     Field field, size_t value) {
   GRX_Limits limits;
-  unlimited(&limits);
+  grx_limits_unlimited(&limits);
   set_field(&limits, field, value);
 
   GRX_Regex * regex = NULL;
@@ -160,7 +157,7 @@ static size_t decode_hex(const char * hex, char * out, size_t capacity) {
 static void report_steps(const char * pattern, size_t pattern_length,
     uint32_t options, const char * subject, size_t subject_length) {
   GRX_Limits limits;
-  unlimited(&limits);
+  grx_limits_unlimited(&limits);
 
   GRX_Regex * regex = NULL;
   if (grx_regex_compile_with_allocator(pattern, pattern_length,

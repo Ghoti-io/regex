@@ -264,9 +264,34 @@ typedef struct GRX_Limits {
 /**
  * @brief Fill in the default limits.
  *
+ * Every field is a measured number rather than a guess; see
+ * documentation/dialects.md section 7 for the report and the reasoning.
+ * Two are zero on purpose - `max_subject_length`, because the caller
+ * already chose how big their buffer is, and `max_lookbehind_length`,
+ * because bounding a lookbehind is a caller's policy rather than a
+ * dialect's rule.
+ *
  * @param limits Structure to populate. NULL is ignored.
  */
 GRX_API void grx_limits_default(GRX_Limits * limits);
+
+/**
+ * @brief Fill in limits that cap nothing.
+ *
+ * Every field zero, which each enforcement site reads as "no limit". The
+ * opposite end of grx_limits_default(), and the shape a caller wants when
+ * they are measuring what a pattern costs rather than defending against it -
+ * `tools/limits/grx_limits.c` had written its own copy of this before it was
+ * offered here.
+ *
+ * This is a loaded foot-gun and is meant to look like one. With `max_steps`
+ * and `max_backtrack` at zero there is nothing between a backtracking engine
+ * and an unbounded run: `(a+)+$` against thirty `a`s and a `!` will not
+ * return. Use it on patterns you wrote, never on patterns you were given.
+ *
+ * @param limits Structure to populate. NULL is ignored.
+ */
+GRX_API void grx_limits_unlimited(GRX_Limits * limits);
 
 #ifdef __cplusplus
 }

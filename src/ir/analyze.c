@@ -283,9 +283,14 @@ static Span walk(Analysis * analysis, uint32_t node_index) {
       analysis->has_lookaround = 1;
       analysis->is_regular = 0;
       Span body = walk(analysis, node->first_child);
+      // GRX_NPOS is kept rather than skipped. An unbounded body - `(?<=a+)`
+      // - used to leave this at zero, which reads as "no lookbehind" and is
+      // the opposite of the truth: that is the one lookbehind that may need
+      // the whole subject before the start. GRX_NPOS is what
+      // GRX_Facts::max_length already means by unbounded, and because it is
+      // SIZE_MAX no later body can lower it.
       if ((node->mode == GRX_LOOK_BEHIND_POSITIVE
               || node->mode == GRX_LOOK_BEHIND_NEGATIVE)
-          && body.max_length != GRX_NPOS
           && body.max_length > analysis->max_lookbehind) {
         analysis->max_lookbehind = body.max_length;
       }

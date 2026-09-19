@@ -49,6 +49,26 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t * data, size_t size) {
       limits.max_repeat_count = 16;
       limits.max_class_ranges = 8;
     }
+    // The fields the set above leaves alone, so that every enforcement site
+    // is reachable rather than the four that were written first.
+    // max_lookbehind_length is here because it was reachable from nowhere at
+    // all until it was enforced: a limit nothing exercises is a limit nobody
+    // finds out is broken.
+    //
+    // Downward only, never to zero. "Zero means no limit" is checked in
+    // tests/unit/test_limits.cpp and in the vectors, where the input is
+    // chosen; here it is not, and `a{4294967295}` with max_program_size at
+    // zero is an unbounded allocation that would be reported as a crash it
+    // is not. The two match-time limits stay at their defaults for the same
+    // reason - a fuzzer that can turn off max_steps is a fuzzer that hangs.
+    if (selector & 0x80) {
+      limits.max_pattern_length = 32;
+      limits.max_captures = 4;
+      limits.max_program_size = 128;
+      limits.max_lookbehind_length = 4;
+      limits.max_match_memory = 4096;
+      limits.max_subject_length = 64;
+    }
     // The option combinations that change the *grammar*, not just the
     // match: ECMAScript reads a different language with `u` than without,
     // and a third one with `v`, where `--` is an operator and a bare `-` is

@@ -122,7 +122,8 @@ typedef struct GRX_Facts {
   int has_duplicate_names; ///< Two capturing groups share a name.
   size_t min_length;     ///< Shortest possible match, in bytes.
   size_t max_length;     ///< Longest possible match, or GRX_NPOS if unbounded.
-  size_t max_lookbehind; ///< Bytes a lookbehind may need before the start.
+  size_t max_lookbehind; ///< Bytes a lookbehind may need before the start,
+                         ///< or GRX_NPOS if unbounded.
   size_t capture_count;  ///< Capturing groups, excluding group 0.
   size_t program_size;   ///< Instructions in the compiled program.
   const char * literal_prefix;   ///< Bytes every match starts with, or NULL.

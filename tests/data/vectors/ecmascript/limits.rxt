@@ -1,0 +1,79 @@
+# Hand-written, like long_limits.rxt: these are claims about this library's
+# limits, not about ECMAScript, so no oracle answers them.
+#
+# The unit tests in tests/unit/test_limits.cpp check each field through the
+# C API. These check the same thing through the vector runner, which is the
+# path a caller's own harness looks like - and they exist because `limits:`
+# only accepted seven of the thirteen fields until it was looked at, so a
+# vector could not have expressed most of this.
+dialect: ecmascript
+unicode: 17.0
+
+# A caller may bound a lookbehind even where the dialect does not.
+pattern: (?<=abcd)x
+flags: u
+subject: abcdx
+engines: backtrack
+limits: max_lookbehind_length=3
+expect: error limit
+
+pattern: (?<=abcd)x
+flags: u
+subject: abcdx
+engines: backtrack
+limits: max_lookbehind_length=4
+expect: 4-5
+
+# An unbounded body exceeds any bound, which is the reason to set one.
+pattern: (?<=a+)x
+flags: u
+subject: aaax
+engines: backtrack
+limits: max_lookbehind_length=1000000
+expect: error limit
+
+# ...and is accepted when there is no bound, because ECMAScript has none.
+pattern: (?<=a+)x
+flags: u
+subject: aaax
+engines: backtrack
+limits: max_lookbehind_length=0
+expect: 3-4
+
+# Zero lifts a compile-time limit that would otherwise refuse.
+pattern: ((((((a))))))
+flags: u
+subject: a
+limits: max_nesting_depth=3
+expect: error limit
+
+pattern: ((((((a))))))
+flags: u
+subject: a
+limits: max_nesting_depth=0
+expect: 0-1 0-1 0-1 0-1 0-1 0-1 0-1
+
+# Zero lifts a match-time limit too. The backtracking engines need
+# max_backtrack lifted for a long greedy scan; see long_limits.rxt.
+pattern: ^a+$
+flags: u
+subject: a
+repeat: 200000
+engines: backtrack bitstate
+limits: max_backtrack=0
+expect: 0-$
+
+# A subject cap is the caller's, and off by default. `limit` rather than
+# `error limit` because this one is checked at match time: the pattern
+# compiles, and it is the search that is refused.
+pattern: ^a+$
+flags: u
+subject: aaaa
+limits: max_subject_length=3
+expect: limit
+
+pattern: ^a+$
+flags: u
+subject: aaaa
+limits: max_subject_length=0
+expect: 0-4

@@ -101,6 +101,22 @@ GRX_Result grx_compile_program(const GRX_Pattern * pattern,
   grx_facts_init(&regex->facts);
 
   result = grx_analyze_ir(ir, &regex->facts);
+  if (result == GRX_OK && limits->max_lookbehind_length
+      && regex->facts.max_lookbehind > limits->max_lookbehind_length) {
+    // Checked here rather than in the parser because it is a property of the
+    // lowered tree: `(?<=a{3,7})` is seven bytes and `(?<=a|bcd)` is three,
+    // and neither is visible from the syntax alone.
+    //
+    // An unbounded body is GRX_NPOS and so exceeds every finite cap, which
+    // is the whole point of setting one: a caller who bounds a lookbehind is
+    // defending against the body that may read the entire subject, and
+    // `(?<=a+)` is exactly that body. A dialect whose lookbehind is
+    // unbounded (ECMAScript, documentation/dialects.md section 5.4) accepts
+    // the pattern as *syntax*; this limit is the caller's own policy on top
+    // of that, which is why the default does not apply it.
+    result = grx_error_set(out_error, GRX_ERR_LIMIT,
+        GRX_DIAG_LIMIT_LOOKBEHIND_LENGTH, GRX_NPOS, 0);
+  }
   if (result == GRX_OK) {
     result = grx_codegen_program(ir, limits, out_error, &regex->program);
   }

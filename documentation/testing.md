@@ -107,10 +107,14 @@ expect: 0-$
   Bounded at 16,777,216 repetitions and 64 MB of subject, because a typo
   here is an out-of-memory rather than a failed assertion, and a suite that
   dies has told nobody anything.
+- `limits:` sets any field of `GRX_Limits` as `name=value`, `0` meaning no
+  limit. All thirteen fields, since it accepted only the seven somebody
+  happened to need first until that was looked at - which meant most of what
+  `tests/data/vectors/ecmascript/limits.rxt` now says could not have been
+  written as a vector at all.
 - `engines:` restricts which engines are asked - `pike`, `backtrack`,
-  `bitstate` - and defaults to every eligible one; `limits:` overrides a
-  limit for the record; `skip: <reason>` records a known deviation without
-  deleting the evidence.
+  `bitstate` - and defaults to every eligible one; `skip: <reason>` records a
+  known deviation without deleting the evidence.
 - `unicode:` at file level: the oracle's Unicode version, for the skip rule
   in [unicode.md](unicode.md) §1.
 
@@ -416,7 +420,12 @@ comparing them should not have to open three files.
   front end is refused at the first call and the run is spent. Bits 3-5
   choose the option set, which is the thing that matters: ECMAScript is three
   grammars, not one, and `v` reads `--` as an operator where `u` reads two
-  dashes. Bit 6 tightens the limits.
+  dashes. Bits 6 and 7 tighten two disjoint sets of limits, covering every
+  enforced field between them - bit 7 was added when
+  `max_lookbehind_length` became enforced, since a limit no harness can
+  exercise is a limit nobody finds out is broken. Downward only, never to
+  zero: "zero means no limit" is checked where the input is chosen, and a
+  fuzzer that can turn off `max_steps` is a fuzzer that hangs.
 - `fuzz_subject`: bits 0-1 choose which list the pattern comes from - one
   input in four takes the UnicodeSets list, which needs the flag as well -
   and the rest of the byte chooses within the list, the case flags and the
