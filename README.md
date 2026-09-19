@@ -7,10 +7,11 @@ table that says what each one has, and two engines run the result: a Pike VM
 that is linear in the subject length, and a backtracking engine for the
 constructs no lockstep simulation can express.
 
-**Status: scaffolding.** The layout, the API surface, the dialect table, the
-build and the test harness are in place and green. The parser, the compiler
-and both engines are stubs that report `GRX_ERR_UNSUPPORTED`; see
-[Status](#status) below for exactly what works today.
+**Status: under construction.** The Unicode tables, the character-class
+algebra, the parser and the ECMAScript front end are built and checked
+against Node 22. The compiler and both engines are still stubs that report
+`GRX_ERR_UNSUPPORTED`, so nothing *matches* yet; see [Status](#status) below
+for exactly what works today.
 
 ## Example
 
@@ -132,14 +133,24 @@ Nothing is allocated for the caller to free on a failing call.
 | Canonical character-class table | working |
 | Dialect table and lookup | working; the feature rows are provisional |
 | UTF-8 decode and encode | working, strict |
-| Character-class membership | working; `grx_charclass_add_range()` is a stub |
-| Simple case folding | ASCII only |
-| Parser | stub - `GRX_ERR_UNSUPPORTED` |
+| Character classes: membership, insertion, set algebra, fold closure | working |
+| Unicode tables: 454 properties, both foldings, both name resolvers | working, UCD 17.0.0 |
+| UTF-8 reverse decode and whole-buffer validation | working |
+| Parser skeleton and hook interface | working |
+| ECMAScript front end, legacy and Unicode modes | working |
+| ECMAScript UnicodeSets (`v`) mode | refused with a diagnostic; WP-12 |
+| Every dialect but ECMAScript | named, `GRX_ERR_UNSUPPORTED` |
 | Lowering and codegen | not started |
 | Pike VM, backtracking engine | stubs - `GRX_ERR_UNSUPPORTED` |
 | Substitution and splitting | designed, not started |
 
-127 tests, clean under Valgrind and under ASan+UBSan. The tests that record a
+**Conformance.** The ECMAScript front end's accept/reject agrees with Node 22
+on every one of 720,000 patterns per seed - an exhaustive corpus of every
+string up to three characters over the grammar's punctuation, and a random
+corpus of longer ones. `make check-oracle-syntax` runs it. That is a claim
+about *syntax* only; there is no engine yet to make one about matching.
+
+202 tests, clean under Valgrind and under ASan+UBSan. The tests that record a
 stub's answer are marked `STUB` in a comment and are meant to be deleted with
 the stub.
 

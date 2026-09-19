@@ -104,16 +104,23 @@ zero vectors. *Done:* a vector file with one deliberately wrong expectation
 fails with a message naming the vector. *Depends on:* WP-01 for the dump
 formats.
 
-**WP-05 Character-class algebra.** *core, S.* `grx_charclass_add_range()`
+**WP-05 Character-class algebra.** *core, S.* **Landed.** `grx_charclass_add_range()`
 for real; union, intersection, subtraction, symmetric difference,
 complement; fold closure using WP-02's orbits; canonicalisation; the
 `max_class_ranges` limit. *Done:* property-based tests against a bitmap
 model over a sampled code-point space. *Depends on:* WP-02's fold table
-(can start with the ASCII stub and switch).
+(can start with the ASCII stub and switch). *As built:* the model is exact
+rather than sampled - one bit per code point over the whole of Unicode, which
+is 136 KB and a few milliseconds per operation - so there is no sample for a
+boundary to fall outside of. The four set operations are one sweep
+parameterised by a truth table, and closure walks the *orbit* table rather
+than the class, so its cost is the size of the folding rather than the size of
+the class.
 
 ### Phase 1: ECMAScript and the engines
 
-**WP-06 The parser and the ECMAScript front end.** *front ends, L.* The
+**WP-06 The parser and the ECMAScript front end.** *front ends, L.*
+**Landed** (legacy and Unicode modes; `v` is WP-12). The
 recursive-descent parser skeleton (groups, alternation, quantifiers,
 classes, escapes, names, `max_nesting_depth`), the `GRX_Frontend` hook
 interface with its default, and the ECMAScript hooks for legacy and Unicode

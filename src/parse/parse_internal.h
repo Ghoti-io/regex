@@ -38,6 +38,7 @@
 
 #include "../core/arena_internal.h"
 #include "../core/semantics_internal.h"
+#include "../syntax/syntax_internal.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -277,6 +278,272 @@ GRX_Result grx_pattern_add_name(GRX_Pattern * pattern, const char * name,
  * @return The NUL-terminated name, or NULL when the offset is out of range.
  */
 const char * grx_pattern_name(const GRX_Pattern * pattern, uint32_t offset);
+
+/**
+ * @brief The parser's state, and what a hook is handed.
+ *
+ * One recursive-descent parser serves every dialect, parameterised by the
+ * dialect's features, its profile and its hooks (documentation/design.md
+ * section 4). This is the state all three share.
+ *
+ * `group_count` and `named_groups` are filled by a lexical prescan before
+ * parsing begins, because some dialects cannot read an escape without them:
+ * `\1` in ECMAScript without `u` is a backreference when the pattern has a
+ * group 1 and a legacy octal escape otherwise, and `\k` is a named reference
+ * only when the pattern has a named group *anywhere*, including after the
+ * reference. ECMA-262 does the same two-pass reading for the same reason.
+ */
+typedef struct GRX_Parser {
+  const char * text;               ///< The pattern text.
+  size_t length;                   ///< Its length in bytes.
+  size_t position;                 ///< Where the next character is read from.
+  GRX_Syntax syntax;               ///< The dialect.
+  GRX_SyntaxSpec spec;             ///< Its features.
+  GRX_Profile profile;             ///< What its constructs mean.
+  const struct GRX_Frontend * frontend; ///< How to read what a table cannot say.
+  uint32_t options;                ///< GRX_Option bits in force.
+  const GRX_Limits * limits;       ///< Caps to apply. Never NULL.
+  GRX_Pattern * pattern;           ///< What is being built.
+  GRX_Error * error;               ///< Where a failure is reported. May be NULL.
+  size_t depth;                    ///< Nesting, against max_nesting_depth.
+  size_t group_count;              ///< Capturing groups the prescan counted.
+  size_t groups_opened;            ///< Capturing groups numbered so far.
+  int named_groups;                ///< Non-zero if the pattern names a group.
+  int in_lookbehind;               ///< Non-zero inside a lookbehind body.
+} GRX_Parser;
+
+/**
+ * @brief What a `{` turned out to be.
+ *
+ * `is_quantifier` is 0 when the dialect says this `{` is a literal, which is
+ * what ECMAScript without `u` says about `a{`, `a{1` and `a{,3}`. The parser
+ * then rewinds and reads the brace as an ordinary character.
+ */
+typedef struct GRX_Quantifier {
+  uint32_t min;      ///< Lower bound.
+  uint32_t max;      ///< Upper bound, or GRX_REPEAT_INF.
+  int is_quantifier; ///< 0 when the `{` is a literal after all.
+} GRX_Quantifier;
+
+/**
+ * @brief What a group opener turned out to be.
+ *
+ * The hook has consumed `(` and whatever followed it that identifies the
+ * form; the parser then reads the body and the `)`, so that nesting, depth
+ * and the unmatched-parenthesis diagnostic live in one place.
+ */
+typedef struct GRX_GroupOpen {
+  GRX_NodeKind kind; ///< GROUP, LOOKAROUND, CONDITIONAL, RECURSE, CONTROL, OPTIONS.
+  uint32_t flags;    ///< GRX_NODE_* bits for the node.
+  uint32_t a;        ///< Kind-specific payload; see @ref GRX_Node.
+  uint32_t b;        ///< Kind-specific payload.
+  int has_body;      ///< Non-zero when a body and a `)` follow.
+} GRX_GroupOpen;
+
+/**
+ * @brief The lexical rules a table cannot express.
+ *
+ * Every hook reads text and produces a node or an item. None of them decides
+ * what a construct *means*: that is the profile's job, and a hook that
+ * consulted GRX_Profile to choose a node kind would be a hook that has to
+ * change when a second dialect shares its spelling.
+ *
+ * A NULL hook is "this dialect is named but not built" and reports
+ * GRX_DIAG_DIALECT_NOT_IMPLEMENTED rather than falling back to a default
+ * that would accept the wrong language. documentation/design.md section 4:
+ * a dialect that accepts everything is a bug.
+ */
+typedef struct GRX_Frontend {
+  const char * name; ///< For diagnostics and dumps.
+
+  /**
+   * Read an escape outside a character class, `\` already consumed, and
+   * build the node it denotes.
+   */
+  GRX_Result (*atom_escape)(GRX_Parser * parser, uint32_t * out_node);
+
+  /** Read an escape inside a character class, `\` already consumed. */
+  GRX_Result (*class_escape)(GRX_Parser * parser, GRX_ClassItem * out_item);
+
+  /** Read a character class, `[` already consumed, up to and including `]`. */
+  GRX_Result (*char_class)(GRX_Parser * parser, uint32_t * out_node);
+
+  /** Read a group opener, `(` already consumed. */
+  GRX_Result (*group_open)(GRX_Parser * parser, GRX_GroupOpen * out_open);
+
+  /** Read a `{` quantifier, the brace already consumed. */
+  GRX_Result (*brace_quantifier)(
+      GRX_Parser * parser, GRX_Quantifier * out_quantifier);
+
+  /**
+   * Turn a character with no special meaning into a node.
+   *
+   * The hook exists because "no special meaning" is itself a dialect rule:
+   * `{`, `}` and `]` are literals in ECMAScript without `u` and syntax
+   * errors with it, and a dialect that accepted both would be telling a
+   * caller their pattern is valid for an engine that rejects it.
+   */
+  GRX_Result (*literal_atom)(GRX_Parser * parser, uint32_t codepoint,
+      size_t offset, size_t length, uint32_t * out_node);
+
+  /**
+   * Refuse a quantifier the dialect does not allow on this atom.
+   *
+   * Which atoms may be repeated is a dialect rule and not a shared one: a
+   * lookahead is quantifiable in ECMAScript without `u` and a syntax error
+   * with it, a lookbehind is never quantifiable, `^*` is a literal asterisk
+   * in POSIX BRE, and Perl rejects `(?=a)*` outright. The parser knows a
+   * quantifier has been found and what it is being applied to; the dialect
+   * knows whether that is allowed.
+   *
+   * @param parser The parser.
+   * @param node The atom the quantifier would wrap.
+   * @param offset Byte offset of the quantifier.
+   * @param length Bytes it spans.
+   * @return GRX_OK to allow it, or a failure with its diagnostic set.
+   */
+  GRX_Result (*check_quantifier_target)(GRX_Parser * parser, uint32_t node,
+      size_t offset, size_t length);
+
+  /** Check what only the finished pattern can show. May be NULL. */
+  GRX_Result (*validate)(GRX_Parser * parser);
+} GRX_Frontend;
+
+/**
+ * @brief The hooks for a dialect, or NULL when it is named but not built.
+ *
+ * @param syntax The dialect.
+ * @return Its front end, or NULL.
+ */
+const GRX_Frontend * grx_frontend_for(GRX_Syntax syntax);
+
+/** @brief The ECMAScript front end. */
+extern const GRX_Frontend grx_frontend_ecmascript;
+
+// --------------------------------------------------------------------------
+// The services a hook uses. Declared here so that a front end is a table of
+// rules rather than a second parser.
+// --------------------------------------------------------------------------
+
+/**
+ * @brief Report a failure at a span of the pattern, and return its code.
+ *
+ * @param parser The parser.
+ * @param diag The diagnostic.
+ * @param offset Byte offset of the offending construct.
+ * @param length Bytes it spans.
+ * @return The result code the diagnostic implies, so a hook can
+ *   `return grx_parse_fail(...)`.
+ */
+GRX_Result grx_parse_fail(
+    GRX_Parser * parser, GRX_Diag diag, size_t offset, size_t length);
+
+/**
+ * @brief Whether the parser has reached the end of the pattern.
+ *
+ * @param parser The parser.
+ * @return Non-zero at the end.
+ */
+int grx_parse_at_end(const GRX_Parser * parser);
+
+/**
+ * @brief The next code point, without consuming it.
+ *
+ * @param parser The parser.
+ * @param out_codepoint Receives the code point. Required.
+ * @param out_width Receives its width in bytes. Optional.
+ * @return GRX_OK, GRX_ERR_SYNTAX for malformed UTF-8, or GRX_ERR_LIMIT at
+ *   the end of the pattern.
+ */
+GRX_Result grx_parse_peek(
+    const GRX_Parser * parser, uint32_t * out_codepoint, size_t * out_width);
+
+/**
+ * @brief Consume and return the next code point.
+ *
+ * @param parser The parser.
+ * @param out_codepoint Receives the code point. Required.
+ * @return GRX_OK, GRX_ERR_SYNTAX for malformed UTF-8, or GRX_ERR_LIMIT at
+ *   the end of the pattern.
+ */
+GRX_Result grx_parse_take(GRX_Parser * parser, uint32_t * out_codepoint);
+
+/**
+ * @brief Consume one byte if it is the one expected.
+ *
+ * ASCII only, which every construct's punctuation is.
+ *
+ * @param parser The parser.
+ * @param expected The byte.
+ * @return Non-zero when it was there and was consumed.
+ */
+int grx_parse_eat(GRX_Parser * parser, char expected);
+
+/**
+ * @brief Append a literal node holding one code point.
+ *
+ * @param parser The parser.
+ * @param codepoint The code point.
+ * @param offset Byte offset of the construct that produced it.
+ * @param length Bytes it spanned in the pattern.
+ * @param out_node Receives the node index.
+ * @return GRX_OK or a failure code.
+ */
+GRX_Result grx_parse_literal_node(GRX_Parser * parser, uint32_t codepoint,
+    size_t offset, size_t length, uint32_t * out_node);
+
+/**
+ * @brief Append an empty character-class node, ready for items.
+ *
+ * @param parser The parser.
+ * @param offset Byte offset in the pattern.
+ * @param out_node Receives the node index.
+ * @return GRX_OK or a failure code.
+ */
+GRX_Result grx_parse_class_node(
+    GRX_Parser * parser, size_t offset, uint32_t * out_node);
+
+/**
+ * @brief Append one item to a class node built by grx_parse_class_node().
+ *
+ * Items must be added contiguously: a class node names a span of the item
+ * table, so a second class opened halfway through would interleave with it.
+ *
+ * @param parser The parser.
+ * @param node The class node.
+ * @param item The item.
+ * @return GRX_OK or a failure code.
+ */
+GRX_Result grx_parse_class_add(
+    GRX_Parser * parser, uint32_t node, const GRX_ClassItem * item);
+
+/**
+ * @brief Append a class node holding a single shorthand, such as `\d`.
+ *
+ * @param parser The parser.
+ * @param shorthand Which shorthand.
+ * @param negated Non-zero for the upper-case spelling.
+ * @param offset Byte offset in the pattern.
+ * @param length Bytes it spans.
+ * @param out_node Receives the node index.
+ * @return GRX_OK or a failure code.
+ */
+GRX_Result grx_parse_shorthand_node(GRX_Parser * parser,
+    GRX_ShorthandKind shorthand, int negated, size_t offset, size_t length,
+    uint32_t * out_node);
+
+/**
+ * @brief Parse one alternation - the whole grammar below a group.
+ *
+ * Exposed so that a hook which has read a group opener with a body of its own
+ * shape, such as a conditional's two branches, can recurse into the shared
+ * grammar rather than reimplementing it.
+ *
+ * @param parser The parser.
+ * @param out_node Receives the node index.
+ * @return GRX_OK or a failure code.
+ */
+GRX_Result grx_parse_alternation(GRX_Parser * parser, uint32_t * out_node);
 
 /**
  * @brief Parse pattern text into a node tree.

@@ -98,6 +98,7 @@ typedef enum {
   GRX_DIAG_DOUBLE_QUANTIFIER,      ///< `a**`, where the dialect forbids it.
   GRX_DIAG_QUANTIFIER_OUT_OF_ORDER, ///< `{3,1}`: the minimum exceeds the max.
   GRX_DIAG_QUANTIFIED_ASSERTION,   ///< A quantifier on a zero-width assertion.
+  GRX_DIAG_INVALID_QUANTIFIER,     ///< `a{,3}`: a `{` that is not a quantifier.
 
   // Escapes and code points.
   GRX_DIAG_INVALID_ESCAPE,         ///< An escape this dialect does not define.
@@ -107,6 +108,7 @@ typedef enum {
   GRX_DIAG_INVALID_CONTROL_ESCAPE, ///< `\c` without the letter it requires.
   GRX_DIAG_CODEPOINT_OUT_OF_RANGE, ///< Above U+10FFFF, or a surrogate.
   GRX_DIAG_INVALID_UTF8_IN_PATTERN, ///< The pattern is not valid UTF-8.
+  GRX_DIAG_UNESCAPED_METACHARACTER, ///< `{` where the dialect requires `\{`.
 
   // Character classes.
   GRX_DIAG_INVALID_CLASS_RANGE,    ///< `[z-a]`: the endpoints are reversed.

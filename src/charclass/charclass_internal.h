@@ -7,7 +7,12 @@
  * library's classes are over the whole of Unicode: `\p{L}` is some 700 ranges
  * and a bitmap of 0x110000 bits per class is not a reasonable price for it.
  *
- * Status: stub.
+ * There are two forms, and the difference is whether anything may still edit
+ * the set. A @ref GRX_CharClass is the editable one, used while lowering
+ * evaluates a class expression: it grows, it takes set operations, it closes
+ * under a case folding. A @ref GRX_ClassRef in a @ref GRX_ClassTable is what
+ * is left when lowering is done - a span of a shared range array that the IR,
+ * the program and the engines all read and none of them writes.
  *
  * Copyright 2026 by Corey Pennycuff
  */
@@ -24,6 +29,7 @@
 
 #include "../core/arena_internal.h"
 #include "../core/range_internal.h"
+#include "../unicode/unicode_internal.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -44,16 +50,149 @@ typedef struct GRX_CharClass {
 } GRX_CharClass;
 
 /**
- * @brief Add one inclusive range to a class.
+ * @brief Prepare an empty class. Allocates nothing.
+ *
+ * @param cls The class. NULL is ignored.
+ * @param allocator Where ranges will come from. NULL uses the default.
+ */
+void grx_charclass_init(GRX_CharClass * cls, const GRX_Allocator * allocator);
+
+/**
+ * @brief Add one inclusive range to a class, keeping it sorted and disjoint.
+ *
+ * Merges with every range the new one overlaps *or touches*: `[a-c]` and
+ * `[d-f]` become one range, not two. That matters beyond tidiness - the
+ * canonical form has to be unique, or two spellings of the same set would
+ * produce two classes and the table's deduplication would miss them.
  *
  * @param cls The class. NULL is invalid.
  * @param low First code point.
- * @param high Last code point; must be at least `low`.
+ * @param high Last code point; must be at least `low` and at most
+ *   GRX_CODEPOINT_MAX.
  * @param limits Caps to apply. NULL applies none.
  * @return GRX_OK, GRX_ERR_INVALID, GRX_ERR_LIMIT, or GRX_ERR_OOM.
  */
 GRX_Result grx_charclass_add_range(GRX_CharClass * cls, uint32_t low,
     uint32_t high, const GRX_Limits * limits);
+
+/**
+ * @brief Add a whole sorted, disjoint range array - a Unicode property, say.
+ *
+ * @param cls The class. NULL is invalid.
+ * @param ranges The ranges. May be NULL only when `count` is 0.
+ * @param count Number of ranges.
+ * @param limits Caps to apply. NULL applies none.
+ * @return GRX_OK, GRX_ERR_INVALID, GRX_ERR_LIMIT, or GRX_ERR_OOM.
+ */
+GRX_Result grx_charclass_add_ranges(GRX_CharClass * cls,
+    const GRX_CharRange * ranges, size_t count, const GRX_Limits * limits);
+
+/**
+ * @brief The set operations, each replacing `cls` with the result.
+ *
+ * Both operands are read as the sets they *denote*, so a negated class
+ * behaves as its complement without the caller having to apply the negation
+ * first; the result is never negated, because the operation has already been
+ * evaluated over the real sets.
+ *
+ * `cls` and `other` may be the same object.
+ *
+ * @param cls Left operand, and where the result lands. NULL is invalid.
+ * @param other Right operand. NULL is invalid.
+ * @param limits Caps to apply. NULL applies none.
+ * @return GRX_OK, GRX_ERR_INVALID, GRX_ERR_LIMIT, or GRX_ERR_OOM.
+ */
+GRX_Result grx_charclass_union(GRX_CharClass * cls, const GRX_CharClass * other,
+    const GRX_Limits * limits);
+
+/** @copydoc grx_charclass_union */
+GRX_Result grx_charclass_intersect(GRX_CharClass * cls,
+    const GRX_CharClass * other, const GRX_Limits * limits);
+
+/** @copydoc grx_charclass_union */
+GRX_Result grx_charclass_subtract(GRX_CharClass * cls,
+    const GRX_CharClass * other, const GRX_Limits * limits);
+
+/** @copydoc grx_charclass_union */
+GRX_Result grx_charclass_symdiff(GRX_CharClass * cls,
+    const GRX_CharClass * other, const GRX_Limits * limits);
+
+/**
+ * @brief Replace a class with every code point it does not contain.
+ *
+ * Clears the negation flag, because the negation has now been performed.
+ *
+ * @param cls The class. NULL is invalid.
+ * @param limits Caps to apply. NULL applies none.
+ * @return GRX_OK, GRX_ERR_INVALID, GRX_ERR_LIMIT, or GRX_ERR_OOM.
+ */
+GRX_Result grx_charclass_complement(
+    GRX_CharClass * cls, const GRX_Limits * limits);
+
+/**
+ * @brief Apply the negation flag, leaving a class that denotes itself.
+ *
+ * What lowering calls before handing a class to the class table: past this
+ * point nothing consults `negated`, and an engine testing membership does a
+ * binary search and believes the answer.
+ *
+ * @param cls The class. NULL is invalid.
+ * @param limits Caps to apply. NULL applies none.
+ * @return GRX_OK, GRX_ERR_INVALID, GRX_ERR_LIMIT, or GRX_ERR_OOM.
+ */
+GRX_Result grx_charclass_canonicalize(
+    GRX_CharClass * cls, const GRX_Limits * limits);
+
+/**
+ * @brief Add every code point that matches one already present, under a
+ * folding.
+ *
+ * This is what makes a caseless class an ordinary class: after it, no engine
+ * needs to know that the pattern said `i`. It walks the folding's orbit
+ * table rather than the class, so the cost is the size of the table and not
+ * the size of the class - `[^\x00]` is 1.1 million code points and 2,994
+ * orbits.
+ *
+ * Applied to the *denoted* set, so it must run after any negation is
+ * resolved; a caller closing `[^a]` under folding wants the complement of
+ * the closure of `{a}`, and grx_charclass_canonicalize() first is how it
+ * says so.
+ *
+ * @param cls The class. NULL is invalid.
+ * @param kind Which folding. GRX_FOLD_NONE does nothing.
+ * @param limits Caps to apply. NULL applies none.
+ * @return GRX_OK, GRX_ERR_INVALID, GRX_ERR_LIMIT, or GRX_ERR_OOM.
+ */
+GRX_Result grx_charclass_fold_closure(GRX_CharClass * cls, GRX_FoldKind kind,
+    const GRX_Limits * limits);
+
+/**
+ * @brief Replace one class's contents with a copy of another's.
+ *
+ * @param cls Destination. NULL is invalid.
+ * @param other Source. NULL is invalid.
+ * @param limits Caps to apply. NULL applies none.
+ * @return GRX_OK, GRX_ERR_INVALID, GRX_ERR_LIMIT, or GRX_ERR_OOM.
+ */
+GRX_Result grx_charclass_copy(GRX_CharClass * cls, const GRX_CharClass * other,
+    const GRX_Limits * limits);
+
+/**
+ * @brief Whether two classes denote the same set.
+ *
+ * @param a First class. NULL denotes nothing.
+ * @param b Second class.
+ * @return Non-zero when they are equal.
+ */
+int grx_charclass_equals(const GRX_CharClass * a, const GRX_CharClass * b);
+
+/**
+ * @brief The number of code points a class denotes.
+ *
+ * @param cls The class. NULL returns 0.
+ * @return The count.
+ */
+size_t grx_charclass_size(const GRX_CharClass * cls);
 
 /**
  * @brief Whether a class contains a code point.
@@ -123,6 +262,24 @@ void grx_class_table_init(GRX_ClassTable * table,
  */
 GRX_Result grx_class_table_add(GRX_ClassTable * table,
     const GRX_CharRange * ranges, size_t count, uint32_t * out_index);
+
+/**
+ * @brief Add a canonical class, reusing an identical one already present.
+ *
+ * Deduplication is here rather than at the call sites because a pattern
+ * names the same set repeatedly - `[a-z]` in four places, `\w` in six - and
+ * an instruction stores an index, so one entry serves all of them. The class
+ * must already be canonical: this refuses a class whose negation flag is
+ * still set rather than quietly storing the wrong set.
+ *
+ * @param table The table. NULL is GRX_ERR_INVALID.
+ * @param cls The class. NULL, or one still flagged negated, is
+ *   GRX_ERR_INVALID.
+ * @param out_index Receives the class's index. Optional.
+ * @return GRX_OK, GRX_ERR_LIMIT, GRX_ERR_OOM, or GRX_ERR_INVALID.
+ */
+GRX_Result grx_class_table_add_class(GRX_ClassTable * table,
+    const GRX_CharClass * cls, uint32_t * out_index);
 
 /**
  * @brief The ranges of one class in a table.

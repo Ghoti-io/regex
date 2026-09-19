@@ -8,8 +8,11 @@
  * that is linting, translating between dialects, or reporting a position to a
  * user wants it without having built a program it will not run.
  *
- * Status: stub. grx_pattern_parse() returns GRX_ERR_UNSUPPORTED until the
- * parser is written; see documentation/dialects.md.
+ * Status: ECMAScript is implemented, in both the legacy and Unicode modes of
+ * documentation/dialects.md section 8. Every other dialect is named and
+ * reports GRX_ERR_UNSUPPORTED with GRX_DIAG_DIALECT_NOT_IMPLEMENTED, rather
+ * than being read with a front end written for something else - a caller
+ * uses this library to learn whether a pattern is valid *for that engine*.
  *
  * Copyright 2026 by Corey Pennycuff
  */

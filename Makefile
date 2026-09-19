@@ -239,6 +239,12 @@ TESTFLAGS := `PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs --cflags gtes
 # wrong to reject in an instrumented one. Spelled as text's TEST_GATES is.
 TEST_GATES ?= check-symbols check-layering check-unicode-tables
 
+# How much of the pattern space `make check-oracle-syntax` walks. The default
+# is a few seconds; a soak before a milestone raises the count and varies the
+# seed (documentation/testing.md).
+ORACLE_SEED ?= 1
+ORACLE_COUNT ?= 120000
+
 # Valgrind flags (exclude "still reachable" as it's not a leak)
 VALGRIND_FLAGS := --leak-check=full --show-leak-kinds=definite,indirect,possible --track-origins=yes --error-exitcode=1
 
@@ -269,6 +275,14 @@ TEST_EXECUTABLES := $(addprefix $(APP_DIR)/,$(addsuffix $(EXE_EXTENSION),$(TEST_
 EXAMPLE_SOURCES := $(shell find examples -type f -name '*.c' 2>/dev/null)
 EXAMPLES := $(patsubst examples/%.c,$(APP_DIR)/examples/%$(EXE_EXTENSION),$(EXAMPLE_SOURCES))
 
+# The oracle drivers: this library wrapped so that a conformance harness can
+# ask it the same question it asks a reference implementation. Built on
+# demand rather than by `all`, because they are development tools and are not
+# installed.
+TOOL_SOURCES := $(shell find tools -type f -name '*.c' 2>/dev/null)
+TOOLS := $(patsubst tools/%.c,$(APP_DIR)/tools/%$(EXE_EXTENSION),$(notdir $(TOOL_SOURCES)))
+TOOLS := $(patsubst tools/oracle/%.c,$(APP_DIR)/tools/%$(EXE_EXTENSION),$(TOOL_SOURCES))
+
 # Where the test fixtures live. Tests run from build/.../apps, so the path is
 # baked in at compile time.
 REGEX_ROOT := $(CURDIR)
@@ -283,6 +297,11 @@ all: $(APP_DIR)/$(TARGET) $(APP_DIR)/$(STATIC_TARGET) ## Build shared + static l
 TEST_DEPFILES := $(foreach pair,$(TEST_PAIRS),$(OBJ_DIR)/tests/$(basename $(notdir $(word 1,$(subst |, ,$(pair))))).d)
 DEPFILES := $(LIBOBJECTS:.o=.d) $(TEST_HELPER_OBJ:.o=.d) $(TEST_DEPFILES)
 -include $(DEPFILES)
+
+# The sanitizer and fuzz trees get theirs at the end of this file, where the
+# variables naming their object directories have been defined. They were
+# getting none at all, which meant a header change did not rebuild them and
+# `make test-asan` reported on whatever had been compiled last.
 
 ####################################################################
 # Object Files
@@ -413,12 +432,18 @@ $(APP_DIR)/examples/%$(EXE_EXTENSION): examples/%.c $(APP_DIR)/$(STATIC_TARGET) 
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(INCLUDE) -o $@ $< $(LDFLAGS) $(REGEXLIBRARY) $(CUTIL_LIBS)
 
+$(APP_DIR)/tools/%$(EXE_EXTENSION): tools/oracle/%.c $(APP_DIR)/$(STATIC_TARGET) \
+		| $(APP_DIR)/$(TARGET)
+	@printf "\n### Compiling Tool: $* ###\n"
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(INCLUDE) -o $@ $< $(LDFLAGS) $(REGEXLIBRARY) $(CUTIL_LIBS)
+
 ####################################################################
 # Commands
 ####################################################################
 
 # General commands
-.PHONY: clean cloc docs docs-pdf examples coverage check-symbols check-layering check-unicode-tables
+.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-unicode-tables check-oracle-syntax
 # Release build commands
 .PHONY: all install test test-quiet test-asan test-valgrind test-valgrind-quiet test-watch uninstall watch
 # Debug build commands
@@ -448,6 +473,23 @@ test-watch: ## Watch the file directory for changes and run the unit tests
 		printf "\033[0m\n"; \
 		inotifywait -qr -e modify -e create -e delete -e move src include tests Makefile --exclude '/\.'; \
 		done
+
+tools: ## Build the oracle drivers used by the conformance harnesses
+tools: $(APP_DIR)/$(TARGET) $(TOOLS)
+	@printf "\nOracle drivers are in: $(APP_DIR)/tools/\n"
+
+check-oracle-syntax: ## Compare accept/reject against the reference implementation
+check-oracle-syntax: $(TOOLS)
+	@if ! command -v node >/dev/null 2>&1; then \
+		printf "check-oracle-syntax: skipped (no node)\n"; \
+		exit 0; \
+	fi; \
+	if ! command -v python3 >/dev/null 2>&1; then \
+		printf "check-oracle-syntax: skipped (no python3)\n"; \
+		exit 0; \
+	fi; \
+	python3 tools/oracle/syntax_diff.py --seed $(ORACLE_SEED) \
+		--count $(ORACLE_COUNT) --driver $(APP_DIR)/tools/grx_syntax
 
 examples: ## Build all examples
 examples: $(APP_DIR)/$(TARGET) $(EXAMPLES)
@@ -766,10 +808,16 @@ ifeq ($(UNAME_S), Linux)
 	ASAN_CFLAGS += -fPIC
 endif
 
+# -MMD -MP here for the same reason as the release build, and it was missing:
+# without it a change to a header did not rebuild these objects, so
+# `make test-asan` ran the previous build's code. Found when two diagnostics
+# were added to an enum and the sanitizer suite failed against a table it had
+# compiled before they existed. A stale sanitizer build is worse than no
+# sanitizer build, because it reports on something other than the tree.
 $(ASAN_OBJ_DIR)/%.o: src/%.c
 	@printf "\n### Compiling (ASan+UBSan): $< ###\n"
 	@mkdir -p $(@D)
-	$(CC) $(ASAN_CFLAGS) $(INCLUDE) -c $< -o $@
+	$(CC) $(ASAN_CFLAGS) $(INCLUDE) -c $< -MMD -MP -MF $(@:.o=.d) -o $@
 
 $(ASAN_APP_DIR)/$(ASAN_TARGET): $(ASAN_LIBOBJECTS)
 	@printf "\n### Linking ASan+UBSan Regex Library ###\n"
@@ -779,12 +827,12 @@ $(ASAN_APP_DIR)/$(ASAN_TARGET): $(ASAN_LIBOBJECTS)
 $(ASAN_OBJ_DIR)/tests/%.o: tests/%.cpp
 	@printf "\n### Compiling ASan Test: $* ###\n"
 	@mkdir -p $(@D)
-	$(CXX) $(ASAN_CXXFLAGS) $(INCLUDE) -Itests -DGRX_TEST_DATA=\"$(TEST_DATA)\" -c $< -o $@
+	$(CXX) $(ASAN_CXXFLAGS) $(INCLUDE) -Itests -DGRX_TEST_DATA=\"$(TEST_DATA)\" -c $< -MMD -MP -MF $(@:.o=.d) -o $@
 
 $(ASAN_OBJ_DIR)/tests/%.o: tests/unit/%.cpp
 	@printf "\n### Compiling ASan Test: $* ###\n"
 	@mkdir -p $(@D)
-	$(CXX) $(ASAN_CXXFLAGS) $(INCLUDE) -Itests -DGRX_TEST_DATA=\"$(TEST_DATA)\" -c $< -o $@
+	$(CXX) $(ASAN_CXXFLAGS) $(INCLUDE) -Itests -DGRX_TEST_DATA=\"$(TEST_DATA)\" -c $< -MMD -MP -MF $(@:.o=.d) -o $@
 
 define asan-test-executable-rule
 ASAN_TEST_OBJ_$1 := $(ASAN_OBJ_DIR)/tests/$(basename $(notdir $1)).o
@@ -850,7 +898,7 @@ FUZZ_TIME ?= 60
 
 $(FUZZ_OBJ_DIR)/%.o: src/%.c
 	@mkdir -p $(@D)
-	@$(FUZZ_CC) $(FUZZ_LIB_FLAGS) -std=c17 -w $(INCLUDE) -c $< -o $@
+	@$(FUZZ_CC) $(FUZZ_LIB_FLAGS) -std=c17 -w $(INCLUDE) -c $< -MMD -MP -MF $(@:.o=.d) -o $@
 
 # $1 = harness basename (fuzz_obj), $2 = target suffix (obj)
 define fuzz-rule
@@ -1028,3 +1076,16 @@ clean: ## Remove all contents of the build directories.
 
 help: ## Display this help
 	@grep -E '^[ a-zA-Z_-]+:.*?## .*$$' Makefile | sort | sed 's/\\([^:]*\\):.*## \\(.*\\)/\\1:\\2/' | awk -F: '{printf "%-20s %s\n", $$1, $$2}' | sed "s/(SUITE)/$(SUITE)/g; s/(PROJECT)/$(PROJECT)/g; s/(BRANCH)/$(BRANCH)/g"
+
+####################################################################
+# Dependency inclusion for the sanitizer and fuzz builds
+#
+# Here rather than beside the release build's, because both trees' object
+# directories are defined further down this file and `:=` is expanded where
+# it is written.
+####################################################################
+
+ASAN_DEPFILES := $(ASAN_LIBOBJECTS:.o=.d) \
+	$(foreach pair,$(TEST_PAIRS),$(ASAN_OBJ_DIR)/tests/$(basename $(notdir $(word 1,$(subst |, ,$(pair))))).d)
+FUZZ_DEPFILES := $(FUZZ_OBJECTS:.o=.d)
+-include $(ASAN_DEPFILES) $(FUZZ_DEPFILES)

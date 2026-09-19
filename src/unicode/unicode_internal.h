@@ -107,6 +107,68 @@ size_t grx_unicode_fold_orbit(
     uint32_t codepoint, uint32_t out[GRX_FOLD_ORBIT_MAX]);
 
 /**
+ * @brief Which folding a dialect uses for a caseless match.
+ *
+ * documentation/dialects.md section 5.8. Two of the five values there are
+ * absent because they are implemented as SIMPLE and recorded as deviations:
+ * Perl's full folding, which would change the length of what was matched,
+ * and .NET's culture-sensitive folding, which would need a locale this
+ * library does not have.
+ */
+typedef enum {
+  GRX_FOLD_NONE = 0,   ///< Not caseless; nothing folds.
+  GRX_FOLD_SIMPLE,     ///< Unicode simple case folding.
+  GRX_FOLD_ES_LEGACY,  ///< ECMA-262 Canonicalize without `u`.
+  GRX_FOLD_ASCII,      ///< A-Z and a-z only. POSIX, and PCRE2 without UTF.
+  GRX_FOLD_COUNT       ///< Closes the enum; not a folding.
+} GRX_FoldKind;
+
+/**
+ * @brief Every code point that matches this one under a folding.
+ *
+ * The dispatcher over the two orbit tables and the ASCII rule, so that a
+ * caller holding a @ref GRX_FoldKind does not branch on it.
+ *
+ * @param kind Which folding.
+ * @param codepoint The code point.
+ * @param out Receives the members, ascending. Required, with room for
+ *   @ref GRX_FOLD_ORBIT_MAX.
+ * @return The number of members written, at least 1.
+ */
+size_t grx_unicode_orbit(GRX_FoldKind kind, uint32_t codepoint,
+    uint32_t out[GRX_FOLD_ORBIT_MAX]);
+
+/**
+ * @brief How many orbits a folding's table holds.
+ *
+ * Closing a *class* under a folding walks the orbit table and asks which
+ * orbits the class touches, rather than walking the class and asking for
+ * each code point's orbit. The two give the same answer, and the first costs
+ * the size of the table while the second costs the size of the class - which
+ * for `[^\x00]` is every code point in Unicode.
+ *
+ * @param kind Which folding.
+ * @return The number of entries, 0 for GRX_FOLD_NONE.
+ */
+size_t grx_unicode_orbit_table_size(GRX_FoldKind kind);
+
+/**
+ * @brief One entry of a folding's orbit table.
+ *
+ * Every member of an orbit has its own entry, so the same orbit is visited
+ * once per member. Closing a class is idempotent, so that costs a little
+ * work and no correctness.
+ *
+ * @param kind Which folding.
+ * @param index Entry index, below grx_unicode_orbit_table_size().
+ * @param out Receives the members, ascending. Required, with room for
+ *   @ref GRX_FOLD_ORBIT_MAX.
+ * @return The number of members written, or 0 for an index out of range.
+ */
+size_t grx_unicode_orbit_table_at(GRX_FoldKind kind, size_t index,
+    uint32_t out[GRX_FOLD_ORBIT_MAX]);
+
+/**
  * @brief ECMA-262 Canonicalize for a pattern without the `u` flag.
  *
  * Applies the full uppercase mapping unless the result is more than one

@@ -165,6 +165,210 @@ static const char * const spec_names[GRX_SYNTAX_COUNT] = {
   [GRX_SYNTAX_EMACS] = "emacs",
 };
 
+/**
+ * The semantic profile of each dialect: what the constructs mean.
+ *
+ * Status: ECMAScript's row is filled from ECMA-262 and checked against Node
+ * 22; every other row holds the value documentation/dialects.md section 5
+ * states, and the cells that page marks **probe** are resolved by
+ * documentation/plan.md WP-03 before code depends on them. A zeroed field is
+ * the first value of its enum, and for every enum here that is the value the
+ * Perl family takes - so a dialect whose row is not yet written behaves as
+ * Perl rather than as nothing, which is the failure a reader can see.
+ *
+ * Reading a row: the second fold and shorthand columns are the values under
+ * UTF or UCP. A dialect where the two differ is one where the same pattern
+ * means different things with and without the flag, which is most of them.
+ */
+static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
+  // POSIX and GNU: leftmost-longest, no lookbehind, the C locale treated as
+  // ASCII (a deviation, recorded in dialects.md section 6).
+  [GRX_SYNTAX_POSIX_BRE] = {
+    .preference = GRX_PREFER_LEFTMOST_LONGEST,
+    .empty_loop = GRX_EMPTY_LOOP_ALLOW,
+    .backref_unset = GRX_BACKREF_UNSET_FAILS,
+    .lookbehind = GRX_LOOKBEHIND_NONE,
+    .dollar = GRX_DOLLAR_END_ONLY,
+    .newlines = GRX_NEWLINES_NONE,
+    .fold = GRX_FOLD_ASCII,
+    .fold_utf = GRX_FOLD_ASCII,
+  },
+  [GRX_SYNTAX_POSIX_ERE] = {
+    .preference = GRX_PREFER_LEFTMOST_LONGEST,
+    .empty_loop = GRX_EMPTY_LOOP_ALLOW,
+    .backref_unset = GRX_BACKREF_UNSET_FAILS,
+    .lookbehind = GRX_LOOKBEHIND_NONE,
+    .dollar = GRX_DOLLAR_END_ONLY,
+    .newlines = GRX_NEWLINES_NONE,
+    .fold = GRX_FOLD_ASCII,
+    .fold_utf = GRX_FOLD_ASCII,
+  },
+  [GRX_SYNTAX_GNU_BRE] = {
+    .preference = GRX_PREFER_LEFTMOST_LONGEST,
+    .empty_loop = GRX_EMPTY_LOOP_ALLOW,
+    .backref_unset = GRX_BACKREF_UNSET_FAILS,
+    .lookbehind = GRX_LOOKBEHIND_NONE,
+    .dollar = GRX_DOLLAR_END_ONLY,
+    .newlines = GRX_NEWLINES_NONE,
+    .fold = GRX_FOLD_ASCII,
+    .fold_utf = GRX_FOLD_ASCII,
+  },
+  [GRX_SYNTAX_GNU_ERE] = {
+    .preference = GRX_PREFER_LEFTMOST_LONGEST,
+    .empty_loop = GRX_EMPTY_LOOP_ALLOW,
+    .backref_unset = GRX_BACKREF_UNSET_FAILS,
+    .lookbehind = GRX_LOOKBEHIND_NONE,
+    .dollar = GRX_DOLLAR_END_ONLY,
+    .newlines = GRX_NEWLINES_NONE,
+    .fold = GRX_FOLD_ASCII,
+    .fold_utf = GRX_FOLD_ASCII,
+  },
+
+  // The Perl family. Full folding is implemented as simple folding and
+  // recorded as a deviation (design.md section 10).
+  [GRX_SYNTAX_PERL] = {
+    .lookbehind = GRX_LOOKBEHIND_BOUNDED,
+    .dollar = GRX_DOLLAR_BEFORE_FINAL_NEWLINE,
+    .shorthands = GRX_SHORTHANDS_UNICODE,
+    .shorthands_utf = GRX_SHORTHANDS_UNICODE,
+    .fold = GRX_FOLD_SIMPLE,
+    .fold_utf = GRX_FOLD_SIMPLE,
+    .property_match = GRX_PROPERTY_LOOSE,
+  },
+  [GRX_SYNTAX_PCRE] = {
+    .lookbehind = GRX_LOOKBEHIND_BOUNDED,
+    .dollar = GRX_DOLLAR_BEFORE_FINAL_NEWLINE,
+    .shorthands = GRX_SHORTHANDS_ASCII,
+    .shorthands_utf = GRX_SHORTHANDS_UNICODE,
+    .fold = GRX_FOLD_ASCII,
+    .fold_utf = GRX_FOLD_SIMPLE,
+    .property_match = GRX_PROPERTY_LOOSE,
+  },
+
+  // ECMAScript. Every value here is ECMA-262's, and each of the four that
+  // distinguish it from the Perl family has a test that states the rule:
+  // an empty iteration fails rather than breaking the loop (22.2.2.3.1
+  // RepeatMatcher step 2.b), captures reset each iteration (step 4), a
+  // reference to an unset group matches the empty string, and `$` without
+  // `m` means the end of the subject and nothing else.
+  [GRX_SYNTAX_ECMASCRIPT] = {
+    .preference = GRX_PREFER_LEFTMOST_FIRST,
+    .empty_loop = GRX_EMPTY_LOOP_FAIL,
+    .capture_reset = GRX_CAPTURE_RESET_EACH,
+    .backref_unset = GRX_BACKREF_UNSET_EMPTY,
+    .lookbehind = GRX_LOOKBEHIND_UNBOUNDED,
+    .iteration = GRX_ITERATE_ADVANCE_ONE,
+    .dollar = GRX_DOLLAR_END_ONLY,
+    .newlines = GRX_NEWLINES_ECMASCRIPT,
+    .shorthands = GRX_SHORTHANDS_ECMASCRIPT,
+    .shorthands_utf = GRX_SHORTHANDS_ES_UNICODE,
+    .fold = GRX_FOLD_ES_LEGACY,
+    .fold_utf = GRX_FOLD_SIMPLE,
+    .property_match = GRX_PROPERTY_STRICT,
+  },
+
+  [GRX_SYNTAX_PYTHON] = {
+    .lookbehind = GRX_LOOKBEHIND_FIXED,
+    .dollar = GRX_DOLLAR_BEFORE_FINAL_NEWLINE,
+    .shorthands = GRX_SHORTHANDS_UNICODE,
+    .shorthands_utf = GRX_SHORTHANDS_UNICODE,
+    .fold = GRX_FOLD_SIMPLE,
+    .fold_utf = GRX_FOLD_SIMPLE,
+  },
+  [GRX_SYNTAX_JAVA] = {
+    .lookbehind = GRX_LOOKBEHIND_BOUNDED,
+    .dollar = GRX_DOLLAR_BEFORE_FINAL_NEWLINE,
+    .newlines = GRX_NEWLINES_UNICODE,
+    .shorthands = GRX_SHORTHANDS_ASCII,
+    .shorthands_utf = GRX_SHORTHANDS_UNICODE,
+    .fold = GRX_FOLD_ASCII,
+    .fold_utf = GRX_FOLD_SIMPLE,
+    .property_match = GRX_PROPERTY_LOOSE,
+  },
+  [GRX_SYNTAX_DOTNET] = {
+    .lookbehind = GRX_LOOKBEHIND_UNBOUNDED,
+    .iteration = GRX_ITERATE_ADVANCE_ONE,
+    .dollar = GRX_DOLLAR_BEFORE_FINAL_NEWLINE,
+    .shorthands = GRX_SHORTHANDS_UNICODE,
+    .shorthands_utf = GRX_SHORTHANDS_UNICODE,
+    .fold = GRX_FOLD_SIMPLE,
+    .fold_utf = GRX_FOLD_SIMPLE,
+  },
+  [GRX_SYNTAX_RUBY] = {
+    .lookbehind = GRX_LOOKBEHIND_FIXED_PER_BRANCH,
+    .iteration = GRX_ITERATE_ADVANCE_ONE,
+    .dollar = GRX_DOLLAR_ALWAYS_LINE,
+    .multiline_by_default = 1,
+    .shorthands = GRX_SHORTHANDS_ASCII,
+    .shorthands_utf = GRX_SHORTHANDS_ASCII,
+    .fold = GRX_FOLD_SIMPLE,
+    .fold_utf = GRX_FOLD_SIMPLE,
+    .property_match = GRX_PROPERTY_LOOSE,
+  },
+
+  // RE2 and Rust: no backreference and no lookaround at all, which is the
+  // point of them - a pattern they accept is regular by construction.
+  [GRX_SYNTAX_RE2] = {
+    .empty_loop = GRX_EMPTY_LOOP_BREAK,
+    .lookbehind = GRX_LOOKBEHIND_NONE,
+    .dollar = GRX_DOLLAR_END_ONLY,
+    .shorthands = GRX_SHORTHANDS_ASCII,
+    .shorthands_utf = GRX_SHORTHANDS_ASCII,
+    .fold = GRX_FOLD_SIMPLE,
+    .fold_utf = GRX_FOLD_SIMPLE,
+    .property_match = GRX_PROPERTY_STRICT,
+  },
+  [GRX_SYNTAX_RUST] = {
+    .empty_loop = GRX_EMPTY_LOOP_BREAK,
+    .lookbehind = GRX_LOOKBEHIND_NONE,
+    .iteration = GRX_ITERATE_ADVANCE_SKIP_ABUTTING,
+    .dollar = GRX_DOLLAR_END_ONLY,
+    .shorthands = GRX_SHORTHANDS_UNICODE,
+    .shorthands_utf = GRX_SHORTHANDS_UNICODE,
+    .fold = GRX_FOLD_SIMPLE,
+    .fold_utf = GRX_FOLD_SIMPLE,
+    .property_match = GRX_PROPERTY_LOOSE,
+  },
+
+  [GRX_SYNTAX_TCL] = {
+    .preference = GRX_PREFER_LEFTMOST_LONGEST,
+    .empty_loop = GRX_EMPTY_LOOP_ALLOW,
+    .lookbehind = GRX_LOOKBEHIND_FIXED_PER_BRANCH,
+    .dollar = GRX_DOLLAR_END_ONLY,
+    .shorthands = GRX_SHORTHANDS_UNICODE,
+    .shorthands_utf = GRX_SHORTHANDS_UNICODE,
+    .fold = GRX_FOLD_SIMPLE,
+    .fold_utf = GRX_FOLD_SIMPLE,
+  },
+  [GRX_SYNTAX_VIM] = {
+    .lookbehind = GRX_LOOKBEHIND_UNBOUNDED,
+    .dollar = GRX_DOLLAR_ALWAYS_LINE,
+    .multiline_by_default = 1,
+    .shorthands = GRX_SHORTHANDS_ASCII,
+    .shorthands_utf = GRX_SHORTHANDS_ASCII,
+    .fold = GRX_FOLD_ASCII,
+    .fold_utf = GRX_FOLD_ASCII,
+  },
+  [GRX_SYNTAX_EMACS] = {
+    .lookbehind = GRX_LOOKBEHIND_NONE,
+    .dollar = GRX_DOLLAR_ALWAYS_LINE,
+    .multiline_by_default = 1,
+    .shorthands = GRX_SHORTHANDS_UNICODE,
+    .shorthands_utf = GRX_SHORTHANDS_UNICODE,
+    .fold = GRX_FOLD_ASCII,
+    .fold_utf = GRX_FOLD_ASCII,
+  },
+};
+
+GRX_Result grx_syntax_profile(GRX_Syntax syntax, GRX_Profile * out_profile) {
+  if (!out_profile || (unsigned)syntax >= (unsigned)GRX_SYNTAX_COUNT) {
+    return GRX_ERR_INVALID;
+  }
+
+  *out_profile = profiles[syntax];
+  return GRX_OK;
+}
+
 const GRX_SyntaxSpec * grx_syntax_spec_table(void) {
   return spec_table;
 }

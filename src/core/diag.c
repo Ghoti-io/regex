@@ -55,6 +55,8 @@ static const DiagRow diag_table[GRX_DIAG_COUNT] = {
       = {"quantifier applied to a quantifier", GRX_ERR_SYNTAX},
   [GRX_DIAG_QUANTIFIER_OUT_OF_ORDER]
       = {"quantifier minimum exceeds its maximum", GRX_ERR_SYNTAX},
+  [GRX_DIAG_INVALID_QUANTIFIER]
+      = {"malformed repetition count", GRX_ERR_SYNTAX},
   [GRX_DIAG_QUANTIFIED_ASSERTION]
       = {"quantifier applied to a zero-width assertion", GRX_ERR_SYNTAX},
 
@@ -70,6 +72,8 @@ static const DiagRow diag_table[GRX_DIAG_COUNT] = {
       = {"malformed control escape", GRX_ERR_SYNTAX},
   [GRX_DIAG_CODEPOINT_OUT_OF_RANGE]
       = {"code point is not a Unicode scalar value", GRX_ERR_SYNTAX},
+  [GRX_DIAG_UNESCAPED_METACHARACTER]
+      = {"this character must be escaped to be a literal", GRX_ERR_SYNTAX},
   [GRX_DIAG_INVALID_UTF8_IN_PATTERN]
       = {"pattern is not valid UTF-8", GRX_ERR_SYNTAX},
 

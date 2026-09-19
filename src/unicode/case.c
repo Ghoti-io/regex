@@ -107,3 +107,87 @@ size_t grx_unicode_es_legacy_orbit(
       grx_unicode_es_legacy_orbit_count, grx_unicode_es_legacy_orbit_members,
       codepoint, out);
 }
+
+size_t grx_unicode_orbit(GRX_FoldKind kind, uint32_t codepoint,
+    uint32_t out[GRX_FOLD_ORBIT_MAX]) {
+  if (!out) {
+    return 0;
+  }
+
+  switch (kind) {
+    case GRX_FOLD_SIMPLE:
+      return grx_unicode_fold_orbit(codepoint, out);
+    case GRX_FOLD_ES_LEGACY:
+      return grx_unicode_es_legacy_orbit(codepoint, out);
+    case GRX_FOLD_ASCII:
+      if (codepoint >= 'A' && codepoint <= 'Z') {
+        out[0] = codepoint;
+        out[1] = codepoint - 'A' + 'a';
+        return 2;
+      }
+      if (codepoint >= 'a' && codepoint <= 'z') {
+        out[0] = codepoint - 'a' + 'A';
+        out[1] = codepoint;
+        return 2;
+      }
+      out[0] = codepoint;
+      return 1;
+    case GRX_FOLD_NONE:
+    case GRX_FOLD_COUNT:
+    default:
+      out[0] = codepoint;
+      return 1;
+  }
+}
+
+size_t grx_unicode_orbit_table_size(GRX_FoldKind kind) {
+  switch (kind) {
+    case GRX_FOLD_SIMPLE:
+      return grx_unicode_fold_orbit_count;
+    case GRX_FOLD_ES_LEGACY:
+      return grx_unicode_es_legacy_orbit_count;
+    case GRX_FOLD_ASCII:
+      return 26;
+    case GRX_FOLD_NONE:
+    case GRX_FOLD_COUNT:
+    default:
+      return 0;
+  }
+}
+
+size_t grx_unicode_orbit_table_at(GRX_FoldKind kind, size_t index,
+    uint32_t out[GRX_FOLD_ORBIT_MAX]) {
+  if (!out || index >= grx_unicode_orbit_table_size(kind)) {
+    return 0;
+  }
+
+  const GRX_UnicodeOrbit * entry;
+  const uint32_t * members;
+  switch (kind) {
+    case GRX_FOLD_SIMPLE:
+      entry = &grx_unicode_fold_orbits[index];
+      members = grx_unicode_fold_orbit_members;
+      break;
+    case GRX_FOLD_ES_LEGACY:
+      entry = &grx_unicode_es_legacy_orbits[index];
+      members = grx_unicode_es_legacy_orbit_members;
+      break;
+    case GRX_FOLD_ASCII:
+      out[0] = (uint32_t)('A' + index);
+      out[1] = (uint32_t)('a' + index);
+      return 2;
+    case GRX_FOLD_NONE:
+    case GRX_FOLD_COUNT:
+    default:
+      return 0;
+  }
+
+  size_t written = entry->count;
+  if (written > GRX_FOLD_ORBIT_MAX) {
+    written = GRX_FOLD_ORBIT_MAX;
+  }
+  for (size_t i = 0; i < written; i++) {
+    out[i] = members[entry->first + i];
+  }
+  return written;
+}

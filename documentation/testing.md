@@ -159,6 +159,38 @@ Any later disagreement between an oracle and its profile row is added here
 as a case, so that the suite is the record of every semantic question the
 project has had to ask.
 
+### The differential syntax check
+
+`make check-oracle-syntax` runs `tools/oracle/syntax_diff.py`, which asks this
+library and the dialect's reference implementation the same question -
+"is this a valid pattern?" - about a few hundred thousand patterns, and prints
+every disagreement.
+
+It is the cheapest strong test the front end has, and it finds a kind of
+defect reading cannot. A parser can be checked line by line against a grammar
+and still be wrong, because the rules that matter are the ones attached to a
+production *parameter* pages away from the production that uses them:
+ECMAScript's Annex B excludes `k` from identity escapes whenever the pattern
+names a group, and that exclusion reaches inside a character class, where a
+named reference cannot appear at all. `[\k]` is therefore valid alone and a
+syntax error in `[\k](?<n>x)`. That was found here, at the cost of one run.
+
+Two corpora, because they fail differently. The **exhaustive** one is every
+string of up to three characters over the dialect's punctuation, which is
+where a lexer's lookahead is wrong. The **random** one is up to fourteen
+tokens drawn from a vocabulary that deliberately includes constructs the
+dialect does *not* have, because rejecting what the reference rejects is half
+of conformance.
+
+A pattern this library refuses for a **limit** is counted separately and
+compared with neither answer. Its syntax was never read, so the comparison
+has nothing to say about it, and counting it as accepted would hide a real
+disagreement behind a cap.
+
+The target skips with a message when the oracle is absent. `ORACLE_SEED` and
+`ORACLE_COUNT` vary the corpus; a soak before a milestone runs several seeds
+at a larger count.
+
 ## 6. Structural checks
 
 Run by `make test` alongside `check-symbols`:

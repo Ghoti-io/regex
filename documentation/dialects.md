@@ -509,11 +509,42 @@ test that states it:
 - Flags `d`, `g`, `y` have no compile-time meaning: `d` is always
   satisfied, `g` is `grx_regex_search_next()`, `y` is `grx_regex_match()`.
 - Modifiers `(?i:...)`, `(?-i:...)`, `(?i-m:...)` for `i`, `m`, `s` only
-  (ES2025): accepted; a bare `(?i)` is a syntax error. Whether Node 22
-  accepts them is **probe** and decides whether the vectors for this
-  feature come from Node or from a later runtime.
+  (ES2025). **Probe resolved:** Node 22.23 rejects all three as
+  `SyntaxError`, with and without `u`. This library therefore rejects them
+  too, because the oracle is what the conformance vectors come from and a
+  library that accepted what the oracle rejects would tell a caller their
+  pattern is valid for an engine that refuses it. When a runtime that
+  implements them is pinned as the oracle, this rule and its test change
+  together. A bare `(?i)` is a syntax error in every version.
+- Duplicate named groups across alternatives (ES2025). **Probe resolved:**
+  Node 22.23 rejects `(?<a>x)|(?<a>y)`, so this library does. Same reason,
+  same change when the oracle moves.
 
-### 8.6 Conformance sources
+### 8.6 What the oracle corrected
+
+Three rules were implemented from the specification, checked against Node 22,
+and found wrong. Each is now a test that says so:
+
+1. **A lone script value.** [unicode.md](unicode.md) §6 said
+   `\p{Greek}` was allowed. It is a `SyntaxError`: only a General_Category
+   value or a binary property name may stand alone.
+2. **Quantified assertions.** Annex B lets a *lookahead* be quantified, so
+   `(?=a)*` is valid without `u`. A lookbehind never is, and neither is
+   under `u`. The first draft allowed all four combinations.
+3. **`\k` inside a class.** Annex B's
+   `SourceCharacterIdentityEscape[+N]` excludes `k` when the pattern names a
+   group *anywhere*, and the exclusion reaches inside a character class,
+   where a named reference cannot appear at all. So `[\k]` is a literal `k`
+   on its own and a `SyntaxError` in `[\k](?<n>x)`. This one was found by
+   differential fuzzing, not by reading: the rule hangs off a production
+   parameter rather than off the class.
+
+The sweep that found the third is `tools/oracle/syntax_diff.py`, run by
+`make check-oracle-syntax`. It compares accept and reject over an exhaustive
+corpus of short patterns and a random corpus of long ones, and currently
+finds no disagreement over 720,000 cases per seed.
+
+### 8.7 Conformance sources
 
 - test262: `test/built-ins/RegExp/` (including `named-groups/`,
   `lookBehind/`, `dotall/`, `unicodeSets/`, `match-indices/`,
@@ -525,7 +556,7 @@ test that states it:
 - Vectors generated from Node for the probe suite and the random-pattern
   generator.
 
-### 8.7 The JSON Schema profile
+### 8.8 The JSON Schema profile
 
 Not a dialect and not an option: a documented way of using this one.
 `GRX_SYNTAX_ECMASCRIPT | GRX_OPT_UTF`, `grx_regex_search()` (never

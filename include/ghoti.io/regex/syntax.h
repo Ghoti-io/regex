@@ -75,7 +75,15 @@ typedef enum {
   GRX_OPT_UTF = GRX_BIT(6),        ///< Treat pattern and subject as UTF-8.
   GRX_OPT_UCP = GRX_BIT(7),        ///< `\w`, `\d`, `\b` use Unicode properties.
   GRX_OPT_NO_CAPTURE = GRX_BIT(8), ///< Treat `(` as non-capturing.
-  GRX_OPT_LITERAL = GRX_BIT(9)     ///< Match the pattern as plain text.
+  GRX_OPT_LITERAL = GRX_BIT(9),    ///< Match the pattern as plain text.
+  /**
+   * ECMAScript's `v` flag: class set operations and string disjunctions.
+   *
+   * Implies GRX_OPT_UTF, and is mutually exclusive with writing `u` as well
+   * - which is a rule about the *flag string*, so grx_options_parse()
+   * enforces it rather than this bit.
+   */
+  GRX_OPT_UNICODE_SETS = GRX_BIT(10)
 } GRX_Option;
 
 /**
@@ -130,6 +138,15 @@ typedef struct GRX_SyntaxSpec {
   int escaped_specials;     ///< Non-zero when `\(` groups and `(` is literal.
   int allow_empty_class;    ///< Non-zero when `[]` is an empty class, not `]`.
   int newline_is_line_break; ///< Non-zero when `$` stops at `\n` by default.
+  /**
+   * Non-zero when a second quantifier on one atom is accepted.
+   *
+   * `a**` is a syntax error in almost every dialect and a legal (if odd)
+   * pattern in GNU's and Ruby's. It is a flag rather than a hook because the
+   * parser is what notices the second quantifier; a hook would have to be
+   * told that one had already been applied.
+   */
+  int allow_double_quantifier;
 } GRX_SyntaxSpec;
 
 /**
