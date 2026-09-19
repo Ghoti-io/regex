@@ -43,6 +43,18 @@ static int unicode_mode(const GRX_Parser * parser) {
   return (parser->options & GRX_OPT_UTF) != 0;
 }
 
+/**
+ * The `v` flag: UnicodeSets mode.
+ *
+ * `v` implies `u` - grx_options_parse() sets both - so every test of
+ * unicode_mode() is still true here. What this one selects is the *class*
+ * grammar, which is a different language: `[a-z]--[aeiou]` is a subtraction
+ * in `v` and a class of eight characters in `u`.
+ */
+static int unicode_sets_mode(const GRX_Parser * parser) {
+  return (parser->options & GRX_OPT_UNICODE_SETS) != 0;
+}
+
 /** The byte at an offset from the current position, or 0 past the end. */
 static char byte_at(const GRX_Parser * parser, size_t ahead) {
   size_t index = parser->position + ahead;
@@ -66,6 +78,61 @@ static uint32_t hex_value(char c) {
 }
 
 /** Whether a code point may be a literal written without a backslash. */
+/**
+ * `ClassSetReservedPunctuator`: the characters `\` may quote in a `v` class.
+ *
+ * Every one of them is also half of a reserved double punctuator, which is
+ * why they are quotable: `[&&]` is an operator and `[\&\&]` is two
+ * ampersands, and without the escape there would be no way to write the
+ * second.
+ */
+static int is_reserved_punctuator(uint32_t codepoint) {
+  switch (codepoint) {
+    case '&': case '-': case '!': case '#': case '%': case ',':
+    case ':': case ';': case '<': case '=': case '>': case '@':
+    case '`': case '~':
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+/**
+ * `ClassSetSyntaxCharacter`: what may not appear unescaped in a `v` class.
+ *
+ * A shorter list than the pattern-level one and a different list: `$`, `*`,
+ * `+`, `?` and `.` are ordinary characters inside a set, and `-` is not.
+ */
+static int is_class_set_syntax_character(uint32_t codepoint) {
+  switch (codepoint) {
+    case '(': case ')': case '[': case ']': case '{': case '}':
+    case '/': case '-': case '\\': case '|':
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+/**
+ * `ClassSetReservedDoublePunctuator`: a pair that must be written escaped.
+ *
+ * Reserved rather than forbidden: `&&` and `--` already mean something, and
+ * the other twelve are held back so that a future edition can give them a
+ * meaning without breaking a pattern that used them as two characters. A
+ * pattern that wants two of them today writes `\!\!`.
+ */
+static int is_reserved_double(char c) {
+  switch (c) {
+    case '&': case '!': case '#': case '$': case '%': case '*':
+    case '+': case ',': case '.': case ':': case ';': case '<':
+    case '=': case '>': case '?': case '@': case '^': case '`':
+    case '~':
+      return 1;
+    default:
+      return 0;
+  }
+}
+
 static int is_syntax_character(uint32_t codepoint) {
   switch (codepoint) {
     case '^': case '$': case '\\': case '.': case '*': case '+':
@@ -428,6 +495,40 @@ static GRX_Result read_property(GRX_Parser * parser, int negated,
 }
 
 /** Wrap one class item in a class node of its own. */
+/**
+ * A `\p{...}` naming a property of *strings*, if that is what it names.
+ *
+ * Defined with the rest of the UnicodeSets grammar below; declared here
+ * because an atom may be one too, not only a class operand.
+ *
+ * @return GRX_OK when it was one, GRX_ERR_SYNTAX when the name belongs to
+ *   the ordinary property tables instead - in which case nothing was
+ *   consumed - or a failure.
+ */
+/**
+ * One operand of a class-set expression.
+ *
+ * `is_character` is not a convenience: `ClassSetRange` is two
+ * *ClassSetCharacters* with a dash between them, so `[\d-z]` and `[\q{a}-z]`
+ * are syntax errors where `[a-z]` is a range. Carrying the distinction on the
+ * operand is what makes that one comparison rather than a second parse.
+ *
+ * `may_contain_strings` is ECMA-262's MayContainStrings, and exists for one
+ * rule: a negated class may not contain strings. It propagates differently
+ * through each operator - any operand for a union, every operand for an
+ * intersection, only the first for a subtraction - which is why it is
+ * computed alongside the parse rather than asked of the tree afterwards.
+ */
+struct SetOperand {
+  GRX_ClassItem item;
+  int is_character;
+  int may_contain_strings;
+};
+
+typedef struct SetOperand SetOperand;
+static GRX_Result string_property_atom(
+    GRX_Parser * parser, int negated, size_t start, SetOperand * out);
+
 static GRX_Result item_as_node(GRX_Parser * parser, const GRX_ClassItem * item,
     uint32_t * out_node) {
   GRX_Result result = grx_parse_class_node(parser, item->offset, out_node);
@@ -495,6 +596,21 @@ static GRX_Result es_atom_escape(GRX_Parser * parser, uint32_t * out_node) {
 
   if (c == 'p' || c == 'P') {
     if (unicode_mode(parser)) {
+      // A property of strings is an atom in `v` mode as well as a class
+      // operand: `\p{RGI_Emoji}` on its own matches a flag sequence, which
+      // is not something a class of code points could express. Offered to
+      // the string tables first for the same reason it is inside a class -
+      // what a name means is decided by which table holds it.
+      if (unicode_sets_mode(parser)) {
+        SetOperand operand;
+        GRX_Result result
+            = string_property_atom(parser, c == 'P', start, &operand);
+        if (result != GRX_ERR_SYNTAX) {
+          return result == GRX_OK
+              ? item_as_node(parser, &operand.item, out_node)
+              : result;
+        }
+      }
       parser->position++;
       GRX_ClassItem item;
       GRX_Result result = read_property(parser, c == 'P', start, &item);
@@ -766,8 +882,12 @@ static GRX_Result es_class_escape(GRX_Parser * parser, GRX_ClassItem * out) {
   }
   // `\-` is the one identity escape Unicode mode adds inside a class, so
   // that a literal dash can be written where it would otherwise be a range.
+  // UnicodeSets mode adds thirteen more: `ClassSetReservedPunctuator`, which
+  // exists because those characters may not appear doubled and a writer
+  // needs a way to say one of them without worrying which.
   if (unicode_mode(parser) && !is_syntax_character(codepoint)
-      && codepoint != '/' && codepoint != '-') {
+      && codepoint != '/' && codepoint != '-'
+      && !(unicode_sets_mode(parser) && is_reserved_punctuator(codepoint))) {
     return grx_parse_fail(
         parser, GRX_DIAG_INVALID_ESCAPE, start, parser->position - start);
   }
@@ -820,12 +940,580 @@ static GRX_Result read_class_atom(GRX_Parser * parser, GRX_ClassItem * out) {
   return GRX_OK;
 }
 
+// --------------------------------------------------------------------------
+// UnicodeSets mode: the `v` class grammar
+// --------------------------------------------------------------------------
+
+
+static GRX_Result class_set_contents(GRX_Parser * parser, size_t start,
+    uint32_t * out_node, int * out_strings);
+
+/** Wrap an operand in a node, so that an operator's children are nodes. */
+static GRX_Result operand_node(
+    GRX_Parser * parser, const SetOperand * operand, uint32_t * out_node) {
+  // A nested class is already a node, and an unnegated one can be used as it
+  // stands rather than wrapped in a class of one item.
+  if (operand->item.kind == GRX_CLASS_ITEM_NESTED
+      && !(operand->item.flags & GRX_CLASS_ITEM_NEGATED)) {
+    *out_node = operand->item.a;
+    return GRX_OK;
+  }
+
+  GRX_Result result
+      = grx_parse_class_node(parser, operand->item.offset, out_node);
+  if (result != GRX_OK) {
+    return result;
+  }
+  return grx_parse_class_add(parser, *out_node, &operand->item);
+}
+
+/**
+ * `\q{abc|de|}`: a disjunction of literal strings.
+ *
+ * Every alternative is a member of the set, including the empty one, and a
+ * member may be any number of code points. An alternative of exactly one is
+ * an ordinary character as far as everything downstream is concerned, which
+ * is why `[^\q{a}]` is legal and `[^\q{ab}]` is not.
+ */
+static GRX_Result class_string_disjunction(
+    GRX_Parser * parser, size_t start, SetOperand * out) {
+  if (!grx_parse_eat(parser, '{')) {
+    return grx_parse_fail(parser, GRX_DIAG_INVALID_CLASS_ITEM, start,
+        parser->position - start);
+  }
+
+  uint32_t node = GRX_INDEX_NONE;
+  GRX_Result result = grx_pattern_add_node(parser->pattern,
+      GRX_NODE_STRING_SET, start, 0, &node);
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  uint32_t first = GRX_INDEX_NONE;
+  uint32_t count = 0;
+  int strings = 0;
+
+  for (;;) {
+    uint32_t index = GRX_INDEX_NONE;
+    result = grx_pattern_string_begin(parser->pattern, &index);
+    if (result != GRX_OK) {
+      return result;
+    }
+    if (first == GRX_INDEX_NONE) {
+      first = index;
+    }
+    count++;
+
+    size_t length = 0;
+    while (!grx_parse_at_end(parser) && byte_at(parser, 0) != '|'
+        && byte_at(parser, 0) != '}') {
+      GRX_ClassItem character;
+      result = read_class_atom(parser, &character);
+      if (result != GRX_OK) {
+        return result;
+      }
+      if (character.kind != GRX_CLASS_ITEM_SINGLE) {
+        // `\q{\d}` and kin: the contents are *characters*, not sets.
+        return grx_parse_fail(parser, GRX_DIAG_INVALID_CLASS_ITEM,
+            character.offset, character.length);
+      }
+      result = grx_pattern_string_push(parser->pattern, index, character.lo);
+      if (result != GRX_OK) {
+        return result;
+      }
+      length++;
+    }
+
+    if (length != 1) {
+      strings = 1;
+    }
+    if (grx_parse_eat(parser, '|')) {
+      continue;
+    }
+    break;
+  }
+
+  if (!grx_parse_eat(parser, '}')) {
+    return grx_parse_fail(
+        parser, GRX_DIAG_UNMATCHED_OPEN_BRACE, start, parser->position - start);
+  }
+
+  GRX_Node * set = grx_pattern_node(parser->pattern, node);
+  if (!set) {
+    return grx_parse_fail(parser, GRX_DIAG_INTERNAL, start, 0);
+  }
+  set->a = first;
+  set->b = count;
+  set->length = parser->position - start;
+
+  *out = (SetOperand) {
+    .item = {
+      .kind = GRX_CLASS_ITEM_NESTED,
+      .flags = 0,
+      .lo = 0,
+      .hi = 0,
+      .a = node,
+      .offset = start,
+      .length = parser->position - start,
+    },
+    .is_character = 0,
+    .may_contain_strings = strings,
+  };
+  return GRX_OK;
+}
+
+/**
+ * `\p{RGI_Emoji}` and its six siblings, when the name is a property of
+ * strings rather than of code points.
+ *
+ * @return GRX_OK when it was one, GRX_ERR_SYNTAX when the name is not a
+ *   property of strings - in which case nothing was consumed beyond what the
+ *   caller had already read, and the ordinary property path should run.
+ */
+static GRX_Result read_string_property(GRX_Parser * parser, int negated,
+    size_t start, size_t name_start, size_t name_length, SetOperand * out) {
+  uint32_t set = 0;
+  if (grx_unicode_string_set_lookup(
+          parser->text + name_start, name_length, &set)
+      != GRX_OK) {
+    return GRX_ERR_SYNTAX;
+  }
+  if (negated) {
+    // `\P{RGI_Emoji}` has no meaning: the complement of a set of strings is
+    // not a set of strings, and ECMA-262 makes it an early error rather than
+    // inventing one.
+    return grx_parse_fail(parser, GRX_DIAG_INVALID_CLASS_ITEM, start,
+        parser->position - start);
+  }
+
+  uint32_t offset = GRX_INDEX_NONE;
+  GRX_Result result = grx_pattern_add_name(
+      parser->pattern, parser->text + name_start, name_length, &offset);
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  *out = (SetOperand) {
+    .item = {
+      .kind = GRX_CLASS_ITEM_STRING_PROPERTY,
+      .flags = 0,
+      .lo = 0,
+      .hi = 0,
+      .a = offset,
+      .offset = start,
+      .length = parser->position - start,
+    },
+    .is_character = 0,
+    .may_contain_strings = 1,
+  };
+  return GRX_OK;
+}
+
+/**
+ * Read `\p{name}` and offer the name to the string tables.
+ *
+ * The `\p` has not been consumed on entry; on GRX_ERR_SYNTAX the position is
+ * put back so the caller can read it as an ordinary property.
+ */
+static GRX_Result string_property_atom(
+    GRX_Parser * parser, int negated, size_t start, SetOperand * out) {
+  size_t at = parser->position;
+  parser->position++; // The `p` or `P`.
+  if (byte_at(parser, 0) == '{') {
+    parser->position++;
+    size_t name_start = parser->position;
+    while (!grx_parse_at_end(parser) && byte_at(parser, 0) != '}') {
+      parser->position++;
+    }
+    if (byte_at(parser, 0) == '}') {
+      size_t name_length = parser->position - name_start;
+      parser->position++;
+      GRX_Result result = read_string_property(
+          parser, negated, start, name_start, name_length, out);
+      if (result != GRX_ERR_SYNTAX) {
+        return result;
+      }
+    }
+  }
+  parser->position = at;
+  return GRX_ERR_SYNTAX;
+}
+
+/** One `ClassSetCharacter`, or one escape that is a set rather than a char. */
+static GRX_Result class_set_atom(GRX_Parser * parser, SetOperand * out) {
+  size_t start = parser->position;
+
+  if (grx_parse_eat(parser, '\\')) {
+    if (grx_parse_at_end(parser)) {
+      return grx_parse_fail(parser, GRX_DIAG_TRAILING_BACKSLASH, start, 1);
+    }
+
+    // `\q` is the one escape that exists only here.
+    if (byte_at(parser, 0) == 'q') {
+      parser->position++;
+      return class_string_disjunction(parser, start, out);
+    }
+
+    // A property name is read once and offered to both tables, so that
+    // `\p{RGI_Emoji}` and `\p{Lu}` are told apart by what they name rather
+    // than by a list of names kept in the parser.
+    if (byte_at(parser, 0) == 'p' || byte_at(parser, 0) == 'P') {
+      GRX_Result result = string_property_atom(
+          parser, byte_at(parser, 0) == 'P', start, out);
+      if (result != GRX_ERR_SYNTAX) {
+        return result;
+      }
+    }
+
+    GRX_ClassItem item;
+    GRX_Result result = es_class_escape(parser, &item);
+    if (result != GRX_OK) {
+      return result;
+    }
+    *out = (SetOperand) {
+      .item = item,
+      .is_character = item.kind == GRX_CLASS_ITEM_SINGLE,
+      .may_contain_strings = 0,
+    };
+    return GRX_OK;
+  }
+
+  char c = byte_at(parser, 0);
+  if (c && is_reserved_double(c) && byte_at(parser, 1) == c) {
+    // `&&` and `--` are operators and are consumed by the caller; the other
+    // twelve pairs are reserved, and a pattern that wants two of them writes
+    // them escaped.
+    return grx_parse_fail(parser, GRX_DIAG_INVALID_CLASS_ITEM, start, 2);
+  }
+
+  uint32_t codepoint = 0;
+  GRX_Result result = grx_parse_take(parser, &codepoint);
+  if (result != GRX_OK) {
+    return result;
+  }
+  if (is_class_set_syntax_character(codepoint)) {
+    return grx_parse_fail(parser, GRX_DIAG_INVALID_CLASS_ITEM, start,
+        parser->position - start);
+  }
+
+  *out = (SetOperand) {
+    .item = {
+      .kind = GRX_CLASS_ITEM_SINGLE,
+      .flags = 0,
+      .lo = codepoint,
+      .hi = 0,
+      .a = 0,
+      .offset = start,
+      .length = parser->position - start,
+    },
+    .is_character = 1,
+    .may_contain_strings = 0,
+  };
+  return GRX_OK;
+}
+
+/** One `ClassSetOperand`: a nested class, a string disjunction, or a char. */
+static GRX_Result class_set_operand(GRX_Parser * parser, SetOperand * out) {
+  size_t start = parser->position;
+
+  if (grx_parse_eat(parser, '[')) {
+    uint32_t node = GRX_INDEX_NONE;
+    int strings = 0;
+    GRX_Result result = class_set_contents(parser, start, &node, &strings);
+    if (result != GRX_OK) {
+      return result;
+    }
+    *out = (SetOperand) {
+      .item = {
+        .kind = GRX_CLASS_ITEM_NESTED,
+        .flags = 0,
+        .lo = 0,
+        .hi = 0,
+        .a = node,
+        .offset = start,
+        .length = parser->position - start,
+      },
+      .is_character = 0,
+      .may_contain_strings = strings,
+    };
+    return GRX_OK;
+  }
+
+  return class_set_atom(parser, out);
+}
+
+/** Whether the next two bytes are this operator. */
+static int at_operator(const GRX_Parser * parser, char c) {
+  return byte_at(parser, 0) == c && byte_at(parser, 1) == c;
+}
+
+/**
+ * `ClassIntersection` or `ClassSubtraction`: two or more operands joined by
+ * one repeated operator.
+ *
+ * The operator may not change part-way and may not be mixed with union, so
+ * `[a&&b--c]` and `[[a][b]&&[b]]` are both syntax errors. That is a rule
+ * about *this* production rather than about precedence: ECMA-262 gives the
+ * operators no precedence at all, precisely so that a reader never has to
+ * work one out.
+ */
+static GRX_Result class_set_operator_list(GRX_Parser * parser, size_t start,
+    char operator_char, const SetOperand * first, uint32_t * out_node,
+    int * out_strings) {
+  uint32_t node = GRX_INDEX_NONE;
+  GRX_Result result = grx_pattern_add_node(
+      parser->pattern, GRX_NODE_CLASS_OP, start, 0, &node);
+  if (result != GRX_OK) {
+    return result;
+  }
+  grx_pattern_node(parser->pattern, node)->a = operator_char == '&'
+      ? (uint32_t)GRX_CLASS_OP_INTERSECT
+      : (uint32_t)GRX_CLASS_OP_SUBTRACT;
+
+  uint32_t child = GRX_INDEX_NONE;
+  result = operand_node(parser, first, &child);
+  if (result == GRX_OK) {
+    result = grx_pattern_add_child(parser->pattern, node, child);
+  }
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  // Intersection keeps strings only where every operand has them;
+  // subtraction keeps the left operand's, because subtracting cannot add.
+  int strings = first->may_contain_strings;
+
+  while (at_operator(parser, operator_char)) {
+    parser->position += 2;
+    SetOperand operand;
+    result = class_set_operand(parser, &operand);
+    if (result != GRX_OK) {
+      return result;
+    }
+    if (operator_char == '&') {
+      strings = strings && operand.may_contain_strings;
+    }
+
+    result = operand_node(parser, &operand, &child);
+    if (result == GRX_OK) {
+      result = grx_pattern_add_child(parser->pattern, node, child);
+    }
+    if (result != GRX_OK) {
+      return result;
+    }
+  }
+
+  if (byte_at(parser, 0) != ']') {
+    // Something followed the last operand that was neither the operator nor
+    // the close: a union mixed into an operator expression.
+    return grx_parse_fail(parser, GRX_DIAG_INVALID_CLASS_SET_OP,
+        parser->position, 1);
+  }
+
+  grx_pattern_node(parser->pattern, node)->length = parser->position - start;
+  *out_node = node;
+  *out_strings = strings;
+  return GRX_OK;
+}
+
+/**
+ * The contents of one `[...]` in `v` mode, up to but not including the `]`.
+ *
+ * `start` is the offset of the `[`, which has already been consumed.
+ */
+static GRX_Result class_set_contents(GRX_Parser * parser, size_t start,
+    uint32_t * out_node, int * out_strings) {
+  // A nested class is nesting, and the C stack this walks down is the same
+  // one a group nests on, so it is bounded by the same limit.
+  if (parser->limits->max_nesting_depth
+      && parser->depth + 1 > parser->limits->max_nesting_depth) {
+    return grx_parse_fail(
+        parser, GRX_DIAG_LIMIT_NESTING_DEPTH, start, 1);
+  }
+  parser->depth++;
+
+  GRX_Result result = GRX_OK;
+  int negated = grx_parse_eat(parser, '^');
+  int strings = 0;
+  uint32_t node = GRX_INDEX_NONE;
+
+  if (byte_at(parser, 0) == ']') {
+    // `[]` is empty and `[^]` is everything, as in `u` mode.
+    result = grx_parse_class_node(parser, start, &node);
+    if (result != GRX_OK) {
+      goto done;
+    }
+  }
+  else {
+    SetOperand first;
+    result = class_set_operand(parser, &first);
+    if (result != GRX_OK) {
+      goto done;
+    }
+
+    if (at_operator(parser, '&') || at_operator(parser, '-')) {
+      char operator_char = byte_at(parser, 0);
+      result = class_set_operator_list(
+          parser, start, operator_char, &first, &node, &strings);
+      if (result != GRX_OK) {
+        goto done;
+      }
+    }
+    else {
+      // A union. Its operands are a mixture of things that fit in a class
+      // item - characters, ranges, `\d`, `\p{...}` - and things that are
+      // whole nodes: a nested class, a string disjunction, a property of
+      // strings. The two cannot share one node, because a class names a
+      // *span* of the item table and a nested class parsed between two items
+      // would land its own items in the middle of that span.
+      //
+      // So consecutive simple items are batched into one class node and a
+      // node operand ends the batch. A union of nothing but simple items -
+      // which is `[abc]` and `[a-z]`, the overwhelming majority - is one
+      // class node and no operator at all.
+      uint32_t single = GRX_INDEX_NONE;
+      uint32_t op_node = GRX_INDEX_NONE;
+      uint32_t pending = GRX_INDEX_NONE;
+      size_t expected = 0;
+
+      SetOperand operand = first;
+      for (;;) {
+        // A range, when both ends are characters and a lone `-` separates
+        // them. `--` was ruled out above and is ruled out again here,
+        // because a union may not turn into a subtraction part-way.
+        if (operand.is_character && byte_at(parser, 0) == '-'
+            && byte_at(parser, 1) != '-' && byte_at(parser, 1) != ']'
+            && byte_at(parser, 1) != '\0') {
+          size_t dash = parser->position;
+          parser->position++;
+
+          SetOperand high;
+          result = class_set_operand(parser, &high);
+          if (result != GRX_OK) {
+            goto done;
+          }
+          if (!high.is_character) {
+            result = grx_parse_fail(parser, GRX_DIAG_INVALID_CLASS_RANGE,
+                dash, parser->position - dash);
+            goto done;
+          }
+          if (high.item.lo < operand.item.lo) {
+            result = grx_parse_fail(parser, GRX_DIAG_INVALID_CLASS_RANGE,
+                operand.item.offset, parser->position - operand.item.offset);
+            goto done;
+          }
+          operand.item.kind = GRX_CLASS_ITEM_RANGE;
+          operand.item.hi = high.item.lo;
+          operand.item.length = parser->position - operand.item.offset;
+          operand.is_character = 0;
+        }
+
+        if (operand.may_contain_strings) {
+          strings = 1;
+        }
+
+        uint32_t child = GRX_INDEX_NONE;
+        if (operand.item.kind == GRX_CLASS_ITEM_NESTED) {
+          child = operand.item.a;
+          pending = GRX_INDEX_NONE;
+        }
+        else if (pending != GRX_INDEX_NONE
+            && expected == parser->pattern->class_items.count) {
+          result = grx_parse_class_add(parser, pending, &operand.item);
+          if (result != GRX_OK) {
+            goto done;
+          }
+          expected = parser->pattern->class_items.count;
+        }
+        else {
+          result = grx_parse_class_node(
+              parser, operand.item.offset, &pending);
+          if (result == GRX_OK) {
+            result = grx_parse_class_add(parser, pending, &operand.item);
+          }
+          if (result != GRX_OK) {
+            goto done;
+          }
+          expected = parser->pattern->class_items.count;
+          child = pending;
+        }
+
+        if (child != GRX_INDEX_NONE) {
+          if (single == GRX_INDEX_NONE && op_node == GRX_INDEX_NONE) {
+            single = child;
+          }
+          else {
+            if (op_node == GRX_INDEX_NONE) {
+              result = grx_pattern_add_node(
+                  parser->pattern, GRX_NODE_CLASS_OP, start, 0, &op_node);
+              if (result == GRX_OK) {
+                grx_pattern_node(parser->pattern, op_node)->a
+                    = (uint32_t)GRX_CLASS_OP_UNION;
+                result = grx_pattern_add_child(
+                    parser->pattern, op_node, single);
+              }
+              if (result != GRX_OK) {
+                goto done;
+              }
+            }
+            result = grx_pattern_add_child(parser->pattern, op_node, child);
+            if (result != GRX_OK) {
+              goto done;
+            }
+          }
+        }
+
+        if (byte_at(parser, 0) == ']' || grx_parse_at_end(parser)) {
+          break;
+        }
+        if (at_operator(parser, '&') || at_operator(parser, '-')) {
+          result = grx_parse_fail(parser, GRX_DIAG_INVALID_CLASS_SET_OP,
+              parser->position, 2);
+          goto done;
+        }
+        result = class_set_operand(parser, &operand);
+        if (result != GRX_OK) {
+          goto done;
+        }
+      }
+
+      node = op_node != GRX_INDEX_NONE ? op_node : single;
+    }
+  }
+
+  if (!grx_parse_eat(parser, ']')) {
+    result = grx_parse_fail(
+        parser, GRX_DIAG_UNMATCHED_OPEN_BRACKET, start, 1);
+    goto done;
+  }
+
+  if (negated) {
+    if (strings) {
+      // ECMA-262 makes this an early error rather than deciding what the
+      // complement of a set containing "abc" would be. There is no good
+      // answer: the complement of a set of strings is not a set of strings.
+      result = grx_parse_fail(parser, GRX_DIAG_INVALID_CLASS_ITEM, start,
+          parser->position - start);
+      goto done;
+    }
+    grx_pattern_node(parser->pattern, node)->flags |= GRX_NODE_NEGATED;
+  }
+
+  grx_pattern_node(parser->pattern, node)->length = parser->position - start;
+  *out_node = node;
+  *out_strings = strings;
+
+done:
+  parser->depth--;
+  return result;
+}
+
 static GRX_Result es_char_class(GRX_Parser * parser, uint32_t * out_node) {
   size_t start = parser->position - 1; // The `[`.
 
-  if (parser->options & GRX_OPT_UNICODE_SETS) {
-    return grx_parse_fail(
-        parser, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, start, 1);
+  if (unicode_sets_mode(parser)) {
+    int strings = 0;
+    return class_set_contents(parser, start, out_node, &strings);
   }
 
   GRX_Result result = grx_parse_class_node(parser, start, out_node);

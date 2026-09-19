@@ -20,27 +20,36 @@ set -eu
 root=$(cd "$(dirname "$0")/../.." && pwd)
 version=${1:-$(cat "$root/tools/unicode/UCD_VERSION")}
 dest="$root/third_party/ucd/$version"
-base="https://www.unicode.org/Public/$version/ucd"
+base="https://www.unicode.org/Public/$version"
 
 # Paths are relative to $base, and the directory structure is flattened on
 # disk: the generator asks for "DerivedGeneralCategory.txt", not for the
 # "extracted/" it happens to live under upstream.
+#
+# The last two are under "emoji/" rather than "ucd/emoji/", which is a
+# different directory and not a typo: UTS #51's sequence data is published
+# beside the UCD rather than inside it, and it is versioned with the UCD
+# only from this directory - "Public/emoji/latest" is already 18.0 while
+# "Public/17.0.0/emoji" is the 17.0 that matches everything else here.
 files="
-UnicodeData.txt
-PropList.txt
-PropertyAliases.txt
-PropertyValueAliases.txt
-DerivedCoreProperties.txt
-extracted/DerivedBinaryProperties.txt
-CaseFolding.txt
-SpecialCasing.txt
-Scripts.txt
-ScriptExtensions.txt
-Blocks.txt
-DerivedNormalizationProps.txt
-extracted/DerivedGeneralCategory.txt
-auxiliary/GraphemeBreakProperty.txt
-emoji/emoji-data.txt
+ucd/UnicodeData.txt
+ucd/PropList.txt
+ucd/PropertyAliases.txt
+ucd/PropertyValueAliases.txt
+ucd/DerivedCoreProperties.txt
+ucd/extracted/DerivedBinaryProperties.txt
+ucd/CaseFolding.txt
+ucd/SpecialCasing.txt
+ucd/Scripts.txt
+ucd/ScriptExtensions.txt
+ucd/Blocks.txt
+ucd/DerivedNormalizationProps.txt
+ucd/extracted/DerivedGeneralCategory.txt
+ucd/auxiliary/GraphemeBreakProperty.txt
+ucd/emoji/emoji-data.txt
+emoji/emoji-sequences.txt
+emoji/emoji-zwj-sequences.txt
+emoji/emoji-test.txt
 "
 
 mkdir -p "$dest"

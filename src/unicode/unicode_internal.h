@@ -263,6 +263,44 @@ const char * grx_unicode_property_name(uint32_t property);
  */
 size_t grx_unicode_property_total(uint32_t property);
 
+/**
+ * @brief Resolve a property *of strings* by name.
+ *
+ * ECMAScript's `v` mode defines seven (documentation/unicode.md section 3),
+ * whose members may be several code points long. They live in a separate
+ * namespace from the character properties above and are matched by exact
+ * spelling only: their long and short names are the same, and only
+ * ECMAScript has them.
+ *
+ * @param name The property name. Need not be NUL-terminated.
+ * @param name_length Its length in bytes.
+ * @param out_set Receives the set index. Required.
+ * @return GRX_OK, or GRX_ERR_SYNTAX when no property of strings is spelled
+ *   that way.
+ */
+GRX_Result grx_unicode_string_set_lookup(
+    const char * name, size_t name_length, uint32_t * out_set);
+
+/**
+ * @brief How many sequences a resolved property of strings holds.
+ *
+ * @param set The index grx_unicode_string_set_lookup() returned.
+ * @return The count, or 0 for an index out of range.
+ */
+size_t grx_unicode_string_set_size(uint32_t set);
+
+/**
+ * @brief One sequence of a resolved property of strings.
+ *
+ * @param set The index grx_unicode_string_set_lookup() returned.
+ * @param index Which sequence, below grx_unicode_string_set_size().
+ * @param out_points Receives a pointer to its code points. Required.
+ * @return The number of code points, or 0 when either index is out of
+ *   range - in which case `*out_points` is left alone.
+ */
+size_t grx_unicode_string_set_at(
+    uint32_t set, size_t index, const uint32_t ** out_points);
+
 #ifdef __cplusplus
 }
 #endif

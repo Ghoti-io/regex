@@ -311,6 +311,79 @@ GRX_Result grx_pattern_add_name(GRX_Pattern * pattern, const char * name,
   return GRX_OK;
 }
 
+GRX_Result grx_pattern_add_string(GRX_Pattern * pattern,
+    const uint32_t * points, size_t count, uint32_t * out_index) {
+  if (!pattern || !out_index || (!points && count)) {
+    return GRX_ERR_INVALID;
+  }
+
+  uint32_t index = (uint32_t)pattern->strings.count;
+  uint32_t length = (uint32_t)count;
+  GRX_Result result = grx_arena_append(&pattern->strings, &length, NULL);
+  for (size_t i = 0; result == GRX_OK && i < count; i++) {
+    result = grx_arena_append(&pattern->strings, &points[i], NULL);
+  }
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  *out_index = index;
+  return GRX_OK;
+}
+
+GRX_Result grx_pattern_string_begin(
+    GRX_Pattern * pattern, uint32_t * out_index) {
+  if (!pattern || !out_index) {
+    return GRX_ERR_INVALID;
+  }
+  uint32_t index = (uint32_t)pattern->strings.count;
+  uint32_t zero = 0;
+  GRX_Result result = grx_arena_append(&pattern->strings, &zero, NULL);
+  if (result != GRX_OK) {
+    return result;
+  }
+  *out_index = index;
+  return GRX_OK;
+}
+
+GRX_Result grx_pattern_string_push(
+    GRX_Pattern * pattern, uint32_t index, uint32_t codepoint) {
+  if (!pattern) {
+    return GRX_ERR_INVALID;
+  }
+  GRX_Result result = grx_arena_append(&pattern->strings, &codepoint, NULL);
+  if (result != GRX_OK) {
+    return result;
+  }
+  uint32_t * length = GRX_ARENA_AT(uint32_t, &pattern->strings, index);
+  if (!length) {
+    return GRX_ERR_INVALID;
+  }
+  (*length)++;
+  return GRX_OK;
+}
+
+const uint32_t * grx_pattern_string(const GRX_Pattern * pattern,
+    uint32_t index, size_t * out_count, uint32_t * out_next) {
+  if (!pattern || !out_count) {
+    return NULL;
+  }
+  const uint32_t * length
+      = GRX_ARENA_AT(const uint32_t, &pattern->strings, index);
+  if (!length) {
+    return NULL;
+  }
+  if ((size_t)index + 1 + *length > pattern->strings.count) {
+    return NULL;
+  }
+
+  *out_count = *length;
+  if (out_next) {
+    *out_next = index + 1 + *length;
+  }
+  return length + 1;
+}
+
 const char * grx_pattern_name(const GRX_Pattern * pattern, uint32_t offset) {
   if (!pattern || offset == GRX_INDEX_NONE) {
     return NULL;
@@ -409,6 +482,9 @@ static void dump_class_items(
         break;
       case GRX_CLASS_ITEM_STRING:
         fprintf(out, "string=%u", item->a);
+        break;
+      case GRX_CLASS_ITEM_STRING_PROPERTY:
+        fprintf(out, "\\p{%s}", grx_pattern_name(pattern, item->a));
         break;
       case GRX_CLASS_ITEM_COUNT:
       default:

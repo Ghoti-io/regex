@@ -5,12 +5,15 @@ engines are specified in [design.md](design.md), which takes precedence where
 the two differ; this page is corrected as each work package in
 [plan.md](plan.md) lands.
 
-**Landed:** Phase 0 and Phase 1 of [plan.md](plan.md), less WP-11. A pattern
-in ECMAScript's legacy or Unicode mode parses, lowers, compiles and matches on
-either engine. Every other dialect is named and reports
-`GRX_ERR_UNSUPPORTED`; UnicodeSets (`v`) mode, conditionals, recursion and the
-backtracking control verbs compile as far as they can and are then refused,
-rather than approximated.
+**Landed:** Phase 0 and Phase 1 of [plan.md](plan.md), less WP-11, and
+Phase 2's WP-12, WP-13, WP-15 and WP-16. A pattern in any of ECMAScript's
+three modes - legacy, Unicode and UnicodeSets - parses, lowers, compiles and
+matches on whichever of the three engines can run it, and
+`grx_regex_replace()`, `grx_regex_split()` and `grx_regex_search_next()`
+apply the dialect's own rules for templates, pieces and what follows an empty
+match. Every other dialect is named and reports `GRX_ERR_UNSUPPORTED`;
+conditionals, recursion and the backtracking control verbs compile as far as
+they can and are then refused, rather than approximated.
 
 ## Layout
 
@@ -23,7 +26,8 @@ src/syntax/               The dialect table
 src/parse/                Pattern text to a syntax tree (the AST)
 src/ir/                   The AST lowered to a dialect-free IR
 src/compile/              IR to a program, and the compiled regex
-src/exec/                 The Pike VM and the backtracking engine
+src/exec/                 The Pike VM, the backtracker and its bit-state form
+src/subst/                Replacement templates and splitting
 src/charclass/            Character-class sets and the canonical class table
 src/unicode/              UTF-8, case folding, property lookup
 src/unicode/tables/       Generated from the UCD; do not edit by hand

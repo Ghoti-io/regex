@@ -137,7 +137,18 @@ static GRX_Result item_base_set(Lowering * low, const GRX_ClassItem * item,
       if (result == GRX_ERR_UNSUPPORTED) {
         return fail(low, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, node);
       }
-      return result;
+      if (result != GRX_OK) {
+        return result;
+      }
+      // The widening is part of the *set*, not of the negation. ECMA-262
+      // 22.2.2.9.3 defines WordCharacters(rer) as the basic word characters
+      // plus every character that canonicalises to one - which under `iu` is
+      // U+017F and U+212A - and then defines `\W` as the complement of that.
+      // Folding here rather than at the negation is what makes `\W` under
+      // `/iu` exclude U+017F while `\P{Lu}` under the same flags is the
+      // complement of an *unfolded* Lu. The two are different rules and were
+      // one rule until Node was asked about `[^\P{Lu}]`.
+      return grx_charclass_fold_closure(out, low->fold, low->limits);
     }
 
     case GRX_CLASS_ITEM_PROPERTY: {
@@ -196,13 +207,19 @@ static GRX_Result evaluate_class(
     GRX_Result result = item_base_set(low, item, node, &piece);
 
     if (result == GRX_OK && (item->flags & GRX_CLASS_ITEM_NEGATED)) {
-      // `\W` is the complement of the *folded* word set, not the fold of the
-      // complement. The difference is U+017F under `/iu`: it is in `\w`
-      // because folding put it there, and so must not also be in `\W`.
-      result = grx_charclass_fold_closure(&piece, low->fold, low->limits);
-      if (result == GRX_OK) {
-        result = grx_charclass_complement(&piece, low->limits);
-      }
+      // A plain complement of whatever the item denotes. A shorthand has
+      // already been folded, because its widening belongs to its definition
+      // (see item_base_set); a property has not, because ECMA-262 22.2.2.9
+      // makes `\P{X}` the complement of X itself and leaves the folding to
+      // the matcher - which is the class-level fold below.
+      //
+      // `[^\P{Lu}]` under `/iu` is where the difference shows and is why
+      // this is two rules rather than one: it matches *nothing* in `u` mode,
+      // because the complement of Lu folds up to everything, and it matches
+      // every cased letter in `v` mode, where MaybeSimpleCaseFolding is
+      // applied to the operand before the complement
+      // (documentation/dialects.md section 8.4).
+      result = grx_charclass_complement(&piece, low->limits);
     }
     if (result == GRX_OK) {
       result = grx_charclass_union(out, &piece, low->limits);
@@ -686,6 +703,472 @@ static GRX_Result lower_sequence(Lowering * low, const GRX_Node * node,
   return GRX_OK;
 }
 
+// --------------------------------------------------------------------------
+// UnicodeSets mode: a class whose members may be strings
+// --------------------------------------------------------------------------
+
+/**
+ * The value of a `v`-mode class expression.
+ *
+ * ECMA-262 calls this a CharSet and lets its members be sequences of any
+ * length. Splitting it in two - the one-code-point members in a character
+ * class, the rest in a list - is not a simplification: it is what lets every
+ * set operation below reuse the class algebra that already exists, and what
+ * lets the common case, a class with no strings in it at all, lower to
+ * exactly the instruction it lowered to before `v` existed.
+ *
+ * A member of length one lives in `set`, never in `runs`. A member of length
+ * zero - `\q{}` writes one - lives in `runs`, because the empty string is not
+ * a code point.
+ */
+typedef struct {
+  GRX_CharClass set;  ///< The one-code-point members.
+  GRX_Arena runs;     ///< uint32_t: length-prefixed runs, the rest.
+  GRX_Arena offsets;  ///< uint32_t: where each run starts in `runs`.
+  size_t count;       ///< How many runs.
+} ClassSet;
+
+static void class_set_init(ClassSet * value, const GRX_Allocator * allocator) {
+  grx_charclass_init(&value->set, allocator);
+  grx_arena_init(&value->runs, allocator, sizeof(uint32_t), 0,
+      GRX_DIAG_OUT_OF_MEMORY);
+  grx_arena_init(&value->offsets, allocator, sizeof(uint32_t), 0,
+      GRX_DIAG_OUT_OF_MEMORY);
+  value->count = 0;
+}
+
+static void class_set_clear(ClassSet * value) {
+  grx_charclass_clear(&value->set);
+  grx_arena_clear(&value->runs);
+  grx_arena_clear(&value->offsets);
+  value->count = 0;
+}
+
+/**
+ * The nth run, and its length.
+ *
+ * The offsets are kept beside the runs rather than derived by walking them.
+ * Walking is the obvious implementation and made adding a member O(n), which
+ * made building `\p{RGI_Emoji}` - 3,953 members - O(n^3) and turned a
+ * differential run into a hang. Measured, not guessed: it ran for seven
+ * minutes at a hundred per cent of a core before being killed.
+ */
+static const uint32_t * class_set_run(
+    const ClassSet * value, size_t index, size_t * out_length) {
+  const uint32_t * at
+      = GRX_ARENA_AT(const uint32_t, &value->offsets, index);
+  if (!at) {
+    return NULL;
+  }
+  const uint32_t * length = GRX_ARENA_AT(const uint32_t, &value->runs, *at);
+  if (!length) {
+    return NULL;
+  }
+  *out_length = *length;
+  return GRX_ARENA_AT(const uint32_t, &value->runs, (size_t)*at + 1);
+}
+
+/** Whether `value` already holds this exact run. */
+static int class_set_holds(
+    const ClassSet * value, const uint32_t * points, size_t length) {
+  for (size_t i = 0; i < value->count; i++) {
+    size_t candidate_length = 0;
+    const uint32_t * candidate = class_set_run(value, i, &candidate_length);
+    if (!candidate && candidate_length) {
+      continue;
+    }
+    if (candidate_length != length) {
+      continue;
+    }
+    size_t at = 0;
+    while (at < length && candidate[at] == points[at]) {
+      at++;
+    }
+    if (at == length) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+/**
+ * Add one member, of any length.
+ *
+ * A member of length one goes into the character class rather than the run
+ * list, which is what makes `[\q{a}]` and `[a]` the same set and so makes
+ * `[^\q{a}]` legal where `[^\q{ab}]` is not.
+ */
+static GRX_Result class_set_add(ClassSet * value, const uint32_t * points,
+    size_t length, const GRX_Limits * limits) {
+  if (length == 1) {
+    return grx_charclass_add_range(&value->set, points[0], points[0], limits);
+  }
+  if (class_set_holds(value, points, length)) {
+    return GRX_OK;
+  }
+
+  uint32_t at = (uint32_t)value->runs.count;
+  uint32_t count = (uint32_t)length;
+  GRX_Result result = grx_arena_append(&value->offsets, &at, NULL);
+  if (result == GRX_OK) {
+    result = grx_arena_append(&value->runs, &count, NULL);
+  }
+  for (size_t i = 0; result == GRX_OK && i < length; i++) {
+    result = grx_arena_append(&value->runs, &points[i], NULL);
+  }
+  if (result == GRX_OK) {
+    value->count++;
+  }
+  return result;
+}
+
+/** Every run of `from` that `keep` says to keep, into a fresh list. */
+static GRX_Result class_set_filter_runs(ClassSet * into, const ClassSet * from,
+    const ClassSet * other, int keep_when_present, const GRX_Limits * limits) {
+  for (size_t i = 0; i < from->count; i++) {
+    size_t length = 0;
+    const uint32_t * points = class_set_run(from, i, &length);
+    if (!points && length) {
+      return GRX_ERR_INTERNAL;
+    }
+    int present = class_set_holds(other, points, length);
+    if (present == keep_when_present) {
+      GRX_Result result = class_set_add(into, points, length, limits);
+      if (result != GRX_OK) {
+        return result;
+      }
+    }
+  }
+  return GRX_OK;
+}
+
+/** `a` becomes `a` ∪ `b`. */
+static GRX_Result class_set_union(
+    ClassSet * a, const ClassSet * b, const GRX_Limits * limits) {
+  GRX_Result result = grx_charclass_union(&a->set, &b->set, limits);
+  for (size_t i = 0; result == GRX_OK && i < b->count; i++) {
+    size_t length = 0;
+    const uint32_t * points = class_set_run(b, i, &length);
+    if (!points && length) {
+      return GRX_ERR_INTERNAL;
+    }
+    result = class_set_add(a, points, length, limits);
+  }
+  return result;
+}
+
+/** `a` becomes `a` ∩ `b`, or `a` − `b` when `subtract` is set. */
+static GRX_Result class_set_combine(ClassSet * a, const ClassSet * b,
+    int subtract, const GRX_Limits * limits) {
+  GRX_Result result = subtract
+      ? grx_charclass_subtract(&a->set, &b->set, limits)
+      : grx_charclass_intersect(&a->set, &b->set, limits);
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  // The runs are filtered rather than rebuilt in place, because both
+  // operations remove members and an arena has no way to remove one.
+  ClassSet kept;
+  class_set_init(&kept, a->set.allocator);
+  result = class_set_filter_runs(&kept, a, b, subtract ? 0 : 1, limits);
+  if (result == GRX_OK) {
+    grx_arena_clear(&a->runs);
+    grx_arena_clear(&a->offsets);
+    a->runs = kept.runs;
+    a->offsets = kept.offsets;
+    a->count = kept.count;
+    kept.runs = (GRX_Arena) {0};
+    kept.offsets = (GRX_Arena) {0};
+    kept.count = 0;
+  }
+  class_set_clear(&kept);
+  return result;
+}
+
+static GRX_Result evaluate_class_set(
+    Lowering * low, const GRX_Node * node, ClassSet * out);
+
+/**
+ * Fold the value, then negate it if the node said to.
+ *
+ * Shared by all three node kinds rather than written into each, because the
+ * one time it was not, a negated `\q{a}` - which is a node kind that looks
+ * like it could not be negated and can be, since a one-code-point member is
+ * an ordinary character - silently kept its negation flag and matched the
+ * character it was meant to exclude.
+ *
+ * Folding *before* negating is ECMA-262's MaybeSimpleCaseFolding and is the
+ * order `v` mode specifies. The runs need no folding here: each code point
+ * of a run is folded as it is lowered, which is the same rule one level down
+ * (documentation/dialects.md section 8.4).
+ */
+static GRX_Result class_set_finish(
+    Lowering * low, const GRX_Node * node, ClassSet * out) {
+  GRX_Result result
+      = grx_charclass_fold_closure(&out->set, low->fold, low->limits);
+  if (result != GRX_OK) {
+    return storage_failed(low, result, node);
+  }
+  if (node->flags & GRX_NODE_NEGATED) {
+    out->set.negated = 1;
+  }
+  return GRX_OK;
+}
+
+/** One item of a `v`-mode class, as a set. */
+static GRX_Result class_set_item(Lowering * low, const GRX_ClassItem * item,
+    const GRX_Node * node, ClassSet * out) {
+  switch (item->kind) {
+    case GRX_CLASS_ITEM_NESTED: {
+      const GRX_Node * nested = grx_pattern_node(low->pattern, item->a);
+      if (!nested) {
+        return fail(low, GRX_DIAG_INTERNAL, node);
+      }
+      return evaluate_class_set(low, nested, out);
+    }
+
+    case GRX_CLASS_ITEM_STRING_PROPERTY: {
+      const char * name = grx_pattern_name(low->pattern, item->a);
+      uint32_t set = 0;
+      if (!name
+          || grx_unicode_string_set_lookup(name, strlen(name), &set)
+              != GRX_OK) {
+        // The parser resolved this once already, so the two resolvers
+        // disagreeing is an internal fault rather than a user's error.
+        return fail(low, GRX_DIAG_INTERNAL, node);
+      }
+      size_t members = grx_unicode_string_set_size(set);
+      for (size_t i = 0; i < members; i++) {
+        const uint32_t * points = NULL;
+        size_t length = grx_unicode_string_set_at(set, i, &points);
+        if (!length) {
+          return fail(low, GRX_DIAG_INTERNAL, node);
+        }
+        GRX_Result result
+            = class_set_add(out, points, length, low->limits);
+        if (result != GRX_OK) {
+          return storage_failed(low, result, node);
+        }
+      }
+      return GRX_OK;
+    }
+
+    default:
+      // Everything else is a set of code points and is already written down
+      // once, for `u` mode, in item_base_set().
+      return item_base_set(low, item, node, &out->set);
+  }
+}
+
+/**
+ * Evaluate a `v`-mode class expression.
+ *
+ * Three node kinds arrive here and each is one line of ECMA-262 22.2.1's
+ * ClassSetExpression: a CLASS is a union, a CLASS_OP is an intersection or a
+ * subtraction, and a STRING_SET is `\q{...}`.
+ */
+static GRX_Result evaluate_class_set(
+    Lowering * low, const GRX_Node * node, ClassSet * out) {
+  if (node->kind == GRX_NODE_STRING_SET) {
+    uint32_t index = node->a;
+    for (uint32_t i = 0; i < node->b; i++) {
+      size_t length = 0;
+      uint32_t next = GRX_INDEX_NONE;
+      const uint32_t * points
+          = grx_pattern_string(low->pattern, index, &length, &next);
+      if (!points) {
+        return fail(low, GRX_DIAG_INTERNAL, node);
+      }
+      GRX_Result result = class_set_add(out, points, length, low->limits);
+      if (result != GRX_OK) {
+        return storage_failed(low, result, node);
+      }
+      index = next;
+    }
+    return class_set_finish(low, node, out);
+  }
+
+  if (node->kind == GRX_NODE_CLASS_OP) {
+    int subtract = node->a == (uint32_t)GRX_CLASS_OP_SUBTRACT;
+    int is_union = node->a == (uint32_t)GRX_CLASS_OP_UNION;
+    uint32_t child = node->first_child;
+    int first = 1;
+    while (child != GRX_INDEX_NONE) {
+      const GRX_Node * operand = grx_pattern_node(low->pattern, child);
+      if (!operand) {
+        return fail(low, GRX_DIAG_INTERNAL, node);
+      }
+
+      ClassSet piece;
+      class_set_init(&piece, out->set.allocator);
+      GRX_Result result = evaluate_class_set(low, operand, &piece);
+      if (result == GRX_OK) {
+        result = (first || is_union)
+            ? class_set_union(out, &piece, low->limits)
+            : class_set_combine(out, &piece, subtract, low->limits);
+      }
+      class_set_clear(&piece);
+      if (result != GRX_OK) {
+        return storage_failed(low, result, node);
+      }
+
+      first = 0;
+      child = operand->next_sibling;
+    }
+
+    return class_set_finish(low, node, out);
+  }
+
+  // A union. Each item's own negation is applied after folding *it*, for the
+  // reason evaluate_class() gives, and the class's own negation after
+  // folding the union - which in `v` mode is ECMA-262's
+  // MaybeSimpleCaseFolding and is why `[^\P{Lu}]` differs between `u` and
+  // `v`.
+  for (uint32_t i = 0; i < node->b; i++) {
+    const GRX_ClassItem * item = GRX_ARENA_AT(
+        const GRX_ClassItem, &low->pattern->class_items, node->a + i);
+    if (!item) {
+      return fail(low, GRX_DIAG_INTERNAL, node);
+    }
+
+    ClassSet piece;
+    class_set_init(&piece, out->set.allocator);
+    GRX_Result result = class_set_item(low, item, node, &piece);
+
+    if (result == GRX_OK && (item->flags & GRX_CLASS_ITEM_NEGATED)) {
+      result = grx_charclass_fold_closure(&piece.set, low->fold, low->limits);
+      if (result == GRX_OK) {
+        result = grx_charclass_complement(&piece.set, low->limits);
+      }
+    }
+    if (result == GRX_OK) {
+      result = class_set_union(out, &piece, low->limits);
+    }
+    class_set_clear(&piece);
+
+    if (result != GRX_OK) {
+      return storage_failed(low, result, node);
+    }
+  }
+
+  return class_set_finish(low, node, out);
+}
+
+/** One run as a concatenation of code points, each folded if need be. */
+static GRX_Result lower_run(Lowering * low, const uint32_t * points,
+    size_t length, const GRX_Node * node, uint32_t * out_node) {
+  if (length == 1) {
+    return lower_codepoint(low, points[0], node, out_node);
+  }
+
+  GRX_Result result = add(low, GRX_IR_CONCAT, node, out_node);
+  for (size_t i = 0; result == GRX_OK && i < length; i++) {
+    uint32_t child = GRX_INDEX_NONE;
+    result = lower_codepoint(low, points[i], node, &child);
+    if (result == GRX_OK) {
+      result = attach(low, *out_node, child);
+    }
+  }
+  return result;
+}
+
+/**
+ * Lower a `v`-mode class.
+ *
+ * A class with no strings in it is a class, and lowers to the one
+ * instruction it always did. A class *with* strings is an alternation
+ * ordered longest first, because that is what ECMA-262 22.2.2.9 specifies
+ * and because leftmost-first would otherwise report `a` for
+ * `[\q{abc|ab|a}]` against "abc".
+ */
+static GRX_Result lower_class_set(
+    Lowering * low, const GRX_Node * node, uint32_t * out_node) {
+  ClassSet value;
+  class_set_init(&value, low->ir->allocator);
+  GRX_Result result = evaluate_class_set(low, node, &value);
+  if (result != GRX_OK) {
+    class_set_clear(&value);
+    return result;
+  }
+
+  if (!value.count) {
+    uint32_t class_index = GRX_INDEX_NONE;
+    result = intern(low, &value.set, node, &class_index);
+    class_set_clear(&value);
+    if (result != GRX_OK) {
+      return result;
+    }
+    result = add(low, GRX_IR_CLASS, node, out_node);
+    if (result != GRX_OK) {
+      return result;
+    }
+    grx_ir_node(low->ir, *out_node)->a = class_index;
+    return GRX_OK;
+  }
+
+  // Longest first, then the single code points, then the empty string.
+  // Sorting by an index rather than by moving the runs keeps the runs where
+  // they are, which matters because they are an arena and not an array of
+  // pointers.
+  size_t longest = 0;
+  for (size_t i = 0; i < value.count; i++) {
+    size_t length = 0;
+    (void)class_set_run(&value, i, &length);
+    if (length > longest) {
+      longest = length;
+    }
+  }
+
+  result = add(low, GRX_IR_ALTERNATE, node, out_node);
+  uint32_t alternation = *out_node;
+
+  for (size_t want = longest; want >= 2 && result == GRX_OK; want--) {
+    for (size_t i = 0; i < value.count && result == GRX_OK; i++) {
+      size_t length = 0;
+      const uint32_t * points = class_set_run(&value, i, &length);
+      if (length != want) {
+        continue;
+      }
+      uint32_t child = GRX_INDEX_NONE;
+      result = lower_run(low, points, length, node, &child);
+      if (result == GRX_OK) {
+        result = attach(low, alternation, child);
+      }
+    }
+  }
+
+  if (result == GRX_OK && (value.set.count || value.set.negated)) {
+    uint32_t class_index = GRX_INDEX_NONE;
+    result = intern(low, &value.set, node, &class_index);
+    if (result == GRX_OK) {
+      uint32_t child = GRX_INDEX_NONE;
+      result = add(low, GRX_IR_CLASS, node, &child);
+      if (result == GRX_OK) {
+        grx_ir_node(low->ir, child)->a = class_index;
+        result = attach(low, alternation, child);
+      }
+    }
+  }
+
+  // The empty string sorts last, so that `[\q{|ab}]` prefers "ab".
+  for (size_t i = 0; i < value.count && result == GRX_OK; i++) {
+    size_t length = 0;
+    (void)class_set_run(&value, i, &length);
+    if (length) {
+      continue;
+    }
+    uint32_t child = GRX_INDEX_NONE;
+    result = add(low, GRX_IR_EMPTY, node, &child);
+    if (result == GRX_OK) {
+      result = attach(low, alternation, child);
+    }
+  }
+
+  class_set_clear(&value);
+  return result;
+}
+
 static GRX_Result lower_node(
     Lowering * low, uint32_t node_index, uint32_t * out_node) {
   const GRX_Node * node = grx_pattern_node(low->pattern, node_index);
@@ -701,6 +1184,9 @@ static GRX_Result lower_node(
       return lower_literal(low, node, out_node);
 
     case GRX_NODE_CLASS: {
+      if (low->options & GRX_OPT_UNICODE_SETS) {
+        return lower_class_set(low, node, out_node);
+      }
       GRX_CharClass cls;
       grx_charclass_init(&cls, low->ir->allocator);
       GRX_Result result = evaluate_class(low, node, &cls);
@@ -756,6 +1242,14 @@ static GRX_Result lower_node(
     case GRX_NODE_OPTIONS:
     case GRX_NODE_CLASS_OP:
     case GRX_NODE_STRING_SET:
+      // Only the `v` grammar builds these, and only inside a class - so
+      // reaching one here without UnicodeSets is a front end producing a
+      // node for a mode it was not parsing in.
+      if (low->options & GRX_OPT_UNICODE_SETS) {
+        return lower_class_set(low, node, out_node);
+      }
+      return fail(low, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, node);
+
     case GRX_NODE_BRANCH_RESET:
     case GRX_NODE_COUNT:
     default:

@@ -75,14 +75,34 @@ SUBJECT_PIECES = ["a", "b", "c", "x", "ab", "abc", "aab", "", " ", "\t", "\n",
 # it forty times per seed would bury the defects that are.
 ASTRAL_PIECES = [FISH, GRIN]
 
-FLAG_SETS = ("", "u", "i", "iu", "m", "s", "imsu")
+FLAG_SETS = ("", "u", "i", "iu", "m", "s", "imsu", "v", "iv")
+
+# The atoms that exist only with `v`. Mixed into a pattern only when the row
+# is going to be run with `v`, because every one of them is a syntax error
+# without it and a syntax error is a wasted row here.
+#
+# Every operand here is a nested class, or a `\q{}` whose alternatives are
+# all longer than one character, and that is deliberate. Node 22.23 does not case-fold a
+# class-set operand that is a bare character or a one-character `\q{}`, so
+# `[a&&a]` under `iv` does not match "A" there and `[[a]&&a]` does - the same
+# intersection written the other way round. That asymmetry is an
+# implementation defect rather than a rule (documentation/dialects.md section
+# 8.6.1); this library follows the specification, and these rows are kept out
+# of the corpus so the harness measures disagreements that mean something.
+SETS_ATOMS = [
+    "[[a-c]--[b]]", "[[a-z]&&[b-d]]", "[\\q{ab|cd}]", "[\\q{}]",
+    "[\\q{abc|ab|xy}]", "[[a-c][x-z]]", "[^[a-c]]", "[\\q{ab}[c]]",
+    "\\p{RGI_Emoji}", "[\\p{Basic_Emoji}]", "[[\\w]--[a-c]]",
+    "[[a-z]--[aeiou]--[xyz]]", "[[a]&&[a]]", "[[^a]&&[^b]]", "[\\q{aa}[a]]",
+]
 
 
-def make_pattern(rng):
+def make_pattern(rng, unicode_sets=False):
+    atoms = ATOMS + (SETS_ATOMS if unicode_sets else [])
     parts = []
     for _ in range(rng.randint(1, 6)):
         parts.append(rng.choice(ANCHORS))
-        parts.append(rng.choice(ATOMS) + rng.choice(QUANTIFIERS))
+        parts.append(rng.choice(atoms) + rng.choice(QUANTIFIERS))
         parts.append(rng.choice(JOINERS))
     return "".join(parts)
 
@@ -157,10 +177,13 @@ def main(argv):
     rng = random.Random(args.seed)
     rows = []
     for _ in range(args.patterns):
-        pattern = make_pattern(rng)
+        # The flags are chosen first, because whether `v` is among them
+        # decides which atoms the pattern may be built from.
         flags = rng.choice(FLAG_SETS)
+        pattern = make_pattern(rng, "v" in flags)
         for _ in range(args.subjects):
-            rows.append((flags, pattern, make_subject(rng, "u" in flags)))
+            rows.append((flags, pattern,
+                         make_subject(rng, "u" in flags or "v" in flags)))
 
     reference = ask_node(rows)
     ours = [parse_ours(line) for line in ask_library(driver, rows, args.engine)]

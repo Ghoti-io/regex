@@ -325,6 +325,76 @@ def read_special_casing(path):
     return upper
 
 
+def read_emoji_sequences(path):
+    """Read emoji-sequences.txt or emoji-zwj-sequences.txt.
+
+    Returns {type_field: [sequence, ...]} where a sequence is a tuple of code
+    points. A range in the first column - Basic_Emoji writes `231A..231B` -
+    is expanded into one single-code-point sequence per member, because a
+    property of strings is a set of strings and a range is a shorthand for
+    several of them, not a member in its own right.
+    """
+    sets = {}
+    for fields in read_records(path):
+        if len(fields) < 2:
+            continue
+        codes, kind = fields[0], fields[1]
+        members = sets.setdefault(kind, [])
+        if ".." in codes:
+            low, high = parse_codepoint_range(codes)
+            members.extend((code,) for code in range(low, high + 1))
+        else:
+            members.append(tuple(int(part, 16) for part in codes.split()))
+    return sets
+
+
+def build_string_sets(ucd):
+    """The seven properties of strings ECMAScript's `v` mode defines.
+
+    UTS #51 publishes six of them as type fields across two files;
+    `RGI_Emoji` is ED-27, the union of all six. The six are laid out
+    contiguously and in a fixed order so that `RGI_Emoji` is the whole array
+    rather than a seventh copy of it - three thousand nine hundred sequences
+    stored twice would be forty kilobytes spent on saying "all of them".
+    """
+    sequences = read_emoji_sequences(
+        os.path.join(ucd, "emoji-sequences.txt"))
+    sequences.update(read_emoji_sequences(
+        os.path.join(ucd, "emoji-zwj-sequences.txt")))
+
+    order = [
+        "Basic_Emoji",
+        "Emoji_Keycap_Sequence",
+        "RGI_Emoji_Flag_Sequence",
+        "RGI_Emoji_Modifier_Sequence",
+        "RGI_Emoji_Tag_Sequence",
+        "RGI_Emoji_ZWJ_Sequence",
+    ]
+    missing = [name for name in order if name not in sequences]
+    if missing:
+        raise SystemExit(
+            "emoji sequence data is missing %s; re-run fetch.sh"
+            % ", ".join(missing))
+
+    sets = []
+    flat = []
+    seen = set()
+    for name in order:
+        members = sequences[name]
+        for member in members:
+            if member in seen:
+                raise SystemExit(
+                    "sequence %s appears in more than one property, so "
+                    "RGI_Emoji cannot be the concatenation" % (member,))
+            seen.add(member)
+        sets.append({"name": name, "first": len(flat), "count": len(members)})
+        flat.extend(members)
+
+    # ED-27. Its slice is every sequence, in the order above.
+    sets.append({"name": "RGI_Emoji", "first": 0, "count": len(flat)})
+    return {"sets": sets, "sequences": flat}
+
+
 def read_aliases(path):
     """PropertyAliases.txt: short name first, then the long name and others."""
     aliases = {}
@@ -574,9 +644,13 @@ def build_tables(ucd, version):
     es_universe = set(es_map.keys()) | set(es_map.values())
     es_orbits = build_orbits(es_map, es_universe)
 
+    strings = build_string_sets(ucd)
+
     return {
         "version": version,
         "properties": properties,
+        "string_sets": strings["sets"],
+        "string_sequences": strings["sequences"],
         "folds": folds,
         "fold_orbits": fold_orbits,
         "es_map": es_map,
@@ -681,8 +755,41 @@ typedef struct GRX_UnicodeOrbit {
   uint32_t count; ///< Members in the orbit, including `code` itself.
 } GRX_UnicodeOrbit;
 
+/** @brief One member of a property of strings: a slice of the point array. */
+typedef struct GRX_UnicodeString {
+  uint32_t first;  ///< Index of its first code point.
+  uint32_t length; ///< Code points; 1 for a member that is a single one.
+} GRX_UnicodeString;
+
+/**
+ * @brief A property of strings, as a slice of the shared sequence array.
+ *
+ * ECMAScript's `v` mode is the only thing that uses these. A property of
+ * strings is not a character class: its members may be several code points
+ * long, so it lowers to an alternation of literal sequences rather than to a
+ * set (documentation/dialects.md section 8.4).
+ *
+ * `RGI_Emoji` is the union of the other six and its slice is the whole
+ * array, so it costs three integers rather than a second copy.
+ */
+typedef struct GRX_UnicodeStringSet {
+  const char * name; ///< Its one spelling; long and short names are equal.
+  uint32_t first;    ///< Index of its first sequence.
+  uint32_t count;    ///< Sequences in it.
+} GRX_UnicodeStringSet;
+
 extern const GRX_CharRange grx_unicode_ranges[];
 extern const size_t grx_unicode_range_count;
+
+/** Properties of strings: the flat code points, the sequences, the sets. */
+extern const uint32_t grx_unicode_string_points[];
+extern const size_t grx_unicode_string_point_count;
+
+extern const GRX_UnicodeString grx_unicode_strings[];
+extern const size_t grx_unicode_string_count;
+
+extern const GRX_UnicodeStringSet grx_unicode_string_sets[];
+extern const size_t grx_unicode_string_set_count;
 
 extern const GRX_UnicodeProperty grx_unicode_properties[];
 extern const size_t grx_unicode_property_count;
@@ -860,6 +967,55 @@ def write_case(out_dir, tables):
             out, "grx_unicode_es_legacy_orbit", tables["es_orbits"])
 
 
+def write_strings(out_dir, tables):
+    """The properties of strings, as one flat code-point array and an index.
+
+    A sequence is two integers into `grx_unicode_string_points` rather than
+    its own array, for the same reason a property is two integers into the
+    range array: three thousand nine hundred separate objects would be three
+    thousand nine hundred relocations for data that is read in slices.
+    """
+    path = os.path.join(out_dir, "tables_strings.c")
+    sets = tables["string_sets"]
+    sequences = tables["string_sequences"]
+
+    points = []
+    index = []
+    for sequence in sequences:
+        index.append((len(points), len(sequence)))
+        points.extend(sequence)
+
+    with open(path, "w", encoding="utf-8") as out:
+        out.write(HEADER_NOTICE % tables["version"])
+        out.write('\n#include "tables_internal.h"\n\n')
+
+        out.write("const uint32_t grx_unicode_string_points[] = {\n")
+        for start in range(0, len(points), 8):
+            chunk = points[start:start + 8]
+            out.write("  " + " ".join("0x%04X," % code for code in chunk)
+                      + "\n")
+        out.write("};\n")
+        out.write("const size_t grx_unicode_string_point_count = %d;\n\n"
+                  % len(points))
+
+        out.write("const GRX_UnicodeString grx_unicode_strings[] = {\n")
+        for start in range(0, len(index), 6):
+            chunk = index[start:start + 6]
+            out.write("  " + " ".join("{%d,%d}," % pair for pair in chunk)
+                      + "\n")
+        out.write("};\n")
+        out.write("const size_t grx_unicode_string_count = %d;\n\n"
+                  % len(index))
+
+        out.write("const GRX_UnicodeStringSet grx_unicode_string_sets[] = {\n")
+        for record in sets:
+            out.write("  {%s, %d, %d},\n" % (
+                c_string(record["name"]), record["first"], record["count"]))
+        out.write("};\n")
+        out.write("const size_t grx_unicode_string_set_count = %d;\n"
+                  % len(sets))
+
+
 def main(argv):
     here = os.path.dirname(os.path.abspath(__file__))
     root = os.path.dirname(os.path.dirname(here))
@@ -886,12 +1042,15 @@ def main(argv):
     write_header(out_dir, tables)
     write_ranges(out_dir, tables)
     write_case(out_dir, tables)
+    write_strings(out_dir, tables)
 
     total_ranges = sum(len(prop["ranges"]) for prop in tables["properties"])
     sys.stderr.write(
-        "UCD %s: %d properties, %d ranges, %d folds, %d fold orbits\n" % (
+        "UCD %s: %d properties, %d ranges, %d folds, %d fold orbits, "
+        "%d string properties over %d sequences\n" % (
             args.version, len(tables["properties"]), total_ranges,
-            len(tables["folds"]), len(tables["fold_orbits"])))
+            len(tables["folds"]), len(tables["fold_orbits"]),
+            len(tables["string_sets"]), len(tables["string_sequences"])))
     return 0
 
 

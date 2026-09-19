@@ -349,6 +349,63 @@ class EsLegacyCanonicalize(unittest.TestCase):
         self.assertEqual(self.canon(0x7A, {0x7A: 0x5A}), 0x5A)
 
 
+class EmojiSequences(unittest.TestCase):
+    def test_reads_single_points_sequences_and_ranges(self):
+        path = write(
+            "# a comment\n"
+            "231A..231C    ; Basic_Emoji  ; watch..x  # E0.6 [3]\n"
+            "1F600 FE0F    ; Basic_Emoji  ; grinning  # E0.6 [1]\n"
+            "0031 FE0F 20E3 ; Emoji_Keycap_Sequence ; keycap  # E0.6 [1]\n")
+        sets = gen.read_emoji_sequences(path)
+        os.unlink(path)
+
+        # A range is a shorthand for several one-code-point members, not a
+        # member of its own: a property of strings is a set of strings.
+        self.assertEqual(sets["Basic_Emoji"], [
+            (0x231A,), (0x231B,), (0x231C,), (0x1F600, 0xFE0F)])
+        self.assertEqual(sets["Emoji_Keycap_Sequence"],
+                         [(0x0031, 0xFE0F, 0x20E3)])
+
+    def test_rgi_emoji_is_the_union_and_costs_no_copy(self):
+        directory = tempfile.mkdtemp()
+        with open(os.path.join(directory, "emoji-sequences.txt"), "w",
+                  encoding="utf-8") as handle:
+            handle.write(
+                "0041 ; Basic_Emoji ; a\n"
+                "0031 FE0F 20E3 ; Emoji_Keycap_Sequence ; k\n"
+                "1F1E6 1F1E7 ; RGI_Emoji_Flag_Sequence ; f\n"
+                "1F44D 1F3FB ; RGI_Emoji_Modifier_Sequence ; m\n"
+                "1F3F4 E0067 ; RGI_Emoji_Tag_Sequence ; t\n")
+        with open(os.path.join(directory, "emoji-zwj-sequences.txt"), "w",
+                  encoding="utf-8") as handle:
+            handle.write("1F468 200D 1F466 ; RGI_Emoji_ZWJ_Sequence ; z\n")
+
+        built = gen.build_string_sets(directory)
+        names = [record["name"] for record in built["sets"]]
+        self.assertEqual(names[-1], "RGI_Emoji")
+
+        # ED-27: the union of the other six, and its slice is the whole
+        # array rather than a second copy of it.
+        total = len(built["sequences"])
+        self.assertEqual(built["sets"][-1], {
+            "name": "RGI_Emoji", "first": 0, "count": total})
+        self.assertEqual(
+            sum(record["count"] for record in built["sets"][:-1]), total)
+
+    def test_a_missing_file_says_so_rather_than_emitting_nothing(self):
+        directory = tempfile.mkdtemp()
+        with open(os.path.join(directory, "emoji-sequences.txt"), "w",
+                  encoding="utf-8") as handle:
+            handle.write("0041 ; Basic_Emoji ; a\n")
+        with open(os.path.join(directory, "emoji-zwj-sequences.txt"), "w",
+                  encoding="utf-8") as handle:
+            handle.write("")
+        # An empty property would be a table that silently matches nothing,
+        # which is worse than a build that stops.
+        with self.assertRaises(SystemExit):
+            gen.build_string_sets(directory)
+
+
 class LooseSpelling(unittest.TestCase):
     def test_uax44_folding(self):
         self.assertEqual(gen.normalise_loose("Lowercase_Letter"),

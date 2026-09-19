@@ -109,6 +109,15 @@ typedef enum {
   GRX_CLASS_ITEM_PROPERTY,   ///< `\p{...}`; `a` is a name offset.
   GRX_CLASS_ITEM_NESTED,     ///< A nested class; `a` is a node index.
   GRX_CLASS_ITEM_STRING,     ///< A `\q{...}` string; `a` is a string index.
+  /**
+   * A property of *strings*: `\p{RGI_Emoji}` in `v` mode. `a` is a name
+   * offset, resolved again at lowering the way GRX_CLASS_ITEM_PROPERTY is.
+   *
+   * Separate from PROPERTY because its members are not code points: it
+   * lowers to an alternation of literal sequences rather than into a set,
+   * and it may not appear under a negation.
+   */
+  GRX_CLASS_ITEM_STRING_PROPERTY,
   GRX_CLASS_ITEM_COUNT       ///< Closes the enum; not an item kind.
 } GRX_ClassItemKind;
 
@@ -278,6 +287,67 @@ GRX_Result grx_pattern_add_name(GRX_Pattern * pattern, const char * name,
  * @return The NUL-terminated name, or NULL when the offset is out of range.
  */
 const char * grx_pattern_name(const GRX_Pattern * pattern, uint32_t offset);
+
+/**
+ * @brief Copy a run of code points into the pattern's string table.
+ *
+ * What `\q{abc|de}` and `\R` need and a node's fixed payload cannot hold. The
+ * run is stored length-prefixed - a count, then that many code points - so
+ * that a STRING_SET names its first string and a count and the strings
+ * themselves need no second index.
+ *
+ * @param pattern The pattern.
+ * @param points The code points. May be NULL only when `count` is 0.
+ * @param count How many.
+ * @param out_index Receives the index to store in a node's payload.
+ * @return GRX_OK, GRX_ERR_OOM, or GRX_ERR_INVALID.
+ */
+GRX_Result grx_pattern_add_string(GRX_Pattern * pattern,
+    const uint32_t * points, size_t count, uint32_t * out_index);
+
+/**
+ * @brief Start a run whose length is not known yet.
+ *
+ * `\q{a|bcd|}` is read one code point at a time and its alternatives may be
+ * any length, so the count is written as a placeholder and patched by
+ * grx_pattern_string_push() as points arrive. That is cheaper than the two
+ * alternatives - a scratch buffer with an allocator, or a cap on how long a
+ * string in a class may be - and neither of those is a limit ECMA-262 has.
+ *
+ * @param pattern The pattern.
+ * @param out_index Receives the run's index.
+ * @return GRX_OK, GRX_ERR_OOM, or GRX_ERR_INVALID.
+ */
+GRX_Result grx_pattern_string_begin(GRX_Pattern * pattern,
+    uint32_t * out_index);
+
+/**
+ * @brief Append one code point to the run begun at `index`.
+ *
+ * Only the most recently begun run may be appended to: the runs are packed
+ * end to end, so appending to an earlier one would write into a later one's
+ * points.
+ *
+ * @param pattern The pattern.
+ * @param index The run's index.
+ * @param codepoint The code point.
+ * @return GRX_OK, GRX_ERR_OOM, or GRX_ERR_INVALID.
+ */
+GRX_Result grx_pattern_string_push(
+    GRX_Pattern * pattern, uint32_t index, uint32_t codepoint);
+
+/**
+ * @brief The run at an index, and the index of the one after it.
+ *
+ * @param pattern The pattern.
+ * @param index The index, as grx_pattern_add_string() returned it.
+ * @param out_count Receives the run's length in code points. Required.
+ * @param out_next Receives the index of the next run. Optional.
+ * @return The first code point, or NULL when the index is out of range. A
+ *   run of length 0 returns a non-NULL pointer that must not be read.
+ */
+const uint32_t * grx_pattern_string(const GRX_Pattern * pattern,
+    uint32_t index, size_t * out_count, uint32_t * out_next);
 
 /**
  * @brief The parser's state, and what a hook is handed.

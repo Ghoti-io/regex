@@ -233,6 +233,22 @@ the exponential engine running out of budget, which is what the budget is
 for - or the bit-state engine refusing a bitmap that will not fit in
 `max_match_memory`, which is what that budget is for.
 
+### The properties of strings
+
+`make check-oracle-string-properties` runs
+`tools/oracle/string_property_diff.py`. The property check above walks every
+code point; this one cannot, because a property of *strings* has members that
+are sequences and there is no space of sequences to walk.
+
+So it walks the one that matters. `emoji-test.txt` lists every emoji sequence
+UTS #51 knows about, including the minimally-qualified and unqualified
+spellings that are deliberately *not* RGI - which is what makes it a two-sided
+test rather than a spot check, because a table that was too large would fail
+on those rows and a table that was too small would fail on the others. 5,225
+sequences against each of the seven properties is 36,575 cases, and it
+currently finds no disagreement. Changing one property's member count by one
+fails it with the sequence named.
+
 ### The differential match check
 
 `make check-oracle-match` runs `tools/oracle/match_diff.py`, which is the

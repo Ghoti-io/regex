@@ -82,8 +82,41 @@ typedef struct GRX_UnicodeOrbit {
   uint32_t count; ///< Members in the orbit, including `code` itself.
 } GRX_UnicodeOrbit;
 
+/** @brief One member of a property of strings: a slice of the point array. */
+typedef struct GRX_UnicodeString {
+  uint32_t first;  ///< Index of its first code point.
+  uint32_t length; ///< Code points; 1 for a member that is a single one.
+} GRX_UnicodeString;
+
+/**
+ * @brief A property of strings, as a slice of the shared sequence array.
+ *
+ * ECMAScript's `v` mode is the only thing that uses these. A property of
+ * strings is not a character class: its members may be several code points
+ * long, so it lowers to an alternation of literal sequences rather than to a
+ * set (documentation/dialects.md section 8.4).
+ *
+ * `RGI_Emoji` is the union of the other six and its slice is the whole
+ * array, so it costs three integers rather than a second copy.
+ */
+typedef struct GRX_UnicodeStringSet {
+  const char * name; ///< Its one spelling; long and short names are equal.
+  uint32_t first;    ///< Index of its first sequence.
+  uint32_t count;    ///< Sequences in it.
+} GRX_UnicodeStringSet;
+
 extern const GRX_CharRange grx_unicode_ranges[];
 extern const size_t grx_unicode_range_count;
+
+/** Properties of strings: the flat code points, the sequences, the sets. */
+extern const uint32_t grx_unicode_string_points[];
+extern const size_t grx_unicode_string_point_count;
+
+extern const GRX_UnicodeString grx_unicode_strings[];
+extern const size_t grx_unicode_string_count;
+
+extern const GRX_UnicodeStringSet grx_unicode_string_sets[];
+extern const size_t grx_unicode_string_set_count;
 
 extern const GRX_UnicodeProperty grx_unicode_properties[];
 extern const size_t grx_unicode_property_count;

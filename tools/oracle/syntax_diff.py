@@ -55,9 +55,15 @@ TOKENS = [
     "\\Z", "\\G", "\\K", "\\Q", "\\E", "[[:alpha:]]", "\\g{1}", "\\9",
     "\\377", "\\400", "{0,}", "{,3}", "{1", "\\u{110000}", "\\uD83D",
     "\\uDC1F", "\\k", "\\p{Script=Greek}", "\\p{Nosuch}", "\\p{", "(?<n>a)",
+    # UnicodeSets mode's own vocabulary. `&&` and `--` are already above,
+    # because they are two ordinary characters without `v` and an operator
+    # with it - which is exactly the kind of row this harness is for.
+    "\\q{}", "\\q{a|bc}", "\\q{|}", "[\\q{ab}]", "\\p{RGI_Emoji}",
+    "\\p{Basic_Emoji}", "\\P{RGI_Emoji}", "[a-z]", "[^a]", "!!", "~~",
+    "^^", "\\&", "\\!", "\\-", "[[a][b]]", "&", "##", "$$", "::",
 ]
 
-FLAG_SETS = ("", "u", "i", "iu", "m", "s")
+FLAG_SETS = ("", "u", "i", "iu", "m", "s", "v", "iv")
 
 
 def corpus(seed, count):

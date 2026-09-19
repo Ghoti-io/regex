@@ -88,11 +88,27 @@ derived in the generator from the ranges, never written by hand.
 | Properties of strings for ECMAScript `v`: `RGI_Emoji`, `Basic_Emoji`, `Emoji_Keycap_Sequence`, `RGI_Emoji_Flag_Sequence`, `RGI_Emoji_Modifier_Sequence`, `RGI_Emoji_Tag_Sequence`, `RGI_Emoji_ZWJ_Sequence` | `emoji-sequences.txt`, `emoji-zwj-sequences.txt` | `\p{RGI_Emoji}` in `v` mode, which matches a *string* and so lowers to an alternation of literal sequences, not a class |
 | Extended grapheme cluster rules | `GraphemeBreakProperty.txt`, `emoji-data.txt` | `\X`, PCRE2 and Perl; later tier |
 
+The two emoji sequence files are not in the UCD. UTS #51 publishes them
+beside it, at `Public/<version>/emoji/` rather than `Public/<version>/ucd/`,
+and that directory is the one to read: `Public/emoji/latest` was already 18.0
+while `Public/17.0.0/emoji` held the 17.0 that matches everything else here.
+`emoji-test.txt` is fetched from the same place and is not generated from -
+it is the universe `tools/oracle/string_property_diff.py` walks, because a
+property of strings has no code-point space to enumerate and needs a list of
+candidate sequences to compare membership over.
+
+A property of strings is stored as three arrays: the code points end to end,
+an index of `{first, length}` per sequence, and a record per property naming
+a slice of that index. `RGI_Emoji` is UTS #51's ED-27, the union of the other
+six, and its slice is the whole array - so it costs three integers rather
+than a second copy of 3,953 sequences.
+
 Size, measured at UCD 17.0.0 rather than estimated: 454 properties over
 21,772 ranges, **183 KB** of `.rodata` for the ranges and the property
 records, **39 KB** of relocated pointers for the name tables, and **106 KB**
-for the two case tables and their orbits - **328 KB** in total, against the
-200 KB this page first guessed. The gap is the name tables, which were not
+for the two case tables and their orbits, and **80 KB** for the properties of
+strings (3,953 sequences over 12,389 code points) - **408 KB** in total,
+against the 200 KB this page first guessed. The gap is the name tables, which were not
 in the estimate, and the orbit index, which carries a twelve-byte record for
 every one of the 2,994 code points in a multi-member orbit. Both are
 compressible and neither is on a hot path; the note is here so that a later

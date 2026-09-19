@@ -205,3 +205,47 @@ size_t grx_unicode_property_total(uint32_t property) {
 
   return grx_unicode_properties[property].total;
 }
+
+// --------------------------------------------------------------------------
+// Properties of strings
+// --------------------------------------------------------------------------
+
+GRX_Result grx_unicode_string_set_lookup(
+    const char * name, size_t name_length, uint32_t * out_set) {
+  if (!name || !out_set) {
+    return GRX_ERR_INVALID;
+  }
+
+  // Seven entries, compared linearly. A binary search would need the table
+  // sorted by name, and the table is sorted by *layout* so that RGI_Emoji
+  // can be the whole of it; seven string comparisons is the cheaper of the
+  // two things to give up.
+  for (size_t i = 0; i < grx_unicode_string_set_count; i++) {
+    const char * candidate = grx_unicode_string_sets[i].name;
+    if (strlen(candidate) == name_length
+        && memcmp(candidate, name, name_length) == 0) {
+      *out_set = (uint32_t)i;
+      return GRX_OK;
+    }
+  }
+  return GRX_ERR_SYNTAX;
+}
+
+size_t grx_unicode_string_set_size(uint32_t set) {
+  if (set >= grx_unicode_string_set_count) {
+    return 0;
+  }
+  return grx_unicode_string_sets[set].count;
+}
+
+size_t grx_unicode_string_set_at(
+    uint32_t set, size_t index, const uint32_t ** out_points) {
+  if (!out_points || set >= grx_unicode_string_set_count
+      || index >= grx_unicode_string_sets[set].count) {
+    return 0;
+  }
+  const GRX_UnicodeString * sequence
+      = &grx_unicode_strings[grx_unicode_string_sets[set].first + index];
+  *out_points = &grx_unicode_string_points[sequence->first];
+  return sequence->length;
+}

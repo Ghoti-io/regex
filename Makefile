@@ -459,7 +459,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/oracle/%.c $(APP_DIR)/$(STATIC_TARGET)
 
 # General commands
 .PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-unicode-tables check-oracle-syntax check-oracle-match check-engine-equivalence \
-	check-oracle-properties check-oracles
+	check-oracle-properties check-oracle-string-properties check-oracles
 # Release build commands
 .PHONY: all install test test-quiet test-asan test-valgrind test-valgrind-quiet test-watch uninstall watch
 # Debug build commands
@@ -496,7 +496,7 @@ tools: $(APP_DIR)/$(TARGET) $(TOOLS)
 
 check-oracles: ## Run every differential check against the reference implementation
 check-oracles: check-oracle-syntax check-oracle-match check-oracle-properties \
-	check-engine-equivalence
+	check-oracle-string-properties check-engine-equivalence
 
 check-oracle-properties: ## Compare every Unicode property table against the reference
 check-oracle-properties: $(TOOLS)
@@ -506,6 +506,14 @@ check-oracle-properties: $(TOOLS)
 	fi; \
 	python3 tools/oracle/property_diff.py \
 		--driver $(APP_DIR)/tools/grx_properties
+
+check-oracle-string-properties: ## Compare the properties of strings against the reference
+check-oracle-string-properties: $(TOOLS)
+	@if ! command -v node >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then \
+		printf "check-oracle-string-properties: skipped (no node or no python3)\n"; \
+		exit 0; \
+	fi; \
+	python3 tools/oracle/string_property_diff.py
 
 check-engine-equivalence: ## Fail if two engines disagree about one program
 check-engine-equivalence: $(TOOLS)

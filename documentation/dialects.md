@@ -569,6 +569,21 @@ test that states it:
   complemented *after* folding (the `MaybeSimpleCaseFolding` rule), which
   differs from `u` for `[^\P{Lu}]`-shaped patterns and has a test.
 
+**Built.** The last rule was worth the note it was given: writing it found
+that `u` mode had been applying it too. Under `u`, `\P{X}` is the complement
+of X itself and the folding is the matcher's, so `[^\P{Lu}]` matches nothing
+under `iu` - the complement of Lu folds up to everything - where under `iv`
+it matches every cased letter. A *shorthand* is the exception and does fold
+before its complement, because ECMA-262 22.2.2.9.3 builds the widening into
+`WordCharacters` rather than into the negation, which is why `\W` under `iu`
+excludes U+017F. Two rules, not one.
+
+A class whose members are all one code point long lowers to exactly the
+instruction it would have without `v`. One with strings in it lowers to an
+alternation ordered longest first, then the single characters, then the empty
+string - which is what makes `[\q{abc|ab|a}]` report `abc` against "abc"
+rather than the `a` that leftmost-first would otherwise prefer.
+
 ### 8.5 Semantics that lowering and the engines implement
 
 - `LEFTMOST_FIRST`; `FAIL_IF_EMPTY_AFTER_MIN`; `RESET_EACH_ITERATION`;
@@ -619,6 +634,41 @@ The sweep that found the third is `tools/oracle/syntax_diff.py`, run by
 `make check-oracle-syntax`. It compares accept and reject over an exhaustive
 corpus of short patterns and a random corpus of long ones, and currently
 finds no disagreement over 720,000 cases per seed.
+
+### 8.6.1 Where the oracle is wrong
+
+One `v`-mode rule goes the other way: the oracle is wrong and this library
+does not follow it.
+
+Under `iv`, Node 22.23 does not apply case folding to a class-set operand
+that is a bare character or a one-character `\q{}`:
+
+| Pattern | Subject | Node 22.23 | Here, and ECMA-262 |
+| --- | --- | --- | --- |
+| `[abc]` | `A` | matches | matches |
+| `[[a]&&a]` | `A` | matches | matches |
+| `[a&&[a]]` | `A` | **no match** | matches |
+| `[a&&a]` | `A` | **no match** | matches |
+| `[a--b]` | `A` | **no match** | matches |
+| `[\q{a}]` | `A` | **no match** | matches |
+| `[\q{ss}]` | `SS` | matches | matches |
+
+The third and fourth rows are what settle it. `[[a]&&a]` matches and
+`[a&&[a]]` does not, and those two are the same intersection written in the
+opposite order. Set intersection is commutative; no reading of 22.2.1 makes
+one of them fold and the other not. It is an implementation defect, and
+following it would mean disagreeing with the specification *and* with every
+other engine in order to agree with this one.
+
+So this is the one place where §4's "the reference implementation is the
+authority" does not apply. The rule it yields to instead is the one §8.6
+already implies: the oracle is the authority on what a *dialect* means, not
+on what a program does when it contradicts itself. The rows above are a test
+in `tests/unit/test_unicodesets.cpp` that asserts this library's answer and
+records Node's beside it, and `tools/oracle/match_diff.py` keeps these shapes
+out of its `v` corpus with the same reason written where it does so. When a
+Node whose answers are symmetric is pinned, the test and the corpus change
+together and this section goes away.
 
 ### 8.7 Conformance sources
 

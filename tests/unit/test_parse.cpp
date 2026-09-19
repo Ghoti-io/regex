@@ -553,13 +553,19 @@ TEST(EcmaScript, PropertyEscapesExistOnlyInUnicodeMode) {
   EXPECT_EQ(malformed.diag(), GRX_DIAG_INVALID_PROPERTY_SYNTAX);
 }
 
-TEST(EcmaScript, UnicodeSetsModeIsRefusedRatherThanReadAsUnicodeMode) {
-  // The `v` flag is plan.md WP-12. Until it exists, a pattern written for it
-  // has to be refused: reading `[[a-z]--[aeiou]]` as `u` would accept it and
-  // match something else entirely.
-  Parsed parsed("[[a-z]--[aeiou]]", "v");
-  EXPECT_EQ(parsed.result(), GRX_ERR_UNSUPPORTED);
-  EXPECT_EQ(parsed.diag(), GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED);
+TEST(EcmaScript, UnicodeSetsModeReadsADifferentClassGrammar) {
+  // The `v` flag is a different language inside a class, not `u` with
+  // extras: `--` is a subtraction where `u` reads two literal dashes, and a
+  // bare `-` is a syntax error where `u` reads a literal. The rest of the
+  // grammar is tested in test_unicodesets.cpp; this is here because it is
+  // the one place a *parse* test would notice the two modes diverging.
+  // Each of these is valid in one mode and a syntax error in the other, in
+  // opposite directions - which is the shortest statement of "different
+  // grammar" there is. Node 22.23 agrees on all four.
+  EXPECT_EQ(Parsed("[[a-z]--[aeiou]]", "v").result(), GRX_OK);
+  EXPECT_EQ(Parsed("[[a-z]--[aeiou]]", "u").result(), GRX_ERR_SYNTAX);
+  EXPECT_EQ(Parsed("[a-]", "u").result(), GRX_OK);
+  EXPECT_EQ(Parsed("[a-]", "v").result(), GRX_ERR_SYNTAX);
 }
 
 // --------------------------------------------------------------------------

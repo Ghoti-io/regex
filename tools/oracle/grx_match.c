@@ -88,6 +88,19 @@ int main(int argc, char ** argv) {
   static char pattern[MAX_BUFFER];
   static char subject[MAX_BUFFER];
 
+  // The compiled regex is kept for as long as the rows keep asking for the
+  // same one. Every harness that drives this tool groups its rows by pattern
+  // - one pattern against many subjects - so a one-entry cache is the whole
+  // of what is needed, and it is the difference between a run that takes a
+  // second and one that takes an hour: `\p{RGI_Emoji}` compiles to an
+  // alternation of nearly four thousand sequences, and compiling that once
+  // per subject is what a differential over the emoji universe would do.
+  static char cached_pattern[MAX_BUFFER];
+  static size_t cached_length = 0;
+  static uint32_t cached_options = 0;
+  static int cached_valid = 0;
+  GRX_Regex * regex = NULL;
+
   while (fgets(line, (int)sizeof(line), stdin)) {
     char * first = strchr(line, '\t');
     if (!first) {
@@ -117,20 +130,31 @@ int main(int argc, char ** argv) {
     size_t subject_length
         = decode_hex(second + 1, subject, sizeof(subject));
 
-    GRX_Error error;
-    grx_error_clear(&error);
-    GRX_Regex * regex = NULL;
-    if (grx_regex_compile_with_allocator(pattern, pattern_length, syntax,
-            options, NULL, NULL, &error, &regex)
-        != GRX_OK) {
-      printf("compile %d\n", (int)error.diag);
-      continue;
+    if (!regex || !cached_valid || cached_options != options
+        || cached_length != pattern_length
+        || memcmp(cached_pattern, pattern, pattern_length) != 0) {
+      grx_regex_free(regex);
+      regex = NULL;
+
+      GRX_Error error;
+      grx_error_clear(&error);
+      if (grx_regex_compile_with_allocator(pattern, pattern_length, syntax,
+              options, NULL, NULL, &error, &regex)
+          != GRX_OK) {
+        cached_valid = 0;
+        regex = NULL;
+        printf("compile %d\n", (int)error.diag);
+        continue;
+      }
+      memcpy(cached_pattern, pattern, pattern_length);
+      cached_length = pattern_length;
+      cached_options = options;
+      cached_valid = 1;
     }
 
     GRX_Match * match = NULL;
     if (grx_match_create(regex, NULL, &match) != GRX_OK) {
       printf("error oom\n");
-      grx_regex_free(regex);
       continue;
     }
 
@@ -163,8 +187,8 @@ int main(int argc, char ** argv) {
     }
 
     grx_match_destroy(match);
-    grx_regex_free(regex);
   }
 
+  grx_regex_free(regex);
   return 0;
 }
