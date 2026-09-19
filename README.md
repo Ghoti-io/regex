@@ -138,11 +138,23 @@ Nothing is allocated for the caller to free on a failing call.
 stub's answer are marked `STUB` in a comment and are meant to be deleted with
 the stub.
 
-The dialect specification - what each syntax accepts, where the
-implementations disagree, and which deviations this library takes
-deliberately - is [documentation/dialects.md](documentation/dialects.md).
-Development notes, including what a new dialect or engine has to arrive with,
-are in [documentation/development.md](documentation/development.md).
+## Design
+
+The design is written ahead of the code, per the suite's convention, and
+lives in `documentation/`:
+
+| Page | What it settles |
+| --- | --- |
+| [design.md](documentation/design.md) | The architecture: the AST-to-IR-to-program pipeline, the three engines and when each runs, the dialect model, memory, limits, errors, the public API as it will be, the target layout |
+| [dialects.md](documentation/dialects.md) | The dialect specification: tiers, references and oracles, which constructs each syntax has, the semantic profile on every axis where implementations differ, deviations, and ECMAScript in full |
+| [unicode.md](documentation/unicode.md) | The Unicode data: UCD 17.0.0, the tables, generation and checking, case folding, property names |
+| [testing.md](documentation/testing.md) | How correctness is established: oracles, the conformance-vector format, the semantic probe suite, corpus imports, fuzzing, the ReDoS corpus |
+| [plan.md](documentation/plan.md) | The plan of attack: lanes, phases, work packages with dependencies and "done" criteria, milestones |
+| [development.md](documentation/development.md) | Notes on the scaffold as it stands |
+
+The first milestone is ECMAScript with the `u` flag, searched rather than
+matched, which is what JSON Schema requires and what `text`'s schema engine
+is waiting for.
 
 ## License
 

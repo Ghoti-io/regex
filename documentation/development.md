@@ -1,7 +1,10 @@
 # Development
 
 **Status:** describes the scaffolding as it stands. The engine sections say
-what a new piece has to arrive with, not what exists.
+what a new piece has to arrive with, not what exists. The target layout,
+the pipeline and the engines are specified in [design.md](design.md), which
+takes precedence where the two differ; this page is corrected as each work
+package in [plan.md](plan.md) lands.
 
 ## Layout
 
