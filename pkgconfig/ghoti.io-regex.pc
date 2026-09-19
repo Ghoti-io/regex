@@ -1,0 +1,7 @@
+Name: Ghoti.io Regex(BRANCH)
+Description: Regular expressions across the major dialects, with a linear-time and a backtracking engine
+Version: (VERSION)
+URL: https://github.com/coreyp1/ghoti-regex
+Libs: -L(PC_LIB_DIR) -l(SUITE)-(PROJECT)(BRANCH)
+CFlags: -I(PC_INCLUDE_DIR)
+Requires: (REQUIRES)

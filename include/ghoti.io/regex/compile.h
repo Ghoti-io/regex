@@ -1,0 +1,164 @@
+/**
+ * @file
+ *
+ * Compilation: a parsed pattern to a program the engines can run.
+ *
+ * GRX_Regex is the type a consumer holds on to. It is immutable once built and
+ * carries no match state, so one compiled regex may be used from several
+ * threads at once; the mutable part lives in @ref GRX_Match.
+ *
+ * Status: stub. grx_regex_compile() returns GRX_ERR_UNSUPPORTED until the
+ * parser and compiler are written.
+ *
+ * Copyright 2026 by Corey Pennycuff
+ */
+
+#ifndef GHOTI_IO_GRX_COMPILE_H
+#define GHOTI_IO_GRX_COMPILE_H
+
+#include <ghoti.io/regex/allocator.h>
+#include <ghoti.io/regex/core.h>
+#include <ghoti.io/regex/macros.h>
+#include <ghoti.io/regex/pattern.h>
+#include <ghoti.io/regex/syntax.h>
+#include <stdio.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/**
+ * @brief A compiled regular expression.
+ *
+ * Owned by the caller; released with grx_regex_free(). Immutable, and so safe
+ * to share between threads.
+ */
+typedef struct GRX_Regex GRX_Regex;
+
+/**
+ * @brief Compile a NUL-terminated pattern using the default limits and
+ * allocator.
+ *
+ * The common case: parse and compile in one call, discarding the intermediate
+ * syntax tree.
+ *
+ * @param pattern The pattern text. NULL is invalid.
+ * @param syntax The dialect to read it in.
+ * @param options @ref GRX_Option bits, or GRX_OPT_NONE.
+ * @param out_regex Receives the compiled regex on success.
+ * @return GRX_OK, GRX_ERR_SYNTAX, GRX_ERR_UNSUPPORTED, GRX_ERR_LIMIT,
+ *   GRX_ERR_INVALID, or GRX_ERR_OOM.
+ */
+GRX_API GRX_Result grx_regex_compile(const char * pattern, GRX_Syntax syntax,
+    uint32_t options, GRX_Regex ** out_regex);
+
+/**
+ * @brief Compile a pattern of a given length, with explicit limits, allocator
+ * and error reporting.
+ *
+ * @param pattern The pattern text. May be NULL only when `length` is 0.
+ * @param length Length of `pattern` in bytes.
+ * @param syntax The dialect to read it in.
+ * @param options @ref GRX_Option bits, or GRX_OPT_NONE.
+ * @param limits Caps to apply. NULL uses grx_limits_default().
+ * @param allocator Allocator for the regex. NULL uses the default.
+ * @param out_error Receives the failure position and message. Optional.
+ * @param out_regex Receives the compiled regex on success.
+ * @return GRX_OK, GRX_ERR_SYNTAX, GRX_ERR_UNSUPPORTED, GRX_ERR_LIMIT,
+ *   GRX_ERR_INVALID, or GRX_ERR_OOM.
+ */
+GRX_API GRX_Result grx_regex_compile_with_allocator(const char * pattern,
+    size_t length, GRX_Syntax syntax, uint32_t options,
+    const GRX_Limits * limits, const GRX_Allocator * allocator,
+    GRX_Error * out_error, GRX_Regex ** out_regex);
+
+/**
+ * @brief Compile an already-parsed pattern.
+ *
+ * The pattern is read, not consumed: the caller still owns it afterwards and
+ * may compile it more than once.
+ *
+ * @param pattern The parsed pattern. NULL is invalid.
+ * @param limits Caps to apply. NULL uses grx_limits_default().
+ * @param allocator Allocator for the regex. NULL uses the default.
+ * @param out_error Receives the failure position and message. Optional.
+ * @param out_regex Receives the compiled regex on success.
+ * @return GRX_OK, GRX_ERR_UNSUPPORTED, GRX_ERR_LIMIT, GRX_ERR_INVALID, or
+ *   GRX_ERR_OOM.
+ */
+GRX_API GRX_Result grx_regex_compile_pattern(const GRX_Pattern * pattern,
+    const GRX_Limits * limits, const GRX_Allocator * allocator,
+    GRX_Error * out_error, GRX_Regex ** out_regex);
+
+/**
+ * @brief The number of capturing groups.
+ *
+ * Group 0, the whole match, is not counted.
+ *
+ * @param regex The regex. NULL returns 0.
+ * @return The number of capturing groups.
+ */
+GRX_API size_t grx_regex_capture_count(const GRX_Regex * regex);
+
+/**
+ * @brief The name of a capturing group, for a dialect that has named groups.
+ *
+ * The returned string is owned by the regex and is valid until it is freed.
+ *
+ * @param regex The regex.
+ * @param index One-based group index; 0 is the whole match and is never named.
+ * @return The name, or NULL for an unnamed or out-of-range group.
+ */
+GRX_API const char * grx_regex_capture_name(
+    const GRX_Regex * regex, size_t index);
+
+/**
+ * @brief The index of a named capturing group.
+ *
+ * @param regex The regex.
+ * @param name The group name. NULL is invalid.
+ * @param out_index Receives the one-based index on success.
+ * @return GRX_OK, or GRX_ERR_INVALID for an unknown name or a NULL argument.
+ */
+GRX_API GRX_Result grx_regex_capture_index(
+    const GRX_Regex * regex, const char * name, size_t * out_index);
+
+/**
+ * @brief The dialect the regex was compiled from.
+ *
+ * @param regex The regex. NULL returns GRX_SYNTAX_COUNT.
+ * @return The dialect.
+ */
+GRX_API GRX_Syntax grx_regex_syntax(const GRX_Regex * regex);
+
+/**
+ * @brief The number of instructions in the compiled program.
+ *
+ * @param regex The regex. NULL returns 0.
+ * @return The program size.
+ */
+GRX_API size_t grx_regex_program_size(const GRX_Regex * regex);
+
+/**
+ * @brief Write a human-readable disassembly of the compiled program.
+ *
+ * For debugging and for tests; the format is not stable across versions.
+ *
+ * @param regex The regex.
+ * @param out Destination.
+ * @return GRX_OK, or GRX_ERR_INVALID for a NULL argument.
+ */
+GRX_API GRX_Result grx_regex_dump(const GRX_Regex * regex, FILE * out);
+
+/**
+ * @brief Release a compiled regex. NULL is ignored.
+ *
+ * @param regex The regex.
+ */
+GRX_API void grx_regex_free(GRX_Regex * regex);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif // GHOTI_IO_GRX_COMPILE_H
