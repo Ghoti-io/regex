@@ -45,6 +45,38 @@ inline std::string data(const std::string & relative) {
 }
 
 /**
+ * Path to a file in the repository, for the tests that check a document
+ * against the code it describes.
+ *
+ * Baked in at compile time the same way the fixture directory is, because a
+ * test binary runs from the build tree and has no other way to find the
+ * source it came from.
+ */
+inline std::string repo(const std::string & relative) {
+#ifdef GRX_REPO_ROOT
+  return std::string(GRX_REPO_ROOT) + "/" + relative;
+#else
+  return relative;
+#endif
+}
+
+/** The whole of a text file, or an empty string when it cannot be read. */
+inline std::string read_file(const std::string & path) {
+  FILE * file = std::fopen(path.c_str(), "rb");
+  if (!file) {
+    return std::string();
+  }
+  std::string out;
+  char buffer[4096];
+  size_t read;
+  while ((read = std::fread(buffer, 1, sizeof(buffer), file)) > 0) {
+    out.append(buffer, read);
+  }
+  std::fclose(file);
+  return out;
+}
+
+/**
  * Run a dump function against a temporary file and return what it wrote.
  *
  * The dumps take a FILE * because that is what a C library can portably

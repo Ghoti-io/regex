@@ -402,17 +402,17 @@ endif
 $(OBJ_DIR)/tests/%.o: tests/%.cpp
 	@printf "\n### Compiling Test: $* ###\n"
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(INCLUDE) -Itests -DGRX_TEST_DATA=\"$(TEST_DATA)\" -c $< -MMD -MP -MF $(@:.o=.d) -o $@
+	$(CXX) $(CXXFLAGS) $(INCLUDE) -Itests -DGRX_TEST_DATA=\"$(TEST_DATA)\" -DGRX_REPO_ROOT=\"$(REGEX_ROOT)\" -c $< -MMD -MP -MF $(@:.o=.d) -o $@
 
 $(OBJ_DIR)/tests/%.o: tests/conformance/%.cpp
 	@printf "\n### Compiling Test: $* ###\n"
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(INCLUDE) -Itests -DGRX_TEST_DATA=\"$(TEST_DATA)\" -c $< -MMD -MP -MF $(@:.o=.d) -o $@
+	$(CXX) $(CXXFLAGS) $(INCLUDE) -Itests -DGRX_TEST_DATA=\"$(TEST_DATA)\" -DGRX_REPO_ROOT=\"$(REGEX_ROOT)\" -c $< -MMD -MP -MF $(@:.o=.d) -o $@
 
 $(OBJ_DIR)/tests/%.o: tests/unit/%.cpp
 	@printf "\n### Compiling Test: $* ###\n"
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(INCLUDE) -Itests -DGRX_TEST_DATA=\"$(TEST_DATA)\" -c $< -MMD -MP -MF $(@:.o=.d) -o $@
+	$(CXX) $(CXXFLAGS) $(INCLUDE) -Itests -DGRX_TEST_DATA=\"$(TEST_DATA)\" -DGRX_REPO_ROOT=\"$(REGEX_ROOT)\" -c $< -MMD -MP -MF $(@:.o=.d) -o $@
 
 # Build rule for one test executable. $1 = source path, $2 = executable name.
 # Tests compile to .o first and link separately, so a library change relinks
@@ -893,17 +893,17 @@ $(ASAN_APP_DIR)/$(ASAN_TARGET): $(ASAN_LIBOBJECTS)
 $(ASAN_OBJ_DIR)/tests/%.o: tests/%.cpp
 	@printf "\n### Compiling ASan Test: $* ###\n"
 	@mkdir -p $(@D)
-	$(CXX) $(ASAN_CXXFLAGS) $(INCLUDE) -Itests -DGRX_TEST_DATA=\"$(TEST_DATA)\" -c $< -MMD -MP -MF $(@:.o=.d) -o $@
+	$(CXX) $(ASAN_CXXFLAGS) $(INCLUDE) -Itests -DGRX_TEST_DATA=\"$(TEST_DATA)\" -DGRX_REPO_ROOT=\"$(REGEX_ROOT)\" -c $< -MMD -MP -MF $(@:.o=.d) -o $@
 
 $(ASAN_OBJ_DIR)/tests/%.o: tests/conformance/%.cpp
 	@printf "\n### Compiling ASan Test: $* ###\n"
 	@mkdir -p $(@D)
-	$(CXX) $(ASAN_CXXFLAGS) $(INCLUDE) -Itests -DGRX_TEST_DATA=\"$(TEST_DATA)\" -c $< -MMD -MP -MF $(@:.o=.d) -o $@
+	$(CXX) $(ASAN_CXXFLAGS) $(INCLUDE) -Itests -DGRX_TEST_DATA=\"$(TEST_DATA)\" -DGRX_REPO_ROOT=\"$(REGEX_ROOT)\" -c $< -MMD -MP -MF $(@:.o=.d) -o $@
 
 $(ASAN_OBJ_DIR)/tests/%.o: tests/unit/%.cpp
 	@printf "\n### Compiling ASan Test: $* ###\n"
 	@mkdir -p $(@D)
-	$(CXX) $(ASAN_CXXFLAGS) $(INCLUDE) -Itests -DGRX_TEST_DATA=\"$(TEST_DATA)\" -c $< -MMD -MP -MF $(@:.o=.d) -o $@
+	$(CXX) $(ASAN_CXXFLAGS) $(INCLUDE) -Itests -DGRX_TEST_DATA=\"$(TEST_DATA)\" -DGRX_REPO_ROOT=\"$(REGEX_ROOT)\" -c $< -MMD -MP -MF $(@:.o=.d) -o $@
 
 define asan-test-executable-rule
 ASAN_TEST_OBJ_$1 := $(ASAN_OBJ_DIR)/tests/$(basename $(notdir $1)).o

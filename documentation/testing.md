@@ -305,6 +305,14 @@ Run by `make test` alongside `check-symbols`:
 - **Every `GRX_Feature` bit is set in at least one profile row** and
   **every profile row is complete** (no zero enum where zero is not a
   value). **Not built.**
+- **The documents that quote output are checked against the output.**
+  `tests/unit/test_docs.cpp` extracts the fenced blocks from
+  `development.md` and `README.md` and compares them with what the library
+  actually prints. **Built.** It is a test of the pages rather than of the
+  library, and it lives with the code because that is what it compares them
+  against. Prose is deliberately not checked: a page that has to be
+  word-for-word correct is a page nobody edits.
+  **To check the gate itself:** change a digit in one of the dump examples.
 - **No STUB-marked test survives the stub it marks:** a test whose comment
   says `STUB` for a function whose implementation no longer returns
   `GRX_ERR_UNSUPPORTED` fails. **Not built, and no longer needed for the
