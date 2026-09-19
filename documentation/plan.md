@@ -73,7 +73,7 @@ the formats the conformance runner will read. No parser, no engine.
 asking questions; the dump formats are documented in `development.md`.
 *Depends on:* nothing. **Start first.**
 
-**WP-02 Unicode tables.** *unicode, M.* `tools/unicode/fetch.sh`,
+**WP-02 Unicode tables.** *unicode, M.* **Landed.** `tools/unicode/fetch.sh`,
 `gen_tables.py` with its own tests, `UCD_VERSION` = 17.0.0, the generated
 tables of [unicode.md](unicode.md) §3 (all but the grapheme rules and the
 properties of strings, which are WP-12), the resolvers of §6, the fold

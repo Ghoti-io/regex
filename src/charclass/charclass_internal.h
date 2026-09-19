@@ -23,16 +23,11 @@
 #include <stdint.h>
 
 #include "../core/arena_internal.h"
+#include "../core/range_internal.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-/** One inclusive range of code points. */
-typedef struct GRX_CharRange {
-  uint32_t low;  ///< First code point in the range.
-  uint32_t high; ///< Last code point in the range.
-} GRX_CharRange;
 
 /**
  * @brief A set of code points, as sorted disjoint ranges.

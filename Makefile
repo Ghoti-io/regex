@@ -237,7 +237,7 @@ TESTFLAGS := `PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs --cflags gtes
 # coverage target does, because --coverage links the gcov runtime, whose
 # mangle_path check-symbols is right to reject in a shipping library and
 # wrong to reject in an instrumented one. Spelled as text's TEST_GATES is.
-TEST_GATES ?= check-symbols check-layering
+TEST_GATES ?= check-symbols check-layering check-unicode-tables
 
 # Valgrind flags (exclude "still reachable" as it's not a leak)
 VALGRIND_FLAGS := --leak-check=full --show-leak-kinds=definite,indirect,possible --track-origins=yes --error-exitcode=1
@@ -418,7 +418,7 @@ $(APP_DIR)/examples/%$(EXE_EXTENSION): examples/%.c $(APP_DIR)/$(STATIC_TARGET) 
 ####################################################################
 
 # General commands
-.PHONY: clean cloc docs docs-pdf examples coverage check-symbols check-layering
+.PHONY: clean cloc docs docs-pdf examples coverage check-symbols check-layering check-unicode-tables
 # Release build commands
 .PHONY: all install test test-quiet test-asan test-valgrind test-valgrind-quiet test-watch uninstall watch
 # Debug build commands
@@ -497,6 +497,51 @@ check-layering: ## Fail if an engine knows which dialect it is running
 		exit 1; \
 	fi
 	@printf "\033[0;32mNo engine names a dialect.\033[0m\n"
+
+####################################################################
+# Unicode table check
+####################################################################
+
+# Where the UCD lands and where the generator's output is committed. Both are
+# named here rather than inside the recipe so that a reader can see what the
+# check compares without reading the shell.
+UCD_VERSION := $(shell cat tools/unicode/UCD_VERSION 2>/dev/null)
+UCD_DIR := third_party/ucd/$(UCD_VERSION)
+UNICODE_TABLES := src/unicode/tables
+
+check-unicode-tables: ## Fail if the committed Unicode tables are not what the generator produces
+	@if ! command -v python3 >/dev/null 2>&1; then \
+		printf "check-unicode-tables: skipped (no python3)\n"; \
+		exit 0; \
+	fi; \
+	if ! python3 tools/unicode/test_gen.py >/dev/null 2>&1; then \
+		printf "\033[0;31m\n### The Unicode generator's own tests fail ###\033[0m\n" >&2; \
+		python3 tools/unicode/test_gen.py >&2 || true; \
+		exit 1; \
+	fi; \
+	if [ ! -d "$(UCD_DIR)" ]; then \
+		printf "check-unicode-tables: generator tests pass; table diff skipped (no $(UCD_DIR); run tools/unicode/fetch.sh)\n"; \
+		exit 0; \
+	fi; \
+	tmp=$$(mktemp -d) || exit 1; \
+	trap 'rm -rf "$$tmp"' EXIT; \
+	mkdir -p "$$tmp/out"; \
+	if ! python3 tools/unicode/gen_tables.py --out "$$tmp/out" >/dev/null 2>"$$tmp/err"; then \
+		printf "\033[0;31m\n### The Unicode generator failed ###\033[0m\n" >&2; \
+		cat "$$tmp/err" >&2; \
+		exit 1; \
+	fi; \
+	if ! diff -ru $(UNICODE_TABLES) "$$tmp/out" >"$$tmp/diff" 2>&1; then \
+		printf "\033[0;31m\n### The committed Unicode tables are stale ###\033[0m\n" >&2; \
+		head -40 "$$tmp/diff" >&2; \
+		printf "\nThe tables under $(UNICODE_TABLES) are committed so that a build needs\n" >&2; \
+		printf "neither the network nor Python, which means they can drift from the\n" >&2; \
+		printf "generator that is supposed to produce them. Regenerate with:\n" >&2; \
+		printf "  tools/unicode/gen_tables.py\n" >&2; \
+		printf "See documentation/unicode.md section 4.\n" >&2; \
+		exit 1; \
+	fi; \
+	printf "\033[0;32mUnicode tables are byte-identical to the generator's output (UCD $(UCD_VERSION)).\033[0m\n"
 
 check-symbols: ## Fail if any exported symbol lacks the version namespace
 check-symbols: $(APP_DIR)/$(TARGET)

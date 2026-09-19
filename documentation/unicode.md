@@ -1,8 +1,9 @@
 # Unicode data
 
-**Status:** design. The library has a strict UTF-8 codec and an ASCII-only
-case fold today; everything else on this page is to be built. Owned by
-[design.md](design.md) §5.
+**Status:** built, except the properties of strings and the grapheme rules
+(WP-12). The codec, the tables, both foldings and both name resolvers are in
+`src/unicode`; `make check-unicode-tables` proves the committed tables are
+what the generator produces. Owned by [design.md](design.md) §5.
 
 Nothing else in the suite carries Unicode data - `text` parses JSON, YAML
 and CSV without character properties, `cutil` has none, and `ctang` uses
@@ -43,20 +44,32 @@ five-and-six-byte forms and every truncated sequence - and
   sequence is reported the same way as forward decoding reports it.
 - `grx_utf8_validate(text, length, &bad_offset)`: the whole-subject check
   that runs before a search in UTF mode ([design.md](design.md) §5.1). Public,
-  so a caller who received `GRX_ERR_INVALID` can find the offset. Implemented
-  as a table-driven DFA over bytes (Hoehrmann's), since it runs on every
-  search and must be cheap.
+  so a caller who received `GRX_ERR_INVALID` can find the offset.
+
+  Built as a loop over `grx_unicode_utf8_decode()` rather than as the
+  table-driven DFA (Hoehrmann's) this page first specified. The reason is
+  that the two must agree on *exactly* what is valid, and a second
+  implementation of "valid UTF-8" is a second place for the surrogate rule or
+  an overlong bound to be written down slightly differently - a disagreement
+  that shows up as a subject the validator accepts and the engine then cannot
+  step through. The loop is O(n) with a small constant. If profiling on a
+  real workload says the constant matters, the DFA goes in *under* the
+  decoder so that both still share one definition.
 
 ## 3. The tables
 
 Every table is a sorted array of disjoint inclusive code-point ranges,
 `GRX_CharRange {low, high}` as the scaffold has it, so that a class built
 from a property is a copy of a range array and membership is the same binary
-search the character-class module already does. Where a lookup is on the
-hot path (General_Category for `\w` under UCP; the fold for a caseless
-literal at compile time) a two-level trie is generated beside the ranges;
-the range array remains the source of truth and the trie is derived from it
-in the generator, never by hand.
+search the character-class module already does.
+
+This page originally also specified a two-level trie beside the ranges for
+the hot lookups. There is none, and there is no hot lookup for it to serve:
+every property and every fold is resolved *at compile time*, into the
+canonical class an instruction names, so an engine never looks a property up
+while matching. A trie would be a second representation of the same data
+with no caller. It goes in if and when a lookup appears on a matching path -
+derived in the generator from the ranges, never written by hand.
 
 | Table | Source file(s) | Used by |
 | --- | --- | --- |
@@ -75,10 +88,17 @@ in the generator, never by hand.
 | Properties of strings for ECMAScript `v`: `RGI_Emoji`, `Basic_Emoji`, `Emoji_Keycap_Sequence`, `RGI_Emoji_Flag_Sequence`, `RGI_Emoji_Modifier_Sequence`, `RGI_Emoji_Tag_Sequence`, `RGI_Emoji_ZWJ_Sequence` | `emoji-sequences.txt`, `emoji-zwj-sequences.txt` | `\p{RGI_Emoji}` in `v` mode, which matches a *string* and so lowers to an alternation of literal sequences, not a class |
 | Extended grapheme cluster rules | `GraphemeBreakProperty.txt`, `emoji-data.txt` | `\X`, PCRE2 and Perl; later tier |
 
-Size: the range arrays for everything above are of the order of 200 KB in
-`.rodata`. That is acceptable for a library whose competitors ship the same;
-what is not acceptable is generating it at build time, which would put
-Python and the network in the build.
+Size, measured at UCD 17.0.0 rather than estimated: 454 properties over
+21,772 ranges, **183 KB** of `.rodata` for the ranges and the property
+records, **39 KB** of relocated pointers for the name tables, and **106 KB**
+for the two case tables and their orbits - **328 KB** in total, against the
+200 KB this page first guessed. The gap is the name tables, which were not
+in the estimate, and the orbit index, which carries a twelve-byte record for
+every one of the 2,994 code points in a multi-member orbit. Both are
+compressible and neither is on a hot path; the note is here so that a later
+decision to compress them is made against a number. What remains
+unacceptable is generating any of it at build time, which would put Python
+and the network in the build.
 
 ## 4. Generation and checking
 
@@ -114,11 +134,14 @@ Three operations, all compile-time ([design.md](design.md) §5.2):
 
 - **`fold_simple(cp)`**: `CaseFolding.txt` statuses C and S. One code point
   in, one out.
-- **`fold_orbit(cp, out_ranges)`**: every code point whose simple fold
-  equals `fold_simple(cp)`. This is what a caseless literal becomes and what
-  a caseless class is closed under. Precomputed as a table of orbits (most
-  are pairs; `k`/`K`/`K` and `s`/`S`/`ſ` are the famous triples; the largest,
-  for U+03B8 theta, has four members).
+- **`fold_orbit(cp, out)`**: every code point whose simple fold equals
+  `fold_simple(cp)`. This is what a caseless literal becomes and what a
+  caseless class is closed under. Precomputed as a table of orbits (most are
+  pairs; `K`/`k`/U+212A and `S`/`s`/U+017F are the famous triples; the
+  largest, for U+03B8 theta, has four members, which is why
+  `GRX_FOLD_ORBIT_MAX` is 4). A code point with no entry is alone in its
+  orbit and the function returns it, so "expand to the orbit" is one code
+  path whether or not the character has a case.
 - **`canonicalize_es_legacy(cp)`**: ECMA-262's Canonicalize for a pattern
   without `u`: apply the simple uppercase mapping unless the result is more
   than one UTF-16 code unit or maps a non-ASCII code point into ASCII.
@@ -134,10 +157,14 @@ Two resolvers over the same alias tables:
 
 - **Strict** (ECMAScript): the name must be exactly a canonical property
   name or alias from `PropertyAliases.txt`, and the value exactly one from
-  `PropertyValueAliases.txt`; case-sensitive; `General_Category`, `Script`
-  and `Script_Extensions` may be written with a value alone (`\p{Lu}`,
-  `\p{Greek}`); binary properties only by name. Anything else is a
-  `SyntaxError` in the reference, and `GRX_ERR_SYNTAX` here.
+  `PropertyValueAliases.txt`; case-sensitive. Three shapes are accepted, and
+  only three (ECMA-262 22.2.2.9.5-9.7): a binary property name alone
+  (`\p{Alphabetic}`, `\p{Alpha}`), a **General_Category value** alone
+  (`\p{Lu}`, `\p{Uppercase_Letter}`, `\p{L}`), and `name=value` for `gc`,
+  `sc` and `scx`. A **lone script value is a `SyntaxError`**: `\p{Greek}`
+  is rejected and `\p{Script=Greek}` accepted. An earlier draft of this page
+  said otherwise; Node 22 was asked, and it rejects `\p{Greek}` under both
+  `u` and `v`. Anything else is `GRX_ERR_SYNTAX` here.
 - **Loose** (Perl, PCRE2, and per UAX #44 §5.9.2): case, whitespace,
   hyphens and underscores are ignored, so `\p{Lowercase_Letter}`,
   `\p{lowercaseletter}` and `\p{LOWERCASE LETTER}` are one property; `Is`

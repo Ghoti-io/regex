@@ -85,6 +85,8 @@
 #define grx_syntax_has_feature GHOTIIO_REGEX(grx_syntax_has_feature)
 #define grx_syntax_name GHOTIIO_REGEX(grx_syntax_name)
 #define grx_syntax_spec GHOTIIO_REGEX(grx_syntax_spec)
+#define grx_unicode_version GHOTIIO_REGEX(grx_unicode_version)
+#define grx_utf8_validate GHOTIIO_REGEX(grx_utf8_validate)
 #define grx_version_number GHOTIIO_REGEX(grx_version_number)
 #define grx_version_string GHOTIIO_REGEX(grx_version_string)
 
@@ -116,7 +118,6 @@
 
 // Character classes.
 #define GRX_CharClass GHOTIIO_REGEX(GRX_CharClass)
-#define GRX_CharRange GHOTIIO_REGEX(GRX_CharRange)
 #define GRX_ClassRef GHOTIIO_REGEX(GRX_ClassRef)
 #define GRX_ClassTable GHOTIIO_REGEX(GRX_ClassTable)
 #define grx_charclass_add_range GHOTIIO_REGEX(grx_charclass_add_range)
@@ -177,11 +178,76 @@
 #define grx_exec_program_needs_backtracking                                    \
   GHOTIIO_REGEX(grx_exec_program_needs_backtracking)
 
-// Dialects and Unicode.
+// Code-point ranges, the shape every set in the library has.
+#define GRX_CharRange GHOTIIO_REGEX(GRX_CharRange)
+#define grx_range_contains GHOTIIO_REGEX(grx_range_contains)
+
+// Dialects.
 #define grx_syntax_spec_table GHOTIIO_REGEX(grx_syntax_spec_table)
+
+// Unicode: the codec, the foldings, and property resolution.
+#define GRX_PropertyMatch GHOTIIO_REGEX(GRX_PropertyMatch)
+#define grx_unicode_es_legacy_canonicalize                                    \
+  GHOTIIO_REGEX(grx_unicode_es_legacy_canonicalize)
+#define grx_unicode_es_legacy_orbit GHOTIIO_REGEX(grx_unicode_es_legacy_orbit)
+#define grx_unicode_fold_orbit GHOTIIO_REGEX(grx_unicode_fold_orbit)
 #define grx_unicode_fold_simple GHOTIIO_REGEX(grx_unicode_fold_simple)
+#define grx_unicode_property_lookup GHOTIIO_REGEX(grx_unicode_property_lookup)
+#define grx_unicode_property_name GHOTIIO_REGEX(grx_unicode_property_name)
+#define grx_unicode_property_ranges GHOTIIO_REGEX(grx_unicode_property_ranges)
+#define grx_unicode_property_total GHOTIIO_REGEX(grx_unicode_property_total)
 #define grx_unicode_utf8_decode GHOTIIO_REGEX(grx_unicode_utf8_decode)
+#define grx_unicode_utf8_decode_prev                                          \
+  GHOTIIO_REGEX(grx_unicode_utf8_decode_prev)
 #define grx_unicode_utf8_encode GHOTIIO_REGEX(grx_unicode_utf8_encode)
+
+// The generated Unicode tables. Data rather than functions, and hidden by
+// -fvisibility=hidden like everything else here, but renamed under the same
+// rule: two versions of this library in one process must not share a table
+// whose layout their headers disagree about.
+#define GRX_UnicodeCaseMap GHOTIIO_REGEX(GRX_UnicodeCaseMap)
+#define GRX_UnicodeName GHOTIIO_REGEX(GRX_UnicodeName)
+#define GRX_UnicodeOrbit GHOTIIO_REGEX(GRX_UnicodeOrbit)
+#define GRX_UnicodeProperty GHOTIIO_REGEX(GRX_UnicodeProperty)
+#define GRX_UPropKind GHOTIIO_REGEX(GRX_UPropKind)
+#define grx_unicode_es_legacy_map GHOTIIO_REGEX(grx_unicode_es_legacy_map)
+#define grx_unicode_es_legacy_map_count                                       \
+  GHOTIIO_REGEX(grx_unicode_es_legacy_map_count)
+#define grx_unicode_es_legacy_orbit_member_count                              \
+  GHOTIIO_REGEX(grx_unicode_es_legacy_orbit_member_count)
+#define grx_unicode_es_legacy_orbit_members                                   \
+  GHOTIIO_REGEX(grx_unicode_es_legacy_orbit_members)
+#define grx_unicode_es_legacy_orbit_count                                     \
+  GHOTIIO_REGEX(grx_unicode_es_legacy_orbit_count)
+#define grx_unicode_es_legacy_orbits                                          \
+  GHOTIIO_REGEX(grx_unicode_es_legacy_orbits)
+#define grx_unicode_fold_map GHOTIIO_REGEX(grx_unicode_fold_map)
+#define grx_unicode_fold_map_count GHOTIIO_REGEX(grx_unicode_fold_map_count)
+#define grx_unicode_fold_orbit_count                                          \
+  GHOTIIO_REGEX(grx_unicode_fold_orbit_count)
+#define grx_unicode_fold_orbit_member_count                                   \
+  GHOTIIO_REGEX(grx_unicode_fold_orbit_member_count)
+#define grx_unicode_fold_orbit_members                                        \
+  GHOTIIO_REGEX(grx_unicode_fold_orbit_members)
+#define grx_unicode_fold_orbits GHOTIIO_REGEX(grx_unicode_fold_orbits)
+#define grx_unicode_loose_name_count                                          \
+  GHOTIIO_REGEX(grx_unicode_loose_name_count)
+#define grx_unicode_loose_names GHOTIIO_REGEX(grx_unicode_loose_names)
+#define grx_unicode_loose_prop_name_count                                     \
+  GHOTIIO_REGEX(grx_unicode_loose_prop_name_count)
+#define grx_unicode_loose_prop_names                                          \
+  GHOTIIO_REGEX(grx_unicode_loose_prop_names)
+#define grx_unicode_prop_name_count                                           \
+  GHOTIIO_REGEX(grx_unicode_prop_name_count)
+#define grx_unicode_prop_names GHOTIIO_REGEX(grx_unicode_prop_names)
+#define grx_unicode_properties GHOTIIO_REGEX(grx_unicode_properties)
+#define grx_unicode_property_count                                            \
+  GHOTIIO_REGEX(grx_unicode_property_count)
+#define grx_unicode_range_count GHOTIIO_REGEX(grx_unicode_range_count)
+#define grx_unicode_ranges GHOTIIO_REGEX(grx_unicode_ranges)
+#define grx_unicode_strict_name_count                                         \
+  GHOTIIO_REGEX(grx_unicode_strict_name_count)
+#define grx_unicode_strict_names GHOTIIO_REGEX(grx_unicode_strict_names)
 
 /// @endcond
 

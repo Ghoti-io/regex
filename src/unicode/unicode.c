@@ -14,6 +14,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <ghoti.io/regex/unicode.h>
+
+#include "tables/tables_internal.h"
 #include "unicode_internal.h"
 
 size_t grx_unicode_utf8_decode(
@@ -114,14 +117,66 @@ size_t grx_unicode_utf8_encode(uint32_t codepoint, char * buffer) {
   return 4;
 }
 
-uint32_t grx_unicode_fold_simple(uint32_t codepoint) {
-  // TODO: the rest of Unicode. CaseFolding.txt's C and S entries are the
-  // table this needs; until it exists, a caseless match outside ASCII is
-  // simply a match on the unfolded code point, which is wrong rather than
-  // approximate - hence the note in documentation/dialects.md.
-  if (codepoint >= 'A' && codepoint <= 'Z') {
-    return codepoint - 'A' + 'a';
+size_t grx_unicode_utf8_decode_prev(
+    const char * text, size_t offset, uint32_t * out_codepoint) {
+  if (!text || !offset || !out_codepoint) {
+    return 0;
   }
 
-  return codepoint;
+  const unsigned char * bytes = (const unsigned char *)text;
+
+  // A lead byte is at most four back. Step over continuation bytes, then
+  // decode forward from the first non-continuation byte and require the
+  // sequence to end exactly where the caller said it does: a backwards scan
+  // alone cannot tell "the three bytes of U+20AC" from "a truncated sequence
+  // followed by two stray continuation bytes", and accepting the second
+  // would let a lookbehind step into the middle of a character.
+  size_t back = 1;
+  while (back <= 4 && back <= offset) {
+    unsigned char candidate = bytes[offset - back];
+    if ((candidate & 0xC0u) != 0x80u) {
+      uint32_t codepoint = 0;
+      size_t used
+          = grx_unicode_utf8_decode(text + offset - back, back, &codepoint);
+      if (used != back) {
+        return 0;
+      }
+      *out_codepoint = codepoint;
+      return back;
+    }
+    back++;
+  }
+
+  return 0;
+}
+
+GRX_Result grx_utf8_validate(
+    const char * text, size_t length, size_t * out_offset) {
+  if (!text && length) {
+    if (out_offset) {
+      *out_offset = 0;
+    }
+    return GRX_ERR_INVALID;
+  }
+
+  size_t position = 0;
+  while (position < length) {
+    uint32_t codepoint = 0;
+    size_t used
+        = grx_unicode_utf8_decode(text + position, length - position,
+            &codepoint);
+    if (!used) {
+      if (out_offset) {
+        *out_offset = position;
+      }
+      return GRX_ERR_INVALID;
+    }
+    position += used;
+  }
+
+  return GRX_OK;
+}
+
+const char * grx_unicode_version(void) {
+  return GRX_UCD_VERSION;
 }

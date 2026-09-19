@@ -1,0 +1,899 @@
+#!/usr/bin/env python3
+"""Generate the library's Unicode tables from the UCD.
+
+Reads ``third_party/ucd/<version>/`` and writes ``src/unicode/tables/``. The
+output is committed, because a build must need neither the network nor
+Python (documentation/unicode.md section 1); this script is run by a person
+when the pinned UCD version changes, and by ``make check-unicode-tables`` to
+prove that what is committed is what this script produces.
+
+Determinism is a requirement, not a nicety: the check target diffs the
+regenerated output against the committed files, so every table is emitted
+from sorted input in a fixed format with no timestamps and no dict-ordering
+dependence.
+
+Usage:
+    tools/unicode/gen_tables.py [--ucd DIR] [--out DIR] [--version V]
+
+Copyright 2026 by Corey Pennycuff
+"""
+
+import argparse
+import os
+import sys
+
+MAX_CODEPOINT = 0x10FFFF
+
+# The property kinds, mirrored by GRX_UPropKind in the generated header. A
+# property is one of these four things, and the kind is what disambiguates
+# `\p{sc=Greek}` from `\p{scx=Greek}`, which name different sets under the
+# same value spelling.
+KIND_BINARY = 0
+KIND_GC = 1
+KIND_SCRIPT = 2
+KIND_SCX = 3
+
+KIND_NAMES = {
+    KIND_BINARY: "GRX_UPROP_BINARY",
+    KIND_GC: "GRX_UPROP_GC",
+    KIND_SCRIPT: "GRX_UPROP_SCRIPT",
+    KIND_SCX: "GRX_UPROP_SCX",
+}
+
+# The binary properties ECMA-262 table 69 names, plus the three that its
+# table 68 treats as lone names. Every other binary property in the UCD is
+# still generated - the loose resolver that Perl and PCRE2 use accepts far
+# more than this - but these are the ones a strict dialect may spell.
+ECMA262_BINARY = [
+    "ASCII",
+    "ASCII_Hex_Digit",
+    "Alphabetic",
+    "Any",
+    "Assigned",
+    "Bidi_Control",
+    "Bidi_Mirrored",
+    "Case_Ignorable",
+    "Cased",
+    "Changes_When_Casefolded",
+    "Changes_When_Casemapped",
+    "Changes_When_Lowercased",
+    "Changes_When_NFKC_Casefolded",
+    "Changes_When_Titlecased",
+    "Changes_When_Uppercased",
+    "Dash",
+    "Default_Ignorable_Code_Point",
+    "Deprecated",
+    "Diacritic",
+    "Emoji",
+    "Emoji_Component",
+    "Emoji_Modifier",
+    "Emoji_Modifier_Base",
+    "Emoji_Presentation",
+    "Extended_Pictographic",
+    "Extender",
+    "Grapheme_Base",
+    "Grapheme_Extend",
+    "Hex_Digit",
+    "IDS_Binary_Operator",
+    "IDS_Trinary_Operator",
+    "ID_Continue",
+    "ID_Start",
+    "Ideographic",
+    "Join_Control",
+    "Logical_Order_Exception",
+    "Lowercase",
+    "Math",
+    "Noncharacter_Code_Point",
+    "Pattern_Syntax",
+    "Pattern_White_Space",
+    "Quotation_Mark",
+    "Radical",
+    "Regional_Indicator",
+    "Sentence_Terminal",
+    "Soft_Dotted",
+    "Terminal_Punctuation",
+    "Unified_Ideograph",
+    "Uppercase",
+    "Variation_Selector",
+    "White_Space",
+    "XID_Continue",
+    "XID_Start",
+]
+
+# The General_Category groups: one-letter names that stand for every value
+# beginning with that letter. `LC` is the exception - it is cased letters
+# only, not every `L` - and the UCD spells it out, so it is listed here
+# rather than derived.
+GC_GROUPS = {
+    "L": ["Lu", "Ll", "Lt", "Lm", "Lo"],
+    "LC": ["Lu", "Ll", "Lt"],
+    "M": ["Mn", "Mc", "Me"],
+    "N": ["Nd", "Nl", "No"],
+    "P": ["Pc", "Pd", "Ps", "Pe", "Pi", "Pf", "Po"],
+    "S": ["Sm", "Sc", "Sk", "So"],
+    "Z": ["Zs", "Zl", "Zp"],
+    "C": ["Cc", "Cf", "Cs", "Co", "Cn"],
+}
+
+
+# ---------------------------------------------------------------------------
+# Range-set arithmetic
+#
+# Every set in this file is a list of (low, high) inclusive pairs, sorted and
+# disjoint, which is the shape the C side reads. These four functions are the
+# only places that shape is created or changed.
+# ---------------------------------------------------------------------------
+
+
+def normalize(ranges):
+    """Sort, merge and coalesce a list of (low, high) pairs."""
+    out = []
+    for low, high in sorted(ranges):
+        if out and low <= out[-1][1] + 1:
+            if high > out[-1][1]:
+                out[-1] = (out[-1][0], high)
+        else:
+            out.append((low, high))
+    return [tuple(r) for r in out]
+
+
+def complement(ranges):
+    """Every code point not in `ranges`, as ranges."""
+    out = []
+    position = 0
+    for low, high in ranges:
+        if low > position:
+            out.append((position, low - 1))
+        position = max(position, high + 1)
+    if position <= MAX_CODEPOINT:
+        out.append((position, MAX_CODEPOINT))
+    return out
+
+
+def union(*sets):
+    merged = []
+    for s in sets:
+        merged.extend(s)
+    return normalize(merged)
+
+
+def count_codepoints(ranges):
+    return sum(high - low + 1 for low, high in ranges)
+
+
+# ---------------------------------------------------------------------------
+# UCD file parsing
+#
+# Each of these knows one file's conventions, and each is covered by
+# tools/unicode/test_gen.py: a generator bug is a correctness bug in every
+# dialect at once, so the parsers are tested against their formats rather
+# than against the data they happen to produce today.
+# ---------------------------------------------------------------------------
+
+
+def strip_comment(line):
+    """Drop a trailing `#` comment and surrounding whitespace."""
+    hash_at = line.find("#")
+    if hash_at >= 0:
+        line = line[:hash_at]
+    return line.strip()
+
+
+def parse_codepoint_range(field):
+    """`0041` or `0041..005A` to an inclusive (low, high) pair."""
+    field = field.strip()
+    if ".." in field:
+        low, high = field.split("..", 1)
+        return (int(low, 16), int(high, 16))
+    value = int(field, 16)
+    return (value, value)
+
+
+def read_records(path):
+    """Yield the semicolon-separated fields of each non-comment line."""
+    with open(path, "r", encoding="utf-8") as handle:
+        for line in handle:
+            body = strip_comment(line)
+            if not body:
+                continue
+            yield [field.strip() for field in body.split(";")]
+
+
+def read_unicode_data(path):
+    """UnicodeData.txt: one record per code point, with First/Last ranges.
+
+    Returns (general_category, simple_upper, simple_lower, assigned) where the
+    first is a dict of value name to range list and the two maps are
+    code point to code point.
+    """
+    categories = {}
+    upper = {}
+    lower = {}
+    assigned = []
+
+    pending_first = None
+    with open(path, "r", encoding="utf-8") as handle:
+        for line in handle:
+            fields = line.rstrip("\n").split(";")
+            if len(fields) < 15:
+                continue
+            code = int(fields[0], 16)
+            name = fields[1]
+            category = fields[2]
+
+            if name.endswith(", First>"):
+                pending_first = (code, category)
+                continue
+            if name.endswith(", Last>"):
+                if pending_first is None:
+                    raise ValueError("Last> without First> at U+%04X" % code)
+                start, start_category = pending_first
+                pending_first = None
+                categories.setdefault(start_category, []).append((start, code))
+                assigned.append((start, code))
+                continue
+
+            categories.setdefault(category, []).append((code, code))
+            assigned.append((code, code))
+
+            # Fields 12 and 13 are the simple uppercase and lowercase
+            # mappings; an empty field means the character maps to itself.
+            if fields[12]:
+                upper[code] = int(fields[12], 16)
+            if fields[13]:
+                lower[code] = int(fields[13], 16)
+
+    if pending_first is not None:
+        raise ValueError("First> with no Last>")
+
+    return (
+        {name: normalize(ranges) for name, ranges in categories.items()},
+        upper,
+        lower,
+        normalize(assigned),
+    )
+
+
+def read_property_file(path, column=1):
+    """A `range ; value` file: PropList, Scripts, DerivedCoreProperties.
+
+    Some records in the derived files carry a third field (a value for a
+    multi-valued derived property); `column` selects which field names the
+    set, and a record with fewer fields than that is skipped rather than
+    guessed at.
+    """
+    sets = {}
+    for fields in read_records(path):
+        if len(fields) <= column:
+            continue
+        low, high = parse_codepoint_range(fields[0])
+        sets.setdefault(fields[column], []).append((low, high))
+    return {name: normalize(ranges) for name, ranges in sets.items()}
+
+
+def read_script_extensions(path, script_value_to_long):
+    """ScriptExtensions.txt: a range maps to a *list* of script short names."""
+    sets = {}
+    for fields in read_records(path):
+        if len(fields) < 2:
+            continue
+        low, high = parse_codepoint_range(fields[0])
+        for short in fields[1].split():
+            long_name = script_value_to_long.get(short, short)
+            sets.setdefault(long_name, []).append((low, high))
+    return {name: normalize(ranges) for name, ranges in sets.items()}
+
+
+def read_case_folding(path):
+    """CaseFolding.txt: the C and S statuses, which are the simple folding.
+
+    F (full) and T (Turkic) are deliberately not read; see
+    documentation/design.md section 10.
+    """
+    folds = {}
+    for fields in read_records(path):
+        if len(fields) < 3:
+            continue
+        status = fields[1]
+        if status not in ("C", "S"):
+            continue
+        code = int(fields[0], 16)
+        mapping = fields[2].split()
+        if len(mapping) != 1:
+            raise ValueError("status %s with a multi-code-point mapping" % status)
+        folds[code] = int(mapping[0], 16)
+    return folds
+
+
+def read_special_casing(path):
+    """SpecialCasing.txt: the unconditional full uppercase mappings.
+
+    Only the unconditional entries are read - a record with a condition list
+    is language- or context-sensitive, and ECMA-262's Canonicalize is defined
+    in terms of `String.prototype.toUpperCase`, which applies the
+    unconditional mappings only.
+    """
+    upper = {}
+    for fields in read_records(path):
+        if len(fields) < 4:
+            continue
+        # Field 4, when present, is the condition list.
+        if len(fields) > 4 and fields[4]:
+            continue
+        code = int(fields[0], 16)
+        upper[code] = [int(value, 16) for value in fields[3].split()]
+    return upper
+
+
+def read_aliases(path):
+    """PropertyAliases.txt: short name first, then the long name and others."""
+    aliases = {}
+    for fields in read_records(path):
+        if len(fields) < 2:
+            continue
+        long_name = fields[1]
+        spellings = [field for field in fields if field]
+        entry = (long_name, spellings)
+        for spelling in spellings:
+            aliases.setdefault(spelling, entry)
+    return aliases
+
+
+def read_value_aliases(path):
+    """PropertyValueAliases.txt, grouped by property short name.
+
+    Returns {property: {any spelling: (canonical long name, [spellings])}} -
+    indexed by *every* spelling rather than by the canonical one, because the
+    files the values come from do not agree on which spelling they use:
+    DerivedGeneralCategory.txt writes `Ll` and PropertyValueAliases.txt calls
+    that row `Lowercase_Letter`, and a table keyed by one cannot be looked up
+    with the other.
+
+    `ccc` puts a numeric value first, which is why the spellings are taken as
+    "every field that is not the property name and not `n/a`" rather than by
+    position.
+    """
+    values = {}
+    for fields in read_records(path):
+        if len(fields) < 3:
+            continue
+        prop = fields[0]
+        spellings = [field for field in fields[1:] if field and field != "n/a"]
+        if not spellings:
+            continue
+        # For every property but ccc the long name is the second spelling;
+        # for ccc it is the third, the first being the numeric class.
+        long_name = spellings[1] if len(spellings) > 1 else spellings[0]
+        if prop == "ccc" and len(spellings) > 2:
+            long_name = spellings[2]
+        entry = (long_name, spellings)
+        for spelling in spellings:
+            values.setdefault(prop, {})[spelling] = entry
+    return values
+
+
+# ---------------------------------------------------------------------------
+# Fold orbits
+# ---------------------------------------------------------------------------
+
+
+def build_orbits(fold_map, universe):
+    """Group `universe` by its image under `fold_map`.
+
+    An orbit is every code point sharing a fold target, and it is what a
+    caseless literal becomes. Only orbits with more than one member are
+    returned - a code point alone in its orbit needs no table entry, because
+    the caller falls back to the code point itself.
+    """
+    groups = {}
+    for code in universe:
+        target = fold_map.get(code, code)
+        groups.setdefault(target, set()).add(code)
+        # The fold target is itself a member: `k` is in the orbit of `K`.
+        groups[target].add(target)
+
+    orbits = {}
+    for members in groups.values():
+        if len(members) < 2:
+            continue
+        ordered = tuple(sorted(members))
+        for member in ordered:
+            orbits[member] = ordered
+    return orbits
+
+
+def es_legacy_canonicalize(code, simple_upper, special_upper):
+    """ECMA-262 22.2.2.9.1 Canonicalize, for a pattern without `u`.
+
+    Uppercase the code point with the full mapping; if that produced more
+    than one UTF-16 code unit, or mapped a non-ASCII code point into ASCII,
+    the original is kept. This is the rule under which `/[a-z]/i` does not
+    match U+017F in JavaScript while `/[a-z]/iu` does.
+    """
+    mapped = special_upper.get(code)
+    if mapped is None:
+        upper = simple_upper.get(code, code)
+        mapped = [upper]
+
+    if len(mapped) != 1:
+        return code
+    result = mapped[0]
+    # "More than one UTF-16 code unit" is about the *encoded* length, so an
+    # astral result is also rejected - it is a surrogate pair.
+    if result > 0xFFFF:
+        return code
+    if code >= 128 and result < 128:
+        return code
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Emitting C
+# ---------------------------------------------------------------------------
+
+HEADER_NOTICE = """/**
+ * @file
+ *
+ * GENERATED by tools/unicode/gen_tables.py from UCD %s. Do not edit.
+ *
+ * Regenerate with:  tools/unicode/gen_tables.py
+ * Verify with:      make check-unicode-tables
+ *
+ * Copyright 2026 by Corey Pennycuff
+ */
+"""
+
+
+def c_string(text):
+    return '"%s"' % text.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def emit_ranges(out, ranges, per_line=4):
+    """Write range initialisers, several to a line to keep the file short."""
+    for start in range(0, len(ranges), per_line):
+        chunk = ranges[start:start + per_line]
+        out.write("  " + " ".join(
+            "{0x%04X,0x%04X}," % (low, high) for low, high in chunk) + "\n")
+
+
+def normalise_loose(name):
+    """UAX #44 section 5.9.2 loose matching: fold case, drop `_`, `-`, space."""
+    return "".join(
+        char.lower() for char in name if char not in ("_", "-", " ")
+    )
+
+
+def build_tables(ucd, version):
+    """Read every UCD file and return the property records to emit."""
+
+    categories, simple_upper, simple_lower, assigned = read_unicode_data(
+        os.path.join(ucd, "UnicodeData.txt"))
+
+    # DerivedGeneralCategory is authoritative: it assigns Cn to everything
+    # UnicodeData.txt leaves out, which UnicodeData.txt cannot express.
+    derived_gc = read_property_file(
+        os.path.join(ucd, "DerivedGeneralCategory.txt"))
+    if derived_gc:
+        categories = derived_gc
+
+    prop_aliases = read_aliases(os.path.join(ucd, "PropertyAliases.txt"))
+    value_aliases = read_value_aliases(
+        os.path.join(ucd, "PropertyValueAliases.txt"))
+
+    gc_values = value_aliases.get("gc", {})
+    script_values = value_aliases.get("sc", {})
+    script_short_to_long = {
+        spelling: entry[0] for spelling, entry in script_values.items()
+    }
+
+    scripts = read_property_file(os.path.join(ucd, "Scripts.txt"))
+    scripts = {
+        script_short_to_long.get(name, name): ranges
+        for name, ranges in scripts.items()
+    }
+
+    scx = read_script_extensions(
+        os.path.join(ucd, "ScriptExtensions.txt"), script_short_to_long)
+    # A code point with no ScriptExtensions record has scx equal to its sc.
+    scx_explicit = union(*scx.values()) if scx else []
+    scx_unlisted = complement(scx_explicit)
+    for name, ranges in scripts.items():
+        remainder = intersect(ranges, scx_unlisted)
+        if remainder:
+            scx[name] = union(scx.get(name, []), remainder)
+
+    binaries = {}
+    binaries.update(read_property_file(os.path.join(ucd, "PropList.txt")))
+    binaries.update(
+        read_property_file(os.path.join(ucd, "DerivedCoreProperties.txt")))
+    binaries.update(
+        read_property_file(os.path.join(ucd, "DerivedBinaryProperties.txt")))
+    for name, ranges in read_property_file(
+            os.path.join(ucd, "emoji-data.txt")).items():
+        binaries[name] = ranges
+
+    # The three sets ECMA-262 names that the UCD does not carry as files.
+    binaries["Any"] = [(0, MAX_CODEPOINT)]
+    binaries["ASCII"] = [(0, 0x7F)]
+    binaries["Assigned"] = complement(categories.get("Cn", []))
+
+    # Drop the multi-valued derived properties that share a file with the
+    # binary ones: their names are values, not properties, and a lone
+    # `\p{Linker}` would otherwise resolve to something ECMA-262 does not
+    # define. They are re-added by name if a later dialect wants them.
+    for name in ("Yes", "No", "Maybe"):
+        binaries.pop(name, None)
+
+    properties = []
+
+    def add(kind, key, ranges, alias_table):
+        """Record one property under its canonical long name.
+
+        `key` is whatever spelling the source file used; the alias table
+        turns it into the canonical long name and the full list of accepted
+        spellings, so that `\\p{Ll}` and `\\p{Lowercase_Letter}` name one
+        record rather than two.
+        """
+        entry = alias_table.get(key)
+        long_name, spellings = entry if entry else (key, [key])
+        properties.append({
+            "kind": kind,
+            "name": long_name,
+            "ranges": normalize(ranges),
+            "spellings": sorted(set(list(spellings) + [long_name, key])),
+        })
+
+    for name in sorted(categories):
+        add(KIND_GC, name, categories[name], gc_values)
+    for group, members in sorted(GC_GROUPS.items()):
+        merged = union(*[categories.get(member, []) for member in members])
+        add(KIND_GC, group, merged, gc_values)
+
+    for name in sorted(scripts):
+        add(KIND_SCRIPT, name, scripts[name], script_values)
+    for name in sorted(scx):
+        add(KIND_SCX, name, scx[name], script_values)
+    for name in sorted(binaries):
+        add(KIND_BINARY, name, binaries[name], prop_aliases)
+
+    folds = read_case_folding(os.path.join(ucd, "CaseFolding.txt"))
+    special_upper = read_special_casing(
+        os.path.join(ucd, "SpecialCasing.txt"))
+
+    # The universe an orbit is built over: every code point either folding
+    # or folded to. Nothing outside it can share an orbit with anything.
+    fold_universe = set(folds.keys()) | set(folds.values())
+    fold_orbits = build_orbits(folds, fold_universe)
+
+    es_map = {}
+    cased_universe = set(simple_upper) | set(simple_lower) | set(special_upper)
+    for code in cased_universe:
+        canonical = es_legacy_canonicalize(code, simple_upper, special_upper)
+        if canonical != code:
+            es_map[code] = canonical
+    es_universe = set(es_map.keys()) | set(es_map.values())
+    es_orbits = build_orbits(es_map, es_universe)
+
+    return {
+        "version": version,
+        "properties": properties,
+        "folds": folds,
+        "fold_orbits": fold_orbits,
+        "es_map": es_map,
+        "es_orbits": es_orbits,
+        "simple_upper": simple_upper,
+        "simple_lower": simple_lower,
+    }
+
+
+def intersect(a, b):
+    """The code points in both range lists."""
+    out = []
+    ia = 0
+    ib = 0
+    while ia < len(a) and ib < len(b):
+        low = max(a[ia][0], b[ib][0])
+        high = min(a[ia][1], b[ib][1])
+        if low <= high:
+            out.append((low, high))
+        if a[ia][1] < b[ib][1]:
+            ia += 1
+        else:
+            ib += 1
+    return normalize(out)
+
+
+def write_header(out_dir, tables):
+    path = os.path.join(out_dir, "tables_internal.h")
+    with open(path, "w", encoding="utf-8") as out:
+        out.write(HEADER_NOTICE % tables["version"])
+        out.write("""
+#ifndef GHOTI_IO_GRX_SRC_UNICODE_TABLES_TABLES_INTERNAL_H
+#define GHOTI_IO_GRX_SRC_UNICODE_TABLES_TABLES_INTERNAL_H
+
+#include <ghoti.io/regex/macros.h>
+
+#include <stddef.h>
+#include <stdint.h>
+
+#include "../../core/range_internal.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/** @brief The UCD release every table on this page was generated from. */
+#define GRX_UCD_VERSION %s
+
+/** @brief What kind of thing a property record names. */
+typedef enum {
+  GRX_UPROP_BINARY = 0, ///< A binary property: `\\p{Alphabetic}`.
+  GRX_UPROP_GC,         ///< A General_Category value: `\\p{gc=Lu}`, `\\p{Lu}`.
+  GRX_UPROP_SCRIPT,     ///< A Script value: `\\p{sc=Greek}`.
+  GRX_UPROP_SCX,        ///< A Script_Extensions value: `\\p{scx=Greek}`.
+  GRX_UPROP_KIND_COUNT  ///< Closes the enum; not a kind.
+} GRX_UPropKind;
+
+/**
+ * @brief One Unicode property, as a slice of the shared range array.
+ *
+ * `total` is the code-point count the UCD's own trailer states, carried
+ * across so that a C test can check the table against the standard's
+ * arithmetic rather than against the generator that produced it
+ * (documentation/unicode.md section 4).
+ */
+typedef struct GRX_UnicodeProperty {
+  const char * name;  ///< The canonical long name.
+  uint8_t kind;       ///< A @ref GRX_UPropKind.
+  uint32_t first;     ///< Index of the first range in grx_unicode_ranges.
+  uint32_t count;     ///< Number of ranges.
+  uint32_t total;     ///< Code points the property covers.
+} GRX_UnicodeProperty;
+
+/**
+ * @brief One accepted spelling of a property or of a property's value.
+ *
+ * Sorted by name so that the strict resolver is a binary search; a second
+ * table holds the same entries with UAX #44 loose spelling applied, for the
+ * dialects that match loosely (documentation/unicode.md section 6).
+ */
+typedef struct GRX_UnicodeName {
+  const char * name;  ///< The spelling.
+  uint16_t kind;      ///< A @ref GRX_UPropKind.
+  uint16_t property;  ///< Index into grx_unicode_properties.
+} GRX_UnicodeName;
+
+/** @brief One entry of a case-mapping table. */
+typedef struct GRX_UnicodeCaseMap {
+  uint32_t from; ///< The code point mapped.
+  uint32_t to;   ///< What it maps to.
+} GRX_UnicodeCaseMap;
+
+/**
+ * @brief One code point's membership in a fold orbit.
+ *
+ * Every member of an orbit has an entry, so a lookup is one binary search
+ * and the answer is a slice of the shared member array.
+ */
+typedef struct GRX_UnicodeOrbit {
+  uint32_t code;  ///< The code point.
+  uint32_t first; ///< Index of the orbit's first member.
+  uint32_t count; ///< Members in the orbit, including `code` itself.
+} GRX_UnicodeOrbit;
+
+extern const GRX_CharRange grx_unicode_ranges[];
+extern const size_t grx_unicode_range_count;
+
+extern const GRX_UnicodeProperty grx_unicode_properties[];
+extern const size_t grx_unicode_property_count;
+
+/** Property *names*: "gc", "General_Category", "sc", "scx". */
+extern const GRX_UnicodeName grx_unicode_prop_names[];
+extern const size_t grx_unicode_prop_name_count;
+
+/** Property *values*, and the binary property names, by exact spelling. */
+extern const GRX_UnicodeName grx_unicode_strict_names[];
+extern const size_t grx_unicode_strict_name_count;
+
+/** The same, with UAX #44 loose spelling applied and re-sorted. */
+extern const GRX_UnicodeName grx_unicode_loose_names[];
+extern const size_t grx_unicode_loose_name_count;
+
+extern const GRX_UnicodeName grx_unicode_loose_prop_names[];
+extern const size_t grx_unicode_loose_prop_name_count;
+
+/** Simple case folding: CaseFolding.txt statuses C and S. */
+extern const GRX_UnicodeCaseMap grx_unicode_fold_map[];
+extern const size_t grx_unicode_fold_map_count;
+
+extern const GRX_UnicodeOrbit grx_unicode_fold_orbits[];
+extern const size_t grx_unicode_fold_orbit_count;
+extern const uint32_t grx_unicode_fold_orbit_members[];
+extern const size_t grx_unicode_fold_orbit_member_count;
+
+/** ECMA-262 Canonicalize without the `u` flag, and its orbits. */
+extern const GRX_UnicodeCaseMap grx_unicode_es_legacy_map[];
+extern const size_t grx_unicode_es_legacy_map_count;
+
+extern const GRX_UnicodeOrbit grx_unicode_es_legacy_orbits[];
+extern const size_t grx_unicode_es_legacy_orbit_count;
+extern const uint32_t grx_unicode_es_legacy_orbit_members[];
+extern const size_t grx_unicode_es_legacy_orbit_member_count;
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif // GHOTI_IO_GRX_SRC_UNICODE_TABLES_TABLES_INTERNAL_H
+""" % c_string(tables["version"]))
+
+
+def write_ranges(out_dir, tables):
+    path = os.path.join(out_dir, "tables_ranges.c")
+    properties = tables["properties"]
+
+    # One flat range array shared by every property, so that a property is
+    # two integers rather than its own symbol, and the linker sees one object
+    # instead of several hundred.
+    flat = []
+    records = []
+    for prop in properties:
+        records.append({
+            "name": prop["name"],
+            "kind": prop["kind"],
+            "first": len(flat),
+            "count": len(prop["ranges"]),
+            "total": count_codepoints(prop["ranges"]),
+        })
+        flat.extend(prop["ranges"])
+
+    # Name tables. A property's value spellings and a binary property's own
+    # name resolve the same way, so they share one table keyed by (name, kind).
+    strict = []
+    for index, prop in enumerate(properties):
+        for spelling in prop["spellings"]:
+            strict.append((spelling, prop["kind"], index))
+    strict = sorted(set(strict))
+
+    loose = sorted(set(
+        (normalise_loose(name), kind, index) for name, kind, index in strict))
+
+    prop_names = []
+    for spelling, kind in (
+            ("General_Category", KIND_GC),
+            ("gc", KIND_GC),
+            ("Script", KIND_SCRIPT),
+            ("sc", KIND_SCRIPT),
+            ("Script_Extensions", KIND_SCX),
+            ("scx", KIND_SCX)):
+        prop_names.append((spelling, kind, 0))
+    prop_names = sorted(set(prop_names))
+    loose_prop_names = sorted(set(
+        (normalise_loose(name), kind, index)
+        for name, kind, index in prop_names))
+
+    with open(path, "w", encoding="utf-8") as out:
+        out.write(HEADER_NOTICE % tables["version"])
+        out.write('\n#include "tables_internal.h"\n\n')
+
+        out.write("const GRX_CharRange grx_unicode_ranges[] = {\n")
+        emit_ranges(out, flat)
+        out.write("};\n")
+        out.write("const size_t grx_unicode_range_count = %d;\n\n" % len(flat))
+
+        out.write("const GRX_UnicodeProperty grx_unicode_properties[] = {\n")
+        for record in records:
+            out.write("  {%s, %s, %d, %d, %d},\n" % (
+                c_string(record["name"]), KIND_NAMES[record["kind"]],
+                record["first"], record["count"], record["total"]))
+        out.write("};\n")
+        out.write("const size_t grx_unicode_property_count = %d;\n\n"
+                  % len(records))
+
+        # The count symbol is spelled from the singular - `..._name_count`
+        # beside `..._names` - because that is how the hand-written header
+        # declares it, and a generator that invented its own spelling would
+        # compile and then fail to link.
+        for symbol, singular, entries in (
+                ("grx_unicode_prop_names", "grx_unicode_prop_name", prop_names),
+                ("grx_unicode_strict_names", "grx_unicode_strict_name", strict),
+                ("grx_unicode_loose_names", "grx_unicode_loose_name", loose),
+                ("grx_unicode_loose_prop_names", "grx_unicode_loose_prop_name",
+                 loose_prop_names)):
+            out.write("const GRX_UnicodeName %s[] = {\n" % symbol)
+            for name, kind, index in entries:
+                out.write("  {%s, %s, %d},\n"
+                          % (c_string(name), KIND_NAMES[kind], index))
+            out.write("};\n")
+            out.write("const size_t %s_count = %d;\n\n"
+                      % (singular, len(entries)))
+
+
+def write_case(out_dir, tables):
+    path = os.path.join(out_dir, "tables_case.c")
+
+    def emit_map(out, symbol, mapping):
+        items = sorted(mapping.items())
+        out.write("const GRX_UnicodeCaseMap %s[] = {\n" % symbol)
+        for start in range(0, len(items), 4):
+            chunk = items[start:start + 4]
+            out.write("  " + " ".join(
+                "{0x%04X,0x%04X}," % pair for pair in chunk) + "\n")
+        out.write("};\n")
+        out.write("const size_t %s_count = %d;\n\n" % (symbol, len(items)))
+
+    def emit_orbits(out, base, orbits):
+        """Emit `<base>s`, `<base>_members` and the two counts.
+
+        The singular base is what the header declares: one orbit record is a
+        `<base>`, and the flat array it indexes is `<base>_members`.
+        """
+        members = []
+        offsets = {}
+        for orbit in sorted(set(orbits.values())):
+            offsets[orbit] = len(members)
+            members.extend(orbit)
+
+        out.write("const uint32_t %s_members[] = {\n" % base)
+        for start in range(0, len(members), 8):
+            chunk = members[start:start + 8]
+            out.write("  " + " ".join("0x%04X," % code for code in chunk) + "\n")
+        out.write("};\n")
+        out.write("const size_t %s_member_count = %d;\n\n"
+                  % (base, len(members)))
+
+        out.write("const GRX_UnicodeOrbit %ss[] = {\n" % base)
+        for code in sorted(orbits):
+            orbit = orbits[code]
+            out.write("  {0x%04X, %d, %d},\n"
+                      % (code, offsets[orbit], len(orbit)))
+        out.write("};\n")
+        out.write("const size_t %s_count = %d;\n\n" % (base, len(orbits)))
+
+    with open(path, "w", encoding="utf-8") as out:
+        out.write(HEADER_NOTICE % tables["version"])
+        out.write('\n#include "tables_internal.h"\n\n')
+        emit_map(out, "grx_unicode_fold_map", tables["folds"])
+        emit_orbits(out, "grx_unicode_fold_orbit", tables["fold_orbits"])
+        emit_map(out, "grx_unicode_es_legacy_map", tables["es_map"])
+        emit_orbits(
+            out, "grx_unicode_es_legacy_orbit", tables["es_orbits"])
+
+
+def main(argv):
+    here = os.path.dirname(os.path.abspath(__file__))
+    root = os.path.dirname(os.path.dirname(here))
+
+    with open(os.path.join(here, "UCD_VERSION"), "r", encoding="utf-8") as f:
+        default_version = f.read().strip()
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--version", default=default_version)
+    parser.add_argument("--ucd", default=None)
+    parser.add_argument("--out", default=None)
+    args = parser.parse_args(argv[1:])
+
+    ucd = args.ucd or os.path.join(root, "third_party", "ucd", args.version)
+    out_dir = args.out or os.path.join(root, "src", "unicode", "tables")
+
+    if not os.path.isdir(ucd):
+        sys.stderr.write(
+            "the UCD is not in %s; run tools/unicode/fetch.sh\n" % ucd)
+        return 1
+
+    os.makedirs(out_dir, exist_ok=True)
+    tables = build_tables(ucd, args.version)
+    write_header(out_dir, tables)
+    write_ranges(out_dir, tables)
+    write_case(out_dir, tables)
+
+    total_ranges = sum(len(prop["ranges"]) for prop in tables["properties"])
+    sys.stderr.write(
+        "UCD %s: %d properties, %d ranges, %d folds, %d fold orbits\n" % (
+            args.version, len(tables["properties"]), total_ranges,
+            len(tables["folds"]), len(tables["fold_orbits"])))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
