@@ -257,6 +257,7 @@ when the gate changes:
 | `make test-asan` | a write past a heap allocation | non-zero, ASan report |
 | `make test-asan` | a signed integer overflow | non-zero, UBSan report, no "clean" line |
 | `make fuzz-run-<h>` | a `__builtin_trap()` on a reachable input | non-zero, crash artifact written |
+| `make fuzz-run-<h>` | a signed integer overflow on a reachable input | non-zero, UBSan report |
 | `check-symbols` | an exported function with no `namespace.h` entry | non-zero, naming the symbol |
 | `check-layering` | a `GRX_SYNTAX_` mention under `src/exec/` | non-zero, naming the file |
 

@@ -786,7 +786,12 @@ test-asan: $(ASAN_TEST_EXECUTABLES)
 FUZZ_CC ?= clang
 FUZZ_CXX ?= clang++
 FUZZ_CC_OK := $(shell which $(FUZZ_CC) 2>/dev/null)
-FUZZ_SAN := -fsanitize=address,undefined -fno-omit-frame-pointer -g -O1
+# -fno-sanitize-recover=undefined for the same reason the ASan build has it,
+# and it matters more here: a recoverable UBSan diagnostic is not a crash, so
+# libFuzzer prints it once, keeps going, writes no artifact and exits 0. A
+# fuzzer that finds undefined behaviour and discards it is worse than no
+# fuzzer. Verified by injecting a signed overflow on a reachable input.
+FUZZ_SAN := -fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer -g -O1
 FUZZ_LIB_FLAGS := $(FUZZ_SAN) -fsanitize=fuzzer-no-link
 FUZZ_BIN_FLAGS := $(FUZZ_SAN) -fsanitize=fuzzer
 FUZZ_DIR := $(BUILD_DIR)/fuzz
