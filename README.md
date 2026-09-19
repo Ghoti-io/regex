@@ -3,15 +3,21 @@
 Regular expressions across the major dialects, in C17. One parser reads
 sixteen syntaxes - POSIX BRE and ERE, GNU's extensions, Perl, PCRE,
 ECMAScript, Python, Java, .NET, Ruby, RE2, Rust, Tcl, Vim and Emacs - from a
-table that says what each one has, and two engines run the result: a Pike VM
-that is linear in the subject length, and a backtracking engine for the
-constructs no lockstep simulation can express.
+table that says what each one has, and three engines run the result: a Pike VM
+that is linear in the subject length, a backtracking engine for the constructs
+no lockstep simulation can express, and a bit-state engine that is the
+backtracker with a memo and the linear bound back.
 
-**Status: under construction.** The Unicode tables, the character-class
-algebra, the parser and the ECMAScript front end are built and checked
-against Node 22. The compiler and both engines are still stubs that report
-`GRX_ERR_UNSUPPORTED`, so nothing *matches* yet; see [Status](#status) below
-for exactly what works today.
+**Status: under construction.** ECMAScript - legacy, `u` and `v` modes -
+parses, compiles and matches on all three engines, checked against Node 22;
+`text` validates JSON Schema's `pattern` and `patternProperties` through it.
+Every other dialect is named and reports `GRX_ERR_UNSUPPORTED`. See
+[Status](#status) below for exactly what works today.
+
+(This paragraph said the compiler and the engines were stubs and that nothing
+matched, for some time after they stopped being stubs. A status line that is
+wrong in the *safe* direction is still wrong, and it sits above a table that
+contradicts it.)
 
 ## Example
 
@@ -164,7 +170,7 @@ Nothing is allocated for the caller to free on a failing call.
 | `grx_regex_replace()` and `grx_regex_split()` | working - ECMAScript's template grammar and split rule |
 | `grx_pattern_lint()`, the JSON Schema subset check | working |
 | Limits | measured, not guessed; dialects.md section 7 |
-| The `text` seam for JSON Schema | not started; WP-11 |
+| The `text` seam for JSON Schema | working - `pattern` and `patternProperties` validate through this library |
 
 **Conformance.** Five differential checks against Node 22, which is the
 pinned ECMAScript oracle. `make check-oracles` runs all five.
@@ -196,6 +202,23 @@ to give the same answer for it, which is the invariant of
 One `v`-mode rule goes the other way and the oracle is not followed:
 [dialects.md](documentation/dialects.md) §8.6.1 has the table and the
 reasoning.
+
+**JSON Schema.** `text` has no regular-expression engine and is not going to
+grow one, so its `pattern` and `patternProperties` keywords arrive through a
+provider vtable that a caller fills in. `examples/json_schema_provider.c` is
+that adapter written against this library - about sixty lines - and
+`make check-json-schema-suite` runs JSON-Schema-Test-Suite's two pattern files
+through `text` with it: **37 of 37** cases in draft2020-12 and **32 of 32** in
+draft7, no group skipped. `tools/jsonschema/fetch.sh` fetches the corpus at
+the commit pinned in `tools/jsonschema/SUITE_COMMIT`; it is not vendored, for
+the same reason the UCD is not.
+
+The interesting part of that seam is `search_fn`'s third answer. A search that
+could not finish - a budget spent on a pattern whose worst case is exponential
+- has not said the instance is invalid, and reporting it as "no match" would
+turn a denial-of-service defence into a wrong validation result. It becomes
+`GTEXT_JSON_E_LIMIT`, which is neither valid nor invalid, and a caller can
+tell the difference.
 
 **Vectors.** 1,596 checked-in `.rxt` records run in `make test`, with no
 oracle needed: 100% pass. Their expectations are Node's, not this library's.

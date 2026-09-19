@@ -179,21 +179,43 @@ from the vectors, the small-stack run, a 24-hour soak of all three before
 M1. *Done:* the soak is clean and the coverage report is read for the
 branches it missed. *Depends on:* WP-08.
 
-**WP-11 The `text` seam.** *text team, M.* A regular-expression provider
-vtable in `GTEXT_JSON_Schema_Options` (compile, search, free, plus a user
-pointer), `pattern` and `patternProperties` implemented against it and
-removed from the unsupported-keyword list when a provider is present, the
-schema-compile error when a pattern fails to compile carrying the
-provider's message and offset; in this repository, `examples/json_schema_provider.c`
-showing the adapter, and an env-gated oracle test that validates
+**WP-11 The `text` seam.** *text team, M.* **Landed.** A regular-expression
+provider vtable in `GTEXT_JSON_Schema_Options` - `compile_fn`, `search_fn`,
+`free_fn` and a `ctx`, spelled as the suite's other vtables are - with
+`pattern` and `patternProperties` implemented against it and refused, exactly
+as before, when no provider is present; the schema-compile error carries the
+provider's own message in `context_snippet` and its offset in `offset`, with
+`(size_t)-1` passed through rather than folded to 0, because a refusal about
+the whole pattern has no position. In this repository,
+`examples/json_schema_provider.c` is the adapter, `tools/jsonschema/` runs
 JSON-Schema-Test-Suite's `pattern.json` and `patternProperties.json` through
-`text` with this library as the provider. *Done:* those two suites pass.
-*Depends on:* WP-07 and WP-08 for a working `grx_regex_search()`; can be
-built against the stubs and switched.
+`text` with this library behind it, and `make check-json-schema-suite` is the
+gate. *Done:* 37 of 37 cases in draft2020-12 and 32 of 32 in draft7, none
+skipped.
+
+Two decisions were made in the course of it that the sketch above did not
+anticipate. `search_fn` has **three** answers rather than two: a search that
+could not finish - a budget spent, an allocation refused - is not "no match",
+and recording it as one would turn a denial-of-service defence into a wrong
+validation result; it becomes `GTEXT_JSON_E_LIMIT`, which is neither
+`GTEXT_JSON_OK` nor `GTEXT_JSON_E_SCHEMA`. And implementing
+`patternProperties` meant fixing `additionalProperties`, which applies to the
+properties that neither `properties` named *nor* any pattern matched: the
+validator's comment said so while only half of it was true, because the other
+half had nothing to be true about.
+*Depended on:* WP-07 and WP-08 for a working `grx_regex_search()`.
 
 **M1 - JSON Schema ready.** ECMAScript legacy and Unicode modes; both
 engines; limits enforced; `text` validates `pattern` and
 `patternProperties`; conformance rate published; fuzz soak clean.
+
+Four of the six are done. `text` validates both keywords through this
+library as of WP-11, all three engines are built and limits are measured and
+enforced. Two remain, and they are the two that are claims about *numbers*
+rather than about features: the conformance rate is published over this
+library's own generated corpora and against Node, not over test262, which is
+the second half of WP-09; and the longest fuzz campaign so far is thirty
+minutes per harness per mode rather than the soak WP-10 asks for.
 
 ### Phase 2: the rest of ECMAScript, safety, surface
 

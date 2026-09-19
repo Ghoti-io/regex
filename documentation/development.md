@@ -5,7 +5,8 @@ engines are specified in [design.md](design.md), which takes precedence where
 the two differ; this page is corrected as each work package in
 [plan.md](plan.md) lands.
 
-**Landed:** Phase 0, Phase 1 and Phase 2 of [plan.md](plan.md), less WP-11. A
+**Landed:** Phase 0, Phase 1 and Phase 2 of [plan.md](plan.md), WP-11
+included. A
 pattern in any of ECMAScript's three modes - legacy, Unicode and UnicodeSets -
 parses, lowers, compiles and matches on whichever of the three engines can run
 it, and `grx_regex_replace()`, `grx_regex_split()` and

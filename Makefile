@@ -224,6 +224,18 @@ endif
 endif
 INCLUDE += $(CUTIL_CFLAGS)
 
+# ghoti.io-text, for WP-11's JSON Schema seam. Optional, and deliberately so:
+# nothing that ships links it. It is needed by examples/json_schema_provider.c,
+# which is the adapter, and by tools/jsonschema, which runs
+# JSON-Schema-Test-Suite through that adapter. A checkout without `text`
+# installed builds everything else and skips those two with a message, rather
+# than failing - the opposite of the cutil rule above, because cutil is a
+# dependency of the library and this is a dependency of two demonstrations.
+TEXT_PC ?= ghoti.io-text$(BRANCH)
+TEXT_CFLAGS := $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --cflags $(TEXT_PC) 2>/dev/null)
+TEXT_LIBS := $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs $(TEXT_PC) 2>/dev/null)
+HAVE_TEXT := $(if $(strip $(TEXT_LIBS)),1,)
+
 # Automatically collect all .c source files under the src directory.
 SOURCES := $(shell find src -type f -name '*.c')
 
@@ -281,18 +293,33 @@ TEST_SOURCES := $(foreach pair,$(TEST_PAIRS),$(word 1,$(subst |, ,$(pair))))
 TEST_NAMES := $(foreach pair,$(TEST_PAIRS),$(word 2,$(subst |, ,$(pair))))
 TEST_EXECUTABLES := $(addprefix $(APP_DIR)/,$(addsuffix $(EXE_EXTENSION),$(TEST_NAMES)))
 
-# Automatically collect all example .c files.
-EXAMPLE_SOURCES := $(shell find examples -type f -name '*.c' 2>/dev/null)
+# Automatically collect all example .c files. The one that links `text` is
+# held out of the glob and added back only when pkg-config found it, so that
+# `make examples` on a machine without `text` builds the rest instead of
+# stopping at the first missing header.
+TEXT_EXAMPLE_SOURCES := examples/json_schema_provider.c
+EXAMPLE_SOURCES := $(filter-out $(TEXT_EXAMPLE_SOURCES),\
+	$(shell find examples -type f -name '*.c' 2>/dev/null))
 EXAMPLES := $(patsubst examples/%.c,$(APP_DIR)/examples/%$(EXE_EXTENSION),$(EXAMPLE_SOURCES))
+ifdef HAVE_TEXT
+EXAMPLES += $(patsubst examples/%.c,$(APP_DIR)/examples/%$(EXE_EXTENSION),$(TEXT_EXAMPLE_SOURCES))
+endif
 
 # The oracle drivers: this library wrapped so that a conformance harness can
 # ask it the same question it asks a reference implementation. Built on
 # demand rather than by `all`, because they are development tools and are not
 # installed.
-TOOL_SOURCES := $(shell find tools -type f -name '*.c' 2>/dev/null)
+TOOL_SOURCES := $(shell find tools -type f -name '*.c' -not -path 'tools/jsonschema/*' 2>/dev/null)
 TOOLS := $(patsubst tools/%.c,$(APP_DIR)/tools/%$(EXE_EXTENSION),$(notdir $(TOOL_SOURCES)))
 TOOLS := $(patsubst tools/oracle/%.c,$(APP_DIR)/tools/%$(EXE_EXTENSION),$(TOOL_SOURCES))
 TOOLS := $(patsubst tools/limits/%.c,$(APP_DIR)/tools/%$(EXE_EXTENSION),$(TOOLS))
+
+# The JSON Schema suite runner links `text`, so it joins the list only when
+# pkg-config found it.
+JSONSCHEMA_TOOL_SOURCES := $(shell find tools/jsonschema -type f -name '*.c' 2>/dev/null)
+ifdef HAVE_TEXT
+TOOLS += $(patsubst tools/jsonschema/%.c,$(APP_DIR)/tools/%$(EXE_EXTENSION),$(JSONSCHEMA_TOOL_SOURCES))
+endif
 
 # Where the test fixtures live. Tests run from build/.../apps, so the path is
 # baked in at compile time.
@@ -460,6 +487,23 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/limits/%.c $(APP_DIR)/$(STATIC_TARGET)
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(INCLUDE) -o $@ $< $(LDFLAGS) $(REGEXLIBRARY) $(CUTIL_LIBS)
 
+# The two targets that link `text`. Specific rules, so they take precedence
+# over the pattern rules above and add the flags pkg-config gave for it.
+$(APP_DIR)/examples/json_schema_provider$(EXE_EXTENSION): \
+		examples/json_schema_provider.c $(APP_DIR)/$(STATIC_TARGET) \
+		| $(APP_DIR)/$(TARGET)
+	@printf "\n### Compiling Example: json_schema_provider ###\n"
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(INCLUDE) $(TEXT_CFLAGS) -o $@ $< $(LDFLAGS) \
+		$(REGEXLIBRARY) $(CUTIL_LIBS) $(TEXT_LIBS)
+
+$(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
+		$(APP_DIR)/$(STATIC_TARGET) | $(APP_DIR)/$(TARGET)
+	@printf "\n### Compiling Tool: $* ###\n"
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(INCLUDE) $(TEXT_CFLAGS) -o $@ $< $(LDFLAGS) \
+		$(REGEXLIBRARY) $(CUTIL_LIBS) $(TEXT_LIBS)
+
 ####################################################################
 # Commands
 ####################################################################
@@ -467,7 +511,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/limits/%.c $(APP_DIR)/$(STATIC_TARGET)
 # General commands
 .PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-unicode-tables check-oracle-syntax check-oracle-match check-engine-equivalence \
 	check-oracle-properties check-oracle-string-properties check-oracles \
-	check-limits
+	check-limits check-json-schema-suite
 # Release build commands
 .PHONY: all install test test-quiet test-asan test-valgrind test-valgrind-quiet test-watch uninstall watch
 # Debug build commands
@@ -523,6 +567,30 @@ check-oracle-string-properties: $(TOOLS)
 	fi; \
 	python3 tools/oracle/string_property_diff.py
 
+check-json-schema-suite: ## Run JSON-Schema-Test-Suite's pattern files through `text`
+check-json-schema-suite: $(TOOLS)
+	@if [ -z "$(HAVE_TEXT)" ]; then \
+		printf "check-json-schema-suite: skipped (ghoti.io-text not found by pkg-config)\n"; \
+		exit 0; \
+	fi; \
+	dir="$(JSON_SCHEMA_SUITE)/tests/$(JSON_SCHEMA_DRAFT)"; \
+	if [ ! -d "$$dir" ]; then \
+		printf "check-json-schema-suite: skipped (run tools/jsonschema/fetch.sh first)\n"; \
+		exit 0; \
+	fi; \
+	$(APP_DIR)/tools/grx_json_schema \
+		"$$dir/pattern.json" "$$dir/patternProperties.json"
+
+# Where tools/jsonschema/fetch.sh puts the corpus, and which draft's files are
+# run. The suite is not committed - it is somebody else's, and a copy here
+# would be a snapshot that stops being what everyone else is measured against -
+# so the commit is pinned instead, and a published pass rate names it.
+# 2020-12 is the draft `text`'s keyword set is written against; draft7 is
+# fetched too and differs here only in `items`.
+JSON_SCHEMA_COMMIT := $(shell cat tools/jsonschema/SUITE_COMMIT 2>/dev/null)
+JSON_SCHEMA_SUITE ?= third_party/json-schema-test-suite/$(JSON_SCHEMA_COMMIT)
+JSON_SCHEMA_DRAFT ?= draft2020-12
+
 check-limits: ## Report what real patterns cost against grx_limits_default()
 check-limits: $(TOOLS)
 	@if ! command -v python3 >/dev/null 2>&1; then \
@@ -572,6 +640,11 @@ examples: $(APP_DIR)/$(TARGET) $(EXAMPLES)
 	@printf "############################\n"
 	@printf "\033[0m\n"
 	@printf "Examples are available in: $(APP_DIR)/examples/\n"
+ifndef HAVE_TEXT
+	@printf "\n"
+	@printf "  json_schema_provider was skipped: ghoti.io-text is not\n"
+	@printf "  installed, and it is the library that example plugs into.\n"
+endif
 	@printf "\n"
 	@printf "\033[0;33mTo run examples:\033[0m\n"
 ifeq ($(OS_NAME), Linux)

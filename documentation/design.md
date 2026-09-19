@@ -35,11 +35,13 @@ check against the code.
 
 ### 1.1 The first consumer
 
-`text`'s JSON Schema engine refuses schemas that use `pattern` or
-`patternProperties`, and its header says why: "these need a regular-expression
+`text`'s JSON Schema engine used to refuse every schema that used `pattern` or
+`patternProperties`, and its header said why: "these need a regular-expression
 engine, which is a dependency decision rather than an implementation detail"
 (`text/include/ghoti.io/text/json/json_schema.h`). This library is that
-engine. The dialect it needs is fixed by the specification:
+engine, and as of WP-11 the seam below exists and both keywords work through
+it; a schema is refused only when no provider was supplied. The dialect is
+fixed by the specification:
 
 > JSON Schema 2020-12 core, §6.4 *Regular Expressions*: keywords that use
 > regular expressions "SHOULD be valid according to the regular expression
@@ -56,14 +58,22 @@ characters, classes, the simple and range quantifiers and their lazy forms,
 formal sense and so the subset the linear-time engine runs. That is not a
 coincidence and it is the reason the engine split in §3.5 is worth having.
 
-The integration is a decision for the `text` team and is recorded in
-[plan.md](plan.md) as its own work package, but the design constraint is
-stated here: `text` depends on nothing, and this library depends on `cutil`.
-`text` should therefore not link this library. It should accept a
-regular-expression *provider* - a small vtable in `GTEXT_JSON_Schema_Options`
-with compile, search and free entries - and the application supplies one
-backed by `ghoti.io-regex`. `text` stays standalone, this library stays
+The integration is [plan.md](plan.md)'s WP-11, and it went the way the
+constraint here required: `text` does not link this library. It accepts a
+regular-expression *provider* - `GTEXT_JSON_Regex_Provider` in
+`GTEXT_JSON_Schema_Options`, with `compile_fn`, `search_fn`, `free_fn` and a
+`ctx` - and the application supplies one backed by `ghoti.io-regex`.
+`examples/json_schema_provider.c` is that adapter. This library stays
 optional, and a third party could supply PCRE2 through the same seam.
+
+One thing the sketch above did not have, and the implementation needed:
+`search_fn` returns **three** answers, not two. Positive is a match, zero is
+no match, and negative is *the search could not be completed* - a step budget
+spent, an allocation refused. That third answer is the whole point of §1.2's
+threat model reaching the caller: a pattern that exhausted its budget has not
+said the instance is invalid, and folding that into "no match" would turn the
+defence into a wrong validation result. `text` surfaces it as
+`GTEXT_JSON_E_LIMIT`, which is neither its OK nor its schema-failure code.
 
 ### 1.2 The threat model
 
@@ -696,6 +706,9 @@ blocks the first work packages.
 1. **The `text` seam** (§1.1): a provider vtable in `text` versus a
    dependency. Recommendation: the vtable. `text`'s standalone status is a
    stated property of the suite, and the vtable costs one struct.
+   **Decided, and built** in WP-11: the vtable, at four members. The cost was
+   one struct as predicted; what was not predicted was that `search_fn` would
+   need a third return value (§1.1).
 2. **Offsets under ECMAScript** are bytes, not UTF-16 units (§2).
    Recommendation: bytes, documented; a conversion helper if a consumer
    asks.
