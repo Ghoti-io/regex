@@ -140,6 +140,21 @@ typedef enum {
 } GRX_BackrefUnsetMode;
 
 /**
+ * @brief What a search-all loop does after an empty match.
+ *
+ * documentation/dialects.md section 5.10. The dialect chose it; lowering
+ * carries it onto the program, because an empty match is only discovered
+ * during execution and grx_regex_search_next() is the one place the rule is
+ * applied. The caller does not have to know there is more than one rule.
+ */
+typedef enum {
+  GRX_ITERATE_RETRY_THEN_ADVANCE = 0, ///< Perl, PCRE2, Python.
+  GRX_ITERATE_ADVANCE_ONE,            ///< ECMAScript.
+  GRX_ITERATE_ADVANCE_SKIP_ABUTTING,  ///< Go.
+  GRX_ITERATE_COUNT                   ///< Closes the enum; not a rule.
+} GRX_IterationRule;
+
+/**
  * @brief Which match a search reports when more than one is possible.
  *
  * Program-wide rather than per-node: it is a property of the dialect, and

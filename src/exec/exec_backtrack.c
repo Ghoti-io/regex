@@ -206,21 +206,27 @@ static int assertion_holds(
   int has_before = read_backward(bt, position, &before, &width);
   int has_after = read_forward(bt, position, &after, &width);
 
+  // NOTBOL and NOTEOL suppress only the end-of-subject halves; see the same
+  // switch in exec_pike.c, which this one has to agree with exactly.
   switch ((GRX_AssertKind)inst->mode) {
     case GRX_ASSERT_START_SUBJECT:
-      return position == 0;
+      return position == 0 && !request->not_bol;
     case GRX_ASSERT_END_SUBJECT:
-      return position == request->length;
+      return position == request->length && !request->not_eol;
     case GRX_ASSERT_END_BEFORE_NEWLINE:
+      if (request->not_eol) {
+        return 0;
+      }
       if (position == request->length) {
         return 1;
       }
       return has_after && in_class(bt, inst->x, after)
           && position + width == request->length;
     case GRX_ASSERT_START_LINE:
-      return position == 0 || (has_before && in_class(bt, inst->x, before));
+      return (position == 0 && !request->not_bol)
+          || (has_before && in_class(bt, inst->x, before));
     case GRX_ASSERT_END_LINE:
-      return position == request->length
+      return (position == request->length && !request->not_eol)
           || (has_after && in_class(bt, inst->x, after));
     case GRX_ASSERT_WORD_BOUNDARY:
     case GRX_ASSERT_NOT_WORD_BOUNDARY: {
@@ -314,9 +320,16 @@ static int backref_matches(const Backtrack * bt, const GRX_Inst * inst,
  * lookaround's sub-match cannot backtrack into its caller's alternatives.
  * The caller unwinds to the floor itself afterwards, which is what makes a
  * lookaround atomic.
+ *
+ * `toplevel` distinguishes the whole-pattern run from a lookaround body.
+ * Both end in a MATCH - a lookaround body is compiled as a sub-program with
+ * a success state of its own - but only the outer one is a match the caller
+ * asked for, and so only the outer one is subject to the request's rule
+ * about empty matches. Applying it to a body would make `(?=)` fail under
+ * NOTEMPTY, which is a rule about the *result*, not about an assertion.
  */
 static int run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
-    size_t * out_end) {
+    int toplevel, size_t * out_end) {
   const GRX_Limits * limits = bt->request->limits;
 
   for (;;) {
@@ -506,7 +519,8 @@ static int run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
 
         size_t body_floor = bt->depth;
         size_t end = 0;
-        int body_matched = run(bt, inst->x, position, body_floor, &end);
+        int body_matched
+            = run(bt, inst->x, position, body_floor, 0, &end);
         bt->depth = body_floor;
         if (bt->failure != GRX_OK) {
           gcu_allocator_free(bt->allocator, before);
@@ -550,6 +564,14 @@ static int run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
       }
 
       case GRX_OP_MATCH:
+        if (toplevel
+            && !grx_exec_accepts(bt->request, bt->slots[0], position)) {
+          // Not a match the caller will take. Fall through to backtracking
+          // so that a longer alternative from the same position still has
+          // its chance.
+          ok = 0;
+          break;
+        }
         *out_end = position;
         return 1;
 
@@ -628,7 +650,7 @@ GRX_Result grx_exec_backtrack(
     bt.depth = 0;
 
     size_t end = 0;
-    if (run(&bt, 0, start, 0, &end)) {
+    if (run(&bt, 0, start, 0, 1, &end)) {
       *out_matched = 1;
       break;
     }
@@ -668,6 +690,9 @@ GRX_Result grx_exec_backtrack(
     }
   }
 
+  if (request->out_steps) {
+    *request->out_steps = bt.steps;
+  }
   gcu_allocator_free(bt.allocator, bt.slots);
   gcu_allocator_free(bt.allocator, bt.stack);
   return result;

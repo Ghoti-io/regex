@@ -16,6 +16,7 @@
 #include <ghoti.io/regex/core.h>
 #include <ghoti.io/regex/exec.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #include "../compile/compile_internal.h"
 
@@ -37,7 +38,23 @@ struct GRX_Match {
   size_t count;                    ///< Capture spans, including group 0.
   GRX_Engine engine;               ///< Which engine ran the last attempt.
   int matched;                     ///< Whether the last attempt matched.
+  size_t steps;                    ///< Instructions the last attempt ran.
 };
+
+/**
+ * @brief Whether an empty match counts as a match.
+ *
+ * Both halves of PCRE2's documented search-all loop, and the mechanism behind
+ * every rule in documentation/dialects.md section 5.10: without a way to say
+ * "not the empty match you just gave me", a loop over a pattern that can
+ * match empty either never advances or has to skip positions a match starts
+ * at.
+ */
+typedef enum {
+  GRX_EMPTY_OK = 0,      ///< An empty match is a match.
+  GRX_EMPTY_REJECT,      ///< An empty match is never a match.
+  GRX_EMPTY_REJECT_AT_START ///< Not when it begins where the search did.
+} GRX_EmptyMatchRule;
 
 /**
  * @brief One attempt, in the form both engines take.
@@ -52,9 +69,40 @@ typedef struct GRX_ExecRequest {
   size_t length;            ///< Length of `subject` in bytes.
   size_t start;             ///< Byte offset to begin at.
   int anchored;             ///< Non-zero to match only at `start`.
+  int not_bol;              ///< `^` and `\A` do not hold at offset 0.
+  int not_eol;              ///< `$`, `\Z` and `\z` do not hold at `length`.
+  uint8_t empty_rule;       ///< A @ref GRX_EmptyMatchRule.
   const GRX_Limits * limits; ///< Caps to apply. Never NULL.
   GRX_Match * match;        ///< Receives the spans. May be NULL.
+  size_t * out_steps;       ///< Receives the step count. May be NULL.
 } GRX_ExecRequest;
+
+/**
+ * @brief Whether a match spanning [begin, end) is one this request accepts.
+ *
+ * Shared by the two engines so that the rule is written once. An engine calls
+ * it where it would otherwise have accepted a match outright.
+ *
+ * @param request The attempt. Never NULL.
+ * @param begin Where the candidate match begins.
+ * @param end Where it ends.
+ * @return Non-zero when the match is acceptable.
+ */
+static inline int grx_exec_accepts(
+    const GRX_ExecRequest * request, size_t begin, size_t end) {
+  if (begin != end) {
+    return 1;
+  }
+  switch ((GRX_EmptyMatchRule)request->empty_rule) {
+    case GRX_EMPTY_REJECT:
+      return 0;
+    case GRX_EMPTY_REJECT_AT_START:
+      return begin != request->start;
+    case GRX_EMPTY_OK:
+    default:
+      return 1;
+  }
+}
 
 /**
  * @brief Whether a program uses a construct the Pike VM cannot run.

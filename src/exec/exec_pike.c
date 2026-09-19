@@ -275,14 +275,21 @@ static int assertion_holds(
   size_t width = 0;
   int has_after = read_forward(pike, position, &after, &width);
 
+  // NOTBOL and NOTEOL say the caller's buffer is a *piece* of the text, so
+  // its two ends are not the text's two ends. They suppress only the
+  // end-of-subject halves of these rules: a `^` that holds because a newline
+  // precedes it is still holding for a reason inside the buffer.
   switch ((GRX_AssertKind)inst->mode) {
     case GRX_ASSERT_START_SUBJECT:
-      return position == 0;
+      return position == 0 && !request->not_bol;
 
     case GRX_ASSERT_END_SUBJECT:
-      return position == request->length;
+      return position == request->length && !request->not_eol;
 
     case GRX_ASSERT_END_BEFORE_NEWLINE:
+      if (request->not_eol) {
+        return 0;
+      }
       if (position == request->length) {
         return 1;
       }
@@ -292,11 +299,11 @@ static int assertion_holds(
           && position + width == request->length;
 
     case GRX_ASSERT_START_LINE:
-      return position == 0
+      return (position == 0 && !request->not_bol)
           || (has_before && in_class(pike, inst->x, before));
 
     case GRX_ASSERT_END_LINE:
-      return position == request->length
+      return (position == request->length && !request->not_eol)
           || (has_after && in_class(pike, inst->x, after));
 
     case GRX_ASSERT_WORD_BOUNDARY:
@@ -648,6 +655,14 @@ GRX_Result grx_exec_pike(const GRX_ExecRequest * request, int * out_matched) {
           break;
 
         case GRX_OP_MATCH:
+          // An empty match the request refuses is not a match at all, so
+          // this thread dies and the lower-priority ones live: one of them
+          // may still find a non-empty match from the same position.
+          if (!grx_exec_accepts(request, state->slots[0], position)) {
+            state_release(&pike, state);
+            state = NULL;
+            break;
+          }
           // Every thread after this one in the list is lower priority, so
           // this match beats all of them and they are dropped. Threads
           // before it have already produced successors and may still win.
@@ -698,6 +713,9 @@ GRX_Result grx_exec_pike(const GRX_ExecRequest * request, int * out_matched) {
   }
 
 done:
+  if (request->out_steps) {
+    *request->out_steps = pike.steps;
+  }
   state_release(&pike, pike.matched);
   list_free(&pike, &pike.current);
   list_free(&pike, &pike.next);

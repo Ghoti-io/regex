@@ -74,20 +74,6 @@ typedef enum {
 } GRX_LookbehindLimit;
 
 /**
- * @brief What a search-all loop does after an empty match.
- *
- * documentation/dialects.md section 5.10. Carried on the profile so that
- * grx_regex_search_next() applies the dialect's rule and the caller does not
- * have to know there is more than one.
- */
-typedef enum {
-  GRX_ITERATE_RETRY_THEN_ADVANCE = 0, ///< Perl, PCRE2, Python.
-  GRX_ITERATE_ADVANCE_ONE,            ///< ECMAScript.
-  GRX_ITERATE_ADVANCE_SKIP_ABUTTING,  ///< Go.
-  GRX_ITERATE_COUNT                   ///< Closes the enum; not a rule.
-} GRX_IterationRule;
-
-/**
  * @brief Which code points `\w`, `\d` and `\s` stand for.
  *
  * documentation/dialects.md section 5.9. One enum rather than three because

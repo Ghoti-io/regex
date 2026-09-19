@@ -126,7 +126,7 @@ semantics rather than the spelling - which is the point, because a lowering
 bug is a wrong mode and nothing else looks wrong:
 
 ```
-ir: flags=0x00000001 prefer=leftmost-first nodes=3 captures=1 classes=0
+ir: flags=0x00000001 prefer=leftmost-first iterate=advance-one nodes=3 captures=1 classes=0
   repeat {1,} greedy empty=fail reset=each @0+4
     capture #1 @0+3
       char 'a' @1+1
@@ -142,7 +142,7 @@ format changed and this page was not.
 
 ```
 regex: syntax=ecmascript options=0x00000040 captures=1 regular=yes
-program: flags=0x00000001 prefer=leftmost-first insts=15 classes=0 registers=1
+program: flags=0x00000001 prefer=leftmost-first iterate=advance-one insts=15 classes=0 registers=1
      0  save           0  (group 0 start)
      1  reset          slots 2..3
      2  save           2  (group 1 start)

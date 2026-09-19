@@ -67,6 +67,62 @@ typedef struct GRX_Capture {
 typedef struct GRX_Match GRX_Match;
 
 /**
+ * @brief Bits for GRX_SearchOptions::flags.
+ *
+ * Each says something about the *subject* that the compiled pattern cannot
+ * know, and so belongs to the search rather than to the regex. A caller
+ * feeding one buffer in pieces, or searching one field of a larger record,
+ * needs all of them; a caller with a whole string in hand needs none.
+ */
+typedef enum {
+  GRX_SEARCH_NONE = 0,                  ///< No flags.
+  GRX_SEARCH_NOTBOL = GRX_BIT(0),       ///< Offset 0 is not the start of a
+                                        ///< line, so `^` and `\A` fail there.
+  GRX_SEARCH_NOTEOL = GRX_BIT(1),       ///< The end is not the end of a line,
+                                        ///< so `$`, `\Z` and `\z` fail there.
+  GRX_SEARCH_NOTEMPTY = GRX_BIT(2),     ///< An empty match is not a match.
+  GRX_SEARCH_NOTEMPTY_ATSTART = GRX_BIT(3), ///< An empty match is not a match
+                                        ///< when it begins at `begin`.
+  GRX_SEARCH_NO_UTF_CHECK = GRX_BIT(4)  ///< The caller guarantees the subject
+                                        ///< is valid UTF-8.
+} GRX_SearchFlag;
+
+/**
+ * @brief Everything one search needs beyond the subject itself.
+ *
+ * A struct rather than more parameters, because the list grows: the scaffold's
+ * `grx_regex_search()` already took eight arguments and adding a window and
+ * five flags to it positionally would make a mis-ordered call something the
+ * compiler cannot see.
+ *
+ * **The window.** `begin` and `end` bound the search inside a larger buffer.
+ * `end` is where the subject *ends* for this search: nothing at or past it is
+ * read, and `$`, `\Z` and `\z` hold there. `begin` is only where the search
+ * starts - a lookbehind may still read the bytes before it, and `^` and `\A`
+ * still mean offset 0, not `begin`. That asymmetry is deliberate and is what
+ * makes iteration correct: the second call of a search-all loop must not
+ * report `^` as holding where the first match happened to stop.
+ *
+ * Zero-initialising the struct gives a search of the whole subject with no
+ * flags on GRX_ENGINE_AUTO with default limits, which is what
+ * grx_search_options_default() writes.
+ */
+typedef struct GRX_SearchOptions {
+  size_t begin;   ///< First byte a match may begin at.
+  size_t end;     ///< One past the last byte visible; GRX_NPOS for all of it.
+  uint32_t flags; ///< GRX_SearchFlag bits.
+  GRX_Engine engine; ///< Which engine to use. GRX_ENGINE_AUTO chooses.
+  const GRX_Limits * limits; ///< Caps to apply. NULL uses the defaults.
+} GRX_SearchOptions;
+
+/**
+ * @brief Fill in the options for an ordinary whole-subject search.
+ *
+ * @param out_options The struct to initialise. NULL is ignored.
+ */
+GRX_API void grx_search_options_default(GRX_SearchOptions * out_options);
+
+/**
  * @brief Create a match object sized for a regex.
  *
  * @param regex The regex it will be used with. NULL is invalid.
@@ -116,6 +172,113 @@ GRX_API GRX_Result grx_regex_search(const GRX_Regex * regex,
 GRX_API GRX_Result grx_regex_match(const GRX_Regex * regex,
     const char * subject, size_t length, size_t start, GRX_Engine engine,
     const GRX_Limits * limits, GRX_Match * match, int * out_matched);
+
+/**
+ * @brief Search a subject, with a window and search flags.
+ *
+ * The general form; grx_regex_search() is this with default options.
+ *
+ * @param regex The regex. NULL is invalid.
+ * @param subject The bytes to search. May be NULL only when `length` is 0.
+ * @param length Length of `subject` in bytes.
+ * @param options The window, flags, engine and limits. NULL uses the
+ *   defaults.
+ * @param match Receives the capture spans. Optional.
+ * @param out_matched Receives non-zero when a match was found. Required.
+ * @return GRX_OK, GRX_ERR_UNSUPPORTED, GRX_ERR_LIMIT, GRX_ERR_INVALID, or
+ *   GRX_ERR_OOM.
+ */
+GRX_API GRX_Result grx_regex_search_ex(const GRX_Regex * regex,
+    const char * subject, size_t length, const GRX_SearchOptions * options,
+    GRX_Match * match, int * out_matched);
+
+/**
+ * @brief Match a subject anchored at the window's start, with search flags.
+ *
+ * As grx_regex_search_ex(), except that the match must begin at
+ * GRX_SearchOptions::begin.
+ *
+ * @param regex The regex. NULL is invalid.
+ * @param subject The bytes to match. May be NULL only when `length` is 0.
+ * @param length Length of `subject` in bytes.
+ * @param options The window, flags, engine and limits. NULL uses the
+ *   defaults.
+ * @param match Receives the capture spans. Optional.
+ * @param out_matched Receives non-zero when the regex matched. Required.
+ * @return GRX_OK, GRX_ERR_UNSUPPORTED, GRX_ERR_LIMIT, GRX_ERR_INVALID, or
+ *   GRX_ERR_OOM.
+ */
+GRX_API GRX_Result grx_regex_match_ex(const GRX_Regex * regex,
+    const char * subject, size_t length, const GRX_SearchOptions * options,
+    GRX_Match * match, int * out_matched);
+
+/**
+ * @brief Find the next match after the one already in `match`.
+ *
+ * The search-all loop, with the dialect's rule for what follows an empty
+ * match applied for the caller. There are three such rules in the wild
+ * (documentation/dialects.md section 5.10) and which one a dialect uses is
+ * not something a caller should have to look up: a loop written as
+ *
+ * ```c
+ * int matched = 0;
+ * grx_regex_search_ex(regex, s, n, NULL, match, &matched);
+ * while (matched) {
+ *   // ... use the match ...
+ *   grx_regex_search_next(regex, s, n, NULL, match, &matched);
+ * }
+ * ```
+ *
+ * terminates and reports what the dialect's own engine would report, for
+ * every dialect.
+ *
+ * When `match` holds no previous match - a fresh object, or one whose last
+ * search found nothing - this is grx_regex_search_ex().
+ *
+ * @param regex The regex. NULL is invalid.
+ * @param subject The bytes to search. Must be the same bytes the previous
+ *   search ran against.
+ * @param length Length of `subject` in bytes.
+ * @param options The window, flags, engine and limits. NULL uses the
+ *   defaults. GRX_SearchOptions::begin is used only when there is no
+ *   previous match; `end` and the flags apply to every call.
+ * @param match Carries the previous match in and the next one out. Required
+ *   here, unlike the other entry points: it is the only record of where the
+ *   loop had got to.
+ * @param out_matched Receives non-zero when a further match was found.
+ *   Required.
+ * @return GRX_OK, GRX_ERR_UNSUPPORTED, GRX_ERR_LIMIT, GRX_ERR_INVALID, or
+ *   GRX_ERR_OOM.
+ */
+GRX_API GRX_Result grx_regex_search_next(const GRX_Regex * regex,
+    const char * subject, size_t length, const GRX_SearchOptions * options,
+    GRX_Match * match, int * out_matched);
+
+/**
+ * @brief The span of the whole match.
+ *
+ * grx_match_group() with index 0, which is the group every caller wants and
+ * the one place an off-by-one in a caller's group numbering is silent.
+ *
+ * @param match The match object. NULL is invalid.
+ * @param out_capture Receives the span.
+ * @return GRX_OK, or GRX_ERR_INVALID for a NULL argument.
+ */
+GRX_API GRX_Result grx_match_span(
+    const GRX_Match * match, GRX_Capture * out_capture);
+
+/**
+ * @brief Instructions executed by the last search.
+ *
+ * What GRX_Limits::max_steps counts, so that a caller who wants to set that
+ * limit from measurement rather than from guesswork can measure it. Reset at
+ * the start of every search, including each attempt inside
+ * grx_regex_search_next().
+ *
+ * @param match The match object. NULL returns 0.
+ * @return The step count.
+ */
+GRX_API size_t grx_match_steps(const GRX_Match * match);
 
 /**
  * @brief Which engine actually ran the last match.

@@ -138,6 +138,7 @@ GRX_Result grx_ir_create(const GRX_Allocator * allocator,
   ir->root = GRX_INDEX_NONE;
   ir->flags = 0;
   ir->preference = GRX_PREFER_LEFTMOST_FIRST;
+  ir->iteration = GRX_ITERATE_RETRY_THEN_ADVANCE;
   ir->capture_count = 0;
 
   // The IR's node count is capped by max_nodes like the AST's: lowering can
@@ -356,15 +357,24 @@ static void dump_node(
   }
 }
 
+/** The name of an iteration rule, for the dump header. */
+static const char * iteration_name(GRX_IterationRule iteration) {
+  static const char * const names[GRX_ITERATE_COUNT] = {
+    "retry-then-advance", "advance-one", "advance-skip-abutting"};
+  return (unsigned)iteration < GRX_ITERATE_COUNT ? names[iteration] : "?";
+}
+
 GRX_Result grx_ir_dump(const GRX_IR * ir, FILE * out) {
   if (!ir || !out) {
     return GRX_ERR_INVALID;
   }
 
   fprintf(out,
-      "ir: flags=0x%08x prefer=%s nodes=%zu captures=%zu classes=%zu\n",
-      ir->flags, preference_name(ir->preference), ir->nodes.count,
-      ir->capture_count, grx_class_table_count(&ir->classes));
+      "ir: flags=0x%08x prefer=%s iterate=%s nodes=%zu captures=%zu "
+      "classes=%zu\n",
+      ir->flags, preference_name(ir->preference),
+      iteration_name(ir->iteration), ir->nodes.count, ir->capture_count,
+      grx_class_table_count(&ir->classes));
 
   if (ir->root != GRX_INDEX_NONE) {
     dump_node(out, ir, ir->root, 1);

@@ -148,6 +148,7 @@ typedef struct GRX_IR {
   uint32_t root;                   ///< Root node, or GRX_INDEX_NONE.
   uint32_t flags;                  ///< GRX_PROGRAM_* bits.
   GRX_MatchPreference preference;  ///< Which match a search reports.
+  GRX_IterationRule iteration;     ///< Search-all after an empty match.
   GRX_Arena nodes;                 ///< GRX_IRNode.
   GRX_ClassTable classes;          ///< Every canonical class, by index.
   GRX_Arena names;                 ///< char; NUL-terminated, by offset.

@@ -94,6 +94,7 @@ void grx_program_init(GRX_Program * program, const GRX_Allocator * allocator,
   program->flags = 0;
   program->register_count = 0;
   program->preference = GRX_PREFER_LEFTMOST_FIRST;
+  program->iteration = GRX_ITERATE_RETRY_THEN_ADVANCE;
 }
 
 GRX_Result grx_program_add(
@@ -182,16 +183,24 @@ static void dump_operands(FILE * out, const GRX_Inst * inst) {
   }
 }
 
+/** The name of an iteration rule, for the dump header. */
+static const char * iteration_name(GRX_IterationRule iteration) {
+  static const char * const names[GRX_ITERATE_COUNT] = {
+    "retry-then-advance", "advance-one", "advance-skip-abutting"};
+  return (unsigned)iteration < GRX_ITERATE_COUNT ? names[iteration] : "?";
+}
+
 GRX_Result grx_program_dump(const GRX_Program * program, FILE * out) {
   if (!program || !out) {
     return GRX_ERR_INVALID;
   }
 
   fprintf(out,
-      "program: flags=0x%08x prefer=%s insts=%zu classes=%zu registers=%u\n",
+      "program: flags=0x%08x prefer=%s iterate=%s insts=%zu classes=%zu "
+      "registers=%u\n",
       program->flags, preference_name(program->preference),
-      program->insts.count, grx_class_table_count(&program->classes),
-      program->register_count);
+      iteration_name(program->iteration), program->insts.count,
+      grx_class_table_count(&program->classes), program->register_count);
 
   for (size_t i = 0; i < program->insts.count; i++) {
     const GRX_Inst * inst
