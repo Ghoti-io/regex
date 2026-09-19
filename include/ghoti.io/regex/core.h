@@ -161,6 +161,13 @@ typedef enum {
   GRX_DIAG_LIMIT_BACKTRACK,        ///< max_backtrack.
   GRX_DIAG_LIMIT_MATCH_MEMORY,     ///< max_match_memory.
 
+  // Replacement templates. A template is a second small language with its
+  // own per-dialect grammar (documentation/dialects.md section 5.11), so it
+  // gets its own offsets and its own diagnostics rather than borrowing the
+  // pattern's.
+  GRX_DIAG_INVALID_TEMPLATE,       ///< The replacement template is malformed.
+  GRX_DIAG_TEMPLATE_UNKNOWN_GROUP, ///< It names a group the regex does not have.
+
   // Everything else.
   GRX_DIAG_OUT_OF_MEMORY,          ///< The allocator returned NULL.
   GRX_DIAG_INVALID_ARGUMENT,       ///< A caller-supplied argument is wrong.

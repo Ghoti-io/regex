@@ -20,6 +20,7 @@
 #include <ghoti.io/regex/macros.h>
 
 #include <ghoti.io/regex/syntax.h>
+#include <stdint.h>
 
 #include "../core/semantics_internal.h"
 #include "../unicode/unicode_internal.h"
@@ -88,6 +89,56 @@ typedef enum {
 } GRX_ShorthandSet;
 
 /**
+ * @brief What a replacement template may say, and how.
+ *
+ * documentation/dialects.md section 5.11 as bits. A template is a second
+ * language with a second grammar, and the grammars differ more than the
+ * patterns do: ECMAScript spells a group `$1`, Python spells it `\1`, sed
+ * spells the whole match `&`. What they have in common is the *kinds* of
+ * thing a template can name, which is what these bits enumerate.
+ */
+#define GRX_TMPL_NUMBER GRX_BIT(0)        ///< `$1`, one or two digits.
+#define GRX_TMPL_NUMBER_BRACED GRX_BIT(1) ///< `${1}`.
+#define GRX_TMPL_NAME_ANGLE GRX_BIT(2)    ///< `$<name>`.
+#define GRX_TMPL_NAME_BRACED GRX_BIT(3)   ///< `${name}`.
+#define GRX_TMPL_WHOLE GRX_BIT(4)         ///< `$&`.
+#define GRX_TMPL_PREFIX GRX_BIT(5)        ///< `` $` ``: the text before it.
+#define GRX_TMPL_SUFFIX GRX_BIT(6)        ///< `$'`: the text after it.
+#define GRX_TMPL_DOUBLE_SIGIL GRX_BIT(7)  ///< `$$` is a literal `$`.
+/**
+ * @brief A named reference exists only when the pattern has named groups.
+ *
+ * ECMAScript's rule, and it is not a nicety: `$<x>` against a pattern with
+ * no named groups is *literal text*, so a caller who mistypes a group name
+ * gets their template back rather than an empty string. With named groups
+ * present the same spelling is a reference, and an unknown name there
+ * substitutes nothing.
+ */
+#define GRX_TMPL_NAME_NEEDS_NAMED_GROUPS GRX_BIT(8)
+
+/** @brief What a reference to a group the pattern does not have does. */
+typedef enum {
+  GRX_TMPL_MISSING_LITERAL = 0, ///< The text stands as written. ECMAScript.
+  GRX_TMPL_MISSING_EMPTY,       ///< It substitutes nothing. Perl, Ruby, Go.
+  GRX_TMPL_MISSING_ERROR,       ///< The call fails. PCRE2, Python, Java.
+  GRX_TMPL_MISSING_COUNT        ///< Closes the enum; not a rule.
+} GRX_TemplateMissing;
+
+/**
+ * @brief A dialect's replacement-template grammar.
+ *
+ * A zeroed row - `sigil` of 0 - is a dialect whose grammar has not been
+ * written yet, and grx_regex_replace() refuses it rather than guessing.
+ * Nothing but ECMAScript can reach this today, because nothing but
+ * ECMAScript has a front end to compile a pattern with.
+ */
+typedef struct GRX_TemplateSpec {
+  char sigil;          ///< The character that introduces a reference; 0 = none.
+  uint32_t features;   ///< GRX_TMPL_* bits.
+  GRX_TemplateMissing missing; ///< A reference to a group that does not exist.
+} GRX_TemplateSpec;
+
+/**
  * @brief What the constructs mean, once the dialect has them.
  *
  * Every field is a value from documentation/dialects.md section 5, and every
@@ -112,6 +163,7 @@ typedef struct GRX_Profile {
   GRX_FoldKind fold;                ///< Caseless folding without UTF.
   GRX_FoldKind fold_utf;            ///< Caseless folding with UTF.
   GRX_PropertyMatch property_match; ///< How `\p{...}` names are spelled.
+  GRX_TemplateSpec template_spec;   ///< The replacement-template grammar.
   int multiline_by_default;         ///< Ruby: `^`/`$` are always line anchors.
   /**
    * The dialect's subject is text, not bytes, whatever the options say.

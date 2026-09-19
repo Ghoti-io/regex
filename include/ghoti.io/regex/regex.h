@@ -15,6 +15,7 @@
 #include <ghoti.io/regex/exec.h>
 #include <ghoti.io/regex/macros.h>
 #include <ghoti.io/regex/pattern.h>
+#include <ghoti.io/regex/subst.h>
 #include <ghoti.io/regex/syntax.h>
 #include <ghoti.io/regex/unicode.h>
 #include <ghoti.io/regex/version.h>

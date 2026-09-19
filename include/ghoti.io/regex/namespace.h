@@ -41,8 +41,11 @@
 #define GRX_Pattern GHOTIIO_REGEX(GRX_Pattern)
 #define GRX_Regex GHOTIIO_REGEX(GRX_Regex)
 #define GRX_Result GHOTIIO_REGEX(GRX_Result)
+#define GRX_ReplaceFlag GHOTIIO_REGEX(GRX_ReplaceFlag)
 #define GRX_SearchFlag GHOTIIO_REGEX(GRX_SearchFlag)
 #define GRX_SearchOptions GHOTIIO_REGEX(GRX_SearchOptions)
+#define GRX_Split GHOTIIO_REGEX(GRX_Split)
+#define GRX_Text GHOTIIO_REGEX(GRX_Text)
 #define GRX_Syntax GHOTIIO_REGEX(GRX_Syntax)
 #define GRX_SyntaxSpec GHOTIIO_REGEX(GRX_SyntaxSpec)
 
@@ -87,6 +90,10 @@
 #define grx_regex_search GHOTIIO_REGEX(grx_regex_search)
 #define grx_regex_search_ex GHOTIIO_REGEX(grx_regex_search_ex)
 #define grx_regex_search_next GHOTIIO_REGEX(grx_regex_search_next)
+#define grx_regex_replace GHOTIIO_REGEX(grx_regex_replace)
+#define grx_regex_split GHOTIIO_REGEX(grx_regex_split)
+#define grx_split_free GHOTIIO_REGEX(grx_split_free)
+#define grx_text_free GHOTIIO_REGEX(grx_text_free)
 #define grx_search_options_default GHOTIIO_REGEX(grx_search_options_default)
 #define grx_regex_syntax GHOTIIO_REGEX(grx_regex_syntax)
 #define grx_result_string GHOTIIO_REGEX(grx_result_string)
@@ -207,6 +214,15 @@
 #define grx_exec_accepts GHOTIIO_REGEX(grx_exec_accepts)
 #define grx_exec_backtrack GHOTIIO_REGEX(grx_exec_backtrack)
 #define grx_exec_pike GHOTIIO_REGEX(grx_exec_pike)
+
+// Substitution and splitting.
+#define GRX_Template GHOTIIO_REGEX(GRX_Template)
+#define GRX_TemplateMissing GHOTIIO_REGEX(GRX_TemplateMissing)
+#define GRX_TemplateOp GHOTIIO_REGEX(GRX_TemplateOp)
+#define GRX_TemplateOpKind GHOTIIO_REGEX(GRX_TemplateOpKind)
+#define GRX_TemplateSpec GHOTIIO_REGEX(GRX_TemplateSpec)
+#define grx_template_clear GHOTIIO_REGEX(grx_template_clear)
+#define grx_template_parse GHOTIIO_REGEX(grx_template_parse)
 #define grx_exec_program_needs_backtracking                                    \
   GHOTIIO_REGEX(grx_exec_program_needs_backtracking)
 

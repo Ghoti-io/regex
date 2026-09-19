@@ -162,6 +162,12 @@ static const DiagRow diag_table[GRX_DIAG_COUNT] = {
 
   [GRX_DIAG_OUT_OF_MEMORY] = {"out of memory", GRX_ERR_OOM},
   [GRX_DIAG_INVALID_ARGUMENT] = {"invalid argument", GRX_ERR_INVALID},
+  [GRX_DIAG_INVALID_TEMPLATE]
+      = {"malformed replacement template", GRX_ERR_SYNTAX},
+  [GRX_DIAG_TEMPLATE_UNKNOWN_GROUP]
+      = {"replacement template names a group the pattern does not have",
+          GRX_ERR_SYNTAX},
+
   [GRX_DIAG_INVALID_SUBJECT_UTF8]
       = {"subject is not valid UTF-8", GRX_ERR_INVALID},
   [GRX_DIAG_INTERNAL] = {"internal error", GRX_ERR_INTERNAL},

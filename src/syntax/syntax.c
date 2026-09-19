@@ -180,6 +180,14 @@ static const char * const spec_names[GRX_SYNTAX_COUNT] = {
  * Reading a row: the second fold and shorthand columns are the values under
  * UTF or UCP. A dialect where the two differ is one where the same pattern
  * means different things with and without the flag, which is most of them.
+ *
+ * `template_spec` is the exception to the "zeroed means Perl" rule, and
+ * deliberately: a zeroed spec has no sigil, and grx_regex_replace() refuses
+ * a dialect with no sigil rather than applying a grammar that is not that
+ * dialect's. Section 5.11 has all twelve rows written down; each is
+ * transcribed when its dialect gets a front end and a test that can see it
+ * be wrong, because a template grammar nothing can reach is a grammar
+ * nothing can check.
  */
 static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
   // POSIX and GNU: leftmost-longest, no lookbehind, the C locale treated as
@@ -278,6 +286,17 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     .fold_utf = GRX_FOLD_SIMPLE,
     .property_match = GRX_PROPERTY_STRICT,
     .subject_is_text = 1,
+    // String.prototype.replace's grammar, GetSubstitution (22.1.3.19.1).
+    // No case operators and no `${n}`: both are Perl spellings ECMAScript
+    // never took. `$<name>` is conditional on the pattern having named
+    // groups, which is the one rule here that is not a spelling.
+    .template_spec = {
+      .sigil = '$',
+      .features = GRX_TMPL_NUMBER | GRX_TMPL_NAME_ANGLE | GRX_TMPL_WHOLE
+          | GRX_TMPL_PREFIX | GRX_TMPL_SUFFIX | GRX_TMPL_DOUBLE_SIGIL
+          | GRX_TMPL_NAME_NEEDS_NAMED_GROUPS,
+      .missing = GRX_TMPL_MISSING_LITERAL,
+    },
   },
 
   [GRX_SYNTAX_PYTHON] = {

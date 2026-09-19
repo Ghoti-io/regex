@@ -1,0 +1,175 @@
+/**
+ * @file
+ *
+ * Substitution and splitting: the two things callers do with a match that are
+ * not "where is it".
+ *
+ * Both are dialect-dependent in ways that are easy to miss. A replacement
+ * template is a second small language - `$1` in ECMAScript, `\1` in Python,
+ * `&` in sed - with its own rules for what a reference to a group that does
+ * not exist means (documentation/dialects.md section 5.11). Splitting differs
+ * in whether capturing groups appear in the output at all, and in what an
+ * empty match does to the piece boundaries (section 5.16). Neither is
+ * something a caller should have to reimplement per dialect, and both are
+ * things they will get subtly wrong if they do.
+ *
+ * Status: ECMAScript. Every expectation in the tests is Node 22's own output
+ * for the same pattern, subject and template.
+ *
+ * Copyright 2026 by Corey Pennycuff
+ */
+
+#ifndef GHOTI_IO_GRX_SUBST_H
+#define GHOTI_IO_GRX_SUBST_H
+
+#include <ghoti.io/regex/allocator.h>
+#include <ghoti.io/regex/compile.h>
+#include <ghoti.io/regex/core.h>
+#include <ghoti.io/regex/exec.h>
+#include <ghoti.io/regex/macros.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/**
+ * @brief Text this library allocated and the caller owns.
+ *
+ * The allocator travels with the buffer so that grx_text_free() needs only
+ * the one argument: a caller who passed a custom allocator to the call that
+ * produced this cannot free it with the wrong one, because there is no way
+ * to say which.
+ *
+ * `data` is NUL-terminated as a convenience for `printf`, but `length` is
+ * authoritative - a subject may contain a NUL and a replacement may put one
+ * back.
+ */
+typedef struct GRX_Text {
+  char * data;                     ///< The bytes; NUL-terminated.
+  size_t length;                   ///< Bytes, not counting the terminator.
+  const GRX_Allocator * allocator; ///< Where they came from.
+} GRX_Text;
+
+/**
+ * @brief Release a GRX_Text and zero it. NULL, or an already-zeroed one, is
+ * ignored.
+ *
+ * @param text The text to free.
+ */
+GRX_API void grx_text_free(GRX_Text * text);
+
+/**
+ * @brief The pieces a subject was split into.
+ *
+ * Spans into the subject rather than copies: every piece is a substring of
+ * the text the caller already has, and copying them would allocate once per
+ * piece to hand back bytes that are already addressable. A piece whose
+ * `start` is GRX_NPOS is a capturing group that did not participate - what
+ * ECMAScript reports as `undefined` - which is why the pieces are
+ * GRX_Capture and not pointers.
+ */
+typedef struct GRX_Split {
+  GRX_Capture * pieces;            ///< Spans into the subject.
+  size_t count;                    ///< How many.
+  const GRX_Allocator * allocator; ///< Where the array came from.
+} GRX_Split;
+
+/**
+ * @brief Release a GRX_Split and zero it. NULL, or an already-zeroed one, is
+ * ignored.
+ *
+ * @param split The split to free.
+ */
+GRX_API void grx_split_free(GRX_Split * split);
+
+/**
+ * @brief Bits for grx_regex_replace().
+ */
+typedef enum {
+  GRX_REPLACE_NONE = 0,             ///< Replace the first match only.
+  GRX_REPLACE_GLOBAL = GRX_BIT(0),  ///< Replace every match. ECMAScript's `g`.
+  GRX_REPLACE_LITERAL = GRX_BIT(1)  ///< The replacement is text, not a
+                                    ///< template: no character in it is
+                                    ///< special. What a caller substituting
+                                    ///< user input needs.
+} GRX_ReplaceFlag;
+
+/**
+ * @brief Replace what a regex matches with a template.
+ *
+ * The subject for this call is `subject[0, options->end)` - see
+ * GRX_SearchOptions - and the result is that text with the replacements made.
+ * Bytes at or past `end` are not part of the subject and do not appear in the
+ * output; bytes before `options->begin` are copied through unchanged, because
+ * `begin` says where a *match* may start and not where the text does.
+ *
+ * The template grammar is the dialect's (documentation/dialects.md section
+ * 5.11). For ECMAScript: `$$` is a literal `$`, `$&` the whole match,
+ * `` $` `` and `$'` the text before and after it, `$1`..`$99` a group by
+ * number, and `$<name>` a group by name when the pattern has named groups.
+ * Anything else beginning with `$` - including a reference to a group the
+ * pattern does not have - is literal text, which is ECMAScript's rule and
+ * not a fallback.
+ *
+ * @param regex The regex. NULL is invalid.
+ * @param subject The bytes to search. May be NULL only when `length` is 0.
+ * @param length Length of `subject` in bytes.
+ * @param replacement The template, or literal text with GRX_REPLACE_LITERAL.
+ *   May be NULL only when `replacement_length` is 0.
+ * @param replacement_length Length of `replacement` in bytes.
+ * @param flags GRX_ReplaceFlag bits.
+ * @param options The window, search flags, engine and limits. NULL uses the
+ *   defaults.
+ * @param allocator Allocator for the result. NULL uses the default.
+ * @param out_error Receives the failure position and diagnostic. Optional.
+ *   An offset in it is an offset into `replacement`, not into the pattern.
+ * @param out_text Receives the result. Freed with grx_text_free(). Written
+ *   only on success.
+ * @return GRX_OK, GRX_ERR_SYNTAX for a template this dialect rejects,
+ *   GRX_ERR_UNSUPPORTED for a dialect whose template grammar is not built,
+ *   GRX_ERR_LIMIT, GRX_ERR_INVALID, or GRX_ERR_OOM.
+ */
+GRX_API GRX_Result grx_regex_replace(const GRX_Regex * regex,
+    const char * subject, size_t length, const char * replacement,
+    size_t replacement_length, uint32_t flags,
+    const GRX_SearchOptions * options, const GRX_Allocator * allocator,
+    GRX_Error * out_error, GRX_Text * out_text);
+
+/**
+ * @brief Divide a subject at every match.
+ *
+ * ECMAScript's rule (22.2.6.14), which is more particular than it looks:
+ *
+ * - Capturing groups appear in the output between the pieces around them, so
+ *   `(\d)` splitting `"a1b"` yields `a`, `1`, `b`.
+ * - An empty match at the position a piece starts does not end that piece,
+ *   which is what stops a pattern like `x*` splitting `"abc"` into seven
+ *   pieces instead of three.
+ * - An empty subject yields one empty piece, unless the pattern matches the
+ *   empty string, in which case it yields none.
+ * - A match at the very start or end yields the empty piece beside it:
+ *   `b` splitting `"b"` yields two empty pieces, not none.
+ *
+ * @param regex The regex. NULL is invalid.
+ * @param subject The bytes to split. May be NULL only when `length` is 0.
+ * @param length Length of `subject` in bytes.
+ * @param limit The most pieces to produce; GRX_NPOS for no limit. Zero
+ *   yields none, which is ECMAScript's rule for `split(re, 0)`.
+ * @param options The window, search flags, engine and limits. NULL uses the
+ *   defaults.
+ * @param allocator Allocator for the result. NULL uses the default.
+ * @param out_error Receives the failure diagnostic. Optional.
+ * @param out_split Receives the pieces. Freed with grx_split_free(). Written
+ *   only on success.
+ * @return GRX_OK, GRX_ERR_LIMIT, GRX_ERR_INVALID, or GRX_ERR_OOM.
+ */
+GRX_API GRX_Result grx_regex_split(const GRX_Regex * regex,
+    const char * subject, size_t length, size_t limit,
+    const GRX_SearchOptions * options, const GRX_Allocator * allocator,
+    GRX_Error * out_error, GRX_Split * out_split);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif // GHOTI_IO_GRX_SUBST_H
