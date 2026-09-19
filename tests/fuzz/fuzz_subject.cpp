@@ -58,6 +58,28 @@ const char * const kPatterns[] = {
   "^",
 };
 
+/**
+ * The patterns that need the UnicodeSets grammar to be read at all.
+ *
+ * Kept apart because they need a different option set, not because they are
+ * a different kind of test: a class that holds *strings* lowers to an
+ * alternation of literal sequences, which is a shape none of the patterns
+ * above produces and which the engines therefore never ran against a fuzzed
+ * subject until this list existed.
+ */
+const char * const kSetsPatterns[] = {
+  "[\\q{ab|cd|a}]+",
+  "[[a-z]--[aeiou]]+",
+  "[[a-z]&&[b-y]]",
+  "[\\q{ab}[c-e]]*",
+  "[^[a-c]]",
+  "\\p{RGI_Emoji}",
+  "[\\q{}]",
+};
+
+const size_t kSetsPatternCount
+    = sizeof(kSetsPatterns) / sizeof(*kSetsPatterns);
+
 const size_t kPatternCount = sizeof(kPatterns) / sizeof(*kPatterns);
 
 } // namespace
@@ -94,7 +116,16 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t * data, size_t size) {
     options |= GRX_OPT_MULTILINE;
   }
 
-  const char * pattern = kPatterns[(selector >> 1) % kPatternCount];
+  // One input in four takes the UnicodeSets list, which needs the flag as
+  // well as the pattern.
+  const char * pattern;
+  if ((selector & 0x03) == 0x03) {
+    options |= GRX_OPT_UNICODE_SETS;
+    pattern = kSetsPatterns[(selector >> 2) % kSetsPatternCount];
+  }
+  else {
+    pattern = kPatterns[(selector >> 1) % kPatternCount];
+  }
 
   GRX_Error error;
   grx_error_clear(&error);

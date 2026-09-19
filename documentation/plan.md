@@ -127,7 +127,7 @@ the class.
 ### Phase 1: ECMAScript and the engines
 
 **WP-06 The parser and the ECMAScript front end.** *front ends, L.*
-**Landed** (legacy and Unicode modes; `v` is WP-12). The
+**Landed**, all three modes. The
 recursive-descent parser skeleton (groups, alternation, quantifiers,
 classes, escapes, names, `max_nesting_depth`), the `GRX_Frontend` hook
 interface with its default, and the ECMAScript hooks for legacy and Unicode
@@ -197,43 +197,49 @@ engines; limits enforced; `text` validates `pattern` and
 
 ### Phase 2: the rest of ECMAScript, safety, surface
 
-**WP-12 UnicodeSets mode.** *front ends + unicode, M.* `v`-flag syntax per
+**WP-12 UnicodeSets mode.** *front ends + unicode, M.* **Landed**, less the
+test262 `unicodeSets/` import, which waits on WP-09. `v`-flag syntax per
 [dialects.md](dialects.md) §8.4; `GRX_NODE_CLASS_OP` and
 `GRX_NODE_STRING_SET` through lowering (a string set lowers to an
 alternation, longest first); the properties-of-strings tables and the
 grapheme-break data. *Done:* test262 `unicodeSets/` vectors pass.
 *Depends on:* WP-05, WP-06, WP-07.
 
-**WP-13 The bit-state engine and engine selection.** *engines, M.* Per
+**WP-13 The bit-state engine and engine selection.** *engines, M.*
+**Landed.** Per
 [design.md](design.md) §3.5.3; `max_match_memory`; the selection policy in
 `exec.c` with its table of which facts route to which engine, and a test
 per row. *Done:* equivalence with the backtracker on every vector it is
 eligible for; the ReDoS corpus patterns without backreferences complete
 with a match or no-match, not a limit. *Depends on:* WP-08.
 
-**WP-14 Limits measured.** *conformance, S.* The two-corpus method of
+**WP-14 Limits measured.** *conformance, S.* **Landed.** The two-corpus method of
 [dialects.md](dialects.md) §7; defaults set; the measurements written into
 §7. *Done:* no oracle-corpus pattern hits a default; every ReDoS pair hits
 `max_steps` in bounded time. *Depends on:* WP-09, WP-10.
 
-**WP-15 Search options and iteration.** *core, S.* `GRX_SearchOptions`,
+**WP-15 Search options and iteration.** *core, S.* **Landed.**
+`GRX_SearchOptions`,
 the `_ex` entry points, `NOTBOL`/`NOTEOL`/`NOTEMPTY`/`NOTEMPTY_ATSTART`/
 `NO_UTF_CHECK`, the window, `grx_regex_search_next()` with the profile's
 iteration rule. *Done:* the iteration vectors (every dialect's oracle's
 "find all" output) pass for ECMAScript. *Depends on:* WP-07, WP-08.
 
-**WP-16 Substitution and split.** *core, M.* `subst.h`; the template
+**WP-16 Substitution and split.** *core, M.* **Landed.** `subst.h`; the template
 grammar as a per-dialect table with the ECMAScript grammar first; unset and
 missing group rules; `grx_regex_split()` with the dialect's rule for empty
 matches and leading/trailing empties. *Done:* vectors from
 `String.prototype.replace` and `split` in Node. *Depends on:* WP-15.
 
-**WP-17 The JSON Schema lint.** *front ends, S, optional.*
+**WP-17 The JSON Schema lint.** *front ends, S, optional.* **Landed.**
 `grx_pattern_lint()` reporting the first construct outside JSON Schema core
 §6.4's subset with its offset. *Depends on:* WP-06.
 
-**M2 - ECMAScript complete.** All three modes; three engines; iteration,
-replace, split; limits measured.
+**M2 - ECMAScript complete. Reached.** All three modes; three engines;
+iteration, replace, split; limits measured. The one thing the milestone
+named that is not done is WP-12's test262 `unicodeSets/` import, which is
+part of WP-09 and is described there; `v` mode itself is checked against
+Node over 960,000 patterns per seed instead.
 
 ### Phase 3: PCRE2 and Perl
 

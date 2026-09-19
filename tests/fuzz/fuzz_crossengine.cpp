@@ -77,6 +77,13 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t * data, size_t size) {
   if (selector & 0x04) {
     options |= GRX_OPT_DOTALL;
   }
+  // One input in four reads the UnicodeSets grammar, whose classes lower to
+  // something quite different: an alternation of literal sequences rather
+  // than a set. The engines have to agree about those too, and until this
+  // line they were never asked.
+  if ((selector & 0x18) == 0x18) {
+    options |= GRX_OPT_UNICODE_SETS;
+  }
 
   GRX_Limits limits;
   grx_limits_default(&limits);

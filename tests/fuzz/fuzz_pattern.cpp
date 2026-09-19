@@ -50,11 +50,20 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t * data, size_t size) {
       limits.max_class_ranges = 8;
     }
     // The option combinations that change the *grammar*, not just the
-    // match: ECMAScript reads a different language with `u` than without.
-    switch ((selector >> 3) & 0x03) {
+    // match: ECMAScript reads a different language with `u` than without,
+    // and a third one with `v`, where `--` is an operator and a bare `-` is
+    // a syntax error. `v` was missing here until a seven-minute run found a
+    // defect that a 974,873-run soak had not - the lesson being that a run
+    // count is not coverage, and that a grammar no option combination
+    // reaches is a grammar no number of runs will test.
+    switch ((selector >> 3) & 0x07) {
       case 1: options = GRX_OPT_UTF; break;
       case 2: options = GRX_OPT_CASELESS | GRX_OPT_UTF; break;
       case 3: options = GRX_OPT_CASELESS | GRX_OPT_MULTILINE | GRX_OPT_DOTALL;
+        break;
+      case 4: options = GRX_OPT_UTF | GRX_OPT_UNICODE_SETS; break;
+      case 5:
+        options = GRX_OPT_CASELESS | GRX_OPT_UTF | GRX_OPT_UNICODE_SETS;
         break;
       default: options = GRX_OPT_NONE; break;
     }

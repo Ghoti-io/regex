@@ -391,10 +391,33 @@ instrumented):
 | `fuzz_subject` | a pattern chosen from the corpus by the options byte | subject | every eligible engine: no crash; `GRX_ERR_LIMIT` only when a limit is set below the structural bound |
 | `fuzz_crossengine` | - | pattern and subject, split by a length byte | all eligible engines run; **abort on any disagreement in spans** |
 
-The options byte: bits 0-4 select the dialect; bit 5 selects tight limits;
-bit 6 selects `CASELESS | MULTILINE | UTF`; bit 7 sets the bit-state
-engine's memory budget to zero, forcing the backtracker. Documented in the
-harness and kept stable so a corpus survives a rebuild.
+**The options byte, as each harness actually reads it.** Each is documented
+at its own use and repeated here because the three differ and a reader
+comparing them should not have to open three files.
+
+- `fuzz_pattern`: bits 0-2 choose whether to pick an arbitrary dialect, which
+  one input in eight does; the rest get ECMAScript, because a dialect with no
+  front end is refused at the first call and the run is spent. Bits 3-5
+  choose the option set, which is the thing that matters: ECMAScript is three
+  grammars, not one, and `v` reads `--` as an operator where `u` reads two
+  dashes. Bit 6 tightens the limits.
+- `fuzz_subject`: bits 0-1 choose which list the pattern comes from - one
+  input in four takes the UnicodeSets list, which needs the flag as well -
+  and the rest of the byte chooses within the list, the case flags and the
+  tight-limit mode.
+- `fuzz_crossengine`: bits 0-2 are `CASELESS`, `MULTILINE` and `DOTALL`; bits
+  3-4 together select `v`, so one input in four reads the UnicodeSets
+  grammar.
+
+**A run count is not coverage.** Until `9bac05f` the pattern fuzzer chose
+uniformly from sixteen dialects, fifteen of which refuse everything at the
+first call, so about fifteen runs in sixteen were spent on a single early
+return. A soak of 974,873 runs found nothing; a seven-minute run after the
+weighting was fixed found a read past the end of a property name. The
+UnicodeSets grammar had the same problem for longer - no harness set the
+flag at all until Phase 2 was finished - and the three lists above are the
+fix. The question to ask of a harness is which code its option byte can
+reach, not how many times it ran.
 
 Every harness also runs under a 256 KB stack (`ulimit -s 256`) in the
 soak, because the promise that no engine's stack depth depends on its input
