@@ -264,11 +264,18 @@ def report_match_cost(driver, defaults):
     print("-" * 78)
 
     worst_rate = 0.0
+    refused = 0
     for index, (flags, pattern, subject) in enumerate(payload):
         if len(subject) != lengths[-1]:
             continue
         parts = lines[index].split()
+        # The driver refuses a record it cannot hold rather than measuring
+        # the prefix that fit, so a `-` here is a row this report does not
+        # have and must not quietly leave out of the worst case.
         if parts[0] == "-":
+            refused += 1
+            print("%-44s %8s %12s %10s"
+                  % ("/%s/%s" % (pattern[:36], flags), "-", "refused", "-"))
             continue
         program = int(parts[0])
         steps = int(parts[1])
@@ -282,6 +289,10 @@ def report_match_cost(driver, defaults):
     print("at max_steps = %d, the costliest of these scans %.0f bytes"
           % (defaults["max_steps"], defaults["max_steps"] / max(worst_rate,
                                                                0.001)))
+    if refused:
+        print("%d of these were refused by the driver and are not in that "
+              "number" % refused)
+        return 1
     return 0
 
 

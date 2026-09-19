@@ -517,9 +517,16 @@ to every phase.
 Nothing in the corpus is refused by a default, and the two tightest -
 `max_nodes` and `max_program_size`, at six and seven times - are both bound
 by the same pattern: `\p{RGI_Emoji}` is the largest thing ECMAScript can
-name, and it lowers to an alternation of 3,953 sequences. `\p{RGI_Emoji}{6}`
-exceeds `max_program_size` and is refused with the field named, which is the
-right answer rather than a gap.
+name, and it lowers to an alternation of 3,953 sequences.
+
+Where the ceiling actually is depends on how that atom is spelled, which is
+worth knowing before a caller meets it. `^\p{RGI_Emoji}{n}$` is one node
+whatever `n` is and adds 16,719 instructions a repetition: `{11}` compiles
+to 183,914 and matches, and `{12}` is refused by `max_program_size`. Writing
+the atom out `n` times instead adds 13,958 *nodes* each time, and is refused
+by `max_nodes` at eight copies with the program still at 133,757. Both
+refusals name their field, which is the right answer rather than a gap - but
+the field they name is not the same one.
 
 `max_lookbehind_length` is not in the table. Its default is 255, the corpus
 says nothing about it, and it does not apply to ECMAScript at all -
@@ -542,10 +549,18 @@ should not lift casually, and that is the number the warning is about.
 hostile one does, and the two are measured separately.
 
 Above: on whichever engine `GRX_ENGINE_AUTO` picks, a scanning pattern costs
-between 0.02 and 2.0 steps per subject byte - the high end being an
+between 0.02 and 3.0 steps per subject byte - the high end being an
 unanchored `[a-z]+@[a-z]+`, which restarts at every position. At
-`max_steps = 10,000,000` the costliest of those scans about 5 MB before the
-limit binds.
+`max_steps = 10,000,000` the costliest of those scans about 3.3 MB before
+the limit binds.
+
+This paragraph said 2.0 and 5 MB until the driver behind it was checked
+rather than trusted. `measure.py` asks for a 100,000-byte subject;
+`grx_limits` held 65,536 and quietly scanned those, and the report divided
+the steps by the length it had asked for. Every rate here was 1.53 times too
+low. The tool now refuses a record it cannot hold, which is the only way a
+number like this stays honest: a measurement that silently measures
+something smaller than it claims is worse than one that fails.
 
 Below: all 17 pairs in the ReDoS corpus are refused in 105 to 173
 milliseconds on an idle machine, and in 276 to 414 on the same machine with
@@ -559,10 +574,10 @@ not need it.
 
 `max_steps` stays at 10,000,000, and the numbers above are why rather than a
 preference. Lowering it to a million would refuse a pathological pair in
-about 15 ms instead of 150 - but would also cap a legitimate scan at 500 KB,
+about 15 ms instead of 150 - but would also cap a legitimate scan at 333 KB,
 and a caller scanning documents that large is not the one being attacked. A
 caller who *is* - one compiling patterns from a file it did not write -
-should lower it, and now has the arithmetic to choose by: divide it by two
+should lower it, and now has the arithmetic to choose by: divide it by three
 to get the bytes it will scan, and multiply it by 15 nanoseconds to get the
 time it will spend refusing on an idle core.
 

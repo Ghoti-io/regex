@@ -28,7 +28,20 @@
 #include <string.h>
 
 /** The longest pattern or subject a line may carry. */
-#define MAX_BUFFER 65536
+/*
+ * A pattern this driver will read, and a subject it will scan.
+ *
+ * Separate, and the subject far larger, because they are asked for
+ * different things. They were one 64 KB constant that `decode_hex` silently
+ * stopped at, which in a *differential* driver is the worst shape the bug
+ * has: Node would have been asked about one pattern and this library about
+ * a shorter one, and the gate would have reported agreement about two
+ * different questions. Nothing in the current corpora comes near either
+ * bound - the oracle's subjects are under twenty bytes - so this is a
+ * latent failure being closed rather than an observed one being fixed.
+ */
+#define MAX_PATTERN 65536
+#define MAX_SUBJECT (1 << 20)
 
 static int unhex(int c) {
   if (c >= '0' && c <= '9') {
@@ -43,9 +56,18 @@ static int unhex(int c) {
   return -1;
 }
 
+/**
+ * Decode a hex field, or refuse it.
+ *
+ * Returns the number of bytes written, or SIZE_MAX when the field holds
+ * more than `capacity` of them.
+ */
 static size_t decode_hex(const char * hex, char * out, size_t capacity) {
   size_t length = 0;
-  while (hex[0] && hex[1] && length < capacity) {
+  while (hex[0] && hex[1]) {
+    if (length == capacity) {
+      return (size_t)-1;
+    }
     int high = unhex(hex[0]);
     int low = unhex(hex[1]);
     if (high < 0 || low < 0) {
@@ -84,9 +106,9 @@ int main(int argc, char ** argv) {
     }
   }
 
-  static char line[3 * MAX_BUFFER];
-  static char pattern[MAX_BUFFER];
-  static char subject[MAX_BUFFER];
+  static char line[2 * (MAX_PATTERN + MAX_SUBJECT) + 64];
+  static char pattern[MAX_PATTERN];
+  static char subject[MAX_SUBJECT];
 
   // The compiled regex is kept for as long as the rows keep asking for the
   // same one. Every harness that drives this tool groups its rows by pattern
@@ -95,13 +117,24 @@ int main(int argc, char ** argv) {
   // second and one that takes an hour: `\p{RGI_Emoji}` compiles to an
   // alternation of nearly four thousand sequences, and compiling that once
   // per subject is what a differential over the emoji universe would do.
-  static char cached_pattern[MAX_BUFFER];
+  static char cached_pattern[MAX_PATTERN];
   static size_t cached_length = 0;
   static uint32_t cached_options = 0;
   static int cached_valid = 0;
   GRX_Regex * regex = NULL;
 
   while (fgets(line, (int)sizeof(line), stdin)) {
+    // A record too long for the buffer arrives without its newline, and its
+    // tail would be read as the next record. Drain it and say so.
+    if (!strchr(line, '\n') && !feof(stdin)) {
+      int c;
+      while ((c = fgetc(stdin)) != EOF && c != '\n') {
+      }
+      printf("toolong\n");
+      fflush(stdout);
+      continue;
+    }
+
     char * first = strchr(line, '\t');
     if (!first) {
       continue;
@@ -129,6 +162,11 @@ int main(int argc, char ** argv) {
         = decode_hex(first + 1, pattern, sizeof(pattern));
     size_t subject_length
         = decode_hex(second + 1, subject, sizeof(subject));
+    if (pattern_length == (size_t)-1 || subject_length == (size_t)-1) {
+      printf("toolong\n");
+      fflush(stdout);
+      continue;
+    }
 
     if (!regex || !cached_valid || cached_options != options
         || cached_length != pattern_length

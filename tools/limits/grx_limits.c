@@ -32,7 +32,22 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define MAX_BUFFER 65536
+/*
+ * A pattern this tool will read, and a subject it will scan.
+ *
+ * The subject is a megabyte because the match-cost half of the report asks
+ * what a *long* scan costs, and the answer has to be measured at a length
+ * that is actually long. These were one 64 KB constant until the report was
+ * checked against the driver: `measure.py` asks for a 100,000-byte subject,
+ * the driver quietly handed the engine 65,536 of them, and the report
+ * divided the resulting step count by the length it had asked for rather
+ * than the one that was scanned. Every rate in it was therefore 1.53 times
+ * too low, and the published `max_steps` arithmetic 1.53 times too
+ * generous. A buffer that shortens its input without saying so is worse
+ * than one that refuses it, which is why both now refuse.
+ */
+#define MAX_PATTERN 65536
+#define MAX_SUBJECT (1 << 20)
 
 /** Which field of GRX_Limits a probe is varying. */
 typedef enum {
@@ -114,9 +129,19 @@ static size_t needed(const char * pattern, size_t length, uint32_t options,
   return low;
 }
 
+/**
+ * Decode a hex field, or refuse it.
+ *
+ * Returns the number of bytes written, or SIZE_MAX when the field holds
+ * more than `capacity` of them. The caller reports the refusal; what it
+ * must not do is measure the prefix that fit and call it the answer.
+ */
 static size_t decode_hex(const char * hex, char * out, size_t capacity) {
   size_t length = 0;
-  while (hex[0] && hex[1] && length < capacity) {
+  while (hex[0] && hex[1]) {
+    if (length == capacity) {
+      return (size_t)-1;
+    }
     char byte[3] = {hex[0], hex[1], '\0'};
     out[length++] = (char)strtol(byte, NULL, 16);
     hex += 2;
@@ -200,11 +225,24 @@ int main(int argc, char ** argv) {
   }
   int steps_mode = argc > 1 && strcmp(argv[1], "--steps") == 0;
 
-  static char line[3 * MAX_BUFFER];
-  static char pattern[MAX_BUFFER];
-  static char subject[MAX_BUFFER];
+  // Two hex digits a byte, two tabs, the flags and the newline.
+  static char line[2 * (MAX_PATTERN + MAX_SUBJECT) + 64];
+  static char pattern[MAX_PATTERN];
+  static char subject[MAX_SUBJECT];
 
   while (fgets(line, (int)sizeof(line), stdin)) {
+    // A record longer than the buffer arrives without its newline, and its
+    // tail would otherwise be read as the next record. Drain it and refuse
+    // the row: a measurement of the part that fit is not a measurement.
+    if (!strchr(line, '\n') && !feof(stdin)) {
+      int c;
+      while ((c = fgetc(stdin)) != EOF && c != '\n') {
+      }
+      printf(steps_mode ? "- - -\n" : "- - - - - - - -\n");
+      fflush(stdout);
+      continue;
+    }
+
     char * tab = strchr(line, '\t');
     if (!tab) {
       continue;
@@ -233,13 +271,20 @@ int main(int argc, char ** argv) {
           = decode_hex(tab + 1, pattern, sizeof(pattern));
       size_t subject_length
           = decode_hex(second + 1, subject, sizeof(subject));
-      report_steps(pattern, pattern_length, options, subject, subject_length);
+      if (pattern_length == (size_t)-1 || subject_length == (size_t)-1) {
+        printf("- - -\n");
+      }
+      else {
+        report_steps(
+            pattern, pattern_length, options, subject, subject_length);
+      }
       fflush(stdout);
       continue;
     }
 
     size_t length = decode_hex(tab + 1, pattern, sizeof(pattern));
-    if (!compiles(pattern, length, options, FIELD_NODES, 0)) {
+    if (length == (size_t)-1
+        || !compiles(pattern, length, options, FIELD_NODES, 0)) {
       printf("- - - - - - - -\n");
       continue;
     }

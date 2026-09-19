@@ -82,6 +82,15 @@ def main(argv):
     skipped = 0
 
     for (flags, pattern, subject), first, second in zip(rows, pike, backtrack):
+        # A record the driver could not hold. Both engines would answer
+        # "toolong" and the invariant would look satisfied by a comparison
+        # that never happened, so stop instead.
+        if first == "toolong" or second == "toolong":
+            sys.stderr.write(
+                "the driver could not hold a record this run generated; "
+                "raise MAX_PATTERN/MAX_SUBJECT in tools/oracle/grx_match.c\n")
+            return 2
+
         # A program the Pike VM cannot run is not a program both engines can
         # run, so the invariant says nothing about it.
         if first.startswith("unsupported") or first.startswith("compile") \

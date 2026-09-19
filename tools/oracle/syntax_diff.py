@@ -135,6 +135,15 @@ def main(argv):
     disagreements = {}
     capped = 0
     for (flags, pattern), expected, verdict in zip(rows, reference, ours):
+        # The driver refuses a pattern longer than its buffer rather than
+        # parsing the prefix. That must stop the gate rather than count as a
+        # rejection: a comparison against what Node said about the whole
+        # pattern is not a comparison this run made.
+        if verdict == "toolong":
+            sys.stderr.write(
+                "the driver could not hold a pattern this run generated; "
+                "raise MAX_PATTERN in tools/oracle/grx_syntax.c\n")
+            return 2
         if verdict.startswith("limit"):
             capped += 1
             continue

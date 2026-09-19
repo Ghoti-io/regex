@@ -82,6 +82,20 @@ int main(int argc, char ** argv) {
   char pattern[MAX_PATTERN];
 
   while (fgets(line, (int)sizeof(line), stdin)) {
+    // A record too long for the buffer arrives without its newline, and its
+    // tail would be read as the next record. Drain it and say so, rather
+    // than parsing the prefix that fit: this driver's answer is compared
+    // against what Node said about the *whole* pattern, and a shortened one
+    // would make the two agree about different questions.
+    if (!strchr(line, '\n') && !feof(stdin)) {
+      int c;
+      while ((c = fgetc(stdin)) != EOF && c != '\n') {
+      }
+      printf("toolong\n");
+      fflush(stdout);
+      continue;
+    }
+
     char * tab = strchr(line, '\t');
     if (!tab) {
       continue;
@@ -91,7 +105,12 @@ int main(int argc, char ** argv) {
     uint32_t options = options_from_flags(line, syntax);
     const char * hex = tab + 1;
     size_t length = 0;
-    while (hex[0] && hex[1] && length < sizeof(pattern)) {
+    int too_long = 0;
+    while (hex[0] && hex[1]) {
+      if (length == sizeof(pattern)) {
+        too_long = 1;
+        break;
+      }
       int high = unhex(hex[0]);
       int low = unhex(hex[1]);
       if (high < 0 || low < 0) {
@@ -99,6 +118,11 @@ int main(int argc, char ** argv) {
       }
       pattern[length++] = (char)((high << 4) | low);
       hex += 2;
+    }
+    if (too_long) {
+      printf("toolong\n");
+      fflush(stdout);
+      continue;
     }
 
     GRX_Error error;

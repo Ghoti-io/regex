@@ -454,6 +454,31 @@ when the gate changes:
 **The first binary, not the last**, is the point of the first two rows: the
 defect they guard against is invisible if the fault is injected at the end.
 
+### A driver that shortens its input answers a different question
+
+The three oracle drivers - `grx_syntax`, `grx_match` and `grx_limits` - read
+hex-encoded records from stdin into fixed buffers. All three used to stop at
+the end of the buffer and carry on with the prefix, and that is the one
+failure a differential gate cannot survive: Node is asked about the whole
+pattern, this library about a shorter one, and the two answers are compared
+as though they were answers to the same question. A gate in that state
+reports agreement and means nothing.
+
+It was found by checking a published number rather than by any of the rows
+above. `measure.py` asks `grx_limits` for a 100,000-byte subject; the driver
+scanned 65,536 of them and the report divided the step count by the length
+it had asked for, so every rate in `dialects.md` §7 was 1.53 times too low
+and the `max_steps` arithmetic 1.53 times too generous. The oracle corpora
+never came near any of the three buffers - their subjects are under twenty
+bytes - so no gate had ever been wrong because of it, which is exactly why
+nothing found it.
+
+All three now refuse a record they cannot hold, and `syntax_diff.py` and
+`engine_diff.py` stop with a non-zero status if a driver ever says
+`toolong`. The rule this is an instance of: **a test harness may fail, and
+may refuse, but it may never quietly measure something smaller than it was
+asked to.**
+
 ## 10. The ReDoS corpus
 
 `tests/data/redos/ecmascript.rxt`, using `expect: limit`: 17 pattern and
