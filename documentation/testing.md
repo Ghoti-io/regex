@@ -396,23 +396,31 @@ logged, because they are usually interesting.
 - **Spencer's tests** (glibc `posix/rxspencer/tests`): the classic
   `pattern flags subject expected` lines with the `-` conventions; the
   glibc driver supplies the answers.
-- **JSON-Schema-Test-Suite** `pattern.json` and `patternProperties.json`
-  (`tools/jsonschema/`): not a vector import - these are run *through* `text`,
-  with this library plugged into its regular-expression provider vtable,
-  because what they measure is the pair. `tools/jsonschema/fetch.sh` fetches
-  the four files (both drafts) at the commit pinned in
-  `tools/jsonschema/SUITE_COMMIT`, into `third_party/`, which is not
-  committed; `make check-json-schema-suite` runs them and
-  `JSON_SCHEMA_DRAFT=draft7` selects the older one. The corpus is not
+- **JSON-Schema-Test-Suite** (`tools/jsonschema/`): not a vector import -
+  these are run *through* `text`, with this library plugged into its
+  regular-expression provider vtable, because what they measure is the pair.
+  `tools/jsonschema/fetch.sh` fetches the files named in `JSON_SCHEMA_FILES`
+  (both drafts) at the commit pinned in `tools/jsonschema/SUITE_COMMIT`, into
+  `third_party/`, which is not committed; `make check-json-schema-suite` runs
+  them and `JSON_SCHEMA_DRAFT=draft7` selects the older one. The corpus is not
   vendored for the same reason the UCD is not: it is somebody else's, and a
   copy here would be a snapshot that stops being what every other
   implementation is measured against. The gate is out of `TEST_GATES`,
   because it needs `text` installed and the corpus fetched.
 
-  Current: **37 of 37** cases in draft2020-12 and **32 of 32** in draft7, no
+  Current: **51 of 51** cases in draft2020-12 and **46 of 46** in draft7, no
   group skipped. The runner exits non-zero on a wrong answer, which was
   checked by flipping one expectation and watching it fail rather than by
   assuming.
+
+  `JSON_SCHEMA_FILES` is `pattern patternProperties maxLength minLength`. The
+  last two are not about regular expressions, and they are there because the
+  first version of this check ran only the first two and therefore could not
+  have caught a defect in the pair it validates. There was one: `text`
+  measured string length in bytes where JSON Schema counts characters. Adding
+  the file turned that from an argument into two failing cases, and then into
+  a fix - which is the whole reason to run somebody else's corpus rather than
+  one's own.
 
 ## 8. Fuzzing
 

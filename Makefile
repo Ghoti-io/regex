@@ -578,8 +578,9 @@ check-json-schema-suite: $(TOOLS)
 		printf "check-json-schema-suite: skipped (run tools/jsonschema/fetch.sh first)\n"; \
 		exit 0; \
 	fi; \
-	$(APP_DIR)/tools/grx_json_schema \
-		"$$dir/pattern.json" "$$dir/patternProperties.json"
+	files=""; \
+	for f in $(JSON_SCHEMA_FILES); do files="$$files $$dir/$$f.json"; done; \
+	$(APP_DIR)/tools/grx_json_schema $$files
 
 # Where tools/jsonschema/fetch.sh puts the corpus, and which draft's files are
 # run. The suite is not committed - it is somebody else's, and a copy here
@@ -590,6 +591,12 @@ check-json-schema-suite: $(TOOLS)
 JSON_SCHEMA_COMMIT := $(shell cat tools/jsonschema/SUITE_COMMIT 2>/dev/null)
 JSON_SCHEMA_SUITE ?= third_party/json-schema-test-suite/$(JSON_SCHEMA_COMMIT)
 JSON_SCHEMA_DRAFT ?= draft2020-12
+
+# Which of the suite's files to run. The two WP-11 is about, plus the two
+# other keywords that measure a string: the first version of this check ran
+# only the pattern files, and so could not have caught a defect in the pair it
+# exists to validate - which is exactly what maxLength.json then found.
+JSON_SCHEMA_FILES ?= pattern patternProperties maxLength minLength
 
 check-limits: ## Report what real patterns cost against grx_limits_default()
 check-limits: $(TOOLS)

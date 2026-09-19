@@ -207,11 +207,20 @@ reasoning.
 grow one, so its `pattern` and `patternProperties` keywords arrive through a
 provider vtable that a caller fills in. `examples/json_schema_provider.c` is
 that adapter written against this library - about sixty lines - and
-`make check-json-schema-suite` runs JSON-Schema-Test-Suite's two pattern files
-through `text` with it: **37 of 37** cases in draft2020-12 and **32 of 32** in
-draft7, no group skipped. `tools/jsonschema/fetch.sh` fetches the corpus at
-the commit pinned in `tools/jsonschema/SUITE_COMMIT`; it is not vendored, for
-the same reason the UCD is not.
+`make check-json-schema-suite` runs JSON-Schema-Test-Suite files through `text`
+with it: **51 of 51** cases in draft2020-12 and **46 of 46** in draft7, no
+group skipped. `tools/jsonschema/fetch.sh` fetches the corpus at the commit
+pinned in `tools/jsonschema/SUITE_COMMIT`; it is not vendored, for the same
+reason the UCD is not.
+
+The files run are `pattern` and `patternProperties`, which is what the seam is
+for, plus `maxLength` and `minLength`, which are not. Those two are there
+because the first version of this check ran only the pattern files and so
+could not have caught a defect in the pair it exists to validate - and there
+was one. `text` measured string length in bytes where the specification counts
+characters, so `{"maxLength": 1}` rejected `"é"`. `maxLength.json` catches
+that on sight, because it asks whether two astral characters satisfy
+`maxLength: 2`.
 
 The interesting part of that seam is `search_fn`'s third answer. A search that
 could not finish - a budget spent on a pattern whose worst case is exponential

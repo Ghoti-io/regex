@@ -190,8 +190,11 @@ the whole pattern has no position. In this repository,
 `examples/json_schema_provider.c` is the adapter, `tools/jsonschema/` runs
 JSON-Schema-Test-Suite's `pattern.json` and `patternProperties.json` through
 `text` with this library behind it, and `make check-json-schema-suite` is the
-gate. *Done:* 37 of 37 cases in draft2020-12 and 32 of 32 in draft7, none
-skipped.
+gate. *Done:* 51 of 51 cases in draft2020-12 and 46 of 46 in draft7, none
+skipped. (The gate began at the two `pattern` files this package names, which
+between them could not have caught the byte-versus-character defect the
+`maxLength` file found in `text` the same day; `JSON_SCHEMA_FILES` now carries
+the two length files as well.)
 
 Two decisions were made in the course of it that the sketch above did not
 anticipate. `search_fn` has **three** answers rather than two: a search that

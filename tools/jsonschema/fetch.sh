@@ -10,10 +10,15 @@
 # committed is the commit hash, in tools/jsonschema/SUITE_COMMIT, so that a
 # published pass rate names the corpus it was measured over.
 #
-# Only the two files WP-11 is about are fetched - `pattern` and
-# `patternProperties`, in both drafts - rather than the whole repository. The
-# rest of the suite measures `text`'s schema engine, which is that library's
-# business and not this one's.
+# Not the whole repository: the files fetched are the ones that exercise the
+# *pair* - `pattern` and `patternProperties`, which WP-11 is about, plus
+# `maxLength` and `minLength`, which are the other two keywords that measure a
+# string. Those two are here because the first version of this check ran only
+# the pattern files and so could not have caught a defect in the thing it
+# validates - and there was one: `text` counted string length in bytes rather
+# than in characters, which `maxLength.json`'s astral cases catch on sight.
+# The rest of the suite measures `text`'s schema engine more broadly, which is
+# that library's business and not this one's.
 #
 # Everything lands in third_party/json-schema-test-suite/<commit>/, which
 # .gitignore excludes.
@@ -32,8 +37,12 @@ base="https://raw.githubusercontent.com/json-schema-org/JSON-Schema-Test-Suite/$
 files="
 tests/draft2020-12/pattern.json
 tests/draft2020-12/patternProperties.json
+tests/draft2020-12/maxLength.json
+tests/draft2020-12/minLength.json
 tests/draft7/pattern.json
 tests/draft7/patternProperties.json
+tests/draft7/maxLength.json
+tests/draft7/minLength.json
 "
 
 for path in $files; do
