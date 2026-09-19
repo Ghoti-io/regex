@@ -312,6 +312,209 @@ TEST(Exec, EverythingIsFreedThroughTheCallersAllocator) {
   EXPECT_EQ(allocator.live(), 0) << "the engine leaked its thread state";
 }
 
+// --------------------------------------------------------------------------
+// The backtracking engine
+// --------------------------------------------------------------------------
+
+TEST(Backtrack, RunsWhatTheLockstepEngineCannot) {
+  struct {
+    const char * pattern;
+    uint32_t options;
+    const char * subject;
+    const char * spans;
+  } cases[] = {
+    // A backreference: what a group matched, matched again.
+    {"(a|b)\\1", 0, "xaay", "1:3 1:2"},
+    {"(a|b)\\1", 0, "xaby", ""},
+    // A reference to a group that did not participate. ECMAScript matches
+    // the empty string where every other tier-1 dialect fails; the rule
+    // arrives as a mode on the instruction.
+    {"(a)?b\\1c", 0, "bc", "0:2 -"},
+    // Caseless comparison is on folded code points, not on bytes, because
+    // the two runs may be different lengths.
+    {"(a)\\1", GRX_OPT_CASELESS, "aA", "0:2 0:1"},
+    // Lookahead, with a capture inside it that survives.
+    {"(?=(a))a", 0, "a", "0:1 0:1"},
+    {"x(?=y)(?=.z)", 0, "xyz", "0:1"},
+    {"(?!a)b", 0, "b", "0:1"},
+    // Lookbehind of more than one length, which is what running the body
+    // backwards buys.
+    {"(?<=(a|ab))c", GRX_OPT_UTF, "abc", "2:3 0:2"},
+    {"(?<=(a+))c", GRX_OPT_UTF, "aaac", "3:4 0:3"},
+    {"(?<=(?:ab)+)c", GRX_OPT_UTF, "ababc", "4:5"},
+    // A negative lookaround leaves the captures as they were, whatever its
+    // body touched on the way to failing.
+    {"(?<!(a))b", GRX_OPT_UTF, "cb", "1:2 -"},
+    {"(?<!(a))b", GRX_OPT_UTF, "ab", ""},
+  };
+
+  for (const auto & test : cases) {
+    Regex regex(test.pattern, test.options);
+    ASSERT_TRUE(regex.ok()) << test.pattern;
+
+    GRX_Match * match = nullptr;
+    ASSERT_EQ(grx_match_create(regex.get(), nullptr, &match), GRX_OK);
+
+    int matched = 0;
+    ASSERT_EQ(grx_regex_search(regex.get(), test.subject,
+                  std::char_traits<char>::length(test.subject), 0,
+                  GRX_ENGINE_AUTO, nullptr, match, &matched),
+        GRX_OK)
+        << test.pattern;
+
+    std::string spans;
+    if (matched) {
+      for (size_t i = 0; i < grx_match_count(match); i++) {
+        GRX_Capture capture;
+        grx_match_group(match, i, &capture);
+        if (i) {
+          spans += " ";
+        }
+        spans += capture.start == GRX_NPOS
+            ? std::string("-")
+            : std::to_string(capture.start) + ":"
+                + std::to_string(capture.end);
+      }
+      EXPECT_EQ(grx_match_engine(match), GRX_ENGINE_BACKTRACK)
+          << test.pattern << " should have needed the backtracker";
+    }
+    EXPECT_EQ(spans, test.spans) << test.pattern << " on " << test.subject;
+
+    grx_match_destroy(match);
+  }
+}
+
+TEST(Backtrack, ExponentialPatternsHitTheLimitRatherThanHanging) {
+  // The patterns a backtracking engine is famous for. There is no clever
+  // answer here - the engine really does explore exponentially many paths -
+  // so the promise is not speed but *termination*: max_steps turns a hang
+  // into GRX_ERR_LIMIT, and GRX_ERR_LIMIT is not "no match", because "no
+  // match" is a fact about the subject and a limit is a fact about the
+  // budget.
+  const char * patterns[] = {"(a+)+b", "(a|aa)*b", "(a*)*b"};
+
+  GRX_Limits limits;
+  grx_limits_default(&limits);
+  limits.max_steps = 200000;
+
+  for (const char * pattern : patterns) {
+    Regex regex(pattern);
+    ASSERT_TRUE(regex.ok()) << pattern;
+
+    const std::string subject(40, 'a');
+    int matched = 1;
+    EXPECT_EQ(grx_regex_search(regex.get(), subject.data(), subject.size(), 0,
+                  GRX_ENGINE_BACKTRACK, &limits, nullptr, &matched),
+        GRX_ERR_LIMIT)
+        << pattern;
+    EXPECT_FALSE(matched) << pattern;
+
+    // And the same pattern on the lockstep engine answers immediately,
+    // because its bound is structural. This pair is the whole argument for
+    // having two engines.
+    matched = 1;
+    EXPECT_EQ(grx_regex_search(regex.get(), subject.data(), subject.size(), 0,
+                  GRX_ENGINE_PIKE, &limits, nullptr, &matched),
+        GRX_OK)
+        << pattern;
+    EXPECT_FALSE(matched) << pattern;
+  }
+}
+
+TEST(Backtrack, TheStackDepthIsCappedSeparatelyFromTheStepCount) {
+  // Two different resources, and a caller may want to bound either. The
+  // stack is on the heap, so this is a policy cap and not a guard against
+  // overflowing the C stack - there is nothing recursive here to overflow it.
+  Regex regex("(a|b)*c");
+  ASSERT_TRUE(regex.ok());
+
+  GRX_Limits limits;
+  grx_limits_default(&limits);
+  limits.max_backtrack = 8;
+
+  const std::string subject(200, 'a');
+  int matched = 1;
+  EXPECT_EQ(grx_regex_search(regex.get(), subject.data(), subject.size(), 0,
+                GRX_ENGINE_BACKTRACK, &limits, nullptr, &matched),
+      GRX_ERR_LIMIT);
+}
+
+TEST(Backtrack, ConstructsWithoutAnEngineAreRefusedRatherThanIgnored) {
+  // `(?>a)` has an opcode and no dialect that emits it yet; the verbs and
+  // recursion have opcodes and no engine until WP-19. A program containing
+  // one has to be refused: running it with the construct ignored would give
+  // a plausible wrong answer, which is worse than no answer.
+  GRX_Regex * regex = nullptr;
+  GRX_Error error;
+  EXPECT_EQ(grx_regex_compile_with_allocator("(?>a)", 5, GRX_SYNTAX_ECMASCRIPT,
+                0, nullptr, nullptr, &error, &regex),
+      GRX_ERR_SYNTAX)
+      << "ECMAScript has no atomic group, so the parser rejects it first";
+  EXPECT_EQ(regex, nullptr);
+}
+
+TEST(Engines, AgreeOnEveryProgramBothCanRun) {
+  // documentation/design.md section 3.5.4. The two engines share nothing
+  // below the instruction set - one merges threads in lockstep, the other
+  // walks one path with an undo stack - so a disagreement is a defect in one
+  // of them and there is nowhere for a shared mistake to hide.
+  //
+  // tools/oracle/engine_diff.py runs thousands of random rows through this
+  // same comparison; these are the cases worth naming.
+  struct {
+    const char * pattern;
+    const char * subject;
+  } cases[] = {
+    {"a(b|c)*d", "abcbcd"},
+    {"(a*)*", "b"},
+    {"(a*)+", "b"},
+    {"((a)|b)+", "ab"},
+    {"(?:(a)|b){2}", "ab"},
+    {"a|ab", "ab"},
+    {"(a|b)*", "abab"},
+    {"^(a+)(b+)$", "aaabbb"},
+    {"[a-c]+?", "xbcay"},
+    {"(a)(b)?(c)", "ac"},
+    {"a{2,4}", "aaaaa"},
+    {"a{2,4}?", "aaaaa"},
+    {"(?:)", "abc"},
+    {"x*", "aaa"},
+  };
+
+  for (const auto & test : cases) {
+    Regex regex(test.pattern);
+    ASSERT_TRUE(regex.ok()) << test.pattern;
+
+    std::string reported[2];
+    const GRX_Engine engines[2] = {GRX_ENGINE_PIKE, GRX_ENGINE_BACKTRACK};
+    for (int i = 0; i < 2; i++) {
+      GRX_Match * match = nullptr;
+      ASSERT_EQ(grx_match_create(regex.get(), nullptr, &match), GRX_OK);
+      int matched = 0;
+      ASSERT_EQ(grx_regex_search(regex.get(), test.subject,
+                    std::char_traits<char>::length(test.subject), 0,
+                    engines[i], nullptr, match, &matched),
+          GRX_OK)
+          << test.pattern;
+
+      reported[i] = matched ? "" : "nomatch";
+      for (size_t g = 0; matched && g < grx_match_count(match); g++) {
+        GRX_Capture capture;
+        grx_match_group(match, g, &capture);
+        reported[i] += capture.start == GRX_NPOS
+            ? std::string(" -")
+            : " " + std::to_string(capture.start) + ":"
+                + std::to_string(capture.end);
+      }
+      grx_match_destroy(match);
+    }
+
+    EXPECT_EQ(reported[0], reported[1])
+        << test.pattern << " on " << test.subject
+        << ": the engines disagree about the same program";
+  }
+}
+
 int main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

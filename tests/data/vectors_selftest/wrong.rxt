@@ -1,0 +1,15 @@
+# Deliberately wrong. tests/conformance/test_vectors.cpp expects the runner to
+# fail exactly one record here, which is how "the conformance suite passes" is
+# kept distinguishable from "the conformance suite ran nothing"
+# (documentation/testing.md section 9).
+dialect: ecmascript
+
+pattern: abc
+flags:
+subject: xabcy
+expect: 1-4
+
+pattern: abc
+flags:
+subject: xabcy
+expect: 0-3

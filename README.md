@@ -142,8 +142,9 @@ Nothing is allocated for the caller to free on a failing call.
 | Every dialect but ECMAScript | named, `GRX_ERR_UNSUPPORTED` |
 | Lowering, analysis and code generation | working |
 | Pike VM | working - the regular subset, in linear time |
-| Backtracking engine | stub - `GRX_ERR_UNSUPPORTED`; WP-08 |
-| Backreference, lookaround, atomic group | compile, but no engine runs them yet |
+| Backtracking engine | working - backreferences, lookaround, atomic groups |
+| Conditionals, recursion, the control verbs | opcodes exist; refused until WP-19 |
+| Bit-state engine | not started; WP-13 |
 | Iteration, substitution and splitting | designed, not started |
 
 **Conformance.** Two differential checks against Node 22, which is the
@@ -155,15 +156,30 @@ the grammar's punctuation, plus a random corpus of longer ones. No
 disagreement.
 
 `make check-oracle-match` compares every group's span for random patterns
-against random subjects. No disagreement over the rows it can compare; the
-rows it cannot are counted and named, and today they are the patterns whose
-programs need the backtracking engine (WP-08).
+against random subjects, including backreferences, lookahead and lookbehind.
+No disagreement.
+
+`make check-oracle-properties` asks both implementations which code points
+match each `\p{...}` - all 1,114,112 of them, for all 454 properties. No
+disagreement.
+
+`make check-engine-equivalence` requires the two engines to give the same
+answer for any program both can run, which is the invariant of
+[design.md](documentation/design.md) §3.5.4. No disagreement. The
+`crossengine` fuzzer checks the same thing on random input.
+
+**Vectors.** 1,567 checked-in `.rxt` records run in `make test`, with no
+oracle needed: 100% pass. Their expectations are Node's, not this library's.
+A deliberately wrong record sits beside them in a self-test corpus, and a
+test expects the runner to fail it - so that "the suite passes" cannot mean
+"the suite ran nothing".
 
 **Linear time.** `(a|aa)*b`, `(a+)+b` and `(a*)*b` - the patterns that make a
 backtracking engine hang - run against 100,000 characters in around fifty
 milliseconds, and a test asserts the *scaling* rather than the wall clock.
 
-202 tests, clean under Valgrind and under ASan+UBSan. The tests that record a
+229 tests plus the vector corpus, clean under Valgrind and under
+ASan+UBSan. The tests that record a
 stub's answer are marked `STUB` in a comment and are meant to be deleted with
 the stub.
 

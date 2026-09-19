@@ -227,6 +227,11 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
   // The Perl family. Full folding is implemented as simple folding and
   // recorded as a deviation (design.md section 10).
   [GRX_SYNTAX_PERL] = {
+    // RESET_EACH, not KEEP_LAST_SET: Perl 5.40 reports group 2 of
+    // `((a)|b)+` against "ab" as unset, where PCRE2 and Python report "a".
+    // Probed rather than read; see tests/data/probe/report.md and
+    // documentation/dialects.md section 5.5.
+    .capture_reset = GRX_CAPTURE_RESET_EACH,
     .lookbehind = GRX_LOOKBEHIND_BOUNDED,
     .dollar = GRX_DOLLAR_BEFORE_FINAL_NEWLINE,
     .shorthands = GRX_SHORTHANDS_UNICODE,

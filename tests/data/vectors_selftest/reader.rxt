@@ -1,0 +1,24 @@
+# hand-written; exercises every field of the .rxt format
+dialect: ecmascript
+unicode: 17.0
+
+pattern: a(b|c)*d
+flags:
+subject: abcd
+expect: 0-4 2-3
+
+pattern: [a-z
+flags:
+expect: error syntax
+
+pattern: \u{1F41F}
+flags: u
+subject: \u{1F41F}
+expect: 0-4
+
+pattern: (a|b)\1
+flags:
+subject: xaay
+engines: backtrack
+limits: max_steps=1000
+expect: 1-3 1-2

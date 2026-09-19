@@ -16,6 +16,10 @@
 
 import { readFileSync } from "node:fs";
 
+// On stderr, so that a generated vector file records which oracle answered.
+process.stderr.write(
+  `node ${process.version}, Unicode ${process.versions.unicode ?? "?"}\n`);
+
 /**
  * UTF-16 index to UTF-8 byte offset, for one subject.
  *

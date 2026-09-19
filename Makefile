@@ -253,8 +253,17 @@ VALGRIND_FLAGS := --leak-check=full --show-leak-kinds=definite,indirect,possible
 # Test discovery
 ####################################################################
 
-# Optional shared test helper (if present).
-TEST_HELPER_SRC := $(wildcard tests/test_helpers.cpp)
+# Shared test code that is not itself a test: the helper, and the conformance
+# vector reader, which every conformance binary links and which has its own
+# tests rather than being trusted.
+# The exclusion is by *basename*, because `filter-out` allows one `%` per
+# pattern and `%/test_%.cpp` has two - make reads the second one literally and
+# the filter silently matches nothing, which linked every conformance test
+# into every other one.
+TEST_HELPER_CANDIDATES := $(wildcard tests/test_helpers.cpp) \
+	$(wildcard tests/conformance/*.cpp)
+TEST_HELPER_SRC := $(foreach candidate,$(TEST_HELPER_CANDIDATES),\
+	$(if $(filter test_%,$(notdir $(candidate))),,$(candidate)))
 TEST_HELPER_OBJ := $(patsubst tests/%.cpp,$(OBJ_DIR)/tests/%.o,$(TEST_HELPER_SRC))
 
 # The static archive, not -l: a static link resolves hidden symbols, so the
@@ -395,6 +404,11 @@ $(OBJ_DIR)/tests/%.o: tests/%.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(INCLUDE) -Itests -DGRX_TEST_DATA=\"$(TEST_DATA)\" -c $< -MMD -MP -MF $(@:.o=.d) -o $@
 
+$(OBJ_DIR)/tests/%.o: tests/conformance/%.cpp
+	@printf "\n### Compiling Test: $* ###\n"
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) $(INCLUDE) -Itests -DGRX_TEST_DATA=\"$(TEST_DATA)\" -c $< -MMD -MP -MF $(@:.o=.d) -o $@
+
 $(OBJ_DIR)/tests/%.o: tests/unit/%.cpp
 	@printf "\n### Compiling Test: $* ###\n"
 	@mkdir -p $(@D)
@@ -444,7 +458,8 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/oracle/%.c $(APP_DIR)/$(STATIC_TARGET)
 ####################################################################
 
 # General commands
-.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-unicode-tables check-oracle-syntax check-oracle-match
+.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-unicode-tables check-oracle-syntax check-oracle-match check-engine-equivalence \
+	check-oracle-properties check-oracles
 # Release build commands
 .PHONY: all install test test-quiet test-asan test-valgrind test-valgrind-quiet test-watch uninstall watch
 # Debug build commands
@@ -478,6 +493,28 @@ test-watch: ## Watch the file directory for changes and run the unit tests
 tools: ## Build the oracle drivers used by the conformance harnesses
 tools: $(APP_DIR)/$(TARGET) $(TOOLS)
 	@printf "\nOracle drivers are in: $(APP_DIR)/tools/\n"
+
+check-oracles: ## Run every differential check against the reference implementation
+check-oracles: check-oracle-syntax check-oracle-match check-oracle-properties \
+	check-engine-equivalence
+
+check-oracle-properties: ## Compare every Unicode property table against the reference
+check-oracle-properties: $(TOOLS)
+	@if ! command -v node >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then \
+		printf "check-oracle-properties: skipped (no node or no python3)\n"; \
+		exit 0; \
+	fi; \
+	python3 tools/oracle/property_diff.py \
+		--driver $(APP_DIR)/tools/grx_properties
+
+check-engine-equivalence: ## Fail if two engines disagree about one program
+check-engine-equivalence: $(TOOLS)
+	@if ! command -v python3 >/dev/null 2>&1; then \
+		printf "check-engine-equivalence: skipped (no python3)\n"; \
+		exit 0; \
+	fi; \
+	python3 tools/oracle/engine_diff.py --seed $(ORACLE_SEED) \
+		--patterns $(ORACLE_PATTERNS) --driver $(APP_DIR)/tools/grx_match
 
 check-oracle-match: ## Compare what patterns match against the reference implementation
 check-oracle-match: $(TOOLS)
@@ -808,6 +845,7 @@ ASAN_OBJ_DIR := $(ASAN_BUILD_DIR)/objects
 ASAN_APP_DIR := $(ASAN_BUILD_DIR)/apps
 
 ASAN_LIBOBJECTS := $(patsubst src/%.c,$(ASAN_OBJ_DIR)/%.o,$(SOURCES))
+ASAN_TEST_HELPER_OBJ := $(patsubst tests/%.cpp,$(ASAN_OBJ_DIR)/tests/%.o,$(TEST_HELPER_SRC))
 ASAN_TARGET := $(BASE_NAME_PREFIX)-asan.$(LIB_EXTENSION)
 ASAN_REGEXLIBRARY := -L $(ASAN_APP_DIR) -l$(SUITE)-$(PROJECT)$(BRANCH)-asan
 
@@ -839,6 +877,11 @@ $(ASAN_OBJ_DIR)/tests/%.o: tests/%.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(ASAN_CXXFLAGS) $(INCLUDE) -Itests -DGRX_TEST_DATA=\"$(TEST_DATA)\" -c $< -MMD -MP -MF $(@:.o=.d) -o $@
 
+$(ASAN_OBJ_DIR)/tests/%.o: tests/conformance/%.cpp
+	@printf "\n### Compiling ASan Test: $* ###\n"
+	@mkdir -p $(@D)
+	$(CXX) $(ASAN_CXXFLAGS) $(INCLUDE) -Itests -DGRX_TEST_DATA=\"$(TEST_DATA)\" -c $< -MMD -MP -MF $(@:.o=.d) -o $@
+
 $(ASAN_OBJ_DIR)/tests/%.o: tests/unit/%.cpp
 	@printf "\n### Compiling ASan Test: $* ###\n"
 	@mkdir -p $(@D)
@@ -847,10 +890,11 @@ $(ASAN_OBJ_DIR)/tests/%.o: tests/unit/%.cpp
 define asan-test-executable-rule
 ASAN_TEST_OBJ_$1 := $(ASAN_OBJ_DIR)/tests/$(basename $(notdir $1)).o
 
-$(ASAN_APP_DIR)/$2$(EXE_EXTENSION): $$(ASAN_TEST_OBJ_$1) $(ASAN_APP_DIR)/$(ASAN_TARGET)
+$(ASAN_APP_DIR)/$2$(EXE_EXTENSION): $$(ASAN_TEST_OBJ_$1) $(ASAN_TEST_HELPER_OBJ) \
+		$(ASAN_APP_DIR)/$(ASAN_TARGET)
 	@printf "\n### Linking ASan Test: $2 ###\n"
 	@mkdir -p $$(@D)
-	$(CXX) $(ASAN_CXXFLAGS) -o $$@ $$(ASAN_TEST_OBJ_$1) $(ASAN_LDFLAGS) $(ASAN_REGEXLIBRARY) $(CUTIL_LIBS) $(TESTFLAGS)
+	$(CXX) $(ASAN_CXXFLAGS) -o $$@ $$(ASAN_TEST_OBJ_$1) $(ASAN_TEST_HELPER_OBJ) $(ASAN_LDFLAGS) $(ASAN_REGEXLIBRARY) $(CUTIL_LIBS) $(TESTFLAGS)
 endef
 
 $(foreach pair,$(TEST_PAIRS),\
@@ -934,9 +978,11 @@ fuzz-run-$2: $$(FUZZ_APP_DIR)/$1
 endef
 
 $(eval $(call fuzz-rule,fuzz_pattern,pattern))
+$(eval $(call fuzz-rule,fuzz_subject,subject))
+$(eval $(call fuzz-rule,fuzz_crossengine,crossengine))
 
 fuzz: ## Build and run every fuzzer for $(FUZZ_TIME) seconds each
-fuzz: fuzz-run-pattern
+fuzz: fuzz-run-pattern fuzz-run-subject fuzz-run-crossengine
 
 fuzz-clean: ## Remove the fuzz build (keeps the corpus)
 	-@rm -rf $(FUZZ_DIR)

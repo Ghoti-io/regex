@@ -82,7 +82,12 @@ operations of §5, `grx_utf8_validate()`, reverse decoding,
 §4 pass; the check target is byte-identical; the tables' size is recorded.
 *Depends on:* nothing.
 
-**WP-03 The semantic probe suite.** *conformance, M.* `tools/oracle/`: one
+**WP-03 The semantic probe suite.** *conformance, M.* **Landed for the
+dialects this machine can run** - Node, Perl, Python, pcre2test, GNU-style
+grep and Vim. The cells for Java, .NET, Ruby, Go, Rust, Tcl and Emacs stay
+marked **probe** until their tier installs an oracle, which is the point:
+a dialect this machine cannot run is a dialect this library cannot claim.
+`tools/oracle/`: one
 driver per available oracle (Node, Perl, Python, pcre2test, glibc `regcomp`
 via a small C program, GNU grep/sed, Vim) that takes pattern, flags and
 subject and prints spans or an error in one common form; `probe.py`, which
@@ -94,7 +99,9 @@ Ruby, Go, Rust, Tcl, Emacs) so tier 2-4 probes can run when their tier
 starts. *Done:* no `probe` cell remains for tier 1; the report is
 committed under `tests/data/probe/`. *Depends on:* nothing.
 
-**WP-04 Conformance infrastructure.** *conformance, M.* The `.rxt` vector
+**WP-04 Conformance infrastructure.** *conformance, M.* **Landed**, less
+the `make vectors-<dialect>` regeneration targets and the ReDoS corpus
+runner. The `.rxt` vector
 format of [testing.md](testing.md) §3 with its reader in C++; the gtest
 runner that runs every vector under `tests/data/vectors/` on every eligible
 engine and checks engine agreement; the `make vectors-<dialect>` targets
@@ -142,7 +149,8 @@ Pike VM; a step-count test shows O(n·m) on `(a|aa)*b` against 10^5 `a`s.
 *Depends on:* WP-01, WP-05; the ECMAScript AST from WP-06 to test end to
 end (unit tests can build IR by hand before then).
 
-**WP-08 The backtracker.** *engines, L.* Per [design.md](design.md) §3.5.2:
+**WP-08 The backtracker.** *engines, L.* **Landed**, less the
+constructs WP-19 adds. Per [design.md](design.md) §3.5.2:
 the frame stack, `max_steps`, `max_backtrack`, captures with undo,
 lookahead and lookbehind (reverse execution), backreferences with the
 `MATCH_EMPTY`/`FAIL` modes and caseless comparison, the empty-iteration and
@@ -163,7 +171,8 @@ random-pattern generator for ECMAScript with a nightly run against Node.
 a bug filed against WP-06/07/08 or a deviation recorded in
 [dialects.md](dialects.md) §6. *Depends on:* WP-04; consumes WP-06/07/08.
 
-**WP-10 Fuzzing.** *conformance, S.* `fuzz_subject` (pattern from the
+**WP-10 Fuzzing.** *conformance, S.* **Landed**, less the 24-hour soak.
+`fuzz_subject` (pattern from the
 corpus, subject fuzzed), `fuzz_crossengine` (aborts on engine
 disagreement), the options-byte layout documented, corpus seeds derived
 from the vectors, the small-stack run, a 24-hour soak of all three before

@@ -159,6 +159,69 @@ Any later disagreement between an oracle and its profile row is added here
 as a case, so that the suite is the record of every semantic question the
 project has had to ask.
 
+### The vector corpus, and proving it can fail
+
+`tests/data/vectors/` holds checked-in `.rxt` records, and `testVectors` runs
+every one of them in `make test` - on a machine with no Node, no network and
+no Python. The differential harnesses find defects; the vectors keep them
+found.
+
+Every expectation in a generated file is the **oracle's**. A vector generated
+from what this library currently does would record the bug rather than the
+rule, and would then pass forever. `tools/oracle/make_vectors.py` asks Node
+and writes down the answer; if this library disagrees, the vector fails, which
+is the correct outcome whichever side is wrong.
+
+The corpus is in two files, for two reasons. `named.rxt` holds the cases worth
+writing down by name - the two loop rules, the two foldings, the `$` rule,
+the shorthands, the lookbehinds - each of which a random corpus would reach
+only by accident. `generated.rxt` holds the random ones, which reach
+combinations nobody would think to write.
+
+`tests/data/vectors_selftest/` is how the runner is kept honest. It holds a
+record whose expectation is deliberately wrong, and a test that *expects the
+runner to fail it*. Without that, "the conformance suite passes" would be
+indistinguishable from "the conformance suite ran nothing" - which is the
+failure mode a corpus discovered by directory walk is most prone to, and the
+one section 9 of this page is about. The runner separately refuses to pass
+when it found no vectors at all.
+
+### The property check
+
+`make check-oracle-properties` asks this library and the reference which code
+points match each `\p{...}` - all 1,114,112 of them, for all 454 properties -
+and compares the range arrays.
+
+This is what plan.md WP-09 calls "the real check on WP-02", and it is
+stronger than importing test262's generated `property-escapes/` files. Those
+files are themselves generated from the UCD, so they check that a table
+agrees with the UCD; this checks that it agrees with the UCD *as a shipping
+engine reads it*, which is the question a conformance rate is about. It also
+covers every property rather than the subset test262 happens to have
+generated, and it needs nothing cloned.
+
+Surrogates are excluded on both sides: `String.fromCodePoint` of a lone
+surrogate matches nothing in JavaScript and UTF-8 cannot hold one, so neither
+side is asked. Properties the reference cannot spell - the binary properties
+outside ECMA-262's table 69 - are counted and skipped, because which
+spellings each side accepts is the syntax check's question.
+
+### The cross-engine check
+
+`make check-engine-equivalence` runs the same rows through both engines and
+requires the same answer. design.md section 3.5.4 is the invariant; this is
+what enforces it, along with the `crossengine` fuzz harness.
+
+It is the strongest cheap test the library has and it needs no oracle
+installed. The Pike VM merges threads in lockstep and the backtracker walks
+one path with an explicit undo stack; they share the instruction set and
+nothing else, so a disagreement is a defect in one of them and there is
+nowhere for a shared mistake to hide.
+
+A limit reached by the backtracker and not by the Pike VM is not a
+disagreement. It is the exponential engine running out of budget, which is
+what the budget is for.
+
 ### The differential match check
 
 `make check-oracle-match` runs `tools/oracle/match_diff.py`, which is the

@@ -226,15 +226,28 @@ The two rules that make `(a*)*` against `b` report different things:
 | Empty iteration | `FAIL_IF_EMPTY_AFTER_MIN`: an iteration that consumes nothing, once `min` is satisfied, fails (22.2.2.3.1 RepeatMatcher step 2.b) | ECMAScript |
 | | `BREAK_ON_EMPTY`: the iteration succeeds and the loop stops | Perl, PCRE2, Python, Java (**probe**), .NET (**probe**), Ruby (**probe**), RE2, Rust |
 | | `LONGEST`: irrelevant; the match is the longest, and an empty iteration adds nothing | POSIX, GNU, Tcl |
-| Capture reset | `RESET_EACH_ITERATION`: captures inside the group are cleared at the start of every iteration (RepeatMatcher step 4) | ECMAScript |
-| | `KEEP_LAST_SET`: a capture set in an earlier iteration survives if a later one does not set it | Perl, PCRE2, Python, Java (**probe**), .NET, Ruby (**probe**), RE2 (**probe**), Rust (**probe**) |
+| Capture reset | `RESET_EACH_ITERATION`: captures inside the group are cleared at the start of every iteration (RepeatMatcher step 4) | ECMAScript, **Perl** (probed) |
+| | `KEEP_LAST_SET`: a capture set in an earlier iteration survives if a later one does not set it | PCRE2, Python, Java (**probe**), .NET, Ruby (**probe**), RE2 (**probe**), Rust (**probe**) |
 
 Consequences the tests state:
 
-- `(a*)*` on `b`: ECMAScript group 1 unset; Perl group 1 = `""`.
-- `((a)\|b)+` on `ab`: ECMAScript group 2 unset; Perl group 2 = `"a"`.
+- `(a*)*` on `b`: ECMAScript group 1 unset; Perl group 1 = `""`. This is the
+  **empty-iteration** axis: ECMAScript fails the iteration that consumed
+  nothing, so there are none, so nothing was captured. Perl's iteration
+  succeeds and the loop stops.
+- `((a)\|b)+` on `ab`: ECMAScript group 2 unset; **Perl group 2 unset**;
+  PCRE2 and Python group 2 = `"a"`. This is the **capture-reset** axis, and
+  it is a different axis: Perl resets and PCRE2 does not.
 - `(a*)+` on `b`: group 1 = `""` in both (min = 1 forces the one empty
   iteration).
+
+**Corrected by WP-03's probe.** An earlier version of this page put Perl in
+the `KEEP_LAST_SET` row and gave `((a)|b)+` as the example that shows it,
+with Perl reporting group 2 as `"a"`. Perl 5.40 reports it as **unset**, and
+so does `(?:(a)|b){2}` against `"ab"`. PCRE2 10.46 and Python 3.13 report
+`"a"`. The page had attributed the `(a*)*` difference - which is the
+empty-iteration axis - to the capture-reset axis as well, and the two are
+independent. `tests/data/probe/report.md` has the transcript.
 
 ### 5.6 Backreferences to unset groups; forward and nested references
 
@@ -332,7 +345,7 @@ the dialect's rule for a reference to a group that does not exist.
 | `]` first is a literal | yes | yes | no: `[]` is empty, `[^]` is everything | yes | **probe** | yes, with a warning | yes |
 | Backslash inside brackets | literal | escape | escape | escape | escape | escape | escape |
 | `-` literal at the ends | yes | yes | yes (legacy); `u`: yes; `v`: must be escaped | yes | yes | yes | yes |
-| Class escape as a range endpoint, `[\d-z]` | n/a | error (PCRE2: `-` literal with a warning in Perl) | legacy: union; `u`: error | error since 3.7 (**probe**) | error | **probe** | error |
+| Class escape as a range endpoint, `[\d-z]` | n/a | PCRE2: error; Perl: `-` literal, with a warning | legacy: union; `u`: error | error (probed: Python 3.13 raises) | error | **probe** | error |
 | `[[:alpha:]]` | yes | yes | no | no | no | yes | yes |
 | Set operations | no | Perl: `(?[ ])` | `v`: `&&`, `--`, nesting, `\q{}` | no | `&&`, nesting | `&&`, nesting | Rust: `&&`, `--`, `~~`, nesting; RE2: no |
 | Reserved double punctuators | - | - | `v`: `&&`, `!!`, `##`, ... must be escaped | - | - | - | - |
