@@ -33,16 +33,34 @@
  */
 #define GRX_PROPERTY_NAME_MAX 96
 
-/** Compare a table entry against a caller's name, which is not terminated. */
+/**
+ * Compare a table entry against a caller's name, which is not terminated.
+ *
+ * `strncmp` is the obvious implementation and is wrong, because a pattern is
+ * *bytes*: `\p{L\0\0\0}` gives a name whose first byte is `L` and whose
+ * remaining thirty-seven are NUL. `strncmp` stops at the NUL, reports the
+ * entry "L" as equal, and the length comparison that followed then read
+ * `entry[37]` - thirty-six bytes past the end of a two-byte string. Found by
+ * the pattern fuzzer as a global-buffer-overflow; the name table is in
+ * `.rodata`, so what it read was whichever property name happened to be
+ * stored after it.
+ *
+ * So: compare the bytes both have, then the lengths. That is strcmp's
+ * ordering, which is what the table is sorted by, extended to a name that
+ * may contain a NUL.
+ */
 static int name_compare(
     const char * entry, const char * name, size_t name_length) {
-  int order = strncmp(entry, name, name_length);
+  size_t entry_length = strlen(entry);
+  size_t shared = entry_length < name_length ? entry_length : name_length;
+  int order = shared ? memcmp(entry, name, shared) : 0;
   if (order != 0) {
     return order;
   }
-  // `entry` is NUL-terminated, `name` is not: equal over `name_length` bytes
-  // means the entry is longer, and so sorts after.
-  return entry[name_length] == '\0' ? 0 : 1;
+  if (entry_length == name_length) {
+    return 0;
+  }
+  return entry_length < name_length ? -1 : 1;
 }
 
 /**

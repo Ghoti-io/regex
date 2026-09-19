@@ -421,6 +421,44 @@ TEST(Property, StrictSpellingRejectsWhatEcmaScriptRejects) {
   EXPECT_NE(resolve("sc=Greek", GRX_PROPERTY_STRICT), UINT32_MAX);
 }
 
+TEST(Property, ANameMayContainANulAndIsStillJustBytes) {
+  // A pattern is bytes, so `\p{L\0\0\0}` hands the resolver a name whose
+  // first byte is `L` and whose rest are NUL. The first implementation used
+  // `strncmp`, which stops at a NUL: it reported the entry "L" as equal over
+  // all thirty-eight bytes, and the length check that followed then read
+  // thirty-six bytes past the end of a two-byte string in `.rodata`. The
+  // pattern fuzzer found it as a global-buffer-overflow.
+  //
+  // What must happen is that the name simply does not resolve - it is not
+  // the name of a property - and that nothing is read outside the table on
+  // the way to saying so. ASan is what proves the second half; this test is
+  // what makes the input reach it.
+  const char nul_name[] = "L\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
+  uint32_t property = 0;
+  EXPECT_EQ(grx_unicode_property_lookup(nul_name, sizeof(nul_name) - 1,
+                nullptr, 0, GRX_PROPERTY_STRICT, &property),
+      GRX_ERR_SYNTAX);
+  EXPECT_EQ(grx_unicode_property_lookup(nul_name, sizeof(nul_name) - 1,
+                nullptr, 0, GRX_PROPERTY_LOOSE, &property),
+      GRX_ERR_SYNTAX);
+
+  // A NUL *inside* a name that is otherwise a prefix of a real one, which is
+  // the shape that made strncmp report equality.
+  const char prefix[] = "Lu\0Lu";
+  EXPECT_EQ(grx_unicode_property_lookup(prefix, sizeof(prefix) - 1, nullptr,
+                0, GRX_PROPERTY_STRICT, &property),
+      GRX_ERR_SYNTAX);
+
+  // And the name without the NULs still resolves, so the fix did not make
+  // the resolver stricter than it was.
+  EXPECT_EQ(grx_unicode_property_lookup("L", 1, nullptr, 0,
+                GRX_PROPERTY_STRICT, &property),
+      GRX_OK);
+  EXPECT_EQ(grx_unicode_property_lookup("Lu", 2, nullptr, 0,
+                GRX_PROPERTY_STRICT, &property),
+      GRX_OK);
+}
+
 TEST(Property, LooseSpellingIgnoresCasePunctuationAndSpace) {
   EXPECT_NE(resolve("lu", GRX_PROPERTY_LOOSE), UINT32_MAX);
   EXPECT_NE(resolve("Lowercase_Letter", GRX_PROPERTY_LOOSE), UINT32_MAX);
