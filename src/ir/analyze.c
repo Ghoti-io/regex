@@ -68,13 +68,12 @@ static size_t add_length(size_t a, size_t b) {
 
 /** Multiply a length by a repeat count, saturating at "unbounded". */
 static size_t scale_length(size_t length, uint32_t count) {
-  if (length == GRX_NPOS) {
-    return count ? GRX_NPOS : 0;
-  }
+  // Zero repetitions of anything, and any number of repetitions of nothing,
+  // are both nothing - including zero repetitions of an unbounded body.
   if (!count || !length) {
-    return count ? 0 : 0;
+    return 0;
   }
-  if (length > GRX_NPOS / count) {
+  if (length == GRX_NPOS || length > GRX_NPOS / count) {
     return GRX_NPOS;
   }
   return length * count;
@@ -135,7 +134,6 @@ static Span walk(Analysis * analysis, uint32_t node_index);
 /** The span of a node's children, concatenated. */
 static Span walk_concat(Analysis * analysis, const GRX_IRNode * node) {
   Span span = {0, 0, 0, 0};
-  int first = 1;
 
   for (uint32_t child = node->first_child; child != GRX_INDEX_NONE;) {
     const GRX_IRNode * child_node = grx_ir_node(analysis->ir, child);
@@ -144,17 +142,15 @@ static Span walk_concat(Analysis * analysis, const GRX_IRNode * node) {
     }
     Span part = walk(analysis, child);
 
-    // The concatenation is anchored at the start if its first *consuming*
-    // part is, and at the end if its last part is. A leading assertion has
-    // zero length, so an anchored assertion followed by anything keeps the
-    // anchoring; anything followed by a trailing `$` keeps it too.
-    if (first) {
+    // Anchored at the start if any part *before the first one that can
+    // consume* is anchored: `^a` is anchored and so is `\b^a`, because a
+    // zero-width part in front of the `^` does not move where the match
+    // begins. `a^` is not.
+    if (!span.anchored_start && span.max_length == 0) {
       span.anchored_start = part.anchored_start;
-      first = 0;
     }
-    else if (span.min_length == 0 && span.max_length == 0) {
-      span.anchored_start = span.anchored_start || part.anchored_start;
-    }
+    // Anchored at the end if the last part is, or if an anchored part is
+    // followed only by zero-width ones: `a$` and `a$\b` both are.
     span.anchored_end = part.anchored_end
         || (span.anchored_end && part.min_length == 0
             && part.max_length == 0);

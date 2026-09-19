@@ -346,6 +346,59 @@ TEST(Facts, LengthsAndAnchoringAreConservative) {
   }
 }
 
+TEST(Facts, AnchoringSurvivesAZeroWidthPartAndNotAConsumingOne) {
+  // The arithmetic that is easy to get one step wrong. A zero-width part in
+  // front of a `^` does not move where the match begins, so `\b^a` is still
+  // anchored; a part that can consume does, so `a^` is not. The mirror image
+  // holds at the end.
+  struct {
+    const char * pattern;
+    bool start;
+    bool end;
+  } cases[] = {
+    {"^a", true, false},
+    {"\\b^a", true, false},
+    {"(?:)^a", true, false},
+    {"a^", false, false},
+    {"a$", false, true},
+    {"a$\\b", false, true},
+    {"$a", false, false},
+    {"^a$", true, true},
+    // `^` alone is anchored at the start and not at the end: it matches the
+    // empty string at position 0, and that is the end of the subject only
+    // when the subject is empty.
+    {"^", true, false},
+    {"$", false, true},
+    {"^$", true, true},
+    {"^a*", true, false},
+    {"(^a)", true, false},   // Through a capture.
+    {"(?:^a)+", true, false}, // A repeat that must run keeps its anchoring.
+    {"(?:^a)*", false, false}, // One that may not, does not.
+  };
+
+  for (const auto & test : cases) {
+    Compiled compiled(test.pattern, "");
+    ASSERT_TRUE(compiled.ok()) << test.pattern;
+    EXPECT_EQ(compiled.facts().anchored_start != 0, test.start)
+        << test.pattern << " anchored start";
+    EXPECT_EQ(compiled.facts().anchored_end != 0, test.end)
+        << test.pattern << " anchored end";
+  }
+}
+
+TEST(Facts, ZeroRepetitionsOfAnythingIsNothing) {
+  // Including zero repetitions of something unbounded, which is the case a
+  // saturating multiply gets wrong if it checks for "unbounded" first.
+  EXPECT_EQ(Compiled("(?:a*){0}", "").facts().max_length, 0u);
+  EXPECT_EQ(Compiled("(?:a*){0}", "").facts().min_length, 0u);
+  EXPECT_EQ(Compiled("a{0}", "").facts().max_length, 0u);
+  EXPECT_EQ(Compiled("(?:){5}", "").facts().max_length, 0u);
+
+  // And the other saturating direction: a large bounded repeat of something
+  // unbounded is unbounded, not a wrapped-around small number.
+  EXPECT_EQ(Compiled("(?:a*){2}", "").facts().max_length, GRX_NPOS);
+}
+
 TEST(Facts, LengthsAreBytesComputedFromWhatEachNodeCanMatch) {
   // A caller sizing a buffer from max_length must never be told a number that
   // is too small, so the lengths are bytes. They are computed per node rather
