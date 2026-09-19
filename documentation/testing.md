@@ -286,21 +286,30 @@ at a larger count.
 
 Run by `make test` alongside `check-symbols`:
 
-- **The dialect is gone after lowering:** no file under `src/exec/` names a
-  `GRX_SYNTAX_` constant, a `GRX_SyntaxSpec` or a `grx_syntax_*` function.
-  A grep, in the Makefile. **Built:** `make check-layering`, in `TEST_GATES`.
-  It is scoped to `src/exec/` because `src/compile/compile.c` holds the
-  public accessors and `grx_regex_syntax()` legitimately *reports* the
-  dialect a regex was compiled from; reporting is not branching. The gate
-  grows to cover `codegen.c` when WP-07 splits it out from the API file.
+- **The dialect is gone after lowering:** no file below the IR names a
+  `GRX_Syntax`, a `GRX_SYNTAX_` constant or a `grx_syntax_*` function, nor
+  reads `GRX_Regex::syntax` through the header. A grep, in the Makefile.
+  **Built:** `make check-layering`, in `TEST_GATES`, covering `src/exec/*`,
+  `src/compile/codegen.c` and `src/compile/program.c`. Three files are
+  legitimately *above* the line and the Makefile names them with the reason:
+  `compile.c` holds the public accessors and `grx_regex_syntax()` reports
+  rather than branches, `compile_internal.h` declares the field reporting
+  reads, and `lower.c` is where the dialect is spent.
+  **To check the gate itself:** put `GRX_Syntax x;` in `codegen.c`, or
+  `regex->syntax` in `exec_pike.c`. Both must fail the build.
 - **Every `GRX_Diag` has a string** and every string is used by some test
-  (the catalogue is not allowed to accumulate dead entries).
+  (the catalogue is not allowed to accumulate dead entries). **Half built:**
+  the completeness half is `DiagnosticCatalogueIsComplete`; the reachability
+  half waits for the front ends that emit the remaining diagnostics, which is
+  WP-18 and WP-23.
 - **Every `GRX_Feature` bit is set in at least one profile row** and
   **every profile row is complete** (no zero enum where zero is not a
-  value).
+  value). **Not built.**
 - **No STUB-marked test survives the stub it marks:** a test whose comment
   says `STUB` for a function whose implementation no longer returns
-  `GRX_ERR_UNSUPPORTED` fails.
+  `GRX_ERR_UNSUPPORTED` fails. **Not built, and no longer needed for the
+  stubs it was written for** - there are none left. Worth building before
+  the next round of stubs rather than after.
 
 ## 7. Importing the reference corpora
 

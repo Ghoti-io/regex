@@ -5,9 +5,12 @@ engines are specified in [design.md](design.md), which takes precedence where
 the two differ; this page is corrected as each work package in
 [plan.md](plan.md) lands.
 
-**Landed:** WP-01, the contract - the AST, the IR, the instruction set, the
-arena, the diagnostics, `GRX_Facts`, and the three dumps. The parser, lowering,
-codegen and the engines are still stubs.
+**Landed:** Phase 0 and Phase 1 of [plan.md](plan.md), less WP-11. A pattern
+in ECMAScript's legacy or Unicode mode parses, lowers, compiles and matches on
+either engine. Every other dialect is named and reports
+`GRX_ERR_UNSUPPORTED`; UnicodeSets (`v`) mode, conditionals, recursion and the
+backtracking control verbs compile as far as they can and are then refused,
+rather than approximated.
 
 ## Layout
 
@@ -22,10 +25,18 @@ src/ir/                   The AST lowered to a dialect-free IR
 src/compile/              IR to a program, and the compiled regex
 src/exec/                 The Pike VM and the backtracking engine
 src/charclass/            Character-class sets and the canonical class table
-src/unicode/              UTF-8 and case folding
+src/unicode/              UTF-8, case folding, property lookup
+src/unicode/tables/       Generated from the UCD; do not edit by hand
 src/regex.c               Version entry points
 tests/unit/               Unit tests (gtest)
-tests/fuzz/               libFuzzer harness and seed corpus
+tests/conformance/        The .rxt vector reader and its runner
+tests/fuzz/               libFuzzer harnesses and seed corpora
+tests/data/vectors/       Checked-in conformance vectors
+tests/data/probe/         What each reference implementation answered
+tools/unicode/            Fetch the UCD and generate the tables
+tools/oracle/             Drivers and harnesses that ask a reference
+                          implementation the same question this library
+                          was asked
 ```
 
 The headers mirror the modules, with two exceptions: `regex.h` is the umbrella
@@ -41,21 +52,28 @@ at is most of knowing where a bug is.
 
 | | Header | Holds | Built by |
 | --- | --- | --- | --- |
-| **AST** | `src/parse/parse_internal.h` | what the text *says*, dialect-shaped | the parser (WP-06) |
-| **IR** | `src/ir/ir_internal.h` | what it *means*, dialect-free | lowering (WP-07) |
-| **Program** | `src/compile/compile_internal.h` | what the engines *run* | codegen (WP-07) |
+| **AST** | `src/parse/parse_internal.h` | what the text *says*, dialect-shaped | `src/parse/parse.c` and the dialect's hooks |
+| **IR** | `src/ir/ir_internal.h` | what it *means*, dialect-free | `src/ir/lower.c` |
+| **Program** | `src/compile/compile_internal.h` | what the engines *run* | `src/compile/codegen.c` |
 
 All three are arenas of fixed-size nodes linked by `uint32_t` index, with
 `GRX_INDEX_NONE` for "no node" - never 0, because index 0 is the root. That
 shape means a tree is one allocation, is freed as a unit, and has no link a
 range check cannot validate.
 
-**The dialect is gone after lowering.** No file under `src/exec` may name a
-`GRX_SYNTAX_` constant, a `GRX_SyntaxSpec` or a `grx_syntax_*` function;
-`make check-layering` fails the build if one does. When a dialect difference
-seems to need an engine to know which dialect it is running, the construct it
-needs is missing from the IR - add it to
-`src/core/semantics_internal.h` and to the IR, not to the engine.
+**The dialect is gone after lowering.** No file under `src/exec`, and neither
+`src/compile/codegen.c` nor `src/compile/program.c`, may name a `GRX_Syntax`,
+a `GRX_SYNTAX_` constant or a `grx_syntax_*` function - nor read
+`GRX_Regex::syntax` through the header. `make check-layering` fails the build
+if one does, and the Makefile names the three files that are legitimately
+*above* the line with the reason for each.
+
+When a dialect difference seems to need an engine to know which dialect it is
+running, the construct it needs is missing from the IR - add it to
+`src/core/semantics_internal.h` and to the IR, not to the engine. That has
+happened twice so far and both times the addition was right:
+`GRX_OP_RESET` for the capture-reset rule, and the `empty_loop` mode on
+`PROGRESS_CHECK`.
 
 `src/compile/compile.c` does name `GRX_Syntax`, and legitimately: it holds the
 public accessors, and `grx_regex_syntax()` reports which dialect a regex was
@@ -109,7 +127,7 @@ bug is a wrong mode and nothing else looks wrong:
 
 ```
 ir: flags=0x00000001 prefer=leftmost-first nodes=3 captures=1 classes=0
-  repeat {0,} greedy empty=fail reset=each @0+4
+  repeat {1,} greedy empty=fail reset=each @0+4
     capture #1 @0+3
       char 'a' @1+1
 ```
@@ -118,11 +136,35 @@ ir: flags=0x00000001 prefer=leftmost-first nodes=3 captures=1 classes=0
 indexed by instruction, expanding the encodings a reader should not have to
 decode - a save slot as its group and end, a mode byte as its name:
 
+All three examples on this page are the real output for `/(a)+/u`, which is
+worth knowing when one of them stops matching: the page is wrong, or the
+format changed and this page was not.
+
 ```
-program: flags=0x00000001 prefer=leftmost-first insts=2 classes=0 registers=0
-     0  save           2  (group 1 start)
-     1  char           'a'  reverse
+regex: syntax=ecmascript options=0x00000040 captures=1 regular=yes
+program: flags=0x00000001 prefer=leftmost-first insts=15 classes=0 registers=1
+     0  save           0  (group 0 start)
+     1  reset          slots 2..3
+     2  save           2  (group 1 start)
+     3  char           'a'
+     4  save           3  (group 1 end)
+     5  split          6, 13
+     6  progress-set   r0
+     7  reset          slots 2..3
+     8  save           2  (group 1 start)
+     9  char           'a'
+    10  save           3  (group 1 end)
+    11  progress-check r0, 13  (fail)
+    12  jmp            5
+    13  save           1  (group 0 end)
+    14  match
 ```
+
+Fifteen instructions for four characters of pattern is what expansion costs:
+the `+` is one mandatory copy of the body and then an unbounded loop over a
+second, and each copy carries the dialect's two loop rules as a `reset` and a
+`progress-check`. A `reverse` flag appears on the consuming instructions of a
+lookbehind body.
 
 Code points are escaped in all three (`\x0A`, `\u{1F600}`), so a pattern
 containing a newline still dumps as one line per node and a diff stays
@@ -130,18 +172,37 @@ readable.
 
 ## Where a dialect lives
 
-A dialect is a row of `spec_table` in [`src/syntax/syntax.c`](../src/syntax/syntax.c)
-and nothing else. The parser reads `GRX_SyntaxSpec` rather than switching on
-`GRX_Syntax`, which is what keeps "does this syntax have possessive
-quantifiers" a single lookup instead of a condition repeated wherever
-quantifiers are parsed.
+A dialect is three things, in three places
+([design.md](design.md) section 4):
+
+- **A row of `spec_table`** in [`src/syntax/syntax.c`](../src/syntax/syntax.c):
+  which constructs it has. The parser reads `GRX_SyntaxSpec` rather than
+  switching on `GRX_Syntax`, which keeps "does this syntax have possessive
+  quantifiers" a single lookup instead of a condition repeated wherever
+  quantifiers are parsed.
+- **A row of `profiles`**, in the same file: what those constructs *mean*.
+  Small enums, one per axis on which real implementations differ, and
+  lowering turns each into an explicit IR node, flag or mode. Nothing here
+  reaches an engine.
+- **A `GRX_Frontend`** - the hooks for the spellings a table cannot
+  describe. `src/syntax/ecmascript.c` is the one that exists. A hook reads
+  text and produces a node; it never decides what a construct means, because
+  that is the profile's job, and keeping the two apart is what keeps the
+  hooks small.
 
 Adding a dialect is therefore:
 
 1. A constant in `GRX_Syntax`, before `GRX_SYNTAX_COUNT`.
-2. A row in `spec_table` and a name in `spec_names`.
-3. A section in [dialects.md](dialects.md) naming the reference document.
-4. Tests for whatever is *definitional* about it - the thing that makes it a
+2. A row in `spec_table`, a row in `profiles`, and a name in `spec_names`.
+3. A `GRX_Frontend` and an entry in `grx_frontend_for()`. Until that exists
+   the dialect reports `GRX_DIAG_DIALECT_NOT_IMPLEMENTED`, which is the right
+   answer: a caller uses this library to learn whether a pattern is valid
+   *for that engine*, and reading it with somebody else's grammar would tell
+   them it is when it is not.
+4. A section in [dialects.md](dialects.md) naming the reference document, and
+   an oracle installed so that `tools/oracle/probe.py` can fill its profile
+   cells by running the real implementation rather than by reading a manual.
+5. Tests for whatever is *definitional* about it - the thing that makes it a
    separate dialect rather than an alias for one already there.
 
 Point 4 is the one to be careful about. `tests/unit/test_syntax.cpp` states
@@ -164,8 +225,11 @@ Whatever an engine does, three properties are not negotiable:
   without a bound is an engine that turns a pattern into a denial of service.
 - **It is checked against the others.** Any pattern two engines can both run
   must produce the same captures from both. That cross-check is the cheapest
-  correctness test this library has, and it belongs in the suite as soon as
-  either engine runs.
+  correctness test this library has, because the engines share nothing below
+  the instruction set. Three things enforce it: the conformance runner asks
+  every eligible engine and compares them, `make check-engine-equivalence`
+  sweeps random patterns, and `tests/fuzz/fuzz_crossengine.cpp` aborts on a
+  disagreement.
 - **It never asks which dialect it is running.** See above.
 
 ## Adding a construct
@@ -192,25 +256,48 @@ the *program* is the bytes.
 
 The library is rebuilt with `-fsanitize=fuzzer-no-link` rather than linking
 the ordinary shared library, so libFuzzer sees the parser's branches. The
-first byte of each input selects the dialect and the limits, so that every
-syntax and the capped paths are reachable rather than only the defaults in
-one dialect. Keep that convention when adding a harness.
+first byte of each input selects the dialect, the options and the limits, so
+that every syntax and the capped paths are reachable rather than only the
+defaults in one dialect. Keep that convention when adding a harness.
+
+Three harnesses, and the split between them is the point:
+
+- `fuzz_pattern` fuzzes the **pattern**, which finds parser and compiler
+  defects.
+- `fuzz_subject` holds a corpus of interesting patterns fixed and fuzzes the
+  **subject**, which is where the engines' own defects live. A fuzzer that
+  varied both would spend almost all its time on patterns that do not
+  compile.
+- `fuzz_crossengine` runs **both engines** on one program and aborts when
+  they disagree.
+
+Keep the budgets small in a harness that runs a subject. `max_steps` defaults
+to ten million, and `fuzz_subject` runs every input four ways; with the
+defaults it managed 83 executions a second, which is a fuzzer that explores
+almost nothing. The limits' own arithmetic is unit-tested, so the fuzzer's job
+is to reach many *shapes* of input rather than to exhaust one budget.
 
 ```bash
 make fuzz FUZZ_TIME=3600
-make fuzz-run-pattern FUZZ_TIME=600
+make fuzz-run-crossengine FUZZ_TIME=600
 ```
-
-Coverage is low until the parser exists; that is expected, and is the
-measurement to repeat once it does.
 
 ## Memory
 
 Every allocation goes through the `GRX_Allocator` the caller supplied.
-`grxtest::CountingAllocator` in `tests/test_helpers.h` is how a test states
-that a failing call allocated nothing - which is where a parser that unwinds
-by hand usually leaks, and where these tests will earn their keep once there
-is a parser to unwind.
+Two helpers in `tests/test_helpers.h`:
+
+`grxtest::CountingAllocator` is how a test states that a call allocated
+nothing, or that everything it allocated came back.
+
+`grxtest::FailingAllocator` refuses the *n*th allocation and lets every other
+through. `tests/unit/test_oom.cpp` counts how many allocations a whole
+compile-and-match takes and then runs it again once per allocation with that
+one refused. That is how the `GRX_ERR_OOM` branches get exercised at all -
+they are unreachable by hand - and what it checks is that the refusal comes
+back as a result code and that nothing leaked. The failure path is the one
+that unwinds a half-built structure and is never taken in ordinary use, so a
+missing `free` lives there for years.
 
 ## What is deliberately absent
 
@@ -223,7 +310,12 @@ is a parser to unwind.
 - **Substitution and splitting.** `grx_regex_replace()` and a split are the
   obvious next surface, and they need decisions the matcher does not: what a
   replacement template's syntax is, and which dialect's spelling of `$1`
-  versus `\1` applies. Not designed yet; see dialects.md.
+  versus `\1` applies. Specified in dialects.md section 5.11 and scheduled as
+  WP-16; not built.
+- **Iteration.** `grx_regex_search_next()` is WP-15. The rule it has to
+  apply - what a search-all loop does after an *empty* match - is already on
+  the profile as `GRX_IterationRule`, because it is a dialect decision and
+  there are three answers in the wild.
 - **A `GRX_Node` accessor API.** The syntax tree is internal. A consumer that
   wants to walk a pattern - to translate between dialects, say - is a reason
   to widen the public API deliberately, not a reason to install

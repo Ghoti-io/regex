@@ -23,8 +23,11 @@ int main(void) {
   GRX_Error error;
   GRX_Regex * regex = NULL;
 
-  if (grx_regex_compile_with_allocator("(\\w+)@(\\w+)", 11, GRX_SYNTAX_PCRE,
-          GRX_OPT_CASELESS, NULL, NULL, &error, &regex) != GRX_OK) {
+  // ECMAScript with the `u` flag, which is the only dialect built today.
+  if (grx_regex_compile_with_allocator("(\\w+)@(\\w+)", 11,
+          GRX_SYNTAX_ECMASCRIPT, GRX_OPT_CASELESS | GRX_OPT_UTF, NULL, NULL,
+          &error, &regex)
+      != GRX_OK) {
     fprintf(stderr, "%s at offset %zu\n", error.message, error.offset);
     return 1;
   }

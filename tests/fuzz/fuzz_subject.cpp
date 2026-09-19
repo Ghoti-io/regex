@@ -73,13 +73,18 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t * data, size_t size) {
     size--;
   }
 
+  // Both budgets are small, and deliberately. The default max_steps is ten
+  // million, and this harness runs every input on both engines and both
+  // entry points - so one adversarial subject against the backtracker costs
+  // more than ten thousand ordinary ones. Measured: the defaults gave 83
+  // executions a second, which is a fuzzer that explores almost nothing.
+  // A fuzzer's job here is to reach many *shapes* of input; the limits' own
+  // arithmetic is unit-tested.
   GRX_Limits limits;
   grx_limits_default(&limits);
-  if (selector & 0x40) {
-    limits.max_steps = 5000;
-    limits.max_backtrack = 500;
-    limits.max_match_memory = 64 * 1024;
-  }
+  limits.max_steps = (selector & 0x40) ? 2000 : 50000;
+  limits.max_backtrack = (selector & 0x40) ? 200 : 5000;
+  limits.max_match_memory = 256 * 1024;
 
   uint32_t options = GRX_OPT_UTF;
   if (selector & 0x20) {
