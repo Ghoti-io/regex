@@ -232,6 +232,13 @@ LIBOBJECTS := $(patsubst src/%.c,$(OBJ_DIR)/%.o,$(SOURCES))
 
 TESTFLAGS := `PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs --cflags gtest`
 
+# The checks `make test` runs besides the tests themselves. Named in a
+# variable so that a build which cannot satisfy them can clear it: the
+# coverage target does, because --coverage links the gcov runtime, whose
+# mangle_path check-symbols is right to reject in a shipping library and
+# wrong to reject in an instrumented one. Spelled as text's TEST_GATES is.
+TEST_GATES ?= check-symbols
+
 # Valgrind flags (exclude "still reachable" as it's not a leak)
 VALGRIND_FLAGS := --leak-check=full --show-leak-kinds=definite,indirect,possible --track-origins=yes --error-exitcode=1
 
@@ -385,7 +392,8 @@ $(OBJ_DIR)/tests/%.o: tests/unit/%.cpp
 define test-executable-rule
 TEST_OBJ_$1 := $(OBJ_DIR)/tests/$(basename $(notdir $1)).o
 
-$(APP_DIR)/$2$(EXE_EXTENSION): $$(TEST_OBJ_$1) $(TEST_HELPER_OBJ) $(APP_DIR)/$(STATIC_TARGET)
+$(APP_DIR)/$2$(EXE_EXTENSION): $$(TEST_OBJ_$1) $(TEST_HELPER_OBJ) \
+		$(APP_DIR)/$(STATIC_TARGET) | $(APP_DIR)/$(TARGET)
 	@printf "\n### Linking Test: $2 ###\n"
 	@mkdir -p $$(@D)
 	$(CXX) $(CXXFLAGS) -o $$@ $$(TEST_OBJ_$1) $(TEST_HELPER_OBJ) $(LDFLAGS) $(REGEXLIBRARY) $(CUTIL_LIBS) $(TESTFLAGS)
@@ -399,7 +407,8 @@ $(foreach pair,$(TEST_PAIRS),\
 ####################################################################
 
 # Links the archive, so it depends on the archive; see test-executable-rule.
-$(APP_DIR)/examples/%$(EXE_EXTENSION): examples/%.c $(APP_DIR)/$(STATIC_TARGET)
+$(APP_DIR)/examples/%$(EXE_EXTENSION): examples/%.c $(APP_DIR)/$(STATIC_TARGET) \
+		| $(APP_DIR)/$(TARGET)
 	@printf "\n### Compiling Example: $* ###\n"
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(INCLUDE) -o $@ $< $(LDFLAGS) $(REGEXLIBRARY) $(CUTIL_LIBS)
@@ -441,7 +450,7 @@ test-watch: ## Watch the file directory for changes and run the unit tests
 		done
 
 examples: ## Build all examples
-examples: $(APP_DIR)/$(STATIC_TARGET) $(EXAMPLES)
+examples: $(APP_DIR)/$(TARGET) $(EXAMPLES)
 	@printf "\033[0;32m\n"
 	@printf "############################\n"
 	@printf "### Examples built       ###\n"
@@ -545,7 +554,7 @@ else
 endif
 
 test: ## Make and run the unit tests
-test: $(APP_DIR)/$(TARGET) $(TEST_EXECUTABLES) check-symbols
+test: $(APP_DIR)/$(TARGET) $(TEST_EXECUTABLES) $(TEST_GATES)
 	@for test_exe in $(TEST_EXECUTABLES); do \
 		test_name=$$(basename $$test_exe $(EXE_EXTENSION)); \
 		printf "\033[0;30;43m\n"; \
@@ -891,16 +900,30 @@ coverage: ## Build instrumented, run the tests, and report line coverage
 # instrumented objects behind would have a later `make` silently link them,
 # and leaving the tree cleaned would break any sibling project that links this
 # one. The cost is one extra build; coverage is not run often.
-# test-quiet rather than test: `test` depends on check-symbols, and an
-# instrumented build links gcov's runtime, which exports mangle_path and so
-# fails a check that is about the shipped library rather than this one.
 	@$(MAKE) --no-print-directory clean > /dev/null
-	@$(MAKE) --no-print-directory test-quiet \
+# The instrumented build, the report and the restoration of the tree are one
+# shell command so that the cleanup runs whatever fails. Letting a failure
+# stop the recipe leaves the --coverage objects in build/, and the next
+# ordinary `make` links them into a library that needs the gcov runtime; every
+# later build then fails with undefined references to __gcov_init until
+# somebody works out why.
+#
+# TEST_GATES is cleared because --coverage links the gcov runtime, which
+# exports mangle_path. check-symbols is right to reject that in a shipping
+# build and wrong to reject it here, and it made this target fail before it
+# ever produced a report.
+	@status=0; \
+	$(MAKE) --no-print-directory test TEST_GATES= \
 		EXTRA_CFLAGS="--coverage -O0" \
-		EXTRA_LDFLAGS="--coverage" > /dev/null
-	@tools/coverage.sh $(OBJ_DIR)
-	@$(MAKE) --no-print-directory clean > /dev/null
-	@$(MAKE) --no-print-directory all > /dev/null
+		EXTRA_LDFLAGS="--coverage" > /dev/null || status=$$?; \
+	if [ $$status -eq 0 ]; then \
+		tools/coverage.sh $(OBJ_DIR) || status=$$?; \
+	else \
+		printf "coverage: the instrumented test run failed; no report\n" >&2; \
+	fi; \
+	$(MAKE) --no-print-directory clean > /dev/null; \
+	$(MAKE) --no-print-directory all > /dev/null; \
+	exit $$status
 
 clean: ## Remove all contents of the build directories.
 	-@rm -rvf $(OBJ_DIR)/*
