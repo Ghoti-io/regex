@@ -1,0 +1,58 @@
+# Hand-written. Unlike the rest of this directory these are not the oracle's
+# answers - Node has no `max_backtrack` and nothing to say about this. They
+# are claims about *this library's* defaults, written down because the long
+# subjects in long.rxt found them and nothing else had.
+#
+# `max_backtrack` defaults to 100,000 entries. A greedy loop over the subject
+# pushes one entry per position, so both backtracking engines refuse a
+# subject past roughly that many positions - on an ordinary anchored scan,
+# not a hostile pattern. The Pike VM has no such stack and answers at any
+# length, which is why GRX_ENGINE_AUTO picks it: a caller who does not choose
+# an engine never meets this.
+#
+# These records exist so that the ceiling moves deliberately. If a change
+# makes the backtrackers scale, or moves the default, these fail and say so.
+dialect: ecmascript
+unicode: 17.0
+
+# Just inside: 64 Ki positions, under the 100,000-entry stack.
+pattern: ^a+$
+flags: u
+subject: a
+repeat: 65536
+engines: backtrack bitstate
+expect: 0-$
+
+# Just outside: 128 Ki positions.
+pattern: ^a+$
+flags: u
+subject: a
+repeat: 131072
+engines: backtrack bitstate
+expect: limit
+
+# The Pike VM answers the same subject, which is the point of having it.
+pattern: ^a+$
+flags: u
+subject: a
+repeat: 131072
+engines: pike
+expect: 0-$
+
+# Raising the limit is all it takes: the work was never the problem.
+pattern: ^a+$
+flags: u
+subject: a
+repeat: 131072
+engines: backtrack bitstate
+limits: max_backtrack=1000000
+expect: 0-$
+
+# A pattern with no greedy loop over the subject does not push per position,
+# so the backtrackers scale on it at the default limit.
+pattern: [0-9]+
+flags: u
+subject: ab
+repeat: 524288
+engines: backtrack bitstate
+expect: nomatch

@@ -81,6 +81,13 @@ expect: 3-4
 pattern: (x+x+)+y
 subject: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 expect: limit
+
+pattern: ^a+$
+flags: u
+subject: a
+repeat: 1048576
+engines: pike
+expect: 0-$
 ```
 
 - `pattern`, `subject`: escaped with `\xHH`, `\uHHHH`, `\u{H+}`, `\n`,
@@ -90,7 +97,16 @@ expect: limit
   test of that function is that every vector's flags parse.
 - `expect`: `<start>-<end>` per group, `-` for a group that did not
   participate; `nomatch`; `error <syntax|unsupported|limit|invalid>`; or
-  `limit` for a search that must hit `max_steps`.
+  `limit` for a search that must hit a limit. Either end of a span may be
+  `$`, meaning the subject's length.
+- `repeat: <n>`: the subject is `subject:` repeated `n` times. A megabyte of
+  `a` written out is a record nobody reads, and the whole design requirement
+  here is that a record can be pasted into a bug report - so
+  `subject: a` with `repeat: 1048576` says it instead, and `expect: 0-$`
+  avoids an end offset a person would have to compute and keep in step.
+  Bounded at 16,777,216 repetitions and 64 MB of subject, because a typo
+  here is an out-of-memory rather than a failed assertion, and a suite that
+  dies has told nobody anything.
 - `engines:` restricts which engines are asked - `pike`, `backtrack`,
   `bitstate` - and defaults to every eligible one; `limits:` overrides a
   limit for the record; `skip: <reason>` records a known deviation without
@@ -408,6 +424,27 @@ comparing them should not have to open three files.
 - `fuzz_crossengine`: bits 0-2 are `CASELESS`, `MULTILINE` and `DOTALL`; bits
   3-4 together select `v`, so one input in four reads the UnicodeSets
   grammar.
+
+**How long an input, and why that is a second question.** libFuzzer's
+default `-max_len` is 4096 and nothing overrode it, so until `FUZZ_MAX_LEN`
+was added no pattern and no subject over 4 KB had ever been fuzzed - against
+a `max_pattern_length` of 65,536. The ceiling is now that limit, so a
+harness can reach the refusal as well as everything below it.
+
+Raising the ceiling is not enough on its own: libFuzzer grows inputs from
+short to long over a run, and a run measured in minutes never arrives. So
+there are two modes, and neither replaces the other.
+
+| | length control | what it is for |
+| --- | --- | --- |
+| `make fuzz-run-<h>` | on | the short end, where most bugs are and where throughput is highest |
+| `make fuzz-long-<h>` | off | generates at the full length from the first input; the only way the long end is reached at all |
+
+It costs less throughput than it looks, because every harness caps
+`max_steps` far below the default: a long subject ends at the step limit
+rather than scanning to the end. The first full-length runs held 1,250-1,900
+executions a second and pushed the longest corpus entry from 4,088 bytes to
+13,865.
 
 **A run count is not coverage.** Until `9bac05f` the pattern fuzzer chose
 uniformly from sixteen dialects, fifteen of which refuse everything at the

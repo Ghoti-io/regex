@@ -473,7 +473,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/limits/%.c $(APP_DIR)/$(STATIC_TARGET)
 # Debug build commands
 .PHONY: all-debug install-debug test-debug test-valgrind-debug test-watch-debug uninstall-debug watch-debug
 # Fuzz commands
-.PHONY: fuzz fuzz-clean
+.PHONY: fuzz fuzz-long fuzz-clean
 
 watch: ## Watch the file directory for changes and compile the target
 	@while true; do \
@@ -998,6 +998,24 @@ FUZZ_CORPUS := tests/fuzz/corpus
 # A smoke-test length by default; for a real campaign: make fuzz FUZZ_TIME=3600
 FUZZ_TIME ?= 60
 
+# The longest input libFuzzer may build.
+#
+# It was libFuzzer's own default of 4096 until it was checked, which meant no
+# pattern over 4 KB and no subject over 4 KB had ever been fuzzed, against a
+# max_pattern_length of 65,536. 64 KB is that limit, so the harness can reach
+# the refusal as well as everything under it. It costs less throughput than
+# it looks: every harness caps max_steps well below the default, so a long
+# subject ends at the step limit rather than scanning to the end.
+FUZZ_MAX_LEN ?= 65536
+
+# libFuzzer grows its inputs from short to long over the course of a run, so
+# a run that ends in minutes never reaches FUZZ_MAX_LEN. `fuzz-long-<h>`
+# turns that off and generates at the full length from the first input. The
+# two are complementary and neither replaces the other: length control is
+# what makes a short run find shallow bugs quickly, and turning it off is the
+# only way the long end is ever reached.
+FUZZ_LEN_CONTROL ?= 1
+
 $(FUZZ_OBJ_DIR)/%.o: src/%.c
 	@mkdir -p $(@D)
 	@$(FUZZ_CC) $(FUZZ_LIB_FLAGS) -std=c17 -w $(INCLUDE) -c $< -MMD -MP -MF $(@:.o=.d) -o $@
@@ -1022,7 +1040,16 @@ fuzz-run-$2: $$(FUZZ_APP_DIR)/$1
 	@mkdir -p $$(FUZZ_CORPUS)/$2
 	@printf "\n### Fuzzing $2 for $$(FUZZ_TIME)s ###\n"
 	@LD_LIBRARY_PATH="$(TEST_LD_PATH)" $$(FUZZ_APP_DIR)/$1 $$(FUZZ_CORPUS)/$2 \
-		-max_total_time=$$(FUZZ_TIME) -print_final_stats=1
+		-max_total_time=$$(FUZZ_TIME) -max_len=$$(FUZZ_MAX_LEN) \
+		-len_control=$$(FUZZ_LEN_CONTROL) -print_final_stats=1
+
+fuzz-long-$2: ## Run the $2 fuzzer at FUZZ_MAX_LEN from the first input
+fuzz-long-$2: $$(FUZZ_APP_DIR)/$1
+	@mkdir -p $$(FUZZ_CORPUS)/$2
+	@printf "\n### Fuzzing $2 for $$(FUZZ_TIME)s at up to $$(FUZZ_MAX_LEN) bytes ###\n"
+	@LD_LIBRARY_PATH="$(TEST_LD_PATH)" $$(FUZZ_APP_DIR)/$1 $$(FUZZ_CORPUS)/$2 \
+		-max_total_time=$$(FUZZ_TIME) -max_len=$$(FUZZ_MAX_LEN) \
+		-len_control=0 -print_final_stats=1
 endef
 
 $(eval $(call fuzz-rule,fuzz_pattern,pattern))
@@ -1031,6 +1058,9 @@ $(eval $(call fuzz-rule,fuzz_crossengine,crossengine))
 
 fuzz: ## Build and run every fuzzer for $(FUZZ_TIME) seconds each
 fuzz: fuzz-run-pattern fuzz-run-subject fuzz-run-crossengine
+
+fuzz-long: ## Run every fuzzer at full length for $(FUZZ_TIME) seconds each
+fuzz-long: fuzz-long-pattern fuzz-long-subject fuzz-long-crossengine
 
 fuzz-clean: ## Remove the fuzz build (keeps the corpus)
 	-@rm -rf $(FUZZ_DIR)

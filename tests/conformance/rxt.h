@@ -36,6 +36,15 @@ enum class Expectation {
   Limit,     ///< The search must exhaust a limit.
 };
 
+/**
+ * In a span, the subject's own length.
+ *
+ * `expect: 0-$` is the only way to write the end of a repeated subject
+ * without doing the arithmetic in the file, and a number a person computed
+ * by hand is a number that goes stale the moment `repeat:` changes.
+ */
+const size_t kSubjectLength = (size_t)-1;
+
 /** One group's expected span, or "did not participate". */
 struct Span {
   bool set = false;
@@ -54,7 +63,17 @@ struct Record {
   std::string flags;       ///< The dialect's own alphabet.
   uint32_t options = 0;    ///< What the flags mean.
   bool has_subject = false;
-  std::string subject;     ///< Decoded.
+  std::string subject;     ///< Decoded, and already repeated.
+
+  /**
+   * How many times `subject:` is repeated.
+   *
+   * A long subject written out is a vector nobody reads, and the format's
+   * whole requirement is that a record can be pasted into a bug report. So
+   * a megabyte of `a` is `subject: a` with `repeat: 1048576`, which is
+   * still evidence a person can check.
+   */
+  size_t repeat = 1;
 
   Expectation expectation = Expectation::NoMatch;
   std::vector<Span> spans; ///< For Expectation::Spans.

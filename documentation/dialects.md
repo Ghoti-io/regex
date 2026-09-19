@@ -506,13 +506,22 @@ to every phase.
 
 | Limit | median | p99 | max | default | headroom | what needs the most |
 | --- | --- | --- | --- | --- | --- | --- |
-| `max_pattern_length` | 19 | 77 | 179 | 65536 | 366× | a semver pattern |
-| `max_nesting_depth` | 1 | 5 | 10 | 128 | 13× | `^((((((((((a))))))))))$` |
-| `max_nodes` | 11 | 46 | 13962 | 100000 | 7× | `\p{RGI_Emoji}` |
-| `max_captures` | 1 | 7 | 10 | 1000 | 100× | the same nested group |
+| `max_pattern_length` | 19 | 426 | 14005 | 65536 | 5× | a 2,000-branch alternation |
+| `max_nesting_depth` | 1 | 10 | 10 | 128 | 13× | the RFC 822 address regex |
+| `max_nodes` | 11 | 710 | 14005 | 100000 | 7× | the same alternation |
+| `max_captures` | 1 | 7 | 10 | 1000 | 100× | `^((((((((((a))))))))))$` |
 | `max_repeat_count` | 1 | 253 | 1000 | 65536 | 66× | `^.{0,1000}$` |
 | `max_class_ranges` | 5 | 702 | 1463 | 10000 | 7× | `\p{L}` |
-| `max_program_size` | 26 | 2007 | 33445 | 200000 | 6× | `\p{RGI_Emoji}` |
+| `max_program_size` | 25 | 3074 | 33445 | 200000 | 6× | `^\p{RGI_Emoji}+$` |
+
+The corpus grew a long tail after this table was first written, and the
+`max_pattern_length` row is why it had to. Its longest entry had been 179
+bytes - shorter than the RFC 5322 address regex most people have met - so a
+366× headroom was being reported against a corpus with nothing long in it.
+With the published RFC 5322 and RFC 822 address regexes and a generated
+alternation added, the same default has 5× headroom and a p99 five times
+higher. Nothing about the library changed; the measurement stopped
+flattering it.
 
 Nothing in the corpus is refused by a default, and the two tightest -
 `max_nodes` and `max_program_size`, at six and seven times - are both bound
@@ -527,6 +536,26 @@ the atom out `n` times instead adds 13,958 *nodes* each time, and is refused
 by `max_nodes` at eight copies with the program still at 133,757. Both
 refusals name their field, which is the right answer rather than a gap - but
 the field they name is not the same one.
+
+### `max_backtrack` bounds the subject, not just the pattern
+
+The limit that reads as a defence against a hostile pattern is also a
+ceiling on how long a subject the two backtracking engines will scan, and
+that was not known until `long.rxt` was written. A greedy loop over the
+subject pushes one backtrack entry per position, so at the default 100,000
+entries `/^a+$/u` is answered at 65,536 bytes and refused at 131,072 - on an
+ordinary anchored scan, with the work itself nowhere near any other limit.
+Raising `max_backtrack` to a million makes the same 1 MB subject match in
+3,145,733 steps, comfortably inside `max_steps`.
+
+The Pike VM has no such stack and answers at any length, which is why
+`GRX_ENGINE_AUTO` picks it and why a caller who does not name an engine
+never meets this. It matters to a caller who *does* name one:
+`GRX_ENGINE_BACKTRACK` and `GRX_ENGINE_BITSTATE` are for patterns the Pike
+VM cannot run - backreferences, lookaround, recursion - and on a long
+subject those callers need `max_backtrack` raised to match.
+`tests/data/vectors/ecmascript/long_limits.rxt` pins all of this, so the
+ceiling moves deliberately rather than silently.
 
 `max_lookbehind_length` is not in the table. Its default is 255, the corpus
 says nothing about it, and it does not apply to ECMAScript at all -

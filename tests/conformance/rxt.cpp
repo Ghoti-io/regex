@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <stdexcept>
 #include <dirent.h>
 #include <fstream>
 #include <sstream>
@@ -153,6 +154,17 @@ bool decode_field(const std::string & field, std::string * out_value,
 
 namespace {
 
+/**
+ * What `repeat:` may ask for.
+ *
+ * The count bound keeps a typo from being an allocation failure; the byte
+ * bound is what the whole suite is willing to hold for one record. 64 MB is
+ * far above the longest vector here (1 MB) and far below anything that
+ * would trouble a CI runner.
+ */
+const size_t kMaxRepeat = 1u << 24;
+const size_t kMaxSubject = 64u << 20;
+
 /** Parse an `expect:` field into a record. */
 bool parse_expectation(
     const std::string & value, Record * record, std::string * out_error) {
@@ -201,8 +213,10 @@ bool parse_expectation(
       return false;
     }
     span.set = true;
-    span.start = (size_t)std::stoul(field.substr(0, dash));
-    span.end = (size_t)std::stoul(field.substr(dash + 1));
+    std::string start = field.substr(0, dash);
+    std::string end = field.substr(dash + 1);
+    span.start = start == "$" ? kSubjectLength : (size_t)std::stoul(start);
+    span.end = end == "$" ? kSubjectLength : (size_t)std::stoul(end);
     record->spans.push_back(span);
   }
 
@@ -328,6 +342,46 @@ bool read_vector_file(
     record.line = record_line;
     record.text = record_text;
     record.syntax = file_syntax;
+
+    if (record.repeat != 1) {
+      if (!record.has_subject) {
+        *out_error = path + ":" + std::to_string(record_line)
+            + ": repeat: with no subject:";
+        return false;
+      }
+      if (record.subject.empty()) {
+        *out_error = path + ":" + std::to_string(record_line)
+            + ": repeat: of an empty subject:";
+        return false;
+      }
+      if (record.subject.size() > kMaxSubject / record.repeat) {
+        *out_error = path + ":" + std::to_string(record_line)
+            + ": repeat: would build a subject over "
+            + std::to_string(kMaxSubject) + " bytes";
+        return false;
+      }
+      std::string once;
+      once.swap(record.subject);
+      record.subject.reserve(once.size() * record.repeat);
+      for (size_t i = 0; i < record.repeat; i++) {
+        record.subject += once;
+      }
+    }
+
+    // `$` means the subject's length, and the subject is only now its final
+    // size. Resolved here rather than at parse time for that reason: a
+    // record may say `repeat:` after its `expect:`.
+    for (Span & span : record.spans) {
+      if (!span.set) {
+        continue;
+      }
+      if (span.start == kSubjectLength) {
+        span.start = record.subject.size();
+      }
+      if (span.end == kSubjectLength) {
+        span.end = record.subject.size();
+      }
+    }
     // The test of grx_options_parse() is that every vector's flags parse
     // (documentation/testing.md section 3). A vector whose flags it rejects
     // is a failure of one or the other, and either way it must be said.
@@ -454,6 +508,25 @@ bool read_vector_file(
         *out_error = path + ":" + std::to_string(line_number) + ": " + failure;
         return false;
       }
+    }
+    else if (key == "repeat") {
+      // Bounded, because a typo here is an out-of-memory rather than a
+      // failed assertion, and a suite that dies has told nobody anything.
+      unsigned long long count = 0;
+      try {
+        count = std::stoull(value);
+      }
+      catch (const std::exception &) {
+        *out_error = path + ":" + std::to_string(line_number)
+            + ": repeat: wants a count";
+        return false;
+      }
+      if (count < 1 || count > kMaxRepeat) {
+        *out_error = path + ":" + std::to_string(line_number)
+            + ": repeat: must be 1.." + std::to_string(kMaxRepeat);
+        return false;
+      }
+      record.repeat = (size_t)count;
     }
     else if (key == "skip") {
       record.skip = value;

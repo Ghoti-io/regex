@@ -4,6 +4,12 @@ build
 # Debug artifacts (GDB scripts, captured stderr, sanity/trace dumps)
 *.gdb
 *.txt
+# ...but not the corpora, which are inputs rather than output. `*.txt` had
+# quietly kept tools/limits/real_world.txt - half of what WP-14 measures the
+# limit defaults against - out of every clone but this one, so `make
+# check-limits` elsewhere would have produced a different table from the one
+# documentation/dialects.md section 7 publishes.
+!tools/limits/*.txt
 
 # IDE / CTest run output (not used by project Makefile)
 Testing
