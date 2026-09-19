@@ -799,6 +799,42 @@ The sweep that found the third is `tools/oracle/syntax_diff.py`, run by
 corpus of short patterns and a random corpus of long ones, and currently
 finds no disagreement over 720,000 cases per seed.
 
+Five more were found the day test262 was imported, and they are the argument
+for importing a corpus somebody else wrote rather than only generating one.
+Every differential gate here was green at the time; all five had been green
+for as long as the code existed.
+
+4. **The binary property list is closed.** `\p{Other_Alphabetic}` is a real
+   UCD property and a `SyntaxError` in JavaScript: ECMA-262 names the binary
+   properties a pattern may spell, and that list does not include the
+   `Other_*` family, `Grapheme_Link`, `Hyphen` or
+   `Prepended_Concatenation_Mark`. The generator had the list, under a
+   comment saying what it was for, and nothing read it - so every binary
+   property in the UCD was reachable. Eleven names, accepted where the
+   specification requires refusal.
+5. **`Script=Unknown` exists.** `Scripts.txt` lists what is assigned;
+   everything else is `Unknown` (`Zzzz`), a value ECMA-262 accepts and the
+   file does not carry, so it had to be synthesised and was not.
+6. **`Changes_When_NFKC_Casefolded` was missing.** It is in ECMA-262's list
+   and lives in `DerivedNormalizationProps.txt`, which was fetched and never
+   read.
+7. **A group name always uses the Unicode escape grammar.**
+   `RegExpIdentifierStart` is `\ RegExpUnicodeEscapeSequence[+UnicodeMode]`
+   with the parameter set unconditionally, so `(?<\u{1d5b0}x>y)` is a valid
+   name in a pattern with no flags. The parser passed it the `u` flag
+   instead, and rejected fifty-five of test262's named-group cases.
+8. **A backreference inside a lookbehind ran forwards.** A lookbehind body
+   carries `GRX_INST_REVERSE` and steps backwards; `GRX_OP_BACKREF` compared
+   forward from the position and advanced forward inside it. The visible
+   result was captures whose end preceded their start - `(.)(?<=(\1\1))`
+   against `"aaa"` reported group 2 as `3-1` - and lookbehinds that matched
+   when they must not.
+
+A ninth was not a rule but an engine: `(a?b??)*` against `"abc"` answered
+`0-1` on the Pike VM where every other engine and ECMA-262 answer `0-2`. See
+[design.md](design.md) §3.5.2 for what was wrong and why a corpus of
+hand-written patterns was what found it.
+
 ### 8.6.1 Where the oracle is wrong
 
 One `v`-mode rule goes the other way: the oracle is wrong and this library

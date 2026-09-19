@@ -318,8 +318,35 @@ run, never a quiet substitution.
 #### 3.5.1 Pike VM
 
 Cox's lockstep simulation: two thread lists as sparse sets keyed by program
-counter, so each `(pc, position)` pair is visited at most once per position
-and the bound is structural rather than counted. Threads are ordered by
+counter *and by a stall mask*, so the bound is structural rather than counted.
+
+The mask is what makes the set sound. A plain `(pc, position)` key assumes
+two threads at one program counter have the same future - true of a pure NFA,
+and false here, because `GRX_OP_PROGRESS_CHECK` consults a register and two
+arrivals can carry different values in it. `(a?b??)*` against `"abc"` is the
+case that showed it: the first iteration reaches the lazy `b??` at position 1
+with the register holding 0, the second reaches the same program counter at
+the same position with it holding 1, so one of them is a stalled iteration
+and the other is not - and the second arrival was dropped as a duplicate,
+taking with it the thread that goes on to match `b`. The engine answered
+`0-1` where the backtracker, the bit-state engine and ECMA-262 all answer
+`0-2`.
+
+Only *equality with the current position* can distinguish two register
+values, because that is the only question `PROGRESS_CHECK` asks and positions
+only advance, so a register holding anything else can never equal a later
+one. One bit per register is therefore the whole of the distinction, and
+threads at one program counter with the same bits really are interchangeable.
+The lists and the closure stack grow against `max_match_memory` rather than
+assuming one thread per program counter, so a pattern that needs an
+unreasonable number of them is refused with `GRX_ERR_LIMIT` - an answer,
+where the fixed size would have had to choose between a wrong result and a
+write past the end.
+
+This is worth stating plainly because the invariant the sparse set exists to
+provide is the library's headline claim. It still holds: the mask is bounded
+by the number of potentially-empty loops enclosing a program counter, not by
+the subject. Threads are ordered by
 priority, which is what makes the result leftmost-*first*; a leftmost-*longest*
 mode for the POSIX dialects keeps running after the first `MATCH` and reports
 the last one. Per-thread state is the capture array plus the progress

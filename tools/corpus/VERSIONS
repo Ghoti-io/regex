@@ -1,0 +1,20 @@
+# The reference corpora, pinned.
+#
+# One line per corpus: <name> <ref>. The ref is what tools/corpus/fetch.sh
+# fetches and what a published pass rate names - "94% of test262" means
+# nothing without it, because the corpus grows.
+#
+# Raise one of these deliberately: a new ref is new cases, and new cases that
+# fail are findings rather than regressions.
+
+# tc39/test262. The `test/built-ins/RegExp` tree only.
+test262 35d566604512cba908054eec49f85e64a59f3091
+
+# PhilipHazel/pcre2. testinput1 (Perl-compatible) and testinput2
+# (PCRE2-specific), from the release that matches the pcre2test on this
+# machine: 10.46.
+pcre2 pcre2-10.46
+
+# Perl/perl5. t/re/re_tests, from the release matching the perl on this
+# machine: 5.40.1.
+perl v5.40.1

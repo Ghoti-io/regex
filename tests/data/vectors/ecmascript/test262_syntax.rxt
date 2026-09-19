@@ -1,0 +1,1587 @@
+# imported by tools/corpus/import_test262.py
+# corpus: tc39/test262 35d566604512cba908054eec49f85e64a59f3091, test/built-ins/RegExp
+# oracle: node v22.23.2, Unicode 17.0
+#
+# Cases whose expectation test262 states in a form a program
+# can read: the `negative:` frontmatter and
+# `assert.throws(SyntaxError, ...)`. The corpus supplies both
+# the case and the answer here, so a pass rate over this file
+# is a test262 pass rate.
+dialect: ecmascript
+unicode: 17.0
+
+pattern: (
+flags: u
+expect: error syntax
+
+pattern: (?!.)*
+flags: u
+expect: error syntax
+
+pattern: (?!.)*?
+flags: u
+expect: error syntax
+
+pattern: (?!.)+
+flags: u
+expect: error syntax
+
+pattern: (?!.)+?
+flags: u
+expect: error syntax
+
+pattern: (?!.)?
+flags: u
+expect: error syntax
+
+pattern: (?!.)??
+flags: u
+expect: error syntax
+
+pattern: (?!.){1,2}
+flags: u
+expect: error syntax
+
+pattern: (?!.){1,2}?
+flags: u
+expect: error syntax
+
+pattern: (?!.){1,}
+flags: u
+expect: error syntax
+
+pattern: (?!.){1,}?
+flags: u
+expect: error syntax
+
+pattern: (?!.){1}
+flags: u
+expect: error syntax
+
+pattern: (?!.){1}?
+flags: u
+expect: error syntax
+
+pattern: (?-1:a)
+flags: 
+expect: error syntax
+
+pattern: (?-:a)
+flags: 
+expect: error syntax
+
+pattern: (?-I:a)
+flags: 
+expect: error syntax
+
+pattern: (?-I:a)
+flags: i
+expect: error syntax
+
+pattern: (?-M:a)
+flags: i
+expect: error syntax
+
+pattern: (?-Q:a)
+flags: 
+expect: error syntax
+
+pattern: (?-S:a)
+flags: i
+expect: error syntax
+
+pattern: (?-d:a)
+flags: 
+expect: error syntax
+
+pattern: (?-g:a)
+flags: 
+expect: error syntax
+
+pattern: (?-ii:a)
+flags: 
+expect: error syntax
+
+pattern: (?-imsi:a)
+flags: 
+expect: error syntax
+
+pattern: (?-i\u0365:a)
+flags: 
+expect: error syntax
+
+pattern: (?-m\u036B:a)
+flags: 
+expect: error syntax
+
+pattern: (?-s\u0300:a)
+flags: 
+expect: error syntax
+
+pattern: (?-s\u200C:a)
+flags: 
+expect: error syntax
+
+pattern: (?-s\u200D:a)
+flags: 
+expect: error syntax
+
+pattern: (?-s\u200E:a)
+flags: 
+expect: error syntax
+
+pattern: (?-s\uFEFF:a)
+flags: 
+expect: error syntax
+
+pattern: (?-u:a)
+flags: 
+expect: error syntax
+
+pattern: (?-y:a)
+flags: 
+expect: error syntax
+
+pattern: (?-\u0130:a)
+flags: iu
+expect: error syntax
+
+pattern: (?-\u017F:a)
+flags: u
+expect: error syntax
+
+pattern: (?1-:a)
+flags: 
+expect: error syntax
+
+pattern: (?1:a)
+flags: 
+expect: error syntax
+
+pattern: (?<x>a)(?<x>b)
+flags: 
+expect: error syntax
+
+pattern: (?<\uD83D \uDC15>dog)
+flags: 
+expect: error syntax
+
+pattern: (?<\uD83D \uDC15>dog)
+flags: u
+expect: error syntax
+
+pattern: (?<\u{1D7DA}the>the)
+flags: 
+expect: error syntax
+
+pattern: (?<\u{1D7DA}the>the)
+flags: u
+expect: error syntax
+
+pattern: (?<\u{1F415}>dog)
+flags: 
+expect: error syntax
+
+pattern: (?<\u{1F415}>dog)
+flags: u
+expect: error syntax
+
+pattern: (?<\u{1F98A}>fox)
+flags: 
+expect: error syntax
+
+pattern: (?<\u{1F98A}>fox)
+flags: u
+expect: error syntax
+
+pattern: (?=.)*
+flags: u
+expect: error syntax
+
+pattern: (?=.)*?
+flags: u
+expect: error syntax
+
+pattern: (?=.)+
+flags: u
+expect: error syntax
+
+pattern: (?=.)+?
+flags: u
+expect: error syntax
+
+pattern: (?=.)?
+flags: u
+expect: error syntax
+
+pattern: (?=.)??
+flags: u
+expect: error syntax
+
+pattern: (?=.){1,2}
+flags: u
+expect: error syntax
+
+pattern: (?=.){1,2}?
+flags: u
+expect: error syntax
+
+pattern: (?=.){1,}
+flags: u
+expect: error syntax
+
+pattern: (?=.){1,}?
+flags: u
+expect: error syntax
+
+pattern: (?=.){1}
+flags: u
+expect: error syntax
+
+pattern: (?=.){1}?
+flags: u
+expect: error syntax
+
+pattern: (?I-:a)
+flags: 
+expect: error syntax
+
+pattern: (?I-:a)
+flags: i
+expect: error syntax
+
+pattern: (?I:a)
+flags: 
+expect: error syntax
+
+pattern: (?I:a)
+flags: i
+expect: error syntax
+
+pattern: (?M-:a)
+flags: i
+expect: error syntax
+
+pattern: (?M:a)
+flags: i
+expect: error syntax
+
+pattern: (?Q-:a)
+flags: 
+expect: error syntax
+
+pattern: (?Q:a)
+flags: 
+expect: error syntax
+
+pattern: (?S-:a)
+flags: i
+expect: error syntax
+
+pattern: (?S:a)
+flags: i
+expect: error syntax
+
+pattern: (?d-:a)
+flags: 
+expect: error syntax
+
+pattern: (?d:a)
+flags: 
+expect: error syntax
+
+pattern: (?g-:a)
+flags: 
+expect: error syntax
+
+pattern: (?g:a)
+flags: 
+expect: error syntax
+
+pattern: (?i-i:a)
+flags: 
+expect: error syntax
+
+pattern: (?ii-:a)
+flags: 
+expect: error syntax
+
+pattern: (?ii:a)
+flags: 
+expect: error syntax
+
+pattern: (?ims-m:a)
+flags: 
+expect: error syntax
+
+pattern: (?imsi-:a)
+flags: 
+expect: error syntax
+
+pattern: (?imsi:a)
+flags: 
+expect: error syntax
+
+pattern: (?i\u0365-:a)
+flags: 
+expect: error syntax
+
+pattern: (?i\u0365:a)
+flags: 
+expect: error syntax
+
+pattern: (?m-ims:a)
+flags: 
+expect: error syntax
+
+pattern: (?m-m:a)
+flags: 
+expect: error syntax
+
+pattern: (?m\u036B-:a)
+flags: 
+expect: error syntax
+
+pattern: (?m\u036B:a)
+flags: 
+expect: error syntax
+
+pattern: (?s-s:a)
+flags: 
+expect: error syntax
+
+pattern: (?s\u0300-:a)
+flags: 
+expect: error syntax
+
+pattern: (?s\u0300:a)
+flags: 
+expect: error syntax
+
+pattern: (?s\u200C-:a)
+flags: 
+expect: error syntax
+
+pattern: (?s\u200C:a)
+flags: 
+expect: error syntax
+
+pattern: (?s\u200D-:a)
+flags: 
+expect: error syntax
+
+pattern: (?s\u200D:a)
+flags: 
+expect: error syntax
+
+pattern: (?s\u200E-:a)
+flags: 
+expect: error syntax
+
+pattern: (?s\u200E:a)
+flags: 
+expect: error syntax
+
+pattern: (?s\uFEFF-:a)
+flags: 
+expect: error syntax
+
+pattern: (?s\uFEFF:a)
+flags: 
+expect: error syntax
+
+pattern: (?u-:a)
+flags: 
+expect: error syntax
+
+pattern: (?u:a)
+flags: 
+expect: error syntax
+
+pattern: (?y-:a)
+flags: 
+expect: error syntax
+
+pattern: (?y:a)
+flags: 
+expect: error syntax
+
+pattern: (?\u0130-:a)
+flags: iu
+expect: error syntax
+
+pattern: (?\u0130:a)
+flags: iu
+expect: error syntax
+
+pattern: (?\u017F-:a)
+flags: u
+expect: error syntax
+
+pattern: (?\u017F:a)
+flags: u
+expect: error syntax
+
+pattern: )
+flags: u
+expect: error syntax
+
+pattern: *
+flags: u
+expect: error syntax
+
+pattern: *?
+flags: u
+expect: error syntax
+
+pattern: +
+flags: u
+expect: error syntax
+
+pattern: +?
+flags: u
+expect: error syntax
+
+pattern: 0{2,1}
+flags: 
+expect: error syntax
+
+pattern: ?
+flags: u
+expect: error syntax
+
+pattern: ??
+flags: u
+expect: error syntax
+
+pattern: [
+flags: u
+expect: error syntax
+
+pattern: [!!]
+flags: v
+expect: error syntax
+
+pattern: [##]
+flags: v
+expect: error syntax
+
+pattern: [$$]
+flags: v
+expect: error syntax
+
+pattern: [%%]
+flags: v
+expect: error syntax
+
+pattern: [&&]
+flags: v
+expect: error syntax
+
+pattern: [(]
+flags: v
+expect: error syntax
+
+pattern: [)]
+flags: v
+expect: error syntax
+
+pattern: [**]
+flags: v
+expect: error syntax
+
+pattern: [++]
+flags: v
+expect: error syntax
+
+pattern: [,,]
+flags: v
+expect: error syntax
+
+pattern: [--\\p{Hex}]
+flags: u
+expect: error syntax
+
+pattern: [-]
+flags: v
+expect: error syntax
+
+pattern: [..]
+flags: v
+expect: error syntax
+
+pattern: [/]
+flags: v
+expect: error syntax
+
+pattern: [::]
+flags: v
+expect: error syntax
+
+pattern: [;;]
+flags: v
+expect: error syntax
+
+pattern: [<<]
+flags: v
+expect: error syntax
+
+pattern: [==]
+flags: v
+expect: error syntax
+
+pattern: [>>]
+flags: v
+expect: error syntax
+
+pattern: [??]
+flags: v
+expect: error syntax
+
+pattern: [@@]
+flags: v
+expect: error syntax
+
+pattern: [[]
+flags: v
+expect: error syntax
+
+pattern: [\\00]
+flags: u
+expect: error syntax
+
+pattern: [\\01]
+flags: u
+expect: error syntax
+
+pattern: [\\02]
+flags: u
+expect: error syntax
+
+pattern: [\\03]
+flags: u
+expect: error syntax
+
+pattern: [\\04]
+flags: u
+expect: error syntax
+
+pattern: [\\05]
+flags: u
+expect: error syntax
+
+pattern: [\\06]
+flags: u
+expect: error syntax
+
+pattern: [\\07]
+flags: u
+expect: error syntax
+
+pattern: [\\08]
+flags: u
+expect: error syntax
+
+pattern: [\\09]
+flags: u
+expect: error syntax
+
+pattern: [\\1]
+flags: u
+expect: error syntax
+
+pattern: [\\2]
+flags: u
+expect: error syntax
+
+pattern: [\\3]
+flags: u
+expect: error syntax
+
+pattern: [\\4]
+flags: u
+expect: error syntax
+
+pattern: [\\5]
+flags: u
+expect: error syntax
+
+pattern: [\\6]
+flags: u
+expect: error syntax
+
+pattern: [\\7]
+flags: u
+expect: error syntax
+
+pattern: [\\8]
+flags: u
+expect: error syntax
+
+pattern: [\\9]
+flags: u
+expect: error syntax
+
+pattern: [\\D-\\D]
+flags: u
+expect: error syntax
+
+pattern: [\\D-a]
+flags: u
+expect: error syntax
+
+pattern: [\\P{invalid}]
+flags: u
+expect: error syntax
+
+pattern: [\\P{}]
+flags: u
+expect: error syntax
+
+pattern: [\\S-\\S]
+flags: u
+expect: error syntax
+
+pattern: [\\S-a]
+flags: u
+expect: error syntax
+
+pattern: [\\W-\\W]
+flags: u
+expect: error syntax
+
+pattern: [\\W-a]
+flags: u
+expect: error syntax
+
+pattern: [\\c]
+flags: u
+expect: error syntax
+
+pattern: [\\d-\\d]
+flags: u
+expect: error syntax
+
+pattern: [\\d-a]
+flags: u
+expect: error syntax
+
+pattern: [\\p{Hex}--]
+flags: u
+expect: error syntax
+
+pattern: [\\p{Hex}-\\uFFFF]
+flags: u
+expect: error syntax
+
+pattern: [\\p{invalid}]
+flags: u
+expect: error syntax
+
+pattern: [\\p{}]
+flags: u
+expect: error syntax
+
+pattern: [\\s-\\s]
+flags: u
+expect: error syntax
+
+pattern: [\\s-a]
+flags: u
+expect: error syntax
+
+pattern: [\\u123]
+flags: u
+expect: error syntax
+
+pattern: [\\u12]
+flags: u
+expect: error syntax
+
+pattern: [\\u1]
+flags: u
+expect: error syntax
+
+pattern: [\\uFFFF-\\p{Hex}]
+flags: u
+expect: error syntax
+
+pattern: [\\u]
+flags: u
+expect: error syntax
+
+pattern: [\\u{123]
+flags: u
+expect: error syntax
+
+pattern: [\\u{12]
+flags: u
+expect: error syntax
+
+pattern: [\\u{1]
+flags: u
+expect: error syntax
+
+pattern: [\\u{]
+flags: u
+expect: error syntax
+
+pattern: [\\u{}]
+flags: u
+expect: error syntax
+
+pattern: [\\w-\\w]
+flags: u
+expect: error syntax
+
+pattern: [\\w-a]
+flags: u
+expect: error syntax
+
+pattern: [\\x1]
+flags: u
+expect: error syntax
+
+pattern: [\\x]
+flags: u
+expect: error syntax
+
+pattern: [^\\p{Basic_Emoji}]
+flags: v
+expect: error syntax
+
+pattern: [^\\p{Emoji_Keycap_Sequence}]
+flags: v
+expect: error syntax
+
+pattern: [^\\p{RGI_Emoji_Flag_Sequence}]
+flags: v
+expect: error syntax
+
+pattern: [^\\p{RGI_Emoji_Modifier_Sequence}]
+flags: v
+expect: error syntax
+
+pattern: [^\\p{RGI_Emoji_Tag_Sequence}]
+flags: v
+expect: error syntax
+
+pattern: [^\\p{RGI_Emoji_ZWJ_Sequence}]
+flags: v
+expect: error syntax
+
+pattern: [^\\p{RGI_Emoji}]
+flags: v
+expect: error syntax
+
+pattern: [^^^]
+flags: v
+expect: error syntax
+
+pattern: [_^^]
+flags: v
+expect: error syntax
+
+pattern: [``]
+flags: v
+expect: error syntax
+
+pattern: [a-\\D]
+flags: u
+expect: error syntax
+
+pattern: [a-\\S]
+flags: u
+expect: error syntax
+
+pattern: [a-\\W]
+flags: u
+expect: error syntax
+
+pattern: [a-\\d]
+flags: u
+expect: error syntax
+
+pattern: [a-\\s]
+flags: u
+expect: error syntax
+
+pattern: [a-\\w]
+flags: u
+expect: error syntax
+
+pattern: [{]
+flags: v
+expect: error syntax
+
+pattern: [|]
+flags: v
+expect: error syntax
+
+pattern: [}]
+flags: v
+expect: error syntax
+
+pattern: [~~]
+flags: v
+expect: error syntax
+
+pattern: \\
+flags: 
+expect: error syntax
+
+pattern: \\00
+flags: u
+expect: error syntax
+
+pattern: \\01
+flags: u
+expect: error syntax
+
+pattern: \\02
+flags: u
+expect: error syntax
+
+pattern: \\03
+flags: u
+expect: error syntax
+
+pattern: \\04
+flags: u
+expect: error syntax
+
+pattern: \\05
+flags: u
+expect: error syntax
+
+pattern: \\06
+flags: u
+expect: error syntax
+
+pattern: \\07
+flags: u
+expect: error syntax
+
+pattern: \\08
+flags: u
+expect: error syntax
+
+pattern: \\09
+flags: u
+expect: error syntax
+
+pattern: \\1
+flags: u
+expect: error syntax
+
+pattern: \\2
+flags: u
+expect: error syntax
+
+pattern: \\3
+flags: u
+expect: error syntax
+
+pattern: \\4
+flags: u
+expect: error syntax
+
+pattern: \\5
+flags: u
+expect: error syntax
+
+pattern: \\6
+flags: u
+expect: error syntax
+
+pattern: \\7
+flags: u
+expect: error syntax
+
+pattern: \\8
+flags: u
+expect: error syntax
+
+pattern: \\9
+flags: u
+expect: error syntax
+
+pattern: \\P
+flags: u
+expect: error syntax
+
+pattern: \\PL
+flags: u
+expect: error syntax
+
+pattern: \\P{
+flags: u
+expect: error syntax
+
+pattern: \\P{ General_Category=Uppercase_Letter }
+flags: u
+expect: error syntax
+
+pattern: \\P{ Lowercase }
+flags: u
+expect: error syntax
+
+pattern: \\P{=Letter}
+flags: u
+expect: error syntax
+
+pattern: \\P{=}
+flags: u
+expect: error syntax
+
+pattern: \\P{ANY}
+flags: u
+expect: error syntax
+
+pattern: \\P{ASCII=F}
+flags: u
+expect: error syntax
+
+pattern: \\P{ASCII=Invalid}
+flags: u
+expect: error syntax
+
+pattern: \\P{ASCII=No}
+flags: u
+expect: error syntax
+
+pattern: \\P{ASCII=N}
+flags: u
+expect: error syntax
+
+pattern: \\P{ASCII=T}
+flags: u
+expect: error syntax
+
+pattern: \\P{ASCII=Yes}
+flags: u
+expect: error syntax
+
+pattern: \\P{ASCII=Y}
+flags: u
+expect: error syntax
+
+pattern: \\P{ASSIGNED}
+flags: u
+expect: error syntax
+
+pattern: \\P{Ascii}
+flags: u
+expect: error syntax
+
+pattern: \\P{Basic_Emoji}
+flags: v
+expect: error syntax
+
+pattern: \\P{Block=Adlam}
+flags: u
+expect: error syntax
+
+pattern: \\P{Composition_Exclusion}
+flags: u
+expect: error syntax
+
+pattern: \\P{Emoji_Keycap_Sequence}
+flags: v
+expect: error syntax
+
+pattern: \\P{Expands_On_NFC}
+flags: u
+expect: error syntax
+
+pattern: \\P{Expands_On_NFD}
+flags: u
+expect: error syntax
+
+pattern: \\P{Expands_On_NFKC}
+flags: u
+expect: error syntax
+
+pattern: \\P{Expands_On_NFKD}
+flags: u
+expect: error syntax
+
+pattern: \\P{FC_NFKC_Closure}
+flags: u
+expect: error syntax
+
+pattern: \\P{Full_Composition_Exclusion}
+flags: u
+expect: error syntax
+
+pattern: \\P{General_Category = Uppercase_Letter}
+flags: u
+expect: error syntax
+
+pattern: \\P{General_Category:Letter}
+flags: u
+expect: error syntax
+
+pattern: \\P{General_Category=}
+flags: u
+expect: error syntax
+
+pattern: \\P{General_Category}
+flags: u
+expect: error syntax
+
+pattern: \\P{Grapheme_Link}
+flags: u
+expect: error syntax
+
+pattern: \\P{Hyphen}
+flags: u
+expect: error syntax
+
+pattern: \\P{InAdlam}
+flags: u
+expect: error syntax
+
+pattern: \\P{InScript=Adlam}
+flags: u
+expect: error syntax
+
+pattern: \\P{IsScript=Adlam}
+flags: u
+expect: error syntax
+
+pattern: \\P{Line_Break=Alphabetic}
+flags: u
+expect: error syntax
+
+pattern: \\P{Line_Breakz=Alphabetic}
+flags: u
+expect: error syntax
+
+pattern: \\P{Line_Breakz=WAT}
+flags: u
+expect: error syntax
+
+pattern: \\P{Other_Alphabetic}
+flags: u
+expect: error syntax
+
+pattern: \\P{Other_Default_Ignorable_Code_Point}
+flags: u
+expect: error syntax
+
+pattern: \\P{Other_Grapheme_Extend}
+flags: u
+expect: error syntax
+
+pattern: \\P{Other_ID_Continue}
+flags: u
+expect: error syntax
+
+pattern: \\P{Other_ID_Start}
+flags: u
+expect: error syntax
+
+pattern: \\P{Other_Lowercase}
+flags: u
+expect: error syntax
+
+pattern: \\P{Other_Math}
+flags: u
+expect: error syntax
+
+pattern: \\P{Other_Uppercase}
+flags: u
+expect: error syntax
+
+pattern: \\P{Prepended_Concatenation_Mark}
+flags: u
+expect: error syntax
+
+pattern: \\P{RGI_Emoji_Flag_Sequence}
+flags: v
+expect: error syntax
+
+pattern: \\P{RGI_Emoji_Modifier_Sequence}
+flags: v
+expect: error syntax
+
+pattern: \\P{RGI_Emoji_Tag_Sequence}
+flags: v
+expect: error syntax
+
+pattern: \\P{RGI_Emoji_ZWJ_Sequence}
+flags: v
+expect: error syntax
+
+pattern: \\P{RGI_Emoji}
+flags: v
+expect: error syntax
+
+pattern: \\P{Script=}
+flags: u
+expect: error syntax
+
+pattern: \\P{Script_Extensions=}
+flags: u
+expect: error syntax
+
+pattern: \\P{Script_Extensions}
+flags: u
+expect: error syntax
+
+pattern: \\P{Script}
+flags: u
+expect: error syntax
+
+pattern: \\P{UnknownBinaryProperty}
+flags: u
+expect: error syntax
+
+pattern: \\P{^General_Category=Letter}
+flags: u
+expect: error syntax
+
+pattern: \\P{_-_lOwEr_C-A_S-E_-_}
+flags: u
+expect: error syntax
+
+pattern: \\P{any}
+flags: u
+expect: error syntax
+
+pattern: \\P{ascii}
+flags: u
+expect: error syntax
+
+pattern: \\P{assigned}
+flags: u
+expect: error syntax
+
+pattern: \\P{gC=uppercase_letter}
+flags: u
+expect: error syntax
+
+pattern: \\P{gc=uppercaseletter}
+flags: u
+expect: error syntax
+
+pattern: \\P{lowercase}
+flags: u
+expect: error syntax
+
+pattern: \\P}
+flags: u
+expect: error syntax
+
+pattern: \\\\P{General_Category=WAT}
+flags: u
+expect: error syntax
+
+pattern: \\\\P{Script=FooBarBazInvalid}
+flags: u
+expect: error syntax
+
+pattern: \\\\P{Script_Extensions=H_e_h}
+flags: u
+expect: error syntax
+
+pattern: \\\\p{General_Category=WAT}
+flags: u
+expect: error syntax
+
+pattern: \\\\p{Script=FooBarBazInvalid}
+flags: u
+expect: error syntax
+
+pattern: \\\\p{Script_Extensions=H_e_h}
+flags: u
+expect: error syntax
+
+pattern: \\c
+flags: u
+expect: error syntax
+
+pattern: \\p
+flags: u
+expect: error syntax
+
+pattern: \\pL
+flags: u
+expect: error syntax
+
+pattern: \\p{
+flags: u
+expect: error syntax
+
+pattern: \\p{ General_Category=Uppercase_Letter }
+flags: u
+expect: error syntax
+
+pattern: \\p{ Lowercase }
+flags: u
+expect: error syntax
+
+pattern: \\p{=Letter}
+flags: u
+expect: error syntax
+
+pattern: \\p{=}
+flags: u
+expect: error syntax
+
+pattern: \\p{ANY}
+flags: u
+expect: error syntax
+
+pattern: \\p{ASCII=F}
+flags: u
+expect: error syntax
+
+pattern: \\p{ASCII=Invalid}
+flags: u
+expect: error syntax
+
+pattern: \\p{ASCII=No}
+flags: u
+expect: error syntax
+
+pattern: \\p{ASCII=N}
+flags: u
+expect: error syntax
+
+pattern: \\p{ASCII=T}
+flags: u
+expect: error syntax
+
+pattern: \\p{ASCII=Yes}
+flags: u
+expect: error syntax
+
+pattern: \\p{ASCII=Y}
+flags: u
+expect: error syntax
+
+pattern: \\p{ASSIGNED}
+flags: u
+expect: error syntax
+
+pattern: \\p{Ascii}
+flags: u
+expect: error syntax
+
+pattern: \\p{Basic_Emoji}
+flags: u
+expect: error syntax
+
+pattern: \\p{Block=Adlam}
+flags: u
+expect: error syntax
+
+pattern: \\p{Composition_Exclusion}
+flags: u
+expect: error syntax
+
+pattern: \\p{Emoji_Keycap_Sequence}
+flags: u
+expect: error syntax
+
+pattern: \\p{Expands_On_NFC}
+flags: u
+expect: error syntax
+
+pattern: \\p{Expands_On_NFD}
+flags: u
+expect: error syntax
+
+pattern: \\p{Expands_On_NFKC}
+flags: u
+expect: error syntax
+
+pattern: \\p{Expands_On_NFKD}
+flags: u
+expect: error syntax
+
+pattern: \\p{FC_NFKC_Closure}
+flags: u
+expect: error syntax
+
+pattern: \\p{Full_Composition_Exclusion}
+flags: u
+expect: error syntax
+
+pattern: \\p{General_Category = Uppercase_Letter}
+flags: u
+expect: error syntax
+
+pattern: \\p{General_Category:Letter}
+flags: u
+expect: error syntax
+
+pattern: \\p{General_Category=}
+flags: u
+expect: error syntax
+
+pattern: \\p{General_Category}
+flags: u
+expect: error syntax
+
+pattern: \\p{Grapheme_Link}
+flags: u
+expect: error syntax
+
+pattern: \\p{Hyphen}
+flags: u
+expect: error syntax
+
+pattern: \\p{InAdlam}
+flags: u
+expect: error syntax
+
+pattern: \\p{InScript=Adlam}
+flags: u
+expect: error syntax
+
+pattern: \\p{IsScript=Adlam}
+flags: u
+expect: error syntax
+
+pattern: \\p{Line_Break=Alphabetic}
+flags: u
+expect: error syntax
+
+pattern: \\p{Line_Breakz=Alphabetic}
+flags: u
+expect: error syntax
+
+pattern: \\p{Line_Breakz=WAT}
+flags: u
+expect: error syntax
+
+pattern: \\p{Line_Break}
+flags: u
+expect: error syntax
+
+pattern: \\p{Other_Alphabetic}
+flags: u
+expect: error syntax
+
+pattern: \\p{Other_Default_Ignorable_Code_Point}
+flags: u
+expect: error syntax
+
+pattern: \\p{Other_Grapheme_Extend}
+flags: u
+expect: error syntax
+
+pattern: \\p{Other_ID_Continue}
+flags: u
+expect: error syntax
+
+pattern: \\p{Other_ID_Start}
+flags: u
+expect: error syntax
+
+pattern: \\p{Other_Lowercase}
+flags: u
+expect: error syntax
+
+pattern: \\p{Other_Math}
+flags: u
+expect: error syntax
+
+pattern: \\p{Other_Uppercase}
+flags: u
+expect: error syntax
+
+pattern: \\p{Prepended_Concatenation_Mark}
+flags: u
+expect: error syntax
+
+pattern: \\p{RGI_Emoji_Flag_Sequence}
+flags: u
+expect: error syntax
+
+pattern: \\p{RGI_Emoji_Modifier_Sequence}
+flags: u
+expect: error syntax
+
+pattern: \\p{RGI_Emoji_Tag_Sequence}
+flags: u
+expect: error syntax
+
+pattern: \\p{RGI_Emoji_ZWJ_Sequence}
+flags: u
+expect: error syntax
+
+pattern: \\p{RGI_Emoji}
+flags: u
+expect: error syntax
+
+pattern: \\p{Script=}
+flags: u
+expect: error syntax
+
+pattern: \\p{Script_Extensions=}
+flags: u
+expect: error syntax
+
+pattern: \\p{Script_Extensions}
+flags: u
+expect: error syntax
+
+pattern: \\p{Script}
+flags: u
+expect: error syntax
+
+pattern: \\p{UnknownBinaryProperty}
+flags: u
+expect: error syntax
+
+pattern: \\p{^General_Category=Letter}
+flags: u
+expect: error syntax
+
+pattern: \\p{_-_lOwEr_C-A_S-E_-_}
+flags: u
+expect: error syntax
+
+pattern: \\p{any}
+flags: u
+expect: error syntax
+
+pattern: \\p{ascii}
+flags: u
+expect: error syntax
+
+pattern: \\p{assigned}
+flags: u
+expect: error syntax
+
+pattern: \\p{gC=uppercase_letter}
+flags: u
+expect: error syntax
+
+pattern: \\p{gc=uppercaseletter}
+flags: u
+expect: error syntax
+
+pattern: \\p{lowercase}
+flags: u
+expect: error syntax
+
+pattern: \\p}
+flags: u
+expect: error syntax
+
+pattern: \\u
+flags: u
+expect: error syntax
+
+pattern: \\u1
+flags: u
+expect: error syntax
+
+pattern: \\u12
+flags: u
+expect: error syntax
+
+pattern: \\u123
+flags: u
+expect: error syntax
+
+pattern: \\u{
+flags: u
+expect: error syntax
+
+pattern: \\u{1
+flags: u
+expect: error syntax
+
+pattern: \\u{12
+flags: u
+expect: error syntax
+
+pattern: \\u{123
+flags: u
+expect: error syntax
+
+pattern: \\u{}
+flags: u
+expect: error syntax
+
+pattern: \\x
+flags: u
+expect: error syntax
+
+pattern: \\x1
+flags: u
+expect: error syntax
+
+pattern: ]
+flags: u
+expect: error syntax
+
+pattern: ^[z-a]$
+flags: 
+expect: error syntax
+
+pattern: a{
+flags: u
+expect: error syntax
+
+pattern: a{1
+flags: u
+expect: error syntax
+
+pattern: a{1,
+flags: u
+expect: error syntax
+
+pattern: a{1,2
+flags: u
+expect: error syntax
+
+pattern: {
+flags: u
+expect: error syntax
+
+pattern: {1
+flags: u
+expect: error syntax
+
+pattern: {1,
+flags: u
+expect: error syntax
+
+pattern: {1,2
+flags: u
+expect: error syntax
+
+pattern: {1,2}
+flags: u
+expect: error syntax
+
+pattern: {1,2}?
+flags: u
+expect: error syntax
+
+pattern: {1,}
+flags: u
+expect: error syntax
+
+pattern: {1,}?
+flags: u
+expect: error syntax
+
+pattern: {1}
+flags: u
+expect: error syntax
+
+pattern: {1}?
+flags: u
+expect: error syntax
+
+pattern: }
+flags: u
+expect: error syntax

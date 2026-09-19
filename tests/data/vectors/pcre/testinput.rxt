@@ -1,0 +1,7493 @@
+# imported by tools/corpus/import_pcre2test.py
+# corpus: PCRE2 pcre2-10.46, testdata/testinput1 and testinput2
+# oracle: PCRE2 version 10.46 2025-08-27
+#
+# Syntax verdicts only: whether each pattern compiles, which is
+# what plan.md's WP-18 is measured on. The reference answers that
+# question directly; its match answers need an oracle driver that
+# WP-20 will write.
+#
+# Nothing here runs until the PCRE2 front end exists. Until then
+# the conformance runner counts every record as skipped and says
+# so - which is the point of importing first.
+dialect: pcre
+
+pattern: the quick brown fox
+flags: 
+expect: compiles
+
+pattern: The quick brown fox
+flags: i
+expect: compiles
+
+pattern: abcd\\t\\n\\r\\f\\a\\e\\071\\x3b\\$\\\\\\?caxyz
+flags: 
+expect: compiles
+
+pattern: a*abc?xyz+pqr{3}ab{2,}xy{4,5}pq{0,6}AB{0,}zz
+flags: 
+expect: compiles
+
+pattern: ^(abc){1,2}zz
+flags: 
+expect: compiles
+
+pattern: ^(b+?|a){1,2}?c
+flags: 
+expect: compiles
+
+pattern: ^(b+|a){1,2}c
+flags: 
+expect: compiles
+
+pattern: ^(ba|b*){1,2}?bc
+flags: 
+expect: compiles
+
+pattern: ^\\ca\\cA\\c[;\\c:
+flags: 
+expect: compiles
+
+pattern: ^[ab\\]cde]
+flags: 
+expect: compiles
+
+pattern: ^[]cde]
+flags: 
+expect: compiles
+
+pattern: ^[^ab\\]cde]
+flags: 
+expect: compiles
+
+pattern: ^[^]cde]
+flags: 
+expect: compiles
+
+pattern: ^\\\uFFFD
+flags: 
+expect: compiles
+
+pattern: ^\uFFFD
+flags: 
+expect: compiles
+
+pattern: ^[0-9]+$
+flags: 
+expect: compiles
+
+pattern: ^.*nter
+flags: 
+expect: compiles
+
+pattern: ^xxx[0-9]+$
+flags: 
+expect: compiles
+
+pattern: ^.+[0-9][0-9][0-9]$
+flags: 
+expect: compiles
+
+pattern: ^.+?[0-9][0-9][0-9]$
+flags: 
+expect: compiles
+
+pattern: ^([^!]+)!(.+)=apquxz\\.ixr\\.zzz\\.ac\\.uk$
+flags: 
+expect: compiles
+
+pattern: :
+flags: 
+expect: compiles
+
+pattern: ([\\da-f:]+)$
+flags: i
+expect: compiles
+
+pattern: ^.*\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})$
+flags: 
+expect: compiles
+
+pattern: ^(\\d+)\\s+IN\\s+SOA\\s+(\\S+)\\s+(\\S+)\\s*\\(\\s*$
+flags: 
+expect: compiles
+
+pattern: ^[a-zA-Z\\d][a-zA-Z\\d\\-]*(\\.[a-zA-Z\\d][a-zA-z\\d\\-]*)*\\.$
+flags: 
+expect: compiles
+
+pattern: ^\\*\\.[a-z]([a-z\\-\\d]*[a-z\\d]+)?(\\.[a-z]([a-z\\-\\d]*[a-z\\d]+)?)*$
+flags: 
+expect: compiles
+
+pattern: ^(?=ab(de))(abd)(e)
+flags: 
+expect: compiles
+
+pattern: ^(?!(ab)de|x)(abd)(f)
+flags: 
+expect: compiles
+
+pattern: ^(?=(ab(cd)))(ab)
+flags: 
+expect: compiles
+
+pattern: ^[\\da-f](\\.[\\da-f])*$
+flags: i
+expect: compiles
+
+pattern: ^\\".*\\"\\s*(;.*)?$
+flags: 
+expect: compiles
+
+pattern: ^$
+flags: 
+expect: compiles
+
+pattern: \x20  ^    a   (?# begins with a)  b\\sc (?# then b c) $ (?# then end)
+flags: x
+expect: compiles
+
+pattern: (?x)   ^    a   (?# begins with a)  b\\sc (?# then b c) $ (?# then end)
+flags: 
+expect: compiles
+
+pattern: ^   a\\ b[c ]d       $
+flags: x
+expect: compiles
+
+pattern: ^(a(b(c)))(d(e(f)))(h(i(j)))(k(l(m)))$
+flags: 
+expect: compiles
+
+pattern: ^(?:a(b(c)))(?:d(e(f)))(?:h(i(j)))(?:k(l(m)))$
+flags: 
+expect: compiles
+
+pattern: ^[\\w][\\W][\\s][\\S][\\d][\\D][\\b][\\n][\\c]][\\022]
+flags: 
+expect: compiles
+
+pattern: ^[.^$|()*+?{,}]+
+flags: 
+expect: compiles
+
+pattern: ^a*\\w
+flags: 
+expect: compiles
+
+pattern: ^a*?\\w
+flags: 
+expect: compiles
+
+pattern: ^a+\\w
+flags: 
+expect: compiles
+
+pattern: ^a+?\\w
+flags: 
+expect: compiles
+
+pattern: ^\\d{8}\\w{2,}
+flags: 
+expect: compiles
+
+pattern: ^[aeiou\\d]{4,5}$
+flags: 
+expect: compiles
+
+pattern: ^[aeiou\\d]{4,5}?
+flags: 
+expect: compiles
+
+pattern: \\A(abc|def)=(\\1){2,3}\\Z
+flags: 
+expect: compiles
+
+pattern: ^(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)(k)\\11*(\\3\\4)\\1(?#)2$
+flags: 
+expect: compiles
+
+pattern: (cat(a(ract|tonic)|erpillar)) \\1()2(3)
+flags: 
+expect: compiles
+
+pattern: ^From +([^ ]+) +[a-zA-Z][a-zA-Z][a-zA-Z] +[a-zA-Z][a-zA-Z][a-zA-Z] +[0-9]?[0-9] +[0-9][0-9]:[0-9][0-9]
+flags: 
+expect: compiles
+
+pattern: ^From\\s+\\S+\\s+([a-zA-Z]{3}\\s+){2}\\d{1,2}\\s+\\d\\d:\\d\\d
+flags: 
+expect: compiles
+
+pattern: ^12.34
+flags: s
+expect: compiles
+
+pattern: \\w+(?=\\t)
+flags: 
+expect: compiles
+
+pattern: foo(?!bar)(.*)
+flags: 
+expect: compiles
+
+pattern: (?:(?!foo)...|^.{0,2})bar(.*)
+flags: 
+expect: compiles
+
+pattern: ^(\\D*)(?=\\d)(?!123)
+flags: 
+expect: compiles
+
+pattern: ^abcd#rhubarb
+flags: x
+expect: compiles
+
+pattern: ^(a)\\1{2,3}(.)
+flags: 
+expect: compiles
+
+pattern: (?!^)abc
+flags: 
+expect: compiles
+
+pattern: (?=^)abc
+flags: 
+expect: compiles
+
+pattern: ^[ab]{1,3}(ab*|b)
+flags: 
+expect: compiles
+
+pattern: ^[ab]{1,3}?(ab*|b)
+flags: 
+expect: compiles
+
+pattern: ^[ab]{1,3}?(ab*?|b)
+flags: 
+expect: compiles
+
+pattern: ^[ab]{1,3}(ab*?|b)
+flags: 
+expect: compiles
+
+pattern: abc\\0def\\00pqr\\000xyz\\0000AB
+flags: 
+expect: compiles
+
+pattern: abc\\x0def\\x00pqr\\x000xyz\\x0000AB
+flags: 
+expect: compiles
+
+pattern: ^[\\000-\\037]
+flags: 
+expect: compiles
+
+pattern: \\0*
+flags: 
+expect: compiles
+
+pattern: A\\x0{2,3}Z
+flags: 
+expect: compiles
+
+pattern: ^(cow|)\\1(bell)
+flags: 
+expect: compiles
+
+pattern: ^\\s
+flags: 
+expect: compiles
+
+pattern: ^(a|)\\1*b
+flags: 
+expect: compiles
+
+pattern: ^(a|)\\1+b
+flags: 
+expect: compiles
+
+pattern: ^(a|)\\1?b
+flags: 
+expect: compiles
+
+pattern: ^(a|)\\1{2}b
+flags: 
+expect: compiles
+
+pattern: ^(a|)\\1{2,3}b
+flags: 
+expect: compiles
+
+pattern: ab{1,3}bc
+flags: 
+expect: compiles
+
+pattern: ([^.]*)\\.([^:]*):[T ]+(.*)
+flags: 
+expect: compiles
+
+pattern: ([^.]*)\\.([^:]*):[T ]+(.*)
+flags: i
+expect: compiles
+
+pattern: ([^.]*)\\.([^:]*):[t ]+(.*)
+flags: i
+expect: compiles
+
+pattern: ^[W-c]+$
+flags: 
+expect: compiles
+
+pattern: ^[W-c]+$
+flags: i
+expect: compiles
+
+pattern: ^[\\x3f-\\x5F]+$
+flags: i
+expect: compiles
+
+pattern: ^abc$
+flags: m
+expect: compiles
+
+pattern: ^abc$
+flags: 
+expect: compiles
+
+pattern: \\Aabc\\Z
+flags: m
+expect: compiles
+
+pattern: \\A(.)*\\Z
+flags: s
+expect: compiles
+
+pattern: \\A(.)*\\Z
+flags: m
+expect: compiles
+
+pattern: (?:b)|(?::+)
+flags: 
+expect: compiles
+
+pattern: [-az]+
+flags: 
+expect: compiles
+
+pattern: [az-]+
+flags: 
+expect: compiles
+
+pattern: [a\\-z]+
+flags: 
+expect: compiles
+
+pattern: [a-z]+
+flags: 
+expect: compiles
+
+pattern: [\\d-]+
+flags: 
+expect: compiles
+
+pattern: \\x5c
+flags: 
+expect: compiles
+
+pattern: \\x20Z
+flags: 
+expect: compiles
+
+pattern: (abc)\\1
+flags: i
+expect: compiles
+
+pattern: abc$
+flags: 
+expect: compiles
+
+pattern: (abc)\\123
+flags: 
+expect: compiles
+
+pattern: (abc)\\223
+flags: 
+expect: compiles
+
+pattern: (abc)\\323
+flags: 
+expect: compiles
+
+pattern: (abc)\\100
+flags: 
+expect: compiles
+
+pattern: (abc)\\1000
+flags: 
+expect: compiles
+
+pattern: ^(A)(B)(C)(D)(E)(F)(G)(H)(I)\\8\\9$
+flags: 
+expect: compiles
+
+pattern: ^[A\\8B\\9C]+$
+flags: 
+expect: compiles
+
+pattern: (a)(b)(c)(d)(e)(f)(g)(h)(i)(j)(k)(l)\\12\\123
+flags: 
+expect: compiles
+
+pattern: (a)(b)(c)(d)(e)(f)(g)(h)(i)(j)(k)\\12\\123
+flags: 
+expect: compiles
+
+pattern: a{0}bc
+flags: 
+expect: compiles
+
+pattern: (a|(bc)){0,0}?xyz
+flags: 
+expect: compiles
+
+pattern: abc[\\10]de
+flags: 
+expect: compiles
+
+pattern: abc[\\1]de
+flags: 
+expect: compiles
+
+pattern: (abc)[\\1]de
+flags: 
+expect: compiles
+
+pattern: (?s)a.b
+flags: 
+expect: compiles
+
+pattern: ^([^a])([^\\b])([^c]*)([^d]{3,4})
+flags: 
+expect: compiles
+
+pattern: [^a]
+flags: 
+expect: compiles
+
+pattern: [^a]
+flags: i
+expect: compiles
+
+pattern: [^a]+
+flags: 
+expect: compiles
+
+pattern: [^a]+
+flags: i
+expect: compiles
+
+pattern: [^k]$
+flags: 
+expect: compiles
+
+pattern: [^k]{2,3}$
+flags: 
+expect: compiles
+
+pattern: ^\\d{8,}\\@.+[^k]$
+flags: 
+expect: compiles
+
+pattern: (a)\\1{8,}
+flags: 
+expect: compiles
+
+pattern: [^az]
+flags: 
+expect: compiles
+
+pattern: [^az]
+flags: i
+expect: compiles
+
+pattern: \\000\\001\\002\\003\\004\\005\\006\\007\\010\\011\\012\\013\\014\\015\\016\\017\\020\\021\\022\\023\\024\\025\\026\\027\\030\\031\\032\\033\\034\\035\\036\\037\\040\\041\\042\\043\\044\\045\\046\\047\\050\\051\\052\\053\\054\\055\\056\\057\\060\\061\\062\\063\\064\\065\\066\\067\\070\\071\\072\\073\\074\\075\\076\\077\\100\\101\\102\\103\\104\\105\\106\\107\\110\\111\\112\\113\\114\\115\\116\\117\\120\\121\\122\\123\\124\\125\\126\\127\\130\\131\\132\\133\\134\\135\\136\\137\\140\\141\\142\\143\\144\\145\\146\\147\\150\\151\\152\\153\\154\\155\\156\\157\\160\\161\\162\\163\\164\\165\\166\\167\\170\\171\\172\\173\\174\\175\\176\\177\\200\\201\\202\\203\\204\\205\\206\\207\\210\\211\\212\\213\\214\\215\\216\\217\\220\\221\\222\\223\\224\\225\\226\\227\\230\\231\\232\\233\\234\\235\\236\\237\\240\\241\\242\\243\\244\\245\\246\\247\\250\\251\\252\\253\\254\\255\\256\\257\\260\\261\\262\\263\\264\\265\\266\\267\\270\\271\\272\\273\\274\\275\\276\\277\\300\\301\\302\\303\\304\\305\\306\\307\\310\\311\\312\\313\\314\\315\\316\\317\\320\\321\\322\\323\\324\\325\\326\\327\\330\\331\\332\\333\\334\\335\\336\\337\\340\\341\\342\\343\\344\\345\\346\\347\\350\\351\\352\\353\\354\\355\\356\\357\\360\\361\\362\\363\\364\\365\\366\\367\\370\\371\\372\\373\\374\\375\\376\\377
+flags: 
+expect: compiles
+
+pattern: P[^*]TAIRE[^*]{1,6}?LL
+flags: 
+expect: compiles
+
+pattern: P[^*]TAIRE[^*]{1,}?LL
+flags: 
+expect: compiles
+
+pattern: (\\.\\d\\d[1-9]?)\\d+
+flags: 
+expect: compiles
+
+pattern: (\\.\\d\\d((?=0)|\\d(?=\\d)))
+flags: 
+expect: compiles
+
+pattern: a(?)b
+flags: 
+expect: compiles
+
+pattern: \\b(foo)\\s+(\\w+)
+flags: i
+expect: compiles
+
+pattern: foo(.*)bar
+flags: 
+expect: compiles
+
+pattern: foo(.*?)bar
+flags: 
+expect: compiles
+
+pattern: (.*)(\\d*)
+flags: 
+expect: compiles
+
+pattern: (.*)(\\d+)
+flags: 
+expect: compiles
+
+pattern: (.*?)(\\d*)
+flags: 
+expect: compiles
+
+pattern: (.*?)(\\d+)
+flags: 
+expect: compiles
+
+pattern: (.*)(\\d+)$
+flags: 
+expect: compiles
+
+pattern: (.*?)(\\d+)$
+flags: 
+expect: compiles
+
+pattern: (.*)\\b(\\d+)$
+flags: 
+expect: compiles
+
+pattern: (.*\\D)(\\d+)$
+flags: 
+expect: compiles
+
+pattern: ^\\D*(?!123)
+flags: 
+expect: compiles
+
+pattern: ^[W-]46]
+flags: 
+expect: compiles
+
+pattern: ^[W-\\]46]
+flags: 
+expect: compiles
+
+pattern: \\d\\d\\/\\d\\d\\/\\d\\d\\d\\d
+flags: 
+expect: compiles
+
+pattern: word (?:[a-zA-Z0-9]+ ){0,10}otherword
+flags: 
+expect: compiles
+
+pattern: word (?:[a-zA-Z0-9]+ ){0,300}otherword
+flags: 
+expect: compiles
+
+pattern: ^(a){0,0}
+flags: 
+expect: compiles
+
+pattern: ^(a){0,1}
+flags: 
+expect: compiles
+
+pattern: ^(a){0,2}
+flags: 
+expect: compiles
+
+pattern: ^(a){0,3}
+flags: 
+expect: compiles
+
+pattern: ^(a){0,}
+flags: 
+expect: compiles
+
+pattern: ^(a){1,1}
+flags: 
+expect: compiles
+
+pattern: ^(a){1,2}
+flags: 
+expect: compiles
+
+pattern: ^(a){1,3}
+flags: 
+expect: compiles
+
+pattern: ^(a){1,}
+flags: 
+expect: compiles
+
+pattern: .*\\.gif
+flags: 
+expect: compiles
+
+pattern: .{0,}\\.gif
+flags: 
+expect: compiles
+
+pattern: .*\\.gif
+flags: m
+expect: compiles
+
+pattern: .*\\.gif
+flags: s
+expect: compiles
+
+pattern: .*\\.gif
+flags: ms
+expect: compiles
+
+pattern: .*$
+flags: 
+expect: compiles
+
+pattern: .*$
+flags: m
+expect: compiles
+
+pattern: .*$
+flags: s
+expect: compiles
+
+pattern: .*$
+flags: ms
+expect: compiles
+
+pattern: (.*X|^B)
+flags: 
+expect: compiles
+
+pattern: (.*X|^B)
+flags: m
+expect: compiles
+
+pattern: (.*X|^B)
+flags: s
+expect: compiles
+
+pattern: (.*X|^B)
+flags: ms
+expect: compiles
+
+pattern: (?s)(.*X|^B)
+flags: 
+expect: compiles
+
+pattern: (?s:.*X|^B)
+flags: 
+expect: compiles
+
+pattern: ^.*B
+flags: 
+expect: compiles
+
+pattern: (?s)^.*B
+flags: 
+expect: compiles
+
+pattern: (?m)^.*B
+flags: 
+expect: compiles
+
+pattern: (?ms)^.*B
+flags: 
+expect: compiles
+
+pattern: (?ms)^B
+flags: 
+expect: compiles
+
+pattern: (?s)B$
+flags: 
+expect: compiles
+
+pattern: ^[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]
+flags: 
+expect: compiles
+
+pattern: ^\\d\\d\\d\\d\\d\\d\\d\\d\\d\\d\\d\\d
+flags: 
+expect: compiles
+
+pattern: ^[\\d][\\d][\\d][\\d][\\d][\\d][\\d][\\d][\\d][\\d][\\d][\\d]
+flags: 
+expect: compiles
+
+pattern: ^[abc]{12}
+flags: 
+expect: compiles
+
+pattern: ^[a-c]{12}
+flags: 
+expect: compiles
+
+pattern: ^(a|b|c){12}
+flags: 
+expect: compiles
+
+pattern: ^[abcdefghijklmnopqrstuvwxy0123456789]
+flags: 
+expect: compiles
+
+pattern: abcde{0,0}
+flags: 
+expect: compiles
+
+pattern: ab[cd]{0,0}e
+flags: 
+expect: compiles
+
+pattern: ab(c){0,0}d
+flags: 
+expect: compiles
+
+pattern: a(b*)
+flags: 
+expect: compiles
+
+pattern: ab\\d{0}e
+flags: 
+expect: compiles
+
+pattern: "([^\\\\"]+|\\\\.)*"
+flags: 
+expect: compiles
+
+pattern: <tr([\\w\\W\\s\\d][^<>]{0,})><TD([\\w\\W\\s\\d][^<>]{0,})>([\\d]{0,}\\.)(.*)((<BR>([\\w\\W\\s\\d][^<>]{0,})|[\\s]{0,}))<\\/a><\\/TD><TD([\\w\\W\\s\\d][^<>]{0,})>([\\w\\W\\s\\d][^<>]{0,})<\\/TD><TD([\\w\\W\\s\\d][^<>]{0,})>([\\w\\W\\s\\d][^<>]{0,})<\\/TD><\\/TR>
+flags: is
+expect: compiles
+
+pattern: a[^a]b
+flags: 
+expect: compiles
+
+pattern: a.b
+flags: 
+expect: compiles
+
+pattern: a[^a]b
+flags: s
+expect: compiles
+
+pattern: a.b
+flags: s
+expect: compiles
+
+pattern: ^(b+|a){1,2}?c
+flags: 
+expect: compiles
+
+pattern: (?!\\A)x
+flags: m
+expect: compiles
+
+pattern: (A|B)*?CD
+flags: 
+expect: compiles
+
+pattern: (A|B)*CD
+flags: 
+expect: compiles
+
+pattern: (AB)*?\\1
+flags: 
+expect: compiles
+
+pattern: (AB)*\\1
+flags: 
+expect: compiles
+
+pattern: (?<!bar)foo
+flags: 
+expect: compiles
+
+pattern: \\w{3}(?<!bar)foo
+flags: 
+expect: compiles
+
+pattern: (?<=(foo)a)bar
+flags: 
+expect: compiles
+
+pattern: \\Aabc\\z
+flags: m
+expect: compiles
+
+pattern: (?>.*\\/)foo
+flags: 
+expect: compiles
+
+pattern: (?>(\\.\\d\\d[1-9]?))\\d+
+flags: 
+expect: compiles
+
+pattern: ^((?>\\w+)|(?>\\s+))*$
+flags: 
+expect: compiles
+
+pattern: (\\d+)(\\w)
+flags: 
+expect: compiles
+
+pattern: ((?>\\d+))(\\w)
+flags: 
+expect: compiles
+
+pattern: (?>a+)b
+flags: 
+expect: compiles
+
+pattern: ((?>a+)b)
+flags: 
+expect: compiles
+
+pattern: (?>(a+))b
+flags: 
+expect: compiles
+
+pattern: (?>b)+
+flags: 
+expect: compiles
+
+pattern: (?>a+|b+|c+)*c
+flags: 
+expect: compiles
+
+pattern: ((?>[^()]+)|\\([^()]*\\))+
+flags: 
+expect: compiles
+
+pattern: \\(((?>[^()]+)|\\([^()]+\\))+\\)
+flags: 
+expect: compiles
+
+pattern: a(?-i)b
+flags: i
+expect: compiles
+
+pattern: (a (?x)b c)d e
+flags: 
+expect: compiles
+
+pattern: (a b(?x)c d (?-x)e f)
+flags: 
+expect: compiles
+
+pattern: (a(?i)b)c
+flags: 
+expect: compiles
+
+pattern: a(?i:b)c
+flags: 
+expect: compiles
+
+pattern: a(?i:b)*c
+flags: 
+expect: compiles
+
+pattern: a(?=b(?i)c)\\w\\wd
+flags: 
+expect: compiles
+
+pattern: (?s-i:more.*than).*million
+flags: i
+expect: compiles
+
+pattern: (?:(?s-i)more.*than).*million
+flags: i
+expect: compiles
+
+pattern: (?>a(?i)b+)+c
+flags: 
+expect: compiles
+
+pattern: (?=a(?i)b)\\w\\wc
+flags: 
+expect: compiles
+
+pattern: (?<=a(?i)b)(\\w\\w)c
+flags: 
+expect: compiles
+
+pattern: (?:(a)|b)(?(1)A|B)
+flags: 
+expect: compiles
+
+pattern: ^(a)?(?(1)a|b)+$
+flags: 
+expect: compiles
+
+pattern: ^(?(?=abc)\\w{3}:|\\d\\d)
+flags: 
+expect: compiles
+
+pattern: ^(?(?!abc)\\d\\d|\\w{3}:)$
+flags: 
+expect: compiles
+
+pattern: (?(?<=foo)bar|cat)
+flags: 
+expect: compiles
+
+pattern: (?(?<!foo)cat|bar)
+flags: 
+expect: compiles
+
+pattern: ( \\( )? [^()]+ (?(1) \\) |)\x20
+flags: x
+expect: compiles
+
+pattern: ( \\( )? [^()]+ (?(1) \\) )\x20
+flags: x
+expect: compiles
+
+pattern: ^(?(2)a|(1)(2))+$
+flags: 
+expect: compiles
+
+pattern: ((?i)blah)\\s+\\1
+flags: 
+expect: compiles
+
+pattern: ((?i)blah)\\s+(?i:\\1)
+flags: 
+expect: compiles
+
+pattern: ((?i)blah)\\s+(?m)A(?i:\\1)
+flags: 
+expect: compiles
+
+pattern: (?>a*)*
+flags: 
+expect: compiles
+
+pattern: (abc|)+
+flags: 
+expect: compiles
+
+pattern: ([a]*)*
+flags: 
+expect: compiles
+
+pattern: ([ab]*)*
+flags: 
+expect: compiles
+
+pattern: ([^a]*)*
+flags: 
+expect: compiles
+
+pattern: ([^ab]*)*
+flags: 
+expect: compiles
+
+pattern: ([a]*?)*
+flags: 
+expect: compiles
+
+pattern: ([ab]*?)*
+flags: 
+expect: compiles
+
+pattern: ([^a]*?)*
+flags: 
+expect: compiles
+
+pattern: ([^ab]*?)*
+flags: 
+expect: compiles
+
+pattern: ((?>a*))*
+flags: 
+expect: compiles
+
+pattern: ((?>a*?))*
+flags: 
+expect: compiles
+
+pattern: (?(?=[^a-z]+[a-z])  \\d{2}-[a-z]{3}-\\d{2}  |  \\d{2}-\\d{2}-\\d{2} )\x20
+flags: x
+expect: compiles
+
+pattern: (?<=(foo))bar\\1
+flags: 
+expect: compiles
+
+pattern: (?i:saturday|sunday)
+flags: 
+expect: compiles
+
+pattern: (a(?i)bc|BB)x
+flags: 
+expect: compiles
+
+pattern: ^([ab](?i)[cd]|[ef])
+flags: 
+expect: compiles
+
+pattern: ^(ab|a(?i)[b-c](?m-i)d|x(?i)y|z)
+flags: 
+expect: compiles
+
+pattern: (?<=foo\\n)^bar
+flags: m
+expect: compiles
+
+pattern: (?<=(?<!foo)bar)baz
+flags: 
+expect: compiles
+
+pattern: ^(a\\1?){4}$
+flags: 
+expect: compiles
+
+pattern: ^(a\\1?)(a\\1?)(a\\2?)(a\\3?)$
+flags: 
+expect: compiles
+
+pattern: abc
+flags: 
+expect: compiles
+
+pattern: ab*c
+flags: 
+expect: compiles
+
+pattern: ab*bc
+flags: 
+expect: compiles
+
+pattern: .{1}
+flags: 
+expect: compiles
+
+pattern: .{3,4}
+flags: 
+expect: compiles
+
+pattern: ab{0,}bc
+flags: 
+expect: compiles
+
+pattern: ab+bc
+flags: 
+expect: compiles
+
+pattern: ab{1,}bc
+flags: 
+expect: compiles
+
+pattern: ab{3,4}bc
+flags: 
+expect: compiles
+
+pattern: ab{4,5}bc
+flags: 
+expect: compiles
+
+pattern: ab?bc
+flags: 
+expect: compiles
+
+pattern: ab{0,1}bc
+flags: 
+expect: compiles
+
+pattern: ab?c
+flags: 
+expect: compiles
+
+pattern: ab{0,1}c
+flags: 
+expect: compiles
+
+pattern: ^abc
+flags: 
+expect: compiles
+
+pattern: ^
+flags: 
+expect: compiles
+
+pattern: $
+flags: 
+expect: compiles
+
+pattern: a.c
+flags: 
+expect: compiles
+
+pattern: a.*c
+flags: 
+expect: compiles
+
+pattern: a[bc]d
+flags: 
+expect: compiles
+
+pattern: a[b-d]e
+flags: 
+expect: compiles
+
+pattern: a[b-d]
+flags: 
+expect: compiles
+
+pattern: a[-b]
+flags: 
+expect: compiles
+
+pattern: a[b-]
+flags: 
+expect: compiles
+
+pattern: a]
+flags: 
+expect: compiles
+
+pattern: a[]]b
+flags: 
+expect: compiles
+
+pattern: a[^bc]d
+flags: 
+expect: compiles
+
+pattern: a[^-b]c
+flags: 
+expect: compiles
+
+pattern: a[^]b]c
+flags: 
+expect: compiles
+
+pattern: \\ba\\b
+flags: 
+expect: compiles
+
+pattern: \\by\\b
+flags: 
+expect: compiles
+
+pattern: \\Ba\\B
+flags: 
+expect: compiles
+
+pattern: \\By\\b
+flags: 
+expect: compiles
+
+pattern: \\by\\B
+flags: 
+expect: compiles
+
+pattern: \\By\\B
+flags: 
+expect: compiles
+
+pattern: \\w
+flags: 
+expect: compiles
+
+pattern: \\W
+flags: 
+expect: compiles
+
+pattern: a\\sb
+flags: 
+expect: compiles
+
+pattern: a\\Sb
+flags: 
+expect: compiles
+
+pattern: \\d
+flags: 
+expect: compiles
+
+pattern: \\D
+flags: 
+expect: compiles
+
+pattern: [\\w]
+flags: 
+expect: compiles
+
+pattern: [\\W]
+flags: 
+expect: compiles
+
+pattern: a[\\s]b
+flags: 
+expect: compiles
+
+pattern: a[\\S]b
+flags: 
+expect: compiles
+
+pattern: [\\d]
+flags: 
+expect: compiles
+
+pattern: [\\D]
+flags: 
+expect: compiles
+
+pattern: ab|cd
+flags: 
+expect: compiles
+
+pattern: ()ef
+flags: 
+expect: compiles
+
+pattern: $b
+flags: 
+expect: compiles
+
+pattern: a\\(b
+flags: 
+expect: compiles
+
+pattern: a\\(*b
+flags: 
+expect: compiles
+
+pattern: a\\\\b
+flags: 
+expect: compiles
+
+pattern: ((a))
+flags: 
+expect: compiles
+
+pattern: (a)b(c)
+flags: 
+expect: compiles
+
+pattern: a+b+c
+flags: 
+expect: compiles
+
+pattern: a{1,}b{1,}c
+flags: 
+expect: compiles
+
+pattern: a.+?c
+flags: 
+expect: compiles
+
+pattern: (a+|b)*
+flags: 
+expect: compiles
+
+pattern: (a+|b){0,}
+flags: 
+expect: compiles
+
+pattern: (a+|b)+
+flags: 
+expect: compiles
+
+pattern: (a+|b){1,}
+flags: 
+expect: compiles
+
+pattern: (a+|b)?
+flags: 
+expect: compiles
+
+pattern: (a+|b){0,1}
+flags: 
+expect: compiles
+
+pattern: [^ab]*
+flags: 
+expect: compiles
+
+pattern: a*
+flags: 
+expect: compiles
+
+pattern: ([abc])*d
+flags: 
+expect: compiles
+
+pattern: ([abc])*bcd
+flags: 
+expect: compiles
+
+pattern: a|b|c|d|e
+flags: 
+expect: compiles
+
+pattern: (a|b|c|d|e)f
+flags: 
+expect: compiles
+
+pattern: abcd*efg
+flags: 
+expect: compiles
+
+pattern: ab*
+flags: 
+expect: compiles
+
+pattern: (ab|cd)e
+flags: 
+expect: compiles
+
+pattern: [abhgefdc]ij
+flags: 
+expect: compiles
+
+pattern: ^(ab|cd)e
+flags: 
+expect: compiles
+
+pattern: (abc|)ef
+flags: 
+expect: compiles
+
+pattern: (a|b)c*d
+flags: 
+expect: compiles
+
+pattern: (ab|ab*)bc
+flags: 
+expect: compiles
+
+pattern: a([bc]*)c*
+flags: 
+expect: compiles
+
+pattern: a([bc]*)(c*d)
+flags: 
+expect: compiles
+
+pattern: a([bc]+)(c*d)
+flags: 
+expect: compiles
+
+pattern: a([bc]*)(c+d)
+flags: 
+expect: compiles
+
+pattern: a[bcd]*dcdcde
+flags: 
+expect: compiles
+
+pattern: a[bcd]+dcdcde
+flags: 
+expect: compiles
+
+pattern: (ab|a)b*c
+flags: 
+expect: compiles
+
+pattern: ((a)(b)c)(d)
+flags: 
+expect: compiles
+
+pattern: [a-zA-Z_][a-zA-Z0-9_]*
+flags: 
+expect: compiles
+
+pattern: ^a(bc+|b[eh])g|.h$
+flags: 
+expect: compiles
+
+pattern: (bc+d$|ef*g.|h?i(j|k))
+flags: 
+expect: compiles
+
+pattern: ((((((((((a))))))))))
+flags: 
+expect: compiles
+
+pattern: ((((((((((a))))))))))\\10
+flags: 
+expect: compiles
+
+pattern: (((((((((a)))))))))
+flags: 
+expect: compiles
+
+pattern: multiple words of text
+flags: 
+expect: compiles
+
+pattern: multiple words
+flags: 
+expect: compiles
+
+pattern: (.*)c(.*)
+flags: 
+expect: compiles
+
+pattern: \\((.*), (.*)\\)
+flags: 
+expect: compiles
+
+pattern: [k]
+flags: 
+expect: compiles
+
+pattern: abcd
+flags: 
+expect: compiles
+
+pattern: a(bc)d
+flags: 
+expect: compiles
+
+pattern: a[-]?c
+flags: 
+expect: compiles
+
+pattern: (abc)\\1
+flags: 
+expect: compiles
+
+pattern: ([a-c]*)\\1
+flags: 
+expect: compiles
+
+pattern: (a)|\\1
+flags: 
+expect: compiles
+
+pattern: (([a-c])b*?\\2)*
+flags: 
+expect: compiles
+
+pattern: (([a-c])b*?\\2){3}
+flags: 
+expect: compiles
+
+pattern: ((\\3|b)\\2(a)x)+
+flags: 
+expect: compiles
+
+pattern: ((\\3|b)\\2(a)){2,}
+flags: 
+expect: compiles
+
+pattern: abc
+flags: i
+expect: compiles
+
+pattern: ab*c
+flags: i
+expect: compiles
+
+pattern: ab*bc
+flags: i
+expect: compiles
+
+pattern: ab*?bc
+flags: i
+expect: compiles
+
+pattern: ab{0,}?bc
+flags: i
+expect: compiles
+
+pattern: ab+?bc
+flags: i
+expect: compiles
+
+pattern: ab+bc
+flags: i
+expect: compiles
+
+pattern: ab{1,}bc
+flags: i
+expect: compiles
+
+pattern: ab{1,}?bc
+flags: i
+expect: compiles
+
+pattern: ab{1,3}?bc
+flags: i
+expect: compiles
+
+pattern: ab{3,4}?bc
+flags: i
+expect: compiles
+
+pattern: ab{4,5}?bc
+flags: i
+expect: compiles
+
+pattern: ab??bc
+flags: i
+expect: compiles
+
+pattern: ab{0,1}?bc
+flags: i
+expect: compiles
+
+pattern: ab??c
+flags: i
+expect: compiles
+
+pattern: ab{0,1}?c
+flags: i
+expect: compiles
+
+pattern: ^abc$
+flags: i
+expect: compiles
+
+pattern: ^abc
+flags: i
+expect: compiles
+
+pattern: abc$
+flags: i
+expect: compiles
+
+pattern: ^
+flags: i
+expect: compiles
+
+pattern: $
+flags: i
+expect: compiles
+
+pattern: a.c
+flags: i
+expect: compiles
+
+pattern: a.*?c
+flags: i
+expect: compiles
+
+pattern: a.*c
+flags: i
+expect: compiles
+
+pattern: a[bc]d
+flags: i
+expect: compiles
+
+pattern: a[b-d]e
+flags: i
+expect: compiles
+
+pattern: a[b-d]
+flags: i
+expect: compiles
+
+pattern: a[-b]
+flags: i
+expect: compiles
+
+pattern: a[b-]
+flags: i
+expect: compiles
+
+pattern: a]
+flags: i
+expect: compiles
+
+pattern: a[]]b
+flags: i
+expect: compiles
+
+pattern: a[^bc]d
+flags: i
+expect: compiles
+
+pattern: a[^-b]c
+flags: i
+expect: compiles
+
+pattern: a[^]b]c
+flags: i
+expect: compiles
+
+pattern: ab|cd
+flags: i
+expect: compiles
+
+pattern: ()ef
+flags: i
+expect: compiles
+
+pattern: $b
+flags: i
+expect: compiles
+
+pattern: a\\(b
+flags: i
+expect: compiles
+
+pattern: a\\(*b
+flags: i
+expect: compiles
+
+pattern: a\\\\b
+flags: i
+expect: compiles
+
+pattern: ((a))
+flags: i
+expect: compiles
+
+pattern: (a)b(c)
+flags: i
+expect: compiles
+
+pattern: a+b+c
+flags: i
+expect: compiles
+
+pattern: a{1,}b{1,}c
+flags: i
+expect: compiles
+
+pattern: a.+?c
+flags: i
+expect: compiles
+
+pattern: a.{0,5}?c
+flags: i
+expect: compiles
+
+pattern: (a+|b)*
+flags: i
+expect: compiles
+
+pattern: (a+|b){0,}
+flags: i
+expect: compiles
+
+pattern: (a+|b)+
+flags: i
+expect: compiles
+
+pattern: (a+|b){1,}
+flags: i
+expect: compiles
+
+pattern: (a+|b)?
+flags: i
+expect: compiles
+
+pattern: (a+|b){0,1}
+flags: i
+expect: compiles
+
+pattern: (a+|b){0,1}?
+flags: i
+expect: compiles
+
+pattern: [^ab]*
+flags: i
+expect: compiles
+
+pattern: ([abc])*d
+flags: i
+expect: compiles
+
+pattern: ([abc])*bcd
+flags: i
+expect: compiles
+
+pattern: a|b|c|d|e
+flags: i
+expect: compiles
+
+pattern: (a|b|c|d|e)f
+flags: i
+expect: compiles
+
+pattern: abcd*efg
+flags: i
+expect: compiles
+
+pattern: ab*
+flags: i
+expect: compiles
+
+pattern: (ab|cd)e
+flags: i
+expect: compiles
+
+pattern: [abhgefdc]ij
+flags: i
+expect: compiles
+
+pattern: ^(ab|cd)e
+flags: i
+expect: compiles
+
+pattern: (abc|)ef
+flags: i
+expect: compiles
+
+pattern: (a|b)c*d
+flags: i
+expect: compiles
+
+pattern: (ab|ab*)bc
+flags: i
+expect: compiles
+
+pattern: a([bc]*)c*
+flags: i
+expect: compiles
+
+pattern: a([bc]*)(c*d)
+flags: i
+expect: compiles
+
+pattern: a([bc]+)(c*d)
+flags: i
+expect: compiles
+
+pattern: a([bc]*)(c+d)
+flags: i
+expect: compiles
+
+pattern: a[bcd]*dcdcde
+flags: i
+expect: compiles
+
+pattern: a[bcd]+dcdcde
+flags: i
+expect: compiles
+
+pattern: (ab|a)b*c
+flags: i
+expect: compiles
+
+pattern: ((a)(b)c)(d)
+flags: i
+expect: compiles
+
+pattern: [a-zA-Z_][a-zA-Z0-9_]*
+flags: i
+expect: compiles
+
+pattern: ^a(bc+|b[eh])g|.h$
+flags: i
+expect: compiles
+
+pattern: (bc+d$|ef*g.|h?i(j|k))
+flags: i
+expect: compiles
+
+pattern: ((((((((((a))))))))))
+flags: i
+expect: compiles
+
+pattern: ((((((((((a))))))))))\\10
+flags: i
+expect: compiles
+
+pattern: (((((((((a)))))))))
+flags: i
+expect: compiles
+
+pattern: (?:(?:(?:(?:(?:(?:(?:(?:(?:(a))))))))))
+flags: i
+expect: compiles
+
+pattern: (?:(?:(?:(?:(?:(?:(?:(?:(?:(a|b|c))))))))))
+flags: i
+expect: compiles
+
+pattern: multiple words of text
+flags: i
+expect: compiles
+
+pattern: multiple words
+flags: i
+expect: compiles
+
+pattern: (.*)c(.*)
+flags: i
+expect: compiles
+
+pattern: \\((.*), (.*)\\)
+flags: i
+expect: compiles
+
+pattern: [k]
+flags: i
+expect: compiles
+
+pattern: abcd
+flags: i
+expect: compiles
+
+pattern: a(bc)d
+flags: i
+expect: compiles
+
+pattern: a[-]?c
+flags: i
+expect: compiles
+
+pattern: ([a-c]*)\\1
+flags: i
+expect: compiles
+
+pattern: a(?!b).
+flags: 
+expect: compiles
+
+pattern: a(?=d).
+flags: 
+expect: compiles
+
+pattern: a(?=c|d).
+flags: 
+expect: compiles
+
+pattern: a(?:b|c|d)(.)
+flags: 
+expect: compiles
+
+pattern: a(?:b|c|d)*(.)
+flags: 
+expect: compiles
+
+pattern: a(?:b|c|d)+?(.)
+flags: 
+expect: compiles
+
+pattern: a(?:b|c|d)+(.)
+flags: 
+expect: compiles
+
+pattern: a(?:b|c|d){2}(.)
+flags: 
+expect: compiles
+
+pattern: a(?:b|c|d){4,5}(.)
+flags: 
+expect: compiles
+
+pattern: a(?:b|c|d){4,5}?(.)
+flags: 
+expect: compiles
+
+pattern: a(?:b|c|d){6,7}(.)
+flags: 
+expect: compiles
+
+pattern: a(?:b|c|d){6,7}?(.)
+flags: 
+expect: compiles
+
+pattern: a(?:b|c|d){5,6}(.)
+flags: 
+expect: compiles
+
+pattern: a(?:b|c|d){5,6}?(.)
+flags: 
+expect: compiles
+
+pattern: a(?:b|c|d){5,7}(.)
+flags: 
+expect: compiles
+
+pattern: a(?:b|c|d){5,7}?(.)
+flags: 
+expect: compiles
+
+pattern: a(?:b|(c|e){1,2}?|d)+?(.)
+flags: 
+expect: compiles
+
+pattern: ^(.+)?B
+flags: 
+expect: compiles
+
+pattern: ^([^a-z])|(\\^)$
+flags: 
+expect: compiles
+
+pattern: ^[<>]&
+flags: 
+expect: compiles
+
+pattern: ^(a(?(1)\\1)){4}$
+flags: 
+expect: compiles
+
+pattern: (?<=a)b
+flags: 
+expect: compiles
+
+pattern: (?<!c)b
+flags: 
+expect: compiles
+
+pattern: (?:..)*a
+flags: 
+expect: compiles
+
+pattern: (?:..)*?a
+flags: 
+expect: compiles
+
+pattern: ^(?:b|a(?=(.)))*\\1
+flags: 
+expect: compiles
+
+pattern: ^(){3,5}
+flags: 
+expect: compiles
+
+pattern: ^(a+)*ax
+flags: 
+expect: compiles
+
+pattern: ^((a|b)+)*ax
+flags: 
+expect: compiles
+
+pattern: ^((a|bc)+)*ax
+flags: 
+expect: compiles
+
+pattern: (a|x)*ab
+flags: 
+expect: compiles
+
+pattern: (a)*ab
+flags: 
+expect: compiles
+
+pattern: (?:(?i)a)b
+flags: 
+expect: compiles
+
+pattern: ((?i)a)b
+flags: 
+expect: compiles
+
+pattern: (?i:a)b
+flags: 
+expect: compiles
+
+pattern: ((?i:a))b
+flags: 
+expect: compiles
+
+pattern: (?:(?-i)a)b
+flags: i
+expect: compiles
+
+pattern: ((?-i)a)b
+flags: i
+expect: compiles
+
+pattern: (?-i:a)b
+flags: i
+expect: compiles
+
+pattern: ((?-i:a))b
+flags: i
+expect: compiles
+
+pattern: ((?-i:a.))b
+flags: i
+expect: compiles
+
+pattern: ((?s-i:a.))b
+flags: i
+expect: compiles
+
+pattern: (?:c|d)(?:)(?:a(?:)(?:b)(?:b(?:))(?:b(?:)(?:b)))
+flags: 
+expect: compiles
+
+pattern: (?:c|d)(?:)(?:aaaaaaaa(?:)(?:bbbbbbbb)(?:bbbbbbbb(?:))(?:bbbbbbbb(?:)(?:bbbbbbbb)))
+flags: 
+expect: compiles
+
+pattern: (ab)\\d\\1
+flags: i
+expect: compiles
+
+pattern: foo\\w*\\d{4}baz
+flags: 
+expect: compiles
+
+pattern: x(~~)*(?:(?:F)?)?
+flags: 
+expect: compiles
+
+pattern: ^a(?#xxx){3}c
+flags: 
+expect: compiles
+
+pattern: ^a (?#xxx) (?#yyy) {3}c
+flags: x
+expect: compiles
+
+pattern: (?<![cd])b
+flags: 
+expect: compiles
+
+pattern: (?<![cd])[ab]
+flags: 
+expect: compiles
+
+pattern: (?<!(c|d))b
+flags: 
+expect: compiles
+
+pattern: (?<!(c|d))[ab]
+flags: 
+expect: compiles
+
+pattern: (?<!cd)[ab]
+flags: 
+expect: compiles
+
+pattern: ^(?:a?b?)*$
+flags: 
+expect: compiles
+
+pattern: ((?s)^a(.))((?m)^b$)
+flags: 
+expect: compiles
+
+pattern: ((?m)^b$)
+flags: 
+expect: compiles
+
+pattern: (?m)^b
+flags: 
+expect: compiles
+
+pattern: (?m)^(b)
+flags: 
+expect: compiles
+
+pattern: ((?m)^b)
+flags: 
+expect: compiles
+
+pattern: \\n((?m)^b)
+flags: 
+expect: compiles
+
+pattern: ((?s).)c(?!.)
+flags: 
+expect: compiles
+
+pattern: ((?s)b.)c(?!.)
+flags: 
+expect: compiles
+
+pattern: ^b
+flags: 
+expect: compiles
+
+pattern: ()^b
+flags: 
+expect: compiles
+
+pattern: (x)?(?(1)a|b)
+flags: 
+expect: compiles
+
+pattern: (x)?(?(1)b|a)
+flags: 
+expect: compiles
+
+pattern: ()?(?(1)b|a)
+flags: 
+expect: compiles
+
+pattern: ()(?(1)b|a)
+flags: 
+expect: compiles
+
+pattern: ()?(?(1)a|b)
+flags: 
+expect: compiles
+
+pattern: ^(\\()?blah(?(1)(\\)))$
+flags: 
+expect: compiles
+
+pattern: ^(\\(+)?blah(?(1)(\\)))$
+flags: 
+expect: compiles
+
+pattern: (?(?!a)a|b)
+flags: 
+expect: compiles
+
+pattern: (?(?!a)b|a)
+flags: 
+expect: compiles
+
+pattern: (?(?=a)b|a)
+flags: 
+expect: compiles
+
+pattern: (?(?=a)a|b)
+flags: 
+expect: compiles
+
+pattern: (?=(a+?))(\\1ab)
+flags: 
+expect: compiles
+
+pattern: ^(?=(a+?))\\1ab
+flags: 
+expect: compiles
+
+pattern: (\\w+:)+
+flags: 
+expect: compiles
+
+pattern: $(?<=^(a))
+flags: 
+expect: compiles
+
+pattern: ([\\w:]+::)?(\\w+)$
+flags: 
+expect: compiles
+
+pattern: ^[^bcd]*(c+)
+flags: 
+expect: compiles
+
+pattern: (a*)b+
+flags: 
+expect: compiles
+
+pattern: (>a+)ab
+flags: 
+expect: compiles
+
+pattern: ([[:]+)
+flags: 
+expect: compiles
+
+pattern: ([[=]+)
+flags: 
+expect: compiles
+
+pattern: ([[.]+)
+flags: 
+expect: compiles
+
+pattern: a\\Z
+flags: 
+expect: compiles
+
+pattern: b\\Z
+flags: 
+expect: compiles
+
+pattern: b\\z
+flags: 
+expect: compiles
+
+pattern: ^(?>(?(1)\\.|())[^\\W_](?>[a-z0-9-]*[^\\W_])?)+$
+flags: 
+expect: compiles
+
+pattern: (?>.*)(?<=(abcd|wxyz))
+flags: 
+expect: compiles
+
+pattern: word (?>(?:(?!otherword)[a-zA-Z0-9]+ ){0,30})otherword
+flags: 
+expect: compiles
+
+pattern: word (?>[a-zA-Z0-9]+ ){0,30}otherword
+flags: 
+expect: compiles
+
+pattern: (?<=\\d{3}(?!999))foo
+flags: 
+expect: compiles
+
+pattern: (?<=(?!...999)\\d{3})foo
+flags: 
+expect: compiles
+
+pattern: (?<=\\d{3}(?!999)...)foo
+flags: 
+expect: compiles
+
+pattern: (?<=\\d{3}...)(?<!999)foo
+flags: 
+expect: compiles
+
+pattern: (Z()|A)*
+flags: 
+expect: compiles
+
+pattern: (Z(())|A)*
+flags: 
+expect: compiles
+
+pattern: ((?>Z)+|A)*
+flags: 
+expect: compiles
+
+pattern: ((?>)+|A)*
+flags: 
+expect: compiles
+
+pattern: [[:space:]]+
+flags: 
+expect: compiles
+
+pattern: [[:blank:]]+
+flags: 
+expect: compiles
+
+pattern: [\\s]+
+flags: 
+expect: compiles
+
+pattern: \\s+
+flags: 
+expect: compiles
+
+pattern: a\x0Bb
+flags: x
+expect: compiles
+
+pattern: (?!^)x
+flags: m
+expect: compiles
+
+pattern: abc\\Qabc\\Eabc
+flags: 
+expect: compiles
+
+pattern: abc\\Q(*+|\\Eabc
+flags: 
+expect: compiles
+
+pattern: \x20  abc\\Q abc\\Eabc
+flags: x
+expect: compiles
+
+pattern: \\Qabc\\$xyz\\E
+flags: 
+expect: compiles
+
+pattern: \\Qabc\\E\\$\\Qxyz\\E
+flags: 
+expect: compiles
+
+pattern: \\Gabc
+flags: 
+expect: compiles
+
+pattern: a(?x: b c )d
+flags: 
+expect: compiles
+
+pattern: ((?x)x y z | a b c)
+flags: 
+expect: compiles
+
+pattern: (?i)AB(?-i)C
+flags: 
+expect: compiles
+
+pattern: ((?i)AB(?-i)C|D)E
+flags: 
+expect: compiles
+
+pattern: (.*)\\d+\\1
+flags: 
+expect: compiles
+
+pattern: (.*)\\d+\\1
+flags: s
+expect: compiles
+
+pattern: ((.*))\\d+\\1
+flags: 
+expect: compiles
+
+pattern: [z\\Qa-d]\\E]
+flags: 
+expect: compiles
+
+pattern: (a+)*b
+flags: 
+expect: compiles
+
+pattern: (?i)reg(?:ul(?:[a\uFFFD]|ae)r|ex)
+flags: 
+expect: compiles
+
+pattern: \uFFFD\uFFFD\uFFFD\uFFFD[\uFFFD-\uFFFD\uFFFD-\uFFFD]+
+flags: 
+expect: compiles
+
+pattern: (?<=Z)X.
+flags: 
+expect: compiles
+
+pattern: ab cd (?x) de fg
+flags: 
+expect: compiles
+
+pattern: ab cd(?x) de fg
+flags: 
+expect: compiles
+
+pattern: (?<![^f]oo)(bar)
+flags: 
+expect: compiles
+
+pattern: (?<![^f])X
+flags: 
+expect: compiles
+
+pattern: (?<=[^f])X
+flags: 
+expect: compiles
+
+pattern: (?:(?(1)a|b)(X))+
+flags: 
+expect: compiles
+
+pattern: (?:(?(1)\\1a|b)(X|Y))+
+flags: 
+expect: compiles
+
+pattern: ()()()()()()()()()(?:(?(10)\\10a|b)(X|Y))+
+flags: 
+expect: compiles
+
+pattern: [[,abc,]+]
+flags: 
+expect: compiles
+
+pattern: (?-x: )
+flags: x
+expect: compiles
+
+pattern: (?x)(?-x: \\s*#\\s*)
+flags: 
+expect: compiles
+
+pattern: (?x-is)(?:(?-ixs) \\s*#\\s*) include
+flags: 
+expect: compiles
+
+pattern: a*b*\\w
+flags: 
+expect: compiles
+
+pattern: a*b?\\w
+flags: 
+expect: compiles
+
+pattern: a*b{0,4}\\w
+flags: 
+expect: compiles
+
+pattern: a*b{0,}\\w
+flags: 
+expect: compiles
+
+pattern: a*\\d*\\w
+flags: 
+expect: compiles
+
+pattern: a*b *\\w
+flags: x
+expect: compiles
+
+pattern: a* b *\\w
+flags: x
+expect: compiles
+
+pattern: ^\\w+=.*(\\\\\\n.*)*
+flags: 
+expect: compiles
+
+pattern: (?=(\\w+))\\1:
+flags: 
+expect: compiles
+
+pattern: ^(?=(\\w+))\\1:
+flags: 
+expect: compiles
+
+pattern: ^\\Eabc
+flags: 
+expect: compiles
+
+pattern: ^[\\Eabc]
+flags: 
+expect: compiles
+
+pattern: ^[a-\\Ec]
+flags: 
+expect: compiles
+
+pattern: ^[a\\E\\E-\\Ec]
+flags: 
+expect: compiles
+
+pattern: ^[\\E\\Qa\\E-\\Qz\\E]+
+flags: 
+expect: compiles
+
+pattern: ^[a\\Q]bc\\E]
+flags: 
+expect: compiles
+
+pattern: ^[a-\\Q\\E]
+flags: 
+expect: compiles
+
+pattern: ^(a()*)*
+flags: 
+expect: compiles
+
+pattern: ^(?:a(?:(?:))*)*
+flags: 
+expect: compiles
+
+pattern: ^(a()+)+
+flags: 
+expect: compiles
+
+pattern: ^(?:a(?:(?:))+)+
+flags: 
+expect: compiles
+
+pattern: (a){0,3}(?(1)b|(c|))*D
+flags: 
+expect: compiles
+
+pattern: (a|)*\\d
+flags: 
+expect: compiles
+
+pattern: (?>a|)*\\d
+flags: 
+expect: compiles
+
+pattern: (?:a|)*\\d
+flags: 
+expect: compiles
+
+pattern: ^(?s)(?>.*)(?<!\\n)
+flags: 
+expect: compiles
+
+pattern: ^(?![^\\n]*\\n\\z)
+flags: 
+expect: compiles
+
+pattern: \\z(?<!\\n)
+flags: 
+expect: compiles
+
+pattern: (.*(.)?)*
+flags: 
+expect: compiles
+
+pattern: ( (A | (?(1)0|) )*   )
+flags: x
+expect: compiles
+
+pattern: ( ( (?(1)0|) )*   )
+flags: x
+expect: compiles
+
+pattern: (  (?(1)0|)*   )
+flags: x
+expect: compiles
+
+pattern: [[:abcd:xyz]]
+flags: 
+expect: compiles
+
+pattern: [abc[:x\\]pqr]
+flags: 
+expect: compiles
+
+pattern: .*[op][xyz]
+flags: 
+expect: compiles
+
+pattern: (?(?=.*b)b|^)
+flags: 
+expect: compiles
+
+pattern: (?(?=^.*b)b|^)
+flags: 
+expect: compiles
+
+pattern: (?(?=.*b)b|^)*
+flags: 
+expect: compiles
+
+pattern: (?(?=.*b)b|^)+
+flags: 
+expect: compiles
+
+pattern: (?(?=b).*b|^d)
+flags: 
+expect: compiles
+
+pattern: (?(?=.*b).*b|^d)
+flags: 
+expect: compiles
+
+pattern: ^%((?(?=[a])[^%])|b)*%$
+flags: 
+expect: compiles
+
+pattern: (?i)a(?-i)b|c
+flags: 
+expect: compiles
+
+pattern: [\\x00-\\xff\\s]+
+flags: 
+expect: compiles
+
+pattern: [^a]*
+flags: i
+expect: compiles
+
+pattern: [^a]*+
+flags: i
+expect: compiles
+
+pattern: [^a]*?X
+flags: i
+expect: compiles
+
+pattern: [^a]+?X
+flags: i
+expect: compiles
+
+pattern: [^a]?X
+flags: i
+expect: compiles
+
+pattern: [^a]??X
+flags: i
+expect: compiles
+
+pattern: [^a]?+X
+flags: i
+expect: compiles
+
+pattern: [^a]{2,3}
+flags: i
+expect: compiles
+
+pattern: [^a]{2,3}?
+flags: i
+expect: compiles
+
+pattern: [^a]{2,3}+
+flags: i
+expect: compiles
+
+pattern: ((a|)+)+Z
+flags: 
+expect: compiles
+
+pattern: (a)b|(a)c
+flags: 
+expect: compiles
+
+pattern: (?>(a))b|(a)c
+flags: 
+expect: compiles
+
+pattern: (?=(a))ab|(a)c
+flags: 
+expect: compiles
+
+pattern: ((?>(a))b|(a)c)
+flags: 
+expect: compiles
+
+pattern: ((?>(a))b|(a)c)++
+flags: 
+expect: compiles
+
+pattern: (?:(?>(a))b|(a)c)++
+flags: 
+expect: compiles
+
+pattern: (?=(?>(a))b|(a)c)(..)
+flags: 
+expect: compiles
+
+pattern: (?>(?>(a))b|(a)c)
+flags: 
+expect: compiles
+
+pattern: ((?>(a+)b)+(aabab))
+flags: 
+expect: compiles
+
+pattern: (?>a+|ab)+?c
+flags: 
+expect: compiles
+
+pattern: (?>a+|ab)+c
+flags: 
+expect: compiles
+
+pattern: (?:a+|ab)+c
+flags: 
+expect: compiles
+
+pattern: (?(?=(a))a)
+flags: 
+expect: compiles
+
+pattern: (?(?=(a))a)(b)
+flags: 
+expect: compiles
+
+pattern: ^(?:a|ab)++c
+flags: 
+expect: compiles
+
+pattern: ^(?>a|ab)++c
+flags: 
+expect: compiles
+
+pattern: ^(?:a|ab)+c
+flags: 
+expect: compiles
+
+pattern: (?=abc){0}xyz
+flags: 
+expect: compiles
+
+pattern: (?=abc){1}xyz
+flags: 
+expect: compiles
+
+pattern: (?=(a))?.
+flags: 
+expect: compiles
+
+pattern: (?=(a))??.
+flags: 
+expect: compiles
+
+pattern: ^(?=(?1))?[az]([abc])d
+flags: 
+expect: compiles
+
+pattern: ^(?!a){0}\\w+
+flags: 
+expect: compiles
+
+pattern: (?<=(abc))?xyz
+flags: 
+expect: compiles
+
+pattern: ^[\\g<a>]+
+flags: 
+expect: compiles
+
+pattern: ^[\\ga]+
+flags: 
+expect: compiles
+
+pattern: ^[:a[:digit:]]+
+flags: 
+expect: compiles
+
+pattern: ^[:a[:digit:]:b]+
+flags: 
+expect: compiles
+
+pattern: [:a]xxx[b:]
+flags: 
+expect: compiles
+
+pattern: (?<=a{2})b
+flags: i
+expect: compiles
+
+pattern: (?<!a{2})b
+flags: i
+expect: compiles
+
+pattern: (?<=a\\h)c
+flags: 
+expect: compiles
+
+pattern: (?<=[^a]{2})b
+flags: 
+expect: compiles
+
+pattern: (?<=[^a]{2})b
+flags: i
+expect: compiles
+
+pattern: (?<=a\\H)c
+flags: 
+expect: compiles
+
+pattern: (?<=a\\V)c
+flags: 
+expect: compiles
+
+pattern: (?<=a\\v)c
+flags: 
+expect: compiles
+
+pattern: (?(?=c)c|d)++Y
+flags: 
+expect: compiles
+
+pattern: (?(?=c)c|d)*+Y
+flags: 
+expect: compiles
+
+pattern: ^(a{2,3}){2,}+a
+flags: 
+expect: compiles
+
+pattern: ^(a{2,3})++a
+flags: 
+expect: compiles
+
+pattern: ^(a{2,3})*+a
+flags: 
+expect: compiles
+
+pattern: \\H\\h\\V\\v
+flags: 
+expect: compiles
+
+pattern: \\H*\\h+\\V?\\v{3,4}
+flags: 
+expect: compiles
+
+pattern: \\H{3,4}
+flags: 
+expect: compiles
+
+pattern: .\\h{3,4}.
+flags: 
+expect: compiles
+
+pattern: \\h*X\\h?\\H+Y\\H?Z
+flags: 
+expect: compiles
+
+pattern: \\v*X\\v?Y\\v+Z\\V*\\x0a\\V+\\x0b\\V{2,3}\\x0c
+flags: 
+expect: compiles
+
+pattern: (foo)\\Kbar
+flags: 
+expect: compiles
+
+pattern: (foo)(\\Kbar|baz)
+flags: 
+expect: compiles
+
+pattern: (foo\\Kbar)baz
+flags: 
+expect: compiles
+
+pattern: ^(a(b))\\1\\g1\\g{1}\\g-1\\g{-1}\\g{-2}Z
+flags: 
+expect: compiles
+
+pattern: (?<A>tom|bon)-\\g{A}
+flags: 
+expect: compiles
+
+pattern: (^(a|b\\g{-1}))
+flags: 
+expect: compiles
+
+pattern: (?|(abc)|(xyz))\\1
+flags: 
+expect: compiles
+
+pattern: (?|(abc)|(xyz))(?1)
+flags: 
+expect: compiles
+
+pattern: ^X(?5)(a)(?|(b)|(q))(c)(d)(Y)
+flags: 
+expect: compiles
+
+pattern: ^X(?7)(a)(?|(b|(r)(s))|(q))(c)(d)(Y)
+flags: 
+expect: compiles
+
+pattern: ^X(?7)(a)(?|(b|(?|(r)|(t))(s))|(q))(c)(d)(Y)
+flags: 
+expect: compiles
+
+pattern: (?'abc'\\w+):\\k<abc>{2}
+flags: 
+expect: compiles
+
+pattern: (?'abc'\\w+):\\g{abc}{2}
+flags: 
+expect: compiles
+
+pattern: ^(?<ab>a)? (?(<ab>)b|c) (?('ab')d|e)
+flags: x
+expect: compiles
+
+pattern: ^(a.)\\g-1Z
+flags: 
+expect: compiles
+
+pattern: ^(a.)\\g{-1}Z
+flags: 
+expect: compiles
+
+pattern: ^(?(DEFINE) (?<A> a) (?<B> b) )  (?&A) (?&B)\x20
+flags: x
+expect: compiles
+
+pattern: (?<all>(?:(?:a(?&all))|(b))(c?))
+flags: 
+expect: compiles
+
+pattern: (a(b)|(c))(?1)
+flags: 
+expect: compiles
+
+pattern: (?1)(a(b)|(c))
+flags: 
+expect: compiles
+
+pattern: (?(DEFINE)(?<byte>2[0-4]\\d|25[0-5]|1\\d\\d|[1-9]?\\d))\\b(?&byte)(\\.(?&byte)){3}
+flags: 
+expect: compiles
+
+pattern: \\b(?&byte)(\\.(?&byte)){3}(?(DEFINE)(?<byte>2[0-4]\\d|25[0-5]|1\\d\\d|[1-9]?\\d))
+flags: 
+expect: compiles
+
+pattern: ^(\\w++|\\s++)*$
+flags: 
+expect: compiles
+
+pattern: (\\d++)(\\w)
+flags: 
+expect: compiles
+
+pattern: a++b
+flags: 
+expect: compiles
+
+pattern: (a++b)
+flags: 
+expect: compiles
+
+pattern: (a++)b
+flags: 
+expect: compiles
+
+pattern: ([^()]++|\\([^()]*\\))+
+flags: 
+expect: compiles
+
+pattern: \\(([^()]++|\\([^()]+\\))+\\)
+flags: 
+expect: compiles
+
+pattern: ^([^()]|\\((?1)*\\))*$
+flags: 
+expect: compiles
+
+pattern: ^>abc>([^()]|\\((?1)*\\))*<xyz<$
+flags: 
+expect: compiles
+
+pattern: ^(?:((.)(?1)\\2|)|((.)(?3)\\4|.))$
+flags: i
+expect: compiles
+
+pattern: ^(\\d+|\\((?1)([+*-])(?1)\\)|-(?1))$
+flags: 
+expect: compiles
+
+pattern: ^(x(y|(?1){2})z)
+flags: 
+expect: compiles
+
+pattern: ((< (?: (?(R) \\d++  | [^<>]*+) | (?2)) * >))
+flags: x
+expect: compiles
+
+pattern: ^a+(*FAIL)
+flags: 
+expect: compiles
+
+pattern: a+b?c+(*FAIL)
+flags: 
+expect: compiles
+
+pattern: a+b?(*PRUNE)c+(*FAIL)
+flags: 
+expect: compiles
+
+pattern: a+b?(*COMMIT)c+(*FAIL)
+flags: 
+expect: compiles
+
+pattern: a+b?(*SKIP)c+(*FAIL)
+flags: 
+expect: compiles
+
+pattern: ^(?:aaa(*THEN)\\w{6}|bbb(*THEN)\\w{5}|ccc(*THEN)\\w{4}|\\w{3})
+flags: 
+expect: compiles
+
+pattern: ^(aaa(*THEN)\\w{6}|bbb(*THEN)\\w{5}|ccc(*THEN)\\w{4}|\\w{3})
+flags: 
+expect: compiles
+
+pattern: a+b?(*THEN)c+(*FAIL)
+flags: 
+expect: compiles
+
+pattern: (A (A|B(*ACCEPT)|C) D)(E)
+flags: x
+expect: compiles
+
+pattern: ^\\W*+(?:((.)\\W*+(?1)\\W*+\\2|)|((.)\\W*+(?3)\\W*+\\4|\\W*+.\\W*+))\\W*+$
+flags: i
+expect: compiles
+
+pattern: ^((.)(?1)\\2|.)$
+flags: 
+expect: compiles
+
+pattern: (a)(?<=b(?1))
+flags: 
+expect: compiles
+
+pattern: (?<=b(?1))(a)
+flags: 
+expect: compiles
+
+pattern: (?<X>a)(?<=b(?&X))
+flags: 
+expect: compiles
+
+pattern: ^(?|(abc)|(def))\\1
+flags: 
+expect: compiles
+
+pattern: ^(?|(abc)|(def))(?1)
+flags: 
+expect: compiles
+
+pattern: (?:(?1)|B)(A(*F)|C)
+flags: 
+expect: compiles
+
+pattern: ^(?:(?1)|B)(A(*F)|C)
+flags: 
+expect: compiles
+
+pattern: (?:(?1)|B)(A(*ACCEPT)XX|C)D
+flags: 
+expect: compiles
+
+pattern: (?(DEFINE)(A))B(?1)C
+flags: 
+expect: compiles
+
+pattern: (?(DEFINE)((A)\\2))B(?1)C
+flags: 
+expect: compiles
+
+pattern: (?<pn> \\( ( [^()]++ | (?&pn) )* \\) )
+flags: x
+expect: compiles
+
+pattern: ^(?=a(*SKIP)b|ac)
+flags: 
+expect: compiles
+
+pattern: ^(?=a(*PRUNE)b)
+flags: 
+expect: compiles
+
+pattern: ^(?=a(*ACCEPT)b)
+flags: 
+expect: compiles
+
+pattern: (?>a\\Kb)
+flags: 
+expect: compiles
+
+pattern: ((?>a\\Kb))
+flags: 
+expect: compiles
+
+pattern: (a\\Kb)
+flags: 
+expect: compiles
+
+pattern: ^a\\Kcz|ac
+flags: 
+expect: compiles
+
+pattern: (?>a\\Kbz|ab)
+flags: 
+expect: compiles
+
+pattern: ^(?&t)(?(DEFINE)(?<t>a\\Kb))$
+flags: 
+expect: compiles
+
+pattern: (?P<L1>(?P<L2>0)(?P>L1)|(?P>L2))
+flags: 
+expect: compiles
+
+pattern: (?P<L1>(?P<L2>0)|(?P>L2)(?P>L1))
+flags: 
+expect: compiles
+
+pattern: A(*COMMIT)(B|D)
+flags: 
+expect: compiles
+
+pattern: (*COMMIT)(A|P)(B|P)(C|P)
+flags: 
+expect: compiles
+
+pattern: (\\w+)(?>b(*COMMIT))\\w{2}
+flags: 
+expect: compiles
+
+pattern: (\\w+)b(*COMMIT)\\w{2}
+flags: 
+expect: compiles
+
+pattern: (?&t)(?#()(?(DEFINE)(?<t>a))
+flags: 
+expect: compiles
+
+pattern: (?>(*COMMIT)(?>yes|no)(*THEN)(*F))?
+flags: 
+expect: compiles
+
+pattern: (?>(*COMMIT)(yes|no)(*THEN)(*F))?
+flags: 
+expect: compiles
+
+pattern: b?(*SKIP)c
+flags: 
+expect: compiles
+
+pattern: (*SKIP)bc
+flags: 
+expect: compiles
+
+pattern: (*SKIP)b
+flags: 
+expect: compiles
+
+pattern: (?P<abn>(?P=abn)xxx|)+
+flags: 
+expect: compiles
+
+pattern: (?i:([^b]))(?1)
+flags: 
+expect: compiles
+
+pattern: ^(?&t)*+(?(DEFINE)(?<t>a))\\w$
+flags: 
+expect: compiles
+
+pattern: ^(?&t)*(?(DEFINE)(?<t>a))\\w$
+flags: 
+expect: compiles
+
+pattern: ^(a)*+(\\w)
+flags: 
+expect: compiles
+
+pattern: ^(?:a)*+(\\w)
+flags: 
+expect: compiles
+
+pattern: ^(a)++(\\w)
+flags: 
+expect: compiles
+
+pattern: ^(?:a)++(\\w)
+flags: 
+expect: compiles
+
+pattern: ^(a)?+(\\w)
+flags: 
+expect: compiles
+
+pattern: ^(?:a)?+(\\w)
+flags: 
+expect: compiles
+
+pattern: ^(a){2,}+(\\w)
+flags: 
+expect: compiles
+
+pattern: ^(?:a){2,}+(\\w)
+flags: 
+expect: compiles
+
+pattern: (a|)*(?1)b
+flags: 
+expect: compiles
+
+pattern: (a)++(?1)b
+flags: 
+expect: compiles
+
+pattern: (a)*+(?1)b
+flags: 
+expect: compiles
+
+pattern: (?1)(?:(b)){0}
+flags: 
+expect: compiles
+
+pattern: (foo ( \\( ((?:(?> [^()]+ )|(?2))*) \\) ) )
+flags: x
+expect: compiles
+
+pattern: \\A.*?(a|bc)
+flags: 
+expect: compiles
+
+pattern: \\A.*?(?:a|bc)++
+flags: 
+expect: compiles
+
+pattern: \\A.*?(a|bc)++
+flags: 
+expect: compiles
+
+pattern: \\A.*?(?:a|bc|d)
+flags: 
+expect: compiles
+
+pattern: (?:(b))++
+flags: 
+expect: compiles
+
+pattern: (?(?=(a(*ACCEPT)z))a)
+flags: 
+expect: compiles
+
+pattern: ^(a)(?1)+ab
+flags: 
+expect: compiles
+
+pattern: ^(a)(?1)++ab
+flags: 
+expect: compiles
+
+pattern: (?(DEFINE)(a))?b(?1)
+flags: 
+expect: compiles
+
+pattern: ^\\N+
+flags: 
+expect: compiles
+
+pattern: ^\\N{1,}
+flags: 
+expect: compiles
+
+pattern: (?(R)a+|(?R)b)
+flags: 
+expect: compiles
+
+pattern: (?(R)a+|((?R))b)
+flags: 
+expect: compiles
+
+pattern: ((?(R)a+|(?1)b))
+flags: 
+expect: compiles
+
+pattern: ((?(R1)a+|(?1)b))
+flags: 
+expect: compiles
+
+pattern: ((?(R)a|(?1)))*
+flags: 
+expect: compiles
+
+pattern: ((?(R)a|(?1)))+
+flags: 
+expect: compiles
+
+pattern: (?>(?&t)c|(?&t))(?(DEFINE)(?<t>a|b(*PRUNE)c))
+flags: 
+expect: compiles
+
+pattern: ^.*? (a(*THEN)b) c
+flags: x
+expect: compiles
+
+pattern: ^.*? (a(*THEN)b|(*F)) c
+flags: x
+expect: compiles
+
+pattern: ^.*? ( (a(*THEN)b) | (*F) ) c
+flags: x
+expect: compiles
+
+pattern: ^.*? ( (a(*THEN)b) ) c
+flags: x
+expect: compiles
+
+pattern: ^.*? (?:a(*THEN)b) c
+flags: x
+expect: compiles
+
+pattern: ^.*? (?:a(*THEN)b|(*F)) c
+flags: x
+expect: compiles
+
+pattern: ^.*? (?: (?:a(*THEN)b) | (*F) ) c
+flags: x
+expect: compiles
+
+pattern: ^.*? (?: (?:a(*THEN)b) ) c
+flags: x
+expect: compiles
+
+pattern: ^.*? (?>a(*THEN)b) c
+flags: x
+expect: compiles
+
+pattern: ^.*? (?>a(*THEN)b|(*F)) c
+flags: x
+expect: compiles
+
+pattern: ^.*? (?> (?>a(*THEN)b) | (*F) ) c
+flags: x
+expect: compiles
+
+pattern: ^.*? (?> (?>a(*THEN)b) ) c
+flags: x
+expect: compiles
+
+pattern: ^.*? (a(*THEN)b)++ c
+flags: x
+expect: compiles
+
+pattern: ^.*? (a(*THEN)b|(*F))++ c
+flags: x
+expect: compiles
+
+pattern: ^.*? ( (a(*THEN)b)++ | (*F) )++ c
+flags: x
+expect: compiles
+
+pattern: ^.*? ( (a(*THEN)b)++ )++ c
+flags: x
+expect: compiles
+
+pattern: ^.*? (?:a(*THEN)b)++ c
+flags: x
+expect: compiles
+
+pattern: ^.*? (?:a(*THEN)b|(*F))++ c
+flags: x
+expect: compiles
+
+pattern: ^.*? (?: (?:a(*THEN)b)++ | (*F) )++ c
+flags: x
+expect: compiles
+
+pattern: ^.*? (?: (?:a(*THEN)b)++ )++ c
+flags: x
+expect: compiles
+
+pattern: ^(?(?=a(*THEN)b)ab|ac)
+flags: 
+expect: compiles
+
+pattern: ^.*?(?(?=a)a|b(*THEN)c)
+flags: 
+expect: compiles
+
+pattern: ^.*?(?:(?(?=a)a|b(*THEN)c)|d)
+flags: 
+expect: compiles
+
+pattern: ^.*?(?(?=a)a(*THEN)b|c)
+flags: 
+expect: compiles
+
+pattern: ^.*(?=a(*THEN)b)
+flags: 
+expect: compiles
+
+pattern: (?<=a(*ACCEPT)b)c
+flags: 
+expect: compiles
+
+pattern: (?<=(a(*ACCEPT)b))c
+flags: 
+expect: compiles
+
+pattern: (?<=(a(*COMMIT)b))c
+flags: 
+expect: compiles
+
+pattern: (?<!a(*FAIL)b)c
+flags: 
+expect: compiles
+
+pattern: (?<=a(*PRUNE)b)c
+flags: 
+expect: compiles
+
+pattern: (?<=a(*SKIP)b)c
+flags: 
+expect: compiles
+
+pattern: (?<=a(*THEN)b)c
+flags: 
+expect: compiles
+
+pattern: (a)(?2){2}(.)
+flags: 
+expect: compiles
+
+pattern: (*COMMIT)ABC
+flags: 
+expect: compiles
+
+pattern: (another)?(\\1?)test
+flags: 
+expect: compiles
+
+pattern: (another)?(\\1+)test
+flags: 
+expect: compiles
+
+pattern: (a(*COMMIT)b){0}a(?1)|aac
+flags: 
+expect: compiles
+
+pattern: ((?:a?)*)*c
+flags: 
+expect: compiles
+
+pattern: ((?>a?)*)*c
+flags: 
+expect: compiles
+
+pattern: (?>.*?a)(?<=ba)
+flags: 
+expect: compiles
+
+pattern: (?:.*?a)(?<=ba)
+flags: 
+expect: compiles
+
+pattern: (?>.*?a)b
+flags: s
+expect: compiles
+
+pattern: (?>.*?a)b
+flags: 
+expect: compiles
+
+pattern: (?>^a)b
+flags: s
+expect: compiles
+
+pattern: (?>.*?)(?<=(abcd)|(wxyz))
+flags: 
+expect: compiles
+
+pattern: (?>.*)(?<=(abcd)|(wxyz))
+flags: 
+expect: compiles
+
+pattern: (?>.*)foo
+flags: 
+expect: compiles
+
+pattern: (?>.*?)foo
+flags: 
+expect: compiles
+
+pattern: (?:(a(*PRUNE)b)){0}(?:(?1)|ac)
+flags: 
+expect: compiles
+
+pattern: (?:(a(*SKIP)b)){0}(?:(?1)|ac)
+flags: 
+expect: compiles
+
+pattern: (?<=(*SKIP)ac)a
+flags: 
+expect: compiles
+
+pattern: aaaaa(*PRUNE)b|a+c
+flags: 
+expect: compiles
+
+pattern: aaaaa(*SKIP)(*PRUNE)b|a+c
+flags: 
+expect: compiles
+
+pattern: aaaaa(*SKIP:N)(*PRUNE)b|a+c
+flags: 
+expect: compiles
+
+pattern: aaaa(*:N)a(*SKIP:N)(*PRUNE)b|a+c
+flags: 
+expect: compiles
+
+pattern: aaaaa(*THEN)(*PRUNE)b|a+c
+flags: 
+expect: compiles
+
+pattern: aaaaa(*COMMIT)(*PRUNE)b|a+c
+flags: 
+expect: compiles
+
+pattern: aaaaa(*SKIP)b|a+c
+flags: 
+expect: compiles
+
+pattern: aaaaa(*PRUNE)(*SKIP)b|a+c
+flags: 
+expect: compiles
+
+pattern: aaaaa(*THEN)(*SKIP)b|a+c
+flags: 
+expect: compiles
+
+pattern: aaaaa(*COMMIT)(*SKIP)b|a+c
+flags: 
+expect: compiles
+
+pattern: aaaaa(*COMMIT)b|a+c
+flags: 
+expect: compiles
+
+pattern: aaaaa(*THEN)b|a+c
+flags: 
+expect: compiles
+
+pattern: aaaaa(*SKIP)(*THEN)b|a+c
+flags: 
+expect: compiles
+
+pattern: aaaaa(*PRUNE)(*THEN)b|a+c
+flags: 
+expect: compiles
+
+pattern: aaaaa(*COMMIT)(*THEN)b|a+c
+flags: 
+expect: compiles
+
+pattern: aaaaa(*:m)(*PRUNE:m)(*SKIP:m)m|a+
+flags: 
+expect: compiles
+
+pattern: aaaaa(*:m)(*MARK:m)(*PRUNE)(*SKIP:m)m|a+
+flags: 
+expect: compiles
+
+pattern: aaaaa(*:n)(*PRUNE:m)(*SKIP:m)m|a+
+flags: 
+expect: compiles
+
+pattern: aaaaa(*:n)(*MARK:m)(*PRUNE)(*SKIP:m)m|a+
+flags: 
+expect: compiles
+
+pattern: a(*MARK:A)aa(*PRUNE:A)a(*SKIP:A)b|a+c
+flags: 
+expect: compiles
+
+pattern: a(*MARK:A)aa(*MARK:A)a(*SKIP:A)b|a+c
+flags: 
+expect: compiles
+
+pattern: aaa(*PRUNE:A)a(*SKIP:A)b|a+c
+flags: 
+expect: compiles
+
+pattern: aaa(*MARK:A)a(*SKIP:A)b|a+c
+flags: 
+expect: compiles
+
+pattern: .?(a|b(*THEN)c)
+flags: 
+expect: compiles
+
+pattern: (a(*COMMIT)b)c|abd
+flags: 
+expect: compiles
+
+pattern: (?=a(*COMMIT)b)abc|abd
+flags: 
+expect: compiles
+
+pattern: (?>a(*COMMIT)b)c|abd
+flags: 
+expect: compiles
+
+pattern: a(?=b(*COMMIT)c)[^d]|abd
+flags: 
+expect: compiles
+
+pattern: a(?=bc).|abd
+flags: 
+expect: compiles
+
+pattern: a(?>b(*COMMIT)c)d|abd
+flags: 
+expect: compiles
+
+pattern: a(?>bc)d|abd
+flags: 
+expect: compiles
+
+pattern: (?>a(*COMMIT)c)d|abd
+flags: 
+expect: compiles
+
+pattern: ((?=a(*COMMIT)b)ab|ac){0}(?:(?1)|a(c))
+flags: 
+expect: compiles
+
+pattern: ^((abc|abcx)(*THEN)y|abcd)
+flags: 
+expect: compiles
+
+pattern: ^((yes|no)(*THEN)(*F))?
+flags: 
+expect: compiles
+
+pattern: (A (.*)   C? (*THEN)  | A D) (*FAIL)
+flags: x
+expect: compiles
+
+pattern: (A (.*)   C? (*THEN)  | A D) z
+flags: x
+expect: compiles
+
+pattern: (A (.*)   C? (*THEN)  | A D) \\s* (*FAIL)
+flags: x
+expect: compiles
+
+pattern: (A (.*)   C? (*THEN)  | A D) \\s* z
+flags: x
+expect: compiles
+
+pattern: (A (.*)   (?:C|) (*THEN)  | A D) (*FAIL)
+flags: x
+expect: compiles
+
+pattern: (A (.*)   (?:C|) (*THEN)  | A D) z
+flags: x
+expect: compiles
+
+pattern: (A (.*)   C{0,6} (*THEN)  | A D) (*FAIL)
+flags: x
+expect: compiles
+
+pattern: (A (.*)   C{0,6} (*THEN)  | A D) z
+flags: x
+expect: compiles
+
+pattern: (A (.*)   (CE){0,6} (*THEN)  | A D) (*FAIL)
+flags: x
+expect: compiles
+
+pattern: (A (.*)   (CE){0,6} (*THEN)  | A D) z
+flags: x
+expect: compiles
+
+pattern: (A (.*)   (CE*){0,6} (*THEN)  | A D) (*FAIL)
+flags: x
+expect: compiles
+
+pattern: (A (.*)   (CE*){0,6} (*THEN)  | A D) z
+flags: x
+expect: compiles
+
+pattern: (?=a(*COMMIT)b|ac)ac|ac
+flags: 
+expect: compiles
+
+pattern: (?=a(*COMMIT)b|(ac)) ac | (a)c
+flags: x
+expect: compiles
+
+pattern: (?(?!b(*THEN)a)bn|bnn)
+flags: 
+expect: compiles
+
+pattern: (?!b(*SKIP)a)bn|bnn
+flags: 
+expect: compiles
+
+pattern: (?(?!b(*SKIP)a)bn|bnn)
+flags: 
+expect: compiles
+
+pattern: (?!b(*PRUNE)a)bn|bnn
+flags: 
+expect: compiles
+
+pattern: (?(?!b(*PRUNE)a)bn|bnn)
+flags: 
+expect: compiles
+
+pattern: (?!b(*COMMIT)a)bn|bnn
+flags: 
+expect: compiles
+
+pattern: (?(?!b(*COMMIT)a)bn|bnn)
+flags: 
+expect: compiles
+
+pattern: (?=b(*SKIP)a)bn|bnn
+flags: 
+expect: compiles
+
+pattern: (?=b(*THEN)a)bn|bnn
+flags: 
+expect: compiles
+
+pattern: ^(?!a(*SKIP)b)
+flags: 
+expect: compiles
+
+pattern: ^(?!a(*SKIP)b)..
+flags: 
+expect: compiles
+
+pattern: (?!a(*SKIP)b)..
+flags: 
+expect: compiles
+
+pattern: ^(?(?!a(*SKIP)b))
+flags: 
+expect: compiles
+
+pattern: ^(?!a(*PRUNE)b)..
+flags: 
+expect: compiles
+
+pattern: (?!a(*PRUNE)b)..
+flags: 
+expect: compiles
+
+pattern: (?!a(*COMMIT)b)ac|cd
+flags: 
+expect: compiles
+
+pattern: \\A.*?(?:a|bc)
+flags: 
+expect: compiles
+
+pattern: ^(A(*THEN)B|C(*THEN)D)
+flags: 
+expect: compiles
+
+pattern: ^\\d*\\w{4}
+flags: 
+expect: compiles
+
+pattern: ^[^b]*\\w{4}
+flags: 
+expect: compiles
+
+pattern: ^[^b]*\\w{4}
+flags: i
+expect: compiles
+
+pattern: ^a*\\w{4}
+flags: 
+expect: compiles
+
+pattern: ^a*\\w{4}
+flags: i
+expect: compiles
+
+pattern: ^A\\xBz
+flags: 
+expect: compiles
+
+pattern: ^A\\xABz
+flags: 
+expect: compiles
+
+pattern: ^A\\xABCz
+flags: 
+expect: compiles
+
+pattern: ^A\\o{123}B
+flags: 
+expect: compiles
+
+pattern: \x20^ a + + b $\x20
+flags: x
+expect: compiles
+
+pattern: \x20^ (?> a + ) b $\x20
+flags: x
+expect: compiles
+
+pattern: \x20^ ( a + ) + + \\w $\x20
+flags: x
+expect: compiles
+
+pattern: (?:x|(?:(xx|yy)+|x|x|x|x|x)|a|a|a)bc
+flags: 
+expect: compiles
+
+pattern: \\A(?:[^\\"]++|\\"(?:[^\\"]*+|\\"\\")*+\\")++
+flags: 
+expect: compiles
+
+pattern: \\A(?:[^\\"]++|\\"(?:[^\\"]++|\\"\\")*+\\")++
+flags: 
+expect: compiles
+
+pattern: \\A(?:[^\\"]++|\\"(?:[^\\"]++|\\"\\")++\\")++
+flags: 
+expect: compiles
+
+pattern: \\A([^\\"1]++|[\\"2]([^\\"3]*+|[\\"4][\\"5])*+[\\"6])++
+flags: 
+expect: compiles
+
+pattern: ^\\w+(?>\\s*)(?<=\\w)
+flags: 
+expect: compiles
+
+pattern: (?P<Name>a)?(?P<Name2>b)?(?(<Name>)c|d)*l
+flags: 
+expect: compiles
+
+pattern: \\sabc
+flags: 
+expect: compiles
+
+pattern: [\\Qa]\\E]+
+flags: 
+expect: compiles
+
+pattern: [\\Q]a\\E]+
+flags: 
+expect: compiles
+
+pattern: A((((((((a))))))))\\8B
+flags: 
+expect: compiles
+
+pattern: A(((((((((a)))))))))\\9B
+flags: 
+expect: compiles
+
+pattern: A[\\8\\9]B
+flags: 
+expect: compiles
+
+pattern: (|ab)*?d
+flags: 
+expect: compiles
+
+pattern: (?:((abcd))|(((?:(?:(?:(?:abc|(?:abcdef))))b)abcdefghi)abc)|((*ACCEPT)))
+flags: 
+expect: compiles
+
+pattern: (\\2|a)(\\1)
+flags: 
+expect: compiles
+
+pattern: (\\2)(\\1)
+flags: 
+expect: compiles
+
+pattern: Z*(|d*){216}
+flags: 
+expect: compiles
+
+pattern: (?1)(?#?'){8}(a)
+flags: 
+expect: compiles
+
+pattern: ((((((((((((x))))))))))))\\12
+flags: 
+expect: compiles
+
+pattern: A[\\8]B[\\9]C
+flags: 
+expect: compiles
+
+pattern: (?1)()((((((\\1++))\\x85)+)|))
+flags: 
+expect: compiles
+
+pattern: (?|(\\k'Pm')|(?'Pm'))
+flags: 
+expect: compiles
+
+pattern: (?|(aaa)|(b))\\g{1}
+flags: 
+expect: compiles
+
+pattern: (?|(aaa)|(b))(?1)
+flags: 
+expect: compiles
+
+pattern: (?|(aaa)|(b))
+flags: 
+expect: compiles
+
+pattern: (?|(?'a'aaa)|(?'a'b))\\k'a'
+flags: 
+expect: compiles
+
+pattern: (?<=a(B){0}c)X
+flags: 
+expect: compiles
+
+pattern: (?<DEFINE>b)(?(DEFINE)(a+))(?&DEFINE)
+flags: 
+expect: compiles
+
+pattern: (?=.*[A-Z])(?=.*[a-z])(?=.*[0-9])(?=.*[,;:])(?=.{8,16})(?!.*[\\s])
+flags: 
+expect: compiles
+
+pattern: (?=.*X)X$
+flags: 
+expect: compiles
+
+pattern: (?s)(?=.*?)b
+flags: 
+expect: compiles
+
+pattern: (Z)(a)\\2{1,2}?(?-i)\\1X
+flags: i
+expect: compiles
+
+pattern: (?'c')XX(?'YYYYYYYYYYYYYYYYYYYYYYYCl')
+flags: 
+expect: compiles
+
+pattern: a+(?:|b)a
+flags: 
+expect: compiles
+
+pattern: X?(R||){3335}
+flags: 
+expect: compiles
+
+pattern: (?1)(A(*COMMIT)|B)D
+flags: 
+expect: compiles
+
+pattern: ^ (?(DEFINE) ( (?!(a)\\2b)..) )   ()(?1) \x20
+flags: x
+expect: compiles
+
+pattern: (?>ab|abab){1,5}?M
+flags: 
+expect: compiles
+
+pattern: (?>ab|abab){2}?M
+flags: 
+expect: compiles
+
+pattern: ((?(?=(a))a)+k)
+flags: 
+expect: compiles
+
+pattern: ((?(?=(a))a|)+k)
+flags: 
+expect: compiles
+
+pattern: (?(?!(b))a|b)+k
+flags: 
+expect: compiles
+
+pattern: (?!(b))c|b
+flags: 
+expect: compiles
+
+pattern: (?=(b))b|c
+flags: 
+expect: compiles
+
+pattern: ^(.|(.)(?1)\\2)$
+flags: 
+expect: compiles
+
+pattern: ^((.)(?1)\\2|.?)$
+flags: 
+expect: compiles
+
+pattern: ^(.)(\\1|a(?2))
+flags: 
+expect: compiles
+
+pattern: ^(.|(.)(?1)?\\2)$
+flags: 
+expect: compiles
+
+pattern: ^(?(?=(a))abc|def)
+flags: 
+expect: compiles
+
+pattern: ^(?(?!(a))def|abc)
+flags: 
+expect: compiles
+
+pattern: ^(?(?=(a)(*ACCEPT))abc|def)
+flags: 
+expect: compiles
+
+pattern: ^(?(?!(a)(*ACCEPT))def|abc)
+flags: 
+expect: compiles
+
+pattern: ^(?1)\\d{3}(a)
+flags: 
+expect: compiles
+
+pattern: <(?x:[a b])>
+flags: x
+expect: compiles
+
+pattern: <(?:[a b])>
+flags: x
+expect: compiles
+
+pattern: <(?xxx:[a b])>
+flags: 
+expect: compiles
+
+pattern: <(?-x:[a b])>
+flags: x
+expect: compiles
+
+pattern: [[:digit:]-]+
+flags: 
+expect: compiles
+
+pattern: ((?<=((*ACCEPT)) )\\1?\\b)\x20
+flags: 
+expect: compiles
+
+pattern: ((?<=((*ACCEPT))X)\\1?Y)\\1
+flags: 
+expect: compiles
+
+pattern: ((?<=((*ACCEPT))X)\\1?Y(*ACCEPT))\\1
+flags: 
+expect: compiles
+
+pattern: (?(DEFINE)(?<optional_a>a?)X)^(?&optional_a)a$
+flags: 
+expect: compiles
+
+pattern: ^(a?)b(?1)a
+flags: 
+expect: compiles
+
+pattern: ^(a?)+b(?1)a
+flags: 
+expect: compiles
+
+pattern: ^(a?)++b(?1)a
+flags: 
+expect: compiles
+
+pattern: ^(a?)+b
+flags: 
+expect: compiles
+
+pattern: (?=a+)a(a+)++b
+flags: 
+expect: compiles
+
+pattern: (?<=(?=.)?)
+flags: 
+expect: compiles
+
+pattern: (?<=(?=.)?+)
+flags: 
+expect: compiles
+
+pattern: (?<=(?=.)*)
+flags: 
+expect: compiles
+
+pattern: (?<=(?=.){4,5})
+flags: 
+expect: compiles
+
+pattern: (?<=(?=.){4,5}x)
+flags: 
+expect: compiles
+
+pattern: a(?=.(*:X))(*SKIP:X)(*F)|(.)
+flags: 
+expect: compiles
+
+pattern: a(?>(*:X))(*SKIP:X)(*F)|(.)
+flags: 
+expect: compiles
+
+pattern: a(?:(*:X))(*SKIP:X)(*F)|(.)
+flags: 
+expect: compiles
+
+pattern: (?>a(*:1))(?>b(*:1))(*SKIP:1)x|.*
+flags: 
+expect: compiles
+
+pattern: (?>a(*:1))(?>b)(*SKIP:1)x|.*
+flags: 
+expect: compiles
+
+pattern: a(*ACCEPT:X)b
+flags: 
+expect: compiles
+
+pattern: (?=a(*ACCEPT:QQ)bc)axyz
+flags: 
+expect: compiles
+
+pattern: (?(DEFINE)(a(*ACCEPT:X)))(?1)b
+flags: 
+expect: compiles
+
+pattern: a(*F:X)b
+flags: 
+expect: compiles
+
+pattern: (?(DEFINE)(a(*F:X)))(?1)b
+flags: 
+expect: compiles
+
+pattern: a(*COMMIT:X)b
+flags: 
+expect: compiles
+
+pattern: (?(DEFINE)(a(*COMMIT:X)))(?1)b
+flags: 
+expect: compiles
+
+pattern: a+(*:Z)b(*COMMIT:X)(*SKIP:Z)c|.*
+flags: 
+expect: compiles
+
+pattern: a+(*:Z)b(*COMMIT:X)(*SKIP:X)c|.*
+flags: 
+expect: compiles
+
+pattern: (.COMMIT)(*COMMIT::::::::::interal error:::)
+flags: 
+expect: compiles
+
+pattern: (*COMMIT:\uFFFD\uFFFD)
+flags: 
+expect: compiles
+
+pattern: (*COMMIT:]w)
+flags: 
+expect: compiles
+
+pattern: (?i)A(?^)B(?^x:C D)(?^i)e f
+flags: 
+expect: compiles
+
+pattern: (*pla:foo).{6}
+flags: 
+expect: compiles
+
+pattern: (*positive_lookahead:foo).{6}
+flags: 
+expect: compiles
+
+pattern: (?(*pla:foo).{6}|a..)
+flags: 
+expect: compiles
+
+pattern: (?(*positive_lookahead:foo).{6}|a..)
+flags: 
+expect: compiles
+
+pattern: (*plb:foo)bar
+flags: 
+expect: compiles
+
+pattern: (*positive_lookbehind:foo)bar
+flags: 
+expect: compiles
+
+pattern: (?(*plb:foo)bar|baz)
+flags: 
+expect: compiles
+
+pattern: (?(*positive_lookbehind:foo)bar|baz)
+flags: 
+expect: compiles
+
+pattern: (*nlb:foo)bar
+flags: 
+expect: compiles
+
+pattern: (*negative_lookbehind:foo)bar
+flags: 
+expect: compiles
+
+pattern: (?(*nlb:foo)bar|baz)
+flags: 
+expect: compiles
+
+pattern: (?(*negative_lookbehind:foo)bar|baz)
+flags: 
+expect: compiles
+
+pattern: (*atomic:a+)\\w
+flags: 
+expect: compiles
+
+pattern: \x20  (?<word> \\w+ )*    \\.  \x20
+flags: ix
+expect: compiles
+
+pattern: (?(DEFINE) (?<word> \\w+ ) ) (?&word)*   \\.
+flags: ix
+expect: compiles
+
+pattern: (?(DEFINE) (?<word> \\w+ ) ) ( (?&word)* )   \\.
+flags: ix
+expect: compiles
+
+pattern: (?&word)*  (?(DEFINE) (?<word> \\w+ ) )  \\.
+flags: ix
+expect: compiles
+
+pattern: (?&word)*  \\. (?<word> \\w+ )
+flags: ix
+expect: compiles
+
+pattern: (?:a|ab){1}+c
+flags: 
+expect: compiles
+
+pattern: (a|ab){1}+c
+flags: 
+expect: compiles
+
+pattern: (a+){1}+a
+flags: 
+expect: compiles
+
+pattern: (?(DEFINE)(a|ab))(?1){1}+c
+flags: 
+expect: compiles
+
+pattern: (?:a|(?=b)|.)*\\z
+flags: 
+expect: compiles
+
+pattern: (?:a|(?=b)|.)*
+flags: 
+expect: compiles
+
+pattern: (?<=a(*SKIP)x)|c
+flags: 
+expect: compiles
+
+pattern: (?<=a(*SKIP)x)|d
+flags: 
+expect: compiles
+
+pattern: (?<=(?=(?<=a)))b
+flags: 
+expect: compiles
+
+pattern: ^(?<A>a)(?(<A>)b)((?<=b).*)$
+flags: 
+expect: compiles
+
+pattern: ^((\\1+)|\\d)+133X$
+flags: 
+expect: compiles
+
+pattern: ^(?>.*?([A-Z])(?!.*\\1)){26}
+flags: i
+expect: compiles
+
+pattern: (?<=X(?(DEFINE)(A)))X(*F)
+flags: 
+expect: compiles
+
+pattern: (?<=X(?(DEFINE)(A))).
+flags: 
+expect: compiles
+
+pattern: (?<=X(?(DEFINE)(.*))Y).
+flags: 
+expect: compiles
+
+pattern: (?<=X(?(DEFINE)(Y))(?1)).
+flags: 
+expect: compiles
+
+pattern: (?(DEFINE)(?<foo>bar))(?<![-a-z0-9])word
+flags: 
+expect: compiles
+
+pattern: a{1,2,3}b
+flags: 
+expect: compiles
+
+pattern: \\214748364
+flags: 
+expect: compiles
+
+pattern: \\21300
+flags: 
+expect: compiles
+
+pattern: \\213000
+flags: 
+expect: compiles
+
+pattern: \\21300000000
+flags: 
+expect: compiles
+
+pattern: a{65536
+flags: 
+expect: compiles
+
+pattern: a\\K.(?0)*
+flags: 
+expect: compiles
+
+pattern: (a\\K.(?1)*)
+flags: 
+expect: compiles
+
+pattern: (?(?<=ab?c)d|e)
+flags: 
+expect: compiles
+
+pattern: (?<=\\d{2,3}|ABC).
+flags: 
+expect: compiles
+
+pattern: (?<=(\\d{1,255}))X
+flags: 
+expect: compiles
+
+pattern: (?<=a(b?c){3}d)X
+flags: 
+expect: compiles
+
+pattern: (?<=a(b?c){0}d)X
+flags: 
+expect: compiles
+
+pattern: (?<=a?(b?c){0}d)X.
+flags: 
+expect: compiles
+
+pattern: (?<=\\R)X
+flags: 
+expect: compiles
+
+pattern: a{,3}B
+flags: 
+expect: compiles
+
+pattern: a{,}B
+flags: 
+expect: compiles
+
+pattern: X{
+flags: 
+expect: compiles
+
+pattern: X{A
+flags: 
+expect: compiles
+
+pattern: X{}
+flags: 
+expect: compiles
+
+pattern: X{1234
+flags: 
+expect: compiles
+
+pattern: X{12ABC}
+flags: 
+expect: compiles
+
+pattern: X{1,
+flags: 
+expect: compiles
+
+pattern: X{,9
+flags: 
+expect: compiles
+
+pattern: X{,9]
+flags: 
+expect: compiles
+
+pattern: (A)(?-1)(?+1)(B)
+flags: 
+expect: compiles
+
+pattern: (A)(\\g{ -2 }B)
+flags: 
+expect: compiles
+
+pattern: (A)((?-2)B)
+flags: 
+expect: compiles
+
+pattern: a\\c\\X
+flags: 
+expect: compiles
+
+pattern: (a)\\g{ 1 }
+flags: 
+expect: compiles
+
+pattern: a{ 1,2 }
+flags: 
+expect: compiles
+
+pattern: a{ 1 , 2 }
+flags: 
+expect: compiles
+
+pattern: (?'name'ab)\\k{ name }(?P=name)
+flags: 
+expect: compiles
+
+pattern: A{,}B
+flags: 
+expect: compiles
+
+pattern: A{ , }B
+flags: 
+expect: compiles
+
+pattern: A{ ,3}
+flags: 
+expect: compiles
+
+pattern: A{ 3, }
+flags: 
+expect: compiles
+
+pattern: ^..A(*SKIP)B|C
+flags: 
+expect: compiles
+
+pattern: (?<!a?)
+flags: 
+expect: compiles
+
+pattern: \\Qab*\\E{2,}
+flags: 
+expect: compiles
+
+pattern: [\\Qabc\\E-z]+
+flags: 
+expect: compiles
+
+pattern: [\\Qa-\\Ez]+
+flags: 
+expect: compiles
+
+pattern: a{(?#XYZ),2}
+flags: 
+expect: compiles
+
+pattern: (?<=PQ|Pc.b?)(.?)(b?)
+flags: 
+expect: compiles
+
+pattern: (?(?<=aa.b|ab)b).b
+flags: 
+expect: compiles
+
+pattern: (?(?<=a(?:a.b|b))b).b
+flags: 
+expect: compiles
+
+pattern: (?=a)b?a
+flags: 
+expect: compiles
+
+pattern: (?=a)b?a.
+flags: 
+expect: compiles
+
+pattern: \\w(?R)*\\w
+flags: 
+expect: compiles
+
+pattern: 65 00 64
+flags: 
+expect: compiles
+
+pattern: [[:digit:]-   ]
+flags: x
+expect: compiles
+
+pattern: [\\d-   ]
+flags: x
+expect: compiles
+
+pattern: (?[\\n])
+flags: 
+expect: compiles
+
+pattern: ^(?[\\x61])b
+flags: 
+expect: compiles
+
+pattern: ^(?[\\x61])+b
+flags: 
+expect: compiles
+
+pattern: (?[ [[:graph:]] ])
+flags: 
+expect: compiles
+
+pattern: (?[ [:graph:] ])
+flags: 
+expect: compiles
+
+pattern: (?[ [[:graph:]\\x02] ])
+flags: 
+expect: compiles
+
+pattern: (?[\\E\\n])
+flags: 
+expect: compiles
+
+pattern: (?[\\n \\Q\\E])
+flags: 
+expect: compiles
+
+pattern: (?[ ( \\x02 + [:graph:] ) | [ \\x02 [:graph:] ] ])
+flags: 
+expect: compiles
+
+pattern: (?[ \\d ])
+flags: 
+expect: compiles
+
+pattern: (?[[1]])
+flags: 
+expect: compiles
+
+pattern: (?[[a]])
+flags: 
+expect: compiles
+
+pattern: (?[[a-c]])
+flags: 
+expect: compiles
+
+pattern: (?[ [\\t] + [\\n] ])
+flags: 
+expect: compiles
+
+pattern: (?[ \\t + \\n ])
+flags: 
+expect: compiles
+
+pattern: (?[ [()] ])
+flags: 
+expect: compiles
+
+pattern: (?[ ( [()] ) ])
+flags: 
+expect: compiles
+
+pattern: (?[ (( [\\n\\t] )) ])
+flags: 
+expect: compiles
+
+pattern: (?[ !\\n ])
+flags: 
+expect: compiles
+
+pattern: (?[ !\\d ])
+flags: 
+expect: compiles
+
+pattern: (?[ ![:alpha:] ])
+flags: 
+expect: compiles
+
+pattern: (?[ ![\\n] ])
+flags: 
+expect: compiles
+
+pattern: (?[ !(\\n) ])
+flags: 
+expect: compiles
+
+pattern: (?[ !!\\n ])
+flags: 
+expect: compiles
+
+pattern: (?[ (\\n) ])
+flags: 
+expect: compiles
+
+pattern: (?[ (\\d) ])
+flags: 
+expect: compiles
+
+pattern: (?[ ([:alpha:]) ])
+flags: 
+expect: compiles
+
+pattern: (?[ ([\\n]) ])
+flags: 
+expect: compiles
+
+pattern: (?[ ((\\n)) ])
+flags: 
+expect: compiles
+
+pattern: (?[ (!\\n) ])
+flags: 
+expect: compiles
+
+pattern: (?[ (\\n + \\t) ])
+flags: 
+expect: compiles
+
+pattern: (?[ \\n & [\\n\\t] ])
+flags: 
+expect: compiles
+
+pattern: (?[ \\d & [\\d\\t] ])
+flags: 
+expect: compiles
+
+pattern: (?[ [:alpha:] & [a-z\\t] ])
+flags: 
+expect: compiles
+
+pattern: (?[ [\\n] & [\\n\\t] ])
+flags: 
+expect: compiles
+
+pattern: (?[ (\\n) & [\\n\\t] ])
+flags: 
+expect: compiles
+
+pattern: (?[ !\\n & [^\\n\\t] ])
+flags: 
+expect: compiles
+
+pattern: (?[ \\n & [\\n\\t] + [\\d] ])
+flags: 
+expect: compiles
+
+pattern: (?[ [\\n\\t] & \\n ])
+flags: 
+expect: compiles
+
+pattern: (?[ [\\d\\t] & \\d ])
+flags: 
+expect: compiles
+
+pattern: (?[ [a-z\\t] & [:alpha:] ])
+flags: 
+expect: compiles
+
+pattern: (?[ [\\n\\t] & [\\n] ])
+flags: 
+expect: compiles
+
+pattern: (?[ [\\n\\t] & (\\n) ])
+flags: 
+expect: compiles
+
+pattern: (?[ [^\\n\\t] & !\\n ])
+flags: 
+expect: compiles
+
+pattern: (?[ [\\d] + \\n & [\\n\\t] ])
+flags: 
+expect: compiles
+
+pattern: (?[ [\\d] + \\n + [\\t] ])
+flags: 
+expect: compiles
+
+pattern: (?[ \\d + \\n ])
+flags: 
+expect: compiles
+
+pattern: (?[ \\d | \\n ])
+flags: 
+expect: compiles
+
+pattern: (?[ \\d - [2] ])
+flags: 
+expect: compiles
+
+pattern: (?[ [AC] ^ [BC] ])
+flags: 
+expect: compiles
+
+pattern: (?[\t(\t[\t^\tz\t]\t) ])
+flags: 
+expect: compiles
+
+pattern: ^.{4}
+flags: s
+expect: compiles
+
+pattern: ^(.{3,6}!)+$
+flags: s
+expect: compiles
+
+pattern: [a-z]{5,}b|x
+flags: 
+expect: compiles
+
+pattern: [a-z]{1,6}?s|x
+flags: 
+expect: compiles
+
+pattern: ab\\idef
+flags: 
+expect: error syntax
+
+pattern: (?X)ab\\idef
+flags: 
+expect: error syntax
+
+pattern: x{5,4}
+flags: 
+expect: error syntax
+
+pattern: z{65536}
+flags: 
+expect: error syntax
+
+pattern: [abcd
+flags: 
+expect: error syntax
+
+pattern: [z-a]
+flags: 
+expect: error syntax
+
+pattern: ^*
+flags: 
+expect: error syntax
+
+pattern: (abc
+flags: 
+expect: error syntax
+
+pattern: (?# abc
+flags: 
+expect: error syntax
+
+pattern: (?z)abc
+flags: 
+expect: error syntax
+
+pattern: (ab\\2)
+flags: 
+expect: error syntax
+
+pattern: {4,5}abc
+flags: 
+expect: error syntax
+
+pattern: (a)(b)(c)(d)(e)\\6
+flags: 
+expect: error syntax
+
+pattern: ab(?z)cd
+flags: 
+expect: error syntax
+
+pattern: )
+flags: 
+expect: error syntax
+
+pattern: a[]b
+flags: 
+expect: error syntax
+
+pattern: abc(?<=a+)b
+flags: 
+expect: error syntax
+
+pattern: (?<!(foo)a\\1)bar
+flags: 
+expect: compiles
+
+pattern: (a)(?(1)a|b|c)
+flags: 
+expect: error syntax
+
+pattern: (?(?=a)a|b|c)
+flags: 
+expect: error syntax
+
+pattern: (?(1a)
+flags: 
+expect: error syntax
+
+pattern: (?(1a))
+flags: 
+expect: error syntax
+
+pattern: (?(?i))
+flags: 
+expect: error syntax
+
+pattern: (?(abc))
+flags: 
+expect: error syntax
+
+pattern: (?(?<ab))
+flags: 
+expect: error syntax
+
+pattern: (?<=ab(c+)d)ef
+flags: 
+expect: error syntax
+
+pattern: (?<=ab(?<=c+)d)ef
+flags: 
+expect: error syntax
+
+pattern: The next three are in testinput2 because they have variable length branches
+flags: 
+expect: compiles
+
+pattern: ^(xa|=?\\1a){2}$
+flags: 
+expect: compiles
+
+pattern: ^(xa|=?\\1a)+$
+flags: 
+expect: compiles
+
+pattern: a[b-a]
+flags: 
+expect: error syntax
+
+pattern: a[
+flags: 
+expect: error syntax
+
+pattern: *a
+flags: 
+expect: error syntax
+
+pattern: (*)b
+flags: 
+expect: error syntax
+
+pattern: abc)
+flags: 
+expect: error syntax
+
+pattern: a**
+flags: 
+expect: error syntax
+
+pattern: )(
+flags: 
+expect: error syntax
+
+pattern: \\1
+flags: 
+expect: error syntax
+
+pattern: \\2
+flags: 
+expect: error syntax
+
+pattern: (a)|\\2
+flags: 
+expect: error syntax
+
+pattern: :(?:
+flags: 
+expect: error syntax
+
+pattern: (?<%)b
+flags: 
+expect: error syntax
+
+pattern: a(?{)b
+flags: 
+expect: error syntax
+
+pattern: a(?{{})b
+flags: 
+expect: error syntax
+
+pattern: a(?{}})b
+flags: 
+expect: error syntax
+
+pattern: a(?{"{"})b
+flags: 
+expect: error syntax
+
+pattern: a(?{"{"}})b
+flags: 
+expect: error syntax
+
+pattern: (?(1?)a|b)
+flags: 
+expect: error syntax
+
+pattern: [a[:xyz:
+flags: 
+expect: error syntax
+
+pattern: (?<=x+)y
+flags: 
+expect: error syntax
+
+pattern: a{37,17}
+flags: 
+expect: error syntax
+
+pattern: \\N{4}
+flags: 
+expect: compiles
+
+pattern: \\N{,}
+flags: 
+expect: error syntax
+
+pattern: \\N{25,ab}
+flags: 
+expect: error syntax
+
+pattern: [\\N]
+flags: 
+expect: error syntax
+
+pattern: [\\N{4}]
+flags: 
+expect: error syntax
+
+pattern: [\\N{name}]
+flags: 
+expect: error syntax
+
+pattern: a{1,3}b
+flags: U
+expect: compiles
+
+pattern: ^(?:(?(ZZ)a|b)(?<ZZ>X))+
+flags: 
+expect: compiles
+
+pattern: ^(?P>abc)(?<abcd>xxx)
+flags: 
+expect: error syntax
+
+pattern: ^(?P>abc)(?<abc>x|y)
+flags: 
+expect: compiles
+
+pattern: ^(?P>abc)(?P<abc>x|y)
+flags: 
+expect: compiles
+
+pattern: ^((?(abc)a|b)(?<abc>x|y))+
+flags: 
+expect: compiles
+
+pattern: ^(((?P=abc)|X)(?<abc>x|y))+
+flags: 
+expect: compiles
+
+pattern: ^(?1)(abc)
+flags: 
+expect: compiles
+
+pattern: ^(?:(?:\\1|X)(a|b))+
+flags: 
+expect: compiles
+
+pattern: (?(<bc))
+flags: 
+expect: error syntax
+
+pattern: (?(''))
+flags: 
+expect: error syntax
+
+pattern: (?('R')stuff)
+flags: 
+expect: error syntax
+
+pattern: ((abc (?(R) (?(R1)1) (?(R2)2) X  |  (?1)  (?2)   (?R) )))\x20
+flags: x
+expect: compiles
+
+pattern: (?<A> (?'B' abc (?(R) (?(R&A)1) (?(R&B)2) X  |  (?1)  (?2)   (?R) )))\x20
+flags: x
+expect: compiles
+
+pattern: (?<A> (?'B' abc (?(R) (?(R&C)1) (?(R&B)2) X  |  (?1)  (?2)   (?R) )))\x20
+flags: x
+expect: error syntax
+
+pattern: ^(?(DEFINE) abc | xyz )\x20
+flags: x
+expect: error syntax
+
+pattern: (?:a(?&abc)b)*(?<abc>x)
+flags: 
+expect: compiles
+
+pattern: (?:a(?&abc)b){1,5}(?<abc>x)
+flags: 
+expect: compiles
+
+pattern: (?:a(?&abc)b){2,5}(?<abc>x)
+flags: 
+expect: compiles
+
+pattern: (?:a(?&abc)b){2,}(?<abc>x)
+flags: 
+expect: compiles
+
+pattern: (abc)(?i:(?1))
+flags: 
+expect: compiles
+
+pattern: (abc)(?:(?i)(?1))
+flags: 
+expect: compiles
+
+pattern: ^(a)\\g-2
+flags: 
+expect: error syntax
+
+pattern: ^(a)\\g
+flags: 
+expect: error syntax
+
+pattern: ^(a)\\g{0}
+flags: 
+expect: error syntax
+
+pattern: ^(a)\\g{3
+flags: 
+expect: error syntax
+
+pattern: ^(a)\\g{aa}
+flags: 
+expect: error syntax
+
+pattern: .+foo
+flags: 
+expect: compiles
+
+pattern: .+foo
+flags: s
+expect: compiles
+
+pattern: ^X
+flags: m
+expect: compiles
+
+pattern: x(?-0)y
+flags: 
+expect: error syntax
+
+pattern: x(?-1)y
+flags: 
+expect: error syntax
+
+pattern: x(?+0)y
+flags: 
+expect: error syntax
+
+pattern: x(?+1)y
+flags: 
+expect: error syntax
+
+pattern: (?<A>tom|bon)-\\k{A}
+flags: 
+expect: compiles
+
+pattern: \\g{A
+flags: 
+expect: error syntax
+
+pattern: \\( (?: [^()]* | (?R) )* \\)
+flags: x
+expect: compiles
+
+pattern: [\\E]AAA
+flags: 
+expect: error syntax
+
+pattern: [\\Q\\E]AAA
+flags: 
+expect: error syntax
+
+pattern: [^\\E]AAA
+flags: 
+expect: error syntax
+
+pattern: [^\\Q\\E]AAA
+flags: 
+expect: error syntax
+
+pattern: [\\E^]AAA
+flags: 
+expect: error syntax
+
+pattern: [\\Q\\E^]AAA
+flags: 
+expect: error syntax
+
+pattern: a(*MARK)b
+flags: 
+expect: error syntax
+
+pattern: \\g6666666666
+flags: 
+expect: error syntax
+
+pattern: (?1)\\c[
+flags: 
+expect: error syntax
+
+pattern: a(*CR)b
+flags: 
+expect: error syntax
+
+pattern: (*CR)a.b
+flags: 
+expect: compiles
+
+pattern: (*CRLF)a.b
+flags: 
+expect: compiles
+
+pattern: (*NUL)^.*
+flags: 
+expect: compiles
+
+pattern: (*NUL)^.*
+flags: s
+expect: compiles
+
+pattern: (*NUL)^X\\NY
+flags: 
+expect: compiles
+
+pattern: (?<a>)(?&)
+flags: 
+expect: error syntax
+
+pattern: (?<abc>)(?&a)
+flags: 
+expect: error syntax
+
+pattern: (?<a>)(?&aaaaaaaaaaaaaaaaaaaaaaa)
+flags: 
+expect: error syntax
+
+pattern: (?+-a)
+flags: 
+expect: error syntax
+
+pattern: (?-+a)
+flags: 
+expect: error syntax
+
+pattern: (?(-1))
+flags: 
+expect: error syntax
+
+pattern: (?(+10))
+flags: 
+expect: error syntax
+
+pattern: (?(10))
+flags: 
+expect: error syntax
+
+pattern: (?(+2))()()
+flags: 
+expect: compiles
+
+pattern: (?(2))()()
+flags: 
+expect: compiles
+
+pattern: \\k''
+flags: 
+expect: error syntax
+
+pattern: \\k<>
+flags: 
+expect: error syntax
+
+pattern: \\k{}
+flags: 
+expect: error syntax
+
+pattern: \\k
+flags: 
+expect: error syntax
+
+pattern: \\kabc
+flags: 
+expect: error syntax
+
+pattern: (?P=)
+flags: 
+expect: error syntax
+
+pattern: (?P>)
+flags: 
+expect: error syntax
+
+pattern: [[:foo:]]
+flags: 
+expect: error syntax
+
+pattern: [[:1234:]]
+flags: 
+expect: error syntax
+
+pattern: [[:f\\oo:]]
+flags: 
+expect: error syntax
+
+pattern: [[: :]]
+flags: 
+expect: error syntax
+
+pattern: [[:...:]]
+flags: 
+expect: error syntax
+
+pattern: [[:l\\ower:]]
+flags: 
+expect: error syntax
+
+pattern: [[:abc\\:]]
+flags: 
+expect: error syntax
+
+pattern: [abc[:x\\]pqr:]]
+flags: 
+expect: error syntax
+
+pattern: [[:a\\dz:]]
+flags: 
+expect: error syntax
+
+pattern: (^(a|b\\g<-1'c))
+flags: 
+expect: error syntax
+
+pattern: ^(?+1)(?<a>x|y){0}z
+flags: 
+expect: compiles
+
+pattern: (\\3)(\\1)(a)
+flags: 
+expect: compiles
+
+pattern: TA]
+flags: 
+expect: compiles
+
+pattern: (?2)[]a()b](abc)
+flags: 
+expect: error syntax
+
+pattern: (?2)[^]a()b](abc)
+flags: 
+expect: error syntax
+
+pattern: (?1)[]a()b](abc)
+flags: 
+expect: compiles
+
+pattern: (?1)[^]a()b](abc)
+flags: 
+expect: compiles
+
+pattern: (?2)[]a()b](abc)(xyz)
+flags: 
+expect: compiles
+
+pattern: (?&N)[]a(?<N>)](?<M>abc)
+flags: 
+expect: error syntax
+
+pattern: (?&N)[]a(?<N>)](abc)
+flags: 
+expect: error syntax
+
+pattern: a[^]b
+flags: 
+expect: error syntax
+
+pattern: a(*FAIL)+b
+flags: 
+expect: error syntax
+
+pattern: xyz
+flags: 
+expect: compiles
+
+pattern: (*NO_START_OPT)xyz
+flags: 
+expect: compiles
+
+pattern: ^"((?(?=[a])[^"])|b)*"$
+flags: 
+expect: compiles
+
+pattern: ^X(?5)(a)(?|(b)|(q))(c)(d)Y
+flags: 
+expect: error syntax
+
+pattern: ^X(?&N)(a)(?|(b)|(q))(c)(d)(?<N>Y)
+flags: 
+expect: compiles
+
+pattern: Xa{2,4}b
+flags: 
+expect: compiles
+
+pattern: Xa{2,4}?b
+flags: 
+expect: compiles
+
+pattern: Xa{2,4}+b
+flags: 
+expect: compiles
+
+pattern: X\\d{2,4}b
+flags: 
+expect: compiles
+
+pattern: X\\d{2,4}?b
+flags: 
+expect: compiles
+
+pattern: X\\d{2,4}+b
+flags: 
+expect: compiles
+
+pattern: X\\D{2,4}b
+flags: 
+expect: compiles
+
+pattern: X\\D{2,4}?b
+flags: 
+expect: compiles
+
+pattern: X\\D{2,4}+b
+flags: 
+expect: compiles
+
+pattern: X[abc]{2,4}b
+flags: 
+expect: compiles
+
+pattern: X[abc]{2,4}?b
+flags: 
+expect: compiles
+
+pattern: X[abc]{2,4}+b
+flags: 
+expect: compiles
+
+pattern: X[^a]{2,4}b
+flags: 
+expect: compiles
+
+pattern: X[^a]{2,4}?b
+flags: 
+expect: compiles
+
+pattern: X[^a]{2,4}+b
+flags: 
+expect: compiles
+
+pattern: (Y)X\\1{2,4}b
+flags: 
+expect: compiles
+
+pattern: (Y)X\\1{2,4}?b
+flags: 
+expect: compiles
+
+pattern: (Y)X\\1{2,4}+b
+flags: 
+expect: compiles
+
+pattern: Z(*F)
+flags: 
+expect: compiles
+
+pattern: Z(?!)
+flags: 
+expect: compiles
+
+pattern: dog(sbody)?
+flags: 
+expect: compiles
+
+pattern: dog(sbody)??
+flags: 
+expect: compiles
+
+pattern: dog|dogsbody
+flags: 
+expect: compiles
+
+pattern: dogsbody|dog
+flags: 
+expect: compiles
+
+pattern: \\bthe cat\\b
+flags: 
+expect: compiles
+
+pattern: (?<=abc)123
+flags: 
+expect: compiles
+
+pattern: \\babc\\b
+flags: 
+expect: compiles
+
+pattern: ^(?<name>a|b\\g<name>c)
+flags: 
+expect: compiles
+
+pattern: ^(?<name>a|b\\g'name'c)
+flags: 
+expect: compiles
+
+pattern: ^(a|b\\g<1>c)
+flags: 
+expect: compiles
+
+pattern: ^(a|b\\g'1'c)
+flags: 
+expect: compiles
+
+pattern: ^(a|b\\g'-1'c)
+flags: 
+expect: compiles
+
+pattern: (^(a|b\\g<-1>c))
+flags: 
+expect: compiles
+
+pattern: (?-i:\\g<name>)(?i:(?<name>a))
+flags: 
+expect: compiles
+
+pattern: (?i:\\g<name>)(?-i:(?<name>a))
+flags: 
+expect: compiles
+
+pattern: (?-i:\\g<+1>)(?i:(a))
+flags: 
+expect: compiles
+
+pattern: (?=(?<regex>(?#simplesyntax)\\$(?<name>[a-zA-Z_\\x{7f}-\\x{ff}][a-zA-Z0-9_\\x{7f}-\\x{ff}]*)(?:\\[(?<index>[a-zA-Z0-9_\\x{7f}-\\x{ff}]+|\\$\\g<name>)\\]|->\\g<name>(\\(.*?\\))?)?|(?#simple syntax withbraces)\\$\\{(?:\\g<name>(?<indices>\\[(?:\\g<index>|'(?:\\\\.|[^'\\\\])*'|"(?:\\g<regex>|\\\\.|[^"\\\\])*")\\])?|\\g<complex>|\\$\\{\\g<complex>\\})\\}|(?#complexsyntax)\\{(?<complex>\\$(?<segment>\\g<name>(\\g<indices>*|\\(.*?\\))?)(?:->\\g<segment>)*|\\$\\g<complex>|\\$\\{\\g<complex>\\})\\}))\\{
+flags: 
+expect: compiles
+
+pattern: (?<n>a|b|c)\\g<n>*
+flags: 
+expect: compiles
+
+pattern: ^X(?7)(a)(?|(b)|(q)(r)(s))(c)(d)(Y)
+flags: 
+expect: compiles
+
+pattern: (?<=b(?1)|zzz)(a)
+flags: 
+expect: compiles
+
+pattern: (a)(?<=b\\1)
+flags: 
+expect: compiles
+
+pattern: (a)(?<=b+(?1))
+flags: 
+expect: error syntax
+
+pattern: (a+)(?<=b(?1))
+flags: 
+expect: error syntax
+
+pattern: (a(?<=b(?1)))
+flags: 
+expect: error syntax
+
+pattern: (?<=b(?1))xyz
+flags: 
+expect: error syntax
+
+pattern: (?<=b(?1))xyz(b+)pqrstuvew
+flags: 
+expect: error syntax
+
+pattern: (?|(?<a>A)|(?<b>B))
+flags: 
+expect: error syntax
+
+pattern: abcd*
+flags: 
+expect: compiles
+
+pattern: abcd*
+flags: i
+expect: compiles
+
+pattern: abc\\d*
+flags: 
+expect: compiles
+
+pattern: (a)bc\\1*
+flags: 
+expect: compiles
+
+pattern: abc[de]*
+flags: 
+expect: compiles
+
+pattern: (?>a\\Kb)z|(ab)
+flags: 
+expect: compiles
+
+pattern: (?P<L1>(?P<L2>0|)|(?P>L2)(?P>L1))
+flags: 
+expect: compiles
+
+pattern: abc(*MARK:)pqr
+flags: 
+expect: error syntax
+
+pattern: abc(*:)pqr
+flags: 
+expect: error syntax
+
+pattern: ^(ab (c+(*THEN)cd) | xyz)
+flags: x
+expect: compiles
+
+pattern: ^(ab (c+(*PRUNE)cd) | xyz)
+flags: x
+expect: compiles
+
+pattern: ^(ab (c+(*FAIL)cd) | xyz)
+flags: x
+expect: compiles
+
+pattern: (?>.(*ACCEPT))*?5
+flags: 
+expect: compiles
+
+pattern: (.(*ACCEPT))*?5
+flags: 
+expect: compiles
+
+pattern: (.(*ACCEPT))5
+flags: 
+expect: compiles
+
+pattern: (.(*ACCEPT))*5
+flags: 
+expect: compiles
+
+pattern: (?<=abc)def
+flags: 
+expect: compiles
+
+pattern: abc$
+flags: m
+expect: compiles
+
+pattern: abc\\z
+flags: 
+expect: compiles
+
+pattern: abc\\Z
+flags: 
+expect: compiles
+
+pattern: abc\\b
+flags: 
+expect: compiles
+
+pattern: abc\\B
+flags: 
+expect: compiles
+
+pattern: .+
+flags: 
+expect: compiles
+
+pattern: ^\\c\u0123
+flags: 
+expect: error syntax
+
+pattern: (\\R*)(.)
+flags: s
+expect: compiles
+
+pattern: (\\R)*(.)
+flags: s
+expect: compiles
+
+pattern: ((?>\\r\\n|\\n|\\x0b|\\f|\\r|\\x85)*)(.)
+flags: s
+expect: compiles
+
+pattern: (?<=(abc)+)X
+flags: 
+expect: error syntax
+
+pattern: (abc)\\1+
+flags: 
+expect: compiles
+
+pattern: (?1)(?:(b(*ACCEPT))){0}
+flags: 
+expect: compiles
+
+pattern: (?1)(?:(b(*ACCEPT))){0}c
+flags: 
+expect: compiles
+
+pattern: (?1)(?:((*ACCEPT))){0}c
+flags: 
+expect: compiles
+
+pattern: ^.*?(?(?=a)a|bc)
+flags: 
+expect: compiles
+
+pattern: ^.*?(?(?=a)a(*THEN)b)c
+flags: 
+expect: compiles
+
+pattern: ^.*?(a(*THEN)b)c
+flags: 
+expect: compiles
+
+pattern: ^.*? (?1) c (?(DEFINE)(a(*THEN)b))
+flags: x
+expect: compiles
+
+pattern: ^.*?(a(*THEN)b|z)c
+flags: 
+expect: compiles
+
+pattern: ^.*?(z|a(*THEN)b)c
+flags: 
+expect: compiles
+
+pattern: (?1)c(?(DEFINE)((*ACCEPT)b))
+flags: 
+expect: compiles
+
+pattern: (?>(*ACCEPT)b)c
+flags: 
+expect: compiles
+
+pattern: (a)bc|(a)(b)\\2
+flags: 
+expect: compiles
+
+pattern: ^(a(*:A)(d|e(*:B))z|aeq)
+flags: 
+expect: compiles
+
+pattern: .(*F)
+flags: 
+expect: compiles
+
+pattern: (.)(\\1|a(?2))
+flags: 
+expect: compiles
+
+pattern: \\1|(.)(?R)\\1
+flags: 
+expect: compiles
+
+pattern: (.)((?(1)c|a)|a(?2))
+flags: 
+expect: compiles
+
+pattern: a[\\NB]c
+flags: 
+expect: error syntax
+
+pattern: a[B-\\Nc]
+flags: 
+expect: error syntax
+
+pattern: a[B\\Nc]
+flags: 
+expect: error syntax
+
+pattern: (a)(?2){0,1999}?(b)
+flags: 
+expect: compiles
+
+pattern: (a)(?(DEFINE)(b))(?2){0,1999}?(?2)
+flags: 
+expect: compiles
+
+pattern: (..)\\1
+flags: 
+expect: compiles
+
+pattern: (..)\\1
+flags: i
+expect: compiles
+
+pattern: (..)\\1{2,}
+flags: 
+expect: compiles
+
+pattern: (..)\\1{2,}
+flags: i
+expect: compiles
+
+pattern: (..)\\1{2,}?x
+flags: i
+expect: compiles
+
+pattern: ^(..)\\1
+flags: 
+expect: compiles
+
+pattern: ^(..)\\1{2,3}x
+flags: 
+expect: compiles
+
+pattern: ^(..)\\1{2,3}?x
+flags: 
+expect: compiles
+
+pattern: ^(..)(\\1{2,3})ab
+flags: 
+expect: compiles
+
+pattern: ^\\R
+flags: 
+expect: compiles
+
+pattern: ^\\R{2,3}x
+flags: 
+expect: compiles
+
+pattern: ^\\R{2,3}?x
+flags: 
+expect: compiles
+
+pattern: ^\\R?x
+flags: 
+expect: compiles
+
+pattern: ^\\R+x
+flags: 
+expect: compiles
+
+pattern: (?:(a)+(?C1)bb|aa(?C2)b)
+flags: 
+expect: compiles
+
+pattern: (?:(a)++(?C1)bb|aa(?C2)b)
+flags: 
+expect: compiles
+
+pattern: (?:(?>(a))(?C1)bb|aa(?C2)b)
+flags: 
+expect: compiles
+
+pattern: (?:(?1)(?C1)x|ab(?C2))((a)){0}
+flags: 
+expect: compiles
+
+pattern: (?1)(?C1)((a)(?C2)){0}
+flags: 
+expect: compiles
+
+pattern: (?:(a)+(?C1)bb|aa(?C2)b)++
+flags: 
+expect: compiles
+
+pattern: (ab)x|ab
+flags: 
+expect: compiles
+
+pattern: ^(?(?=a)aa|bb)
+flags: 
+expect: compiles
+
+pattern: (?C1)^(?C2)(?(?C99)(?=(?C3)a(?C4))(?C5)a(?C6)a(?C7)|(?C8)b(?C9)b(?C10))(?C11)
+flags: 
+expect: compiles
+
+pattern: (?!a(*COMMIT)b)ac|ad
+flags: 
+expect: compiles
+
+pattern: ^(?!a(*THEN)b|ac)..
+flags: 
+expect: compiles
+
+pattern: ^(?=a(*THEN)b|ac)
+flags: 
+expect: compiles
+
+pattern: \\A.*?(?:a|b(*THEN)c)
+flags: 
+expect: compiles
+
+pattern: \\A.*?(?:a|b(*THEN)c)++
+flags: 
+expect: compiles
+
+pattern: \\A.*?(?:a|b(*THEN)c|d)
+flags: 
+expect: compiles
+
+pattern: (?:(a(*MARK:X)a+(*SKIP:X)b)){0}(?:(?1)|aac)
+flags: 
+expect: compiles
+
+pattern: \\A.*?(a|b(*THEN)c)
+flags: 
+expect: compiles
+
+pattern: ^(A(*THEN)B|A(*THEN)D)
+flags: 
+expect: compiles
+
+pattern: (?!b(*THEN)a)bn|bnn
+flags: 
+expect: compiles
+
+pattern: (?(?=b(*SKIP)a)bn|bnn)
+flags: 
+expect: compiles
+
+pattern: (?=b(*THEN)a|)bn|bnn
+flags: 
+expect: compiles
+
+pattern: ^(?=(a)){0}b(?1)
+flags: 
+expect: compiles
+
+pattern: ^A\\o{1239}B
+flags: 
+expect: error syntax
+
+pattern: ^A\\oB
+flags: 
+expect: error syntax
+
+pattern: ^A\\x{zz}B
+flags: 
+expect: error syntax
+
+pattern: ^A\\x{12Z
+flags: 
+expect: error syntax
+
+pattern: ^A\\x{
+flags: 
+expect: error syntax
+
+pattern: [a-[:digit:]]+
+flags: 
+expect: error syntax
+
+pattern: [A-[:digit:]]+
+flags: 
+expect: error syntax
+
+pattern: [a-[.xxx.]]+
+flags: 
+expect: error syntax
+
+pattern: [a-[=xxx=]]+
+flags: 
+expect: error syntax
+
+pattern: [a-[!xxx!]]+
+flags: 
+expect: error syntax
+
+pattern: [A-[!xxx!]]+
+flags: 
+expect: compiles
+
+pattern: [a-\\d]+
+flags: 
+expect: error syntax
+
+pattern: (?<0abc>xx)
+flags: 
+expect: error syntax
+
+pattern: (?&1abc)xx(?<1abc>y)
+flags: 
+expect: error syntax
+
+pattern: (?<ab-cd>xx)
+flags: 
+expect: error syntax
+
+pattern: (?'0abc'xx)
+flags: 
+expect: error syntax
+
+pattern: (?P<0abc>xx)
+flags: 
+expect: error syntax
+
+pattern: \\k<5ghj>
+flags: 
+expect: error syntax
+
+pattern: \\k'5ghj'
+flags: 
+expect: error syntax
+
+pattern: \\k{2fgh}
+flags: 
+expect: error syntax
+
+pattern: (?P=8yuki)
+flags: 
+expect: error syntax
+
+pattern: \\g{4df}
+flags: 
+expect: error syntax
+
+pattern: (?P>1abc)xx(?<1abc>y)
+flags: 
+expect: error syntax
+
+pattern: \\g'3gh'
+flags: 
+expect: error syntax
+
+pattern: \\g<5fg>
+flags: 
+expect: error syntax
+
+pattern: (?(<4gh>)abc)
+flags: 
+expect: error syntax
+
+pattern: (?('4gh')abc)
+flags: 
+expect: error syntax
+
+pattern: (?(4gh)abc)
+flags: 
+expect: error syntax
+
+pattern: (?(R&6yh)abc)
+flags: 
+expect: error syntax
+
+pattern: [a[:<:]] should give error
+flags: 
+expect: error syntax
+
+pattern: (((((a)))))
+flags: 
+expect: compiles
+
+pattern: \\othing
+flags: 
+expect: error syntax
+
+pattern: \\o{}
+flags: 
+expect: error syntax
+
+pattern: \\o{whatever}
+flags: 
+expect: error syntax
+
+pattern: \\xthing
+flags: 
+expect: error syntax
+
+pattern: ^A\\xZ
+flags: 
+expect: error syntax
+
+pattern: ^A\\x
+flags: 
+expect: error syntax
+
+pattern: \\x{}
+flags: 
+expect: error syntax
+
+pattern: \\x{whatever}
+flags: 
+expect: error syntax
+
+pattern: A\\8B
+flags: 
+expect: error syntax
+
+pattern: A\\9B
+flags: 
+expect: error syntax
+
+pattern: ^(?(?=abc)\\w{3}:|\\d\\d)$
+flags: 
+expect: compiles
+
+pattern: a*?b*?
+flags: 
+expect: compiles
+
+pattern: (*NOTEMPTY)a*?b*?
+flags: 
+expect: compiles
+
+pattern: (?(VERSION>=10.04)yes|no)
+flags: 
+expect: compiles
+
+pattern: (?(VERSION<10)yes|no)
+flags: 
+expect: error syntax
+
+pattern: (?(VERSION>10)yes|no)
+flags: 
+expect: error syntax
+
+pattern: (?(VERSION>=10.0.0)yes|no)
+flags: 
+expect: error syntax
+
+pattern: (?(VERSION=10.101)yes|no)
+flags: 
+expect: error syntax
+
+pattern: a(b)c
+flags: 
+expect: compiles
+
+pattern: (a)(b)|(c)
+flags: 
+expect: compiles
+
+pattern: a(b)c(d)
+flags: 
+expect: compiles
+
+pattern: .*\\d
+flags: 
+expect: compiles
+
+pattern: .*\\d
+flags: s
+expect: compiles
+
+pattern: (*NO_DOTSTAR_ANCHOR)(?s).*\\d
+flags: 
+expect: compiles
+
+pattern: (?<N111>(?J)(?<N111>1(111111)11|)1|1|)(?(<N111>)1)
+flags: 
+expect: compiles
+
+pattern: (?<N>(?J)(?<N>))(?-J)\\k<N>
+flags: 
+expect: compiles
+
+pattern: (?(?=0)?)+
+flags: 
+expect: error syntax
+
+pattern: (?(?=0)(?=00)?00765)
+flags: 
+expect: compiles
+
+pattern: (?(?=0)(?=00)?00765|(?!3).56)
+flags: 
+expect: compiles
+
+pattern: a(?C"
+flags: 
+expect: error syntax
+
+pattern: a(?C"a
+flags: 
+expect: error syntax
+
+pattern: a(?C"a"
+flags: 
+expect: error syntax
+
+pattern: a(?C"a"bcde(?C"b")xyz
+flags: 
+expect: error syntax
+
+pattern: ^a(b)c(?C1)def
+flags: 
+expect: compiles
+
+pattern: ^a(b)c(?C"AB")def
+flags: 
+expect: compiles
+
+pattern: ^ab(?C'first')cd(?C"second")ef
+flags: 
+expect: compiles
+
+pattern: (?:a(?C`code`)){3}X
+flags: 
+expect: compiles
+
+pattern: \x2061 28 3f 43 27 78 00 7a 27 29 62
+flags: 
+expect: compiles
+
+pattern: (?(?!)^)
+flags: 
+expect: compiles
+
+pattern: (?(?!)a|b)
+flags: 
+expect: compiles
+
+pattern: (?<=\\bABQ(3(?-7)))
+flags: 
+expect: error syntax
+
+pattern: (?<=\\bABQ(3(?+7)))
+flags: 
+expect: error syntax
+
+pattern: ((?2){73}(?2))((?1))
+flags: 
+expect: compiles
+
+pattern: (abc)*
+flags: 
+expect: compiles
+
+pattern: ((((((((x))))))))\\81
+flags: 
+expect: error syntax
+
+pattern: ((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((x))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))\\80
+flags: 
+expect: compiles
+
+pattern: \\80
+flags: 
+expect: error syntax
+
+pattern: A\\8B\\9C
+flags: 
+expect: error syntax
+
+pattern: (\\9*+(?2);\\3++()2|)++{
+flags: 
+expect: error syntax
+
+pattern: \\V\\x85\\9*+((?2)\\3++()2)*:2
+flags: 
+expect: error syntax
+
+pattern: (((?(R)){0,2}) (?'x'((?'X')((?'R')))))
+flags: 
+expect: compiles
+
+pattern: A(?'')Z
+flags: 
+expect: error syntax
+
+pattern: (?<=|(\\,\\$(?73591620449005828816)\\xa8.{7}){6}\\x09)
+flags: 
+expect: error syntax
+
+pattern: [[:>:]](?<)
+flags: 
+expect: error syntax
+
+pattern: ((?x)(*:0))#(?'
+flags: 
+expect: error syntax
+
+pattern: (?C$[$)(?<]
+flags: 
+expect: error syntax
+
+pattern: (?C$)$)(?<]
+flags: 
+expect: error syntax
+
+pattern: ((?x)(?#))#(?'
+flags: 
+expect: error syntax
+
+pattern: [[:\\\\](?<[::]
+flags: 
+expect: error syntax
+
+pattern: (?R-:(?<
+flags: 
+expect: error syntax
+
+pattern: (?R-:(?<)
+flags: 
+expect: error syntax
+
+pattern: (?(?C{\\Q})(?!(?'
+flags: 
+expect: error syntax
+
+pattern: ab{3cd
+flags: 
+expect: compiles
+
+pattern: ab{3,cd
+flags: 
+expect: compiles
+
+pattern: ab{3,4a}cd
+flags: 
+expect: compiles
+
+pattern: {4,5a}bc
+flags: 
+expect: compiles
+
+pattern: \\x0{ab}
+flags: 
+expect: compiles
+
+pattern: ^(a(b))\\1\\g1\\g{1}\\g-1\\g{-1}\\g{-02}Z
+flags: 
+expect: compiles
+
+pattern: .*?a(*PRUNE)b
+flags: 
+expect: compiles
+
+pattern: .*?a(*PRUNE)b
+flags: s
+expect: compiles
+
+pattern: ^a(*PRUNE)b
+flags: s
+expect: compiles
+
+pattern: .*?a(*SKIP)b
+flags: 
+expect: compiles
+
+pattern: (?(8000000000
+flags: 
+expect: error syntax
+
+pattern: ((?(R8000000000)))
+flags: 
+expect: error syntax
+
+pattern: 0(?0)|(1)(*THEN)(*SKIP:0)(*FAIL)
+flags: 
+expect: compiles
+
+pattern: (?(1)()\\983040\\2)
+flags: 
+expect: error syntax
+
+pattern: (*LIMIT_MATCH=)abc
+flags: 
+expect: error syntax
+
+pattern: (*CRLF)(*LIMIT_MATCH=)abc
+flags: 
+expect: error syntax
+
+pattern: (?:ab)?(?:ab)(?:ab)
+flags: 
+expect: compiles
+
+pattern: ((*MARK:A))++a(*SKIP:B)b
+flags: 
+expect: compiles
+
+pattern: (*:ab\\t(d\\)c)xxx
+flags: 
+expect: error syntax
+
+pattern: (?<=abc)
+flags: 
+expect: compiles
+
+pattern: ^\\w
+flags: m
+expect: compiles
+
+pattern: (abcd)
+flags: 
+expect: compiles
+
+pattern: ((p(?'K
+flags: 
+expect: error syntax
+
+pattern: ((p(?'K
+flags: n
+expect: error syntax
+
+pattern: (?'abcdefghijklmnopqrstuvwxyzABCDEFGabcdefghijklmnopqrstuvwxyzABCDEabcdefghijklmnopqrstuvwxyzABCDEabcdefghijklmnopqrstuvwxyzABCDEFGH'toolong)
+flags: 
+expect: error syntax
+
+pattern: (?'abcdefghijklmnopqrstuvwxyzABCDEFGabcdefghijklmnopqrstuvwxyzABCDEabcdefghijklmnopqrstuvwxyzABCDEabcdefghijklmnopqrstuvwxyzABCDEFG'justright)
+flags: 
+expect: compiles
+
+pattern: a[[:punct:]b]
+flags: 
+expect: compiles
+
+pattern: a[b[:punct:]]
+flags: 
+expect: compiles
+
+pattern: \x20(?-x):?
+flags: x
+expect: compiles
+
+pattern: \x0B(?-x):?
+flags: x
+expect: compiles
+
+pattern: 0b 28 3f 2d 78 29 3a
+flags: x
+expect: compiles
+
+pattern: a|(b)c
+flags: 
+expect: compiles
+
+pattern: ()()()
+flags: 
+expect: compiles
+
+pattern: efg
+flags: 
+expect: compiles
+
+pattern: eff
+flags: 
+expect: compiles
+
+pattern: effg
+flags: 
+expect: compiles
+
+pattern: (?J)(?'a'))(?'a')
+flags: 
+expect: error syntax
+
+pattern: (?<=((?C)0))
+flags: 
+expect: compiles
+
+pattern: aaa
+flags: 
+expect: compiles
+
+pattern: \\[AB]{6000000000000000000000}
+flags: 
+expect: compiles
+
+pattern: '(*U'
+flags: 
+expect: error syntax
+
+pattern: '(*'
+flags: 
+expect: error syntax
+
+pattern: '('
+flags: 
+expect: error syntax
+
+pattern: 
+flags: 
+expect: compiles
+
+pattern: ([ab])...(?<=\\1)z
+flags: 
+expect: compiles
+
+pattern: (?|([ab]))...(?<=\\1)z
+flags: 
+expect: error syntax
+
+pattern: ([ab])(\\1)...(?<=\\2)z
+flags: 
+expect: compiles
+
+pattern: (a\\2)(b\\1)(?<=\\2)
+flags: 
+expect: error syntax
+
+pattern: (?<A>[ab])...(?<=\\k'A')z
+flags: 
+expect: compiles
+
+pattern: ((\\g+1X)?([ab]))+
+flags: 
+expect: compiles
+
+pattern: ab(?C1)c
+flags: 
+expect: compiles
+
+pattern: 'ab(?C1)c'
+flags: 
+expect: compiles
+
+pattern: ()(?<=(?0))
+flags: 
+expect: error syntax
+
+pattern: (?<!|!(?<!))
+flags: 
+expect: compiles
+
+pattern: (?<!|!|!||||||(?<!)||(?<!)!|!||(?<!)!|!(?<!)!|!|!|!||||!!|<!)!|!||||!|
+flags: 
+expect: compiles
+
+pattern: .>*?\\g'0
+flags: 
+expect: error syntax
+
+pattern: {\uFFFD\u0344\uFFFD\u0344\uFFFD{'{22{2{{2{'{22{\x12{22{2{'{22{2{{2{{222{{2{'{22{2{22{2{'{22{2{{2{'{22{2{22{2{'{'{22{2{22{2{'{22{2{{2{'{22{2{22{2{'{222{2\u0104\u0344\uFFFD\u0344\uFFFD{'{22{2{{2{'{22{\x12{11{2{'{22{2{{2{{'{22{2{{2{'{22{\x12{22{1{'{22{2{{2{{222{{2{'{22{2{22{2{'{
+flags: 
+expect: compiles
+
+pattern: (?(?(?(?(?(?))))))
+flags: 
+expect: error syntax
+
+pattern: (*:ab)*
+flags: 
+expect: error syntax
+
+pattern: (?:\\[A|B|C|D|E|F|G|H|I|J|]{200}Z)
+flags: 
+expect: compiles
+
+pattern: .+(?(?C'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX'))?!XXXX.=X
+flags: 
+expect: error syntax
+
+pattern: [:[:alnum:]-[[a:lnum:]+
+flags: 
+expect: error syntax
+
+pattern: ((?(?C'')\\QX\\E(?!((?(?C'')(?!X=X));=)r*X=X));=)
+flags: 
+expect: error syntax
+
+pattern: ((?(?C'')\\Q\\E(?!((?(?C'')(?!X=X));=)r*X=X));=)
+flags: 
+expect: compiles
+
+pattern: ()(\\g+65534)
+flags: 
+expect: error syntax
+
+pattern: ()(\\g+65533)
+flags: 
+expect: error syntax
+
+pattern: (R?){65}
+flags: 
+expect: compiles
+
+pattern: \\[(a)]{60}
+flags: 
+expect: compiles
+
+pattern: \\g{3
+flags: 
+expect: error syntax
+
+pattern: (a(?C1)(b)(c)d)+
+flags: 
+expect: compiles
+
+pattern: ^ (?(DEFINE) (..(*ACCEPT)|...) ) (?1)$
+flags: x
+expect: compiles
+
+pattern: \\d{0,3}(*:abc)(?C1)xxx
+flags: 
+expect: compiles
+
+pattern: ^a+?x
+flags: i
+expect: compiles
+
+pattern: ^[^a]{3,}?x
+flags: i
+expect: compiles
+
+pattern: ^X\\S
+flags: 
+expect: compiles
+
+pattern: ^X\\W
+flags: 
+expect: compiles
+
+pattern: ^X\\H
+flags: 
+expect: compiles
+
+pattern: ^X\\h
+flags: 
+expect: compiles
+
+pattern: ^X\\V
+flags: 
+expect: compiles
+
+pattern: ^X\\v
+flags: 
+expect: compiles
+
+pattern: ^X.+?
+flags: s
+expect: compiles
+
+pattern: ^X\\R+?
+flags: 
+expect: compiles
+
+pattern: ^X\\H+?
+flags: 
+expect: compiles
+
+pattern: ^X\\h+?
+flags: 
+expect: compiles
+
+pattern: ^X\\V+?
+flags: 
+expect: compiles
+
+pattern: ^X\\D+?
+flags: 
+expect: compiles
+
+pattern: ^X\\S+?
+flags: 
+expect: compiles
+
+pattern: ^X\\W+?
+flags: 
+expect: compiles
+
+pattern: ^X.+?Z
+flags: 
+expect: compiles
+
+pattern: (*CRLF)^X.+?Z
+flags: 
+expect: compiles
+
+pattern: ^X\\R+?Z
+flags: 
+expect: compiles
+
+pattern: (*BSR_ANYCRLF)^X\\R+?Z
+flags: 
+expect: compiles
+
+pattern: ^X\\H+?Z
+flags: 
+expect: compiles
+
+pattern: ^X\\h+?Z
+flags: 
+expect: compiles
+
+pattern: ^X\\V+?Z
+flags: 
+expect: compiles
+
+pattern: ^X\\v+?Z
+flags: 
+expect: compiles
+
+pattern: ^X\\D+?Z
+flags: 
+expect: compiles
+
+pattern: ^X\\d+?Z
+flags: 
+expect: compiles
+
+pattern: ^X\\S+?Z
+flags: 
+expect: compiles
+
+pattern: ^X\\s+?Z
+flags: 
+expect: compiles
+
+pattern: ^X\\W+?Z
+flags: 
+expect: compiles
+
+pattern: ^X\\w+?Z
+flags: 
+expect: compiles
+
+pattern: ^X.{1,3}Z
+flags: s
+expect: compiles
+
+pattern: ^X\\h+Z
+flags: 
+expect: compiles
+
+pattern: ^X\\V+Z
+flags: 
+expect: compiles
+
+pattern: ^(X(*THEN)Y|AB){0}(?1)
+flags: 
+expect: compiles
+
+pattern: ^(?!A(?C1)B)C
+flags: 
+expect: compiles
+
+pattern: ^(?(?!A(?C1)B)C)
+flags: 
+expect: compiles
+
+pattern: ^(b+|a){1,2}?bc
+flags: 
+expect: compiles
+
+pattern: ^(b*|ba){1,2}?bc
+flags: 
+expect: compiles
+
+pattern: [[:digit:]-a]
+flags: 
+expect: error syntax
+
+pattern: [[:digit:]-[:print:]]
+flags: 
+expect: error syntax
+
+pattern: [\\d-a]
+flags: 
+expect: error syntax
+
+pattern: [\\H-z]
+flags: 
+expect: error syntax
+
+pattern: [\\d-[:print:]]
+flags: 
+expect: error syntax
+
+pattern: (*NO_JIT)(a+)b
+flags: 
+expect: compiles
+
+pattern: (*NO_JIT)a+(?C'XXX')b
+flags: 
+expect: compiles
+
+pattern: (?^x-i)AB
+flags: 
+expect: error syntax
+
+pattern: (?^-i)AB
+flags: 
+expect: error syntax
+
+pattern: (?x-i-i)
+flags: 
+expect: error syntax
+
+pattern: abc\\rdef
+flags: 
+expect: compiles
+
+pattern: (?(*ACCEPT)xxx)
+flags: 
+expect: error syntax
+
+pattern: (?(*atomic:xx)xxx)
+flags: 
+expect: error syntax
+
+pattern: (?(*script_run:xxx)zzz)
+flags: 
+expect: error syntax
+
+pattern: foobar
+flags: 
+expect: compiles
+
+pattern: \\[()]{65535}()
+flags: 
+expect: error syntax
+
+pattern: \\[()]{65535}(?<A>)
+flags: 
+expect: error syntax
+
+pattern: a(?:(*ACCEPT))??bc
+flags: 
+expect: compiles
+
+pattern: a(*ACCEPT)??bc
+flags: 
+expect: compiles
+
+pattern: (*:\\)?
+flags: 
+expect: error syntax
+
+pattern: A(?:(*ACCEPT))?B
+flags: 
+expect: compiles
+
+pattern: (A(*ACCEPT)??B)C
+flags: 
+expect: compiles
+
+pattern: ( {32742} {42})(?<!\\1{65481})
+flags: 
+expect: error syntax
+
+pattern: (X{65535})(?<=\\1{32770})
+flags: 
+expect: error syntax
+
+pattern: (?(*napla:xx)bc)
+flags: 
+expect: error syntax
+
+pattern: \\A(*pla:.*\\b(\\w++))(?>.*?\\b\\1\\b){3}
+flags: 
+expect: compiles
+
+pattern: \\A(*napla:.*\\b(\\w++))(?>.*?\\b\\1\\b){3}
+flags: 
+expect: compiles
+
+pattern: \\A(?*.*\\b(\\w++))(?>.*?\\b\\1\\b){3}
+flags: 
+expect: compiles
+
+pattern: (*plb:(.)..|(.)...)(\\1|\\2)
+flags: 
+expect: compiles
+
+pattern: (*naplb:(.)..|(.)...)(\\1|\\2)
+flags: 
+expect: compiles
+
+pattern: (?<*(.)..|(.)...)(\\1|\\2)
+flags: 
+expect: compiles
+
+pattern: (*napla:)+
+flags: 
+expect: compiles
+
+pattern: (*naplb:)+
+flags: 
+expect: compiles
+
+pattern: (*napla:a|(.)(*ACCEPT)zz)\\1..
+flags: 
+expect: compiles
+
+pattern: (*napla:a(*ACCEPT)zz|(.))\\1..
+flags: 
+expect: compiles
+
+pattern: (*napla:a|(*COMMIT)(.))\\1\\1
+flags: 
+expect: compiles
+
+pattern: (*napla:a|(.))\\1\\1
+flags: 
+expect: compiles
+
+pattern: (\\2)((?=(?<=\\1)))
+flags: 
+expect: error syntax
+
+pattern: c*+(?<=[bc])
+flags: 
+expect: compiles
+
+pattern: c++(?<=[bc])
+flags: 
+expect: compiles
+
+pattern: (?<=(?=.(?<=x)))
+flags: 
+expect: compiles
+
+pattern: \\z
+flags: 
+expect: compiles
+
+pattern: \\Z
+flags: 
+expect: compiles
+
+pattern: (?![ab]).*
+flags: 
+expect: compiles
+
+pattern: c*+
+flags: 
+expect: compiles
+
+pattern: ^(?|(\\*)(*napla:\\S*_(\\2?+.+))|(\\w)(?=\\S*_(\\2?+\\1)))+_\\2$
+flags: 
+expect: compiles
+
+pattern: ^(?|(\\*)(*napla:\\S*_(\\3?+.+))|(\\w)(?=\\S*_((\\2?+\\1))))+_\\2$
+flags: 
+expect: compiles
+
+pattern: ^((\\1+)(?C)|\\d)+133X$
+flags: 
+expect: compiles
+
+pattern: (?(VERSION=0.0
+flags: 
+expect: error syntax
+
+pattern: (?=a\\Kb)ab
+flags: 
+expect: error syntax
+
+pattern: (?!a\\Kb)ac
+flags: 
+expect: error syntax
+
+pattern: ^abc(?<=b\\Kc)d
+flags: 
+expect: error syntax
+
+pattern: ^abc(?<!b\\Kq)d
+flags: 
+expect: error syntax
+
+pattern: (?>this line\\s*((?R)|)\\K)
+flags: 
+expect: compiles
+
+pattern: (?>this line\\s*((?R)|)(*MARK:A))
+flags: 
+expect: compiles
+
+pattern: 12345(?<=\\d{1,256})X
+flags: 
+expect: error syntax
+
+pattern: (?<!( {65054}){9,44965})
+flags: 
+expect: error syntax
+
+pattern: (?(?<!|(|a)))
+flags: 
+expect: compiles
+
+pattern: (?(?<!|a?))
+flags: 
+expect: compiles
+
+pattern: (?<=(()()()()()()()()()()()()()(()()()()(())()()()()(()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()(())()()()()(()()()()()()(()()()()()()()()()()()()()()()()()()()()()(())()()()()(()()()()()()()()()()()()()(()()()()()()()()()()()()()(()())))))))))
+flags: 
+expect: compiles
+
+pattern: (?<!( {65054}){0,44965})
+flags: 
+expect: error syntax
+
+pattern: A+{,3}
+flags: 
+expect: error syntax
+
+pattern: (\\g{+1}Z|(A))+
+flags: 
+expect: compiles
+
+pattern: ^(?=.*(?=(([A-Z]).*(?(1)\\1)))(?!.+\\2)){26}
+flags: i
+expect: compiles
+
+pattern: ((foo)|(bar))*
+flags: 
+expect: compiles
+
+pattern: (?:(f)(o)(o)|(b)(a)(r))*
+flags: 
+expect: compiles
+
+pattern: ((Z)+|A)*
+flags: 
+expect: compiles
+
+pattern: A +
+flags: x
+expect: compiles
+
+pattern: a\\z
+flags: 
+expect: compiles
+
+pattern: (?:|(?0).)(?(R)|\\z)
+flags: 
+expect: compiles
+
+pattern: (?0)
+flags: 
+expect: compiles
+
+pattern: (a(?1)z||(?1)++)$
+flags: 
+expect: compiles
+
+pattern: (((?<=123?456456|ABC)))(?<=\\2)..
+flags: 
+expect: compiles
+
+pattern: [^\\S\\W]{6}
+flags: 
+expect: compiles
+
+pattern: a{\\Q1\\E,2}
+flags: 
+expect: compiles
+
+pattern: a{\\E1,2}
+flags: 
+expect: compiles
+
+pattern: (*scs:
+flags: 
+expect: error syntax
+
+pattern: (*scan_substring:(
+flags: 
+expect: error syntax
+
+pattern: (*scs:('name'
+flags: 
+expect: error syntax
+
+pattern: (*scs:(1)a|b)
+flags: 
+expect: error syntax
+
+pattern: (*scs:(0)a)
+flags: 
+expect: error syntax
+
+pattern: (*scan_substring:(1)a|b)
+flags: 
+expect: error syntax
+
+pattern: (*scs:(<name>)a|b)
+flags: 
+expect: error syntax
+
+pattern: (*scan_substring:(<name>)a|b)
+flags: 
+expect: error syntax
+
+pattern: ()(*scs:(1)+a)
+flags: 
+expect: error syntax
+
+pattern: ()(*scs:(1,1,1,1,1,1,1,1,2))
+flags: 
+expect: error syntax
+
+pattern: ()()(*scs:(1,2,1,2,1,2,2,'XYZ'))
+flags: 
+expect: error syntax
+
+pattern: (\\w++)=(?(*scs:(1)(abc))pqr|xyz)(\\w++)
+flags: 
+expect: error syntax
+
+pattern: ([a-z])([a-z]++)(#+)(*scs:(2)(ab.))
+flags: 
+expect: compiles
+
+pattern: ([a-zA-Z]+)(*scs:(1).*?(?<ABC>[A-Z]+)(*scan_substring:('ABC').*(.)\\3))#+
+flags: 
+expect: compiles
+
+pattern: ([a-z]++)##(*scs:(1)(abc))?!
+flags: 
+expect: compiles
+
+pattern: ([a-z]++)##(*scs:(1)(abc))??(?(2)!|:)
+flags: 
+expect: compiles
+
+pattern: ([a-z]++)##(*scs:(1)(abc)|xyz){8}(?(2)!|:)
+flags: 
+expect: compiles
+
+pattern: [A-Z]{3}([A-Z]++)#(*scs:(1)(?<=BC)XY)#
+flags: 
+expect: compiles
+
+pattern: ()(\\w++)=(*scs:(2)(?=abc))(\\w++)
+flags: 
+expect: compiles
+
+pattern: (\\d++)(*scs:(1)\\d+\\z)(\\w+)
+flags: 
+expect: compiles
+
+pattern: (\\d++)(*scs:(1)\\d+\\Z)(\\w+)
+flags: 
+expect: compiles
+
+pattern: (\\d++)(*scs:(1)\\d+$)(\\w+)
+flags: 
+expect: compiles
+
+pattern: ([a-z]{2})[a-z](*scs:(1)(.*?))\\2$
+flags: 
+expect: compiles
+
+pattern: ^(([a-z]([a-z]*+))(*scs:(2).(?=(?1)|$)\\3)|#){5}
+flags: 
+expect: compiles
+
+pattern: (*scs:(1)a)(a)|x
+flags: 
+expect: compiles
+
+pattern: (*scs:(1)a)?(a)
+flags: 
+expect: compiles
+
+pattern: (*scs:(1)a)??(a)
+flags: 
+expect: compiles
+
+pattern: x(?|(*scs:(1)(?<=(.)))|()){8}
+flags: 
+expect: compiles
+
+pattern: (a)(b)(*scs:(2)(*scs:(1)a(*PRUNE)x)).+|(.+)
+flags: 
+expect: compiles
+
+pattern: (a)(b)(*scs:(2)(*scs:(1)a(*COMMIT)x)).+|(.+)
+flags: 
+expect: compiles
+
+pattern: (abc)(def)(*scs:(1)(*scs:(2)de(*SKIP)x)).+|(.+)
+flags: 
+expect: compiles
+
+pattern: (abc)(def)(*scs:(2)(*scs:(1)(*SKIP)x)).+|(.+)
+flags: 
+expect: compiles
+
+pattern: (?<=(abc))(def)(*scs:(2)(*scs:(1)(*SKIP)x)).+|(ef.+)
+flags: 
+expect: compiles
+
+pattern: (abc)(def)(*scs:(2)(?:(*scs:(1)abc(*SKIP:notfound)x|abcd|(abc)))).+
+flags: 
+expect: compiles
+
+pattern: (abc)(def)(*MARK:markstr)(*scs:(2)(?:(*scs:(1)abc(*SKIP:markstr)x))).+|(.+)
+flags: 
+expect: compiles
+
+pattern: ^([a-z]++)(?:((?6))|((?7))|((?8))|(#))(?(DEFINE)((*scs:(1)abc(*PRUNE)d))((*scs:(1)abc(*COMMIT)e))((*scs:(1)abc(*SKIP)f)))
+flags: 
+expect: compiles
+
+pattern: \\b(\\w++)(*scs:(1)^)
+flags: 
+expect: compiles
+
+pattern: (xyz)(abc)(*scs:(-1)abc)(*scs:(-2)\\1)
+flags: 
+expect: compiles
+
+pattern: ^([a-z]++)#(*scs:(1)a|ab|abc|abcd|abcde|abcdef|(abcdefg))\\2
+flags: 
+expect: compiles
+
+pattern: ^([a-z]++)(*scs:(1)(a+)(*THEN)b|(a+)(*THEN)c|(aa))
+flags: 
+expect: compiles
+
+pattern: ^([a-z]++)(*scs:(1)((a+)(*THEN)b)|(a+)(*THEN)c|(aa))
+flags: 
+expect: compiles
+
+pattern: ^([a-z]++)(*scs:(1)((a+)(*THEN)b))?
+flags: 
+expect: compiles
+
+pattern: ^([a-z]++)(*scs:(1)(abc|(a+)(*THEN)b))?
+flags: 
+expect: compiles
+
+pattern: ^(?:(.){20,30}#|([a-z]++)(*scs:(1)(a+)(*THEN)b){20,30}#|(.){20,30}!)
+flags: 
+expect: compiles
+
+pattern: f(?:(*scs:(+1,+2)(?<=(.)))|()){16}
+flags: 
+expect: compiles
+
+pattern: ()()()(?<=ab(*scs:(1,2,3))cd)xyz
+flags: 
+expect: compiles
+
+pattern: ()()()(?<=ab(*ACCEPT)(*scs:(1,2,3))cd|efg)xyz
+flags: 
+expect: compiles
+
+pattern: (a)(*scs:(1)a(*ACCEPT))bbb
+flags: 
+expect: compiles
+
+pattern: (a)(b+)(*scs:(1)a(*ACCEPT))(\\2)
+flags: 
+expect: compiles
+
+pattern: a\\800000b
+flags: 
+expect: error syntax
+
+pattern: a\\800000000b
+flags: 
+expect: error syntax
+
+pattern: a\\8000000000b
+flags: 
+expect: error syntax
+
+pattern: a\\0b\\x00c\\00d
+flags: 
+expect: compiles
+
+pattern: \\0-\\00-\\01-\\012-\\0123-\\123-\\1234
+flags: 
+expect: compiles
+
+pattern: \\12
+flags: 
+expect: compiles
+
+pattern: a(?C)b
+flags: 
+expect: compiles
+
+pattern: [a[]
+flags: 
+expect: compiles
+
+pattern: [ \\j ]
+flags: 
+expect: error syntax
+
+pattern: (?[ \\j ])
+flags: 
+expect: error syntax
+
+pattern: (?[])
+flags: 
+expect: error syntax
+
+pattern: (?[
+flags: 
+expect: error syntax
+
+pattern: (?[]
+flags: 
+expect: error syntax
+
+pattern: (?[\\n
+flags: 
+expect: error syntax
+
+pattern: (?[\\n]
+flags: 
+expect: error syntax
+
+pattern: (?[\\n]z)
+flags: 
+expect: error syntax
+
+pattern: (?[\\n] )
+flags: 
+expect: error syntax
+
+pattern: (?[(
+flags: 
+expect: error syntax
+
+pattern: (?[(\x20
+flags: 
+expect: error syntax
+
+pattern: (?[(\\n
+flags: 
+expect: error syntax
+
+pattern: (?[ \\n + () ])
+flags: 
+expect: error syntax
+
+pattern: (?[1])
+flags: 
+expect: error syntax
+
+pattern: (?[a])
+flags: 
+expect: error syntax
+
+pattern: (?[a-c])
+flags: 
+expect: error syntax
+
+pattern: (?[(])
+flags: 
+expect: error syntax
+
+pattern: (?[(\\n])
+flags: 
+expect: error syntax
+
+pattern: (?[\\n)])
+flags: 
+expect: error syntax
+
+pattern: (?[^\\n])
+flags: 
+expect: error syntax
+
+pattern: (?[ \\n \\t ])
+flags: 
+expect: error syntax
+
+pattern: (?[ \\d \\t ])
+flags: 
+expect: error syntax
+
+pattern: (?[ [\\n] \\t ])
+flags: 
+expect: error syntax
+
+pattern: (?[ (\\n) \\t ])
+flags: 
+expect: error syntax
+
+pattern: (?[ [:alpha:] \\t ])
+flags: 
+expect: error syntax
+
+pattern: (?[ \\n + \\t \\d ])
+flags: 
+expect: error syntax
+
+pattern: (?[ !\\n \\t ])
+flags: 
+expect: error syntax
+
+pattern: (?[ \\n [:alpha:] ])
+flags: 
+expect: error syntax
+
+pattern: (?[ \\n [\\d] ])
+flags: 
+expect: error syntax
+
+pattern: (?[ \\n (\\t) ])
+flags: 
+expect: error syntax
+
+pattern: (?[ \\n !\\t ])
+flags: 
+expect: error syntax
+
+pattern: (?[:graph:])
+flags: 
+expect: error syntax
+
+pattern: (?[\\Qn\\E])
+flags: 
+expect: error syntax
+
+pattern: (?[\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n&\\n))))))))))))))])
+flags: 
+expect: compiles
+
+pattern: (?[\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+([\\n]&\\n))))))))))))))])
+flags: 
+expect: error syntax
+
+pattern: (?[\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n&[\\n]))))))))))))))])
+flags: 
+expect: error syntax
+
+pattern: (?[\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+((\\n)&\\n))))))))))))))])
+flags: 
+expect: error syntax
+
+pattern: [[:digit:]   -Z]
+flags: x
+expect: error syntax
+
+pattern: [\\d   -Z]
+flags: x
+expect: error syntax
+
+pattern: [[:digit:]\\E-H]
+flags: 
+expect: error syntax
+
+pattern: [[:digit:]\\Q\\E-H]+
+flags: 
+expect: error syntax
+
+pattern: [z-[:space:]]
+flags: 
+expect: error syntax
+
+pattern: [z-\\d]
+flags: 
+expect: error syntax
+
+pattern: [[:space:]-z]
+flags: 
+expect: error syntax
+
+pattern: [\\d-z]
+flags: 
+expect: error syntax
+
+pattern: [\\d-\\w]
+flags: 
+expect: error syntax
+
+pattern: [\\Q
+flags: 
+expect: error syntax
+
+pattern: [\\Q\\E
+flags: 
+expect: error syntax
+
+pattern: [\\Q\\n
+flags: 
+expect: error syntax
+
+pattern: [\\Q\\n]
+flags: 
+expect: error syntax
+
+pattern: [\\Q\\n\\]
+flags: 
+expect: error syntax
+
+pattern: [\\Q\\n\\E
+flags: 
+expect: error syntax
+
+pattern: [\\Q\\n\\E]
+flags: 
+expect: compiles
+
+pattern: [z\\Q
+flags: 
+expect: error syntax
+
+pattern: [z\\Q\\E
+flags: 
+expect: error syntax
+
+pattern: [\\n
+flags: 
+expect: error syntax
+
+pattern: [\\E
+flags: 
+expect: error syntax
+
+pattern: [\\A]
+flags: 
+expect: error syntax
+
+pattern: [\\Z]
+flags: 
+expect: error syntax
+
+pattern: [\\z]
+flags: 
+expect: error syntax
+
+pattern: [\\G]
+flags: 
+expect: error syntax
+
+pattern: [\\K]
+flags: 
+expect: error syntax
+
+pattern: [\\g<1>]
+flags: 
+expect: compiles
+
+pattern: [\\k<1>]
+flags: 
+expect: compiles
+
+pattern: a
+flags: 
+expect: compiles
+
+pattern: (*:pear)apple
+flags: 
+expect: compiles
+
+pattern: a(bb)c
+flags: 
+expect: compiles
+
+pattern: a()c
+flags: 
+expect: compiles

@@ -157,6 +157,35 @@ TEST(Ir, DumpShowsTheResolvedSemanticsRatherThanTheDialect) {
   EXPECT_NE(dump.find("capture #1"), std::string::npos) << dump;
   EXPECT_NE(dump.find("char 'a'"), std::string::npos) << dump;
 
+  // Every arm of the dump's code-point escaping. Three of the four were
+  // unreached: an IR built in a test holds `a`, and a pattern's own literals
+  // reach the *AST* dump rather than this one. A renderer nothing renders
+  // with is a renderer that is wrong the first time somebody needs it.
+  struct {
+    uint32_t codepoint;
+    const char * rendered;
+  } escapes[] = {
+    {'\\', "\\\\"},          // the backslash, escaped
+    {'\'', "\\'"},           // the quote the dump wraps a char in
+    {'\t', "\\x09"},         // control: two hex digits
+    {0x00E9, "\\xE9"},       // still one byte: two hex digits, not braces
+    {0x4E2D, "\\u{4E2D}"},   // beyond 0xFF: braces
+    {0x1F4A9, "\\u{1F4A9}"}, // astral
+  };
+  for (const auto & test : escapes) {
+    uint32_t node = GRX_INDEX_NONE;
+    ASSERT_EQ(grx_ir_add_node(ir, GRX_IR_CHAR, 0, 1, &node), GRX_OK);
+    grx_ir_node(ir, node)->a = test.codepoint;
+    ASSERT_EQ(grx_ir_add_child(ir, capture, node), GRX_OK);
+  }
+  std::string escaped = grxtest::capture_dump(
+      [&](FILE * out) { EXPECT_EQ(grx_ir_dump(ir, out), GRX_OK); });
+  for (const auto & test : escapes) {
+    EXPECT_NE(escaped.find(test.rendered), std::string::npos)
+        << test.rendered << " is missing from:\n"
+        << escaped;
+  }
+
   grx_ir_free(ir);
 }
 

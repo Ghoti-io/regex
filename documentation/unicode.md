@@ -103,8 +103,8 @@ a slice of that index. `RGI_Emoji` is UTS #51's ED-27, the union of the other
 six, and its slice is the whole array - so it costs three integers rather
 than a second copy of 3,953 sequences.
 
-Size, measured at UCD 17.0.0 rather than estimated: 454 properties over
-21,772 ranges, **183 KB** of `.rodata` for the ranges and the property
+Size, measured at UCD 17.0.0 rather than estimated: 457 properties over
+24,086 ranges, **183 KB** of `.rodata` for the ranges and the property
 records, **39 KB** of relocated pointers for the name tables, and **106 KB**
 for the two case tables and their orbits, and **80 KB** for the properties of
 strings (3,953 sequences over 12,389 code points) - **408 KB** in total,
@@ -181,6 +181,24 @@ Two resolvers over the same alias tables:
   is rejected and `\p{Script=Greek}` accepted. An earlier draft of this page
   said otherwise; Node 22 was asked, and it rejects `\p{Greek}` under both
   `u` and `v`. Anything else is `GRX_ERR_SYNTAX` here.
+
+  The set of binary property *names* the strict resolver accepts is **closed**
+  and is ECMA-262's own list, not "every binary property in the UCD".
+  `\p{Other_Alphabetic}` is a real UCD property and a `SyntaxError` in
+  JavaScript; so are `\p{Grapheme_Link}`, `\p{Hyphen}`,
+  `\p{Prepended_Concatenation_Mark}` and the rest of the `Other_*` family.
+  The list lives in `tools/unicode/gen_tables.py` as `ECMA262_BINARY` and the
+  strict name table is built from it. It sat there unread for some time, with
+  a comment explaining exactly what it was for, and every UCD binary property
+  was reachable from ECMAScript until test262 was imported and said so - the
+  same shape as a limit that is in the header and enforced nowhere.
+
+  Two of ECMA-262's names had to be added to the tables rather than filtered
+  out of them. `Script=Unknown` (`Zzzz`) is the value of everything
+  `Scripts.txt` does not assign, so it is the complement of the file rather
+  than an entry in it. `Changes_When_NFKC_Casefolded` lives in
+  `DerivedNormalizationProps.txt`, which `fetch.sh` had been downloading and
+  the generator had never read.
 - **Loose** (Perl, PCRE2, and per UAX #44 §5.9.2): case, whitespace,
   hyphens and underscores are ignored, so `\p{Lowercase_Letter}`,
   `\p{lowercaseletter}` and `\p{LOWERCASE LETTER}` are one property; `Is`

@@ -107,6 +107,32 @@ bool spans_agree(const grxtest::Record & record, const GRX_Match * match) {
   return true;
 }
 
+/**
+ * Whether this dialect has a front end at all.
+ *
+ * Asked by compiling the simplest pattern there is. A dialect that refuses
+ * `a` is one plan.md has not built yet, which is a different thing from a
+ * dialect that refuses a particular construct - and the difference decides
+ * whether a record is a failure or a skip. Cached, because the answer cannot
+ * change during a run.
+ */
+bool dialect_is_built(GRX_Syntax syntax) {
+  static std::map<int, bool> known;
+  auto found = known.find((int)syntax);
+  if (found != known.end()) {
+    return found->second;
+  }
+  GRX_Error error;
+  grx_error_clear(&error);
+  GRX_Regex * regex = nullptr;
+  bool built = grx_regex_compile_with_allocator(
+                   "a", 1, syntax, 0, nullptr, nullptr, &error, &regex)
+      == GRX_OK;
+  grx_regex_free(regex);
+  known[(int)syntax] = built;
+  return built;
+}
+
 /** Run one record and say what happened. */
 Outcome run_record(const grxtest::Record & record) {
   Outcome outcome;
@@ -125,6 +151,38 @@ Outcome run_record(const grxtest::Record & record) {
   GRX_Result compiled = grx_regex_compile_with_allocator(
       record.pattern.data(), record.pattern.size(), record.syntax,
       record.options, limits, nullptr, &error, &regex);
+
+  if (record.expectation == grxtest::Expectation::Compiles) {
+    outcome.passed = compiled == GRX_OK;
+    if (!outcome.passed) {
+      // A dialect with no front end at all is a skip rather than a failure:
+      // the corpus is imported before the front end that reads it, on
+      // purpose, so that the front end's first run has something to be
+      // measured against. `dialect_is_built` distinguishes that from a
+      // construct this dialect does not support.
+      if (compiled == GRX_ERR_UNSUPPORTED && !dialect_is_built(record.syntax)) {
+        outcome.passed = false;
+        outcome.skipped = true;
+        outcome.reason = std::string(grx_syntax_name(record.syntax))
+            + ": no front end yet";
+      }
+      else {
+        outcome.reason = std::string("expected it to compile, got ")
+            + grx_result_string(compiled) + " (" + grx_diag_string(error.diag)
+            + ")";
+      }
+    }
+    grx_regex_free(regex);
+    return outcome;
+  }
+
+  if (compiled == GRX_ERR_UNSUPPORTED && !dialect_is_built(record.syntax)) {
+    outcome.skipped = true;
+    outcome.reason
+        = std::string(grx_syntax_name(record.syntax)) + ": no front end yet";
+    grx_regex_free(regex);
+    return outcome;
+  }
 
   if (record.expectation == grxtest::Expectation::Error) {
     outcome.passed = compiled == record.error;

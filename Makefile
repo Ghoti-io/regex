@@ -511,7 +511,8 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 # General commands
 .PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-unicode-tables check-oracle-syntax check-oracle-match check-engine-equivalence \
 	check-oracle-properties check-oracle-string-properties check-oracles \
-	check-limits check-json-schema-suite
+	check-limits check-json-schema-suite vectors vectors-ecmascript \
+	vectors-pcre vectors-perl
 # Release build commands
 .PHONY: all install test test-quiet test-asan test-valgrind test-valgrind-quiet test-watch uninstall watch
 # Debug build commands
@@ -566,6 +567,41 @@ check-oracle-string-properties: $(TOOLS)
 		exit 0; \
 	fi; \
 	python3 tools/oracle/string_property_diff.py
+
+vectors: ## Regenerate every dialect's conformance vectors
+vectors: vectors-ecmascript vectors-pcre vectors-perl
+
+vectors-ecmascript: ## Regenerate the ECMAScript vectors (needs node)
+	@if ! command -v node >/dev/null 2>&1; then \
+		printf "vectors-ecmascript: skipped (no node)\n"; exit 0; \
+	fi; \
+	python3 tools/oracle/make_vectors.py; \
+	python3 tools/oracle/make_long_vectors.py; \
+	if [ -d third_party/test262 ]; then \
+		python3 tools/corpus/import_test262.py; \
+	else \
+		printf "test262 not fetched: run tools/corpus/fetch.sh test262\n"; \
+	fi
+
+vectors-pcre: ## Re-import PCRE2's testinput corpus (needs pcre2test)
+	@if ! command -v pcre2test >/dev/null 2>&1; then \
+		printf "vectors-pcre: skipped (no pcre2test)\n"; exit 0; \
+	fi; \
+	if [ ! -d third_party/pcre2 ]; then \
+		printf "vectors-pcre: skipped (run tools/corpus/fetch.sh pcre2)\n"; \
+		exit 0; \
+	fi; \
+	python3 tools/corpus/import_pcre2test.py
+
+vectors-perl: ## Re-import Perl's re_tests corpus (needs perl)
+	@if ! command -v perl >/dev/null 2>&1; then \
+		printf "vectors-perl: skipped (no perl)\n"; exit 0; \
+	fi; \
+	if [ ! -d third_party/perl ]; then \
+		printf "vectors-perl: skipped (run tools/corpus/fetch.sh perl)\n"; \
+		exit 0; \
+	fi; \
+	python3 tools/corpus/import_re_tests.py
 
 check-json-schema-suite: ## Run JSON-Schema-Test-Suite's pattern files through `text`
 check-json-schema-suite: $(TOOLS)

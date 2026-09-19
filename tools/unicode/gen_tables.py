@@ -562,6 +562,12 @@ def build_tables(ucd, version):
         for name, ranges in scripts.items()
     }
 
+    # Scripts.txt lists what is assigned; everything else is Unknown (Zzzz),
+    # which is a value ECMA-262 accepts and the file does not carry. Without
+    # this, `\p{Script=Unknown}` was a syntax error - an absence that only a
+    # corpus written by somebody else was ever going to notice.
+    scripts["Unknown"] = complement(union(*scripts.values()))
+
     scx = read_script_extensions(
         os.path.join(ucd, "ScriptExtensions.txt"), script_short_to_long)
     # A code point with no ScriptExtensions record has scx equal to its sc.
@@ -581,6 +587,18 @@ def build_tables(ucd, version):
     for name, ranges in read_property_file(
             os.path.join(ucd, "emoji-data.txt")).items():
         binaries[name] = ranges
+
+    # Changes_When_NFKC_Casefolded lives in DerivedNormalizationProps.txt,
+    # which is otherwise all multi-valued quick-check properties this library
+    # has no use for - so one name is taken rather than the file. ECMA-262
+    # table 69 lists it, and without it `\p{Changes_When_NFKC_Casefolded}`
+    # and its alias `\p{CWKCF}` were rejected: a property JavaScript requires,
+    # absent because the file it comes from was fetched and never read.
+    normalization = read_property_file(
+        os.path.join(ucd, "DerivedNormalizationProps.txt"))
+    if "Changes_When_NFKC_Casefolded" in normalization:
+        binaries["Changes_When_NFKC_Casefolded"] = \
+            normalization["Changes_When_NFKC_Casefolded"]
 
     # The three sets ECMA-262 names that the UCD does not carry as files.
     binaries["Any"] = [(0, MAX_CODEPOINT)]
@@ -856,8 +874,23 @@ def write_ranges(out_dir, tables):
 
     # Name tables. A property's value spellings and a binary property's own
     # name resolve the same way, so they share one table keyed by (name, kind).
+    #
+    # The strict table is what ECMAScript resolves against, and ECMA-262's
+    # list of binary property names is *closed*: `\p{Other_Alphabetic}` is a
+    # real UCD property and a SyntaxError in JavaScript. ECMA262_BINARY above
+    # said so and nothing read it, so every binary property in the UCD was
+    # reachable from a strict dialect - eleven of them, which test262 rejects
+    # and this library accepted. A constant that names a rule and is never
+    # consulted is the same defect shape as a limit nothing enforces.
+    #
+    # Only binary names are filtered. General_Category and Script values are
+    # taken from the UCD's own alias tables, which is exactly what ECMA-262
+    # defers to for them.
+    permitted_binary = set(ECMA262_BINARY)
     strict = []
     for index, prop in enumerate(properties):
+        if prop["kind"] == KIND_BINARY and prop["name"] not in permitted_binary:
+            continue
         for spelling in prop["spellings"]:
             strict.append((spelling, prop["kind"], index))
     strict = sorted(set(strict))

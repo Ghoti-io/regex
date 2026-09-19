@@ -185,7 +185,7 @@ against random subjects, including backreferences, lookahead, lookbehind and
 UnicodeSets classes. No disagreement over six seeds.
 
 `make check-oracle-properties` asks both implementations which code points
-match each `\p{...}` - all 1,114,112 of them, for all 454 properties. No
+match each `\p{...}` - all 1,114,112 of them, for all 457 properties. No
 disagreement.
 
 `make check-oracle-string-properties` does the same for the seven properties
@@ -202,6 +202,32 @@ to give the same answer for it, which is the invariant of
 One `v`-mode rule goes the other way and the oracle is not followed:
 [dialects.md](documentation/dialects.md) §8.6.1 has the table and the
 reasoning.
+
+**test262.** Every one of those gates was green the day tc39's own corpus was
+imported, and the import found five defects within a minute. Three were
+rules: ECMA-262's list of binary property names is *closed*, so
+`\p{Other_Alphabetic}` is a `SyntaxError` and eleven such names were being
+accepted; `\p{Script=Unknown}` and `\p{Changes_When_NFKC_Casefolded}` are
+required and were missing; and a group name uses the Unicode escape grammar
+whatever the flags say, so `(?<\u{1d5b0}x>y)` is valid without `u`. Two were
+engines: a backreference inside a lookbehind ran forwards, reporting captures
+whose end preceded their start, and the Pike VM's thread set discarded a
+thread it should have kept. [dialects.md](documentation/dialects.md) §8.6 has
+all five.
+
+That is the case for a corpus somebody else wrote. A generator explores the
+grammar this library already implements; it does not think to ask whether
+`\p{Other_Alphabetic}` should be refused.
+
+`tools/corpus/import_test262.py` produces two files, because the corpus
+answers two different questions. **394 records** are cases whose expectation
+test262 states in a machine-readable form - the `negative:` frontmatter and
+`assert.throws(SyntaxError, ...)` - so a rate over them is a test262 pass
+rate, and it is **394 of 394**. **26,569 records** are patterns harvested
+from the files whose assertions are about JavaScript rather than about the
+pattern; the corpus contributes 4,566 hand-written expressions and the
+oracle contributes every answer. That is a corpus import and not a
+conformance rate, and the two files say which they are.
 
 **JSON Schema.** `text` has no regular-expression engine and is not going to
 grow one, so its `pattern` and `patternProperties` keywords arrive through a
@@ -229,11 +255,18 @@ turn a denial-of-service defence into a wrong validation result. It becomes
 `GTEXT_JSON_E_LIMIT`, which is neither valid nor invalid, and a caller can
 tell the difference.
 
-**Vectors.** 1,596 checked-in `.rxt` records run in `make test`, with no
+**Vectors.** **28,559 checked-in `.rxt` records** run in `make test`, with no
 oracle needed: 100% pass. Their expectations are Node's, not this library's.
 A deliberately wrong record sits beside them in a self-test corpus, and a
 test expects the runner to fail it - so that "the suite passes" cannot mean
 "the suite ran nothing".
+
+A further **3,577 records are imported and skipped**: 1,870 from pcre2test's
+`testinput1` and `testinput2` and 1,707 from Perl's `re_tests`. They are in
+the tree before the front ends that read them, on purpose - the runner
+recognises a dialect that has no front end at all and counts them rather than
+failing them, so WP-18's and WP-21's first run has a corpus to be measured
+against on the day it exists rather than months later.
 
 **Linear time.** `(a|aa)*b`, `(a+)+b` and `(a*)*b` - the patterns that make a
 backtracking engine hang - run against 100,000 characters in around fifty
@@ -246,10 +279,12 @@ to 173 milliseconds on an idle machine - 276 to 414 on a busy one, which is
 the number that matters - and answered by another engine in under one.
 [dialects.md](documentation/dialects.md) §7 is the report.
 
-348 tests plus the vector corpus, clean under Valgrind and under
-ASan+UBSan. `make coverage` reports 89.6%. The most recent fuzz campaign was
-3,834,620 runs across the three harnesses in two modes - length-controlled
-and full-length - with no crash. The tests that record a
+351 tests plus the vector corpus, clean under Valgrind and under
+ASan+UBSan. `make coverage` reports 90.8%; three of the five directories
+[testing.md](documentation/testing.md) §12 sets a 90% floor for are over it
+and two are under, with the shortfall counted there rather than explained
+away. The most recent fuzz campaign was 3,834,620 runs across the three
+harnesses in two modes - length-controlled and full-length - with no crash. The tests that record a
 stub's answer are marked `STUB` in a comment and are meant to be deleted with
 the stub.
 

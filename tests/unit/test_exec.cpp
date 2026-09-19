@@ -479,6 +479,19 @@ TEST(Engines, AgreeOnEveryProgramBothCanRun) {
     {"a{2,4}?", "aaaaa"},
     {"(?:)", "abc"},
     {"x*", "aaa"},
+    // The case that showed the lockstep engine's thread set was unsound.
+    // `b??` is lazy, so the empty branch is preferred and the second
+    // iteration stalls; ECMA-262 fails that iteration and backtracks into
+    // the body, which finds `b`. The (pc, position) key made the second
+    // arrival at the body look like a duplicate of the first, so the thread
+    // that goes on to match `b` was dropped and the answer was 0-1 where
+    // every other engine said 0-2. Found by test262's harvested patterns.
+    // `?\?` rather than `??`: `??)` is a trigraph, and -Werror says so.
+    {"(a?b?\?)*", "abc"},
+    {"(a?b?\?)*", "ab"},
+    {"(a??b?)*", "abc"},
+    {"(|a)*", "aa"},
+    {"(a*?)*", "aa"},
   };
 
   for (const auto & test : cases) {
@@ -512,6 +525,103 @@ TEST(Engines, AgreeOnEveryProgramBothCanRun) {
     EXPECT_EQ(reported[0], reported[1])
         << test.pattern << " on " << test.subject
         << ": the engines disagree about the same program";
+  }
+}
+
+TEST(Pike, TheThreadListAndTheClosureStackGrowAgainstTheMemoryLimit) {
+  // Both used to be sized from the program: one thread per program counter,
+  // and twice that for the walk's stack. The stall mask ended that bound -
+  // one program counter can hold a thread per distinct mask - so both grow
+  // now, and the growth is charged against max_match_memory like every other
+  // allocation the simulation makes.
+  //
+  // What matters is that an unreasonable demand becomes an *answer*. Before
+  // this, exceeding the stack's fixed size reported GRX_ERR_INTERNAL, which
+  // tells a caller nothing they can act on.
+  struct {
+    const char * pattern;
+    size_t tight;     // a budget too small for this pattern
+    size_t generous;  // one that is not
+  } cases[] = {
+    {"((a?)*)*", 1024, 1u << 20},
+    {"(((a?)*)*)*", 1024, 1u << 20},
+    {"((((a?)*)*)*)*", 8192, 1u << 20},
+    {"(a?b?\?)*", 1024, 1u << 20},
+  };
+
+  const char subject[] = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+  for (const auto & test : cases) {
+    Regex regex(test.pattern, GRX_OPT_UTF);
+    ASSERT_TRUE(regex.ok()) << test.pattern;
+
+    GRX_Limits limits;
+    grx_limits_default(&limits);
+    limits.max_match_memory = test.tight;
+    int matched = 0;
+    EXPECT_EQ(grx_regex_search(regex.get(), subject, sizeof(subject) - 1, 0,
+                  GRX_ENGINE_PIKE, &limits, nullptr, &matched),
+        GRX_ERR_LIMIT)
+        << test.pattern << ": a budget of " << test.tight
+        << " should be refused, not exceeded quietly";
+
+    limits.max_match_memory = test.generous;
+    matched = 0;
+    EXPECT_EQ(grx_regex_search(regex.get(), subject, sizeof(subject) - 1, 0,
+                  GRX_ENGINE_PIKE, &limits, nullptr, &matched),
+        GRX_OK)
+        << test.pattern;
+    EXPECT_TRUE(matched) << test.pattern;
+  }
+}
+
+TEST(Backtrack, ABackreferenceInsideALookbehindRunsBackwards) {
+  // A lookbehind body carries GRX_INST_REVERSE and steps backwards.
+  // GRX_OP_BACKREF ignored that: it compared forward from the position and
+  // advanced forward, inside a body walking the other way. Two things
+  // followed, and the second is the one worth an invariant of its own.
+  struct {
+    const char * pattern;
+    const char * subject;
+    const char * expected;   // "nomatch", or spans as "start:end" per group
+  } cases[] = {
+    {"(.)(?<=(\\1\\1))", "aaa", " 1:2 1:2 0:2"},
+    {"(.)(?<=\\1\\1\\1)", "aaa", " 2:3 2:3"},
+    {"(?<=(?:\\1|b)(aa)).", "aaa", "nomatch"},
+    {"(?<=\\1(\\w+))c", "abc", "nomatch"},
+    {"(?<=(a))b", "ab", " 1:2 0:1"},
+    {"(?<=(ab))c", "abc", " 2:3 0:2"},
+  };
+
+  for (const auto & test : cases) {
+    Regex regex(test.pattern);
+    ASSERT_TRUE(regex.ok()) << test.pattern;
+    GRX_Match * match = nullptr;
+    ASSERT_EQ(grx_match_create(regex.get(), nullptr, &match), GRX_OK);
+    int matched = 0;
+    ASSERT_EQ(grx_regex_search(regex.get(), test.subject,
+                  std::char_traits<char>::length(test.subject), 0,
+                  GRX_ENGINE_BACKTRACK, nullptr, match, &matched),
+        GRX_OK)
+        << test.pattern;
+
+    std::string reported = matched ? "" : "nomatch";
+    for (size_t g = 0; matched && g < grx_match_count(match); g++) {
+      GRX_Capture capture;
+      grx_match_group(match, g, &capture);
+      // The invariant, and the one the defect broke most visibly: a group
+      // that participated has an end at or after its start. `3:1` is not a
+      // span, whatever the rest of the answer is.
+      if (capture.start != GRX_NPOS) {
+        EXPECT_LE(capture.start, capture.end)
+            << test.pattern << ": group " << g << " ends before it starts";
+      }
+      reported += capture.start == GRX_NPOS
+          ? std::string(" -")
+          : " " + std::to_string(capture.start) + ":"
+              + std::to_string(capture.end);
+    }
+    grx_match_destroy(match);
+    EXPECT_EQ(reported, test.expected) << test.pattern;
   }
 }
 

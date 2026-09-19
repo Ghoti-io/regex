@@ -1,0 +1,8408 @@
+# imported by tools/corpus/import_re_tests.py
+# corpus: Perl v5.40.1, t/re/re_tests
+# oracle: perl 5.040001; Quantifier {n,m} with n > m can't match in regex; marked by <-- HERE in m/((def){37,17} <-- HERE )?ABC/ at /home/corey/Documents/ghoti.io/regex/tools/corpus/perl_match.pl line 54, <STDIN> line 638.; (?!)+ matches null string many times in regex; marked by <-- HERE in m/(?!)+ <-- HERE ?|(.{2,4})/ at /home/corey/Documents/ghoti.io/regex/tools/corpus/perl_match.pl line 54, <STDIN> line 989.; Variable length positive lookbehind with capturing is experimental in regex; marked by <-- HERE in m/(?=xy(?<=(aaxyz?))) <-- HERE / at /home/corey/Documents/ghoti.io/regex/tools/corpus/perl_match.pl line 54, <STDIN> line 1236.; Useless use of greediness modifier '?' in regex; marked by <-- HERE in m/(a|(bc)){0,0}? <-- HERE xyz/ at /home/corey/Documents/ghoti.io/regex/tools/corpus/perl_match.pl line 54, <STDIN> line 1507.; Useless use of greediness modifier '?' in regex; marked by <-- HERE in m/(?x)( a | ( bc ) ) {0,0} ? <-- HERE  xyz/ at /home/corey/Documents/ghoti.io/regex/tools/corpus/perl_match.pl line 54, <STDIN> line 1508.; Useless use of greediness modifier '?' in regex; marked by <-- HERE in m/.{1}? <-- HERE ?/ at /home/corey/Documents/ghoti.io/regex/tools/corpus/perl_match.pl line 54, <STDIN> line 1582.; Useless use of greediness modifier '?' in regex; marked by <-- HERE in m/.{1}? <-- HERE +/ at /home/corey/Documents/ghoti.io/regex/tools/corpus/perl_match.pl line 54, <STDIN> line 1583.; \K + matches null string many times in regex; marked by <-- HERE in m/(?iaax:A? \K + <-- HERE )/ at /home/corey/Documents/ghoti.io/regex/tools/corpus/perl_match.pl line 54, <STDIN> line 1609.; Quantifier unexpected on zero-length expression in regex m/(?iaax:A? \K +)/ at /home/corey/Documents/ghoti.io/regex/tools/corpus/perl_match.pl line 54, <STDIN> line 1609.; \K+ matches null string many times in regex; marked by <-- HERE in m/(?iaa:A?\K+ <-- HERE )/ at /home/corey/Documents/ghoti.io/regex/tools/corpus/perl_match.pl line 54, <STDIN> line 1610.; Quantifier unexpected on zero-length expression in regex m/(?iaa:A?\K+)/ at /home/corey/Documents/ghoti.io/regex/tools/corpus/perl_match.pl line 54, <STDIN> line 1610.; \K* matches null string many times in regex; marked by <-- HERE in m/(?iaa:A?\K* <-- HERE )/ at /home/corey/Documents/ghoti.io/regex/tools/corpus/perl_match.pl line 54, <STDIN> line 1611.; Variable length positive lookbehind with capturing is experimental in regex; marked by <-- HERE in m/(?=foo)(?<=(a??)) <-- HERE / at /home/corey/Documents/ghoti.io/regex/tools/corpus/perl_match.pl line 54, <STDIN> line 1635.; Variable length positive lookbehind with capturing is experimental in regex; marked by <-- HERE in m/(?=foo)(?<=(a{0,2})) <-- HERE / at /home/corey/Documents/ghoti.io/regex/tools/corpus/perl_match.pl line 54, <STDIN> line 1636.; Variable length positive lookbehind with capturing is experimental in regex; marked by <-- HERE in m/(?=foo)(?<=(|a|aa)) <-- HERE / at /home/corey/Documents/ghoti.io/regex/tools/corpus/perl_match.pl line 54, <STDIN> line 1637.; Variable length positive lookbehind with capturing is experimental in regex; marked by <-- HERE in m/(?<=([cd](*ACCEPT)|x)gggg)blrph <-- HERE / at /home/corey/Documents/ghoti.io/regex/tools/corpus/perl_match.pl line 54, <STDIN> line 1657.; Variable length negative lookbehind with capturing is experimental in regex; marked by <-- HERE in m/(?<!([cd](*ACCEPT)|x)gggg)blrph <-- HERE / at /home/corey/Documents/ghoti.io/regex/tools/corpus/perl_match.pl line 54, <STDIN> line 1660.; Quantifier unexpected on zero-length expression in regex m/[^\W\S]{6}/ at /home/corey/Documents/ghoti.io/regex/tools/corpus/perl_match.pl line 54, <STDIN> line 1707.; Quantifier unexpected on zero-length expression in regex m/[^\W\S]{1,3}/ at /home/corey/Documents/ghoti.io/regex/tools/corpus/perl_match.pl line 54, <STDIN> line 1708.; [^\W\S]+ matches null string many times in regex; marked by <-- HERE in m/[^\W\S]+ <-- HERE / at /home/corey/Documents/ghoti.io/regex/tools/corpus/perl_match.pl line 54, <STDIN> line 1709.; [^\W\S]* matches null string many times in regex; marked by <-- HERE in m/[^\W\S]* <-- HERE / at /home/corey/Documents/ghoti.io/regex/tools/corpus/perl_match.pl line 54, <STDIN> line 1710.
+#
+# The cases are the corpus's and every span is the oracle's. A
+# row whose own y/n/c verdict disagreed with what Perl does was
+# dropped rather than written down, because the likeliest
+# explanation is that this importer misread the row.
+#
+# Nothing here runs until the Perl front end exists; the runner
+# counts them as skipped until then.
+dialect: perl
+
+pattern: abc
+flags: 
+subject: abc
+expect: 0-3
+
+pattern: abc
+flags: 
+subject: abc
+expect: 0-3
+
+pattern: abc
+flags: 
+subject: abc
+expect: 0-3
+
+pattern: abc
+flags: 
+subject: xbc
+expect: nomatch
+
+pattern: abc
+flags: 
+subject: axc
+expect: nomatch
+
+pattern: abc
+flags: 
+subject: abx
+expect: nomatch
+
+pattern: abc
+flags: 
+subject: xabcy
+expect: 1-4
+
+pattern: abc
+flags: 
+subject: xabcy
+expect: 1-4
+
+pattern: abc
+flags: 
+subject: xabcy
+expect: 1-4
+
+pattern: abc
+flags: 
+subject: ababc
+expect: 2-5
+
+pattern: abc
+flags: 
+subject: ababc
+expect: 2-5
+
+pattern: abc
+flags: 
+subject: ababc
+expect: 2-5
+
+pattern: ab*c
+flags: 
+subject: abc
+expect: 0-3
+
+pattern: ab*c
+flags: 
+subject: abc
+expect: 0-3
+
+pattern: ab*c
+flags: 
+subject: abc
+expect: 0-3
+
+pattern: ab*bc
+flags: 
+subject: abc
+expect: 0-3
+
+pattern: ab*bc
+flags: 
+subject: abc
+expect: 0-3
+
+pattern: ab*bc
+flags: 
+subject: abc
+expect: 0-3
+
+pattern: ab*bc
+flags: 
+subject: abbc
+expect: 0-4
+
+pattern: ab*bc
+flags: 
+subject: abbc
+expect: 0-4
+
+pattern: ab*bc
+flags: 
+subject: abbc
+expect: 0-4
+
+pattern: ab*bc
+flags: 
+subject: abbbbc
+expect: 0-6
+
+pattern: ab*bc
+flags: 
+subject: abbbbc
+expect: 0-6
+
+pattern: ab*bc
+flags: 
+subject: abbbbc
+expect: 0-6
+
+pattern: .{1}
+flags: 
+subject: abbbbc
+expect: 0-1
+
+pattern: .{1}
+flags: 
+subject: abbbbc
+expect: 0-1
+
+pattern: .{1}
+flags: 
+subject: abbbbc
+expect: 0-1
+
+pattern: .{3,4}
+flags: 
+subject: abbbbc
+expect: 0-4
+
+pattern: .{3,4}
+flags: 
+subject: abbbbc
+expect: 0-4
+
+pattern: .{3,4}
+flags: 
+subject: abbbbc
+expect: 0-4
+
+pattern: \\N{1}
+flags: 
+subject: abbbbc
+expect: 0-1
+
+pattern: \\N{1}
+flags: 
+subject: abbbbc
+expect: 0-1
+
+pattern: \\N{1}
+flags: 
+subject: abbbbc
+expect: 0-1
+
+pattern: \\N {1}
+flags: x
+subject: abbbbc
+expect: 0-1
+
+pattern: \\N {1}
+flags: x
+subject: abbbbc
+expect: 0-1
+
+pattern: \\N {1}
+flags: x
+subject: abbbbc
+expect: 0-1
+
+pattern: \\N{3,4}
+flags: 
+subject: abbbbc
+expect: 0-4
+
+pattern: \\N{3,4}
+flags: 
+subject: abbbbc
+expect: 0-4
+
+pattern: \\N{3,4}
+flags: 
+subject: abbbbc
+expect: 0-4
+
+pattern: \\N{ 3 , 4 }
+flags: 
+subject: abbbbc
+expect: 0-4
+
+pattern: \\N {3,4}
+flags: x
+subject: abbbbc
+expect: 0-4
+
+pattern: \\N {3,4}
+flags: x
+subject: abbbbc
+expect: 0-4
+
+pattern: \\N {3,4}
+flags: x
+subject: abbbbc
+expect: 0-4
+
+pattern: ab{0,}bc
+flags: 
+subject: abbbbc
+expect: 0-6
+
+pattern: ab{0,}bc
+flags: 
+subject: abbbbc
+expect: 0-6
+
+pattern: ab{0,}bc
+flags: 
+subject: abbbbc
+expect: 0-6
+
+pattern: ab+bc
+flags: 
+subject: abbc
+expect: 0-4
+
+pattern: ab+bc
+flags: 
+subject: abbc
+expect: 0-4
+
+pattern: ab+bc
+flags: 
+subject: abbc
+expect: 0-4
+
+pattern: ab+bc
+flags: 
+subject: abc
+expect: nomatch
+
+pattern: ab+bc
+flags: 
+subject: abq
+expect: nomatch
+
+pattern: ab{1,}bc
+flags: 
+subject: abq
+expect: nomatch
+
+pattern: ab+bc
+flags: 
+subject: abbbbc
+expect: 0-6
+
+pattern: ab+bc
+flags: 
+subject: abbbbc
+expect: 0-6
+
+pattern: ab+bc
+flags: 
+subject: abbbbc
+expect: 0-6
+
+pattern: ab{1,}bc
+flags: 
+subject: abbbbc
+expect: 0-6
+
+pattern: ab{1,}bc
+flags: 
+subject: abbbbc
+expect: 0-6
+
+pattern: ab{1,}bc
+flags: 
+subject: abbbbc
+expect: 0-6
+
+pattern: ab{1,3}bc
+flags: 
+subject: abbbbc
+expect: 0-6
+
+pattern: ab{1,3}bc
+flags: 
+subject: abbbbc
+expect: 0-6
+
+pattern: ab{1,3}bc
+flags: 
+subject: abbbbc
+expect: 0-6
+
+pattern: ab{3,4}bc
+flags: 
+subject: abbbbc
+expect: 0-6
+
+pattern: ab{3,4}bc
+flags: 
+subject: abbbbc
+expect: 0-6
+
+pattern: ab{3,4}bc
+flags: 
+subject: abbbbc
+expect: 0-6
+
+pattern: ab{4,5}bc
+flags: 
+subject: abbbbc
+expect: nomatch
+
+pattern: ab?bc
+flags: 
+subject: abbc
+expect: 0-4
+
+pattern: ab?bc
+flags: 
+subject: abc
+expect: 0-3
+
+pattern: ab{0,1}bc
+flags: 
+subject: abc
+expect: 0-3
+
+pattern: ab?bc
+flags: 
+subject: abbbbc
+expect: nomatch
+
+pattern: ab?c
+flags: 
+subject: abc
+expect: 0-3
+
+pattern: ab{0,1}c
+flags: 
+subject: abc
+expect: 0-3
+
+pattern: ^abc$
+flags: 
+subject: abc
+expect: 0-3
+
+pattern: ^abc$
+flags: 
+subject: abcc
+expect: nomatch
+
+pattern: ^abc
+flags: 
+subject: abcc
+expect: 0-3
+
+pattern: ^abc$
+flags: 
+subject: aabc
+expect: nomatch
+
+pattern: abc$
+flags: 
+subject: aabc
+expect: 1-4
+
+pattern: abc$
+flags: 
+subject: aabcd
+expect: nomatch
+
+pattern: ^
+flags: 
+subject: abc
+expect: 0-0
+
+pattern: $
+flags: 
+subject: abc
+expect: 3-3
+
+pattern: a.c
+flags: 
+subject: abc
+expect: 0-3
+
+pattern: a.c
+flags: 
+subject: axc
+expect: 0-3
+
+pattern: a\\Nc
+flags: 
+subject: abc
+expect: 0-3
+
+pattern: a\\N c
+flags: x
+subject: abc
+expect: 0-3
+
+pattern: a.*c
+flags: 
+subject: axyzc
+expect: 0-5
+
+pattern: a\\N*c
+flags: 
+subject: axyzc
+expect: 0-5
+
+pattern: a\\N *c
+flags: x
+subject: axyzc
+expect: 0-5
+
+pattern: a.*c
+flags: 
+subject: axyzd
+expect: nomatch
+
+pattern: a\\N*c
+flags: 
+subject: axyzd
+expect: nomatch
+
+pattern: a\\N *c
+flags: x
+subject: axyzd
+expect: nomatch
+
+pattern: a[bc]d
+flags: 
+subject: abc
+expect: nomatch
+
+pattern: a[bc]d
+flags: 
+subject: abd
+expect: 0-3
+
+pattern: a[b]d
+flags: 
+subject: abd
+expect: 0-3
+
+pattern: [a][b][d]
+flags: 
+subject: abd
+expect: 0-3
+
+pattern: .[b].
+flags: 
+subject: abd
+expect: 0-3
+
+pattern: .[b].
+flags: 
+subject: aBd
+expect: nomatch
+
+pattern: (?i:.[b].)
+flags: 
+subject: abd
+expect: 0-3
+
+pattern: (?i:\\N[b]\\N)
+flags: 
+subject: abd
+expect: 0-3
+
+pattern: a[b-d]e
+flags: 
+subject: abd
+expect: nomatch
+
+pattern: a[b-d]e
+flags: 
+subject: ace
+expect: 0-3
+
+pattern: a[b-d]
+flags: 
+subject: aac
+expect: 1-3
+
+pattern: a[-b]
+flags: 
+subject: a-
+expect: 0-2
+
+pattern: a[b-]
+flags: 
+subject: a-
+expect: 0-2
+
+pattern: a[b-a]
+flags: 
+expect: error syntax
+
+pattern: a[]b
+flags: 
+expect: error syntax
+
+pattern: a[
+flags: 
+expect: error syntax
+
+pattern: a]
+flags: 
+subject: a]
+expect: 0-2
+
+pattern: a[]]b
+flags: 
+subject: a]b
+expect: 0-3
+
+pattern: a[^bc]d
+flags: 
+subject: aed
+expect: 0-3
+
+pattern: a[^bc]d
+flags: 
+subject: abd
+expect: nomatch
+
+pattern: a[^-b]c
+flags: 
+subject: adc
+expect: 0-3
+
+pattern: a[^-b]c
+flags: 
+subject: a-c
+expect: nomatch
+
+pattern: a[^]b]c
+flags: 
+subject: a]c
+expect: nomatch
+
+pattern: a[^]b]c
+flags: 
+subject: adc
+expect: 0-3
+
+pattern: \\ba\\b
+flags: 
+subject: a-
+expect: 0-1
+
+pattern: \\ba\\b
+flags: 
+subject: -a
+expect: 1-2
+
+pattern: \\ba\\b
+flags: 
+subject: -a-
+expect: 1-2
+
+pattern: \\by\\b
+flags: 
+subject: xy
+expect: nomatch
+
+pattern: \\by\\b
+flags: 
+subject: yz
+expect: nomatch
+
+pattern: \\by\\b
+flags: 
+subject: xyz
+expect: nomatch
+
+pattern: \\Ba\\B
+flags: 
+subject: a-
+expect: nomatch
+
+pattern: \\Ba\\B
+flags: 
+subject: -a
+expect: nomatch
+
+pattern: \\Ba\\B
+flags: 
+subject: -a-
+expect: nomatch
+
+pattern: \\By\\b
+flags: 
+subject: xy
+expect: 1-2
+
+pattern: \\By\\b
+flags: 
+subject: xy
+expect: 1-2
+
+pattern: \\By\\b
+flags: 
+subject: xy
+expect: 1-2
+
+pattern: \\By\\b
+flags: 
+subject: xy
+expect: 1-2
+
+pattern: \\by\\B
+flags: 
+subject: yz
+expect: 0-1
+
+pattern: \\By\\B
+flags: 
+subject: xyz
+expect: 1-2
+
+pattern: \\b
+flags: 
+subject: 
+expect: nomatch
+
+pattern: \\b{gcb}
+flags: 
+subject: 
+expect: nomatch
+
+pattern: \\b{ gcb }
+flags: 
+subject: 
+expect: nomatch
+
+pattern: \\b{lb}
+flags: 
+subject: 
+expect: nomatch
+
+pattern: \\b{ lb }
+flags: 
+subject: 
+expect: nomatch
+
+pattern: \\b{sb}
+flags: 
+subject: 
+expect: nomatch
+
+pattern: \\b{ sb }
+flags: 
+subject: 
+expect: nomatch
+
+pattern: \\b{ wb }
+flags: 
+subject: 
+expect: nomatch
+
+pattern: \\b{wb}
+flags: 
+subject: 
+expect: nomatch
+
+pattern: \\B
+flags: 
+subject: 
+expect: 0-0
+
+pattern: \\B{gcb}
+flags: 
+subject: 
+expect: 0-0
+
+pattern: \\B{ gcb }
+flags: 
+subject: 
+expect: 0-0
+
+pattern: \\B{lb}
+flags: 
+subject: 
+expect: 0-0
+
+pattern: \\B{ lb }
+flags: 
+subject: 
+expect: 0-0
+
+pattern: \\B{sb}
+flags: 
+subject: 
+expect: 0-0
+
+pattern: \\B{ sb }
+flags: 
+subject: 
+expect: 0-0
+
+pattern: \\B{wb}
+flags: 
+subject: 
+expect: 0-0
+
+pattern: \\B{ wb }
+flags: 
+subject: 
+expect: 0-0
+
+pattern: \\w
+flags: 
+subject: a
+expect: 0-1
+
+pattern: \\w
+flags: 
+subject: -
+expect: nomatch
+
+pattern: \\W
+flags: 
+subject: a
+expect: nomatch
+
+pattern: \\W
+flags: 
+subject: -
+expect: 0-1
+
+pattern: a\\sb
+flags: 
+subject: a b
+expect: 0-3
+
+pattern: a\\sb
+flags: 
+subject: a-b
+expect: nomatch
+
+pattern: a\\Sb
+flags: 
+subject: a b
+expect: nomatch
+
+pattern: a\\Sb
+flags: 
+subject: a-b
+expect: 0-3
+
+pattern: \\d
+flags: 
+subject: 1
+expect: 0-1
+
+pattern: \\d
+flags: 
+subject: -
+expect: nomatch
+
+pattern: \\D
+flags: 
+subject: 1
+expect: nomatch
+
+pattern: \\D
+flags: 
+subject: -
+expect: 0-1
+
+pattern: [\\w]
+flags: 
+subject: a
+expect: 0-1
+
+pattern: [\\w]
+flags: 
+subject: -
+expect: nomatch
+
+pattern: [\\W]
+flags: 
+subject: a
+expect: nomatch
+
+pattern: [\\W]
+flags: 
+subject: -
+expect: 0-1
+
+pattern: a[\\s]b
+flags: 
+subject: a b
+expect: 0-3
+
+pattern: a[\\s]b
+flags: 
+subject: a-b
+expect: nomatch
+
+pattern: a[\\S]b
+flags: 
+subject: a b
+expect: nomatch
+
+pattern: a[\\S]b
+flags: 
+subject: a-b
+expect: 0-3
+
+pattern: [\\d]
+flags: 
+subject: 1
+expect: 0-1
+
+pattern: [\\d]
+flags: 
+subject: -
+expect: nomatch
+
+pattern: [\\D]
+flags: 
+subject: 1
+expect: nomatch
+
+pattern: [\\D]
+flags: 
+subject: -
+expect: 0-1
+
+pattern: ab|cd
+flags: 
+subject: abc
+expect: 0-2
+
+pattern: ab|cd
+flags: 
+subject: abcd
+expect: 0-2
+
+pattern: ()ef
+flags: 
+subject: def
+expect: 1-3 1-1
+
+pattern: ()ef
+flags: 
+subject: def
+expect: 1-3 1-1
+
+pattern: ()ef
+flags: 
+subject: def
+expect: 1-3 1-1
+
+pattern: ()\\x{100}\\x{1000}
+flags: 
+subject: d\u0100\u1000
+expect: 1-6 1-1
+
+pattern: ()ef
+flags: 
+subject: def
+expect: 1-3 1-1
+
+pattern: ()ef
+flags: 
+subject: def
+expect: 1-3 1-1
+
+pattern: *a
+flags: 
+expect: error syntax
+
+pattern: (|*)b
+flags: 
+expect: error syntax
+
+pattern: (*)b
+flags: 
+expect: error syntax
+
+pattern: $b
+flags: 
+subject: b
+expect: nomatch
+
+pattern: a\\
+flags: 
+expect: error syntax
+
+pattern: a\\(b
+flags: 
+subject: a(b
+expect: 0-3
+
+pattern: a\\(*b
+flags: 
+subject: ab
+expect: 0-2
+
+pattern: a\\(*b
+flags: 
+subject: a((b
+expect: 0-4
+
+pattern: a\\\\b
+flags: 
+subject: a\\b
+expect: 0-3
+
+pattern: abc)
+flags: 
+expect: error syntax
+
+pattern: (abc
+flags: 
+expect: error syntax
+
+pattern: ((a))
+flags: 
+subject: abc
+expect: 0-1 0-1 0-1
+
+pattern: ((a))
+flags: 
+subject: abc
+expect: 0-1 0-1 0-1
+
+pattern: ((a))
+flags: 
+subject: abc
+expect: 0-1 0-1 0-1
+
+pattern: (a)b(c)
+flags: 
+subject: abc
+expect: 0-3 0-1 2-3
+
+pattern: (a)b(c)
+flags: 
+subject: abc
+expect: 0-3 0-1 2-3
+
+pattern: (a)b(c)
+flags: 
+subject: abc
+expect: 0-3 0-1 2-3
+
+pattern: a+b+c
+flags: 
+subject: aabbabc
+expect: 4-7
+
+pattern: a{1,}b{1,}c
+flags: 
+subject: aabbabc
+expect: 4-7
+
+pattern: a**
+flags: 
+expect: error syntax
+
+pattern: a.+?c
+flags: 
+subject: abcabc
+expect: 0-3
+
+pattern: (a+|b)*
+flags: 
+subject: ab
+expect: 0-2 1-2
+
+pattern: (a+|b)*
+flags: 
+subject: ab
+expect: 0-2 1-2
+
+pattern: (a+|b)*
+flags: 
+subject: ab
+expect: 0-2 1-2
+
+pattern: (a+|b)*
+flags: 
+subject: ab
+expect: 0-2 1-2
+
+pattern: (a+|b)*
+flags: 
+subject: ab
+expect: 0-2 1-2
+
+pattern: (a+|b){0,}
+flags: 
+subject: ab
+expect: 0-2 1-2
+
+pattern: (a+|b)+
+flags: 
+subject: ab
+expect: 0-2 1-2
+
+pattern: (a+|b){1,}
+flags: 
+subject: ab
+expect: 0-2 1-2
+
+pattern: (a+|b)?
+flags: 
+subject: ab
+expect: 0-1 0-1
+
+pattern: (a+|b){0,1}
+flags: 
+subject: ab
+expect: 0-1 0-1
+
+pattern: )(
+flags: 
+expect: error syntax
+
+pattern: [^ab]*
+flags: 
+subject: cde
+expect: 0-3
+
+pattern: abc
+flags: 
+subject: 
+expect: nomatch
+
+pattern: a*
+flags: 
+subject: 
+expect: 0-0
+
+pattern: ([abc])*d
+flags: 
+subject: abbbcd
+expect: 0-6 4-5
+
+pattern: ([abc])*bcd
+flags: 
+subject: abcd
+expect: 0-4 0-1
+
+pattern: a|b|c|d|e
+flags: 
+subject: e
+expect: 0-1
+
+pattern: (a|b|c|d|e)f
+flags: 
+subject: ef
+expect: 0-2 0-1
+
+pattern: (a|b|c|d|e)f
+flags: 
+subject: ef
+expect: 0-2 0-1
+
+pattern: (a|b|c|d|e)f
+flags: 
+subject: ef
+expect: 0-2 0-1
+
+pattern: (a|b|c|d|e)f
+flags: 
+subject: ef
+expect: 0-2 0-1
+
+pattern: (a|b|c|d|e)f
+flags: 
+subject: ef
+expect: 0-2 0-1
+
+pattern: abcd*efg
+flags: 
+subject: abcdefg
+expect: 0-7
+
+pattern: ab*
+flags: 
+subject: xabyabbbz
+expect: 1-3
+
+pattern: ab*
+flags: 
+subject: xayabbbz
+expect: 1-2
+
+pattern: (ab|cd)e
+flags: 
+subject: abcde
+expect: 2-5 2-4
+
+pattern: [abhgefdc]ij
+flags: 
+subject: hij
+expect: 0-3
+
+pattern: ^(ab|cd)e
+flags: 
+subject: abcde
+expect: nomatch
+
+pattern: (abc|)ef
+flags: 
+subject: abcdef
+expect: 4-6 4-4
+
+pattern: (a|b)c*d
+flags: 
+subject: abcd
+expect: 1-4 1-2
+
+pattern: (ab|ab*)bc
+flags: 
+subject: abc
+expect: 0-3 0-1
+
+pattern: a([bc]*)c*
+flags: 
+subject: abc
+expect: 0-3 1-3
+
+pattern: a([bc]*)(c*d)
+flags: 
+subject: abcd
+expect: 0-4 1-3 3-4
+
+pattern: a([bc]*)(c*d)
+flags: 
+subject: abcd
+expect: 0-4 1-3 3-4
+
+pattern: a([bc]*)(c*d)
+flags: 
+subject: abcd
+expect: 0-4 1-3 3-4
+
+pattern: a([bc]*)(c*d)
+flags: 
+subject: abcd
+expect: 0-4 1-3 3-4
+
+pattern: a([bc]*)(c*d)
+flags: 
+subject: abcd
+expect: 0-4 1-3 3-4
+
+pattern: a([bc]*)(c*d)
+flags: 
+subject: abcd
+expect: 0-4 1-3 3-4
+
+pattern: a([bc]*)(c*d)
+flags: 
+subject: abcd
+expect: 0-4 1-3 3-4
+
+pattern: a([bc]+)(c*d)
+flags: 
+subject: abcd
+expect: 0-4 1-3 3-4
+
+pattern: a([bc]*)(c+d)
+flags: 
+subject: abcd
+expect: 0-4 1-2 2-4
+
+pattern: a([bc]*)(c+d)
+flags: 
+subject: abcd
+expect: 0-4 1-2 2-4
+
+pattern: a([bc]*)(c+d)
+flags: 
+subject: abcd
+expect: 0-4 1-2 2-4
+
+pattern: a([bc]*)(c+d)
+flags: 
+subject: abcd
+expect: 0-4 1-2 2-4
+
+pattern: a([bc]*)(c+d)
+flags: 
+subject: abcd
+expect: 0-4 1-2 2-4
+
+pattern: a([bc]*)(c+d)
+flags: 
+subject: abcd
+expect: 0-4 1-2 2-4
+
+pattern: a([bc]*)(c+d)
+flags: 
+subject: abcd
+expect: 0-4 1-2 2-4
+
+pattern: a[bcd]*dcdcde
+flags: 
+subject: adcdcde
+expect: 0-7
+
+pattern: a[bcd]+dcdcde
+flags: 
+subject: adcdcde
+expect: nomatch
+
+pattern: (ab|a)b*c
+flags: 
+subject: abc
+expect: 0-3 0-2
+
+pattern: (ab|a)b*c
+flags: 
+subject: abc
+expect: 0-3 0-2
+
+pattern: (ab|a)b*c
+flags: 
+subject: abc
+expect: 0-3 0-2
+
+pattern: (ab|a)b*c
+flags: 
+subject: abc
+expect: 0-3 0-2
+
+pattern: (ab|a)b*c
+flags: 
+subject: abc
+expect: 0-3 0-2
+
+pattern: ((a)(b)c)(d)
+flags: 
+subject: abcd
+expect: 0-4 0-3 0-1 1-2 3-4
+
+pattern: ((a)(b)c)(d)
+flags: 
+subject: abcd
+expect: 0-4 0-3 0-1 1-2 3-4
+
+pattern: ((a)(b)c)(d)
+flags: 
+subject: abcd
+expect: 0-4 0-3 0-1 1-2 3-4
+
+pattern: ((a)(b)c)(d)
+flags: 
+subject: abcd
+expect: 0-4 0-3 0-1 1-2 3-4
+
+pattern: ((a)(b)c)(d)
+flags: 
+subject: abcd
+expect: 0-4 0-3 0-1 1-2 3-4
+
+pattern: ((a)(b)c)(d)
+flags: 
+subject: abcd
+expect: 0-4 0-3 0-1 1-2 3-4
+
+pattern: ((a)(b)c)(d)
+flags: 
+subject: abcd
+expect: 0-4 0-3 0-1 1-2 3-4
+
+pattern: ((a)(b)c)(d)
+flags: 
+subject: abcd
+expect: 0-4 0-3 0-1 1-2 3-4
+
+pattern: ((a)(b)c)(d)
+flags: 
+subject: abcd
+expect: 0-4 0-3 0-1 1-2 3-4
+
+pattern: ((a)(b)c)(d)
+flags: 
+subject: abcd
+expect: 0-4 0-3 0-1 1-2 3-4
+
+pattern: ((a)(b)c)(d)
+flags: 
+subject: abcd
+expect: 0-4 0-3 0-1 1-2 3-4
+
+pattern: [a-zA-Z_][a-zA-Z0-9_]*
+flags: 
+subject: alpha
+expect: 0-5
+
+pattern: [_A-Z]
+flags: 
+subject: }
+expect: nomatch
+
+pattern: ^a(bc+|b[eh])g|.h$
+flags: 
+subject: abh
+expect: 1-3
+
+pattern: (bc+d$|ef*g.|h?i(j|k))
+flags: 
+subject: effgz
+expect: 0-5 0-5
+
+pattern: (bc+d$|ef*g.|h?i(j|k))
+flags: 
+subject: ij
+expect: 0-2 0-2 1-2
+
+pattern: (bc+d$|ef*g.|h?i(j|k))
+flags: 
+subject: effg
+expect: nomatch
+
+pattern: (bc+d$|ef*g.|h?i(j|k))
+flags: 
+subject: bcdd
+expect: nomatch
+
+pattern: (bc+d$|ef*g.|h?i(j|k))
+flags: 
+subject: reffgz
+expect: 1-6 1-6
+
+pattern: ((((((((((a))))))))))
+flags: 
+subject: a
+expect: 0-1 0-1 0-1 0-1 0-1 0-1 0-1 0-1 0-1 0-1 0-1
+
+pattern: ((((((((((a))))))))))
+flags: 
+subject: a
+expect: 0-1 0-1 0-1 0-1 0-1 0-1 0-1 0-1 0-1 0-1 0-1
+
+pattern: ((((((((((a))))))))))
+flags: 
+subject: a
+expect: 0-1 0-1 0-1 0-1 0-1 0-1 0-1 0-1 0-1 0-1 0-1
+
+pattern: ((((((((((a))))))))))
+flags: 
+subject: a
+expect: 0-1 0-1 0-1 0-1 0-1 0-1 0-1 0-1 0-1 0-1 0-1
+
+pattern: ((((((((((a))))))))))
+flags: 
+subject: a
+expect: 0-1 0-1 0-1 0-1 0-1 0-1 0-1 0-1 0-1 0-1 0-1
+
+pattern: ((((((((((a))))))))))\\10
+flags: 
+subject: aa
+expect: 0-2 0-1 0-1 0-1 0-1 0-1 0-1 0-1 0-1 0-1 0-1
+
+pattern: (((((((((a)))))))))
+flags: 
+subject: a
+expect: 0-1 0-1 0-1 0-1 0-1 0-1 0-1 0-1 0-1 0-1
+
+pattern: [89]+
+flags: 
+subject: 1((((((7(9))))))
+expect: 9-10
+
+pattern: multiple words of text
+flags: 
+subject: uh-uh
+expect: nomatch
+
+pattern: multiple words
+flags: 
+subject: multiple words, yeah
+expect: 0-14
+
+pattern: (.*)c(.*)
+flags: 
+subject: abcde
+expect: 0-5 0-2 3-5
+
+pattern: \\((.*), (.*)\\)
+flags: 
+subject: (a, b)
+expect: 0-6 1-2 4-5
+
+pattern: [k]
+flags: 
+subject: ab
+expect: nomatch
+
+pattern: abcd
+flags: 
+subject: abcd
+expect: 0-4
+
+pattern: a(bc)d
+flags: 
+subject: abcd
+expect: 0-4 1-3
+
+pattern: a[-]?c
+flags: 
+subject: ac
+expect: 0-2
+
+pattern: (abc)\\1
+flags: 
+subject: abcabc
+expect: 0-6 0-3
+
+pattern: ([a-c]*)\\1
+flags: 
+subject: abcabc
+expect: 0-6 0-3
+
+pattern: \\1
+flags: 
+expect: error syntax
+
+pattern: \\2
+flags: 
+expect: error syntax
+
+pattern: \\g1
+flags: 
+expect: error syntax
+
+pattern: \\g-1
+flags: 
+expect: error syntax
+
+pattern: \\g{1}
+flags: 
+expect: error syntax
+
+pattern: \\g{ 1 }
+flags: 
+expect: error syntax
+
+pattern: \\g{-1}
+flags: 
+expect: error syntax
+
+pattern: \\g{ -1 }
+flags: 
+expect: error syntax
+
+pattern: \\g0
+flags: 
+expect: error syntax
+
+pattern: \\g-0
+flags: 
+expect: error syntax
+
+pattern: \\g{0}
+flags: 
+expect: error syntax
+
+pattern: \\g{ 0 }
+flags: 
+expect: error syntax
+
+pattern: \\g{-0}
+flags: 
+expect: error syntax
+
+pattern: \\g{ -0 }
+flags: 
+expect: error syntax
+
+pattern: (a)|\\1
+flags: 
+subject: a
+expect: 0-1 0-1
+
+pattern: (a)|\\1
+flags: 
+subject: x
+expect: nomatch
+
+pattern: (?:(b)?a)\\1
+flags: 
+subject: a
+expect: nomatch
+
+pattern: (a)|\\2
+flags: 
+expect: error syntax
+
+pattern: (([a-c])b*?\\2)*
+flags: 
+subject: ababbbcbc
+expect: 0-5 3-5 3-4
+
+pattern: (([a-c])b*?\\2){3}
+flags: 
+subject: ababbbcbc
+expect: 0-9 6-9 6-7
+
+pattern: ((\\3|b)\\2(a)x)+
+flags: 
+subject: aaxabxbaxbbx
+expect: nomatch
+
+pattern: ((\\3|b)\\2(a)x)+
+flags: 
+subject: aaaxabaxbaaxbbax
+expect: 12-16 12-16 12-13 14-15
+
+pattern: ((\\3|b)\\2(a)){2,}
+flags: 
+subject: bbaababbabaaaaabbaaaabba
+expect: 15-24 21-24 21-22 23-24
+
+pattern: ^((.)?a\\2)+$
+flags: 
+subject: babadad
+expect: nomatch
+
+pattern: (a)|(b)
+flags: 
+subject: b
+expect: 0-1 - 0-1
+
+pattern: (a)|(b)
+flags: 
+subject: b
+expect: 0-1 - 0-1
+
+pattern: (a)|(b)
+flags: 
+subject: b
+expect: 0-1 - 0-1
+
+pattern: (a)|(b)
+flags: 
+subject: b
+expect: 0-1 - 0-1
+
+pattern: (a)|(b)
+flags: 
+subject: b
+expect: 0-1 - 0-1
+
+pattern: (a)|(b)
+flags: 
+subject: b
+expect: 0-1 - 0-1
+
+pattern: abc
+flags: i
+subject: ABC
+expect: 0-3
+
+pattern: abc
+flags: i
+subject: XBC
+expect: nomatch
+
+pattern: abc
+flags: i
+subject: AXC
+expect: nomatch
+
+pattern: abc
+flags: i
+subject: ABX
+expect: nomatch
+
+pattern: abc
+flags: i
+subject: XABCY
+expect: 1-4
+
+pattern: abc
+flags: i
+subject: ABABC
+expect: 2-5
+
+pattern: ab*c
+flags: i
+subject: ABC
+expect: 0-3
+
+pattern: ab*bc
+flags: i
+subject: ABC
+expect: 0-3
+
+pattern: ab*bc
+flags: i
+subject: ABBC
+expect: 0-4
+
+pattern: ab*?bc
+flags: i
+subject: ABBBBC
+expect: 0-6
+
+pattern: ab{0,}?bc
+flags: i
+subject: ABBBBC
+expect: 0-6
+
+pattern: ab+?bc
+flags: i
+subject: ABBC
+expect: 0-4
+
+pattern: ab+bc
+flags: i
+subject: ABC
+expect: nomatch
+
+pattern: ab+bc
+flags: i
+subject: ABQ
+expect: nomatch
+
+pattern: ab{1,}bc
+flags: i
+subject: ABQ
+expect: nomatch
+
+pattern: ab+bc
+flags: i
+subject: ABBBBC
+expect: 0-6
+
+pattern: ab{1,}?bc
+flags: i
+subject: ABBBBC
+expect: 0-6
+
+pattern: ab{1,3}?bc
+flags: i
+subject: ABBBBC
+expect: 0-6
+
+pattern: ab{3,4}?bc
+flags: i
+subject: ABBBBC
+expect: 0-6
+
+pattern: ab{4,5}?bc
+flags: i
+subject: ABBBBC
+expect: nomatch
+
+pattern: ab??bc
+flags: i
+subject: ABBC
+expect: 0-4
+
+pattern: ab??bc
+flags: i
+subject: ABC
+expect: 0-3
+
+pattern: ab{0,1}?bc
+flags: i
+subject: ABC
+expect: 0-3
+
+pattern: ab??bc
+flags: i
+subject: ABBBBC
+expect: nomatch
+
+pattern: ab??c
+flags: i
+subject: ABC
+expect: 0-3
+
+pattern: ab{0,1}?c
+flags: i
+subject: ABC
+expect: 0-3
+
+pattern: ^abc$
+flags: i
+subject: ABC
+expect: 0-3
+
+pattern: ^abc$
+flags: i
+subject: ABCC
+expect: nomatch
+
+pattern: ^abc
+flags: i
+subject: ABCC
+expect: 0-3
+
+pattern: ^abc$
+flags: i
+subject: AABC
+expect: nomatch
+
+pattern: abc$
+flags: i
+subject: AABC
+expect: 1-4
+
+pattern: ^
+flags: i
+subject: ABC
+expect: 0-0
+
+pattern: $
+flags: i
+subject: ABC
+expect: 3-3
+
+pattern: a.c
+flags: i
+subject: ABC
+expect: 0-3
+
+pattern: a.c
+flags: i
+subject: AXC
+expect: 0-3
+
+pattern: a\\Nc
+flags: i
+subject: ABC
+expect: 0-3
+
+pattern: a.*?c
+flags: i
+subject: AXYZC
+expect: 0-5
+
+pattern: a.*c
+flags: i
+subject: AXYZD
+expect: nomatch
+
+pattern: a[bc]d
+flags: i
+subject: ABC
+expect: nomatch
+
+pattern: a[bc]d
+flags: i
+subject: ABD
+expect: 0-3
+
+pattern: a[b-d]e
+flags: i
+subject: ABD
+expect: nomatch
+
+pattern: a[b-d]e
+flags: i
+subject: ACE
+expect: 0-3
+
+pattern: a[b-d]
+flags: i
+subject: AAC
+expect: 1-3
+
+pattern: a[-b]
+flags: i
+subject: A-
+expect: 0-2
+
+pattern: a[b-]
+flags: i
+subject: A-
+expect: 0-2
+
+pattern: a[b-a]
+flags: i
+expect: error syntax
+
+pattern: a[]b
+flags: i
+expect: error syntax
+
+pattern: a[
+flags: i
+expect: error syntax
+
+pattern: a]
+flags: i
+subject: A]
+expect: 0-2
+
+pattern: a[]]b
+flags: i
+subject: A]B
+expect: 0-3
+
+pattern: a[^bc]d
+flags: i
+subject: AED
+expect: 0-3
+
+pattern: a[^bc]d
+flags: i
+subject: ABD
+expect: nomatch
+
+pattern: a[^-b]c
+flags: i
+subject: ADC
+expect: 0-3
+
+pattern: a[^-b]c
+flags: i
+subject: A-C
+expect: nomatch
+
+pattern: a[^]b]c
+flags: i
+subject: A]C
+expect: nomatch
+
+pattern: a[^]b]c
+flags: i
+subject: ADC
+expect: 0-3
+
+pattern: ab|cd
+flags: i
+subject: ABC
+expect: 0-2
+
+pattern: ab|cd
+flags: i
+subject: ABCD
+expect: 0-2
+
+pattern: ()ef
+flags: i
+subject: DEF
+expect: 1-3 1-1
+
+pattern: *a
+flags: i
+expect: error syntax
+
+pattern: (|*)b
+flags: i
+expect: error syntax
+
+pattern: (*)b
+flags: i
+expect: error syntax
+
+pattern: $b
+flags: i
+subject: B
+expect: nomatch
+
+pattern: a\\
+flags: i
+expect: error syntax
+
+pattern: a\\(b
+flags: i
+subject: A(B
+expect: 0-3
+
+pattern: a\\(*b
+flags: i
+subject: AB
+expect: 0-2
+
+pattern: a\\(*b
+flags: i
+subject: A((B
+expect: 0-4
+
+pattern: a\\\\b
+flags: i
+subject: A\\B
+expect: 0-3
+
+pattern: abc)
+flags: i
+expect: error syntax
+
+pattern: (abc
+flags: i
+expect: error syntax
+
+pattern: ((a))
+flags: i
+subject: ABC
+expect: 0-1 0-1 0-1
+
+pattern: (a)b(c)
+flags: i
+subject: ABC
+expect: 0-3 0-1 2-3
+
+pattern: a+b+c
+flags: i
+subject: AABBABC
+expect: 4-7
+
+pattern: a{1,}b{1,}c
+flags: i
+subject: AABBABC
+expect: 4-7
+
+pattern: a**
+flags: i
+expect: error syntax
+
+pattern: a.+?c
+flags: i
+subject: ABCABC
+expect: 0-3
+
+pattern: a.*?c
+flags: i
+subject: ABCABC
+expect: 0-3
+
+pattern: a.{0,5}?c
+flags: i
+subject: ABCABC
+expect: 0-3
+
+pattern: (a+|b)*
+flags: i
+subject: AB
+expect: 0-2 1-2
+
+pattern: (a+|b){0,}
+flags: i
+subject: AB
+expect: 0-2 1-2
+
+pattern: (a+|b)+
+flags: i
+subject: AB
+expect: 0-2 1-2
+
+pattern: (a+|b){1,}
+flags: i
+subject: AB
+expect: 0-2 1-2
+
+pattern: (a+|b)?
+flags: i
+subject: AB
+expect: 0-1 0-1
+
+pattern: (a+|b){0,1}
+flags: i
+subject: AB
+expect: 0-1 0-1
+
+pattern: (a+|b){0,1}?
+flags: i
+subject: AB
+expect: 0-0
+
+pattern: )(
+flags: i
+expect: error syntax
+
+pattern: [^ab]*
+flags: i
+subject: CDE
+expect: 0-3
+
+pattern: abc
+flags: i
+subject: 
+expect: nomatch
+
+pattern: a*
+flags: i
+subject: 
+expect: 0-0
+
+pattern: ([abc])*d
+flags: i
+subject: ABBBCD
+expect: 0-6 4-5
+
+pattern: ([abc])*bcd
+flags: i
+subject: ABCD
+expect: 0-4 0-1
+
+pattern: a|b|c|d|e
+flags: i
+subject: E
+expect: 0-1
+
+pattern: (a|b|c|d|e)f
+flags: i
+subject: EF
+expect: 0-2 0-1
+
+pattern: abcd*efg
+flags: i
+subject: ABCDEFG
+expect: 0-7
+
+pattern: ab*
+flags: i
+subject: XABYABBBZ
+expect: 1-3
+
+pattern: ab*
+flags: i
+subject: XAYABBBZ
+expect: 1-2
+
+pattern: (ab|cd)e
+flags: i
+subject: ABCDE
+expect: 2-5 2-4
+
+pattern: [abhgefdc]ij
+flags: i
+subject: HIJ
+expect: 0-3
+
+pattern: ^(ab|cd)e
+flags: i
+subject: ABCDE
+expect: nomatch
+
+pattern: (abc|)ef
+flags: i
+subject: ABCDEF
+expect: 4-6 4-4
+
+pattern: (a|b)c*d
+flags: i
+subject: ABCD
+expect: 1-4 1-2
+
+pattern: (ab|ab*)bc
+flags: i
+subject: ABC
+expect: 0-3 0-1
+
+pattern: a([bc]*)c*
+flags: i
+subject: ABC
+expect: 0-3 1-3
+
+pattern: a([bc]*)(c*d)
+flags: i
+subject: ABCD
+expect: 0-4 1-3 3-4
+
+pattern: a([bc]+)(c*d)
+flags: i
+subject: ABCD
+expect: 0-4 1-3 3-4
+
+pattern: a([bc]*)(c+d)
+flags: i
+subject: ABCD
+expect: 0-4 1-2 2-4
+
+pattern: a[bcd]*dcdcde
+flags: i
+subject: ADCDCDE
+expect: 0-7
+
+pattern: a[bcd]+dcdcde
+flags: i
+subject: ADCDCDE
+expect: nomatch
+
+pattern: (ab|a)b*c
+flags: i
+subject: ABC
+expect: 0-3 0-2
+
+pattern: ((a)(b)c)(d)
+flags: i
+subject: ABCD
+expect: 0-4 0-3 0-1 1-2 3-4
+
+pattern: [a-zA-Z_][a-zA-Z0-9_]*
+flags: i
+subject: ALPHA
+expect: 0-5
+
+pattern: ^a(bc+|b[eh])g|.h$
+flags: i
+subject: ABH
+expect: 1-3
+
+pattern: (bc+d$|ef*g.|h?i(j|k))
+flags: i
+subject: EFFGZ
+expect: 0-5 0-5
+
+pattern: (bc+d$|ef*g.|h?i(j|k))
+flags: i
+subject: IJ
+expect: 0-2 0-2 1-2
+
+pattern: (bc+d$|ef*g.|h?i(j|k))
+flags: i
+subject: EFFG
+expect: nomatch
+
+pattern: (bc+d$|ef*g.|h?i(j|k))
+flags: i
+subject: BCDD
+expect: nomatch
+
+pattern: (bc+d$|ef*g.|h?i(j|k))
+flags: i
+subject: REFFGZ
+expect: 1-6 1-6
+
+pattern: ((((((((((a))))))))))
+flags: i
+subject: A
+expect: 0-1 0-1 0-1 0-1 0-1 0-1 0-1 0-1 0-1 0-1 0-1
+
+pattern: ((((((((((a))))))))))\\10
+flags: i
+subject: AA
+expect: 0-2 0-1 0-1 0-1 0-1 0-1 0-1 0-1 0-1 0-1 0-1
+
+pattern: (((((((((a)))))))))
+flags: i
+subject: A
+expect: 0-1 0-1 0-1 0-1 0-1 0-1 0-1 0-1 0-1 0-1
+
+pattern: (?:(?:(?:(?:(?:(?:(?:(?:(?:(a))))))))))
+flags: i
+subject: A
+expect: 0-1 0-1
+
+pattern: (?:(?:(?:(?:(?:(?:(?:(?:(?:(a|b|c))))))))))
+flags: i
+subject: C
+expect: 0-1 0-1
+
+pattern: multiple words of text
+flags: i
+subject: UH-UH
+expect: nomatch
+
+pattern: multiple words
+flags: i
+subject: MULTIPLE WORDS, YEAH
+expect: 0-14
+
+pattern: (.*)c(.*)
+flags: i
+subject: ABCDE
+expect: 0-5 0-2 3-5
+
+pattern: \\((.*), (.*)\\)
+flags: i
+subject: (A, B)
+expect: 0-6 1-2 4-5
+
+pattern: [k]
+flags: i
+subject: AB
+expect: nomatch
+
+pattern: abcd
+flags: i
+subject: ABCD
+expect: 0-4
+
+pattern: a(bc)d
+flags: i
+subject: ABCD
+expect: 0-4 1-3
+
+pattern: a[-]?c
+flags: i
+subject: AC
+expect: 0-2
+
+pattern: (abc)\\1
+flags: i
+subject: ABCABC
+expect: 0-6 0-3
+
+pattern: ([a-c]*)\\1
+flags: i
+subject: ABCABC
+expect: 0-6 0-3
+
+pattern: a(?!b).
+flags: 
+subject: abad
+expect: 2-4
+
+pattern: (?=)a
+flags: 
+subject: a
+expect: 0-1
+
+pattern: a(?=d).
+flags: 
+subject: abad
+expect: 2-4
+
+pattern: a(?=c|d).
+flags: 
+subject: abad
+expect: 2-4
+
+pattern: a(?:b|c|d)(.)
+flags: 
+subject: ace
+expect: 0-3 2-3
+
+pattern: a(?:b|c|d)*(.)
+flags: 
+subject: ace
+expect: 0-3 2-3
+
+pattern: a(?:b|c|d)+?(.)
+flags: 
+subject: ace
+expect: 0-3 2-3
+
+pattern: a(?:b|c|d)+?(.)
+flags: 
+subject: acdbcdbe
+expect: 0-3 2-3
+
+pattern: a(?:b|c|d)+(.)
+flags: 
+subject: acdbcdbe
+expect: 0-8 7-8
+
+pattern: a(?:b|c|d){2}(.)
+flags: 
+subject: acdbcdbe
+expect: 0-4 3-4
+
+pattern: a(?:b|c|d){4,5}(.)
+flags: 
+subject: acdbcdbe
+expect: 0-7 6-7
+
+pattern: a(?:b|c|d){4,5}?(.)
+flags: 
+subject: acdbcdbe
+expect: 0-6 5-6
+
+pattern: ((foo)|(bar))*
+flags: 
+subject: foobar
+expect: 0-6 3-6 - 3-6
+
+pattern: :(?:
+flags: 
+expect: error syntax
+
+pattern: a(?:b|c|d){6,7}(.)
+flags: 
+subject: acdbcdbe
+expect: 0-8 7-8
+
+pattern: a(?:b|c|d){6,7}?(.)
+flags: 
+subject: acdbcdbe
+expect: 0-8 7-8
+
+pattern: a(?:b|c|d){5,6}(.)
+flags: 
+subject: acdbcdbe
+expect: 0-8 7-8
+
+pattern: a(?:b|c|d){5,6}?(.)
+flags: 
+subject: acdbcdbe
+expect: 0-7 6-7
+
+pattern: a(?:b|c|d){5,7}(.)
+flags: 
+subject: acdbcdbe
+expect: 0-8 7-8
+
+pattern: a(?:b|c|d){5,7}?(.)
+flags: 
+subject: acdbcdbe
+expect: 0-7 6-7
+
+pattern: a(?:b|(c|e){1,2}?|d)+?(.)
+flags: 
+subject: ace
+expect: 0-3 1-2 2-3
+
+pattern: ^(.+)?B
+flags: 
+subject: AB
+expect: 0-2 0-1
+
+pattern: ^([^a-z])|(\\^)$
+flags: 
+subject: .
+expect: 0-1 0-1
+
+pattern: ^[<>]&
+flags: 
+subject: <&OUT
+expect: 0-2
+
+pattern: ^(a\\1?){4}$
+flags: 
+subject: aaaaaaaaaa
+expect: 0-10 6-10
+
+pattern: ^(a\\1?){4}$
+flags: 
+subject: aaaaaaaaa
+expect: nomatch
+
+pattern: ^(a\\1?){4}$
+flags: 
+subject: aaaaaaaaaaa
+expect: nomatch
+
+pattern: ^(a(?(1)\\1)){4}$
+flags: 
+subject: aaaaaaaaaa
+expect: 0-10 6-10
+
+pattern: ^(a(?(1)\\1)){4}$
+flags: 
+subject: aaaaaaaaa
+expect: nomatch
+
+pattern: ^(a(?(1)\\1)){4}$
+flags: 
+subject: aaaaaaaaaaa
+expect: nomatch
+
+pattern: ((?(1)a|b))+
+flags: 
+subject: baaa
+expect: 0-4 3-4
+
+pattern: ((?(1)aa|b))+
+flags: 
+subject: baaaa
+expect: 0-5 3-5
+
+pattern: ((a{4})+)
+flags: 
+subject: aaaaaaaaa
+expect: 0-8 0-8 4-8
+
+pattern: (((aa){2})+)
+flags: 
+subject: aaaaaaaaaa
+expect: 0-8 0-8 4-8 8-10
+
+pattern: (((a{2}){2})+)
+flags: 
+subject: aaaaaaaaaa
+expect: 0-8 0-8 4-8 8-10
+
+pattern: (?:(f)(o)(o)|(b)(a)(r))*
+flags: 
+subject: foobar
+expect: 0-6 - - - 3-4 4-5 5-6
+
+pattern: (?<=a)b
+flags: 
+subject: ab
+expect: 1-2
+
+pattern: (?<=af?)b
+flags: 
+subject: ab
+expect: 1-2
+
+pattern: (?<=a)b
+flags: 
+subject: cb
+expect: nomatch
+
+pattern: (?<=a(?:fo)?)b
+flags: 
+subject: cb
+expect: nomatch
+
+pattern: (?<=a)b
+flags: 
+subject: b
+expect: nomatch
+
+pattern: (?<=a(?:foo)?)b
+flags: 
+subject: b
+expect: nomatch
+
+pattern: (?<!c)b
+flags: 
+subject: ab
+expect: 1-2
+
+pattern: (?<!c(?:foob)?)b
+flags: 
+subject: ab
+expect: 1-2
+
+pattern: (?<!c)b
+flags: 
+subject: cb
+expect: nomatch
+
+pattern: (?<!c(?:fooba)?)b
+flags: 
+subject: cb
+expect: nomatch
+
+pattern: (?<!c)b
+flags: 
+subject: b
+expect: 0-1
+
+pattern: (?<!c(?:foobar)?)b
+flags: 
+subject: b
+expect: 0-1
+
+pattern: (?<!c)b
+flags: 
+subject: b
+expect: 0-1
+
+pattern: (?<!c(?:foobarb)?)b
+flags: 
+subject: b
+expect: 0-1
+
+pattern: (?<%)b
+flags: 
+expect: error syntax
+
+pattern: (?:..)*a
+flags: 
+subject: aba
+expect: 0-3
+
+pattern: (?:..)*?a
+flags: 
+subject: aba
+expect: 0-1
+
+pattern: ^(?:b|a(?=(.)))*\\1
+flags: 
+subject: abc
+expect: 0-2 1-2
+
+pattern: ^(){3,5}
+flags: 
+subject: abc
+expect: 0-0 0-0
+
+pattern: ^(a+)*ax
+flags: 
+subject: aax
+expect: 0-3 0-1
+
+pattern: ^((a|b)+)*ax
+flags: 
+subject: aax
+expect: 0-3 0-1 0-1
+
+pattern: ^((a|bc)+)*ax
+flags: 
+subject: aax
+expect: 0-3 0-1 0-1
+
+pattern: (a|x)*ab
+flags: 
+subject: cab
+expect: 1-3
+
+pattern: (a)*ab
+flags: 
+subject: cab
+expect: 1-3
+
+pattern: (?:(?i)a)b
+flags: 
+subject: ab
+expect: 0-2
+
+pattern: ((?i)a)b
+flags: 
+subject: ab
+expect: 0-2 0-1
+
+pattern: (?:(?i)a)b
+flags: 
+subject: Ab
+expect: 0-2
+
+pattern: ((?i)a)b
+flags: 
+subject: Ab
+expect: 0-2 0-1
+
+pattern: (?:(?i)a)b
+flags: 
+subject: aB
+expect: nomatch
+
+pattern: ((?i)a)b
+flags: 
+subject: aB
+expect: nomatch
+
+pattern: (?i:a)b
+flags: 
+subject: ab
+expect: 0-2
+
+pattern: ((?i:a))b
+flags: 
+subject: ab
+expect: 0-2 0-1
+
+pattern: (?i:a)b
+flags: 
+subject: Ab
+expect: 0-2
+
+pattern: ((?i:a))b
+flags: 
+subject: Ab
+expect: 0-2 0-1
+
+pattern: (?i:a)b
+flags: 
+subject: aB
+expect: nomatch
+
+pattern: ((?i:a))b
+flags: 
+subject: aB
+expect: nomatch
+
+pattern: (?:(?-i)a)b
+flags: i
+subject: ab
+expect: 0-2
+
+pattern: ((?-i)a)b
+flags: i
+subject: ab
+expect: 0-2 0-1
+
+pattern: (?:(?-i)a)b
+flags: i
+subject: aB
+expect: 0-2
+
+pattern: ((?-i)a)b
+flags: i
+subject: aB
+expect: 0-2 0-1
+
+pattern: (?:(?-i)a)b
+flags: i
+subject: Ab
+expect: nomatch
+
+pattern: ((?-i)a)b
+flags: i
+subject: Ab
+expect: nomatch
+
+pattern: (?:(?-i)a)b
+flags: i
+subject: aB
+expect: 0-2
+
+pattern: ((?-i)a)b
+flags: i
+subject: aB
+expect: 0-2 0-1
+
+pattern: (?:(?-i)a)b
+flags: i
+subject: AB
+expect: nomatch
+
+pattern: ((?-i)a)b
+flags: i
+subject: AB
+expect: nomatch
+
+pattern: (?-i:a)b
+flags: i
+subject: ab
+expect: 0-2
+
+pattern: ((?-i:a))b
+flags: i
+subject: ab
+expect: 0-2 0-1
+
+pattern: (?-i:a)b
+flags: i
+subject: aB
+expect: 0-2
+
+pattern: ((?-i:a))b
+flags: i
+subject: aB
+expect: 0-2 0-1
+
+pattern: (?-i:a)b
+flags: i
+subject: Ab
+expect: nomatch
+
+pattern: ((?-i:a))b
+flags: i
+subject: Ab
+expect: nomatch
+
+pattern: (?-i:a)b
+flags: i
+subject: aB
+expect: 0-2
+
+pattern: ((?-i:a))b
+flags: i
+subject: aB
+expect: 0-2 0-1
+
+pattern: (?-i:a)b
+flags: i
+subject: AB
+expect: nomatch
+
+pattern: ((?-i:a))b
+flags: i
+subject: AB
+expect: nomatch
+
+pattern: ((?-i:a.))b
+flags: i
+subject: a\nB
+expect: nomatch
+
+pattern: ((?-i:a\\N))b
+flags: i
+subject: a\nB
+expect: nomatch
+
+pattern: ((?s-i:a.))b
+flags: i
+subject: a\nB
+expect: 0-3 0-2
+
+pattern: ((?s-i:a\\N))b
+flags: i
+subject: a\nB
+expect: nomatch
+
+pattern: ((?s-i:a.))b
+flags: i
+subject: B\nB
+expect: nomatch
+
+pattern: ((?s-i:a\\N))b
+flags: i
+subject: B\nB
+expect: nomatch
+
+pattern: (?:c|d)(?:)(?:a(?:)(?:b)(?:b(?:))(?:b(?:)(?:b)))
+flags: 
+subject: cabbbb
+expect: 0-6
+
+pattern: (?:c|d)(?:)(?:aaaaaaaa(?:)(?:bbbbbbbb)(?:bbbbbbbb(?:))(?:bbbbbbbb(?:)(?:bbbbbbbb)))
+flags: 
+subject: caaaaaaaabbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+expect: 0-41
+
+pattern: (ab)\\d\\1
+flags: i
+subject: Ab4ab
+expect: 0-5 0-2
+
+pattern: (ab)\\d\\1
+flags: i
+subject: ab4Ab
+expect: 0-5 0-2
+
+pattern: foo\\w*\\d{4}baz
+flags: 
+subject: foobar1234baz
+expect: 0-13
+
+pattern: x(~~)*(?:(?:F)?)?
+flags: 
+subject: x~~
+expect: 0-3 1-3
+
+pattern: ^a(?#xxx){3}c
+flags: 
+subject: aaac
+expect: 0-4
+
+pattern: ^a (?#xxx) (?#yyy) {3}c
+flags: x
+subject: aaac
+expect: 0-4
+
+pattern: (?<![cd])b
+flags: 
+subject: dbcb
+expect: nomatch
+
+pattern: (?<![cd]e{0,254})b
+flags: 
+subject: dbcb
+expect: nomatch
+
+pattern: (?<![cd])[ab]
+flags: 
+subject: dbaacb
+expect: 2-3
+
+pattern: (?<![cd]{1,2})[ab]
+flags: 
+subject: dbaacb
+expect: 2-3
+
+pattern: (?<!(c|d))b
+flags: 
+subject: dbcb
+expect: nomatch
+
+pattern: (?<!(c|d))[ab]
+flags: 
+subject: dbaacb
+expect: 2-3
+
+pattern: (?<!cd)[ab]
+flags: 
+subject: cdaccb
+expect: 5-6
+
+pattern: ^(?:a?b?)*$
+flags: 
+subject: a--
+expect: nomatch
+
+pattern: ((?s)^a(.))((?m)^b$)
+flags: 
+subject: a\nb\nc\n
+expect: 0-3 0-2 1-2 2-3
+
+pattern: ((?m)^b$)
+flags: 
+subject: a\nb\nc\n
+expect: 2-3 2-3
+
+pattern: (?m)^b
+flags: 
+subject: a\nb\n
+expect: 2-3
+
+pattern: (?m)^(b)
+flags: 
+subject: a\nb\n
+expect: 2-3 2-3
+
+pattern: ((?m)^b)
+flags: 
+subject: a\nb\n
+expect: 2-3 2-3
+
+pattern: \\n((?m)^b)
+flags: 
+subject: a\nb\n
+expect: 1-3 2-3
+
+pattern: ((?s).)c(?!.)
+flags: 
+subject: a\nb\nc\n
+expect: 3-5 3-4
+
+pattern: ((?s).)c(?!.)
+flags: 
+subject: a\nb\nc\n
+expect: 3-5 3-4
+
+pattern: ((?s)b.)c(?!.)
+flags: 
+subject: a\nb\nc\n
+expect: 2-5 2-4
+
+pattern: ((?s)b.)c(?!.)
+flags: 
+subject: a\nb\nc\n
+expect: 2-5 2-4
+
+pattern: ((?s)b.)c(?!\\N)
+flags: 
+subject: a\nb\nc\n
+expect: 2-5 2-4
+
+pattern: (b.)c(?!\\N)
+flags: s
+subject: a\nb\nc\n
+expect: 2-5 2-4
+
+pattern: ^b
+flags: 
+subject: a\nb\nc\n
+expect: nomatch
+
+pattern: ()^b
+flags: 
+subject: a\nb\nc\n
+expect: nomatch
+
+pattern: ((?m)^b)
+flags: 
+subject: a\nb\nc\n
+expect: 2-3 2-3
+
+pattern: (?(1)a|b)
+flags: 
+subject: a
+expect: nomatch
+
+pattern: (?(1)b|a)
+flags: 
+subject: a
+expect: 0-1
+
+pattern: (x)?(?(1)a|b)
+flags: 
+subject: a
+expect: nomatch
+
+pattern: (x)?(?(1)b|a)
+flags: 
+subject: a
+expect: 0-1
+
+pattern: ()?(?(1)b|a)
+flags: 
+subject: a
+expect: 0-1
+
+pattern: ()(?(1)b|a)
+flags: 
+subject: a
+expect: nomatch
+
+pattern: ()?(?(1)a|b)
+flags: 
+subject: a
+expect: 0-1 0-0
+
+pattern: ^(\\()?blah(?(1)(\\)))$
+flags: 
+subject: (blah)
+expect: 0-6 0-1 5-6
+
+pattern: ^(\\()?blah(?(1)(\\)))$
+flags: 
+subject: blah
+expect: 0-4
+
+pattern: ^(\\()?blah(?(1)(\\)))$
+flags: 
+subject: blah)
+expect: nomatch
+
+pattern: ^(\\()?blah(?(1)(\\)))$
+flags: 
+subject: (blah
+expect: nomatch
+
+pattern: ^(\\(+)?blah(?(1)(\\)))$
+flags: 
+subject: (blah)
+expect: 0-6 0-1 5-6
+
+pattern: ^(\\(+)?blah(?(1)(\\)))$
+flags: 
+subject: blah
+expect: 0-4
+
+pattern: ^(\\(+)?blah(?(1)(\\)))$
+flags: 
+subject: blah)
+expect: nomatch
+
+pattern: ^(\\(+)?blah(?(1)(\\)))$
+flags: 
+subject: (blah
+expect: nomatch
+
+pattern: (?(1?)a|b)
+flags: 
+expect: error syntax
+
+pattern: (?(1)a|b|c)
+flags: 
+expect: error syntax
+
+pattern: (?(?!a)a|b)
+flags: 
+subject: a
+expect: nomatch
+
+pattern: (?(?!a)b|a)
+flags: 
+subject: a
+expect: 0-1
+
+pattern: (?(?=a)b|a)
+flags: 
+subject: a
+expect: nomatch
+
+pattern: (?(?=a)a|b)
+flags: 
+subject: a
+expect: 0-1
+
+pattern: (?(?!\\x{100})\\x{100}|b)
+flags: 
+subject: \u0100
+expect: nomatch
+
+pattern: (?(?!\\x{100})b|\\x{100})
+flags: 
+subject: \u0100
+expect: 0-2
+
+pattern: (?(?=\\x{100})b|\\x{100})
+flags: 
+subject: \u0100
+expect: nomatch
+
+pattern: (?(?=\\x{100})\\x{100}|b)
+flags: 
+subject: \u0100
+expect: 0-2
+
+pattern: (?=(a+?))(\\1ab)
+flags: 
+subject: aaab
+expect: 1-4 1-2 1-4
+
+pattern: ^(?=(a+?))\\1ab
+flags: 
+subject: aaab
+expect: nomatch
+
+pattern: (\\w+:)+
+flags: 
+subject: one:
+expect: 0-4 0-4
+
+pattern: $(?<=^(a))
+flags: 
+subject: a
+expect: 1-1 0-1
+
+pattern: (?=(a+?))(\\1ab)
+flags: 
+subject: aaab
+expect: 1-4 1-2 1-4
+
+pattern: ^(?=(a+?))\\1ab
+flags: 
+subject: aaab
+expect: nomatch
+
+pattern: ([\\w:]+::)?(\\w+)$
+flags: 
+subject: abcd:
+expect: nomatch
+
+pattern: ([\\w:]+::)?(\\w+)$
+flags: 
+subject: abcd
+expect: 0-4 - 0-4
+
+pattern: ([\\w:]+::)?(\\w+)$
+flags: 
+subject: xy:z:::abcd
+expect: 0-11 0-7 7-11
+
+pattern: ^[^bcd]*(c+)
+flags: 
+subject: aexycd
+expect: 0-5 4-5
+
+pattern: (a*)b+
+flags: 
+subject: caab
+expect: 1-4 1-3
+
+pattern: ([\\w:]+::)?(\\w+)$
+flags: 
+subject: abcd:
+expect: nomatch
+
+pattern: ([\\w:]+::)?(\\w+)$
+flags: 
+subject: abcd
+expect: 0-4 - 0-4
+
+pattern: ([\\w:]+::)?(\\w+)$
+flags: 
+subject: xy:z:::abcd
+expect: 0-11 0-7 7-11
+
+pattern: ^[^bcd]*(c+)
+flags: 
+subject: aexycd
+expect: 0-5 4-5
+
+pattern: (>a+)ab
+flags: 
+subject: aaab
+expect: nomatch
+
+pattern: (?>a+)b
+flags: 
+subject: aaab
+expect: 0-4
+
+pattern: ([[:]+)
+flags: 
+subject: a:[b]:
+expect: 1-3 1-3
+
+pattern: ([[=]+)
+flags: 
+subject: a=[b]=
+expect: 1-3 1-3
+
+pattern: ([[.]+)
+flags: 
+subject: a.[b].
+expect: 1-3 1-3
+
+pattern: [a[:xyz:
+flags: 
+expect: error syntax
+
+pattern: [a[:xyz:]
+flags: 
+expect: error syntax
+
+pattern: [a[:]b[:c]
+flags: 
+subject: abc
+expect: 0-3
+
+pattern: ([a[:xyz:]b]+)
+flags: 
+expect: error syntax
+
+pattern: [[:foo:]]
+flags: 
+expect: error syntax
+
+pattern: [[:^foo:]]
+flags: 
+expect: error syntax
+
+pattern: [[:^cntrl:]]+
+flags: u
+subject: a\u0080
+expect: 0-1
+
+pattern: ((?>a+)b)
+flags: 
+subject: aaab
+expect: 0-4 0-4
+
+pattern: (?>(a+))b
+flags: 
+subject: aaab
+expect: 0-4 0-3
+
+pattern: ((?>[^()]+)|\\([^()]*\\))+
+flags: 
+subject: ((abc(ade)ufh()()x
+expect: 2-18 17-18
+
+pattern: (?<=x+)y
+flags: 
+expect: error syntax
+
+pattern: ((def){37,17})?ABC
+flags: 
+subject: ABC
+expect: 0-3
+
+pattern: \\Z
+flags: 
+subject: a\nb\n
+expect: 3-3
+
+pattern: \\z
+flags: 
+subject: a\nb\n
+expect: 4-4
+
+pattern: $
+flags: 
+subject: a\nb\n
+expect: 3-3
+
+pattern: \\Z
+flags: 
+subject: b\na\n
+expect: 3-3
+
+pattern: \\z
+flags: 
+subject: b\na\n
+expect: 4-4
+
+pattern: $
+flags: 
+subject: b\na\n
+expect: 3-3
+
+pattern: \\Z
+flags: 
+subject: b\na
+expect: 3-3
+
+pattern: \\z
+flags: 
+subject: b\na
+expect: 3-3
+
+pattern: $
+flags: 
+subject: b\na
+expect: 3-3
+
+pattern: \\Z
+flags: m
+subject: a\nb\n
+expect: 3-3
+
+pattern: \\z
+flags: m
+subject: a\nb\n
+expect: 4-4
+
+pattern: $
+flags: m
+subject: a\nb\n
+expect: 1-1
+
+pattern: \\Z
+flags: m
+subject: b\na\n
+expect: 3-3
+
+pattern: \\z
+flags: m
+subject: b\na\n
+expect: 4-4
+
+pattern: $
+flags: m
+subject: b\na\n
+expect: 1-1
+
+pattern: \\Z
+flags: m
+subject: b\na
+expect: 3-3
+
+pattern: \\z
+flags: m
+subject: b\na
+expect: 3-3
+
+pattern: $
+flags: m
+subject: b\na
+expect: 1-1
+
+pattern: a\\Z
+flags: 
+subject: a\nb\n
+expect: nomatch
+
+pattern: a\\z
+flags: 
+subject: a\nb\n
+expect: nomatch
+
+pattern: a$
+flags: 
+subject: a\nb\n
+expect: nomatch
+
+pattern: a\\Z
+flags: 
+subject: b\na\n
+expect: 2-3
+
+pattern: a\\z
+flags: 
+subject: b\na\n
+expect: nomatch
+
+pattern: a$
+flags: 
+subject: b\na\n
+expect: 2-3
+
+pattern: a\\Z
+flags: 
+subject: b\na
+expect: 2-3
+
+pattern: a\\z
+flags: 
+subject: b\na
+expect: 2-3
+
+pattern: a$
+flags: 
+subject: b\na
+expect: 2-3
+
+pattern: a\\Z
+flags: m
+subject: a\nb\n
+expect: nomatch
+
+pattern: a\\z
+flags: m
+subject: a\nb\n
+expect: nomatch
+
+pattern: a$
+flags: m
+subject: a\nb\n
+expect: 0-1
+
+pattern: a\\Z
+flags: m
+subject: b\na\n
+expect: 2-3
+
+pattern: a\\z
+flags: m
+subject: b\na\n
+expect: nomatch
+
+pattern: a$
+flags: m
+subject: b\na\n
+expect: 2-3
+
+pattern: a\\Z
+flags: m
+subject: b\na
+expect: 2-3
+
+pattern: a\\z
+flags: m
+subject: b\na
+expect: 2-3
+
+pattern: a$
+flags: m
+subject: b\na
+expect: 2-3
+
+pattern: aa\\Z
+flags: 
+subject: aa\nb\n
+expect: nomatch
+
+pattern: aa\\z
+flags: 
+subject: aa\nb\n
+expect: nomatch
+
+pattern: aa$
+flags: 
+subject: aa\nb\n
+expect: nomatch
+
+pattern: aa\\Z
+flags: 
+subject: b\naa\n
+expect: 2-4
+
+pattern: aa\\z
+flags: 
+subject: b\naa\n
+expect: nomatch
+
+pattern: aa$
+flags: 
+subject: b\naa\n
+expect: 2-4
+
+pattern: aa\\Z
+flags: 
+subject: b\naa
+expect: 2-4
+
+pattern: aa\\z
+flags: 
+subject: b\naa
+expect: 2-4
+
+pattern: aa$
+flags: 
+subject: b\naa
+expect: 2-4
+
+pattern: aa\\Z
+flags: m
+subject: aa\nb\n
+expect: nomatch
+
+pattern: aa\\z
+flags: m
+subject: aa\nb\n
+expect: nomatch
+
+pattern: aa$
+flags: m
+subject: aa\nb\n
+expect: 0-2
+
+pattern: aa\\Z
+flags: m
+subject: b\naa\n
+expect: 2-4
+
+pattern: aa\\z
+flags: m
+subject: b\naa\n
+expect: nomatch
+
+pattern: aa$
+flags: m
+subject: b\naa\n
+expect: 2-4
+
+pattern: aa\\Z
+flags: m
+subject: b\naa
+expect: 2-4
+
+pattern: aa\\z
+flags: m
+subject: b\naa
+expect: 2-4
+
+pattern: aa$
+flags: m
+subject: b\naa
+expect: 2-4
+
+pattern: aa\\Z
+flags: 
+subject: ac\nb\n
+expect: nomatch
+
+pattern: aa\\z
+flags: 
+subject: ac\nb\n
+expect: nomatch
+
+pattern: aa$
+flags: 
+subject: ac\nb\n
+expect: nomatch
+
+pattern: aa\\Z
+flags: 
+subject: b\nac\n
+expect: nomatch
+
+pattern: aa\\z
+flags: 
+subject: b\nac\n
+expect: nomatch
+
+pattern: aa$
+flags: 
+subject: b\nac\n
+expect: nomatch
+
+pattern: aa\\Z
+flags: 
+subject: b\nac
+expect: nomatch
+
+pattern: aa\\z
+flags: 
+subject: b\nac
+expect: nomatch
+
+pattern: aa$
+flags: 
+subject: b\nac
+expect: nomatch
+
+pattern: aa\\Z
+flags: m
+subject: ac\nb\n
+expect: nomatch
+
+pattern: aa\\z
+flags: m
+subject: ac\nb\n
+expect: nomatch
+
+pattern: aa$
+flags: m
+subject: ac\nb\n
+expect: nomatch
+
+pattern: aa\\Z
+flags: m
+subject: b\nac\n
+expect: nomatch
+
+pattern: aa\\z
+flags: m
+subject: b\nac\n
+expect: nomatch
+
+pattern: aa$
+flags: m
+subject: b\nac\n
+expect: nomatch
+
+pattern: aa\\Z
+flags: m
+subject: b\nac
+expect: nomatch
+
+pattern: aa\\z
+flags: m
+subject: b\nac
+expect: nomatch
+
+pattern: aa$
+flags: m
+subject: b\nac
+expect: nomatch
+
+pattern: aa\\Z
+flags: 
+subject: ca\nb\n
+expect: nomatch
+
+pattern: aa\\z
+flags: 
+subject: ca\nb\n
+expect: nomatch
+
+pattern: aa$
+flags: 
+subject: ca\nb\n
+expect: nomatch
+
+pattern: aa\\Z
+flags: 
+subject: b\nca\n
+expect: nomatch
+
+pattern: aa\\z
+flags: 
+subject: b\nca\n
+expect: nomatch
+
+pattern: aa$
+flags: 
+subject: b\nca\n
+expect: nomatch
+
+pattern: aa\\Z
+flags: 
+subject: b\nca
+expect: nomatch
+
+pattern: aa\\z
+flags: 
+subject: b\nca
+expect: nomatch
+
+pattern: aa$
+flags: 
+subject: b\nca
+expect: nomatch
+
+pattern: aa\\Z
+flags: m
+subject: ca\nb\n
+expect: nomatch
+
+pattern: aa\\z
+flags: m
+subject: ca\nb\n
+expect: nomatch
+
+pattern: aa$
+flags: m
+subject: ca\nb\n
+expect: nomatch
+
+pattern: aa\\Z
+flags: m
+subject: b\nca\n
+expect: nomatch
+
+pattern: aa\\z
+flags: m
+subject: b\nca\n
+expect: nomatch
+
+pattern: aa$
+flags: m
+subject: b\nca\n
+expect: nomatch
+
+pattern: aa\\Z
+flags: m
+subject: b\nca
+expect: nomatch
+
+pattern: aa\\z
+flags: m
+subject: b\nca
+expect: nomatch
+
+pattern: aa$
+flags: m
+subject: b\nca
+expect: nomatch
+
+pattern: ab\\Z
+flags: 
+subject: ab\nb\n
+expect: nomatch
+
+pattern: ab\\z
+flags: 
+subject: ab\nb\n
+expect: nomatch
+
+pattern: ab$
+flags: 
+subject: ab\nb\n
+expect: nomatch
+
+pattern: ab\\Z
+flags: 
+subject: b\nab\n
+expect: 2-4
+
+pattern: ab\\z
+flags: 
+subject: b\nab\n
+expect: nomatch
+
+pattern: ab$
+flags: 
+subject: b\nab\n
+expect: 2-4
+
+pattern: ab\\Z
+flags: 
+subject: b\nab
+expect: 2-4
+
+pattern: ab\\z
+flags: 
+subject: b\nab
+expect: 2-4
+
+pattern: ab$
+flags: 
+subject: b\nab
+expect: 2-4
+
+pattern: ab\\Z
+flags: m
+subject: ab\nb\n
+expect: nomatch
+
+pattern: ab\\z
+flags: m
+subject: ab\nb\n
+expect: nomatch
+
+pattern: ab$
+flags: m
+subject: ab\nb\n
+expect: 0-2
+
+pattern: ab\\Z
+flags: m
+subject: b\nab\n
+expect: 2-4
+
+pattern: ab\\z
+flags: m
+subject: b\nab\n
+expect: nomatch
+
+pattern: ab$
+flags: m
+subject: b\nab\n
+expect: 2-4
+
+pattern: ab\\Z
+flags: m
+subject: b\nab
+expect: 2-4
+
+pattern: ab\\z
+flags: m
+subject: b\nab
+expect: 2-4
+
+pattern: ab$
+flags: m
+subject: b\nab
+expect: 2-4
+
+pattern: ab\\Z
+flags: 
+subject: ac\nb\n
+expect: nomatch
+
+pattern: ab\\z
+flags: 
+subject: ac\nb\n
+expect: nomatch
+
+pattern: ab$
+flags: 
+subject: ac\nb\n
+expect: nomatch
+
+pattern: ab\\Z
+flags: 
+subject: b\nac\n
+expect: nomatch
+
+pattern: ab\\z
+flags: 
+subject: b\nac\n
+expect: nomatch
+
+pattern: ab$
+flags: 
+subject: b\nac\n
+expect: nomatch
+
+pattern: ab\\Z
+flags: 
+subject: b\nac
+expect: nomatch
+
+pattern: ab\\z
+flags: 
+subject: b\nac
+expect: nomatch
+
+pattern: ab$
+flags: 
+subject: b\nac
+expect: nomatch
+
+pattern: ab\\Z
+flags: m
+subject: ac\nb\n
+expect: nomatch
+
+pattern: ab\\z
+flags: m
+subject: ac\nb\n
+expect: nomatch
+
+pattern: ab$
+flags: m
+subject: ac\nb\n
+expect: nomatch
+
+pattern: ab\\Z
+flags: m
+subject: b\nac\n
+expect: nomatch
+
+pattern: ab\\z
+flags: m
+subject: b\nac\n
+expect: nomatch
+
+pattern: ab$
+flags: m
+subject: b\nac\n
+expect: nomatch
+
+pattern: ab\\Z
+flags: m
+subject: b\nac
+expect: nomatch
+
+pattern: ab\\z
+flags: m
+subject: b\nac
+expect: nomatch
+
+pattern: ab$
+flags: m
+subject: b\nac
+expect: nomatch
+
+pattern: ab\\Z
+flags: 
+subject: ca\nb\n
+expect: nomatch
+
+pattern: ab\\z
+flags: 
+subject: ca\nb\n
+expect: nomatch
+
+pattern: ab$
+flags: 
+subject: ca\nb\n
+expect: nomatch
+
+pattern: ab\\Z
+flags: 
+subject: b\nca\n
+expect: nomatch
+
+pattern: ab\\z
+flags: 
+subject: b\nca\n
+expect: nomatch
+
+pattern: ab$
+flags: 
+subject: b\nca\n
+expect: nomatch
+
+pattern: ab\\Z
+flags: 
+subject: b\nca
+expect: nomatch
+
+pattern: ab\\z
+flags: 
+subject: b\nca
+expect: nomatch
+
+pattern: ab$
+flags: 
+subject: b\nca
+expect: nomatch
+
+pattern: ab\\Z
+flags: m
+subject: ca\nb\n
+expect: nomatch
+
+pattern: ab\\z
+flags: m
+subject: ca\nb\n
+expect: nomatch
+
+pattern: ab$
+flags: m
+subject: ca\nb\n
+expect: nomatch
+
+pattern: ab\\Z
+flags: m
+subject: b\nca\n
+expect: nomatch
+
+pattern: ab\\z
+flags: m
+subject: b\nca\n
+expect: nomatch
+
+pattern: ab$
+flags: m
+subject: b\nca\n
+expect: nomatch
+
+pattern: ab\\Z
+flags: m
+subject: b\nca
+expect: nomatch
+
+pattern: ab\\z
+flags: m
+subject: b\nca
+expect: nomatch
+
+pattern: ab$
+flags: m
+subject: b\nca
+expect: nomatch
+
+pattern: abb\\Z
+flags: 
+subject: abb\nb\n
+expect: nomatch
+
+pattern: abb\\z
+flags: 
+subject: abb\nb\n
+expect: nomatch
+
+pattern: abb$
+flags: 
+subject: abb\nb\n
+expect: nomatch
+
+pattern: abb\\Z
+flags: 
+subject: b\nabb\n
+expect: 2-5
+
+pattern: abb\\z
+flags: 
+subject: b\nabb\n
+expect: nomatch
+
+pattern: abb$
+flags: 
+subject: b\nabb\n
+expect: 2-5
+
+pattern: abb\\Z
+flags: 
+subject: b\nabb
+expect: 2-5
+
+pattern: abb\\z
+flags: 
+subject: b\nabb
+expect: 2-5
+
+pattern: abb$
+flags: 
+subject: b\nabb
+expect: 2-5
+
+pattern: abb\\Z
+flags: m
+subject: abb\nb\n
+expect: nomatch
+
+pattern: abb\\z
+flags: m
+subject: abb\nb\n
+expect: nomatch
+
+pattern: abb$
+flags: m
+subject: abb\nb\n
+expect: 0-3
+
+pattern: abb\\Z
+flags: m
+subject: b\nabb\n
+expect: 2-5
+
+pattern: abb\\z
+flags: m
+subject: b\nabb\n
+expect: nomatch
+
+pattern: abb$
+flags: m
+subject: b\nabb\n
+expect: 2-5
+
+pattern: abb\\Z
+flags: m
+subject: b\nabb
+expect: 2-5
+
+pattern: abb\\z
+flags: m
+subject: b\nabb
+expect: 2-5
+
+pattern: abb$
+flags: m
+subject: b\nabb
+expect: 2-5
+
+pattern: abb\\Z
+flags: 
+subject: ac\nb\n
+expect: nomatch
+
+pattern: abb\\z
+flags: 
+subject: ac\nb\n
+expect: nomatch
+
+pattern: abb$
+flags: 
+subject: ac\nb\n
+expect: nomatch
+
+pattern: abb\\Z
+flags: 
+subject: b\nac\n
+expect: nomatch
+
+pattern: abb\\z
+flags: 
+subject: b\nac\n
+expect: nomatch
+
+pattern: abb$
+flags: 
+subject: b\nac\n
+expect: nomatch
+
+pattern: abb\\Z
+flags: 
+subject: b\nac
+expect: nomatch
+
+pattern: abb\\z
+flags: 
+subject: b\nac
+expect: nomatch
+
+pattern: abb$
+flags: 
+subject: b\nac
+expect: nomatch
+
+pattern: abb\\Z
+flags: m
+subject: ac\nb\n
+expect: nomatch
+
+pattern: abb\\z
+flags: m
+subject: ac\nb\n
+expect: nomatch
+
+pattern: abb$
+flags: m
+subject: ac\nb\n
+expect: nomatch
+
+pattern: abb\\Z
+flags: m
+subject: b\nac\n
+expect: nomatch
+
+pattern: abb\\z
+flags: m
+subject: b\nac\n
+expect: nomatch
+
+pattern: abb$
+flags: m
+subject: b\nac\n
+expect: nomatch
+
+pattern: abb\\Z
+flags: m
+subject: b\nac
+expect: nomatch
+
+pattern: abb\\z
+flags: m
+subject: b\nac
+expect: nomatch
+
+pattern: abb$
+flags: m
+subject: b\nac
+expect: nomatch
+
+pattern: abb\\Z
+flags: 
+subject: ca\nb\n
+expect: nomatch
+
+pattern: abb\\z
+flags: 
+subject: ca\nb\n
+expect: nomatch
+
+pattern: abb$
+flags: 
+subject: ca\nb\n
+expect: nomatch
+
+pattern: abb\\Z
+flags: 
+subject: b\nca\n
+expect: nomatch
+
+pattern: abb\\z
+flags: 
+subject: b\nca\n
+expect: nomatch
+
+pattern: abb$
+flags: 
+subject: b\nca\n
+expect: nomatch
+
+pattern: abb\\Z
+flags: 
+subject: b\nca
+expect: nomatch
+
+pattern: abb\\z
+flags: 
+subject: b\nca
+expect: nomatch
+
+pattern: abb$
+flags: 
+subject: b\nca
+expect: nomatch
+
+pattern: abb\\Z
+flags: m
+subject: ca\nb\n
+expect: nomatch
+
+pattern: abb\\z
+flags: m
+subject: ca\nb\n
+expect: nomatch
+
+pattern: abb$
+flags: m
+subject: ca\nb\n
+expect: nomatch
+
+pattern: abb\\Z
+flags: m
+subject: b\nca\n
+expect: nomatch
+
+pattern: abb\\z
+flags: m
+subject: b\nca\n
+expect: nomatch
+
+pattern: abb$
+flags: m
+subject: b\nca\n
+expect: nomatch
+
+pattern: abb\\Z
+flags: m
+subject: b\nca
+expect: nomatch
+
+pattern: abb\\z
+flags: m
+subject: b\nca
+expect: nomatch
+
+pattern: abb$
+flags: m
+subject: b\nca
+expect: nomatch
+
+pattern: \\Aa$
+flags: m
+subject: a\n\n
+expect: 0-1
+
+pattern: (^|x)(c)
+flags: 
+subject: ca
+expect: 0-1 0-0 0-1
+
+pattern: a*abc?xyz+pqr{3}ab{2,}xy{4,5}pq{0,6}AB{0,}zz
+flags: 
+subject: x
+expect: nomatch
+
+pattern: round\\(((?>[^()]+))\\)
+flags: 
+subject: _I(round(xs * sz),1)
+expect: 3-17 9-16
+
+pattern: ((?x:.) )
+flags: 
+subject: x\x20
+expect: 0-2 0-2
+
+pattern: ((?-x:.) )
+flags: x
+subject: x\x20
+expect: 0-1 0-1
+
+pattern: foo.bart
+flags: 
+subject: foo.bart
+expect: 0-8
+
+pattern: ^d[x][x][x]
+flags: m
+subject: abcd\ndxxx
+expect: 5-9
+
+pattern: .X(.+)+X
+flags: 
+subject: bbbbXcXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+expect: 3-7 5-6
+
+pattern: .X(.+)+XX
+flags: 
+subject: bbbbXcXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+expect: 3-8 5-6
+
+pattern: .XX(.+)+X
+flags: 
+subject: bbbbXXcXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+expect: 3-8 6-7
+
+pattern: .X(.+)+X
+flags: 
+subject: bbbbXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+expect: nomatch
+
+pattern: .X(.+)+XX
+flags: 
+subject: bbbbXXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+expect: nomatch
+
+pattern: .XX(.+)+X
+flags: 
+subject: bbbbXXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+expect: nomatch
+
+pattern: .X(.+)+[X]
+flags: 
+subject: bbbbXcXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+expect: 3-7 5-6
+
+pattern: .X(.+)+[X][X]
+flags: 
+subject: bbbbXcXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+expect: 3-8 5-6
+
+pattern: .XX(.+)+[X]
+flags: 
+subject: bbbbXXcXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+expect: 3-8 6-7
+
+pattern: .X(.+)+[X]
+flags: 
+subject: bbbbXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+expect: nomatch
+
+pattern: .X(.+)+[X][X]
+flags: 
+subject: bbbbXXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+expect: nomatch
+
+pattern: .XX(.+)+[X]
+flags: 
+subject: bbbbXXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+expect: nomatch
+
+pattern: .[X](.+)+[X]
+flags: 
+subject: bbbbXcXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+expect: 3-7 5-6
+
+pattern: .[X](.+)+[X][X]
+flags: 
+subject: bbbbXcXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+expect: 3-8 5-6
+
+pattern: .[X][X](.+)+[X]
+flags: 
+subject: bbbbXXcXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+expect: 3-8 6-7
+
+pattern: .[X](.+)+[X]
+flags: 
+subject: bbbbXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+expect: nomatch
+
+pattern: .[X](.+)+[X][X]
+flags: 
+subject: bbbbXXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+expect: nomatch
+
+pattern: .[X][X](.+)+[X]
+flags: 
+subject: bbbbXXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+expect: nomatch
+
+pattern: tt+$
+flags: 
+subject: xxxtt
+expect: 3-5
+
+pattern: \\GX.*X
+flags: 
+subject: aaaXbX
+expect: nomatch
+
+pattern: (\\d+\\.\\d+)
+flags: 
+subject: 3.1415926
+expect: 0-9 0-9
+
+pattern: (\\ba.{0,10}br)
+flags: 
+subject: have a web browser
+expect: 5-13 5-13
+
+pattern: \\.c(pp|xx|c)?$
+flags: i
+subject: Changes
+expect: nomatch
+
+pattern: \\.c(pp|xx|c)?$
+flags: i
+subject: IO.c
+expect: 2-4
+
+pattern: (\\.c(pp|xx|c)?$)
+flags: i
+subject: IO.c
+expect: 2-4 2-4
+
+pattern: ^([a-z]:)
+flags: 
+subject: C:/
+expect: nomatch
+
+pattern: ^\\S\\s+aa$
+flags: m
+subject: \nx aa
+expect: 1-5
+
+pattern: (^|a)b
+flags: 
+subject: ab
+expect: 0-2 0-1
+
+pattern: ^([ab]*?)(b)?(c)$
+flags: 
+subject: abac
+expect: 0-4 0-3 - 3-4
+
+pattern: (\\w)?(abc)\\1b
+flags: 
+subject: abcab
+expect: nomatch
+
+pattern: ^(?:.,){2}c
+flags: 
+subject: a,b,c
+expect: 0-5
+
+pattern: ^(.,){2}c
+flags: 
+subject: a,b,c
+expect: 0-5 2-4
+
+pattern: ^(?:[^,]*,){2}c
+flags: 
+subject: a,b,c
+expect: 0-5
+
+pattern: ^([^,]*,){2}c
+flags: 
+subject: a,b,c
+expect: 0-5 2-4
+
+pattern: ^([^,]*,){3}d
+flags: 
+subject: aaa,b,c,d
+expect: 0-9 6-8
+
+pattern: ^([^,]*,){3,}d
+flags: 
+subject: aaa,b,c,d
+expect: 0-9 6-8
+
+pattern: ^([^,]*,){0,3}d
+flags: 
+subject: aaa,b,c,d
+expect: 0-9 6-8
+
+pattern: ^([^,]{1,3},){3}d
+flags: 
+subject: aaa,b,c,d
+expect: 0-9 6-8
+
+pattern: ^([^,]{1,3},){3,}d
+flags: 
+subject: aaa,b,c,d
+expect: 0-9 6-8
+
+pattern: ^([^,]{1,3},){0,3}d
+flags: 
+subject: aaa,b,c,d
+expect: 0-9 6-8
+
+pattern: ^([^,]{1,},){3}d
+flags: 
+subject: aaa,b,c,d
+expect: 0-9 6-8
+
+pattern: ^([^,]{1,},){3,}d
+flags: 
+subject: aaa,b,c,d
+expect: 0-9 6-8
+
+pattern: ^([^,]{1,},){0,3}d
+flags: 
+subject: aaa,b,c,d
+expect: 0-9 6-8
+
+pattern: ^([^,]{0,3},){3}d
+flags: 
+subject: aaa,b,c,d
+expect: 0-9 6-8
+
+pattern: ^([^,]{0,3},){3,}d
+flags: 
+subject: aaa,b,c,d
+expect: 0-9 6-8
+
+pattern: ^([^,]{0,3},){0,3}d
+flags: 
+subject: aaa,b,c,d
+expect: 0-9 6-8
+
+pattern: (?i)
+flags: 
+subject: 
+expect: 0-0
+
+pattern: (?a:((?u)\\w)\\W)
+flags: 
+subject: \u00C0\u00C0
+expect: 0-4 0-2
+
+pattern: (?!\\A)x
+flags: m
+subject: a\nxb\n
+expect: 2-3
+
+pattern: ^(a(b)?)+$
+flags: 
+subject: aba
+expect: 0-3 2-3
+
+pattern: ^(aa(bb)?)+$
+flags: 
+subject: aabbaa
+expect: 0-6 4-6
+
+pattern: ^.{9}abc.*\\n
+flags: m
+subject: 123\nabcabcabcabc\n
+expect: 4-17
+
+pattern: ^(a)?a$
+flags: 
+subject: a
+expect: 0-1
+
+pattern: ^(a)?(?(1)a|b)+$
+flags: 
+subject: a
+expect: nomatch
+
+pattern: ^(a\\1?)(a\\1?)(a\\2?)(a\\3?)$
+flags: 
+subject: aaaaaa
+expect: 0-6 0-1 1-3 3-4 4-6
+
+pattern: ^(a\\1?){4}$
+flags: 
+subject: aaaaaa
+expect: 0-6 4-6
+
+pattern: ^(0+)?(?:x(1))?
+flags: 
+subject: x1
+expect: 0-2 - 1-2
+
+pattern: ^([0-9a-fA-F]+)(?:x([0-9a-fA-F]+)?)(?:x([0-9a-fA-F]+))?
+flags: 
+subject: 012cxx0190
+expect: 0-10 0-4 - 6-10
+
+pattern: ^(b+?|a){1,2}c
+flags: 
+subject: bbbac
+expect: 0-5 3-4
+
+pattern: ^(b+?|a){1,2}c
+flags: 
+subject: bbbbac
+expect: 0-6 4-5
+
+pattern: \\((\\w\\. \\w+)\\)
+flags: 
+subject: cd. (A. Tw)
+expect: 4-11 5-10
+
+pattern: ((?:aaaa|bbbb)cccc)?
+flags: 
+subject: aaaacccc
+expect: 0-8 0-8
+
+pattern: ((?:aaaa|bbbb)cccc)?
+flags: 
+subject: bbbbcccc
+expect: 0-8 0-8
+
+pattern: (a)?(a)+
+flags: 
+subject: a
+expect: 0-1 - 0-1
+
+pattern: (ab)?(ab)+
+flags: 
+subject: ab
+expect: 0-2 - 0-2
+
+pattern: (abc)?(abc)+
+flags: 
+subject: abc
+expect: 0-3 - 0-3
+
+pattern: b\\s^
+flags: m
+subject: a\nb\n
+expect: nomatch
+
+pattern: \\ba
+flags: 
+subject: a
+expect: 0-1
+
+pattern: ab(?i)cd
+flags: 
+subject: AbCd
+expect: nomatch
+
+pattern: ab(?i)cd
+flags: 
+subject: abCd
+expect: 0-4
+
+pattern: (A|B)*(?(1)(CD)|(CD))
+flags: 
+subject: CD
+expect: 0-2 - - 0-2
+
+pattern: (A|B)*(?(1)(CD)|(CD))
+flags: 
+subject: ABCD
+expect: 0-4 1-2 2-4
+
+pattern: (A|B)*?(?(1)(CD)|(CD))
+flags: 
+subject: CD
+expect: 0-2 - - 0-2
+
+pattern: (A|B)*?(?(1)(CD)|(CD))
+flags: 
+subject: ABCD
+expect: 0-4 1-2 2-4
+
+pattern: ^(o)(?!.*\\1)
+flags: i
+subject: Oo
+expect: nomatch
+
+pattern: (.*)\\d+\\1
+flags: 
+subject: abc12bc
+expect: 1-7 1-3
+
+pattern: (?m:(foo\\s*$))
+flags: 
+subject: foo\n bar
+expect: 0-3 0-3
+
+pattern: (.*)c
+flags: 
+subject: abcd
+expect: 0-3 0-2
+
+pattern: (.*)(?=c)
+flags: 
+subject: abcd
+expect: 0-2 0-2
+
+pattern: (.*)(?=b|c)
+flags: 
+subject: abcd
+expect: 0-2 0-2
+
+pattern: (.*)(?=b|c)c
+flags: 
+subject: abcd
+expect: 0-3 0-2
+
+pattern: (.*)(?=c|b)
+flags: 
+subject: abcd
+expect: 0-2 0-2
+
+pattern: (.*)(?=c|b)c
+flags: 
+subject: abcd
+expect: 0-3 0-2
+
+pattern: (.*)(?=[bc])
+flags: 
+subject: abcd
+expect: 0-2 0-2
+
+pattern: (.*)(?<=b)
+flags: 
+subject: abcd
+expect: 0-2 0-2
+
+pattern: (.*)(?<=b)c
+flags: 
+subject: abcd
+expect: 0-3 0-2
+
+pattern: (.*)(?<=b|c)
+flags: 
+subject: abcd
+expect: 0-3 0-3
+
+pattern: (.*)(?<=b|c)c
+flags: 
+subject: abcd
+expect: 0-3 0-2
+
+pattern: (.*)(?<=c|b)
+flags: 
+subject: abcd
+expect: 0-3 0-3
+
+pattern: (.*)(?<=c|b)c
+flags: 
+subject: abcd
+expect: 0-3 0-2
+
+pattern: (.*)(?<=[bc])
+flags: 
+subject: abcd
+expect: 0-3 0-3
+
+pattern: (.*)(?<=[bc])c
+flags: 
+subject: abcd
+expect: 0-3 0-2
+
+pattern: (.*?)c
+flags: 
+subject: abcd
+expect: 0-3 0-2
+
+pattern: (.*?)(?=c)
+flags: 
+subject: abcd
+expect: 0-2 0-2
+
+pattern: (.*?)(?=b|c)
+flags: 
+subject: abcd
+expect: 0-1 0-1
+
+pattern: (.*?)(?=b|c)c
+flags: 
+subject: abcd
+expect: 0-3 0-2
+
+pattern: (.*?)(?=c|b)
+flags: 
+subject: abcd
+expect: 0-1 0-1
+
+pattern: (.*?)(?=c|b)c
+flags: 
+subject: abcd
+expect: 0-3 0-2
+
+pattern: (.*?)(?=[bc])
+flags: 
+subject: abcd
+expect: 0-1 0-1
+
+pattern: (.*?)(?<=b)
+flags: 
+subject: abcd
+expect: 0-2 0-2
+
+pattern: (.*?)(?<=b)c
+flags: 
+subject: abcd
+expect: 0-3 0-2
+
+pattern: (.*?)(?<=b|c)
+flags: 
+subject: abcd
+expect: 0-2 0-2
+
+pattern: (.*?)(?<=b|c)c
+flags: 
+subject: abcd
+expect: 0-3 0-2
+
+pattern: (.*?)(?<=c|b)
+flags: 
+subject: abcd
+expect: 0-2 0-2
+
+pattern: (.*?)(?<=c|b)c
+flags: 
+subject: abcd
+expect: 0-3 0-2
+
+pattern: (.*?)(?<=[bc])
+flags: 
+subject: abcd
+expect: 0-2 0-2
+
+pattern: (.*?)(?<=[bc])c
+flags: 
+subject: abcd
+expect: 0-3 0-2
+
+pattern: 2(]*)?$\\1
+flags: 
+subject: 2
+expect: 0-1 1-1
+
+pattern: a(b)??
+flags: 
+subject: abc
+expect: 0-1
+
+pattern: (\\d{1,3}\\.){3,}
+flags: 
+subject: 128.134.142.8
+expect: 0-12 8-12
+
+pattern: ^.{3,4}(.+)\\1\\z
+flags: 
+subject: foobarbar
+expect: 0-9 3-6
+
+pattern: ^(?:f|o|b){3,4}(.+)\\1\\z
+flags: 
+subject: foobarbar
+expect: 0-9 3-6
+
+pattern: ^.{3,4}((?:b|a|r)+)\\1\\z
+flags: 
+subject: foobarbar
+expect: 0-9 3-6
+
+pattern: ^(?:f|o|b){3,4}((?:b|a|r)+)\\1\\z
+flags: 
+subject: foobarbar
+expect: 0-9 3-6
+
+pattern: ^.{3,4}(.+?)\\1\\z
+flags: 
+subject: foobarbar
+expect: 0-9 3-6
+
+pattern: ^(?:f|o|b){3,4}(.+?)\\1\\z
+flags: 
+subject: foobarbar
+expect: 0-9 3-6
+
+pattern: ^.{3,4}((?:b|a|r)+?)\\1\\z
+flags: 
+subject: foobarbar
+expect: 0-9 3-6
+
+pattern: ^(?:f|o|b){3,4}((?:b|a|r)+?)\\1\\z
+flags: 
+subject: foobarbar
+expect: 0-9 3-6
+
+pattern: ^.{2,3}?(.+)\\1\\z
+flags: 
+subject: foobarbar
+expect: 0-9 3-6
+
+pattern: ^(?:f|o|b){2,3}?(.+)\\1\\z
+flags: 
+subject: foobarbar
+expect: 0-9 3-6
+
+pattern: ^.{2,3}?((?:b|a|r)+)\\1\\z
+flags: 
+subject: foobarbar
+expect: 0-9 3-6
+
+pattern: ^(?:f|o|b){2,3}?((?:b|a|r)+)\\1\\z
+flags: 
+subject: foobarbar
+expect: 0-9 3-6
+
+pattern: ^.{2,3}?(.+?)\\1\\z
+flags: 
+subject: foobarbar
+expect: 0-9 3-6
+
+pattern: ^(?:f|o|b){2,3}?(.+?)\\1\\z
+flags: 
+subject: foobarbar
+expect: 0-9 3-6
+
+pattern: ^.{2,3}?((?:b|a|r)+?)\\1\\z
+flags: 
+subject: foobarbar
+expect: 0-9 3-6
+
+pattern: ^(?:f|o|b){2,3}?((?:b|a|r)+?)\\1\\z
+flags: 
+subject: foobarbar
+expect: 0-9 3-6
+
+pattern: .*a(?!(b|cd)*e).*f
+flags: 
+subject: ......abef
+expect: nomatch
+
+pattern: x(?#
+flags: 
+expect: error syntax
+
+pattern: :x(?#:
+flags: 
+expect: error syntax
+
+pattern: (WORDS|WORD)S
+flags: 
+subject: WORDS
+expect: 0-5 0-4
+
+pattern: (X.|WORDS|X.|WORD)S
+flags: 
+subject: WORDS
+expect: 0-5 0-4
+
+pattern: (WORDS|WORLD|WORD)S
+flags: 
+subject: WORDS
+expect: 0-5 0-4
+
+pattern: (X.|WORDS|WORD|Y.)S
+flags: 
+subject: WORDS
+expect: 0-5 0-4
+
+pattern: (foo|fool|x.|money|parted)$
+flags: 
+subject: fool
+expect: 0-4 0-4
+
+pattern: (x.|foo|fool|x.|money|parted|y.)$
+flags: 
+subject: fool
+expect: 0-4 0-4
+
+pattern: (foo|fool|money|parted)$
+flags: 
+subject: fool
+expect: 0-4 0-4
+
+pattern: (foo|fool|x.|money|parted)$
+flags: 
+subject: fools
+expect: nomatch
+
+pattern: (x.|foo|fool|x.|money|parted|y.)$
+flags: 
+subject: fools
+expect: nomatch
+
+pattern: (foo|fool|money|parted)$
+flags: 
+subject: fools
+expect: nomatch
+
+pattern: (a|aa|aaa||aaaa|aaaaa|aaaaaa)(b|c)
+flags: 
+subject: aaaaaaaaaaaaaaab
+expect: 9-16 9-15 15-16
+
+pattern: ^(a*?)(?!(aa|aaaa)*$)
+flags: 
+subject: aaaaaaaaaaaaaaaaaaaa
+expect: 0-1 0-1 18-20
+
+pattern: ^(a*?)(?!(aa|aaaa)*$)(?=a\\z)
+flags: 
+subject: aaaaaaaa
+expect: 0-7 0-7 6-8
+
+pattern: ^(.)\\s+.$(?(1))
+flags: 
+subject: A B
+expect: 0-3 0-1
+
+pattern: (?:r?)*?r|(.{2,4})
+flags: 
+subject: abcde
+expect: 0-4 0-4
+
+pattern: (?!)+?|(.{2,4})
+flags: 
+subject: abcde
+expect: 0-4 0-4
+
+pattern: ^(a*?)(?!(a{6}|a{5})*$)
+flags: 
+subject: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+expect: 0-12 0-12 26-31
+
+pattern: ^((?>(?:aa)?b)?)
+flags: 
+subject: aab
+expect: 0-3 0-3
+
+pattern: ^((?:aa)*)(?:X+((?:\\d+|-)(?:X+(.+))?))?$
+flags: 
+subject: aaaaX5
+expect: 0-6 0-4 5-6
+
+pattern: X(A|B||C|D)Y
+flags: 
+subject: XXXYYY
+expect: 2-4 3-3
+
+pattern: (?i:X([A]|[B]|y[Y]y|[D]|)Y)
+flags: 
+subject: XXXYYYB
+expect: 2-4 3-3
+
+pattern: ^([a]{1})*$
+flags: 
+subject: aa
+expect: 0-2 1-2
+
+pattern: a(?!b(?!c))(..)
+flags: 
+subject: abababc
+expect: 4-7 5-7
+
+pattern: a(?!b(?=a))(..)
+flags: 
+subject: abababc
+expect: 4-7 5-7
+
+pattern: a(?!b(?!c(?!d(?!e))))...(.)
+flags: 
+subject: abxabcdxabcde
+expect: 8-13 12-13
+
+pattern: X(?!b+(?!(c+)*(?!(c+)*d))).*X
+flags: 
+subject: aXbbbbbbbcccccccccccccaaaX
+expect: 1-26 9-22
+
+pattern: ^(XXXXXXXXXX|YYYYYYYYYY|Z.Q*X|Z[TE]Q*P):
+flags: 
+subject: ZEQQQQQQQQQQQQQQQQQQP:
+expect: 0-22 0-21
+
+pattern: ^(XXXXXXXXXX|YYYYYYYYYY|Z.Q*X|Z[TE]Q*P):
+flags: 
+subject: ZEQQQX:
+expect: 0-7 0-6
+
+pattern: ^([TUV]+|XXXXXXXXXX|YYYYYYYYYY|Z.Q*X|Z[TE]Q*P):
+flags: 
+subject: ZEQQQQQQQQQQQQQQQQQQP:
+expect: 0-22 0-21
+
+pattern: ^([TUV]+|XXXXXXXXXX|YYYYYYYYYY|Z.Q*X|Z[TE]Q*P):
+flags: 
+subject: ZEQQQX:
+expect: 0-7 0-6
+
+pattern: ^([TUV]+|XXXXXXXXXX|YYYYYYYYYY|Z.Q*X|Z[TE]Q*P|[MKJ]):
+flags: 
+subject: ZEQQQQQQQQQQQQQQQQQQP:
+expect: 0-22 0-21
+
+pattern: ^([TUV]+|XXXXXXXXXX|YYYYYYYYYY|Z.Q*X|Z[TE]Q*P|[MKJ]):
+flags: 
+subject: ZEQQQX:
+expect: 0-7 0-6
+
+pattern: ^(XXX|YYY|Z.Q*X|Z[TE]Q*P):
+flags: 
+subject: ZEQQQQQQQQQQQQQQQQQQP:
+expect: 0-22 0-21
+
+pattern: ^(XXX|YYY|Z.Q*X|Z[TE]Q*P):
+flags: 
+subject: ZEQQQX:
+expect: 0-7 0-6
+
+pattern: ^([TUV]+|XXX|YYY|Z.Q*X|Z[TE]Q*P):
+flags: 
+subject: ZEQQQQQQQQQQQQQQQQQQP:
+expect: 0-22 0-21
+
+pattern: ^([TUV]+|XXX|YYY|Z.Q*X|Z[TE]Q*P):
+flags: 
+subject: ZEQQQX:
+expect: 0-7 0-6
+
+pattern: ^([TUV]+|XXX|YYY|Z.Q*X|Z[TE]Q*P|[MKJ]):
+flags: 
+subject: ZEQQQQQQQQQQQQQQQQQQP:
+expect: 0-22 0-21
+
+pattern: ^([TUV]+|XXX|YYY|Z.Q*X|Z[TE]Q*P|[MKJ]):
+flags: 
+subject: ZEQQQX:
+expect: 0-7 0-6
+
+pattern: X(?:ABCF[cC]x*|ABCD|ABCF):(?:DIT|DID|DIM)
+flags: 
+subject: XABCFCxxxxxxxxxx:DIM
+expect: 0-20
+
+pattern: (((ABCD|ABCE|ABCF)))(A|B|C[xy]*):
+flags: 
+subject: ABCFCxxxxxxxxxx:DIM
+expect: 0-16 0-4 0-4 0-4 4-15
+
+pattern: (?=foo)
+flags: 
+subject: foo
+expect: 0-0
+
+pattern: (?=foo)
+flags: 
+subject: XfooY
+expect: 1-1
+
+pattern: .*(?=foo)
+flags: 
+subject: XfooY
+expect: 0-1
+
+pattern: (?=.*P)P
+flags: 
+subject: aP
+expect: 1-2
+
+pattern: (?<=foo)
+flags: 
+subject: foo
+expect: 3-3
+
+pattern: (?<=foo)
+flags: 
+subject: XfooY
+expect: 4-4
+
+pattern: .*(?<=foo)
+flags: 
+subject: foo
+expect: 0-3
+
+pattern: .*(?<=foo)
+flags: 
+subject: XfooY
+expect: 0-4
+
+pattern: (?<=foo)Y
+flags: 
+subject: XfooY
+expect: 4-5
+
+pattern: o(?<=foo)Y
+flags: 
+subject: ..XfooY..
+expect: 5-7
+
+pattern: X(?=foo)f
+flags: 
+subject: ..XfooY..
+expect: 2-4
+
+pattern: X(?=foo)
+flags: 
+subject: ..XfooY..
+expect: 2-3
+
+pattern: X(?<=foo.)[YZ]
+flags: 
+subject: ..XfooXY..
+expect: 6-8
+
+pattern: (?=XY*foo)
+flags: 
+subject: Xfoo
+expect: 0-0
+
+pattern: ^(?=XY*foo)
+flags: 
+subject: Xfoo
+expect: 0-0
+
+pattern: ^(<(?:[^<>]+|(?3)|(?1))*>)()(!>!>!>)$
+flags: 
+subject: <<!>!>!>><>>!>!>!>
+expect: 0-18 0-12 12-12 12-18
+
+pattern: ^(<(?:[^<>]+|(?1))*>)$
+flags: 
+subject: <<><<<><>>>>
+expect: 0-12 0-12
+
+pattern: ((?2)*)([fF]o+)
+flags: 
+subject: fooFoFoo
+expect: 0-8 0-5 5-8
+
+pattern: (<(?:[^<>]+|(?R))*>)
+flags: 
+subject: <<><<<><>>>>
+expect: 0-12 0-12
+
+pattern: (?<n>foo|bar|baz)
+flags: 
+subject: snofooewa
+expect: 3-6 3-6
+
+pattern: (?P<n>foo|bar|baz)
+flags: 
+subject: snofooewa
+expect: 3-6 3-6
+
+pattern: (?P<=n>foo|bar|baz)
+flags: 
+expect: error syntax
+
+pattern: (?P<!n>foo|bar|baz)
+flags: 
+expect: error syntax
+
+pattern: (?PX<n>foo|bar|baz)
+flags: 
+expect: error syntax
+
+pattern: (?'n'foo|bar|baz)
+flags: 
+subject: snofooewa
+expect: 3-6 3-6
+
+pattern: (?'n'foo)\\k<n>
+flags: 
+subject: ..foofoo..
+expect: 2-8 2-5
+
+pattern: (?<n>foo)\\k'n'
+flags: 
+subject: ..foofoo..
+expect: 2-8 2-5
+
+pattern: ^(?'main'<(?:[^<>]+|(?&main))*>)$
+flags: 
+subject: <<><<<><>>>>
+expect: 0-12 0-12
+
+pattern: (?<A>foo)?(?(<A>)bar|nada)
+flags: 
+subject: foo-barnada
+expect: 7-11
+
+pattern: (?<A>foo)?(?(1)bar|nada)
+flags: 
+subject: foo-barnada
+expect: 7-11
+
+pattern: (?<A>foo(?(R)bar))?(?1)
+flags: 
+subject: foofoobar
+expect: 0-9 0-3
+
+pattern: (?<A>foo(?(R)bar))?(?1)
+flags: 
+subject: foofoobar
+expect: 0-9 0-3
+
+pattern: (x)(?<A>foo(?(R&A)bar))?(?&A)
+flags: 
+subject: xfoofoobar
+expect: 0-10 0-1 1-4
+
+pattern: (x)(?<A>foo(?(R&A)bar))?(?&A)
+flags: 
+subject: xfoofoobar
+expect: 0-10 0-1 1-4
+
+pattern: (x)(?<A>foo(?(R2)bar))?(?&A)
+flags: 
+subject: xfoofoobar
+expect: 0-10 0-1 1-4
+
+pattern: (x)(?<A>foo(?(R2)bar))?(?&A)
+flags: 
+subject: xfoofoobar
+expect: 0-10 0-1 1-4
+
+pattern: (?1)(?(DEFINE)(blah))
+flags: 
+subject: blah
+expect: 0-4
+
+pattern: ^(?<PAL>(?<CHAR>.)((?&PAL)|.?)\\k<CHAR>)$
+flags: 
+subject: madamimadam
+expect: 0-11 0-11 0-1 1-10
+
+pattern: ^(?<PAL>(?<CHAR>.)((?&PAL)|.?)\\k<CHAR>)$
+flags: 
+subject: madamiamadam
+expect: nomatch
+
+pattern: (a)?((?1))(fox)
+flags: 
+subject: aafox
+expect: 0-5 0-1 1-2 2-5
+
+pattern: (a)*((?1))(fox)
+flags: 
+subject: aafox
+expect: 0-5 0-1 1-2 2-5
+
+pattern: (a)+((?1))(fox)
+flags: 
+subject: aafox
+expect: 0-5 0-1 1-2 2-5
+
+pattern: (a){1,100}((?1))(fox)
+flags: 
+subject: aafox
+expect: 0-5 0-1 1-2 2-5
+
+pattern: (a){0,100}((?1))(fox)
+flags: 
+subject: aafox
+expect: 0-5 0-1 1-2 2-5
+
+pattern: (a)??((?1))(fox)
+flags: 
+subject: aafox
+expect: 0-5 0-1 1-2 2-5
+
+pattern: (a)*?((?1))(fox)
+flags: 
+subject: aafox
+expect: 0-5 0-1 1-2 2-5
+
+pattern: (a)+?((?1))(fox)
+flags: 
+subject: aafox
+expect: 0-5 0-1 1-2 2-5
+
+pattern: (a){1,100}?((?1))(fox)
+flags: 
+subject: aafox
+expect: 0-5 0-1 1-2 2-5
+
+pattern: (a){0,100}?((?1))(fox)
+flags: 
+subject: aafox
+expect: 0-5 0-1 1-2 2-5
+
+pattern: (ab)?((?1))(fox)
+flags: 
+subject: ababfox
+expect: 0-7 0-2 2-4 4-7
+
+pattern: (ab)*((?1))(fox)
+flags: 
+subject: ababfox
+expect: 0-7 0-2 2-4 4-7
+
+pattern: (ab)+((?1))(fox)
+flags: 
+subject: ababfox
+expect: 0-7 0-2 2-4 4-7
+
+pattern: (ab){1,100}((?1))(fox)
+flags: 
+subject: ababfox
+expect: 0-7 0-2 2-4 4-7
+
+pattern: (ab){0,100}((?1))(fox)
+flags: 
+subject: ababfox
+expect: 0-7 0-2 2-4 4-7
+
+pattern: foo(?0)?bar
+flags: 
+subject: phoofoofoobarbarbarr
+expect: 4-16
+
+pattern: foo(?R)?bar
+flags: 
+subject: phoofoofoobarbarbarr
+expect: 4-16
+
+pattern: a++a
+flags: 
+subject: aaaaa
+expect: nomatch
+
+pattern: a*+a
+flags: 
+subject: aaaaa
+expect: nomatch
+
+pattern: a{1,5}+a
+flags: 
+subject: aaaaa
+expect: nomatch
+
+pattern: a?+a
+flags: 
+subject: ab
+expect: nomatch
+
+pattern: a++b
+flags: 
+subject: aaaaab
+expect: 0-6
+
+pattern: a*+b
+flags: 
+subject: aaaaab
+expect: 0-6
+
+pattern: a{1,5}+b
+flags: 
+subject: aaaaab
+expect: 0-6
+
+pattern: a?+b
+flags: 
+subject: ab
+expect: 0-2
+
+pattern: fooa++a
+flags: 
+subject: fooaaaaa
+expect: nomatch
+
+pattern: fooa*+a
+flags: 
+subject: fooaaaaa
+expect: nomatch
+
+pattern: fooa{1,5}+a
+flags: 
+subject: fooaaaaa
+expect: nomatch
+
+pattern: fooa?+a
+flags: 
+subject: fooab
+expect: nomatch
+
+pattern: fooa++b
+flags: 
+subject: fooaaaaab
+expect: 0-9
+
+pattern: fooa*+b
+flags: 
+subject: fooaaaaab
+expect: 0-9
+
+pattern: fooa{1,5}+b
+flags: 
+subject: fooaaaaab
+expect: 0-9
+
+pattern: fooa?+b
+flags: 
+subject: fooab
+expect: 0-5
+
+pattern: (?:aA)++(?:aA)
+flags: 
+subject: aAaAaAaAaA
+expect: nomatch
+
+pattern: (aA)++(aA)
+flags: 
+subject: aAaAaAaAaA
+expect: nomatch
+
+pattern: (aA|bB)++(aA|bB)
+flags: 
+subject: aAaAbBaAbB
+expect: nomatch
+
+pattern: (?:aA|bB)++(?:aA|bB)
+flags: 
+subject: aAbBbBbBaA
+expect: nomatch
+
+pattern: (?:aA)*+(?:aA)
+flags: 
+subject: aAaAaAaAaA
+expect: nomatch
+
+pattern: (aA)*+(aA)
+flags: 
+subject: aAaAaAaAaA
+expect: nomatch
+
+pattern: (aA|bB)*+(aA|bB)
+flags: 
+subject: aAaAbBaAaA
+expect: nomatch
+
+pattern: (?:aA|bB)*+(?:aA|bB)
+flags: 
+subject: aAaAaAbBaA
+expect: nomatch
+
+pattern: (?:aA){1,5}+(?:aA)
+flags: 
+subject: aAaAaAaAaA
+expect: nomatch
+
+pattern: (aA){1,5}+(aA)
+flags: 
+subject: aAaAaAaAaA
+expect: nomatch
+
+pattern: (aA|bB){1,5}+(aA|bB)
+flags: 
+subject: aAaAbBaAaA
+expect: nomatch
+
+pattern: (?:aA|bB){1,5}+(?:aA|bB)
+flags: 
+subject: bBbBbBbBbB
+expect: nomatch
+
+pattern: (?:aA)?+(?:aA)
+flags: 
+subject: aAb
+expect: nomatch
+
+pattern: (aA)?+(aA)
+flags: 
+subject: aAb
+expect: nomatch
+
+pattern: (aA|bB)?+(aA|bB)
+flags: 
+subject: bBb
+expect: nomatch
+
+pattern: (?:aA|bB)?+(?:aA|bB)
+flags: 
+subject: aAb
+expect: nomatch
+
+pattern: (?:aA)++b
+flags: 
+subject: aAaAaAaAaAb
+expect: 0-11
+
+pattern: (aA)++b
+flags: 
+subject: aAaAaAaAaAb
+expect: 0-11 8-10
+
+pattern: (aA|bB)++b
+flags: 
+subject: aAbBaAaAbBb
+expect: 0-11 8-10
+
+pattern: (?:aA|bB)++b
+flags: 
+subject: aAbBbBaAaAb
+expect: 0-11
+
+pattern: (?:aA)*+b
+flags: 
+subject: aAaAaAaAaAb
+expect: 0-11
+
+pattern: (aA)*+b
+flags: 
+subject: aAaAaAaAaAb
+expect: 0-11 8-10
+
+pattern: (aA|bB)*+b
+flags: 
+subject: bBbBbBbBbBb
+expect: 0-11 8-10
+
+pattern: (?:aA|bB)*+b
+flags: 
+subject: bBaAbBbBaAb
+expect: 0-11
+
+pattern: (?:aA){1,5}+b
+flags: 
+subject: aAaAaAaAaAb
+expect: 0-11
+
+pattern: (aA){1,5}+b
+flags: 
+subject: aAaAaAaAaAb
+expect: 0-11 8-10
+
+pattern: (aA|bB){1,5}+b
+flags: 
+subject: bBaAbBaAbBb
+expect: 0-11 8-10
+
+pattern: (?:aA|bB){1,5}+b
+flags: 
+subject: aAbBaAbBbBb
+expect: 0-11
+
+pattern: (?:aA)?+b
+flags: 
+subject: aAb
+expect: 0-3
+
+pattern: (aA)?+b
+flags: 
+subject: aAb
+expect: 0-3 0-2
+
+pattern: (aA|bB)?+b
+flags: 
+subject: bBb
+expect: 0-3 0-2
+
+pattern: (?:aA|bB)?+b
+flags: 
+subject: bBb
+expect: 0-3
+
+pattern: foo(?:aA)++(?:aA)
+flags: 
+subject: fooaAaAaAaAaA
+expect: nomatch
+
+pattern: foo(aA)++(aA)
+flags: 
+subject: fooaAaAaAaAaA
+expect: nomatch
+
+pattern: foo(aA|bB)++(aA|bB)
+flags: 
+subject: foobBbBbBaAaA
+expect: nomatch
+
+pattern: foo(?:aA|bB)++(?:aA|bB)
+flags: 
+subject: fooaAaAaAaAaA
+expect: nomatch
+
+pattern: foo(?:aA)*+(?:aA)
+flags: 
+subject: fooaAaAaAaAaA
+expect: nomatch
+
+pattern: foo(aA)*+(aA)
+flags: 
+subject: fooaAaAaAaAaA
+expect: nomatch
+
+pattern: foo(aA|bB)*+(aA|bB)
+flags: 
+subject: foobBaAbBaAaA
+expect: nomatch
+
+pattern: foo(?:aA|bB)*+(?:aA|bB)
+flags: 
+subject: fooaAaAbBbBaA
+expect: nomatch
+
+pattern: foo(?:aA){1,5}+(?:aA)
+flags: 
+subject: fooaAaAaAaAaA
+expect: nomatch
+
+pattern: foo(aA){1,5}+(aA)
+flags: 
+subject: fooaAaAaAaAaA
+expect: nomatch
+
+pattern: foo(aA|bB){1,5}+(aA|bB)
+flags: 
+subject: fooaAbBbBaAaA
+expect: nomatch
+
+pattern: foo(?:aA|bB){1,5}+(?:aA|bB)
+flags: 
+subject: fooaAbBbBaAbB
+expect: nomatch
+
+pattern: foo(?:aA)?+(?:aA)
+flags: 
+subject: fooaAb
+expect: nomatch
+
+pattern: foo(aA)?+(aA)
+flags: 
+subject: fooaAb
+expect: nomatch
+
+pattern: foo(aA|bB)?+(aA|bB)
+flags: 
+subject: foobBb
+expect: nomatch
+
+pattern: foo(?:aA|bB)?+(?:aA|bB)
+flags: 
+subject: fooaAb
+expect: nomatch
+
+pattern: foo(?:aA)++b
+flags: 
+subject: fooaAaAaAaAaAb
+expect: 0-14
+
+pattern: foo(aA)++b
+flags: 
+subject: fooaAaAaAaAaAb
+expect: 0-14 11-13
+
+pattern: foo(aA|bB)++b
+flags: 
+subject: foobBaAbBaAbBb
+expect: 0-14 11-13
+
+pattern: foo(?:aA|bB)++b
+flags: 
+subject: fooaAaAbBaAaAb
+expect: 0-14
+
+pattern: foo(?:aA)*+b
+flags: 
+subject: fooaAaAaAaAaAb
+expect: 0-14
+
+pattern: foo(aA)*+b
+flags: 
+subject: fooaAaAaAaAaAb
+expect: 0-14 11-13
+
+pattern: foo(aA|bB)*+b
+flags: 
+subject: foobBbBaAaAaAb
+expect: 0-14 11-13
+
+pattern: foo(?:aA|bB)*+b
+flags: 
+subject: foobBaAaAbBaAb
+expect: 0-14
+
+pattern: foo(?:aA){1,5}+b
+flags: 
+subject: fooaAaAaAaAaAb
+expect: 0-14
+
+pattern: foo(aA){1,5}+b
+flags: 
+subject: fooaAaAaAaAaAb
+expect: 0-14 11-13
+
+pattern: foo(aA|bB){1,5}+b
+flags: 
+subject: foobBaAaAaAaAb
+expect: 0-14 11-13
+
+pattern: foo(?:aA|bB){1,5}+b
+flags: 
+subject: fooaAbBaAbBbBb
+expect: 0-14
+
+pattern: foo(?:aA)?+b
+flags: 
+subject: fooaAb
+expect: 0-6
+
+pattern: foo(aA)?+b
+flags: 
+subject: fooaAb
+expect: 0-6 3-5
+
+pattern: foo(aA|bB)?+b
+flags: 
+subject: foobBb
+expect: 0-6 3-5
+
+pattern: foo(?:aA|bB)?+b
+flags: 
+subject: foobBb
+expect: 0-6
+
+pattern: ([^()]++|\\([^()]*\\))+
+flags: 
+subject: ((abc(ade)ufh()()x
+expect: 2-18 17-18
+
+pattern: round\\(([^()]++)\\)
+flags: 
+subject: _I(round(xs * sz),1)
+expect: 3-17 9-16
+
+pattern: (foo[1x]|bar[2x]|baz[3x])+y
+flags: 
+subject: foo1bar2baz3y
+expect: 0-13 8-12
+
+pattern: (foo[1x]|bar[2x]|baz[3x])+y
+flags: 
+subject: foo1bar2baz3y
+expect: 0-13 8-12
+
+pattern: (foo[1x]|bar[2x]|baz[3x])*y
+flags: 
+subject: foo1bar2baz3y
+expect: 0-13 8-12
+
+pattern: (foo[1x]|bar[2x]|baz[3x])*y
+flags: 
+subject: foo1bar2baz3y
+expect: 0-13 8-12
+
+pattern: ([yX].|WORDS|[yX].|WORD)S
+flags: 
+subject: WORDS
+expect: 0-5 0-4
+
+pattern: (WORDS|WORLD|WORD)S
+flags: 
+subject: WORDS
+expect: 0-5 0-4
+
+pattern: ([yX].|WORDS|WORD|[xY].)S
+flags: 
+subject: WORDS
+expect: 0-5 0-4
+
+pattern: (foo|fool|[zx].|money|parted)$
+flags: 
+subject: fool
+expect: 0-4 0-4
+
+pattern: ([zx].|foo|fool|[zq].|money|parted|[yx].)$
+flags: 
+subject: fool
+expect: 0-4 0-4
+
+pattern: (foo|fool|[zx].|money|parted)$
+flags: 
+subject: fools
+expect: nomatch
+
+pattern: ([zx].|foo|fool|[qx].|money|parted|[py].)$
+flags: 
+subject: fools
+expect: nomatch
+
+pattern: ([yX].|WORDS|[yX].|WORD)+S
+flags: 
+subject: WORDS
+expect: 0-5 0-4
+
+pattern: (WORDS|WORLD|WORD)+S
+flags: 
+subject: WORDS
+expect: 0-5 0-4
+
+pattern: ([yX].|WORDS|WORD|[xY].)+S
+flags: 
+subject: WORDS
+expect: 0-5 0-4
+
+pattern: (foo|fool|[zx].|money|parted)+$
+flags: 
+subject: fool
+expect: 0-4 0-4
+
+pattern: ([zx].|foo|fool|[zq].|money|parted|[yx].)+$
+flags: 
+subject: fool
+expect: 0-4 0-4
+
+pattern: (foo|fool|[zx].|money|parted)+$
+flags: 
+subject: fools
+expect: nomatch
+
+pattern: ([zx].|foo|fool|[qx].|money|parted|[py].)+$
+flags: 
+subject: fools
+expect: nomatch
+
+pattern: (x|y|z[QW])+(longish|loquatious|excessive|overblown[QW])+
+flags: 
+subject: xyzQzWlongishoverblownW
+expect: 0-23 4-6 13-23
+
+pattern: (x|y|z[QW])*(longish|loquatious|excessive|overblown[QW])*
+flags: 
+subject: xyzQzWlongishoverblownW
+expect: 0-23 4-6 13-23
+
+pattern: (x|y|z[QW]){1,5}(longish|loquatious|excessive|overblown[QW]){1,5}
+flags: 
+subject: xyzQzWlongishoverblownW
+expect: 0-23 4-6 13-23
+
+pattern: (x|y|z[QW])++(longish|loquatious|excessive|overblown[QW])++
+flags: 
+subject: xyzQzWlongishoverblownW
+expect: 0-23 4-6 13-23
+
+pattern: (x|y|z[QW])*+(longish|loquatious|excessive|overblown[QW])*+
+flags: 
+subject: xyzQzWlongishoverblownW
+expect: 0-23 4-6 13-23
+
+pattern: (x|y|z[QW]){1,5}+(longish|loquatious|excessive|overblown[QW]){1,5}+
+flags: 
+subject: xyzQzWlongishoverblownW
+expect: 0-23 4-6 13-23
+
+pattern: a*(?!)
+flags: 
+subject: aaaab
+expect: nomatch
+
+pattern: a*(*FAIL)
+flags: 
+subject: aaaab
+expect: nomatch
+
+pattern: a*(*F)
+flags: 
+subject: aaaab
+expect: nomatch
+
+pattern: (A(A|B(*ACCEPT)|C)D)(E)
+flags: 
+subject: AB
+expect: 0-2 0-2 1-2
+
+pattern: (A(A|B(*ACCEPT)|C)D)(E)
+flags: 
+subject: ACDE
+expect: 0-4 0-3 1-2 3-4
+
+pattern: (a)(?:(?-1)|(?+1))(b)
+flags: 
+subject: aab
+expect: 0-3 0-1 2-3
+
+pattern: (a)(?:(?-1)|(?+1))(b)
+flags: 
+subject: abb
+expect: 0-3 0-1 2-3
+
+pattern: (a)(?:(?-1)|(?+1))(b)
+flags: 
+subject: acb
+expect: nomatch
+
+pattern: (foo)(\\g-2)
+flags: 
+subject: foofoo
+expect: 0-6 0-3 3-6
+
+pattern: (foo)(\\g-2)(foo)(\\g-2)
+flags: 
+subject: foofoofoofoo
+expect: 0-12 0-3 3-6 6-9 9-12
+
+pattern: (([abc]+) \\g-1)(([abc]+) \\g{-1})
+flags: 
+subject: abc abccba cba
+expect: 0-14 0-7 0-3 7-14 7-10
+
+pattern: (a)(b)(c)\\g1\\g2\\g3
+flags: 
+subject: abcabc
+expect: 0-6 0-1 1-2 2-3
+
+pattern: (?'n'foo) \\k<n>
+flags: 
+subject: ..foo foo..
+expect: 2-9 2-5
+
+pattern: (?<n>foo) \\k'n'
+flags: 
+subject: ..foo foo..
+expect: 2-9 2-5
+
+pattern: (?'0'foo) bar
+flags: 
+expect: error syntax
+
+pattern: (?<0>foo) bar
+flags: 
+expect: error syntax
+
+pattern: (?'12'foo) bar
+flags: 
+expect: error syntax
+
+pattern: (?<12>foo) bar
+flags: 
+expect: error syntax
+
+pattern: (?'1a'foo) bar
+flags: 
+expect: error syntax
+
+pattern: (?<1a>foo) bar
+flags: 
+expect: error syntax
+
+pattern: (?''foo) bar
+flags: 
+expect: error syntax
+
+pattern: (?<>foo) bar
+flags: 
+expect: error syntax
+
+pattern: foo \\k'n'
+flags: 
+expect: error syntax
+
+pattern: foo \\k<n>
+flags: 
+expect: error syntax
+
+pattern: foo \\k'a1'
+flags: 
+expect: error syntax
+
+pattern: foo \\k<a1>
+flags: 
+expect: error syntax
+
+pattern: foo \\k'_'
+flags: 
+expect: error syntax
+
+pattern: foo \\k<_>
+flags: 
+expect: error syntax
+
+pattern: foo \\k'_0_'
+flags: 
+expect: error syntax
+
+pattern: foo \\k<_0_>
+flags: 
+expect: error syntax
+
+pattern: foo \\k'0'
+flags: 
+expect: error syntax
+
+pattern: foo \\k<0>
+flags: 
+expect: error syntax
+
+pattern: foo \\k'12'
+flags: 
+expect: error syntax
+
+pattern: foo \\k<12>
+flags: 
+expect: error syntax
+
+pattern: foo \\k'1a'
+flags: 
+expect: error syntax
+
+pattern: foo \\k<1a>
+flags: 
+expect: error syntax
+
+pattern: foo \\k''
+flags: 
+expect: error syntax
+
+pattern: foo \\k<>
+flags: 
+expect: error syntax
+
+pattern: (?<as>as) (\\w+) \\k<as> (\\w+)
+flags: 
+subject: as easy as pie
+expect: 0-14 0-2 3-7 11-14
+
+pattern: (?<as>as) (\\w+) \\k{as} (\\w+)
+flags: 
+subject: as easy as pie
+expect: 0-14 0-2 3-7 11-14
+
+pattern: (?<as>as) (\\w+) \\k'as' (\\w+)
+flags: 
+subject: as easy as pie
+expect: 0-14 0-2 3-7 11-14
+
+pattern: (?<as>as) (\\w+) \\k{ as } (\\w+)
+flags: 
+subject: as easy as pie
+expect: 0-14 0-2 3-7 11-14
+
+pattern: (?<as>as) (\\w+) \\k< as> (\\w+)
+flags: 
+expect: error syntax
+
+pattern: (?'n'foo) \\g{n}
+flags: 
+subject: ..foo foo..
+expect: 2-9 2-5
+
+pattern: (?'n'foo) \\g{ n }
+flags: 
+subject: ..foo foo..
+expect: 2-9 2-5
+
+pattern: (?<n>foo) \\g{n}
+flags: 
+subject: ..foo foo..
+expect: 2-9 2-5
+
+pattern: (?<as>as) (\\w+) \\g{as} (\\w+)
+flags: 
+subject: as easy as pie
+expect: 0-14 0-2 3-7 11-14
+
+pattern: (?P<n>foo)(?P=n)
+flags: 
+subject: ..foofoo..
+expect: 2-8 2-5
+
+pattern: ^(?P<PAL>(?P<CHAR>.)((?P>PAL)|.?)(?P=CHAR))$
+flags: 
+subject: madamimadam
+expect: 0-11 0-11 0-1 1-10
+
+pattern: ^(?P<PAL>(?P<CHAR>.)((?P>PAL)|.?)(?P=CHAR))$
+flags: 
+subject: madamiamadam
+expect: nomatch
+
+pattern: (?P<n>foo) (?P=n)
+flags: 
+subject: ..foo foo..
+expect: 2-9 2-5
+
+pattern: (?P<as>as) (\\w+) (?P=as) (\\w+)
+flags: 
+subject: as easy as pie
+expect: 0-14 0-2 3-7 11-14
+
+pattern: (?<=bar>)foo
+flags: 
+subject: bar>foo
+expect: 4-7
+
+pattern: (?<!bar>)foo
+flags: 
+subject: bar>foo
+expect: nomatch
+
+pattern: (?<=bar>ABC)foo
+flags: 
+subject: bar>ABCfoo
+expect: 7-10
+
+pattern: (?<!bar>ABC)foo
+flags: 
+subject: bar>ABCfoo
+expect: nomatch
+
+pattern: (?<bar>)foo
+flags: 
+subject: bar>ABCfoo
+expect: 7-10 7-7
+
+pattern: (?<bar>ABC)foo
+flags: 
+subject: bar>ABCfoo
+expect: 4-10 4-7
+
+pattern: (?<=abcd(?<=(aaaabcd)))
+flags: 
+subject: ..aaaabcd..
+expect: 9-9 2-9
+
+pattern: (?=xy(?<=(aaxy)))
+flags: 
+subject: ..aaxy..
+expect: 4-4 2-6
+
+pattern: (?=xy(?<=(aaxyz?)))
+flags: 
+subject: ..aaxy..
+expect: 4-4 2-6
+
+pattern: X(\\w+)(?=\\s)|X(\\w+)
+flags: 
+subject: Xab
+expect: 0-3 - 1-3
+
+pattern: (?|(a))
+flags: 
+subject: a
+expect: 0-1 0-1
+
+pattern: (?|a(.)b|d(.(o).)d|i(.)(.)j)(.)
+flags: 
+subject: d!o!da
+expect: 0-6 1-4 2-3 5-6
+
+pattern: (?|a(.)b|d(.(o).)d|i(.)(.)j)(.)
+flags: 
+subject: aabc
+expect: 0-4 1-2 - 3-4
+
+pattern: (?|a(.)b|d(.(o).)d|i(.)(.)j)(.)
+flags: 
+subject: ixyjp
+expect: 0-5 1-2 2-3 4-5
+
+pattern: (?|(?|(a)|(b))|(?|(c)|(d)))
+flags: 
+subject: a
+expect: 0-1 0-1
+
+pattern: (?|(?|(a)|(b))|(?|(c)|(d)))
+flags: 
+subject: b
+expect: 0-1 0-1
+
+pattern: (?|(?|(a)|(b))|(?|(c)|(d)))
+flags: 
+subject: c
+expect: 0-1 0-1
+
+pattern: (?|(?|(a)|(b))|(?|(c)|(d)))
+flags: 
+subject: d
+expect: 0-1 0-1
+
+pattern: (.)(?|(.)(.)x|(.)d)(.)
+flags: 
+subject: abcde
+expect: 1-5 1-2 2-3 - 4-5
+
+pattern: (\\N)(?|(\\N)(\\N)x|(\\N)d)(\\N)
+flags: 
+subject: abcde
+expect: 1-5 1-2 2-3 - 4-5
+
+pattern: (?|(b)|()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()()(a))
+flags: 
+subject: a
+expect: 0-1 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-0 0-1
+
+pattern: (?(DEFINE)(?<A>(?&B)+)(?<B>a))(?&A)
+flags: 
+subject: a
+expect: 0-1
+
+pattern: (?(DEFINE)(?<A>(?&B)+)(?<B>a))(?&A)
+flags: 
+subject: aa
+expect: 0-2
+
+pattern: foo(\\R)bar
+flags: 
+subject: foo\r\nbar
+expect: 0-8 3-5
+
+pattern: foo(\\R)bar
+flags: 
+subject: foo\nbar
+expect: 0-7 3-4
+
+pattern: foo(\\R)bar
+flags: 
+subject: foo\rbar
+expect: 0-7 3-4
+
+pattern: foo(\\R+)bar
+flags: 
+subject: foo\r\n\u0085\r\n\nbar
+expect: 0-13 3-10
+
+pattern: (\\V+)(\\R)
+flags: 
+subject: foo\r\n\u0085\r\n\nbar
+expect: 0-5 0-3 3-5
+
+pattern: (\\R+)(\\V)
+flags: 
+subject: foo\r\n\u0085\r\n\nbar
+expect: 3-11 3-10 10-11
+
+pattern: foo(\\R)bar
+flags: 
+subject: foo\u0085bar
+expect: 0-8 3-5
+
+pattern: (\\V)(\\R)
+flags: 
+subject: foo\u0085bar
+expect: 2-5 2-3 3-5
+
+pattern: (\\R)(\\V)
+flags: 
+subject: foo\u0085bar
+expect: 3-6 3-5 5-6
+
+pattern: foo(\\R)bar
+flags: 
+subject: foo\r\nbar
+expect: 0-8 3-5
+
+pattern: (\\V)(\\R)
+flags: 
+subject: foo\r\nbar
+expect: 2-5 2-3 3-5
+
+pattern: (\\R)(\\V)
+flags: 
+subject: foo\r\nbar
+expect: 3-6 3-5 5-6
+
+pattern: foo(\\R)bar
+flags: 
+subject: foo\r\nbar
+expect: 0-8 3-5
+
+pattern: (\\V)(\\R)
+flags: 
+subject: foo\r\nbar
+expect: 2-5 2-3 3-5
+
+pattern: (\\R)(\\V)
+flags: 
+subject: foo\r\nbar
+expect: 3-6 3-5 5-6
+
+pattern: foo(\\R)bar
+flags: 
+subject: foo\rbar
+expect: 0-7 3-4
+
+pattern: (\\V)(\\R)
+flags: 
+subject: foo\rbar
+expect: 2-4 2-3 3-4
+
+pattern: (\\R)(\\V)
+flags: 
+subject: foo\rbar
+expect: 3-5 3-4 4-5
+
+pattern: 0|\\R??\\n0
+flags: 
+subject: \n\n
+expect: nomatch
+
+pattern: foo(\\v+)bar
+flags: 
+subject: foo\r\n\u0085\r\n\nbar
+expect: 0-13 3-10
+
+pattern: (\\V+)(\\v)
+flags: 
+subject: foo\r\n\u0085\r\n\nbar
+expect: 0-4 0-3 3-4
+
+pattern: (\\v+)(\\V)
+flags: 
+subject: foo\r\n\u0085\r\n\nbar
+expect: 3-11 3-10 10-11
+
+pattern: foo(\\v)bar
+flags: 
+subject: foo\u0085bar
+expect: 0-8 3-5
+
+pattern: (\\V)(\\v)
+flags: 
+subject: foo\u0085bar
+expect: 2-5 2-3 3-5
+
+pattern: (\\v)(\\V)
+flags: 
+subject: foo\u0085bar
+expect: 3-6 3-5 5-6
+
+pattern: foo(\\v)bar
+flags: 
+subject: foo\rbar
+expect: 0-7 3-4
+
+pattern: (\\V)(\\v)
+flags: 
+subject: foo\rbar
+expect: 2-4 2-3 3-4
+
+pattern: (\\v)(\\V)
+flags: 
+subject: foo\rbar
+expect: 3-5 3-4 4-5
+
+pattern: foo(\\h+)bar
+flags: 
+subject: foo\t\u00A0bar
+expect: 0-9 3-6
+
+pattern: (\\H+)(\\h)
+flags: 
+subject: foo\t\u00A0bar
+expect: 0-4 0-3 3-4
+
+pattern: (\\h+)(\\H)
+flags: 
+subject: foo\t\u00A0bar
+expect: 3-7 3-6 6-7
+
+pattern: foo(\\h)bar
+flags: 
+subject: foo\u00A0bar
+expect: 0-8 3-5
+
+pattern: (\\H)(\\h)
+flags: 
+subject: foo\u00A0bar
+expect: 2-5 2-3 3-5
+
+pattern: (\\h)(\\H)
+flags: 
+subject: foo\u00A0bar
+expect: 3-6 3-5 5-6
+
+pattern: foo(\\h)bar
+flags: 
+subject: foo\tbar
+expect: 0-7 3-4
+
+pattern: (\\H)(\\h)
+flags: 
+subject: foo\tbar
+expect: 2-4 2-3 3-4
+
+pattern: (\\h)(\\H)
+flags: 
+subject: foo\tbar
+expect: 3-5 3-4 4-5
+
+pattern: .*\\z
+flags: 
+subject: foo\n
+expect: 4-4
+
+pattern: \\N*\\z
+flags: 
+subject: foo\n
+expect: 4-4
+
+pattern: .*\\Z
+flags: 
+subject: foo\n
+expect: 0-3
+
+pattern: \\N*\\Z
+flags: 
+subject: foo\n
+expect: 0-3
+
+pattern: ^(?:(\\d)x)?\\d$
+flags: 
+subject: 1
+expect: 0-1
+
+pattern: .*?(?:(\\w)|(\\w))x
+flags: 
+subject: abx
+expect: 0-3 1-2
+
+pattern: 0{50}
+flags: 
+subject: 000000000000000000000000000000000000000000000000000
+expect: 0-50
+
+pattern: ^a?(?=b)b
+flags: 
+subject: ab
+expect: 0-2
+
+pattern: ^a*(?=b)b
+flags: 
+subject: ab
+expect: 0-2
+
+pattern: >\\d+$ \\n
+flags: ix
+subject: >10\n
+expect: 0-4
+
+pattern: >\\d+$ \\n
+flags: ix
+subject: >1\n
+expect: 0-3
+
+pattern: \\d+$ \\n
+flags: ix
+subject: >10\n
+expect: 1-4
+
+pattern: >\\d\\d$ \\n
+flags: ix
+subject: >10\n
+expect: 0-4
+
+pattern: >\\d+$ \\n
+flags: x
+subject: >10\n
+expect: 0-4
+
+pattern: ^\\s*i.*?o\\s*$
+flags: s
+subject: io\n io
+expect: 0-6
+
+pattern: (.*?)a(?!(a+)b\\2c)
+flags: 
+subject: baaabaac
+expect: 0-3 0-2 3-4
+
+pattern: \\A(?(?=db2)db2|\\D+)(?<!processed)\\.csv\\z
+flags: msx
+subject: sql_processed.csv
+expect: nomatch
+
+pattern: \\N{U+0100}
+flags: 
+subject: \u0100
+expect: 0-2
+
+pattern: \\N{ U+0100 }
+flags: 
+subject: \u0100
+expect: 0-2
+
+pattern: [a\\N{U+0100}]
+flags: 
+subject: \u0100
+expect: 0-2
+
+pattern: [a\\N{ U+0100 }]
+flags: 
+subject: \u0100
+expect: 0-2
+
+pattern: [a\\N{U+0100}]
+flags: 
+subject: a
+expect: 0-1
+
+pattern: \\N{U+41}\\x{c1}
+flags: i
+subject: a\u00E1
+expect: 0-3
+
+pattern: \\N{U+41}\\x{c1}
+flags: i
+subject: a\u00E1
+expect: 0-3
+
+pattern: [\\N{U+41}\\x{c1}]
+flags: i
+subject: \u00E1
+expect: 0-2
+
+pattern: [\\N{U+41}\\x{c1}]
+flags: i
+subject: \u00E1
+expect: 0-2
+
+pattern: \\N{U+41}
+flags: 
+subject: A
+expect: 0-1
+
+pattern: [\\s][\\S]
+flags: 
+subject: \u00A0\u00A0
+expect: nomatch
+
+pattern: [\\x{100}\\xff]
+flags: i
+subject: \u00FF
+expect: 0-2
+
+pattern: abc\\N\\{U+BEEF}
+flags: 
+subject: abc\n{UBEEF}
+expect: nomatch
+
+pattern: abc\\N\\{U+BEEF\\}
+flags: 
+subject: abc.{UBEEF}
+expect: 0-11
+
+pattern: [abc\\N\\{U+BEEF\\}]
+flags: 
+expect: error syntax
+
+pattern: abc\\N
+flags: 
+subject: abcd
+expect: 0-4
+
+pattern: abc\\N
+flags: 
+subject: abc\n
+expect: nomatch
+
+pattern: \\N{U+}
+flags: 
+expect: error syntax
+
+pattern: [\\N{U+}]
+flags: 
+expect: error syntax
+
+pattern: abc\\N{def
+flags: 
+expect: error syntax
+
+pattern: \\N{U+4AG3}
+flags: 
+expect: error syntax
+
+pattern: [\\N{U+4AG3}]
+flags: 
+expect: error syntax
+
+pattern: \\N{U+}
+flags: 
+expect: error syntax
+
+pattern: [\\N{U+}]
+flags: 
+expect: error syntax
+
+pattern: \\N{U+4AG3}
+flags: 
+expect: error syntax
+
+pattern: [\\N{U+4AG3}]
+flags: 
+expect: error syntax
+
+pattern: abc\\N{def}
+flags: 
+expect: error syntax
+
+pattern: abc\\N{U+4AG3
+flags: 
+expect: error syntax
+
+pattern: abc\\N{def
+flags: 
+expect: error syntax
+
+pattern: abc\\N{
+flags: 
+expect: error syntax
+
+pattern: abc\\N {U+41}
+flags: x
+expect: error syntax
+
+pattern: abc\\N {SPACE}
+flags: x
+expect: error syntax
+
+pattern: \\N{U+0xBEEF}
+flags: 
+expect: error syntax
+
+pattern: \\N{U+0xBEEF}
+flags: 
+expect: error syntax
+
+pattern: \\N{U+0xBEEF}
+flags: 
+expect: error syntax
+
+pattern: \\c@
+flags: 
+subject: \x00
+expect: 0-1
+
+pattern: \\cA
+flags: 
+subject: \x01
+expect: 0-1
+
+pattern: \\cB
+flags: 
+subject: \x02
+expect: 0-1
+
+pattern: \\cC
+flags: 
+subject: \x03
+expect: 0-1
+
+pattern: \\cI
+flags: 
+subject: \t
+expect: 0-1
+
+pattern: \\cJ
+flags: 
+subject: \n
+expect: 0-1
+
+pattern: \\cR
+flags: 
+subject: \x12
+expect: 0-1
+
+pattern: \\cS
+flags: 
+subject: \x13
+expect: 0-1
+
+pattern: \\cX
+flags: 
+subject: \x18
+expect: 0-1
+
+pattern: \\cY
+flags: 
+subject: \x19
+expect: 0-1
+
+pattern: \\cZ
+flags: 
+subject: \x1A
+expect: 0-1
+
+pattern: \\c[
+flags: 
+subject: \x1B
+expect: 0-1
+
+pattern: \\c\\X
+flags: 
+subject: \x1CX
+expect: 0-2
+
+pattern: \\c]
+flags: 
+subject: \x1D
+expect: 0-1
+
+pattern: \\c^
+flags: 
+subject: \x1E
+expect: 0-1
+
+pattern: \\c_
+flags: 
+subject: \x1F
+expect: 0-1
+
+pattern: \\400
+flags: 
+subject: \u0100
+expect: 0-2
+
+pattern: \\600
+flags: 
+subject: \u0180
+expect: 0-2
+
+pattern: \\777
+flags: 
+subject: \u01FF
+expect: 0-2
+
+pattern: [a\\400]
+flags: 
+subject: \u0100
+expect: 0-2
+
+pattern: [b\\600]
+flags: 
+subject: \u0180
+expect: 0-2
+
+pattern: [c\\777]
+flags: 
+subject: \u01FF
+expect: 0-2
+
+pattern: \\o{120}
+flags: 
+subject: P
+expect: 0-1
+
+pattern: \\o{400}
+flags: 
+subject: \u0100
+expect: 0-2
+
+pattern: \\o{1000}
+flags: 
+subject: \u0200
+expect: 0-2
+
+pattern: [a\\o{120}]
+flags: 
+subject: P
+expect: 0-1
+
+pattern: [a\\o{400}]
+flags: 
+subject: \u0100
+expect: 0-2
+
+pattern: [a\\o{1000}]
+flags: 
+subject: \u0200
+expect: 0-2
+
+pattern: \\87
+flags: 
+expect: error syntax
+
+pattern: a\\87
+flags: 
+expect: error syntax
+
+pattern: a\\97
+flags: 
+expect: error syntax
+
+pattern: (.)\\g2147483648}
+flags: 
+expect: error syntax
+
+pattern: (.)\\g2147483649}
+flags: 
+expect: error syntax
+
+pattern: (.)\\g2147483650}
+flags: 
+expect: error syntax
+
+pattern: (.)\\g4294967296}
+flags: 
+expect: error syntax
+
+pattern: (.)\\g4294967297}
+flags: 
+expect: error syntax
+
+pattern: (.)\\g4294967298}
+flags: 
+expect: error syntax
+
+pattern: a(.)\\g2147483648}
+flags: 
+expect: error syntax
+
+pattern: a(.)\\g2147483649}
+flags: 
+expect: error syntax
+
+pattern: a(.)\\g2147483650}
+flags: 
+expect: error syntax
+
+pattern: a(.)\\g4294967296}
+flags: 
+expect: error syntax
+
+pattern: a(.)\\g4294967297}
+flags: 
+expect: error syntax
+
+pattern: a(.)\\g4294967298}
+flags: 
+expect: error syntax
+
+pattern: (.)\\g{2147483648}
+flags: 
+expect: error syntax
+
+pattern: (.)\\g{ 2147483648 }
+flags: 
+expect: error syntax
+
+pattern: (.)\\g{2147483649}
+flags: 
+expect: error syntax
+
+pattern: (.)\\g{2147483650}
+flags: 
+expect: error syntax
+
+pattern: (.)\\g{4294967296}
+flags: 
+expect: error syntax
+
+pattern: (.)\\g{4294967297}
+flags: 
+expect: error syntax
+
+pattern: (.)\\g{4294967298}
+flags: 
+expect: error syntax
+
+pattern: a(.)\\g{2147483648}
+flags: 
+expect: error syntax
+
+pattern: a(.)\\g{2147483649}
+flags: 
+expect: error syntax
+
+pattern: a(.)\\g{2147483650}
+flags: 
+expect: error syntax
+
+pattern: a(.)\\g{4294967296}
+flags: 
+expect: error syntax
+
+pattern: a(.)\\g{4294967297}
+flags: 
+expect: error syntax
+
+pattern: a(.)\\g{4294967298}
+flags: 
+expect: error syntax
+
+pattern: [\\006]
+flags: 
+subject: \x06
+expect: 0-1
+
+pattern: [\\006]
+flags: 
+subject: 6\x00
+expect: nomatch
+
+pattern: [\\0005]
+flags: 
+subject: \x005
+expect: 0-1
+
+pattern: [\\0005]
+flags: 
+subject: 5\x00
+expect: 0-1
+
+pattern: [\\_]
+flags: 
+subject: _
+expect: 0-1
+
+pattern: (q1|.)*(q2|.)*(x(a|bc)*y){2,}
+flags: 
+subject: xayxay
+expect: 0-6 - - 3-6 4-5
+
+pattern: (q1|.)*(q2|.)*(x(a|bc)*y){2,3}
+flags: 
+subject: xayxay
+expect: 0-6 - - 3-6 4-5
+
+pattern: (q1|z)*(q2|z)*z{15}-.*?(x(a|bc)*y){2,3}Z
+flags: 
+subject: zzzzzzzzzzzzzzzz-xayxayxayxayZ
+expect: 0-30 0-1 - 26-29 27-28
+
+pattern: (?:(?:)foo|bar|zot|rt78356)
+flags: 
+subject: foo
+expect: 0-3
+
+pattern: \\xe0\\pL
+flags: i
+subject: \u00C0a
+expect: 0-3
+
+pattern: ^m?(\\S)(.*)\\1$
+flags: 
+subject: aba
+expect: 0-3 0-1 1-2
+
+pattern: ^m?(\\S)(.*)\\1$
+flags: 
+subject: \tb\t
+expect: nomatch
+
+pattern: ^m?(\\s)(.*)\\1$
+flags: 
+subject: \tb\t
+expect: 0-3 0-1 1-2
+
+pattern: ^m?(\\s)(.*)\\1$
+flags: 
+subject: aba
+expect: nomatch
+
+pattern: ^m?(\\W)(.*)\\1$
+flags: 
+subject: :b:
+expect: 0-3 0-1 1-2
+
+pattern: ^m?(\\W)(.*)\\1$
+flags: 
+subject: aba
+expect: nomatch
+
+pattern: ^m?(\\w)(.*)\\1$
+flags: 
+subject: aba
+expect: 0-3 0-1 1-2
+
+pattern: ^m?(\\w)(.*)\\1$
+flags: 
+subject: :b:
+expect: nomatch
+
+pattern: ^m?(\\D)(.*)\\1$
+flags: 
+subject: aba
+expect: 0-3 0-1 1-2
+
+pattern: ^m?(\\D)(.*)\\1$
+flags: 
+subject: 5b5
+expect: nomatch
+
+pattern: ^m?(\\d)(.*)\\1$
+flags: 
+subject: 5b5
+expect: 0-3 0-1 1-2
+
+pattern: ^m?(\\d)(.*)\\1$
+flags: 
+subject: aba
+expect: nomatch
+
+pattern: ^_?[^\\W_0-9]\\w\\z
+flags: 
+subject: \u00AA\u0100
+expect: 0-4
+
+pattern: (?aia:s)
+flags: 
+subject: \u017F
+expect: nomatch
+
+pattern: (?aia:s)
+flags: 
+subject: S
+expect: 0-1
+
+pattern: ^.*\\d\\H
+flags: 
+subject: X1
+expect: nomatch
+
+pattern: ^.*\\d\\V
+flags: 
+subject: X1
+expect: nomatch
+
+pattern: ^\\p{L_}
+flags: 
+subject: \u3400
+expect: nomatch
+
+pattern: ^\\p{L}
+flags: 
+subject: \u3400
+expect: 0-3
+
+pattern: [s\\xDF]a
+flags: iu
+subject: sa
+expect: 0-2
+
+pattern: ^\\R\\x0A$
+flags: 
+subject: \r\n
+expect: nomatch
+
+pattern: ff
+flags: i
+subject: \uFB00\uFB01
+expect: 0-3
+
+pattern: ff
+flags: i
+subject: \uFB01\uFB00
+expect: 3-6
+
+pattern: fi
+flags: i
+subject: \uFB01\uFB00
+expect: 0-3
+
+pattern: fi
+flags: i
+subject: \uFB00\uFB01
+expect: 3-6
+
+pattern: ffiffl
+flags: i
+subject: abcdef\uFB03\uFB04
+expect: 6-12
+
+pattern: \\xdf\\xdf
+flags: iu
+subject: abcdefssss
+expect: 6-10
+
+pattern: st
+flags: i
+subject: \u00DF\uFB05
+expect: 2-5
+
+pattern: ssst
+flags: i
+subject: \u00DF\uFB05
+expect: 0-5
+
+pattern: [[:lower:]]
+flags: i
+subject: \u0100
+expect: 0-2
+
+pattern: [[:upper:]]
+flags: i
+subject: \u0101
+expect: 0-2
+
+pattern: s\\xDF
+flags: iu
+subject: \u00DFs
+expect: 0-3
+
+pattern: [^\\p{Alphabetic}]
+flags: 
+subject: \u0100
+expect: nomatch
+
+pattern: [[:alnum:]]
+flags: 
+subject: \u02C1
+expect: 0-2
+
+pattern: [[:alnum:]]
+flags: 
+subject: \u02C2
+expect: nomatch
+
+pattern: [[:alpha:]]
+flags: 
+subject: \u02C1
+expect: 0-2
+
+pattern: [[:alpha:]]
+flags: 
+subject: \u02C2
+expect: nomatch
+
+pattern: [[:graph:]]
+flags: 
+subject: \u0377
+expect: 0-2
+
+pattern: [[:graph:]]
+flags: 
+subject: \u0378
+expect: nomatch
+
+pattern: [[:lower:]]
+flags: 
+subject: \u0100
+expect: nomatch
+
+pattern: [[:lower:]]
+flags: 
+subject: \u0101
+expect: 0-2
+
+pattern: [[:lower:]]
+flags: 
+subject: \u0102
+expect: nomatch
+
+pattern: [[:print:]]
+flags: 
+subject: \u0377
+expect: 0-2
+
+pattern: [[:print:]]
+flags: 
+subject: \u0378
+expect: nomatch
+
+pattern: [[:punct:]]
+flags: 
+subject: \u037D
+expect: nomatch
+
+pattern: [[:punct:]]
+flags: 
+subject: \u037E
+expect: 0-2
+
+pattern: [[:punct:]]
+flags: 
+subject: \u0388
+expect: nomatch
+
+pattern: [[:upper:]]
+flags: 
+subject: \u0100
+expect: 0-2
+
+pattern: [[:upper:]]
+flags: 
+subject: \u0101
+expect: nomatch
+
+pattern: [[:word:]]
+flags: 
+subject: \u02C1
+expect: 0-2
+
+pattern: [[:word:]]
+flags: 
+subject: \u02C2
+expect: nomatch
+
+pattern: syntax OK\\s+\\z
+flags: is
+subject: t/bin/good.pl syntax OK\n
+expect: 14-24
+
+pattern: ^(.*?)\\s*\\|\\s*(?:\\/\\s*|)'(.+)'$
+flags: 
+subject: text|'sec'
+expect: 0-10 0-4 6-9
+
+pattern: ^(foo|)bar$
+flags: 
+subject: bar
+expect: 0-3 0-0
+
+pattern: ^(foo||baz)bar$
+flags: 
+subject: bar
+expect: 0-3 0-0
+
+pattern: ^(foo||baz)bar$
+flags: 
+subject: bazbar
+expect: 0-6 0-3
+
+pattern: ^(foo||baz)bar$
+flags: 
+subject: foobar
+expect: 0-6 0-3
+
+pattern: ^(?:foo|)bar$
+flags: 
+subject: bar
+expect: 0-3
+
+pattern: ^(?:foo||baz)bar$
+flags: 
+subject: bar
+expect: 0-3
+
+pattern: ^(?:foo||baz)bar$
+flags: 
+subject: bazbar
+expect: 0-6
+
+pattern: ^(?:foo||baz)bar$
+flags: 
+subject: foobar
+expect: 0-6
+
+pattern: ^(?i:foo|)bar$
+flags: 
+subject: bar
+expect: 0-3
+
+pattern: ^(?i:foo||baz)bar$
+flags: 
+subject: bar
+expect: 0-3
+
+pattern: ^(?i:foo||baz)bar$
+flags: 
+subject: bazbar
+expect: 0-6
+
+pattern: ^(?i:foo||baz)bar$
+flags: 
+subject: foobar
+expect: 0-6
+
+pattern: ^(.)(?:(..)|B)[CX]
+flags: 
+subject: ABCDE
+expect: 0-3 0-1
+
+pattern: ^(.)(?:BC(.)|B)[CX]
+flags: 
+subject: ABCDE
+expect: 0-3 0-1
+
+pattern: ^(.)(?:(.)+)*[BX]
+flags: 
+subject: ABCDE
+expect: 0-2 0-1
+
+pattern: ^(.)(BC)*
+flags: 
+subject: ABCDE
+expect: 0-3 0-1 1-3
+
+pattern: ^(.)(BC)*[BX]
+flags: 
+subject: ABCDE
+expect: 0-2 0-1
+
+pattern: ^(.)(B)*.[DX]
+flags: 
+subject: ABCDE
+expect: 0-4 0-1 1-2
+
+pattern: ^(.)(B)*.[CX]
+flags: 
+subject: ABCDE
+expect: 0-3 0-1
+
+pattern: ^(?:(X)?(\\d)|(X)?(\\d\\d))$
+flags: 
+subject: X12
+expect: 0-3 - - 0-1 1-3
+
+pattern: ^(?:(XX)?(\\d)|(XX)?(\\d\\d))$
+flags: 
+subject: XX12
+expect: 0-4 - - 0-2 2-4
+
+pattern: \\A(?>\\[(?:(?:)(?:R){1}|T|V?|A)\\])\\z
+flags: 
+subject: [A]
+expect: 0-3
+
+pattern: ( [^z] $ [^z]+)
+flags: mx
+subject: aa\nbb\ncc\n
+expect: 1-9 1-9
+
+pattern: [\\h]
+flags: 
+subject: \u00A0
+expect: 0-2
+
+pattern: [\\H]
+flags: 
+subject: \u00BF
+expect: 0-2
+
+pattern: [\\H]
+flags: 
+subject: \u00A0
+expect: nomatch
+
+pattern: [\\H]
+flags: 
+subject: \u00A1
+expect: 0-2
+
+pattern: [^\\n]+
+flags: 
+subject: \nb
+expect: 1-2
+
+pattern: [^\\n]+
+flags: 
+subject: a\n
+expect: 0-1
+
+pattern: (?a:\\p{Any})
+flags: 
+subject: \u0100
+expect: 0-2
+
+pattern: (?aa:\\p{Any})
+flags: 
+subject: \u0100
+expect: 0-2
+
+pattern: \\w
+flags: 
+subject: \u200C
+expect: 0-3
+
+pattern: \\W
+flags: 
+subject: \u200C
+expect: nomatch
+
+pattern: \\w
+flags: 
+subject: \u200D
+expect: 0-3
+
+pattern: \\W
+flags: 
+subject: \u200D
+expect: nomatch
+
+pattern: ^(?d:\\xdf|_)*_
+flags: i
+subject: \u017F\u017F_
+expect: 0-5
+
+pattern: (\\x{100})
+flags: 
+subject: \u2000\u2000\u2000\u0100
+expect: 9-11 9-11
+
+pattern: ^\\R{2}$
+flags: 
+subject: \r\n\r\n
+expect: 0-4
+
+pattern: \\Vn
+flags: 
+subject: \u00FFn/
+expect: 0-3
+
+pattern: (?l:a?\\w)
+flags: 
+subject: b
+expect: 0-1
+
+pattern: (?l:a?\\D)
+flags: 
+subject: b
+expect: 0-1
+
+pattern: ^_?[^\\S_0-9]\\w*\\z
+flags: 
+subject: \t
+expect: 0-1
+
+pattern: m?^xy\\?$?
+flags: 
+subject: xy?
+expect: 0-3
+
+pattern: a?\\X
+flags: 
+subject: a\u0100
+expect: 0-3
+
+pattern: a?\\R
+flags: 
+subject: a\n
+expect: 0-2
+
+pattern: ^a?\\N$
+flags: 
+subject: a\n
+expect: 0-1
+
+pattern: \\N?a
+flags: 
+subject: \na
+expect: 1-2
+
+pattern: (a|(bc)){0,0}?xyz
+flags: 
+subject: xyz
+expect: 0-3
+
+pattern: ( a | ( bc ) ) {0,0} ? xyz
+flags: x
+subject: xyz
+expect: 0-3
+
+pattern: (a|(bc)){0,0}+xyz
+flags: 
+subject: xyz
+expect: 0-3
+
+pattern: ( a | ( bc ) ) {0,0} + xyz
+flags: x
+subject: xyz
+expect: 0-3
+
+pattern: (A(*PRUNE)B|A(*PRUNE)C)
+flags: 
+subject: AC
+expect: nomatch
+
+pattern: (A(*PRUNE)B|A(*PRUNE)D|A(*PRUNE)C)
+flags: 
+subject: AC
+expect: nomatch
+
+pattern: (A(*PRUNE)B|A(*PRUNE)C|A(*PRUNE)D)
+flags: 
+subject: AC
+expect: nomatch
+
+pattern: ((A(*PRUNE)B|A(*PRUNE)C))
+flags: 
+subject: AC
+expect: nomatch
+
+pattern: ((A(*PRUNE)B|A(*PRUNE)D|A(*PRUNE)C))
+flags: 
+subject: AC
+expect: nomatch
+
+pattern: ((A(*PRUNE)B|A(*PRUNE)C|A(*PRUNE)D))
+flags: 
+subject: AC
+expect: nomatch
+
+pattern: A+?(*THEN)BC
+flags: 
+subject: AAABC
+expect: 2-5
+
+pattern: A+?(*PRUNE)BC
+flags: 
+subject: AAABC
+expect: 2-5
+
+pattern: A+(*THEN)BC
+flags: 
+subject: AAABC
+expect: 0-5
+
+pattern: A+(*PRUNE)BC
+flags: 
+subject: AAABC
+expect: 0-5
+
+pattern: [#]
+flags: 
+subject: a#b
+expect: 1-2
+
+pattern: [#]b
+flags: 
+subject: a#b
+expect: 1-3
+
+pattern: [#]
+flags: x
+subject: a#b
+expect: 1-2
+
+pattern: [#]b
+flags: x
+subject: a#b
+expect: 1-3
+
+pattern: ^(?=(a)){0}b(?1)
+flags: 
+subject: back
+expect: 0-2
+
+pattern: (?:(a(*SKIP)b)){0}(?:(?1)|ac)
+flags: 
+subject: x
+expect: nomatch
+
+pattern: (?1)(?:(b)){0}
+flags: 
+subject: b
+expect: 0-1
+
+pattern: ^A*\\z
+flags: 
+subject: 
+expect: 0-0
+
+pattern: \\N*\x20
+flags: x
+subject: ab
+expect: 0-2
+
+pattern: \\N (?#comment) *\x20
+flags: x
+subject: ab
+expect: 0-2
+
+pattern: (?<W>a)(?<BB>(?=(?&W))(?<=(?&W)))(?&BB)
+flags: 
+subject: aa
+expect: 0-1 0-1 1-1
+
+pattern: ^\\S+=
+flags: u
+subject: \u03A3=\u03A0
+expect: 0-3
+
+pattern: \\x{100}[xy]\\x{100}{2}
+flags: 
+subject: \u0100y\u0100\u0100
+expect: 0-7
+
+pattern: \\x{100}a{2,3}
+flags: 
+subject: \u0100aaa
+expect: 0-5
+
+pattern: ^x?abc?de
+flags: 
+subject: abcde
+expect: 0-5
+
+pattern: (?-m:^abc)
+flags: m
+subject: abcde
+expect: 0-3
+
+pattern: (?-m:^abc)
+flags: m
+subject: x\nabcde
+expect: nomatch
+
+pattern: ^[+]([^(]+)$
+flags: im
+subject: li
+expect: nomatch
+
+pattern: (.)((o)\\1)(?2)
+flags: 
+subject: fofof
+expect: 0-5 0-1 1-3 1-2
+
+pattern: (.)(?2)((\\1)(?4)(\\1))
+flags: 
+subject: fffffff
+expect: 0-7 0-1 4-7 4-5 6-7
+
+pattern: (.)(?2)((.)(?4)(\\1))
+flags: 
+subject: foffoff
+expect: 0-7 0-1 4-7 4-5 6-7
+
+pattern: ^(.\\2?)(.)(?1)$
+flags: 
+subject: abcb
+expect: 0-4 0-1 1-2
+
+pattern: ^(.\\1?)(?1)$
+flags: 
+subject: aba
+expect: 0-3 0-1
+
+pattern: ^ (\\3(?2)\\3)? ((.)) (?1) $
+flags: x
+subject: aaba
+expect: 0-4 - 0-1 0-1
+
+pattern: ^ (a|\\3(?1)\\2|(?2)) ((b|c)(?4)?) (?1) (d(?1)) $
+flags: x
+subject: abbcdcabbda
+expect: 0-11 0-1 1-2 1-2 9-11
+
+pattern: (a)\\2
+flags: 
+expect: error syntax
+
+pattern: (a)(b)\\3
+flags: 
+expect: error syntax
+
+pattern: (a)(b)(c)\\4
+flags: 
+expect: error syntax
+
+pattern: (a)(b)(c)(d)\\5
+flags: 
+expect: error syntax
+
+pattern: (a)(b)(c)(d)(e)\\6
+flags: 
+expect: error syntax
+
+pattern: (a)(b)(c)(d)(e)(f)\\7
+flags: 
+expect: error syntax
+
+pattern: (a)(b)(c)(d)(e)(f)(g)(h)(i)\\10
+flags: 
+subject: abcdefghi\x08
+expect: 0-10 0-1 1-2 2-3 3-4 4-5 5-6 6-7 7-8 8-9
+
+pattern: (a)(b)(c)(d)(e)(f)(g)(h)(i)(j)\\11
+flags: 
+subject: abcdefghij\t
+expect: 0-11 0-1 1-2 2-3 3-4 4-5 5-6 6-7 7-8 8-9 9-10
+
+pattern: (a)(b)(c)(d)(e)(f)(g)(h)(i)(j)(k)\\12
+flags: 
+subject: abcdefghijk\n
+expect: 0-12 0-1 1-2 2-3 3-4 4-5 5-6 6-7 7-8 8-9 9-10 10-11
+
+pattern: (a)(b)(c)(d)(e)(f)(g)(h)(i)(j)(k)\\12\\13\\14
+flags: 
+subject: abcdefghijk\n\x0B\x0C
+expect: 0-14 0-1 1-2 2-3 3-4 4-5 5-6 6-7 7-8 8-9 9-10 10-11
+
+pattern: \\d<(.*?)>
+flags: 
+subject: a<>
+expect: nomatch
+
+pattern: [bcd].{2,3}aaaa
+flags: 
+subject: XbXaaaaa
+expect: 1-8
+
+pattern: [bcd].{2,3}aaaa
+flags: 
+subject: Xb\u0100aaaaa
+expect: 1-9
+
+pattern: \\Awibble\\z
+flags: m
+subject: wibble
+expect: 0-6
+
+pattern: (alias|status)es$
+flags: i
+subject: Statuses
+expect: 0-8 0-6
+
+pattern: ( (?&solution) | % ) \\Z (?(DEFINE) (?<solution>7\\%\\ solution) )
+flags: x
+subject: 7% solution
+expect: 0-11 0-11
+
+pattern: w\\zxy?\\z
+flags: i
+subject: \u0100a\u0080a
+expect: nomatch
+
+pattern: w\\z\\R\\z
+flags: i
+subject: \u0100a\u0080a
+expect: nomatch
+
+pattern: (a+){1}+a
+flags: 
+subject: aaa
+expect: nomatch
+
+pattern: ^((?(?=x)xb|ya)z)
+flags: 
+subject: xbz
+expect: 0-3 0-3
+
+pattern: ^((?(?=x)xb|ya)z)
+flags: 
+subject: yaz
+expect: 0-3 0-3
+
+pattern: ^((?(?!y)xb|ya)z)
+flags: 
+subject: xbz
+expect: 0-3 0-3
+
+pattern: ^((?(?!y)xb|ya)z)
+flags: 
+subject: yaz
+expect: 0-3 0-3
+
+pattern: ^((?(?!)xb|ya)z)
+flags: 
+subject: xbz
+expect: nomatch
+
+pattern: ^((?(?!)xb|ya)z)
+flags: 
+subject: yaz
+expect: 0-3 0-3
+
+pattern: foo(*ACCEPT:foo)
+flags: 
+subject: foo
+expect: 0-3
+
+pattern: (foo(*ACCEPT:foo))
+flags: 
+subject: foo
+expect: 0-3 0-3
+
+pattern: A(*FAIL:foo)[BC]
+flags: 
+subject: A
+expect: nomatch
+
+pattern: \\N(?#comment){SPACE}
+flags: 
+expect: error syntax
+
+pattern: ab(?#Comment){2}c
+flags: 
+subject: abbc
+expect: 0-4
+
+pattern: \\p A
+flags: 
+expect: error syntax
+
+pattern: \\P:A
+flags: 
+expect: error syntax
+
+pattern: \\p^
+flags: 
+expect: error syntax
+
+pattern: \\PU
+flags: 
+expect: error syntax
+
+pattern: (?i
+flags: 
+expect: error syntax
+
+pattern: (?a-x
+flags: 
+expect: error syntax
+
+pattern: .{1}??
+flags: 
+expect: error syntax
+
+pattern: .{1}?+
+flags: 
+expect: error syntax
+
+pattern: (?:.||)(?|)000000000@
+flags: 
+subject: 000000000@
+expect: 0-10
+
+pattern: aa$|a(?R)a|a
+flags: 
+subject: aaa
+expect: 0-3
+
+pattern: (?:\\1|a)([bcd])\\1(?:(?R)|e)\\1
+flags: 
+subject: abbaccaddedcb
+expect: 0-13 1-2
+
+pattern: AB\\s+\\x{100}
+flags: 
+subject: AB \u0100X
+expect: 0-5
+
+pattern: \\b\\z0*\\x{100}
+flags: 
+subject: .\u0100
+expect: nomatch
+
+pattern: (.*?(a(a)|i(i))n)
+flags: 
+subject: riiaan
+expect: 0-6 0-6 3-5 4-5
+
+pattern: (^(?:(\\d)x)?\\d$)
+flags: 
+subject: 1
+expect: 0-1 0-1
+
+pattern: (X{2,}[-X]{1,4}){3,}X{2,}
+flags: 
+subject: XXX-XXX-XXX--
+expect: nomatch
+
+pattern: ^a?bcd\\xff\\xff\\xff\\xff\\xff\\xff\\xff\\xff\\xff\\xff\\xff\\xff\\xff\\xff\\xff\\xff\\xff\\xff\\xff\\xff\\xff\\xff\\xff
+flags: 
+subject: ABCDEFGHIJKLMNOPQRSTUVWXYZ
+expect: nomatch
+
+pattern: ([[:ascii:]]+)\\x81
+flags: 
+subject: a\u0080b\u0081
+expect: 3-6 3-4
+
+pattern: [[:^ascii:]]+b
+flags: 
+subject: \u0080a\u0081b
+expect: 3-6
+
+pattern: [[:^ascii:]]+b
+flags: 
+subject: \u0080a\u0081\u0100b
+expect: 3-8
+
+pattern: \\A\\x80+\\z
+flags: 
+subject: \u0080\u0080\u0080\u0080\u0080\u0080\u0080\u0080\u0080
+expect: 0-18
+
+pattern: ^(\\d+)*?4X$
+flags: 
+subject: 1234X
+expect: 0-5 0-3
+
+pattern: (?il)\\x{100}|\\x{100}|\\x{FE}
+flags: 
+subject: \u00FE
+expect: 0-2
+
+pattern: \\A([\\x00-\\x7F]+)(.*)\\z
+flags: 
+subject: \x07\t\n
+expect: 0-3 0-3 3-3
+
+pattern: \\1a(b)
+flags: 
+subject: bab
+expect: nomatch
+
+pattern: (?iu)(?<=\\xdf)hbase
+flags: 
+subject: sshbase
+expect: 2-7
+
+pattern: \\x{30c3}?[\\x{30a2}\\x{30a4}\\x{30a6}\\x{30a8}\\x{30aa}-\\x{30e2}\\x{30e4}\\x{30e6}\\x{30e8}-\\x{30f4}](?:[\\x{30e3}\\x{30e5}\\x{30e7}\\x{30a1}\\x{30a3}\\x{30a5}\\x{30a7}\\x{30a9}])?\\x{30fc}?\\x{30f3}?
+flags: 
+subject: \u30DE\u30FC\u30AF\u30B5\u30FC\u30D3\u30B9
+expect: 0-6
+
+pattern: [\\x{3041}-\\x{3093}]+
+flags: 
+subject: \u6F22\u5B57\u3001\u30AB\u30BF\u30AB\u30CA\u3001\u3072\u3089\u304C\u306A\u306E\u5165\u3063\u305FString
+expect: 24-39
+
+pattern: (?:0)|(?:)(?:[1-9])
+flags: 
+subject: q0
+expect: 1-2
+
+pattern: \\x{_1_0000}
+flags: 
+subject: \u{10000}
+expect: 0-4
+
+pattern: (?iaax:A? \\K +)
+flags: 
+subject: African_Feh
+expect: 1-1
+
+pattern: (?iaa:A?\\K+)
+flags: 
+subject: African_Feh
+expect: 1-1
+
+pattern: (?iaa:A?\\K*)
+flags: 
+subject: African_Feh
+expect: 1-1
+
+pattern: ^((\\w|<(\\s)*(?1)(?3)*>)(?:(?3)*\\+(?3)*(?2))*)(?3)*\\+
+flags: 
+subject: a + b + <c + d>
+expect: 0-7 0-5 0-1
+
+pattern: ^((\\w|<(\\s)*(?1)(?3)*>)(?:(?3)*\\+(?3)*(?2))*)(?3)*\\+
+flags: 
+subject: a + <b> + c
+expect: 0-9 0-7 0-1
+
+pattern: ^a{,2}$
+flags: 
+subject: 
+expect: 0-0
+
+pattern: ^a{,2}$
+flags: 
+subject: a
+expect: 0-1
+
+pattern: ^a{,2}$
+flags: 
+subject: aa
+expect: 0-2
+
+pattern: ^a{,2}$
+flags: 
+subject: aaa
+expect: nomatch
+
+pattern: .{, 2 }
+flags: 
+subject: a
+expect: 0-1
+
+pattern: [x]{, 2}
+flags: 
+subject: x
+expect: 0-1
+
+pattern: \\p{Latin}{ , 2 }
+flags: 
+subject: a
+expect: 0-1
+
+pattern: (?=foo)(?<=a|ab)
+flags: 
+subject: abfoo
+expect: 2-2
+
+pattern: (?=foo)(?<=a|ab)
+flags: 
+subject: adfoo
+expect: nomatch
+
+pattern: (?=foo)(?<=a|ab)
+flags: 
+subject: cafoo
+expect: 2-2
+
+pattern: (?=foo)(?<!a|ab)
+flags: 
+subject: abfoo
+expect: nomatch
+
+pattern: (?=foo)(?<!a|ab)
+flags: 
+subject: adfoo
+expect: 2-2
+
+pattern: (?=foo)(?<!a|ab)
+flags: 
+subject: cafoo
+expect: nomatch
+
+pattern: (?=foo)(?<=c|a[a-d](?<!b))
+flags: 
+subject: aafoo
+expect: 2-2
+
+pattern: (?=foo)(?<=c|a[a-d](?<!b))
+flags: 
+subject: abfoo
+expect: nomatch
+
+pattern: (?<!)
+flags: 
+subject: abfoo
+expect: nomatch
+
+pattern: (?!)
+flags: 
+subject: abfoo
+expect: nomatch
+
+pattern: (.*b)(?<=)
+flags: 
+subject: abfoo
+expect: 0-2 0-2
+
+pattern: (.*b)(?=)
+flags: 
+subject: abfoo
+expect: 0-2 0-2
+
+pattern: (?=(\\w))(?<!^)
+flags: 
+subject: 1234
+expect: 1-1 1-2
+
+pattern: (\\w)(?<!^)
+flags: 
+subject: 1234
+expect: 0-1 0-1
+
+pattern: (?=foo)(?<=(a??))
+flags: 
+subject: afoo
+expect: 1-1 0-1
+
+pattern: (?=foo)(?<=(a{0,2}))
+flags: 
+subject: aafoo
+expect: 2-2 0-2
+
+pattern: (?=foo)(?<=(|a|aa))
+flags: 
+subject: aafoo
+expect: 2-2 0-2
+
+pattern: (?<=(?<!yz)b)c
+flags: 
+subject: aabcdef
+expect: 3-4
+
+pattern: (?<=(?<!yz)b)c
+flags: 
+subject: abcdef
+expect: 2-3
+
+pattern: (A(A|B(*ACCEPT)|C)+D)(E)
+flags: 
+subject: ABDE
+expect: 0-2 0-2 1-2
+
+pattern: (A(A|B(*ACCEPT)|C)+D)(E)
+flags: 
+subject: ABDE
+expect: 0-2 0-2 1-2
+
+pattern: (A(A|B(*ACCEPT)|C)+D)(E)
+flags: 
+subject: ABCDE
+expect: 0-2 0-2 1-2
+
+pattern: (A(A|B(*ACCEPT)|C)+D)(E)
+flags: 
+subject: ABCDE
+expect: 0-2 0-2 1-2
+
+pattern: (A(A|B(*ACCEPT)|C)D)(E)
+flags: 
+subject: ABDE
+expect: 0-2 0-2 1-2
+
+pattern: (A(A|B(*ACCEPT)|C)D)(E)
+flags: 
+subject: ABDE
+expect: 0-2 0-2 1-2
+
+pattern: (A(A|B(*ACCEPT)|C)D)(E)
+flags: 
+subject: ABCDE
+expect: 0-2 0-2 1-2
+
+pattern: (A(A|B(*ACCEPT)|C)D)(E)
+flags: 
+subject: ABCDE
+expect: 0-2 0-2 1-2
+
+pattern: (A(A|B(*ACCEPT)|(?>C))D)(E)
+flags: 
+subject: ABCDE
+expect: 0-2 0-2 1-2
+
+pattern: (A(A|B(*ACCEPT)|(?>C))D)(E)
+flags: 
+subject: ABCDE
+expect: 0-2 0-2 1-2
+
+pattern: (A(A|B(*ACCEPT)|C(?<=C))D)(E)
+flags: 
+subject: ABCDE
+expect: 0-2 0-2 1-2
+
+pattern: (A(A|B(*ACCEPT)|C(?<=C))D)(E)
+flags: 
+subject: ABCDE
+expect: 0-2 0-2 1-2
+
+pattern: (A(A|B(*ACCEPT)|C(?<!Q))D)(E)
+flags: 
+subject: ABCDE
+expect: 0-2 0-2 1-2
+
+pattern: (A(A|B(*ACCEPT)|C(?<!Q))D)(E)
+flags: 
+subject: ABCDE
+expect: 0-2 0-2 1-2
+
+pattern: (?(DEFINE)(?<a>(?:[ab]|[cd](*ACCEPT)|[ef])g))(?&a)(?&a)
+flags: 
+subject: cc
+expect: 0-2
+
+pattern: (?(DEFINE)(?<a>(?:[ab]|[cd](*ACCEPT)|[ef])g))(?&a)(?&a)
+flags: 
+subject: agag
+expect: 0-4
+
+pattern: (?(DEFINE)(?<a>(?:[ab]|[cd](*ACCEPT)|[ef])g))(?&a)(?&a)
+flags: 
+subject: agcq
+expect: 0-3
+
+pattern: (?<=([cd](*ACCEPT)|x)gggg)blrph
+flags: 
+subject: cblrph
+expect: 1-6 0-1
+
+pattern: (?<=([cd](*ACCEPT)|x)gggg)blrph
+flags: 
+subject: dblrph
+expect: 1-6 0-1
+
+pattern: (?<=([cd](*ACCEPT)|x)gggg)blrph
+flags: 
+subject: xggggblrph
+expect: 5-10 0-1
+
+pattern: (?<!([cd](*ACCEPT)|x)gggg)blrph
+flags: 
+subject: cblrph
+expect: nomatch
+
+pattern: (?<!([cd](*ACCEPT)|x)gggg)blrph
+flags: 
+subject: dblrph
+expect: nomatch
+
+pattern: (?<!([cd](*ACCEPT)|x)gggg)blrph
+flags: 
+subject: xggggblrph
+expect: nomatch
+
+pattern: (?:a?(*ACCEPT))b
+flags: 
+subject: x
+expect: 0-0
+
+pattern: (?:a?(*ACCEPT))b
+flags: 
+subject: a
+expect: 0-1
+
+pattern: (?:a?(*ACCEPT))b
+flags: 
+subject: b
+expect: 0-0
+
+pattern: a?(*ACCEPT)b
+flags: 
+subject: x
+expect: 0-0
+
+pattern: a?(*ACCEPT)b
+flags: 
+subject: a
+expect: 0-1
+
+pattern: a?(*ACCEPT)b
+flags: 
+subject: b
+expect: 0-0
+
+pattern: \x20(A (*ACCEPT) | BC){2} D{0,4}
+flags: x
+subject: A
+expect: 0-1 0-1
+
+pattern: \\p{nv=-0}
+flags: 
+subject: \u0660
+expect: 0-2
+
+pattern: (?:a|xx){0,4}?b
+flags: 
+subject: aaaaab\x20
+expect: 1-6
+
+pattern: (?|(?<a>a)|(?<b>b))\\1(?&a)(?&b)
+flags: 
+subject: bbab\x20
+expect: 0-4 0-1
+
+pattern: (?|(?<a>a)|(?<b>b))(?(<a>)x|y)\\1
+flags: 
+subject: byb\x20
+expect: 0-3 0-1
+
+pattern: (?|(?<a>a)|(?<b>b))(?(<a>)x|y)\\1
+flags: 
+subject: bxb\x20
+expect: nomatch
+
+pattern: (?|(?<a>a)|(?<b>b))(?(<a>)x|y)\\1
+flags: 
+subject: axa\x20
+expect: 0-3 0-1
+
+pattern: (?|(?<a>a)|(?<b>b))(?(<a>)x|y)\\1
+flags: 
+subject: aya\x20
+expect: nomatch
+
+pattern: (?|(?<a>a)|(?<b>b))
+flags: 
+subject: a\x20
+expect: 0-1 0-1
+
+pattern: (?|(?<a>a)|(?<b>b))
+flags: 
+subject: b\x20
+expect: 0-1 0-1
+
+pattern: (?<pre>pre)(?|(?<a>a)(?<b>b)(?<c>c)|(?<d>d)(?<e>e)|(?<f>f))(?<post>post)
+flags: 
+subject: preabcpost\x20
+expect: 0-10 0-3 3-4 4-5 5-6 6-10
+
+pattern: (?<pre>pre)(?|(?<a>a)(?<b>b)(?<c>c)|(?<d>d)(?<e>e)|(?<f>f))(?<post>post)
+flags: 
+subject: predepost\x20
+expect: 0-9 0-3 3-4 4-5 - 5-9
+
+pattern: (?<pre>pre)(?|(?<a>a)(?<b>b)(?<c>c)|(?<d>d)(?<e>e)|(?<f>f))(?<post>post)
+flags: 
+subject: prefpost\x20
+expect: 0-8 0-3 3-4 - - 4-8
+
+pattern: (?<pre>pre)(?|(?<a>a)(?<b>b)(?<c>c)|(?<d>d)(?<e>e)|(?<f>f))(?<post>post)
+flags: 
+subject: preabcpost\x20
+expect: 0-10 0-3 3-4 4-5 5-6 6-10
+
+pattern: ((?|(?<a>a)(?-1)|(?<b>b)(?-1)|(?<c>c)(?-1)))
+flags: 
+subject: aa\x20
+expect: 0-2 0-2 0-1
+
+pattern: ((?|(?<a>a)(?-1)|(?<b>b)(?-1)|(?<c>c)(?-1)))
+flags: 
+subject: bb\x20
+expect: 0-2 0-2 0-1
+
+pattern: ((?|(?<a>a)(?-1)|(?<b>b)(?-1)|(?<c>c)(?-1)))
+flags: 
+subject: cc\x20
+expect: 0-2 0-2 0-1
+
+pattern: (?|(a)|(b))
+flags: 
+subject: b
+expect: 0-1 0-1
+
+pattern: (?|(a)|(b))
+flags: 
+subject: b
+expect: 0-1 0-1
+
+pattern: (?|(a)|(b))
+flags: 
+subject: a
+expect: 0-1 0-1
+
+pattern: (?|(a)|(b))
+flags: 
+subject: a
+expect: 0-1 0-1
+
+pattern: (([ab]+)|([cd]+)|([ef]+))+
+flags: 
+subject: ace
+expect: 0-3 2-3 - - 2-3
+
+pattern: (([ab]+)|([cd]+)|([ef]+))+
+flags: 
+subject: acebdf
+expect: 0-6 5-6 - - 5-6
+
+pattern: ((a)(b)(c)|(a)(b)|(a))+
+flags: 
+subject: abcaba
+expect: 0-6 5-6 - - - - - 5-6
+
+pattern: ^(xa|=?\\1a){2}$
+flags: 
+subject: xa=xaaa
+expect: nomatch
+
+pattern: ^(xa|(?:=|zzzz|)\\1a){2}$
+flags: 
+subject: xa=xaaa
+expect: nomatch
+
+pattern: ^(xa|(?:=|zzzz)?\\1a){2}$
+flags: 
+subject: xa=xaaa
+expect: nomatch
+
+pattern: ^(xa|[Z=]?\\1a){2}$
+flags: 
+subject: xa=xaaa
+expect: nomatch
+
+pattern: ^(xa|([Z=])?\\1a){2}$
+flags: 
+subject: xa=xaaa
+expect: nomatch
+
+pattern: ^(xa|([Z=]|zzzz)?\\1a){2}$
+flags: 
+subject: xa=xaaa
+expect: nomatch
+
+pattern: ^(xa|(=|)\\1a){2}$
+flags: 
+subject: xa=xaaa
+expect: nomatch
+
+pattern: ^(xa|(?:[Z=])?\\1a){2}$
+flags: 
+subject: xa=xaaa
+expect: nomatch
+
+pattern: ^(xa|(?:[Z=]|zzzz)?\\1a){2}$
+flags: 
+subject: xa=xaaa
+expect: nomatch
+
+pattern: ^(xa|(?:=|)\\1a){2}$
+flags: 
+subject: xa=xaaa
+expect: nomatch
+
+pattern: ^(xa|=*\\1a){2}$
+flags: 
+subject: xa=xaaa
+expect: nomatch
+
+pattern: ^(xa|[Z=]*\\1a){2}$
+flags: 
+subject: xa=xaaa
+expect: nomatch
+
+pattern: ^(xa|(?:[Z=])*\\1a){2}$
+flags: 
+subject: xa=xaaa
+expect: nomatch
+
+pattern: ^(xa|(?:[Z=]|zzzz)*\\1a){2}$
+flags: 
+subject: xa=xaaa
+expect: nomatch
+
+pattern: [^\\W\\S]{6}
+flags: 
+subject: a
+expect: nomatch
+
+pattern: [^\\W\\S]{1,3}
+flags: 
+subject: a
+expect: nomatch
+
+pattern: [^\\W\\S]+
+flags: 
+subject: a
+expect: nomatch
+
+pattern: [^\\W\\S]*
+flags: 
+subject: a
+expect: 0-0
+
+pattern: [^\\W\\S]?
+flags: 
+subject: a
+expect: 0-0

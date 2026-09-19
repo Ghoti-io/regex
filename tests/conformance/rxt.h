@@ -34,6 +34,19 @@ enum class Expectation {
   NoMatch,   ///< The search must not find anything.
   Error,     ///< Compiling must fail, with a named result code.
   Limit,     ///< The search must exhaust a limit.
+  /**
+   * Compiling must succeed, and nothing else is asserted.
+   *
+   * A corpus can say more about syntax than about matching. pcre2test's
+   * `testinput1` and `testinput2` are thousands of patterns whose accept or
+   * reject verdict the reference gives directly and unambiguously, which is
+   * exactly what plan.md's WP-18 is measured on - while their *match*
+   * answers need an oracle driver that does not exist yet. Without this
+   * expectation a corpus like that could only contribute its rejections,
+   * and "the patterns we are known to refuse" is the half of a syntax
+   * corpus that cannot catch us refusing too much.
+   */
+  Compiles,
 };
 
 /**

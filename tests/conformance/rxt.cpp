@@ -176,6 +176,10 @@ bool parse_expectation(
     record->expectation = Expectation::Limit;
     return true;
   }
+  if (value == "compiles") {
+    record->expectation = Expectation::Compiles;
+    return true;
+  }
   if (value.rfind("error", 0) == 0) {
     record->expectation = Expectation::Error;
     std::string which = trim(value.substr(5));

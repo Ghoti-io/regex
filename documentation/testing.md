@@ -96,9 +96,19 @@ expect: 0-$
 - `flags`: the dialect's alphabet, parsed by `grx_options_parse()`; the
   test of that function is that every vector's flags parse.
 - `expect`: `<start>-<end>` per group, `-` for a group that did not
-  participate; `nomatch`; `error <syntax|unsupported|limit|invalid>`; or
-  `limit` for a search that must hit a limit. Either end of a span may be
+  participate; `nomatch`; `error <syntax|unsupported|limit|invalid>`;
+  `limit` for a search that must hit a limit; or `compiles`, which asserts
+  that the pattern compiles and nothing else. Either end of a span may be
   `$`, meaning the subject's length.
+
+  `compiles` exists because a corpus can say more about syntax than about
+  matching. pcre2test answers "does this compile" directly and
+  unambiguously - which is exactly what [plan.md](plan.md)'s WP-18 is
+  measured on - while its match answers need an oracle driver nothing has
+  written yet. Without it such a corpus could contribute only its
+  *rejections*, and a syntax corpus of rejections alone cannot catch a
+  parser that refuses too much, which is the likelier failure for a front
+  end being written from a specification.
 - `repeat: <n>`: the subject is `subject:` repeated `n` times. A megabyte of
   `a` written out is a record nobody reads, and the whole design requirement
   here is that a record can be pasted into a bug report - so
@@ -138,6 +148,15 @@ discovers every `.rxt` under the data directory and, per record:
 5. Reports, at the end, the counts: passed, failed, skipped by reason, per
    dialect and per source file. The per-dialect pass rate is what
    `README.md` publishes.
+
+A dialect with **no front end at all** is a skip rather than a failure, and
+the runner tells the two apart by compiling the pattern `a` in that dialect
+once: a dialect that refuses *that* has not been built yet, which is a
+different thing from a dialect that refuses one construct. This is what lets
+a corpus be imported before the front end that reads it - the PCRE2 and Perl
+vectors are in the tree now and counted as skipped, so that WP-18's and
+WP-21's first run has something to be measured against on the day it exists
+rather than months later.
 
 A failure prints the record verbatim, the engine, the expected and actual
 spans, and both dump outputs.
@@ -368,34 +387,86 @@ Run by `make test` alongside `check-symbols`:
 
 ## 7. Importing the reference corpora
 
-Each importer produces `.rxt` and then **runs every record through the
-oracle** to set `expect`, rather than trusting the corpus's own
-expectation; the corpus contributes the cases, the oracle the answers.
-Disagreements between a corpus's expectation and its own implementation are
-logged, because they are usually interesting.
+The corpora are other projects' test suites: large, reproducible from a ref
+and a URL, and a copy here would be a snapshot that stops being what everyone
+else is measured against the moment it is taken. `tools/corpus/fetch.sh`
+fetches them into `third_party/`, which is not committed;
+`tools/corpus/VERSIONS` pins the ref of each and *is* committed, because "94%
+of test262" means nothing without saying which test262.
 
-- **test262** (`tools/oracle/import_test262.py`): parses the `RegExp`
-  directories of [dialects.md](dialects.md) §8.6 for literal patterns and
-  `assert.compareArray`/`verifyProperty` expectations, extracting the
-  pattern, flags, subject and expected captures where the test is of that
-  shape; tests that exercise the JavaScript object model rather than the
-  pattern are skipped with a count. The `property-escapes/generated/`
-  files list code points per property and become vectors of the form
-  "`\p{X}` matches U+NNNN" and "`\P{X}` matches U+NNNN", which is the
-  primary check on [unicode.md](unicode.md)'s tables.
-- **pcre2test** (`tools/oracle/import_pcre2test.py`): reads
-  `testinput1` (Perl-compatible) and `testinput2` (PCRE2-specific), whose
-  format is documented in `pcre2test(1)`: a pattern line with delimiters
-  and modifiers, then subject lines until a blank. Modifiers map to flags
-  or to `skip:` when they select something this library does not model
-  (JIT, callouts, `\C`).
-- **Perl `re_tests`** (`tools/oracle/import_re_tests.py`): the
-  tab-separated `pattern subject y/n expr expected` format; the `expr`
-  column is Perl code evaluated by the driver.
-- **CPython `re_tests.py`**: the same format as Perl's, in Python.
+Every importer follows one rule: **the corpus contributes the cases and the
+oracle contributes the answers.** Where a corpus states its own expectation,
+that expectation is checked against the oracle rather than trusted, and a
+disagreement drops the case and is reported - the likeliest explanation for
+one is that the importer misread the file, and writing down an answer nobody
+confirmed is the failure these tools exist to avoid.
+
+`make vectors-<dialect>` regenerates one dialect; `make vectors` does all of
+them. Each skips itself with a message when its oracle or its corpus is
+absent.
+
+- **test262** (`tools/corpus/import_test262.py`): the `test/built-ins/RegExp`
+  tree, 1,879 files. It produces **two** files, because the corpus answers two
+  different questions and conflating them would overstate what is measured.
+
+  `test262_syntax.rxt` holds the cases whose expectation test262 states in a
+  machine-readable form - the `negative: { phase: parse, type: SyntaxError }`
+  frontmatter and `assert.throws(SyntaxError, ... RegExp(p, f) ...)`. The
+  corpus supplies both case and answer there, so a pass rate over that file is
+  a test262 pass rate.
+
+  `test262_patterns.rxt` holds patterns harvested from the files whose
+  assertions are about JavaScript rather than about the pattern - `lastIndex`
+  after a `g`-flagged `exec`, what `Symbol.replace` does with a subclass. No
+  expectation can be lifted out of those, but the *patterns* are worth having:
+  thousands of expressions written by hand by people trying to break
+  implementations, which is exactly what a random generator does not produce.
+  Every answer in that file is the oracle's. It is a corpus import and not a
+  conformance rate, and it says so in its own header.
+
+  Three rules keep the import honest, each of them added after its absence
+  produced a false finding: a case whose flags a vector cannot carry is
+  skipped rather than mangled (a duplicate letter, or `u` and `v` together -
+  collapsing `"ii"` to `"i"` turns a case that must be rejected into one that
+  must be accepted); `y` is skipped because sticky anchors the match, which is
+  not the question a vector asks; and an astral subject is only tried under
+  `u`, because [dialects.md](dialects.md) §6.1's deviation would otherwise
+  make eight vectors fail on purpose.
+
+- **pcre2test** (`tools/corpus/import_pcre2test.py`): `testinput1` and
+  `testinput2`, as **syntax verdicts only**. pcre2test answers "does this
+  compile" directly - it echoes the pattern and follows a rejection with
+  `Failed: error N at offset M` - which is exactly what [plan.md](plan.md)'s
+  WP-18 is measured on. Its *match* answers are another matter: it prints
+  matched text rather than offsets, and turning text back into spans is
+  guesswork in the cases worth having, so those wait for an oracle driver
+  linked against libpcre2, which is WP-20's business.
+
+  The patterns are put to pcre2test **with their original modifiers**, not
+  with the flags this library maps them to: `x` decides whether `#` starts a
+  comment, so `/a#)/x` compiles and `/a#)/` does not, and asking the bare
+  pattern recorded the wrong verdict for seven of them.
+
+- **Perl `re_tests`** (`tools/corpus/import_re_tests.py`): the tab-separated
+  `pattern subject y/n/c expr expected` format. The corpus's fourth and fifth
+  columns are Perl code that states *where* it matched; asking Perl directly
+  is simpler and is the rule above, so the spans come from
+  `tools/corpus/perl_match.pl` - Perl as a matching oracle in the same shape
+  as `node_match.mjs`, converting character offsets to UTF-8 byte offsets -
+  and the corpus's own `y/n/c` is used only to check that the importer read
+  the row correctly.
+
+  The subject column is a double-quoted Perl string, and its escapes are
+  decoded here rather than by handing the text to `eval`: a test corpus is
+  still data, and a tool that can be made to run what it reads is a tool with
+  a different threat model. A row using an escape this does not know is
+  skipped and counted.
+
+- **CPython `re_tests.py`**: the same format as Perl's, in Python. Not yet
+  imported; WP-30.
 - **Spencer's tests** (glibc `posix/rxspencer/tests`): the classic
   `pattern flags subject expected` lines with the `-` conventions; the
-  glibc driver supplies the answers.
+  glibc driver supplies the answers. Not yet imported; WP-23.
 - **JSON-Schema-Test-Suite** (`tools/jsonschema/`): not a vector import -
   these are run *through* `text`, with this library plugged into its
   regular-expression provider vtable, because what they measure is the pair.
@@ -610,7 +681,27 @@ think of, and it is cheap once the drivers exist.
 `make coverage` per module, read for branches without a test. The
 per-module floor at each milestone is 90% line coverage for `src/parse`,
 `src/ir`, `src/compile`, `src/exec` and `src/charclass`, and 100% of the
-generated tables' *accessors* (the tables themselves are data). The unit
+generated tables' *accessors* (the tables themselves are data).
+
+**Where it stands, measured rather than asserted.** Three of the five are
+over the floor - `src/parse` 91.4%, `src/compile` 92.1%, `src/charclass`
+94.6% - and two are not: `src/exec` at 87.9% and `src/ir` at 86.6%, with the
+project at 90.8%.
+
+The two that miss it are the two that carry code for dialects that do not
+exist yet, and the shortfall is counted rather than waved at: of 133
+unexecuted lines in `src/exec`, 58 are switch arms and branches keyed on a
+construct no built dialect produces - `\A`, `\z`, `\Z`, `\G`, atomic
+groups, POSIX's break-on-empty-iteration, a subject that is a byte string
+rather than text. In `src/ir` it is 37 of 149. The rest is mostly defensive
+`GRX_ERR_INTERNAL` returns for states the callers make unreachable, which
+need fault injection rather than a pattern.
+
+That is an explanation and not an excuse: the floor is a floor, and two
+modules are under it. It is written down here so that the number is argued
+with rather than quietly restated, and so that WP-18 and WP-19 - which build
+exactly the constructs those arms are for - can be expected to close most of
+it without a single new test. The unit
 tests remain one file per module, as scaffolded, and test the module's own
 contract - the class algebra against a bitmap model, the arena's growth,
 the diagnostics' offsets - while the conformance runner tests the library's

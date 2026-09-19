@@ -370,6 +370,89 @@ TEST(Ast, DumpRendersEveryNodeKind) {
   grx_pattern_free(pattern);
 }
 
+TEST(Ast, DumpRendersEveryAnchorAndEveryClassItem) {
+  // The node-kind sweep above covers the dump's outer switch. Two inner ones
+  // were left: the anchor kinds and the class-item kinds, most of which no
+  // ECMAScript pattern produces - `\A`, `\G`, GNU's `\<` - so nothing
+  // reached them and a name table that had drifted from its enum would have
+  // said nothing. Built by hand for the same reason the node sweep is.
+  GRX_Pattern * pattern = make_pattern();
+
+  uint32_t root = 0;
+  ASSERT_EQ(grx_pattern_add_node(pattern, GRX_NODE_CONCAT, 0, 0, &root),
+      GRX_OK);
+  pattern->root = root;
+
+  for (int kind = 0; kind < GRX_ANCHOR_COUNT; kind++) {
+    uint32_t index = 0;
+    ASSERT_EQ(grx_pattern_add_node(pattern, GRX_NODE_ANCHOR, 0, 0, &index),
+        GRX_OK);
+    grx_pattern_node(pattern, index)->a = (uint32_t)kind;
+    ASSERT_EQ(grx_pattern_add_child(pattern, root, index), GRX_OK);
+  }
+
+  // One class carrying an item of every kind. The payloads are whatever the
+  // renderer reads for that kind; a name offset and a string index have to be
+  // real, because the dump follows them.
+  uint32_t name = 0;
+  ASSERT_EQ(grx_pattern_add_name(pattern, "alpha", 5, &name), GRX_OK);
+  uint32_t points[] = {'a', 'b'};
+  uint32_t strings = 0;
+  ASSERT_EQ(grx_pattern_add_string(pattern, points, 2, &strings), GRX_OK);
+
+  uint32_t nested = 0;
+  ASSERT_EQ(grx_pattern_add_node(pattern, GRX_NODE_CLASS, 0, 0, &nested),
+      GRX_OK);
+
+  uint32_t first = (uint32_t)pattern->class_items.count;
+  for (int kind = 0; kind < GRX_CLASS_ITEM_COUNT; kind++) {
+    GRX_ClassItem item = {};
+    item.kind = (GRX_ClassItemKind)kind;
+    item.lo = 'a';
+    item.hi = 'z';
+    item.flags = (kind % 2) ? GRX_CLASS_ITEM_NEGATED : 0u;
+    switch (kind) {
+      case GRX_CLASS_ITEM_POSIX:
+      case GRX_CLASS_ITEM_PROPERTY:
+      case GRX_CLASS_ITEM_STRING_PROPERTY: item.a = name; break;
+      case GRX_CLASS_ITEM_NESTED: item.a = nested; break;
+      case GRX_CLASS_ITEM_STRING: item.a = strings; break;
+      default: item.a = 0; break;
+    }
+    ASSERT_EQ(grx_arena_append(&pattern->class_items, &item, nullptr), GRX_OK);
+  }
+
+  uint32_t klass = 0;
+  ASSERT_EQ(grx_pattern_add_node(pattern, GRX_NODE_CLASS, 0, 0, &klass),
+      GRX_OK);
+  GRX_Node * class_node = grx_pattern_node(pattern, klass);
+  class_node->a = first;
+  class_node->b = (uint32_t)GRX_CLASS_ITEM_COUNT;
+  ASSERT_EQ(grx_pattern_add_child(pattern, root, klass), GRX_OK);
+
+  std::string dump = grxtest::capture_dump(
+      [&](FILE * out) { EXPECT_EQ(grx_pattern_dump(pattern, out), GRX_OK); });
+
+  // Every anchor spelling appears, and nothing rendered as unknown - a `?`
+  // here means an enum grew and its name table did not.
+  for (const char * spelling : {"caret", "dollar", "start-subject",
+           "end-subject", "end-before-newline", "word-boundary",
+           "not-word-boundary", "search-start", "start-buffer", "end-buffer",
+           "word-start", "word-end"}) {
+    EXPECT_NE(dump.find(spelling), std::string::npos)
+        << spelling << " is missing from:\n"
+        << dump;
+  }
+  // The POSIX item is one of the negated ones above, so it renders as
+  // `[:^alpha:]`; the assertion is on the part that does not depend on that.
+  EXPECT_NE(dump.find("alpha:]"), std::string::npos) << dump;
+  EXPECT_NE(dump.find("nested="), std::string::npos) << dump;
+  EXPECT_NE(dump.find("string="), std::string::npos) << dump;
+  EXPECT_EQ(dump.find('?'), std::string::npos) << dump;
+
+  grx_pattern_free(pattern);
+}
+
 TEST(Ast, DumpRejectsNullArguments) {
   GRX_Pattern * pattern = make_pattern();
   EXPECT_EQ(grx_pattern_dump(pattern, nullptr), GRX_ERR_INVALID);

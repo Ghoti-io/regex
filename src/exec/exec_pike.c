@@ -57,20 +57,44 @@ typedef struct PikeState {
   size_t slots[1];  ///< `capacity` of them; GRX_NPOS where unset.
 } PikeState;
 
-/** One live thread: where it is, and what it has recorded. */
+/** One live thread: where it is, what it has recorded, and why it is not a
+ * duplicate of another thread at the same program counter. */
 typedef struct {
   uint32_t pc;
   PikeState * state;
+  uint64_t stalls;   ///< Which progress registers equal this position.
+  uint32_t next;     ///< The next thread at this pc, or PIKE_NO_THREAD.
 } PikeThread;
 
+#define PIKE_NO_THREAD ((uint32_t)-1)
+
 /**
- * A set of threads with at most one per program counter.
+ * A set of threads, at most one per (program counter, stall mask).
  *
- * The sparse-set trick: `dense` lists the occupied program counters in the
- * order they were added, `sparse` maps a program counter to its place in
- * `dense`, and membership is "the entry `sparse` points at names me". That
- * makes "is this pc already here" O(1) with no clearing between positions,
- * which is what turns the simulation from exponential into linear.
+ * The sparse-set trick: `threads` lists the occupied program counters in the
+ * order they were added, `sparse` maps a program counter to its place, and
+ * membership is "the entry `sparse` points at names me". That makes the
+ * membership test O(1) with no clearing between positions, which is what
+ * turns the simulation from exponential into linear.
+ *
+ * The mask is what makes the set *sound*. A plain (pc, position) key assumes
+ * two threads at one program counter have the same future, which is true of a
+ * pure NFA and false here: GRX_OP_PROGRESS_CHECK consults a register, and two
+ * arrivals can carry different values in it. `(a?b??)*` against "abc" is the
+ * case that showed it. Iteration one reaches the lazy `b??` at position 1
+ * with its register holding 0; iteration two reaches the same program counter
+ * at the same position with the register holding 1, so one of them is a
+ * stalled iteration and the other is not - and the second arrival was being
+ * dropped as a duplicate, which threw away the thread that goes on to match
+ * `b`. The library answered 0-1 where every other engine, and ECMA-262,
+ * answer 0-2.
+ *
+ * Only *equality with the current position* can distinguish two register
+ * values, because that is the only question GRX_OP_PROGRESS_CHECK asks, and a
+ * register holding anything other than the current position can never equal a
+ * later one - positions only advance. So one bit per register is the whole of
+ * the distinction, and threads at one pc with the same bits really are
+ * interchangeable. Entries sharing a pc are chained through `next`.
  */
 typedef struct {
   uint32_t * sparse;
@@ -187,6 +211,42 @@ static int list_init(Pike * pike, PikeList * list, size_t program_size) {
   return 1;
 }
 
+/**
+ * Make room for one more thread, growing the list if it is full.
+ *
+ * Before the stall mask existed a list held at most one thread per program
+ * counter, so `program_size` entries were an exact bound and this could not
+ * be reached. It can now: a program counter inside nested potentially-empty
+ * loops can carry one thread per distinct mask. Growth is charged against
+ * max_match_memory like everything else the simulation allocates, so a
+ * pathological pattern becomes GRX_ERR_LIMIT rather than a wrong answer or a
+ * write past the end - the two outcomes a fixed cap would have chosen
+ * between.
+ */
+static int list_reserve(Pike * pike, PikeList * list) {
+  if (list->count < list->capacity) {
+    return 1;
+  }
+  size_t capacity = list->capacity ? list->capacity * 2 : 16;
+  size_t bytes = capacity * sizeof(PikeThread);
+  size_t added = (capacity - list->capacity) * sizeof(PikeThread);
+  if (pike->request->limits->max_match_memory
+      && pike->memory + added > pike->request->limits->max_match_memory) {
+    pike->failure = GRX_ERR_LIMIT;
+    return 0;
+  }
+  PikeThread * grown
+      = gcu_allocator_realloc(pike->allocator, list->threads, bytes);
+  if (!grown) {
+    pike->failure = GRX_ERR_OOM;
+    return 0;
+  }
+  pike->memory += added;
+  list->threads = grown;
+  list->capacity = capacity;
+  return 1;
+}
+
 static void list_clear(Pike * pike, PikeList * list) {
   for (size_t i = 0; i < list->count; i++) {
     state_release(pike, list->threads[i].state);
@@ -202,9 +262,16 @@ static void list_free(Pike * pike, PikeList * list) {
   list->threads = NULL;
 }
 
-static int list_contains(const PikeList * list, uint32_t pc) {
+static int list_contains(
+    const PikeList * list, uint32_t pc, uint64_t stalls) {
   uint32_t index = list->sparse[pc];
-  return index < list->count && list->threads[index].pc == pc;
+  while (index < list->count && list->threads[index].pc == pc) {
+    if (list->threads[index].stalls == stalls) {
+      return 1;
+    }
+    index = list->threads[index].next;
+  }
+  return 0;
 }
 
 // --------------------------------------------------------------------------
@@ -336,6 +403,70 @@ static int assertion_holds(
  * pushes its second continuation first, so the preferred one is explored and
  * appended first and the list stays in priority order.
  */
+/**
+ * Make room on the epsilon-closure walk's stack.
+ *
+ * Charged against max_match_memory, like the thread lists: a pattern that
+ * needs an unreasonable amount of either is refused with GRX_ERR_LIMIT, which
+ * is an answer, where GRX_ERR_INTERNAL was an admission.
+ */
+static int stack_reserve(Pike * pike, size_t needed) {
+  if (needed <= pike->stack_capacity) {
+    return 1;
+  }
+  size_t capacity = pike->stack_capacity ? pike->stack_capacity * 2 : 32;
+  while (capacity < needed) {
+    capacity *= 2;
+  }
+  size_t added = (capacity - pike->stack_capacity) * sizeof(PikeThread);
+  if (pike->request->limits->max_match_memory
+      && pike->memory + added > pike->request->limits->max_match_memory) {
+    pike->failure = GRX_ERR_LIMIT;
+    return 0;
+  }
+  PikeThread * grown = gcu_allocator_realloc(
+      pike->allocator, pike->stack, capacity * sizeof(PikeThread));
+  if (!grown) {
+    pike->failure = GRX_ERR_OOM;
+    return 0;
+  }
+  pike->memory += added;
+  pike->stack = grown;
+  pike->stack_capacity = capacity;
+  return 1;
+}
+
+/**
+ * Which progress registers hold exactly this position.
+ *
+ * One bit per register, and that is the whole of what distinguishes two
+ * threads at one program counter: see PikeList. A state with no registers -
+ * a pattern with no potentially-empty loop, which is most of them - gives
+ * zero, so the set behaves exactly as it did before this existed.
+ */
+static uint64_t stall_mask(
+    const Pike * pike, const PikeState * state, size_t position) {
+  if (!state || pike->slots <= pike->captures) {
+    return 0;
+  }
+  uint64_t mask = 0;
+  size_t registers = pike->slots - pike->captures;
+  // Beyond 64 registers the mask saturates: every such thread is then treated
+  // as distinct from none of the others, which is the conservative direction
+  // only for the registers that fit. A program with that many nested
+  // potentially-empty loops is bounded by max_program_size long before this
+  // matters, and capping the loop is better than reading past the slots.
+  if (registers > 64) {
+    registers = 64;
+  }
+  for (size_t index = 0; index < registers; index++) {
+    if (state->slots[pike->captures + index] == position) {
+      mask |= (uint64_t)1 << index;
+    }
+  }
+  return mask;
+}
+
 static void add_thread(
     Pike * pike, PikeList * list, uint32_t pc, PikeState * state,
     size_t position) {
@@ -349,18 +480,32 @@ static void add_thread(
     uint32_t current_pc = pike->stack[depth].pc;
     PikeState * current = pike->stack[depth].state;
 
+    uint64_t stalls = stall_mask(pike, current, position);
     if (current_pc >= pike->program->insts.count
-        || list_contains(list, current_pc)) {
+        || list_contains(list, current_pc, stalls)) {
+      state_release(pike, current);
+      continue;
+    }
+
+    if (!list_reserve(pike, list)) {
       state_release(pike, current);
       continue;
     }
 
     // Occupied now, before the walk goes on: a program counter reached twice
-    // at one position keeps the first arrival, which is the higher-priority
-    // one, and that is what makes the result leftmost-first.
+    // at one position with the same stall mask keeps the first arrival, which
+    // is the higher-priority one, and that is what makes the result
+    // leftmost-first. A second arrival with a different mask is a different
+    // thread and is chained behind this one.
+    uint32_t previous = list->sparse[current_pc];
+    list->threads[list->count].next
+        = (previous < list->count && list->threads[previous].pc == current_pc)
+        ? previous
+        : PIKE_NO_THREAD;
     list->sparse[current_pc] = (uint32_t)list->count;
     list->threads[list->count].pc = current_pc;
     list->threads[list->count].state = NULL;
+    list->threads[list->count].stalls = stalls;
     list->count++;
     size_t slot = list->count - 1;
 
@@ -371,10 +516,13 @@ static void add_thread(
       continue;
     }
 
-    // Room for two more tasks; the stack is sized for the program, and a
-    // program counter is pushed only when it has not been visited.
-    if (depth + 2 > pike->stack_capacity) {
-      pike->failure = GRX_ERR_INTERNAL;
+    // Room for two more tasks. The stack was sized for the program on the
+    // reasoning that a program counter is pushed only when it has not been
+    // visited - which stopped being an exact bound when the stall mask made
+    // one program counter able to hold several threads, so it grows now
+    // rather than reporting an internal error for a pattern that is merely
+    // bigger than the old assumption.
+    if (depth + 2 > pike->stack_capacity && !stack_reserve(pike, depth + 2)) {
       state_release(pike, current);
       continue;
     }
@@ -579,12 +727,19 @@ GRX_Result grx_exec_pike(const GRX_ExecRequest * request, int * out_matched) {
 
   size_t size = program->insts.count;
   GRX_Result result = GRX_OK;
-  pike.stack_capacity = size * 2 + 4;
-  pike.stack
-      = gcu_allocator_malloc(pike.allocator, pike.stack_capacity * sizeof(PikeThread));
-  if (!pike.stack || !list_init(&pike, &pike.current, size)
+  // The closure walk's stack starts small and grows. It used to be sized at
+  // `2 * insts + 4` on the reasoning that a program counter is pushed only
+  // once - which the stall mask ended, since one program counter can now hold
+  // several threads. Rather than guess a new multiple, it grows on demand:
+  // the guess would be either wasteful for the common pattern or wrong for
+  // the uncommon one, and growing costs a realloc that almost never happens
+  // twice. It also means the growth path is taken by ordinary patterns rather
+  // than being code that only a pathological one would ever reach.
+  pike.stack = NULL;
+  pike.stack_capacity = 0;
+  if (!stack_reserve(&pike, 32) || !list_init(&pike, &pike.current, size)
       || !list_init(&pike, &pike.next, size)) {
-    result = GRX_ERR_OOM;
+    result = pike.failure != GRX_OK ? pike.failure : GRX_ERR_OOM;
     goto done;
   }
 

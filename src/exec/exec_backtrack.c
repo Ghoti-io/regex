@@ -300,7 +300,7 @@ static int assertion_holds(
  * the match runs.
  */
 static int backref_matches(const Backtrack * bt, const GRX_Inst * inst,
-    size_t position, size_t * out_width) {
+    size_t position, int reverse, size_t * out_width) {
   size_t start_slot = (size_t)inst->x * 2;
   size_t end_slot = start_slot + 1;
   *out_width = 0;
@@ -321,15 +321,49 @@ static int backref_matches(const Backtrack * bt, const GRX_Inst * inst,
 
   if (!inst->y) {
     size_t length = to - from;
-    if (position + length > bt->request->length) {
+    // Backwards, the run being compared is the one that *ends* at `position`,
+    // so the comparison starts `length` bytes earlier and the width is given
+    // back to the caller to subtract rather than to add.
+    size_t at = position;
+    if (reverse) {
+      if (length > position) {
+        return 0;
+      }
+      at = position - length;
+    }
+    else if (position + length > bt->request->length) {
       return 0;
     }
-    if (memcmp(bt->request->subject + from, bt->request->subject + position,
-            length)
+    if (memcmp(bt->request->subject + from, bt->request->subject + at, length)
         != 0) {
       return 0;
     }
     *out_width = length;
+    return 1;
+  }
+
+  // The caseless comparison walks both runs a character at a time, in the
+  // direction the body runs. A folded comparison cannot be done on bytes,
+  // because two runs that fold alike may have different lengths.
+  if (reverse) {
+    size_t source = to;
+    size_t target = position;
+    while (source > from) {
+      uint32_t wanted = 0;
+      uint32_t found = 0;
+      size_t source_width = 0;
+      size_t target_width = 0;
+      if (!read_backward(bt, source, &wanted, &source_width)
+          || !read_backward(bt, target, &found, &target_width)) {
+        return 0;
+      }
+      if (grx_unicode_fold_simple(wanted) != grx_unicode_fold_simple(found)) {
+        return 0;
+      }
+      source -= source_width;
+      target -= target_width;
+    }
+    *out_width = position - target;
     return 1;
   }
 
@@ -512,9 +546,16 @@ static int run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
       }
 
       case GRX_OP_BACKREF:
-        ok = backref_matches(bt, inst, position, &width);
+        // A lookbehind runs its body backwards, and this instruction used to
+        // ignore that: it compared forward from `position` and advanced
+        // forward, inside a body that was walking the other way. The visible
+        // result was captures with an end before their start - `(.)(?<=(\1\1))`
+        // against "aaa" reported group 2 as 3-1 - and lookbehinds that matched
+        // when they must not. Found by test262's named-group and backreference
+        // cases.
+        ok = backref_matches(bt, inst, position, reverse, &width);
         if (ok) {
-          position += width;
+          position = reverse ? position - width : position + width;
         }
         pc++;
         if (ok) {

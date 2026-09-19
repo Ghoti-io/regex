@@ -209,10 +209,24 @@ static GRX_Result read_hex_escape(
  * one code point. Returns 0 without consuming anything when the escape is
  * malformed, which is what Annex B needs to fall back to the identity escape.
  */
-static int read_unicode_escape(GRX_Parser * parser, uint32_t * out_value) {
+/**
+ * Read what follows `\u`, with the Unicode escape grammar switched on or off.
+ *
+ * `unicode_syntax` is the grammar's [+UnicodeMode] parameter rather than the
+ * `u` flag, and the two are not the same thing. Almost everywhere the flag
+ * decides it - `\u{1F600}` is one code point with `u` and the letter `u`
+ * repeated without it. Inside a group name it does not:
+ * RegExpIdentifierStart's production is
+ * `\ RegExpUnicodeEscapeSequence[+UnicodeMode]`, with the parameter set
+ * unconditionally, so `(?<\u{1d5b0}x>y)` is a valid name in a pattern with no
+ * flags at all. Passing the flag there rejected fifty-five of test262's
+ * named-group cases.
+ */
+static int read_unicode_escape_with(
+    GRX_Parser * parser, int unicode_syntax, uint32_t * out_value) {
   size_t start = parser->position;
 
-  if (unicode_mode(parser) && byte_at(parser, 0) == '{') {
+  if (unicode_syntax && byte_at(parser, 0) == '{') {
     size_t scan = 1;
     uint32_t value = 0;
     if (!is_hex(byte_at(parser, scan))) {
@@ -242,7 +256,7 @@ static int read_unicode_escape(GRX_Parser * parser, uint32_t * out_value) {
   // A high surrogate followed by `\u` and a low surrogate is one code point
   // in Unicode mode, because the source is UTF-16 and that pair is how an
   // astral character is written in it.
-  if (unicode_mode(parser) && lead >= 0xD800u && lead <= 0xDBFFu
+  if (unicode_syntax && lead >= 0xD800u && lead <= 0xDBFFu
       && byte_at(parser, 0) == '\\' && byte_at(parser, 1) == 'u') {
     size_t after_lead = parser->position;
     parser->position += 2;
@@ -257,6 +271,11 @@ static int read_unicode_escape(GRX_Parser * parser, uint32_t * out_value) {
 
   *out_value = lead;
   return 1;
+}
+
+/** The common case: the grammar parameter follows the `u` flag. */
+static int read_unicode_escape(GRX_Parser * parser, uint32_t * out_value) {
+  return read_unicode_escape_with(parser, unicode_mode(parser), out_value);
 }
 
 /**
@@ -335,7 +354,8 @@ static GRX_Result read_group_name(GRX_Parser * parser, char terminator,
     uint32_t codepoint = 0;
     if (byte_at(parser, 0) == '\\' && byte_at(parser, 1) == 'u') {
       parser->position += 2;
-      if (!read_unicode_escape(parser, &codepoint)) {
+      // Always the Unicode grammar here, whatever the flags say.
+      if (!read_unicode_escape_with(parser, 1, &codepoint)) {
         return grx_parse_fail(parser, GRX_DIAG_INVALID_UNICODE_ESCAPE,
             parser->position, 1);
       }

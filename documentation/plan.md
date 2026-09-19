@@ -107,7 +107,7 @@ runner that runs every vector under `tests/data/vectors/` on every eligible
 engine and checks engine agreement; the `make vectors-<dialect>` targets
 that regenerate from an oracle and are env-gated; the ReDoS corpus runner;
 the structural check that no engine file includes `syntax.h`. Runs green on
-zero vectors. *Done:* a vector file with one deliberately wrong expectation
+zero vectors. Complete as of the corpus imports: `make vectors`, `make vectors-ecmascript`, `make vectors-pcre` and `make vectors-perl` regenerate each dialect's records, the reader takes `expect: compiles` for a corpus that states syntax verdicts and not spans, and the runner counts a dialect with no front end as skipped rather than failed so that a corpus can be imported before the front end that reads it. *Done:* a vector file with one deliberately wrong expectation
 fails with a message naming the vector. *Depends on:* WP-01 for the dump
 formats.
 
@@ -161,7 +161,7 @@ to the Pike VM; every pair in the ReDoS corpus returns `GRX_ERR_LIMIT`
 within one second at default limits; the stack fuzzer (8 MB → 256 KB stack)
 finds no overflow. *Depends on:* WP-01, WP-07's codegen.
 
-**WP-09 ECMAScript conformance.** *conformance, M.* The test262 importer
+**WP-09 ECMAScript conformance.** *conformance, M.* **Landed.** The test262 importer
 of [testing.md](testing.md) §7 for the directories in
 [dialects.md](dialects.md) §8.6, producing `.rxt` vectors run through Node
 so the expectation is the oracle's, not the test's assumed one; the
@@ -170,6 +170,21 @@ random-pattern generator for ECMAScript with a nightly run against Node.
 *Done:* the pass rate is published in `README.md`; every failure is either
 a bug filed against WP-06/07/08 or a deviation recorded in
 [dialects.md](dialects.md) §6. *Depends on:* WP-04; consumes WP-06/07/08.
+
+`tools/corpus/import_test262.py` reads the `test/built-ins/RegExp`
+tree and writes two files: the cases whose expectation test262 states in a
+machine-readable form, which is a pass rate and is **394 of 394**, and the
+patterns harvested from the files whose assertions are about JavaScript rather
+than about the pattern, which is a corpus import and is 26,569 records over
+4,566 expressions. The import found five defects on its first run, with every
+differential gate green at the time; [dialects.md](dialects.md) §8.6 has
+them.
+
+One piece is deliberately not done. The package names the property-escapes
+import as "the real check on WP-02", and `make check-oracle-properties`
+already walks all 1,114,112 code points against Node for all 457 properties
+with no disagreement - so committing a bounded sample of the same comparison
+adds little. It is written down here rather than quietly dropped.
 
 **WP-10 Fuzzing.** *conformance, S.* **Landed**, less the 24-hour soak.
 `fuzz_subject` (pattern from the
