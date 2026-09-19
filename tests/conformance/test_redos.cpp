@@ -23,6 +23,8 @@
  */
 
 #include <chrono>
+#include <cstdlib>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -34,13 +36,40 @@ namespace {
 /**
  * How long one pathological pair may take to be refused.
  *
- * plan.md WP-08 says one second. This is the wall clock and so is the one
- * number here that measures the machine as well as the library; it is a
- * ceiling far above what any row costs today (the slowest is milliseconds),
- * set so that a regression has to be an order of magnitude rather than a
- * busy build agent.
+ * plan.md WP-08 says one second, and that is the number for a release build:
+ * the slowest row costs 414 ms there, so the bound has two and a half times
+ * the margin and a regression has to be large rather than a busy machine.
+ *
+ * A sanitized build is about four times slower - measured, not assumed: this
+ * test failed at 1.7 seconds a row the first time it ran under
+ * ASan+UBSan - so the budget is scaled rather than loosened for everybody.
+ * Loosening it would have been the easy fix and the wrong one: the number
+ * that matters is the one a caller gets, and that is the release build's.
  */
+#ifdef GRX_SANITIZERS
+const int kBudgetMilliseconds = 5000;
+#else
 const int kBudgetMilliseconds = 1000;
+#endif
+
+/**
+ * Whether this process is running under Valgrind.
+ *
+ * Valgrind is twenty to fifty times slower and has no compile-time macro to
+ * scale a budget by, so the clock assertion is skipped there rather than
+ * given a budget so large it would assert nothing. Everything else in this
+ * file still runs under it, which is the point of running it under Valgrind
+ * at all: the memory the engines allocate on the way to giving up is exactly
+ * the memory nothing else in the suite frees under a limit.
+ *
+ * Detected from LD_PRELOAD, which Valgrind sets to its own preload library.
+ * That is the only signal available without linking `valgrind/valgrind.h`,
+ * which would make a test depend on a header the build does not require.
+ */
+bool under_valgrind() {
+  const char * preload = std::getenv("LD_PRELOAD");
+  return preload && std::strstr(preload, "vgpreload");
+}
 
 struct Attempt {
   GRX_Result result;
@@ -105,9 +134,11 @@ TEST(ReDoS, EveryPairIsRefusedQuicklyAndAnsweredByAnotherEngine) {
         << backtrack.steps
         << " steps; it is no longer a pathological pair and the corpus "
            "should say so";
-    EXPECT_LT(backtrack.milliseconds, kBudgetMilliseconds)
-        << "/" << record.pattern << "/ took " << backtrack.milliseconds
-        << " ms to be refused";
+    if (!under_valgrind()) {
+      EXPECT_LT(backtrack.milliseconds, kBudgetMilliseconds)
+          << "/" << record.pattern << "/ took " << backtrack.milliseconds
+          << " ms to be refused";
+    }
     slowest_refusal = std::max(slowest_refusal, backtrack.milliseconds);
 
     // Half two: an engine that can run the program does, at the same
@@ -123,7 +154,9 @@ TEST(ReDoS, EveryPairIsRefusedQuicklyAndAnsweredByAnotherEngine) {
           << "/" << record.pattern << "/ on the "
           << (other == GRX_ENGINE_PIKE ? "Pike VM" : "bit-state engine")
           << " gave " << grx_result_string(safe.result);
-      EXPECT_LT(safe.milliseconds, kBudgetMilliseconds) << record.pattern;
+      if (!under_valgrind()) {
+        EXPECT_LT(safe.milliseconds, kBudgetMilliseconds) << record.pattern;
+      }
       EXPECT_LT(safe.steps, backtrack.steps)
           << "/" << record.pattern
           << "/ cost the safe engine as much as the backtracker";

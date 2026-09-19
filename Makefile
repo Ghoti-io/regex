@@ -883,7 +883,11 @@ endif
 # so the suite reports clean with undefined behaviour in its own log. Verified
 # by injecting a signed overflow: it printed and the build passed. The runtime
 # options below say the same thing a second way, for a binary run by hand.
-ASAN_UBSAN_FLAGS := -fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer -g
+# GRX_SANITIZERS is for the tests that measure *time*. A sanitized build is
+# about four times slower, so a wall clock bound that is right for a release
+# build fails here for a reason that is not a defect. The tests that care
+# scale their budget by it rather than being loosened for everybody.
+ASAN_UBSAN_FLAGS := -fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer -g -DGRX_SANITIZERS=1
 ASAN_BUILD_DIR := ./build/$(BUILD)-asan
 ASAN_OBJ_DIR := $(ASAN_BUILD_DIR)/objects
 ASAN_APP_DIR := $(ASAN_BUILD_DIR)/apps
