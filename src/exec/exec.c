@@ -3,8 +3,11 @@
  *
  * The match object, and the public entry points that choose an engine.
  *
- * Status: stub. Engine selection and argument validation are written; the
- * engines themselves report GRX_ERR_UNSUPPORTED.
+ * Engine selection reads one field - GRX_Facts::is_regular - rather than
+ * scanning the program a second time. A second opinion here would be a second
+ * place to be wrong, and the failure it would cause (a program routed to the
+ * lockstep engine that the lockstep engine cannot run) shows up far from its
+ * cause.
  *
  * Copyright 2026 by Corey Pennycuff
  */

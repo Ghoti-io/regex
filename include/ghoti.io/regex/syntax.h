@@ -180,6 +180,38 @@ GRX_API GRX_Result grx_syntax_from_name(
     const char * name, GRX_Syntax * out_syntax);
 
 /**
+ * @brief Read a flag string in the dialect's own alphabet.
+ *
+ * Every consumer has one of these strings - `/gimsu` from a JavaScript
+ * literal, `re.I | re.M` spelled as `im`, PCRE2's `(?i)` leading directive -
+ * and none of them should have to know that `s` is dot-all in PCRE2 and
+ * multiline in Ruby (documentation/dialects.md section 5.15).
+ *
+ * Three kinds of letter are refused rather than ignored, because a flag
+ * string is a statement about how the pattern is to be read and silently
+ * dropping part of it changes what matches:
+ *
+ * - A letter the dialect's alphabet does not contain is
+ *   GRX_DIAG_UNKNOWN_FLAG.
+ * - The same letter twice is GRX_DIAG_DUPLICATE_FLAG.
+ * - A *search-mode* letter - ECMAScript's `g` and `y` - is
+ *   GRX_DIAG_SEARCH_FLAG_IN_PATTERN. They are not compile-time options at
+ *   all: `g` is grx_regex_search_next() and `y` is grx_regex_match(), and a
+ *   caller who passed them here would get a regex that ignored them.
+ * - Two letters that exclude each other, such as ECMAScript's `u` and `v`,
+ *   are GRX_DIAG_CONFLICTING_FLAGS.
+ *
+ * @param syntax The dialect whose alphabet to read.
+ * @param flags The letters. NULL is invalid; empty is valid and sets nothing.
+ * @param out_options Receives the @ref GRX_Option bits. Required.
+ * @param out_error Receives the offending letter's offset and a message.
+ *   Optional.
+ * @return GRX_OK, GRX_ERR_SYNTAX, GRX_ERR_UNSUPPORTED, or GRX_ERR_INVALID.
+ */
+GRX_API GRX_Result grx_options_parse(GRX_Syntax syntax, const char * flags,
+    uint32_t * out_options, GRX_Error * out_error);
+
+/**
  * @brief Whether a dialect has a feature.
  *
  * @param syntax The dialect.

@@ -571,9 +571,27 @@ TEST_LD_PATH := $(APP_DIR):$(LIB_INSTALL_PATH)/$(SUITE)
 # Symbol namespace check
 ####################################################################
 
+# The files that are *below* the IR, and so may not consult a dialect. Named
+# one by one rather than globbed, because three files in these directories
+# are legitimately above the line:
+#
+#   src/compile/compile.c holds the public accessors, and
+#   grx_regex_syntax() reporting which dialect a regex came from is
+#   reporting rather than branching.
+#
+#   src/compile/compile_internal.h declares `GRX_Regex::syntax`, the field
+#   that reporting reads. Declaring it is not consulting it - which is why
+#   the pattern below also catches `->syntax`, so that a file that *is* on
+#   this list cannot read the field through the header either.
+#
+#   src/ir/lower.c is where the dialect is spent, and consulting the profile
+#   is its whole job.
+BELOW_THE_IR := src/exec/*.c src/exec/*.h src/compile/codegen.c \
+	src/compile/program.c
+
 check-layering: ## Fail if an engine knows which dialect it is running
-	@leaked=$$(grep -lnE 'GRX_SYNTAX_|GRX_SyntaxSpec|grx_syntax_|regex/syntax\.h|syntax_internal\.h' \
-		src/exec/*.c src/exec/*.h 2>/dev/null || true); \
+	@leaked=$$(grep -lnE 'GRX_SYNTAX_|GRX_Syntax|grx_syntax_|->syntax|regex/syntax\.h|syntax_internal\.h' \
+		$(BELOW_THE_IR) 2>/dev/null || true); \
 	if [ -n "$$leaked" ]; then \
 		printf "\033[0;31m\n### An engine names a dialect ###\033[0m\n" >&2; \
 		printf "%s\n" "$$leaked" >&2; \

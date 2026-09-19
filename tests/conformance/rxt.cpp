@@ -281,28 +281,17 @@ bool parse_limits(
   return true;
 }
 
-/**
- * The options a dialect's flag letters mean.
- *
- * A stand-in for grx_options_parse(), which is plan.md WP-18's to write. The
- * alphabet here is ECMAScript's, which is the only dialect with vectors; when
- * the real function exists this calls it instead and the test of *it* is that
- * every vector's flags still parse.
- */
-uint32_t options_for_flags(const std::string & flags) {
-  uint32_t options = 0;
-  for (char f : flags) {
-    switch (f) {
-      case 'i': options |= GRX_OPT_CASELESS; break;
-      case 'm': options |= GRX_OPT_MULTILINE; break;
-      case 's': options |= GRX_OPT_DOTALL; break;
-      case 'x': options |= GRX_OPT_EXTENDED; break;
-      case 'u': options |= GRX_OPT_UTF; break;
-      case 'v': options |= GRX_OPT_UNICODE_SETS | GRX_OPT_UTF; break;
-      default: break;
-    }
+/** The options a dialect's flag letters mean, via the library's own parser. */
+bool options_for_flags(GRX_Syntax syntax, const std::string & flags,
+    uint32_t * out_options, std::string * out_error) {
+  GRX_Error error;
+  GRX_Result result = grx_options_parse(
+      syntax, flags.c_str(), out_options, &error);
+  if (result != GRX_OK) {
+    *out_error = std::string("flags: ") + error.message;
+    return false;
   }
-  return options;
+  return true;
 }
 
 } // namespace
@@ -336,7 +325,15 @@ bool read_vector_file(
     record.line = record_line;
     record.text = record_text;
     record.syntax = file_syntax;
-    record.options = options_for_flags(record.flags);
+    // The test of grx_options_parse() is that every vector's flags parse
+    // (documentation/testing.md section 3). A vector whose flags it rejects
+    // is a failure of one or the other, and either way it must be said.
+    std::string failure;
+    if (!options_for_flags(
+            file_syntax, record.flags, &record.options, &failure)) {
+      *out_error = path + ":" + std::to_string(record_line) + ": " + failure;
+      return false;
+    }
     out_file->records.push_back(record);
 
     record = Record();

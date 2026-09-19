@@ -381,6 +381,16 @@ the dialect's rule for a reference to a group that does not exist.
 search-mode letters (`g`, `y`) are rejected with a diagnostic naming the
 API call that expresses them.
 
+**Built** for ECMAScript, PCRE2, Perl and Python; the rest arrive with their
+dialects. Four answers, kept apart because a caller deciding what to tell a
+user needs them apart: a letter the alphabet lacks is `GRX_DIAG_UNKNOWN_FLAG`,
+the same letter twice is `GRX_DIAG_DUPLICATE_FLAG`, a search mode is
+`GRX_DIAG_SEARCH_FLAG_IN_PATTERN`, and a letter the dialect has and this
+library does not implement is `GRX_ERR_UNSUPPORTED`. Two letters that exclude
+each other - `u` and `v` - are `GRX_DIAG_CONFLICTING_FLAGS` in either order,
+which needed an exclusion *group* rather than a mask of forbidden option bits:
+`v` implies `u`, so a mask catches `vu` and misses `uv`.
+
 | Dialect | Alphabet | Notes |
 | --- | --- | --- |
 | POSIX, GNU | none (API flags `REG_ICASE`, `REG_NEWLINE`) | `GRX_OPT_CASELESS`, `GRX_OPT_MULTILINE` |

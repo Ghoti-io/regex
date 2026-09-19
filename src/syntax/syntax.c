@@ -34,6 +34,7 @@
 #include <ghoti.io/regex/syntax.h>
 #include <stddef.h>
 
+#include "../core/core_internal.h"
 #include "syntax_internal.h"
 
 // Shorthand, so that a table row fits on a screen and the difference between
@@ -443,4 +444,170 @@ int grx_syntax_has_feature(GRX_Syntax syntax, GRX_Feature feature) {
   }
 
   return (spec_table[syntax].features & (uint64_t)feature) != 0;
+}
+
+/**
+ * How one letter of a dialect's flag alphabet is treated.
+ *
+ * Three kinds, because "this dialect does not have that letter" and "this
+ * letter is not a compile-time option" and "this library does not implement
+ * what that letter asks for" are three different answers, and a caller
+ * deciding what to tell a user needs them apart.
+ */
+typedef enum {
+  FLAG_OPTION = 0, ///< Sets the option bits in `options`.
+  FLAG_SEARCH,     ///< A search mode, expressed by an API call instead.
+  FLAG_NO_EFFECT,  ///< Accepted and meaningless at compile time.
+  FLAG_UNSUPPORTED ///< The dialect has it and this library does not.
+} FlagKind;
+
+/** One letter of one dialect's alphabet. */
+typedef struct {
+  char letter;
+  FlagKind kind;
+  uint32_t options; ///< For FLAG_OPTION.
+  /**
+   * Letters sharing a non-zero group exclude each other.
+   *
+   * A group rather than a mask of forbidden option bits, because the
+   * exclusion has to be symmetric and a mask is not: ECMAScript's `v`
+   * implies `u`, so "refuse `v` when GRX_OPT_UTF is already set" would
+   * refuse `v` alone after any earlier letter that set it, and "refuse `u`
+   * when GRX_OPT_UNICODE_SETS is set" catches `vu` and misses `uv`.
+   */
+  uint32_t group;
+} FlagRow;
+
+/**
+ * The alphabets of documentation/dialects.md section 5.15.
+ *
+ * Data rather than a switch, because the difference between two dialects'
+ * alphabets is then something a reader can see in one place - which is the
+ * same argument as the feature table above.
+ */
+static const FlagRow ecmascript_flags[] = {
+  {'d', FLAG_NO_EFFECT, 0, 0}, // Match indices; always available here.
+  {'g', FLAG_SEARCH, 0, 0},
+  {'i', FLAG_OPTION, GRX_OPT_CASELESS, 0},
+  {'m', FLAG_OPTION, GRX_OPT_MULTILINE, 0},
+  {'s', FLAG_OPTION, GRX_OPT_DOTALL, 0},
+  {'u', FLAG_OPTION, GRX_OPT_UTF, 1},
+  {'v', FLAG_OPTION, GRX_OPT_UNICODE_SETS | GRX_OPT_UTF, 1},
+  {'y', FLAG_SEARCH, 0, 0},
+  {0, FLAG_OPTION, 0, 0},
+};
+
+static const FlagRow pcre_flags[] = {
+  {'i', FLAG_OPTION, GRX_OPT_CASELESS, 0},
+  {'m', FLAG_OPTION, GRX_OPT_MULTILINE, 0},
+  {'s', FLAG_OPTION, GRX_OPT_DOTALL, 0},
+  {'x', FLAG_OPTION, GRX_OPT_EXTENDED, 0},
+  {'n', FLAG_OPTION, GRX_OPT_NO_CAPTURE, 0},
+  {'U', FLAG_OPTION, GRX_OPT_UNGREEDY, 0},
+  {'J', FLAG_UNSUPPORTED, 0, 0}, // Duplicate names; WP-18.
+  {0, FLAG_OPTION, 0, 0},
+};
+
+static const FlagRow perl_flags[] = {
+  {'m', FLAG_OPTION, GRX_OPT_MULTILINE, 0},
+  {'s', FLAG_OPTION, GRX_OPT_DOTALL, 0},
+  {'i', FLAG_OPTION, GRX_OPT_CASELESS, 0},
+  {'x', FLAG_OPTION, GRX_OPT_EXTENDED, 0},
+  {'n', FLAG_OPTION, GRX_OPT_NO_CAPTURE, 0},
+  {'p', FLAG_NO_EFFECT, 0, 0},   // Preserve the match; a search-API concern.
+  {'a', FLAG_UNSUPPORTED, 0, 0}, // ASCII-restrict; WP-21.
+  {'u', FLAG_OPTION, GRX_OPT_UTF, 0},
+  {0, FLAG_OPTION, 0, 0},
+};
+
+static const FlagRow python_flags[] = {
+  {'a', FLAG_UNSUPPORTED, 0, 0}, // re.ASCII; WP-30.
+  {'i', FLAG_OPTION, GRX_OPT_CASELESS, 0},
+  {'L', FLAG_UNSUPPORTED, 0, 0}, // re.LOCALE; there is no locale here.
+  {'m', FLAG_OPTION, GRX_OPT_MULTILINE, 0},
+  {'s', FLAG_OPTION, GRX_OPT_DOTALL, 0},
+  {'u', FLAG_OPTION, GRX_OPT_UTF, 0},
+  {'x', FLAG_OPTION, GRX_OPT_EXTENDED, 0},
+  {0, FLAG_OPTION, 0, 0},
+};
+
+/** The alphabet of a dialect, or NULL when it has none. */
+static const FlagRow * flag_alphabet(GRX_Syntax syntax) {
+  switch (syntax) {
+    case GRX_SYNTAX_ECMASCRIPT:
+      return ecmascript_flags;
+    case GRX_SYNTAX_PCRE:
+      return pcre_flags;
+    case GRX_SYNTAX_PERL:
+      return perl_flags;
+    case GRX_SYNTAX_PYTHON:
+      return python_flags;
+    default:
+      // POSIX and GNU have no flag letters at all: their options are API
+      // arguments (REG_ICASE, REG_NEWLINE). An empty string is still valid
+      // for them, and any letter is unknown.
+      return NULL;
+  }
+}
+
+GRX_Result grx_options_parse(GRX_Syntax syntax, const char * flags,
+    uint32_t * out_options, GRX_Error * out_error) {
+  if (!flags || !out_options || (unsigned)syntax >= (unsigned)GRX_SYNTAX_COUNT) {
+    return GRX_ERR_INVALID;
+  }
+  grx_error_clear(out_error);
+  *out_options = 0;
+
+  const FlagRow * alphabet = flag_alphabet(syntax);
+  uint32_t options = 0;
+  char seen[256] = {0};
+  uint32_t groups_used = 0;
+
+  for (size_t i = 0; flags[i]; i++) {
+    unsigned char letter = (unsigned char)flags[i];
+
+    if (seen[letter]) {
+      return grx_error_set(
+          out_error, GRX_ERR_SYNTAX, GRX_DIAG_DUPLICATE_FLAG, i, 1);
+    }
+    seen[letter] = 1;
+
+    const FlagRow * row = NULL;
+    for (const FlagRow * candidate = alphabet;
+        candidate && candidate->letter; candidate++) {
+      if (candidate->letter == (char)letter) {
+        row = candidate;
+        break;
+      }
+    }
+    if (!row) {
+      return grx_error_set(
+          out_error, GRX_ERR_SYNTAX, GRX_DIAG_UNKNOWN_FLAG, i, 1);
+    }
+
+    switch (row->kind) {
+      case FLAG_SEARCH:
+        return grx_error_set(out_error, GRX_ERR_SYNTAX,
+            GRX_DIAG_SEARCH_FLAG_IN_PATTERN, i, 1);
+      case FLAG_UNSUPPORTED:
+        return grx_error_set(out_error, GRX_ERR_UNSUPPORTED,
+            GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, i, 1);
+      case FLAG_NO_EFFECT:
+        break;
+      case FLAG_OPTION:
+      default:
+        if (row->group && (groups_used & (1u << (row->group - 1)))) {
+          return grx_error_set(out_error, GRX_ERR_SYNTAX,
+              GRX_DIAG_CONFLICTING_FLAGS, i, 1);
+        }
+        if (row->group) {
+          groups_used |= 1u << (row->group - 1);
+        }
+        options |= row->options;
+        break;
+    }
+  }
+
+  *out_options = options;
+  return GRX_OK;
 }

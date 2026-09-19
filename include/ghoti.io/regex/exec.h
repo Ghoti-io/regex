@@ -15,8 +15,10 @@
  * GRX_ERR_UNSUPPORTED for a pattern that cannot have it, rather than silently
  * getting the engine that can hang.
  *
- * Status: stub. The search entry points return GRX_ERR_UNSUPPORTED until the
- * engines are written.
+ * Status: both engines are built. The constructs neither runs yet -
+ * conditionals, recursion and the backtracking control verbs - compile and
+ * are then refused, rather than being ignored: a plausible wrong answer is
+ * worse than no answer.
  *
  * Copyright 2026 by Corey Pennycuff
  */

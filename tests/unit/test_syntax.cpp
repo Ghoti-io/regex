@@ -147,6 +147,116 @@ TEST(Syntax, OptionsAreDistinctBits) {
   }
 }
 
+// --------------------------------------------------------------------------
+// Flag strings
+// --------------------------------------------------------------------------
+
+TEST(Options, ReadsTheDialectsOwnAlphabet) {
+  // documentation/dialects.md section 5.15. Every consumer has one of these
+  // strings and none of them should have to know that `s` is dot-all in
+  // PCRE2 and multiline in Ruby.
+  struct {
+    GRX_Syntax syntax;
+    const char * flags;
+    uint32_t expected;
+  } cases[] = {
+    {GRX_SYNTAX_ECMASCRIPT, "", 0},
+    {GRX_SYNTAX_ECMASCRIPT, "i", GRX_OPT_CASELESS},
+    {GRX_SYNTAX_ECMASCRIPT, "imsu",
+        GRX_OPT_CASELESS | GRX_OPT_MULTILINE | GRX_OPT_DOTALL | GRX_OPT_UTF},
+    // `d` is always satisfied here, so it parses and sets nothing.
+    {GRX_SYNTAX_ECMASCRIPT, "d", 0},
+    {GRX_SYNTAX_ECMASCRIPT, "v", GRX_OPT_UNICODE_SETS | GRX_OPT_UTF},
+    {GRX_SYNTAX_PCRE, "imsxU",
+        GRX_OPT_CASELESS | GRX_OPT_MULTILINE | GRX_OPT_DOTALL
+            | GRX_OPT_EXTENDED | GRX_OPT_UNGREEDY},
+    {GRX_SYNTAX_PERL, "msix",
+        GRX_OPT_MULTILINE | GRX_OPT_DOTALL | GRX_OPT_CASELESS
+            | GRX_OPT_EXTENDED},
+    {GRX_SYNTAX_PYTHON, "imsx",
+        GRX_OPT_CASELESS | GRX_OPT_MULTILINE | GRX_OPT_DOTALL
+            | GRX_OPT_EXTENDED},
+  };
+
+  for (const auto & test : cases) {
+    uint32_t options = 0xFFFFFFFFu;
+    GRX_Error error;
+    EXPECT_EQ(grx_options_parse(test.syntax, test.flags, &options, &error),
+        GRX_OK)
+        << grx_syntax_name(test.syntax) << " /" << test.flags << ": "
+        << error.message;
+    EXPECT_EQ(options, test.expected)
+        << grx_syntax_name(test.syntax) << " /" << test.flags;
+  }
+}
+
+TEST(Options, RefusesWhatItCannotHonour) {
+  struct {
+    GRX_Syntax syntax;
+    const char * flags;
+    GRX_Result result;
+    GRX_Diag diag;
+    size_t offset;
+  } cases[] = {
+    // A letter this dialect's alphabet does not contain.
+    {GRX_SYNTAX_ECMASCRIPT, "ix", GRX_ERR_SYNTAX, GRX_DIAG_UNKNOWN_FLAG, 1},
+    {GRX_SYNTAX_PCRE, "u", GRX_ERR_SYNTAX, GRX_DIAG_UNKNOWN_FLAG, 0},
+    // The same letter twice.
+    {GRX_SYNTAX_ECMASCRIPT, "ii", GRX_ERR_SYNTAX, GRX_DIAG_DUPLICATE_FLAG, 1},
+    // A search mode, which is an API call rather than a compile-time option.
+    // Accepting `g` would give a caller a regex that quietly ignored it.
+    {GRX_SYNTAX_ECMASCRIPT, "g", GRX_ERR_SYNTAX,
+        GRX_DIAG_SEARCH_FLAG_IN_PATTERN, 0},
+    {GRX_SYNTAX_ECMASCRIPT, "iy", GRX_ERR_SYNTAX,
+        GRX_DIAG_SEARCH_FLAG_IN_PATTERN, 1},
+    // `u` and `v` exclude each other.
+    {GRX_SYNTAX_ECMASCRIPT, "uv", GRX_ERR_SYNTAX,
+        GRX_DIAG_CONFLICTING_FLAGS, 1},
+    {GRX_SYNTAX_ECMASCRIPT, "vu", GRX_ERR_SYNTAX,
+        GRX_DIAG_CONFLICTING_FLAGS, 1},
+    // Letters the dialect has and this library does not implement yet. A
+    // different answer from "unknown", because the caller's pattern is fine
+    // and the gap is here.
+    {GRX_SYNTAX_PYTHON, "L", GRX_ERR_UNSUPPORTED,
+        GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, 0},
+    {GRX_SYNTAX_PCRE, "J", GRX_ERR_UNSUPPORTED,
+        GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, 0},
+    // POSIX has no flag letters at all; its options are API arguments.
+    {GRX_SYNTAX_POSIX_ERE, "i", GRX_ERR_SYNTAX, GRX_DIAG_UNKNOWN_FLAG, 0},
+  };
+
+  for (const auto & test : cases) {
+    uint32_t options = 0;
+    GRX_Error error;
+    EXPECT_EQ(grx_options_parse(test.syntax, test.flags, &options, &error),
+        test.result)
+        << grx_syntax_name(test.syntax) << " /" << test.flags;
+    EXPECT_EQ(error.diag, test.diag)
+        << grx_syntax_name(test.syntax) << " /" << test.flags << ": "
+        << grx_diag_string(error.diag);
+    EXPECT_EQ(error.offset, test.offset)
+        << grx_syntax_name(test.syntax) << " /" << test.flags;
+    EXPECT_EQ(options, 0u) << "nothing is set when the string is refused";
+  }
+
+  // POSIX with no flags at all is fine: it has none to give.
+  uint32_t options = 1;
+  EXPECT_EQ(
+      grx_options_parse(GRX_SYNTAX_POSIX_ERE, "", &options, nullptr), GRX_OK);
+  EXPECT_EQ(options, 0u);
+}
+
+TEST(Options, RejectsArgumentsItCannotUse) {
+  uint32_t options = 0;
+  EXPECT_EQ(
+      grx_options_parse(GRX_SYNTAX_ECMASCRIPT, nullptr, &options, nullptr),
+      GRX_ERR_INVALID);
+  EXPECT_EQ(grx_options_parse(GRX_SYNTAX_ECMASCRIPT, "i", nullptr, nullptr),
+      GRX_ERR_INVALID);
+  EXPECT_EQ(grx_options_parse(GRX_SYNTAX_COUNT, "i", &options, nullptr),
+      GRX_ERR_INVALID);
+}
+
 int main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

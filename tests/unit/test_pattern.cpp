@@ -3,11 +3,10 @@
  *
  * The parse entry points.
  *
- * The parser itself is a stub, so these state the argument contract - which
- * is settled - and record the stub's answer where the behaviour is not. The
- * tests marked STUB are the ones to delete when the parser lands; they exist
- * so that "not implemented" is a statement the suite makes out loud rather
- * than a silence.
+ * About the entry points rather than about any dialect's grammar, which is
+ * tests/unit/test_parse.cpp: the argument contract, the error structure, and
+ * that a dialect with no front end says so out loud rather than being read
+ * with somebody else's.
  *
  * Copyright 2026 by Corey Pennycuff
  */
@@ -75,12 +74,16 @@ TEST(Parse, ErrorIsClearedBeforeTheAttempt) {
   EXPECT_LT(std::strlen(error.message), sizeof(error.message));
 }
 
-TEST(Parse, StubReportsUnsupportedRatherThanParsingHalfOfIt) {
-  // STUB: delete with the parser. A partial parser accepts patterns it should
-  // reject, and a suite written against it records the half.
+TEST(Parse, ADialectWithNoFrontEndIsRefusedRatherThanApproximated) {
+  // PCRE2's front end is plan.md WP-18. Until it exists, reading a PCRE
+  // pattern with somebody else's grammar would tell a caller their pattern
+  // is valid for an engine that rejects it (design.md section 4).
   GRX_Pattern * pattern = nullptr;
-  EXPECT_EQ(grx_pattern_parse("a", GRX_SYNTAX_PCRE, GRX_OPT_NONE, &pattern),
+  GRX_Error error;
+  EXPECT_EQ(grx_pattern_parse_with_allocator("a", 1, GRX_SYNTAX_PCRE,
+                GRX_OPT_NONE, nullptr, nullptr, &error, &pattern),
       GRX_ERR_UNSUPPORTED);
+  EXPECT_EQ(error.diag, GRX_DIAG_DIALECT_NOT_IMPLEMENTED);
   EXPECT_EQ(pattern, nullptr);
 }
 

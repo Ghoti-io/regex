@@ -58,6 +58,7 @@
 #define grx_match_group GHOTIIO_REGEX(grx_match_group)
 #define grx_match_group_named GHOTIIO_REGEX(grx_match_group_named)
 #define grx_node_kind_name GHOTIIO_REGEX(grx_node_kind_name)
+#define grx_options_parse GHOTIIO_REGEX(grx_options_parse)
 #define grx_pattern_capture_count GHOTIIO_REGEX(grx_pattern_capture_count)
 #define grx_pattern_dump GHOTIIO_REGEX(grx_pattern_dump)
 #define grx_pattern_free GHOTIIO_REGEX(grx_pattern_free)

@@ -7,8 +7,9 @@
  * carries no match state, so one compiled regex may be used from several
  * threads at once; the mutable part lives in @ref GRX_Match.
  *
- * Status: stub. grx_regex_compile() returns GRX_ERR_UNSUPPORTED until the
- * parser and compiler are written.
+ * Status: working for the dialects with a front end, which today is
+ * ECMAScript. A dialect that is named and not built reports
+ * GRX_ERR_UNSUPPORTED with GRX_DIAG_DIALECT_NOT_IMPLEMENTED.
  *
  * Copyright 2026 by Corey Pennycuff
  */
