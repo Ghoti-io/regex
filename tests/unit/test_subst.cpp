@@ -371,6 +371,66 @@ TEST(Split, AstralCharactersAreNotCutInHalf) {
   grx_split_free(&split);
 }
 
+/**
+ * Replace and split apply the limits they are handed.
+ *
+ * Both take a GRX_SearchOptions, which carries a GRX_Limits, and both are
+ * loops over grx_regex_search_next(). Whether the limits survive that
+ * plumbing is the kind of thing that is obviously true from reading the code
+ * and worth checking anyway: a caller who tunes limits for a hostile subject
+ * and then calls replace on it has to get the same protection, and the
+ * failure mode is silent - it would simply use the defaults.
+ */
+TEST(Subst, LimitsReachReplaceAndSplit) {
+  const std::string subject = "aaaa bbbb aaaa bbbb aaaa";
+  Regex regex("a+");
+  ASSERT_TRUE(regex.ok());
+
+  struct Case {
+    const char * name;
+    size_t max_steps;
+    size_t max_subject_length;
+    GRX_Result expected;
+  };
+  const Case cases[] = {
+    {"defaults", 10000000, 0, GRX_OK},
+    {"max_steps=1", 1, 0, GRX_ERR_LIMIT},
+    {"max_subject_length under the subject", 10000000, 4, GRX_ERR_LIMIT},
+  };
+
+  for (const Case & one : cases) {
+    GRX_Limits limits;
+    grx_limits_default(&limits);
+    limits.max_steps = one.max_steps;
+    limits.max_subject_length = one.max_subject_length;
+
+    GRX_SearchOptions options;
+    grx_search_options_default(&options);
+    options.limits = &limits;
+
+    GRX_Text text {};
+    EXPECT_EQ(grx_regex_replace(regex.get(), subject.data(), subject.size(),
+                  "X", 1, GRX_REPLACE_GLOBAL, &options, nullptr, nullptr,
+                  &text),
+        one.expected)
+        << "replace, " << one.name;
+    if (one.expected == GRX_OK) {
+      EXPECT_EQ(std::string(text.data, text.length), "X bbbb X bbbb X");
+      grx_text_free(&text);
+    }
+
+    GRX_Split split {};
+    EXPECT_EQ(grx_regex_split(regex.get(), subject.data(), subject.size(),
+                  GRX_NPOS, &options, nullptr, nullptr, &split),
+        one.expected)
+        << "split, " << one.name;
+    if (one.expected == GRX_OK) {
+      EXPECT_EQ(split.count, 4u);
+      grx_split_free(&split);
+    }
+  }
+}
+
 int main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
