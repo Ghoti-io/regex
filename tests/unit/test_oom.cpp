@@ -71,6 +71,46 @@ GRX_Result compile_and_match(const GRX_Allocator * allocator,
   return result;
 }
 
+/**
+ * Replace and split, through one allocator.
+ *
+ * A second sequence rather than more rows in the first, because it
+ * allocates in places the first never reaches: the parsed template, the
+ * growable output buffer, the piece array, and the match object each of the
+ * two creates for itself. Every one of those is released on every path,
+ * which is what the sweep checks.
+ */
+GRX_Result replace_and_split(const GRX_Allocator * allocator,
+    const std::string & pattern, const std::string & subject,
+    const std::string & replacement, uint32_t options) {
+  GRX_Error error;
+  grx_error_clear(&error);
+
+  GRX_Regex * regex = nullptr;
+  GRX_Result result = grx_regex_compile_with_allocator(pattern.data(),
+      pattern.size(), GRX_SYNTAX_ECMASCRIPT, options, nullptr, allocator,
+      &error, &regex);
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  GRX_Text text {};
+  result = grx_regex_replace(regex, subject.data(), subject.size(),
+      replacement.data(), replacement.size(), GRX_REPLACE_GLOBAL, nullptr,
+      allocator, &error, &text);
+  grx_text_free(&text);
+
+  if (result == GRX_OK) {
+    GRX_Split split {};
+    result = grx_regex_split(regex, subject.data(), subject.size(), GRX_NPOS,
+        nullptr, allocator, &error, &split);
+    grx_split_free(&split);
+  }
+
+  grx_regex_free(regex);
+  return result;
+}
+
 /** Patterns chosen to allocate in as many different places as possible. */
 struct Workload {
   const char * pattern;
@@ -138,6 +178,54 @@ TEST(OutOfMemory, EveryAllocationFailureIsReportedAndNothingLeaks) {
       EXPECT_EQ(allocator.live(), 0)
           << workload.pattern << ": failing allocation " << n << " of "
           << total << " leaked " << allocator.live() << " block(s)";
+    }
+  }
+}
+
+TEST(OutOfMemory, ReplaceAndSplitReportEveryFailureAndLeakNothing) {
+  struct Row {
+    const char * pattern;
+    const char * subject;
+    const char * replacement;
+    uint32_t options;
+  };
+  const Row rows[] = {
+    // A template with every kind of op in it, over several matches, so the
+    // output buffer grows more than once.
+    {"(a)(b)", "abababab", "[$&:$1:$2:$$]", GRX_OPT_UTF},
+    // Named groups, which put a name in the template and a lookup behind it.
+    {"(?<x>a)", "aaaa", "<$<x>>", GRX_OPT_UTF},
+    // A pattern that matches empty, so the iteration rule runs and the split
+    // takes its "not a separator" path.
+    {"x*", "abc", "-", GRX_OPT_UTF},
+    // Captures in the split output, which is a second array of pieces.
+    {"(,)", "a,b,c", "", GRX_OPT_UTF},
+  };
+
+  for (const Row & row : rows) {
+    grxtest::FailingAllocator counter(0);
+    ASSERT_EQ(replace_and_split(counter.get(), row.pattern, row.subject,
+                  row.replacement, row.options),
+        GRX_OK)
+        << row.pattern;
+    ASSERT_EQ(counter.live(), 0) << row.pattern;
+
+    const long total = counter.requested();
+    ASSERT_GT(total, 0) << row.pattern;
+
+    for (long n = 1; n <= total; n++) {
+      grxtest::FailingAllocator allocator(n);
+      GRX_Result result = replace_and_split(allocator.get(), row.pattern,
+          row.subject, row.replacement, row.options);
+      if (result != GRX_OK) {
+        EXPECT_TRUE(result == GRX_ERR_OOM || result == GRX_ERR_LIMIT
+            || result == GRX_ERR_INTERNAL)
+            << row.pattern << " n=" << n << ": "
+            << grx_result_string(result);
+      }
+      EXPECT_EQ(allocator.live(), 0)
+          << row.pattern << ": failing allocation " << n << " of " << total
+          << " leaked " << allocator.live() << " block(s)";
     }
   }
 }
