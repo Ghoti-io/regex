@@ -469,8 +469,8 @@ the second is the one that matters:
 
 - the backtracker returns `GRX_ERR_LIMIT` **quickly**. A limit reached after
   a minute is not a defence against a hostile pattern; it is the same outage
-  with a different ending. Currently 276 to 414 ms against a budget of one
-  second.
+  with a different ending. Currently 105 to 173 ms on an idle machine and 276
+  to 414 on a busy one, against a budget of one second.
 - the Pike VM or the bit-state engine **answers**. A library whose only
   response to `(a+)+$` is "I gave up" has not solved the problem, it has
   renamed it. Currently under a millisecond for every row. A second test

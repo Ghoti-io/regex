@@ -68,9 +68,9 @@ void grx_limits_default(GRX_Limits * limits) {
   // for each number; the short version is that 251 real patterns were asked
   // how much of each resource they need, the tightest default leaves six
   // times what the costliest of them uses, and the 17 pairs in the ReDoS
-  // corpus are refused in 276 to 414 milliseconds. Two tests keep the halves
-  // of that true: tests/unit/test_limits.cpp and
-  // tests/conformance/test_redos.cpp.
+  // corpus are refused in 105 to 173 milliseconds on an idle machine and in
+  // 276 to 414 on a busy one. Two tests keep the halves of that true:
+  // tests/unit/test_limits.cpp and tests/conformance/test_redos.cpp.
   //
   // max_subject_length is the one deliberate zero: a subject is a buffer the
   // caller already holds, so its size is already bounded by something the

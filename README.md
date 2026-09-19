@@ -200,8 +200,9 @@ milliseconds, and a test asserts the *scaling* rather than the wall clock.
 
 **Limits.** Measured, not guessed. 251 real patterns were asked how much of
 each resource they need and the tightest default leaves six times what the
-costliest of them uses; the 17 pairs in the ReDoS corpus are refused in 276
-to 414 milliseconds and answered by another engine in under one.
+costliest of them uses; the 17 pairs in the ReDoS corpus are refused in 105
+to 173 milliseconds on an idle machine - 276 to 414 on a busy one, which is
+the number that matters - and answered by another engine in under one.
 [dialects.md](documentation/dialects.md) §7 is the report.
 
 339 tests plus the vector corpus, clean under Valgrind and under

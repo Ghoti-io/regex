@@ -547,20 +547,24 @@ unanchored `[a-z]+@[a-z]+`, which restarts at every position. At
 `max_steps = 10,000,000` the costliest of those scans about 5 MB before the
 limit binds.
 
-Below: all 17 pairs in the ReDoS corpus are refused in 276 to 414
-milliseconds, against plan.md WP-08's bound of one second. Every one of them
-is *answered* by the Pike VM or the bit-state engine in under a millisecond
-at the same limits, which is the point: a limit is a defence only because
-there is another engine that does not need it.
+Below: all 17 pairs in the ReDoS corpus are refused in 105 to 173
+milliseconds on an idle machine, and in 276 to 414 on the same machine with
+six other cores busy - against plan.md WP-08's bound of one second. Both
+ranges are recorded because the second is the one that matters: a bound is
+worth having only if it holds when the machine is under load, which is when
+an attack would be happening. Every pair is *answered* by the Pike VM or the
+bit-state engine in under a millisecond at the same limits, which is the
+point: a limit is a defence only because there is another engine that does
+not need it.
 
-`max_steps` stays at 10,000,000, and the two numbers above are why rather
-than a preference. Lowering it to a million would refuse a pathological pair
-in 35 ms instead of 350 - but would also cap a legitimate scan at 500 KB,
-and a caller who is scanning documents that large is not the one being
-attacked. A caller who *is* - one compiling patterns from a file it did not
-write - should lower it, and now has the arithmetic to choose by: divide it
-by two to get the bytes it will scan, and multiply it by 35 nanoseconds to
-get the time it will spend refusing.
+`max_steps` stays at 10,000,000, and the numbers above are why rather than a
+preference. Lowering it to a million would refuse a pathological pair in
+about 15 ms instead of 150 - but would also cap a legitimate scan at 500 KB,
+and a caller scanning documents that large is not the one being attacked. A
+caller who *is* - one compiling patterns from a file it did not write -
+should lower it, and now has the arithmetic to choose by: divide it by two
+to get the bytes it will scan, and multiply it by 15 nanoseconds to get the
+time it will spend refusing on an idle core.
 
 ## 8. ECMAScript in full
 
