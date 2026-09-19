@@ -488,12 +488,79 @@ Two consequences, both only observable with astral characters:
 
 ## 7. Limits
 
-`grx_limits_default()`'s values are measured by WP-14 ([plan.md](plan.md))
-from two corpora: every pattern in every oracle's own test suite must
-compile and run within the defaults, and every pair in the ReDoS corpus
-must hit `max_steps` within a bounded wall time. Until then the scaffold's
-numbers stand and are labelled first approximations. The measured values,
-and the measurements, replace this paragraph.
+`grx_limits_default()`'s values are measured, not guessed, from two corpora
+that pull in opposite directions: patterns that must keep working, and pairs
+that must be refused. `tools/limits/measure.py` produces the whole report;
+what follows is its output, and `tests/unit/test_limits.cpp` and
+`tests/conformance/test_redos.cpp` are the parts of it that keep being
+checked.
+
+### What real patterns cost
+
+251 distinct patterns: every `.rxt` vector this repository holds, plus
+`tools/limits/real_world.txt` - the patterns that appear in JSON Schemas,
+configuration files and validation code, collected for their *upper* end.
+For each, the smallest value of each limit at which the pattern still
+compiles, found by asking the limit itself rather than by adding a counter
+to every phase.
+
+| Limit | median | p99 | max | default | headroom | what needs the most |
+| --- | --- | --- | --- | --- | --- | --- |
+| `max_pattern_length` | 19 | 77 | 179 | 65536 | 366× | a semver pattern |
+| `max_nesting_depth` | 1 | 5 | 10 | 128 | 13× | `^((((((((((a))))))))))$` |
+| `max_nodes` | 11 | 46 | 13962 | 100000 | 7× | `\p{RGI_Emoji}` |
+| `max_captures` | 1 | 7 | 10 | 1000 | 100× | the same nested group |
+| `max_repeat_count` | 1 | 253 | 1000 | 65536 | 66× | `^.{0,1000}$` |
+| `max_class_ranges` | 5 | 702 | 1463 | 10000 | 7× | `\p{L}` |
+| `max_program_size` | 26 | 2007 | 33445 | 200000 | 6× | `\p{RGI_Emoji}` |
+
+Nothing in the corpus is refused by a default, and the two tightest -
+`max_nodes` and `max_program_size`, at six and seven times - are both bound
+by the same pattern: `\p{RGI_Emoji}` is the largest thing ECMAScript can
+name, and it lowers to an alternation of 3,953 sequences. `\p{RGI_Emoji}{6}`
+exceeds `max_program_size` and is refused with the field named, which is the
+right answer rather than a gap.
+
+`max_lookbehind_length` is not in the table. Its default is 255, the corpus
+says nothing about it, and it does not apply to ECMAScript at all -
+ECMAScript's lookbehind is unbounded (§5.4) and the profile says so, so the
+field is inert until a dialect that bounds one lands. Measuring it against
+an ECMAScript corpus would have produced a number that meant nothing.
+
+### The C stack, which is what `max_nesting_depth` is really about
+
+Measured on the 256 KB stack the fuzzers run under: a pattern nested 480
+deep parses and one nested 496 deep overflows, which is about 525 bytes of
+stack per level. The default of 128 is therefore a factor of about four
+inside the smallest stack this library claims to work on, and thirty inside
+the usual 8 MB one. This is the one limit design.md §6.2 says a caller
+should not lift casually, and that is the number the warning is about.
+
+### What a match costs, and what refusing one costs
+
+`max_steps` has to sit above what a legitimate match costs and below what a
+hostile one does, and the two are measured separately.
+
+Above: on whichever engine `GRX_ENGINE_AUTO` picks, a scanning pattern costs
+between 0.02 and 2.0 steps per subject byte - the high end being an
+unanchored `[a-z]+@[a-z]+`, which restarts at every position. At
+`max_steps = 10,000,000` the costliest of those scans about 5 MB before the
+limit binds.
+
+Below: all 17 pairs in the ReDoS corpus are refused in 276 to 414
+milliseconds, against plan.md WP-08's bound of one second. Every one of them
+is *answered* by the Pike VM or the bit-state engine in under a millisecond
+at the same limits, which is the point: a limit is a defence only because
+there is another engine that does not need it.
+
+`max_steps` stays at 10,000,000, and the two numbers above are why rather
+than a preference. Lowering it to a million would refuse a pathological pair
+in 35 ms instead of 350 - but would also cap a legitimate scan at 500 KB,
+and a caller who is scanning documents that large is not the one being
+attacked. A caller who *is* - one compiling patterns from a file it did not
+write - should lower it, and now has the arithmetic to choose by: divide it
+by two to get the bytes it will scan, and multiply it by 35 nanoseconds to
+get the time it will spend refusing.
 
 ## 8. ECMAScript in full
 

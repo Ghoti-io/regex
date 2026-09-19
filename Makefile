@@ -292,6 +292,7 @@ EXAMPLES := $(patsubst examples/%.c,$(APP_DIR)/examples/%$(EXE_EXTENSION),$(EXAM
 TOOL_SOURCES := $(shell find tools -type f -name '*.c' 2>/dev/null)
 TOOLS := $(patsubst tools/%.c,$(APP_DIR)/tools/%$(EXE_EXTENSION),$(notdir $(TOOL_SOURCES)))
 TOOLS := $(patsubst tools/oracle/%.c,$(APP_DIR)/tools/%$(EXE_EXTENSION),$(TOOL_SOURCES))
+TOOLS := $(patsubst tools/limits/%.c,$(APP_DIR)/tools/%$(EXE_EXTENSION),$(TOOLS))
 
 # Where the test fixtures live. Tests run from build/.../apps, so the path is
 # baked in at compile time.
@@ -453,13 +454,20 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/oracle/%.c $(APP_DIR)/$(STATIC_TARGET)
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(INCLUDE) -o $@ $< $(LDFLAGS) $(REGEXLIBRARY) $(CUTIL_LIBS)
 
+$(APP_DIR)/tools/%$(EXE_EXTENSION): tools/limits/%.c $(APP_DIR)/$(STATIC_TARGET) \
+		| $(APP_DIR)/$(TARGET)
+	@printf "\n### Compiling Tool: $* ###\n"
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(INCLUDE) -o $@ $< $(LDFLAGS) $(REGEXLIBRARY) $(CUTIL_LIBS)
+
 ####################################################################
 # Commands
 ####################################################################
 
 # General commands
 .PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-unicode-tables check-oracle-syntax check-oracle-match check-engine-equivalence \
-	check-oracle-properties check-oracle-string-properties check-oracles
+	check-oracle-properties check-oracle-string-properties check-oracles \
+	check-limits
 # Release build commands
 .PHONY: all install test test-quiet test-asan test-valgrind test-valgrind-quiet test-watch uninstall watch
 # Debug build commands
@@ -514,6 +522,16 @@ check-oracle-string-properties: $(TOOLS)
 		exit 0; \
 	fi; \
 	python3 tools/oracle/string_property_diff.py
+
+check-limits: ## Report what real patterns cost against grx_limits_default()
+check-limits: $(TOOLS)
+	@if ! command -v python3 >/dev/null 2>&1; then \
+		printf "check-limits: skipped (no python3)\n"; \
+		exit 0; \
+	fi; \
+	python3 tools/limits/measure.py \
+		--driver $(APP_DIR)/tools/grx_limits \
+		--matcher $(APP_DIR)/tools/grx_match
 
 check-engine-equivalence: ## Fail if two engines disagree about one program
 check-engine-equivalence: $(TOOLS)

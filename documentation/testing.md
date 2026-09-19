@@ -433,16 +433,50 @@ defect they guard against is invisible if the fault is injected at the end.
 
 ## 10. The ReDoS corpus
 
-`tests/data/redos/*.rxt`, using `expect: limit`: pattern/subject pairs
-known to be exponential or high-polynomial under backtracking - the
-classical `(a+)+$`, `(a|aa)+$`, `(.*a){20}`, the OWASP and Snyk lists, and
-every pattern found in the wild in this project's own bug reports. The
-runner checks that the backtracker returns `GRX_ERR_LIMIT` within a wall
-clock bound at default limits, and that the Pike VM or bit-state engine,
-where eligible, returns the answer without a limit. This is the corpus that
-sets `max_steps` and `max_backtrack` in WP-14, and it is a regression suite
-for the prefilters of Phase 8, which must not make a pathological pair
-pathological again by bypassing the engine that handled it.
+`tests/data/redos/ecmascript.rxt`, using `expect: limit`: 17 pattern and
+subject pairs that are exponential or high-polynomial under backtracking -
+the classical `(a+)+$`, `(a|aa)+$`, `(.*a){20}$`, `(x+x+)+y`, the shape the
+2016 Stack Overflow outage was, the one the Java `Pattern` documentation
+warns about, and the "trim and split" patterns that appear in real
+validation code. Written by `tools/limits/make_redos_corpus.py`, which
+carries the provenance of each row beside it.
+
+`tests/conformance/test_redos.cpp` checks two things about every row, and
+the second is the one that matters:
+
+- the backtracker returns `GRX_ERR_LIMIT` **quickly**. A limit reached after
+  a minute is not a defence against a hostile pattern; it is the same outage
+  with a different ending. Currently 276 to 414 ms against a budget of one
+  second.
+- the Pike VM or the bit-state engine **answers**. A library whose only
+  response to `(a+)+$` is "I gave up" has not solved the problem, it has
+  renamed it. Currently under a millisecond for every row. A second test
+  doubles the subject three times and checks that the step count does not
+  square, so the answer stays an answer as the subject grows.
+
+This is the corpus that sets `max_steps` and `max_backtrack`
+([dialects.md](dialects.md) §7), and it is a regression suite for the
+prefilters of Phase 8, which must not make a pathological pair pathological
+again by bypassing the engine that handled it.
+
+## 10.1 The limits report
+
+`make check-limits` runs `tools/limits/measure.py`, which is the other half
+of §7's method: for 251 distinct patterns - every `.rxt` vector plus
+`tools/limits/real_world.txt` - it asks each limit for the smallest value at
+which the pattern still compiles, and prints the distribution against the
+defaults.
+
+Asking the limit rather than counting inside the library is deliberate. The
+alternative is a counter in every phase and an accessor for each, which is a
+second way of computing every number and a second chance of being wrong
+about it; the limits are already enforced in one place each, so asking them
+asks the thing that will do the refusing. The cost is a binary search per
+pattern per limit, which for this corpus is a few seconds.
+
+The report is a report. What has to keep being true is in
+`tests/unit/test_limits.cpp`: not "the headroom is 7×" but "nothing in the
+corpus is refused", which is the claim a future default would break.
 
 ## 11. Random patterns
 

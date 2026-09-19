@@ -1,0 +1,135 @@
+# The ReDoS corpus: pattern and subject pairs that are exponential or
+# high-polynomial under backtracking (documentation/testing.md section 10).
+#
+# Every record expects GRX_ERR_LIMIT from the backtracking engine at the
+# default limits, and tests/conformance/test_redos.cpp additionally requires
+# that it arrive within a wall clock bound and that the engines which *can*
+# answer do, without a limit. Those two halves are the point: a limit is only
+# a defence if it fires quickly, and it is only acceptable if there is
+# another engine that does not need it.
+#
+# This corpus is what sets max_steps and max_backtrack
+# (documentation/plan.md WP-14), and it is a regression suite for the
+# prefilters of Phase 8, which must not make a pathological pair pathological
+# again by routing around the engine that handled it.
+dialect: ecmascript
+unicode: 17.0
+
+# the classical nested quantifier; every article on the subject opens with it
+pattern: (a+)+$
+flags: u
+subject: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!
+engines: backtrack
+expect: limit
+
+# the anchored form
+pattern: ^(a+)+$
+flags: u
+subject: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!
+engines: backtrack
+expect: limit
+
+# overlapping alternatives
+pattern: (a|aa)+$
+flags: u
+subject: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!
+engines: backtrack
+expect: limit
+
+# an alternative that can match empty
+pattern: (a|a?)+$
+flags: u
+subject: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!
+engines: backtrack
+expect: limit
+
+# OWASP's example
+pattern: (x+x+)+y
+flags: u
+subject: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx!
+engines: backtrack
+expect: limit
+
+# OWASP's second example
+pattern: ([a-zA-Z]+)*$
+flags: u
+subject: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!
+engines: backtrack
+expect: limit
+
+# the 'trim' shape, seen in the wild
+pattern: (\w+\s?)+$
+flags: u
+subject: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!
+engines: backtrack
+expect: limit
+
+# its unanchored-body variant
+pattern: ^(\w+\s?)*$
+flags: u
+subject: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!
+engines: backtrack
+expect: limit
+
+# high-polynomial rather than exponential
+pattern: (.*a){20}$
+flags: u
+subject: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+engines: backtrack
+expect: limit
+
+# the Stack Overflow outage of 2016
+pattern: (.*,){11}P
+flags: u
+subject: ,,,,,,,,,,,,,,,,,,,,,,
+engines: backtrack
+expect: limit
+
+# the Java Pattern documentation's own warning
+pattern: ^(([a-z])+.)+[A-Z]([a-z])+$
+flags: u
+subject: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!
+engines: backtrack
+expect: limit
+
+# digits, for a schema that validates numbers
+pattern: (\d+)*x
+flags: u
+subject: 1111111111111111111111111111111111111111!
+engines: backtrack
+expect: limit
+
+# a body whose first half can match empty; the shape a 'trim and split' pattern falls into
+pattern: ^(\s*\w+)+$
+flags: u
+subject: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!
+engines: backtrack
+expect: limit
+
+# the same with two optional separators, which is what a CSV field pattern looks like
+pattern: ^(\w+,?\s?)+$
+flags: u
+subject: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!
+engines: backtrack
+expect: limit
+
+# the same, caselessly
+pattern: (a+)+$
+flags: iu
+subject: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA!
+engines: backtrack
+expect: limit
+
+# three overlapping alternatives
+pattern: (a|b|ab)*bc
+flags: u
+subject: abababababababababababababababababababababab!
+engines: backtrack
+expect: limit
+
+# an empty-capable body, which carries a progress guard and so is not memoizable
+pattern: (a*)*$
+flags: u
+subject: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!
+engines: backtrack
+expect: limit

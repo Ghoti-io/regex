@@ -63,11 +63,14 @@ void grx_limits_default(GRX_Limits * limits) {
   // take exponential time on a subject of thirty. The caller can still lift
   // any of these by setting it to 0, but the default must be a number.
   //
-  // The values are first approximations, chosen to be far above any pattern a
-  // human writes and far below anything that costs a visible amount of time
-  // or memory. They are the subject of documentation/dialects.md section 7
-  // and are measured rather than guessed by WP-14; until then they are
-  // labelled first approximations and nothing depends on their exact value.
+  // The values are measured, not guessed. documentation/dialects.md section
+  // 7 has the report `tools/limits/measure.py` produces and the reasoning
+  // for each number; the short version is that 251 real patterns were asked
+  // how much of each resource they need, the tightest default leaves six
+  // times what the costliest of them uses, and the 17 pairs in the ReDoS
+  // corpus are refused in 276 to 414 milliseconds. Two tests keep the halves
+  // of that true: tests/unit/test_limits.cpp and
+  // tests/conformance/test_redos.cpp.
   //
   // max_subject_length is the one deliberate zero: a subject is a buffer the
   // caller already holds, so its size is already bounded by something the
