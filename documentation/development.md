@@ -5,15 +5,15 @@ engines are specified in [design.md](design.md), which takes precedence where
 the two differ; this page is corrected as each work package in
 [plan.md](plan.md) lands.
 
-**Landed:** Phase 0 and Phase 1 of [plan.md](plan.md), less WP-11, and
-Phase 2's WP-12, WP-13, WP-15 and WP-16. A pattern in any of ECMAScript's
-three modes - legacy, Unicode and UnicodeSets - parses, lowers, compiles and
-matches on whichever of the three engines can run it, and
-`grx_regex_replace()`, `grx_regex_split()` and `grx_regex_search_next()`
-apply the dialect's own rules for templates, pieces and what follows an empty
-match. Every other dialect is named and reports `GRX_ERR_UNSUPPORTED`;
-conditionals, recursion and the backtracking control verbs compile as far as
-they can and are then refused, rather than approximated.
+**Landed:** Phase 0, Phase 1 and Phase 2 of [plan.md](plan.md), less WP-11. A
+pattern in any of ECMAScript's three modes - legacy, Unicode and UnicodeSets -
+parses, lowers, compiles and matches on whichever of the three engines can run
+it, and `grx_regex_replace()`, `grx_regex_split()` and
+`grx_regex_search_next()` apply the dialect's own rules for templates, pieces
+and what follows an empty match. Every other dialect is named and reports
+`GRX_ERR_UNSUPPORTED`; conditionals, recursion and the backtracking control
+verbs compile as far as they can and are then refused, rather than
+approximated.
 
 ## Layout
 
@@ -314,15 +314,12 @@ missing `free` lives there for years.
   the stream would be a layer with nothing on the other side of it. If
   streaming subjects are ever wanted, that is a design decision to make
   explicitly rather than a hole to fill by copying model's `stream.h`.
-- **Substitution and splitting.** `grx_regex_replace()` and a split are the
-  obvious next surface, and they need decisions the matcher does not: what a
-  replacement template's syntax is, and which dialect's spelling of `$1`
-  versus `\1` applies. Specified in dialects.md section 5.11 and scheduled as
-  WP-16; not built.
-- **Iteration.** `grx_regex_search_next()` is WP-15. The rule it has to
-  apply - what a search-all loop does after an *empty* match - is already on
-  the profile as `GRX_IterationRule`, because it is a dialect decision and
-  there are three answers in the wild.
+- **A callback form of replacement.** `grx_regex_replace()` takes a template.
+  ECMAScript's `String.prototype.replace` also takes a *function*, and a
+  caller who wants one here writes the loop themselves with
+  `grx_regex_search_next()`. A callback taking a `GRX_Match` would be a small
+  addition and is not scheduled, because nothing has asked for it and the
+  loop it would replace is six lines.
 - **A `GRX_Node` accessor API.** The syntax tree is internal. A consumer that
   wants to walk a pattern - to translate between dialects, say - is a reason
   to widen the public API deliberately, not a reason to install

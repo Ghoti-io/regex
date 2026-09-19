@@ -129,7 +129,8 @@ Nothing is allocated for the caller to free on a failing call.
 | --- | --- |
 | Build, install, Doxygen | working |
 | Gates: `check-symbols`, `check-layering`, `check-unicode-tables` | working, in `TEST_GATES` |
-| Gates: `check-oracles` - syntax, match, properties, cross-engine | working; not in `TEST_GATES`, because they need Node |
+| Gates: `check-oracles` - syntax, match, properties, properties of strings, cross-engine | working; not in `TEST_GATES`, because they need Node |
+| Gate: `check-limits` - what real patterns cost against the defaults | working; the report behind dialects.md section 7 |
 | Result codes, limits, allocator, version | working |
 | Diagnostics and error reporting | working |
 | The arena behind every table | working |
@@ -143,36 +144,49 @@ Nothing is allocated for the caller to free on a failing call.
 | UTF-8 reverse decode and whole-buffer validation | working |
 | Parser skeleton and hook interface | working |
 | ECMAScript front end, legacy and Unicode modes | working |
-| ECMAScript UnicodeSets (`v`) mode | refused with a diagnostic; WP-12 |
+| ECMAScript UnicodeSets (`v`) mode | working - set operations, string disjunctions, the seven properties of strings |
 | Every dialect but ECMAScript | named, `GRX_ERR_UNSUPPORTED` |
 | Lowering, analysis and code generation | working |
 | Pike VM | working - the regular subset, in linear time |
 | Backtracking engine | working - backreferences, lookaround, atomic groups |
 | Conditionals, recursion, the control verbs | opcodes exist; refused until WP-19 |
-| Bit-state engine | not started; WP-13 |
-| Iteration, substitution and splitting | designed, not started; WP-15 and WP-16 |
+| Bit-state engine | working - the backtracker with a memo, and the linear bound back |
+| Search window, NOTBOL/NOTEOL/NOTEMPTY, `grx_regex_search_next()` | working |
+| `grx_regex_replace()` and `grx_regex_split()` | working - ECMAScript's template grammar and split rule |
+| `grx_pattern_lint()`, the JSON Schema subset check | working |
+| Limits | measured, not guessed; dialects.md section 7 |
 | The `text` seam for JSON Schema | not started; WP-11 |
 
-**Conformance.** Four differential checks against Node 22, which is the
-pinned ECMAScript oracle. `make check-oracles` runs all four.
+**Conformance.** Five differential checks against Node 22, which is the
+pinned ECMAScript oracle. `make check-oracles` runs all five.
 
-`make check-oracle-syntax` compares accept and reject over 720,000 patterns
+`make check-oracle-syntax` compares accept and reject over 960,000 patterns
 per seed - an exhaustive corpus of every string up to three characters over
-the grammar's punctuation, plus a random corpus of longer ones. No
-disagreement.
+the grammar's punctuation, plus a random corpus of longer ones, each run with
+eight flag sets including `v` and `iv`. No disagreement.
 
 `make check-oracle-match` compares every group's span for random patterns
-against random subjects, including backreferences, lookahead and lookbehind.
-No disagreement.
+against random subjects, including backreferences, lookahead, lookbehind and
+UnicodeSets classes. No disagreement over six seeds.
 
 `make check-oracle-properties` asks both implementations which code points
 match each `\p{...}` - all 1,114,112 of them, for all 454 properties. No
 disagreement.
 
-`make check-engine-equivalence` requires the two engines to give the same
-answer for any program both can run, which is the invariant of
+`make check-oracle-string-properties` does the same for the seven properties
+of *strings*, which have no code-point space to walk: the universe is every
+emoji sequence UTS #51 knows about, qualified and not, so a table that is too
+large fails on one half and one that is too small fails on the other. 36,575
+cases, no disagreement.
+
+`make check-engine-equivalence` requires every engine that can run a program
+to give the same answer for it, which is the invariant of
 [design.md](documentation/design.md) §3.5.4. No disagreement. The
 `crossengine` fuzzer checks the same thing on random input.
+
+One `v`-mode rule goes the other way and the oracle is not followed:
+[dialects.md](documentation/dialects.md) §8.6.1 has the table and the
+reasoning.
 
 **Vectors.** 1,567 checked-in `.rxt` records run in `make test`, with no
 oracle needed: 100% pass. Their expectations are Node's, not this library's.
@@ -184,7 +198,13 @@ test expects the runner to fail it - so that "the suite passes" cannot mean
 backtracking engine hang - run against 100,000 characters in around fifty
 milliseconds, and a test asserts the *scaling* rather than the wall clock.
 
-240 tests plus the vector corpus, clean under Valgrind and under
+**Limits.** Measured, not guessed. 251 real patterns were asked how much of
+each resource they need and the tightest default leaves six times what the
+costliest of them uses; the 17 pairs in the ReDoS corpus are refused in 276
+to 414 milliseconds and answered by another engine in under one.
+[dialects.md](documentation/dialects.md) §7 is the report.
+
+339 tests plus the vector corpus, clean under Valgrind and under
 ASan+UBSan. `make coverage` reports 89%. The tests that record a
 stub's answer are marked `STUB` in a comment and are meant to be deleted with
 the stub.
