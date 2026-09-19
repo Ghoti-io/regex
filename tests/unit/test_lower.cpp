@@ -505,6 +505,53 @@ TEST(Sets, TheShorthandsResolveToTheDialectsDefinitions) {
   }
 }
 
+TEST(Sets, TheSetsNoFrontEndAsksForYet) {
+  // `\h` and `\v` are Perl-family shorthands, and the Unicode definitions
+  // are what PCRE2 uses under UCP. No front end emits them yet, so they are
+  // tested directly rather than through a pattern - the alternative is
+  // shipping a set nothing has ever evaluated.
+  struct {
+    GRX_NamedSet set;
+    uint32_t inside;
+    uint32_t outside;
+  } cases[] = {
+    {GRX_SET_ASCII_HSPACE, ' ', '\n'},
+    {GRX_SET_ASCII_HSPACE, '\t', 'a'},
+    {GRX_SET_ASCII_VSPACE, '\n', ' '},
+    {GRX_SET_ASCII_VSPACE, 0x0B, 'a'},
+    {GRX_SET_UNICODE_DIGIT, 0x0661, 'a'},
+    {GRX_SET_UNICODE_SPACE, 0x00A0, 'a'},
+    {GRX_SET_UNICODE_WORD, 0x00E9, ' '},
+    {GRX_SET_UNICODE_WORD, 0x200C, ' '}, // A join control, per UTS #18.
+    {GRX_SET_UNICODE_WORD, 0x0301, ' '}, // A combining mark.
+  };
+
+  for (const auto & test : cases) {
+    GRX_CharClass cls;
+    grx_charclass_init(&cls, nullptr);
+    ASSERT_EQ(grx_named_set(&cls, test.set, nullptr), GRX_OK)
+        << "set " << test.set;
+    EXPECT_TRUE(grx_charclass_contains(&cls, test.inside)) << "set " << test.set;
+    EXPECT_FALSE(grx_charclass_contains(&cls, test.outside))
+        << "set " << test.set;
+    grx_charclass_clear(&cls);
+  }
+
+  GRX_CharClass cls;
+  grx_charclass_init(&cls, nullptr);
+  EXPECT_EQ(grx_named_set(&cls, GRX_SET_COUNT, nullptr), GRX_ERR_INVALID);
+  EXPECT_EQ(grx_named_set(&cls, (GRX_NamedSet)9999, nullptr), GRX_ERR_INVALID);
+
+  // The shorthands the dialects have and this library has no set for yet.
+  EXPECT_EQ(grx_shorthand_set(&cls, GRX_SHORTHANDS_ASCII,
+                GRX_SHORTHAND_HSPACE, nullptr), GRX_OK);
+  EXPECT_EQ(grx_shorthand_set(&cls, GRX_SHORTHANDS_ASCII,
+                GRX_SHORTHAND_VSPACE, nullptr), GRX_OK);
+  EXPECT_EQ(grx_shorthand_set(&cls, GRX_SHORTHANDS_ASCII,
+                GRX_SHORTHAND_NOT_NEWLINE, nullptr), GRX_ERR_UNSUPPORTED);
+  grx_charclass_clear(&cls);
+}
+
 TEST(Sets, TheNewlineSetsAreNamedInOnePlace) {
   struct {
     GRX_NewlineSet newlines;

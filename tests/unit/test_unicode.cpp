@@ -550,6 +550,64 @@ TEST(Property, RangeContainsHandlesTheEmptyAndNullCases) {
   EXPECT_EQ(grx_range_contains(ranges, 2, 'y'), 0);
 }
 
+TEST(Fold, TheOrbitTableCanBeWalkedAsWellAsQueried) {
+  // Closing a *class* under a folding walks the table rather than the class,
+  // because the class may be every code point in Unicode and the table never
+  // is. That walk is the only caller of these two, so they are tested here
+  // rather than through a class.
+  struct {
+    GRX_FoldKind kind;
+    bool has_entries;
+  } kinds[] = {
+    {GRX_FOLD_SIMPLE, true},
+    {GRX_FOLD_ES_LEGACY, true},
+    {GRX_FOLD_ASCII, true},
+    {GRX_FOLD_NONE, false},
+  };
+
+  for (const auto & test : kinds) {
+    size_t count = grx_unicode_orbit_table_size(test.kind);
+    EXPECT_EQ(count > 0, test.has_entries) << "kind " << test.kind;
+
+    uint32_t members[GRX_FOLD_ORBIT_MAX];
+    // An index past the end is 0 members rather than a read past the array.
+    EXPECT_EQ(grx_unicode_orbit_table_at(test.kind, count, members), 0u);
+    EXPECT_EQ(grx_unicode_orbit_table_at(test.kind, 0, nullptr), 0u);
+
+    // Every entry agrees with the per-code-point lookup, which is what makes
+    // walking the table and walking the class the same answer.
+    for (size_t i = 0; i < count; i++) {
+      size_t written = grx_unicode_orbit_table_at(test.kind, i, members);
+      ASSERT_GE(written, 2u) << "kind " << test.kind << " entry " << i;
+
+      uint32_t direct[GRX_FOLD_ORBIT_MAX];
+      size_t direct_count
+          = grx_unicode_orbit(test.kind, members[0], direct);
+      ASSERT_EQ(direct_count, written) << "kind " << test.kind;
+      for (size_t j = 0; j < written; j++) {
+        ASSERT_EQ(direct[j], members[j]) << "kind " << test.kind;
+      }
+    }
+  }
+
+  // The ASCII folding is the one with no table behind it: it is arithmetic,
+  // and the dispatcher has to give the same shape of answer anyway.
+  uint32_t members[GRX_FOLD_ORBIT_MAX];
+  ASSERT_EQ(grx_unicode_orbit(GRX_FOLD_ASCII, 'a', members), 2u);
+  EXPECT_EQ(members[0], 'A');
+  EXPECT_EQ(members[1], 'a');
+  ASSERT_EQ(grx_unicode_orbit(GRX_FOLD_ASCII, 'Z', members), 2u);
+  EXPECT_EQ(members[0], 'Z');
+  EXPECT_EQ(members[1], 'z');
+  ASSERT_EQ(grx_unicode_orbit(GRX_FOLD_ASCII, '0', members), 1u);
+  EXPECT_EQ(members[0], '0');
+
+  // No folding leaves a code point alone, and still says so with one member.
+  ASSERT_EQ(grx_unicode_orbit(GRX_FOLD_NONE, 'a', members), 1u);
+  EXPECT_EQ(members[0], 'a');
+  EXPECT_EQ(grx_unicode_orbit(GRX_FOLD_SIMPLE, 'a', nullptr), 0u);
+}
+
 TEST(UnicodeVersion, IsThePinnedRelease) {
   // documentation/unicode.md section 1: one UCD release per library minor
   // version, named in tools/unicode/UCD_VERSION and reported here, so that a

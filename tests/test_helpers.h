@@ -142,6 +142,94 @@ private:
   long total_ = 0;
 };
 
+/**
+ * An allocator that fails the nth allocation and succeeds at every other.
+ *
+ * What it is for: every `GRX_ERR_OOM` branch in the library is a path that a
+ * test written by hand will not reach, because reaching it means making one
+ * particular `malloc` fail. Sweeping `n` from 1 upwards over a compile and a
+ * match reaches all of them, one per run, and each run gets to assert the two
+ * things that matter - that the failure came back as a result code rather
+ * than a crash, and that nothing was leaked on the way out.
+ *
+ * It is the same cutil vtable as CountingAllocator, so the same object works
+ * for any library in the suite.
+ */
+class FailingAllocator {
+public:
+  /** @param fail_at Which allocation to fail, counting from 1. 0 fails none. */
+  explicit FailingAllocator(long fail_at) : fail_at_(fail_at) {
+    vtable_.ctx = this;
+    vtable_.malloc_fn = [](void * ctx, size_t size) -> void * {
+      auto * self = static_cast<FailingAllocator *>(ctx);
+      if (!self->allow()) {
+        return nullptr;
+      }
+      void * p = std::malloc(size ? size : 1);
+      if (p) {
+        self->live_++;
+      }
+      return p;
+    };
+    vtable_.calloc_fn = [](void * ctx, size_t nitems, size_t size) -> void * {
+      auto * self = static_cast<FailingAllocator *>(ctx);
+      if (!self->allow()) {
+        return nullptr;
+      }
+      if (nitems && size && nitems > (size_t)-1 / size) {
+        return nullptr;
+      }
+      void * p = std::calloc(nitems ? nitems : 1, size ? size : 1);
+      if (p) {
+        self->live_++;
+      }
+      return p;
+    };
+    vtable_.realloc_fn = [](void * ctx, void * ptr, size_t size) -> void * {
+      auto * self = static_cast<FailingAllocator *>(ctx);
+      if (!self->allow()) {
+        // A failed realloc must leave the original block alone, or the
+        // caller's cleanup would free memory that is still live.
+        return nullptr;
+      }
+      void * p = std::realloc(ptr, size ? size : 1);
+      if (p && !ptr) {
+        self->live_++;
+      }
+      return p;
+    };
+    vtable_.free_fn = [](void * ctx, void * ptr) {
+      auto * self = static_cast<FailingAllocator *>(ctx);
+      if (ptr) {
+        self->live_--;
+      }
+      std::free(ptr);
+    };
+  }
+
+  const GRX_Allocator * get() const { return &vtable_; }
+
+  /** Allocations requested so far, whether they succeeded or not. */
+  long requested() const { return requested_; }
+
+  /** Allocations made and not yet freed. */
+  long live() const { return live_; }
+
+  /** Whether the injected failure actually happened. */
+  bool failed() const { return fail_at_ && requested_ >= fail_at_; }
+
+private:
+  bool allow() {
+    requested_++;
+    return !fail_at_ || requested_ != fail_at_;
+  }
+
+  GRX_Allocator vtable_ {};
+  long fail_at_ = 0;
+  long requested_ = 0;
+  long live_ = 0;
+};
+
 } // namespace grxtest
 
 #endif // GHOTI_IO_GRX_TEST_HELPERS_H
