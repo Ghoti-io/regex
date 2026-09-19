@@ -127,14 +127,16 @@ Nothing is allocated for the caller to free on a failing call.
 
 | Part | State |
 | --- | --- |
-| Build, install, `check-symbols`, `check-layering`, Doxygen | working |
+| Build, install, Doxygen | working |
+| Gates: `check-symbols`, `check-layering`, `check-unicode-tables` | working, in `TEST_GATES` |
+| Gates: `check-oracles` - syntax, match, properties, cross-engine | working; not in `TEST_GATES`, because they need Node |
 | Result codes, limits, allocator, version | working |
 | Diagnostics and error reporting | working |
 | The arena behind every table | working |
 | AST, IR and instruction set, with their dumps | working |
-| `GRX_Facts` and `grx_regex_facts()` | working; analysis computes them in WP-07 |
+| `GRX_Facts` and `grx_regex_facts()` | working; analysis computes them at compile time |
 | Canonical character-class table | working |
-| Dialect table and lookup | working; the feature rows are provisional |
+| Dialect table, semantic profile, `grx_options_parse()` | working; the rows for dialects with no oracle installed are provisional |
 | UTF-8 decode and encode | working, strict |
 | Character classes: membership, insertion, set algebra, fold closure | working |
 | Unicode tables: 454 properties, both foldings, both name resolvers | working, UCD 17.0.0 |
@@ -148,10 +150,11 @@ Nothing is allocated for the caller to free on a failing call.
 | Backtracking engine | working - backreferences, lookaround, atomic groups |
 | Conditionals, recursion, the control verbs | opcodes exist; refused until WP-19 |
 | Bit-state engine | not started; WP-13 |
-| Iteration, substitution and splitting | designed, not started |
+| Iteration, substitution and splitting | designed, not started; WP-15 and WP-16 |
+| The `text` seam for JSON Schema | not started; WP-11 |
 
-**Conformance.** Two differential checks against Node 22, which is the
-pinned ECMAScript oracle.
+**Conformance.** Four differential checks against Node 22, which is the
+pinned ECMAScript oracle. `make check-oracles` runs all four.
 
 `make check-oracle-syntax` compares accept and reject over 720,000 patterns
 per seed - an exhaustive corpus of every string up to three characters over
@@ -181,8 +184,8 @@ test expects the runner to fail it - so that "the suite passes" cannot mean
 backtracking engine hang - run against 100,000 characters in around fifty
 milliseconds, and a test asserts the *scaling* rather than the wall clock.
 
-229 tests plus the vector corpus, clean under Valgrind and under
-ASan+UBSan. The tests that record a
+240 tests plus the vector corpus, clean under Valgrind and under
+ASan+UBSan. `make coverage` reports 89%. The tests that record a
 stub's answer are marked `STUB` in a comment and are meant to be deleted with
 the stub.
 
