@@ -113,10 +113,27 @@ TEST(ReDoS, EveryPairIsRefusedQuicklyAndAnsweredByAnotherEngine) {
   grx_limits_default(&limits);
 
   size_t answered = 0;
+  size_t ran = 0;
   long slowest_refusal = 0;
   long slowest_answer = 0;
 
+  // Under Valgrind, four rows rather than seventeen. Each row costs
+  // max_steps - ten million - and memcheck is thirty times slower, so the
+  // full corpus was six minutes of a twelve-minute suite and dominated it.
+  //
+  // Four is enough for what Valgrind is here to see. Every row takes the
+  // same three paths - compile, backtrack until the limit, answer on the
+  // safe engine - and the memory each allocates differs only in size.
+  // Nothing here reaches the bit-state engine at all: every one of these
+  // patterns is regular, so the safe engine is always the Pike VM, and
+  // bit-state's allocation is checked by test_bitstate.cpp, which also runs
+  // under Valgrind.
+  const size_t rows = under_valgrind() ? 4 : file.records.size();
+
   for (const grxtest::Record & record : file.records) {
+    if (ran++ >= rows) {
+      break;
+    }
     GRX_Regex * regex = nullptr;
     GRX_Error compile_error;
     grx_error_clear(&compile_error);
@@ -169,11 +186,11 @@ TEST(ReDoS, EveryPairIsRefusedQuicklyAndAnsweredByAnotherEngine) {
   // Every pair must be answerable by *something*. A row that only the
   // backtracker can run is a row this library has no defence for, and the
   // corpus is where that would have to be recorded rather than discovered.
-  EXPECT_EQ(answered, file.records.size())
-      << "some pair has no engine that can answer it";
+  EXPECT_EQ(answered, rows) << "some pair has no engine that can answer it";
 
-  printf("\nredos: %zu pairs; slowest refusal %ld ms, slowest answer %ld ms\n",
-      file.records.size(), slowest_refusal, slowest_answer);
+  printf("\nredos: %zu of %zu pairs; slowest refusal %ld ms, slowest answer "
+         "%ld ms\n",
+      rows, file.records.size(), slowest_refusal, slowest_answer);
 }
 
 TEST(ReDoS, TheSafeEnginesStayLinearAsTheSubjectGrows) {
@@ -203,6 +220,7 @@ TEST(ReDoS, TheSafeEnginesStayLinearAsTheSubjectGrows) {
                   GRX_OPT_UTF, &regex),
         GRX_OK)
         << row.pattern;
+
 
     GRX_Facts facts;
     grx_regex_facts(regex, &facts);
