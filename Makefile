@@ -570,16 +570,31 @@ else
 endif
 
 test: ## Make and run the unit tests
+# The loop used to end with the test run itself, so the recipe exited with the
+# status of the LAST binary and every failure before it printed and was
+# discarded - `make test` reported success with a failing suite. Verified by
+# breaking an early test deliberately: the suite exited 0. compress carries
+# the same comment, having been fixed first; this is that fix swept here.
+#
+# Failures are collected rather than stopping at the first, so one run names
+# every suite that failed.
 test: $(APP_DIR)/$(TARGET) $(TEST_EXECUTABLES) $(TEST_GATES)
-	@for test_exe in $(TEST_EXECUTABLES); do \
+	@failed=""; \
+	for test_exe in $(TEST_EXECUTABLES); do \
 		test_name=$$(basename $$test_exe $(EXE_EXTENSION)); \
 		printf "\033[0;30;43m\n"; \
 		printf "############################\n"; \
 		printf "### Running %s tests ###\n" "$$test_name"; \
 		printf "############################"; \
 		printf "\033[0m\n\n"; \
-		LD_LIBRARY_PATH="$(TEST_LD_PATH)" $$test_exe --gtest_brief=1; \
-	done
+		if ! LD_LIBRARY_PATH="$(TEST_LD_PATH)" $$test_exe --gtest_brief=1; then \
+			failed="$$failed $$test_name"; \
+		fi; \
+	done; \
+	if [ -n "$$failed" ]; then \
+		printf "\033[0;31m\n### Failing suites:%s ###\033[0m\n" "$$failed" >&2; \
+		exit 1; \
+	fi
 
 test-quiet: ## Run tests with minimal output (one line per test suite)
 test-quiet: $(APP_DIR)/$(TARGET) $(TEST_EXECUTABLES)
@@ -620,15 +635,22 @@ test-quiet: $(APP_DIR)/$(TARGET) $(TEST_EXECUTABLES)
 test-valgrind: ## Run all tests under valgrind (Linux only)
 test-valgrind: $(APP_DIR)/$(TARGET) $(TEST_EXECUTABLES)
 ifeq ($(OS_NAME), Linux)
-	@for test_exe in $(TEST_EXECUTABLES); do \
+	@failed=""; \
+	for test_exe in $(TEST_EXECUTABLES); do \
 		test_name=$$(basename $$test_exe $(EXE_EXTENSION)); \
 		printf "\033[0;30;43m\n"; \
 		printf "############################\n"; \
 		printf "### Running %s tests under Valgrind ###\n" "$$test_name"; \
 		printf "############################"; \
 		printf "\033[0m\n\n"; \
-		LD_LIBRARY_PATH="$(TEST_LD_PATH)" valgrind $(VALGRIND_FLAGS) $$test_exe --gtest_brief=1; \
-	done
+		if ! LD_LIBRARY_PATH="$(TEST_LD_PATH)" valgrind $(VALGRIND_FLAGS) $$test_exe --gtest_brief=1; then \
+			failed="$$failed $$test_name"; \
+		fi; \
+	done; \
+	if [ -n "$$failed" ]; then \
+		printf "\033[0;31m\n### Valgrind found errors in:%s ###\033[0m\n" "$$failed" >&2; \
+		exit 1; \
+	fi
 else
 	@printf "\033[0;31m\nValgrind is only available on Linux\n\033[0m\n"
 	@exit 1
@@ -678,7 +700,12 @@ endif
 ####################################################################
 # Sanitizer build (ASan + UBSan): separate build dir, run the test suite
 ####################################################################
-ASAN_UBSAN_FLAGS := -fsanitize=address,undefined -fno-omit-frame-pointer -g
+# -fno-sanitize-recover=undefined because UBSan is *recoverable* by default:
+# without it a violation prints "runtime error: ..." and the process exits 0,
+# so the suite reports clean with undefined behaviour in its own log. Verified
+# by injecting a signed overflow: it printed and the build passed. The runtime
+# options below say the same thing a second way, for a binary run by hand.
+ASAN_UBSAN_FLAGS := -fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer -g
 ASAN_BUILD_DIR := ./build/$(BUILD)-asan
 ASAN_OBJ_DIR := $(ASAN_BUILD_DIR)/objects
 ASAN_APP_DIR := $(ASAN_BUILD_DIR)/apps
@@ -741,6 +768,8 @@ test-asan: $(ASAN_TEST_EXECUTABLES)
 		printf "\033[0;30;43m\n### Running %s (ASan+UBSan) ###\033[0m\n\n" "$$test_name"; \
 		LD_PRELOAD="$(ASAN_RUNTIME)$${LD_PRELOAD:+:$$LD_PRELOAD}" \
 		LD_LIBRARY_PATH="$(ASAN_APP_DIR):$(LIB_INSTALL_PATH)/$(SUITE)" \
+		ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
+		UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 \
 			$$test_exe --gtest_brief=1 || exit 1; \
 	done
 	@printf "\033[0;32m\nASan+UBSan suite clean.\033[0m\n"

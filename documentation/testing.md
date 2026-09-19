@@ -237,7 +237,33 @@ Corpus seeds come from the vectors: `make fuzz-seed` writes every vector's
 pattern (and subject) as a corpus file, so the fuzzers start from real
 syntax.
 
-## 9. The ReDoS corpus
+## 9. The gates are themselves tested
+
+A gate nobody has tried to fail is a gate that might not work, and this suite
+has already shipped two that did not: `make test` carried only the *last* test
+binary's exit status, so a failure in any earlier one printed and was
+discarded; and UBSan is recoverable by default, so a violation printed
+`runtime error: ...` and the run still reported "suite clean". Both were found
+by deliberately breaking something and noticing the build stayed green - not
+by reading the Makefile, which looked right.
+
+So each gate has a known way to make it fail, and that is exercised by hand
+when the gate changes:
+
+| Gate | Injected fault | Must give |
+| --- | --- | --- |
+| `make test` | a failing `EXPECT_EQ` in the *first* test binary, not the last | non-zero, naming the suite |
+| `make test-valgrind` | a `malloc` never freed, in the first binary | non-zero, naming the suite |
+| `make test-asan` | a write past a heap allocation | non-zero, ASan report |
+| `make test-asan` | a signed integer overflow | non-zero, UBSan report, no "clean" line |
+| `make fuzz-run-<h>` | a `__builtin_trap()` on a reachable input | non-zero, crash artifact written |
+| `check-symbols` | an exported function with no `namespace.h` entry | non-zero, naming the symbol |
+| `check-layering` | a `GRX_SYNTAX_` mention under `src/exec/` | non-zero, naming the file |
+
+**The first binary, not the last**, is the point of the first two rows: the
+defect they guard against is invisible if the fault is injected at the end.
+
+## 10. The ReDoS corpus
 
 `tests/data/redos/*.rxt`, using `expect: limit`: pattern/subject pairs
 known to be exponential or high-polynomial under backtracking - the
@@ -250,7 +276,7 @@ sets `max_steps` and `max_backtrack` in WP-14, and it is a regression suite
 for the prefilters of Phase 8, which must not make a pathological pair
 pathological again by bypassing the engine that handled it.
 
-## 10. Random patterns
+## 11. Random patterns
 
 `tools/oracle/gen_random.py`: a grammar-driven generator per dialect that
 emits patterns of bounded size over a small alphabet, and subjects over the
@@ -260,7 +286,7 @@ minimised (the generator can shrink) and added to the committed vectors.
 This is what finds the semantic corners the hand-written cases did not
 think of, and it is cheap once the drivers exist.
 
-## 11. Coverage and the unit tests
+## 12. Coverage and the unit tests
 
 `make coverage` per module, read for branches without a test. The
 per-module floor at each milestone is 90% line coverage for `src/parse`,
