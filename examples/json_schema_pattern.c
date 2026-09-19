@@ -41,6 +41,14 @@
  * them. JSON Schema core section 6.4 recommends the regular subset for
  * exactly this reason.
  *
+ * The fifth decision is the one `grx_pattern_lint()` answers, and it is a
+ * different question from all of the above: not "is this safe to run here"
+ * but "does this mean the same thing to every other validator". `\d+` is
+ * regular, is safe, and is outside section 6.4's list - because `\d` is
+ * ASCII in ECMAScript and Unicode-aware in Python and .NET, so a schema
+ * using it validates different documents depending on who reads it. That is
+ * worth telling a schema's author, and it is not worth refusing.
+ *
  * Copyright 2026 by Corey Pennycuff
  */
 
@@ -90,10 +98,27 @@ int main(int argc, char ** argv) {
   // ECMA-262's Annex B rules rather than its Unicode ones.
   GRX_Error error;
   grx_error_clear(&error);
+  GRX_Pattern * parsed = NULL;
+  GRX_Result result = grx_pattern_parse_with_allocator(pattern,
+      strlen(pattern), GRX_SYNTAX_ECMASCRIPT, GRX_OPT_UTF, NULL, NULL,
+      &error, &parsed);
+  if (result != GRX_OK) {
+    report_compile_failure(pattern, &error);
+    return 1;
+  }
+
+  // Whether the pattern stays inside the token list section 6.4 recommends.
+  // This is a *portability* answer and not a safety one: a pattern outside
+  // the list runs here and means something else somewhere else, which is a
+  // warning a validator can pass on to the schema's author. It is asked of
+  // the parsed pattern rather than the compiled one, because by the time a
+  // pattern is compiled `\d` and `[0-9]` are the same class.
+  GRX_LintReport lint;
+  grx_pattern_lint(parsed, &lint);
+
   GRX_Regex * regex = NULL;
-  GRX_Result result
-      = grx_regex_compile_with_allocator(pattern, strlen(pattern),
-          GRX_SYNTAX_ECMASCRIPT, GRX_OPT_UTF, NULL, NULL, &error, &regex);
+  result = grx_regex_compile_pattern(parsed, NULL, NULL, &error, &regex);
+  grx_pattern_free(parsed);
   if (result != GRX_OK) {
     report_compile_failure(pattern, &error);
     return 1;
@@ -111,6 +136,21 @@ int main(int argc, char ** argv) {
                        : "backtracking, exponential worst case");
   if (facts.min_length) {
     printf("minimum:   %zu bytes\n", facts.min_length);
+  }
+
+  printf("portable:  %s\n",
+      lint.finding == GRX_LINT_NONE ? "yes, inside JSON Schema 6.4's subset"
+                                    : grx_lint_string(lint.finding));
+  if (lint.finding != GRX_LINT_NONE && lint.offset != GRX_NPOS) {
+    printf("           ");
+    for (size_t i = 0; i < lint.offset; i++) {
+      putchar(' ');
+    }
+    putchar('^');
+    for (size_t i = 1; i < lint.length; i++) {
+      putchar('~');
+    }
+    putchar('\n');
   }
 
   if (!facts.is_regular && strict) {

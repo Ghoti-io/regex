@@ -39,6 +39,8 @@
 #define GRX_NodeKind GHOTIIO_REGEX(GRX_NodeKind)
 #define GRX_Option GHOTIIO_REGEX(GRX_Option)
 #define GRX_Pattern GHOTIIO_REGEX(GRX_Pattern)
+#define GRX_Lint GHOTIIO_REGEX(GRX_Lint)
+#define GRX_LintReport GHOTIIO_REGEX(GRX_LintReport)
 #define GRX_Regex GHOTIIO_REGEX(GRX_Regex)
 #define GRX_Result GHOTIIO_REGEX(GRX_Result)
 #define GRX_ReplaceFlag GHOTIIO_REGEX(GRX_ReplaceFlag)
@@ -69,6 +71,8 @@
 #define grx_pattern_capture_count GHOTIIO_REGEX(grx_pattern_capture_count)
 #define grx_pattern_dump GHOTIIO_REGEX(grx_pattern_dump)
 #define grx_pattern_free GHOTIIO_REGEX(grx_pattern_free)
+#define grx_pattern_lint GHOTIIO_REGEX(grx_pattern_lint)
+#define grx_lint_string GHOTIIO_REGEX(grx_lint_string)
 #define grx_pattern_node_count GHOTIIO_REGEX(grx_pattern_node_count)
 #define grx_pattern_parse GHOTIIO_REGEX(grx_pattern_parse)
 #define grx_pattern_parse_with_allocator                                       \

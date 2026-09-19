@@ -145,6 +145,92 @@ GRX_API size_t grx_pattern_capture_count(const GRX_Pattern * pattern);
 GRX_API size_t grx_pattern_node_count(const GRX_Pattern * pattern);
 
 /**
+ * @brief What took a pattern outside the JSON Schema subset.
+ *
+ * Not a @ref GRX_Diag, and deliberately: every diagnostic in that catalogue
+ * means something went wrong, and a pattern reported here has nothing wrong
+ * with it. It is valid, this library runs it, and the only claim being made
+ * is that a schema author following JSON Schema core section 6.4's advice
+ * would not have written it.
+ */
+typedef enum {
+  GRX_LINT_NONE = 0,       ///< The pattern is inside the subset.
+  GRX_LINT_FLAGS,          ///< Parsed without `u` or `v`.
+  GRX_LINT_DOT,            ///< `.`.
+  GRX_LINT_SHORTHAND,      ///< `\d`, `\w`, `\s` and their complements.
+  GRX_LINT_PROPERTY,       ///< `\p{...}` or `\P{...}`.
+  GRX_LINT_ANCHOR,         ///< An anchor other than `^` and `$`.
+  GRX_LINT_GROUP,          ///< A group that is not plain `(...)`.
+  GRX_LINT_BACKREFERENCE,  ///< `\1` or `\k<name>`.
+  GRX_LINT_LOOKAROUND,     ///< `(?=...)` and its three siblings.
+  GRX_LINT_CLASS,          ///< A class beyond characters and ranges.
+  GRX_LINT_CONSTRUCT,      ///< Something else outside the subset.
+  GRX_LINT_COUNT           ///< Closes the enum; not a finding.
+} GRX_Lint;
+
+/** @brief What grx_pattern_lint() found, and where. */
+typedef struct GRX_LintReport {
+  GRX_Lint finding; ///< GRX_LINT_NONE when the pattern is in the subset.
+  size_t offset;    ///< Byte offset in the pattern; GRX_NPOS for a flag.
+  size_t length;    ///< Bytes the construct spans, or 0.
+} GRX_LintReport;
+
+/**
+ * @brief The English name of a lint finding.
+ *
+ * @param finding The finding.
+ * @return A static string. Never NULL; out of range gives "unknown".
+ */
+GRX_API const char * grx_lint_string(GRX_Lint finding);
+
+/**
+ * @brief Report the first construct that leaves the JSON Schema subset.
+ *
+ * JSON Schema core section 6.4 says a `pattern` SHOULD be an ECMAScript
+ * regular expression built with `u`, and that "given the high disparity in
+ * regular expression constructs support, schema authors SHOULD limit
+ * themselves to the following regular expression tokens":
+ *
+ * - individual Unicode characters;
+ * - simple and range character classes, `[abc]` and `[a-z]`;
+ * - complemented character classes, `[^abc]` and `[^a-z]`;
+ * - `+`, `*`, `?` and their lazy versions;
+ * - `{x}`, `{x,y}`, `{x,}` and their lazy versions;
+ * - `^` and `$`;
+ * - simple grouping `(...)` and alternation `|`.
+ *
+ * That is the whole list, and this function reports anything else. Three of
+ * its consequences are worth stating because they surprise people, and all
+ * three are the list read as written rather than a judgment added to it:
+ *
+ * - **`.` is not in it.** Which is right: `.` is the construct schema
+ *   engines disagree about most, over line terminators and over whether an
+ *   astral character is one thing or two.
+ * - **`\d`, `\w` and `\s` are not in it.** Also right: they are ASCII in
+ *   ECMAScript and Unicode-aware in Python and .NET, so a schema using them
+ *   means different things to different validators.
+ * - **`(?:...)` is not in it.** "Simple grouping" is `(...)`. This one is
+ *   harmless in practice, and it is reported anyway because the alternative
+ *   is to start deciding which items on the list were meant loosely.
+ *
+ * A caller who disagrees with any of those has the finding and can ignore
+ * it; a caller who wants only the strong signal - whether the pattern can
+ * run in linear time - wants GRX_Facts::is_regular instead, which is a
+ * different and weaker question.
+ *
+ * The *first* construct means the leftmost one in the pattern text, not the
+ * first one a tree walk meets, because the offset is what a caller
+ * underlines.
+ *
+ * @param pattern The parsed pattern. NULL is invalid.
+ * @param out_report Receives the finding. Required; a pattern inside the
+ *   subset reports GRX_LINT_NONE, which is an outcome and not an error.
+ * @return GRX_OK, or GRX_ERR_INVALID for a NULL argument.
+ */
+GRX_API GRX_Result grx_pattern_lint(
+    const GRX_Pattern * pattern, GRX_LintReport * out_report);
+
+/**
  * @brief Write a human-readable form of the syntax tree.
  *
  * For debugging and for tests; the format is not stable across versions.

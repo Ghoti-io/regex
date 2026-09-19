@@ -690,8 +690,26 @@ Not a dialect and not an option: a documented way of using this one.
 recommended subset in JSON Schema core §6.4 is exactly the regular subset,
 so a schema that follows the recommendation runs on the Pike VM with the
 linear-time guarantee; `grx_regex_facts()` tells the validator whether it
-did, and a later `grx_pattern_lint()` reports which construct took a pattern
-outside the subset.
+did, and `grx_pattern_lint()` reports which construct took a pattern outside
+the subset and where it was written.
+
+The two answer different questions and a validator wants both. `is_regular`
+is about *this* library and says whether the linear-time engine can run the
+pattern. The lint is about *every other* validator and says whether the
+pattern means the same thing to them - which `\d` does not, being ASCII in
+ECMAScript and Unicode-aware in Python and .NET, and which `.` does not,
+over line terminators and over whether an astral character is one thing or
+two. `\d+` is regular and outside the subset; both answers are correct and
+neither implies the other.
+
+Section 6.4's list is short enough to quote and the lint reports anything
+not on it: individual Unicode characters; `[abc]` and `[a-z]`; `[^abc]` and
+`[^a-z]`; `+`, `*`, `?` and their lazy forms; `{x}`, `{x,y}`, `{x,}` and
+theirs; `^` and `$`; and `(...)` with `|`. That leaves `.`, the shorthand
+classes and `(?:...)` outside it. The first two are the portability hazards
+above. The third is harmless in practice and is reported anyway, because the
+alternative is to start deciding which bullets were meant loosely, and a
+lint that does that is a lint nobody can rely on.
 
 ## 9. Notes for the rest of tier 1
 
