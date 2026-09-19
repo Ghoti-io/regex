@@ -5,8 +5,8 @@
  *
  * The pattern is the untrusted input here, which is the opposite of most of
  * the suite: elsewhere the format is fixed and the bytes are hostile; here
- * the *program* is the bytes. A pattern must not crash the parser, and - once
- * the engines exist - must not make the matcher run past its limits.
+ * the *program* is the bytes. A pattern must not crash the parser, and must
+ * not make the matcher run past its limits.
  *
  * Build with: make fuzz-pattern
  * Run:        make fuzz-run-pattern FUZZ_TIME=300
@@ -23,10 +23,11 @@
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t * data, size_t size) {
   // The first byte selects the dialect and the limits, so that the capped
   // paths and every syntax are reachable rather than only the wide-open
-  // defaults in one dialect.
+  // defaults in one dialect. It also bounds the limits on one input in two,
+  // because a capped parse takes a different path out.
   GRX_Limits limits;
   grx_limits_default(&limits);
-  GRX_Syntax syntax = GRX_SYNTAX_PCRE;
+  GRX_Syntax syntax = GRX_SYNTAX_ECMASCRIPT;
   uint32_t options = GRX_OPT_NONE;
 
   if (size) {
@@ -34,15 +35,28 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t * data, size_t size) {
     data++;
     size--;
 
-    syntax = (GRX_Syntax)(selector % (unsigned)GRX_SYNTAX_COUNT);
+    // Weighted towards the dialects that have a front end, because a dialect
+    // that does not is refused at the first call and the run is spent. One
+    // input in eight still picks an arbitrary dialect, so the "named but not
+    // built" path stays covered - that path is one line and it is the line
+    // that keeps a caller from being told a PCRE pattern is valid.
+    syntax = (selector & 0x07) == 0
+        ? (GRX_Syntax)((selector >> 3) % (unsigned)GRX_SYNTAX_COUNT)
+        : GRX_SYNTAX_ECMASCRIPT;
     if (selector & 0x40) {
       limits.max_nesting_depth = 8;
       limits.max_nodes = 64;
       limits.max_repeat_count = 16;
       limits.max_class_ranges = 8;
     }
-    if (selector & 0x80) {
-      options = GRX_OPT_CASELESS | GRX_OPT_MULTILINE | GRX_OPT_UTF;
+    // The option combinations that change the *grammar*, not just the
+    // match: ECMAScript reads a different language with `u` than without.
+    switch ((selector >> 3) & 0x03) {
+      case 1: options = GRX_OPT_UTF; break;
+      case 2: options = GRX_OPT_CASELESS | GRX_OPT_UTF; break;
+      case 3: options = GRX_OPT_CASELESS | GRX_OPT_MULTILINE | GRX_OPT_DOTALL;
+        break;
+      default: options = GRX_OPT_NONE; break;
     }
   }
 
