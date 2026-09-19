@@ -278,7 +278,7 @@ the additions are what the dialects need:
 | **Control** | `SPLIT x, y` (try `x` first), `JMP`, `MATCH` |
 | **Captures** | `SAVE n` |
 | **Assertions** | `ASSERT kind`: start/end of subject, start/end of line (dialect newline set), end-or-before-final-newline (`\Z`), word/non-word boundary (dialect word set), `\G` |
-| **Loop guards** | `PROGRESS_SET r` records the position in per-thread register `r` at loop entry; `PROGRESS_CHECK r, mode` implements the dialect's empty-iteration rule at loop end (fail, or exit the loop, or continue) |
+| **Loop guards** | `PROGRESS_SET r` records the position in per-thread register `r` at loop entry; `PROGRESS_CHECK r, mode` implements the dialect's empty-iteration rule at loop end (fail, or exit the loop, or continue); `RESET lo, hi` clears a span of capture slots, which is the other half of §5.5 - ECMAScript clears the captures inside a repeat at each iteration and the Perl family does not. `RESET` was added during WP-07: the rule has no other representation, because a rewrite of the loop cannot say "clear these on entry but keep them if the loop exits here". |
 | **Backtracking only** | `BACKREF n` (with caseless and unset-group mode), `LOOK kind, body` (ahead/behind, positive/negative), `ATOMIC_BEGIN`/`ATOMIC_END`, `COND kind, n`, `CALL n`/`RET` (recursion and subroutines), `KEEP`, `VERB kind` (`(*FAIL)`, `(*ACCEPT)`, `(*COMMIT)`, `(*PRUNE)`, `(*SKIP)`, `(*THEN)`) |
 
 Counted repetition `{m,n}` is compiled by expansion in both engines, bounded
@@ -316,9 +316,15 @@ the last one. Per-thread state is the capture array plus the progress
 registers, reference-counted and copied on write, so a `SPLIT` costs a
 pointer and a `SAVE` costs a copy only when the array is shared.
 
-The subject is decoded once per position, not once per thread. Unanchored
-search is a leading `SPLIT` loop over `ANY_NL`, not a restart per position,
-so the linear bound holds for search as well as match.
+The subject is decoded once per position, not once per thread.
+
+Unanchored search adds a thread at the program's entry point at each
+position, rather than compiling a leading `SPLIT` loop over `ANY_NL` as this
+page first specified. The two are equivalent and the second is simpler: the
+sparse set already refuses a program counter that is occupied, so the search
+costs no more than the match and the linear bound holds for both. Compiling
+the loop instead would mean two programs per pattern, or one program that an
+anchored match has to enter past its own prologue.
 
 #### 3.5.2 Backtracker
 

@@ -97,7 +97,6 @@ typedef enum {
 typedef enum {
   GRX_SHORTHANDS_ASCII = 0,  ///< `[A-Za-z0-9_]`, `[0-9]`, `[ \t\n\v\f\r]`.
   GRX_SHORTHANDS_ECMASCRIPT, ///< ASCII `\w` and `\d`; ECMAScript's wider `\s`.
-  GRX_SHORTHANDS_ES_UNICODE, ///< As ECMAScript, `\w` gaining U+017F, U+212A.
   GRX_SHORTHANDS_UNICODE,    ///< UTS #18: `\p{Word}`, `\p{Nd}`, `\p{White_Space}`.
   GRX_SHORTHANDS_COUNT       ///< Closes the enum; not a definition.
 } GRX_ShorthandSet;
@@ -128,6 +127,18 @@ typedef struct GRX_Profile {
   GRX_FoldKind fold_utf;            ///< Caseless folding with UTF.
   GRX_PropertyMatch property_match; ///< How `\p{...}` names are spelled.
   int multiline_by_default;         ///< Ruby: `^`/`$` are always line anchors.
+  /**
+   * The dialect's subject is text, not bytes, whatever the options say.
+   *
+   * PCRE2 without `PCRE2_UTF` matches bytes, and that is the right thing for
+   * it: its subject is a byte string. ECMAScript's subject is a sequence of
+   * characters in every mode - the `u` flag changes the *grammar* and the
+   * folding, not whether a subject is text - so decoding it as UTF-8 is
+   * unconditional here. Reading it as bytes instead would make `.` match a
+   * third of a character and `[^x]` match a continuation byte, which is not
+   * a closer approximation of ECMA-262 than decoding is; it is a worse one.
+   */
+  int subject_is_text;
 } GRX_Profile;
 
 /**

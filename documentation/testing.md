@@ -159,6 +159,34 @@ Any later disagreement between an oracle and its profile row is added here
 as a case, so that the suite is the record of every semantic question the
 project has had to ask.
 
+### The differential match check
+
+`make check-oracle-match` runs `tools/oracle/match_diff.py`, which is the
+same idea one level deeper: it asks both implementations what a pattern
+*does* to a subject, and compares every group's span.
+
+Spans rather than substrings, because substrings hide the failures that
+matter. `(a*)*` and `(a*)+` against "b" both match the empty string; what
+distinguishes ECMAScript from Perl is whether group 1 comes back unset or
+empty, and only a span says which. Two defects were found this way that no
+substring comparison would have shown: a capture-reset rule that was
+implemented for unbounded repeats and not for `{m,n}`, and an
+empty-iteration guard with the same gap.
+
+The offsets are the hard part. The reference counts UTF-16 code units and
+this library counts UTF-8 bytes, so the Node driver converts - by code point,
+not by code unit, because the byte length of a lone surrogate is three and
+summing that per unit puts every position after an astral character six bytes
+out. A match that lands *between* the halves of a surrogate pair has no byte
+offset at all, and is reported as such and skipped with a count rather than
+given an invented one (dialects.md section 6.1).
+
+Three outcomes are counted rather than compared, and the counts are printed
+so that none of them can hide a real difference: a program no implemented
+engine can run (a backreference, until WP-08), a pattern *both* sides reject,
+and a surrogate position. A pattern only *one* side rejects is a
+disagreement and is reported.
+
 ### The differential syntax check
 
 `make check-oracle-syntax` runs `tools/oracle/syntax_diff.py`, which asks this

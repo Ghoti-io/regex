@@ -4,9 +4,12 @@
  * The compiler: a parsed pattern to a program, plus the public entry points
  * that own a compiled regex.
  *
- * Status: stub. grx_compile_program() reports GRX_ERR_UNSUPPORTED; the
- * accessors, the dump and the free path are written against the struct in
- * compile_internal.h and work as soon as it is populated.
+ * grx_compile_program() is the four steps of documentation/design.md
+ * section 3 in order: lower the syntax tree to the IR, analyse the IR for
+ * the facts, generate instructions, and copy the capture names forward. The
+ * IR is freed on the way out - a compiled regex is the program and the facts,
+ * and keeping the tree that produced it would be keeping a second answer to
+ * every question the facts already answer.
  *
  * Copyright 2026 by Corey Pennycuff
  */
@@ -22,21 +25,107 @@
 #include <string.h>
 
 #include "../core/core_internal.h"
+#include "../ir/lower_internal.h"
 #include "compile_internal.h"
+
+/**
+ * Copy the capture names out of the IR into the array the public API reads.
+ *
+ * One `char *` per group, NULL where the group is unnamed, so that
+ * grx_regex_capture_name() is an index rather than a search.
+ */
+static GRX_Result copy_capture_names(GRX_Regex * regex, const GRX_IR * ir) {
+  if (!regex->capture_count) {
+    return GRX_OK;
+  }
+
+  regex->capture_names = gcu_allocator_calloc(
+      regex->allocator, regex->capture_count, sizeof(char *));
+  if (!regex->capture_names) {
+    return GRX_ERR_OOM;
+  }
+
+  for (size_t i = 0; i < ir->nodes.count; i++) {
+    const GRX_IRNode * node = grx_ir_node(ir, (uint32_t)i);
+    if (!node || node->kind != GRX_IR_CAPTURE || node->b == GRX_INDEX_NONE) {
+      continue;
+    }
+    if (!node->a || node->a > regex->capture_count) {
+      continue;
+    }
+    const char * name = grx_ir_name(ir, node->b);
+    if (!name || regex->capture_names[node->a - 1]) {
+      continue;
+    }
+
+    size_t length = strlen(name);
+    char * copy = gcu_allocator_malloc(regex->allocator, length + 1);
+    if (!copy) {
+      return GRX_ERR_OOM;
+    }
+    memcpy(copy, name, length + 1);
+    regex->capture_names[node->a - 1] = copy;
+  }
+
+  return GRX_OK;
+}
 
 GRX_Result grx_compile_program(const GRX_Pattern * pattern,
     const GRX_Limits * limits, const GRX_Allocator * allocator,
     GRX_Error * out_error, GRX_Regex ** out_regex) {
-  (void)pattern;
-  (void)limits;
-  (void)allocator;
-
-  if (!out_regex) {
+  if (!pattern || !limits || !allocator || !out_regex) {
     return GRX_ERR_INVALID;
   }
+  *out_regex = NULL;
 
-  return grx_error_set(out_error, GRX_ERR_UNSUPPORTED,
-      GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, GRX_NPOS, 0);
+  GRX_IR * ir = NULL;
+  GRX_Result result
+      = grx_lower_pattern(pattern, limits, allocator, out_error, &ir);
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  GRX_Regex * regex = gcu_allocator_calloc(allocator, 1, sizeof(GRX_Regex));
+  if (!regex) {
+    grx_ir_free(ir);
+    return grx_error_set(
+        out_error, GRX_ERR_OOM, GRX_DIAG_OUT_OF_MEMORY, GRX_NPOS, 0);
+  }
+
+  regex->allocator = allocator;
+  regex->syntax = pattern->syntax;
+  regex->options = pattern->options;
+  regex->capture_count = pattern->capture_count;
+  regex->capture_names = NULL;
+  grx_program_init(&regex->program, allocator, limits);
+  grx_facts_init(&regex->facts);
+
+  result = grx_analyze_ir(ir, &regex->facts);
+  if (result == GRX_OK) {
+    result = grx_codegen_program(ir, limits, out_error, &regex->program);
+  }
+  if (result == GRX_OK) {
+    result = copy_capture_names(regex, ir);
+    if (result != GRX_OK) {
+      result = grx_error_set(
+          out_error, result, GRX_DIAG_OUT_OF_MEMORY, GRX_NPOS, 0);
+    }
+  }
+  if (result == GRX_OK) {
+    // Filled in after codegen, because they are properties of the program
+    // rather than of the tree it came from.
+    regex->facts.program_size = regex->program.insts.count;
+    regex->facts.capture_count = regex->capture_count;
+  }
+
+  grx_ir_free(ir);
+  if (result != GRX_OK) {
+    grx_regex_free(regex);
+    return result;
+  }
+
+  *out_regex = regex;
+  return GRX_OK;
 }
 
 void grx_facts_init(GRX_Facts * facts) {

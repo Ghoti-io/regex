@@ -260,11 +260,18 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     .iteration = GRX_ITERATE_ADVANCE_ONE,
     .dollar = GRX_DOLLAR_END_ONLY,
     .newlines = GRX_NEWLINES_ECMASCRIPT,
+    // The same sets in both modes, deliberately. ECMAScript's `\w` gains
+    // U+017F and U+212A under `iu`, but that is not a different set - it is
+    // what closing the ASCII one under simple folding produces, which is
+    // exactly how ECMA-262 22.2.2.9.3 defines it. Writing it as a second set
+    // here would apply the widening under `u` alone, where `/\w/u` does not
+    // match U+017F.
     .shorthands = GRX_SHORTHANDS_ECMASCRIPT,
-    .shorthands_utf = GRX_SHORTHANDS_ES_UNICODE,
+    .shorthands_utf = GRX_SHORTHANDS_ECMASCRIPT,
     .fold = GRX_FOLD_ES_LEGACY,
     .fold_utf = GRX_FOLD_SIMPLE,
     .property_match = GRX_PROPERTY_STRICT,
+    .subject_is_text = 1,
   },
 
   [GRX_SYNTAX_PYTHON] = {

@@ -34,6 +34,9 @@
 #include "../core/arena_internal.h"
 #include "../core/semantics_internal.h"
 
+/** Declared, not included: codegen takes an IR and the IR does not take a program. */
+struct GRX_IR;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -61,6 +64,7 @@ extern "C" {
  * | SAVE | capture slot | - | - |
  * | ASSERT | class index for the line or word set, else GRX_INDEX_NONE | - | GRX_AssertKind |
  * | PROGRESS_SET | register | - | - |
+ * | RESET | first capture slot | one past the last | - |
  * | PROGRESS_CHECK | register | continuation when the loop must exit | GRX_EmptyLoopMode |
  * | BACKREF | group number | - | GRX_BackrefUnsetMode |
  * | LOOK | first instruction of the body | continuation after the body | GRX_LookKind |
@@ -86,6 +90,21 @@ typedef enum {
   GRX_OP_SAVE,         ///< Record a capture boundary.
   GRX_OP_ASSERT,       ///< A zero-width assertion.
   GRX_OP_PROGRESS_SET, ///< Record the position at the head of a loop.
+  /**
+   * @brief Clear a span of capture slots.
+   *
+   * The dialect's capture-reset rule, made explicit. ECMA-262's RepeatMatcher
+   * step 4 clears every capture inside a repeated group at the start of each
+   * iteration, so that `((a)|b)+` against "ab" reports group 2 as unset;
+   * Perl's loop does not, and reports it as "a". Emitted only where the
+   * profile asks for it, so a dialect that keeps its captures pays nothing.
+   *
+   * This opcode is not in documentation/design.md's first instruction table.
+   * It was added when the rule turned out to have no other representation:
+   * the alternative is a rewrite of the loop body, and a rewrite cannot
+   * express "clear these on entry but keep them if the loop exits here".
+   */
+  GRX_OP_RESET,
   GRX_OP_PROGRESS_CHECK, ///< Apply the empty-iteration rule at a loop's end.
   GRX_OP_BACKREF,      ///< Match what a group matched earlier.
   GRX_OP_LOOK,         ///< Run a sub-program without consuming input.
@@ -213,6 +232,19 @@ GRX_Result grx_program_dump(const GRX_Program * program, FILE * out);
  * @param program The program.
  */
 void grx_program_clear(GRX_Program * program);
+
+/**
+ * @brief Generate instructions for a lowered pattern.
+ *
+ * @param ir The lowered pattern. Never NULL here.
+ * @param limits Caps to apply. Never NULL here.
+ * @param out_error Receives the failure position and message. May be NULL.
+ * @param out_program A program already prepared by grx_program_init().
+ * @return GRX_OK or a failure code.
+ */
+GRX_Result grx_codegen_program(const struct GRX_IR * ir,
+    const GRX_Limits * limits, GRX_Error * out_error,
+    GRX_Program * out_program);
 
 /**
  * @brief Compile a lowered pattern into a program.

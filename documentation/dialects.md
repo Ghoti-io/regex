@@ -401,6 +401,8 @@ to be complete for every shipped tier.
 | all | No locale; POSIX classes and case folding are C-locale ASCII or Unicode, never `LC_CTYPE` | [unicode.md](unicode.md) §7 | - |
 | ECMAScript | Lone surrogates cannot occur in the subject | UTF-8 | - |
 | ECMAScript | Repeat counts are limited (the grammar admits 2^53 - 1) | as above | `GRX_ERR_LIMIT` |
+| ECMAScript | **The subject is code points, not UTF-16 code units, in *both* modes** | see below | - |
+| ECMAScript | A match cannot begin or end between the halves of a surrogate pair | as above | - |
 | Perl | Full case folding is simple folding | [design.md](design.md) §5.2 | - |
 | Perl | `(?{ })`, `(??{ })`, `\N{name}` by name, `(?[ ])` in 1.0 | code execution; name table size; later tier | `GRX_ERR_UNSUPPORTED` |
 | PCRE2 | Callouts `(?C...)` | no callback API | `GRX_ERR_UNSUPPORTED` |
@@ -409,6 +411,30 @@ to be complete for every shipped tier.
 | .NET | Culture-sensitive folding is invariant; balancing groups deferred | §5.8; [design.md](design.md) §2 | `GRX_ERR_UNSUPPORTED` for balancing groups |
 | Emacs | Syntax classes (`\s-`, `\w`) use fixed Unicode definitions, not a syntax table | no syntax table | - |
 | Vim | `\%[...]`, `\%d123`, `\z(`, `\=` in replacements | later tier | `GRX_ERR_UNSUPPORTED` |
+
+### 6.1 ECMAScript and the unit of a subject
+
+ECMA-262 defines matching over UTF-16 code units, and the `u` flag changes
+the *grammar* and the folding rather than what a subject is made of. Without
+`u`, `.` against an emoji matches one surrogate half and `RegExp.prototype.exec`
+can report an index between the two.
+
+This library's subject is UTF-8 bytes, and the ECMAScript profile decodes it
+as text in both modes. That is a deviation, and the alternative was worse:
+reading the bytes as units instead would make `.` match one third of a
+character, `[^x]` match a continuation byte, and `\s` fail against U+FEFF. The
+profile records the choice as `subject_is_text`, so a dialect whose subject
+genuinely is a byte string - PCRE2 without `PCRE2_UTF` - is not affected by it.
+
+Two consequences, both only observable with astral characters:
+
+- `.` matches one character where ECMA-262 without `u` matches one code unit,
+  so a subject containing an emoji gives a different count.
+- A zero-width assertion can match *between* the halves of a surrogate pair
+  in ECMAScript, including under `u`: `/\B/u` against `"0"` + an emoji + `"B"`
+  reports index 2. UTF-8 has no such position, so this library reports the
+  next match instead. The conformance harness skips these rather than
+  counting them, and says how many it skipped.
 
 ## 7. Limits
 

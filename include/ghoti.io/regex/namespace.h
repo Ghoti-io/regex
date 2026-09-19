@@ -159,7 +159,13 @@
 #define grx_pattern_name GHOTIIO_REGEX(grx_pattern_name)
 #define grx_pattern_node GHOTIIO_REGEX(grx_pattern_node)
 
-// The intermediate representation.
+// The intermediate representation, and lowering into it.
+#define GRX_NamedSet GHOTIIO_REGEX(GRX_NamedSet)
+#define grx_analyze_ir GHOTIIO_REGEX(grx_analyze_ir)
+#define grx_lower_pattern GHOTIIO_REGEX(grx_lower_pattern)
+#define grx_named_set GHOTIIO_REGEX(grx_named_set)
+#define grx_newline_set GHOTIIO_REGEX(grx_newline_set)
+#define grx_shorthand_set GHOTIIO_REGEX(grx_shorthand_set)
 #define GRX_IR GHOTIIO_REGEX(GRX_IR)
 #define GRX_IRKind GHOTIIO_REGEX(GRX_IRKind)
 #define GRX_IRNode GHOTIIO_REGEX(GRX_IRNode)
@@ -176,6 +182,7 @@
 #define GRX_Inst GHOTIIO_REGEX(GRX_Inst)
 #define GRX_Opcode GHOTIIO_REGEX(GRX_Opcode)
 #define GRX_Program GHOTIIO_REGEX(GRX_Program)
+#define grx_codegen_program GHOTIIO_REGEX(grx_codegen_program)
 #define grx_compile_program GHOTIIO_REGEX(grx_compile_program)
 #define grx_opcode_name GHOTIIO_REGEX(grx_opcode_name)
 #define grx_program_add GHOTIIO_REGEX(grx_program_add)

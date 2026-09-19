@@ -140,15 +140,28 @@ Nothing is allocated for the caller to free on a failing call.
 | ECMAScript front end, legacy and Unicode modes | working |
 | ECMAScript UnicodeSets (`v`) mode | refused with a diagnostic; WP-12 |
 | Every dialect but ECMAScript | named, `GRX_ERR_UNSUPPORTED` |
-| Lowering and codegen | not started |
-| Pike VM, backtracking engine | stubs - `GRX_ERR_UNSUPPORTED` |
-| Substitution and splitting | designed, not started |
+| Lowering, analysis and code generation | working |
+| Pike VM | working - the regular subset, in linear time |
+| Backtracking engine | stub - `GRX_ERR_UNSUPPORTED`; WP-08 |
+| Backreference, lookaround, atomic group | compile, but no engine runs them yet |
+| Iteration, substitution and splitting | designed, not started |
 
-**Conformance.** The ECMAScript front end's accept/reject agrees with Node 22
-on every one of 720,000 patterns per seed - an exhaustive corpus of every
-string up to three characters over the grammar's punctuation, and a random
-corpus of longer ones. `make check-oracle-syntax` runs it. That is a claim
-about *syntax* only; there is no engine yet to make one about matching.
+**Conformance.** Two differential checks against Node 22, which is the
+pinned ECMAScript oracle.
+
+`make check-oracle-syntax` compares accept and reject over 720,000 patterns
+per seed - an exhaustive corpus of every string up to three characters over
+the grammar's punctuation, plus a random corpus of longer ones. No
+disagreement.
+
+`make check-oracle-match` compares every group's span for random patterns
+against random subjects. No disagreement over the rows it can compare; the
+rows it cannot are counted and named, and today they are the patterns whose
+programs need the backtracking engine (WP-08).
+
+**Linear time.** `(a|aa)*b`, `(a+)+b` and `(a*)*b` - the patterns that make a
+backtracking engine hang - run against 100,000 characters in around fifty
+milliseconds, and a test asserts the *scaling* rather than the wall clock.
 
 202 tests, clean under Valgrind and under ASan+UBSan. The tests that record a
 stub's answer are marked `STUB` in a comment and are meant to be deleted with

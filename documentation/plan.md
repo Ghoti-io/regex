@@ -132,7 +132,7 @@ accept/reject verdicts (WP-09 supplies the vectors, but the parser lane runs
 them). *Depends on:* WP-01.
 
 **WP-07 Lowering, analysis, codegen, and the Pike VM.** *core then
-engines, L.* Lowering per [design.md](design.md) §3.2 with the ECMAScript
+engines, L.* **Landed.** Lowering per [design.md](design.md) §3.2 with the ECMAScript
 profile values; analysis per §3.3; codegen for the regular subset,
 including repeat expansion under `max_program_size`, progress registers,
 reverse-direction instructions; the Pike VM per §3.5.1 in leftmost-first

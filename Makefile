@@ -244,6 +244,7 @@ TEST_GATES ?= check-symbols check-layering check-unicode-tables
 # seed (documentation/testing.md).
 ORACLE_SEED ?= 1
 ORACLE_COUNT ?= 120000
+ORACLE_PATTERNS ?= 600
 
 # Valgrind flags (exclude "still reachable" as it's not a leak)
 VALGRIND_FLAGS := --leak-check=full --show-leak-kinds=definite,indirect,possible --track-origins=yes --error-exitcode=1
@@ -443,7 +444,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/oracle/%.c $(APP_DIR)/$(STATIC_TARGET)
 ####################################################################
 
 # General commands
-.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-unicode-tables check-oracle-syntax
+.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-unicode-tables check-oracle-syntax check-oracle-match
 # Release build commands
 .PHONY: all install test test-quiet test-asan test-valgrind test-valgrind-quiet test-watch uninstall watch
 # Debug build commands
@@ -477,6 +478,15 @@ test-watch: ## Watch the file directory for changes and run the unit tests
 tools: ## Build the oracle drivers used by the conformance harnesses
 tools: $(APP_DIR)/$(TARGET) $(TOOLS)
 	@printf "\nOracle drivers are in: $(APP_DIR)/tools/\n"
+
+check-oracle-match: ## Compare what patterns match against the reference implementation
+check-oracle-match: $(TOOLS)
+	@if ! command -v node >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then \
+		printf "check-oracle-match: skipped (no node or no python3)\n"; \
+		exit 0; \
+	fi; \
+	python3 tools/oracle/match_diff.py --seed $(ORACLE_SEED) \
+		--patterns $(ORACLE_PATTERNS) --driver $(APP_DIR)/tools/grx_match
 
 check-oracle-syntax: ## Compare accept/reject against the reference implementation
 check-oracle-syntax: $(TOOLS)

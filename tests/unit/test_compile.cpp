@@ -3,9 +3,14 @@
  *
  * The compile entry points.
  *
- * As with the parser, the compiler is a stub: these state the argument
- * contract, and the tests marked STUB record the stub's answer so that "not
- * implemented" is said out loud.
+ * The argument contract, which is the part that does not change as the
+ * pipeline behind it fills in. What a compile *produces* is
+ * tests/unit/test_lower.cpp; what it matches is checked against Node by
+ * tools/oracle/match_diff.py.
+ *
+ * The dialect used here is deliberately one that is not built. Every call
+ * below is about arguments rather than about patterns, and using a dialect
+ * with a front end would make the tests depend on that front end's rules.
  *
  * Copyright 2026 by Corey Pennycuff
  */
@@ -51,11 +56,52 @@ TEST(Compile, ReportsThePositionOfTheFailure) {
   EXPECT_NE(error.message[0], '\0');
 }
 
-TEST(Compile, StubReportsUnsupported) {
-  // STUB: delete with the compiler.
+TEST(Compile, ADialectThatIsNotBuiltSaysSo) {
+  // design.md section 4: a dialect that accepts everything is a bug. PCRE2's
+  // front end is plan.md WP-18; until then a PCRE pattern is refused rather
+  // than read with ECMAScript's rules and pronounced valid.
   GRX_Regex * regex = nullptr;
-  EXPECT_EQ(grx_regex_compile("a", GRX_SYNTAX_PCRE, GRX_OPT_NONE, &regex),
+  GRX_Error error;
+  EXPECT_EQ(grx_regex_compile_with_allocator("a", 1, GRX_SYNTAX_PCRE,
+                GRX_OPT_NONE, nullptr, nullptr, &error, &regex),
       GRX_ERR_UNSUPPORTED);
+  EXPECT_EQ(error.diag, GRX_DIAG_DIALECT_NOT_IMPLEMENTED);
+  EXPECT_EQ(regex, nullptr);
+}
+
+TEST(Compile, TheCommonPathProducesARunnableProgram) {
+  GRX_Regex * regex = nullptr;
+  ASSERT_EQ(grx_regex_compile("a(b|c)*d", GRX_SYNTAX_ECMASCRIPT, GRX_OPT_NONE,
+                &regex),
+      GRX_OK);
+  ASSERT_NE(regex, nullptr);
+  EXPECT_EQ(grx_regex_syntax(regex), GRX_SYNTAX_ECMASCRIPT);
+  EXPECT_EQ(grx_regex_capture_count(regex), 1u);
+  EXPECT_GT(grx_regex_program_size(regex), 0u);
+  grx_regex_free(regex);
+}
+
+TEST(Compile, AnAlreadyParsedPatternCanBeCompiledMoreThanOnce) {
+  // The pattern is read, not consumed: a caller linting a pattern and then
+  // compiling it should not have to parse it twice.
+  GRX_Pattern * parsed = nullptr;
+  ASSERT_EQ(grx_pattern_parse("[a-z]+", GRX_SYNTAX_ECMASCRIPT, GRX_OPT_NONE,
+                &parsed),
+      GRX_OK);
+
+  GRX_Regex * first = nullptr;
+  GRX_Regex * second = nullptr;
+  ASSERT_EQ(
+      grx_regex_compile_pattern(parsed, nullptr, nullptr, nullptr, &first),
+      GRX_OK);
+  ASSERT_EQ(
+      grx_regex_compile_pattern(parsed, nullptr, nullptr, nullptr, &second),
+      GRX_OK);
+  EXPECT_EQ(grx_regex_program_size(first), grx_regex_program_size(second));
+
+  grx_regex_free(first);
+  grx_regex_free(second);
+  grx_pattern_free(parsed);
 }
 
 TEST(Compile, AllocatesNothingOnAFailedCompile) {
