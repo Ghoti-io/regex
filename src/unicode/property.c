@@ -120,6 +120,29 @@ static int find_name(const GRX_UnicodeName * table, size_t count,
   return 0;
 }
 
+/**
+ * The general-category spellings the loose table cannot hold.
+ *
+ * `\p{L&}` is Cased_Letter in both references, and `\p{L_}` is Cased_Letter
+ * in Perl. Neither can be a row: `L&` loosens to "l&", which is a key
+ * nothing else would ever produce, and `L_` loosens to "l", which is already
+ * `L`'s - and `L` is what PCRE2 means by it. So the two are resolved from
+ * the caller's text, before loosening gets to it.
+ *
+ * @return The loose spelling to look up instead, or NULL for anything else.
+ */
+static const char * cased_letter_alias(
+    const char * name, size_t name_length, GRX_PropertyMatch match) {
+  if (name_length != 2 || (name[0] != 'L' && name[0] != 'l')) {
+    return NULL;
+  }
+  if (name[1] == '&') {
+    return "lc";
+  }
+
+  return name[1] == '_' && match == GRX_PROPERTY_LOOSE_PERL ? "lc" : NULL;
+}
+
 /** Find the kind a property *name* selects: `gc`, `sc`, `scx` and their aliases. */
 static int find_prop_kind(const GRX_UnicodeName * table, size_t count,
     const char * name, size_t name_length, int * out_kind) {
@@ -147,12 +170,20 @@ GRX_Result grx_unicode_property_lookup(const char * name, size_t name_length,
   const GRX_UnicodeName * props = grx_unicode_prop_names;
   size_t prop_count = grx_unicode_prop_name_count;
 
-  if (match == GRX_PROPERTY_LOOSE) {
-    name_length = loosen(name, name_length, name_buffer);
-    if (!name_length) {
-      return GRX_ERR_SYNTAX;
+  if (match != GRX_PROPERTY_STRICT) {
+    const char * alias
+        = value ? NULL : cased_letter_alias(name, name_length, match);
+    if (alias) {
+      name = alias;
+      name_length = strlen(alias);
     }
-    name = name_buffer;
+    else {
+      name_length = loosen(name, name_length, name_buffer);
+      if (!name_length) {
+        return GRX_ERR_SYNTAX;
+      }
+      name = name_buffer;
+    }
     if (value) {
       value_length = loosen(value, value_length, value_buffer);
       if (!value_length) {
@@ -196,7 +227,7 @@ GRX_Result grx_unicode_property_lookup(const char * name, size_t name_length,
   // ECMAScript, which is exactly the difference the two resolvers exist to
   // keep apart. Tried last, so that a name which is both a binary property
   // and a script still resolves the way it does in the strict form.
-  if (match == GRX_PROPERTY_LOOSE
+  if (match != GRX_PROPERTY_STRICT
       && find_name(names, name_count, name, name_length, GRX_UPROP_SCRIPT,
           out_property)) {
     return GRX_OK;

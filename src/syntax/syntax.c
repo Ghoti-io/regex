@@ -259,7 +259,7 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     .shorthands_utf = GRX_SHORTHANDS_UNICODE,
     .fold = GRX_FOLD_SIMPLE,
     .fold_utf = GRX_FOLD_SIMPLE,
-    .property_match = GRX_PROPERTY_LOOSE,
+    .property_match = GRX_PROPERTY_LOOSE_PERL,
     // The interpolation subset of section 5.11. A Perl template is a double-
     // quoted string, so the escape is `\$` and not `$$` - `$$` is the
     // process id, which is why the two rules cannot both be true of one
@@ -312,6 +312,7 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
   // `m` means the end of the subject and nothing else.
   [GRX_SYNTAX_ECMASCRIPT] = {
     .preference = GRX_PREFER_LEFTMOST_FIRST,
+    .caret_after_final_newline = 1,
     .empty_loop = GRX_EMPTY_LOOP_FAIL,
     .capture_reset = GRX_CAPTURE_RESET_EACH,
     .backref_unset = GRX_BACKREF_UNSET_EMPTY,
@@ -345,6 +346,7 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
   },
 
   [GRX_SYNTAX_PYTHON] = {
+    .caret_after_final_newline = 1,
     .lookbehind = GRX_LOOKBEHIND_FIXED,
     .dollar = GRX_DOLLAR_BEFORE_FINAL_NEWLINE,
     .shorthands = GRX_SHORTHANDS_UNICODE,

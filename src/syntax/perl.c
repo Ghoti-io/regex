@@ -49,6 +49,8 @@ static Flavour flavour(const GRX_Parser * parser) {
 /** The longest group name this front end will accept, in bytes. */
 #define GRX_PCRE_NAME_MAX 128
 
+static GRX_Result pcre_skip_ignorable(GRX_Parser * parser);
+
 /** The byte at an offset from the current position, or 0 past the end. */
 static char byte_at(const GRX_Parser * parser, size_t ahead) {
   size_t index = parser->position + ahead;
@@ -143,10 +145,22 @@ typedef struct {
 static GRX_Result read_hex(GRX_Parser * parser, size_t start,
     uint32_t * out_value) {
   if (byte_at(parser, 0) == '{') {
+    // Perl lets an underscore separate the digits, the way a numeric literal
+    // does: `\x{_1_0000}` is U+10000. PCRE2 does not, and says "Malformed
+    // \x{ escape" for the same pattern. Perl also reads `\x{_}` as zero,
+    // which this still refuses: a digit is what the escape is for.
+    int separators = flavour(parser) == FLAVOUR_PERL;
     size_t scan = 1;
     uint32_t value = 0;
     int digits = 0;
-    while (is_hex(byte_at(parser, scan))) {
+    for (;;) {
+      if (separators && byte_at(parser, scan) == '_') {
+        scan++;
+        continue;
+      }
+      if (!is_hex(byte_at(parser, scan))) {
+        break;
+      }
       value = (value << 4) | hex_value(byte_at(parser, scan));
       if (value > GRX_CODEPOINT_MAX) {
         return grx_parse_fail(
@@ -433,15 +447,61 @@ static GRX_Result read_property(GRX_Parser * parser, int negated, size_t start,
 }
 
 /**
+ * Whether the `{` at an offset from here could be a quantifier's.
+ *
+ * Both references allow spaces inside the braces - `\N{ 3 }` is three of
+ * anything - so the shape is digits, commas and blanks, with at least one
+ * digit, closed by a brace. What it cannot be is a name.
+ */
+static int brace_is_repeat(const GRX_Parser * parser, size_t at) {
+  size_t scan = at + 1;
+  int digits = 0;
+  while (is_decimal(byte_at(parser, scan)) || byte_at(parser, scan) == ','
+      || byte_at(parser, scan) == ' ' || byte_at(parser, scan) == '\t') {
+    digits += is_decimal(byte_at(parser, scan));
+    scan++;
+  }
+
+  return digits && byte_at(parser, scan) == '}';
+}
+
+/**
  * Read `\N`, the `N` already consumed.
  *
  * `\N` alone is "any character that is not a newline". `\N{U+hhhh}` is a code
  * point, and PCRE2 accepts it only in UTF mode. `\N{name}` is a Perl
  * character-name lookup that PCRE2 does not implement and neither does this.
  */
-static GRX_Result read_named_codepoint(GRX_Parser * parser, size_t start,
-    Escape * out) {
+static GRX_Result read_named_codepoint(GRX_Parser * parser, int in_class,
+    size_t start, Escape * out) {
   if (byte_at(parser, 0) != '{') {
+    if (in_class) {
+      // "not a newline" is not a set operation a class can express, and
+      // pcre2test refuses `[\N]`. Checked before the look-ahead below,
+      // because a class does not ignore what a pattern ignores.
+      return grx_parse_fail(parser, GRX_DIAG_INVALID_CLASS_ITEM, start, 2);
+    }
+
+    // A comment or an extended-mode space may stand between the `N` and a
+    // brace, and both references still read `\N {3}` as a quantified `\N`.
+    // They part over a brace that is *not* a quantifier: perl refuses
+    // `/abc\N {SPACE}/x` with "Missing braces on \N{}", while pcre2test
+    // compiles `/\N {U+41}/x,utf` as `\N` followed by six literals. Only
+    // Perl's half is checked here, and the skip is undone: what it passed
+    // over is ignorable, but only the ordinary path may consume it.
+    if (flavour(parser) == FLAVOUR_PERL) {
+      size_t saved_position = parser->position;
+      size_t saved_quote = parser->quote_end;
+      (void)pcre_skip_ignorable(parser);
+      int detached_name = byte_at(parser, 0) == '{'
+          && !brace_is_repeat(parser, 0);
+      parser->position = saved_position;
+      parser->quote_end = saved_quote;
+      if (detached_name) {
+        return grx_parse_fail(parser, GRX_DIAG_INVALID_ESCAPE, start, 2);
+      }
+    }
+
     out->kind = ESC_NOT_NEWLINE;
     return GRX_OK;
   }
@@ -485,14 +545,12 @@ static GRX_Result read_named_codepoint(GRX_Parser * parser, size_t start,
   // `\N{2,3}` is `\N` quantified, and the `{` is the quantifier's. Only a
   // brace that cannot be a quantifier is the `\N{name}` form, which neither
   // PCRE2 nor this library implements.
-  scan = 1;
-  int digits = 0;
-  while (is_decimal(byte_at(parser, scan)) || byte_at(parser, scan) == ','
-      || byte_at(parser, scan) == ' ' || byte_at(parser, scan) == '\t') {
-    digits += is_decimal(byte_at(parser, scan));
-    scan++;
-  }
-  if (digits && byte_at(parser, scan) == '}') {
+  if (brace_is_repeat(parser, 0)) {
+    if (in_class) {
+      // `[\N{4}]` is a class item that quantifies nothing; pcre2test reads
+      // the brace as a name it does not support and refuses the pattern.
+      return grx_parse_fail(parser, GRX_DIAG_INVALID_CLASS_ITEM, start, 2);
+    }
     out->kind = ESC_NOT_NEWLINE;
     return GRX_OK;
   }
@@ -779,20 +837,15 @@ static GRX_Result read_escape(GRX_Parser * parser, int in_class, Escape * out) {
       out->length = parser->position - start;
       return GRX_OK;
 
-    case 'N':
+    case 'N': {
+      // `\N{U+hhhh}` is a code point and so is a class item; every other
+      // spelling of `\N` is "not a newline" and is not. read_named_codepoint
+      // is what knows which of the two this is.
       parser->position++;
-      if (in_class) {
-        // `\N` in a class is "not a newline", which is not a set operation a
-        // class can express; PCRE2 refuses it there and so does this.
-        if (byte_at(parser, 0) != '{') {
-          return grx_parse_fail(parser, GRX_DIAG_INVALID_CLASS_ITEM, start, 2);
-        }
-      }
-      {
-        GRX_Result result = read_named_codepoint(parser, start, out);
-        out->length = parser->position - start;
-        return result;
-      }
+      GRX_Result result = read_named_codepoint(parser, in_class, start, out);
+      out->length = parser->position - start;
+      return result;
+    }
 
     case 'C':
       // One code unit. Meaningless here: this library's subject is code

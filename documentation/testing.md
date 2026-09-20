@@ -182,7 +182,11 @@ already right: `^(a\1?){4}$` answers three of its four and the fourth is the
 gap.
 
 A reason beginning "not yet classified" is one nobody has looked at, and is
-meant to read as the admission it is. There are sixteen of them today.
+meant to read as the admission it is. There are none of them today: the
+fifteen that were there have each been read, and six of them turned out to
+be defects rather than missing constructs - among them a multiline `^` that
+matched after a newline ending the subject, which is ECMAScript's rule and
+neither reference's.
 
 A failure prints the record verbatim, the engine, the expected and actual
 spans, and both dump outputs.

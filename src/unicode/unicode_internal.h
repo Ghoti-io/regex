@@ -204,7 +204,16 @@ size_t grx_unicode_es_legacy_orbit(
  */
 typedef enum {
   GRX_PROPERTY_STRICT = 0, ///< Exact, case-sensitive. ECMAScript.
-  GRX_PROPERTY_LOOSE       ///< UAX #44 section 5.9.2. Perl, PCRE2.
+  GRX_PROPERTY_LOOSE,      ///< UAX #44 section 5.9.2. PCRE2.
+  /**
+   * The same, plus the one alias Perl has and PCRE2 does not.
+   *
+   * `\p{L_}` is Cased_Letter in Perl and plain Letter in PCRE2, which reads
+   * it through the loose rule that deletes underscores. One character's
+   * difference, and it is not expressible as a table row - see
+   * cased_letter_alias() - so it is a third spelling rule instead.
+   */
+  GRX_PROPERTY_LOOSE_PERL
 } GRX_PropertyMatch;
 
 /**

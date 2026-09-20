@@ -84,6 +84,17 @@ typedef enum {
   GRX_ASSERT_END_SUBJECT,       ///< `\z`, and `$` where it means the end.
   GRX_ASSERT_END_BEFORE_NEWLINE, ///< `\Z`: the end, or before a final newline.
   GRX_ASSERT_START_LINE,        ///< `^` with multiline; uses the newline set.
+  /**
+   * `^` with multiline, except after a newline that ends the subject.
+   *
+   * Two kinds rather than one, because the dialects genuinely disagree and
+   * neither answer is the other one with a flag set. ECMA-262 asks only
+   * whether the preceding character is a line terminator, so `/^/gm` finds
+   * three positions in "a\nb\n"; pcre2pattern says a circumflex "does not
+   * match after a newline that ends the string", and Perl agrees, so those
+   * two find two. An engine is told which it is running.
+   */
+  GRX_ASSERT_START_LINE_INTERIOR,
   GRX_ASSERT_END_LINE,          ///< `$` with multiline; uses the newline set.
   GRX_ASSERT_WORD_BOUNDARY,     ///< `\b`; uses the word set.
   GRX_ASSERT_NOT_WORD_BOUNDARY, ///< `\B`; uses the word set.

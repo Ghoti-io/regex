@@ -599,7 +599,8 @@ static GRX_Result lower_anchor(
   switch ((GRX_AnchorKind)node->a) {
     case GRX_ANCHOR_CARET:
       if (multiline(low)) {
-        kind = GRX_ASSERT_START_LINE;
+        kind = low->profile.caret_after_final_newline
+            ? GRX_ASSERT_START_LINE : GRX_ASSERT_START_LINE_INTERIOR;
         needs_newlines = 1;
       }
       else {

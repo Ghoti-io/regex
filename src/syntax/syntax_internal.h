@@ -194,6 +194,18 @@ typedef struct GRX_Profile {
   int recursion_is_atomic;
   int multiline_by_default;         ///< Ruby: `^`/`$` are always line anchors.
   /**
+   * `^` with multiline matches after a newline that ends the subject.
+   *
+   * ECMA-262 asks one question - is the character before this position a
+   * line terminator - and so answers yes at the end of "a\n". PCRE2 and
+   * Perl both say no, on the ground that the empty run after a final
+   * newline is not a line. Python answers ECMAScript's way; Java documents
+   * PCRE2's. The rows of dialects with no front end hold whichever of the
+   * two nobody has had to check yet, which is what a zero here means.
+   * See GRX_ASSERT_START_LINE_INTERIOR.
+   */
+  int caret_after_final_newline;
+  /**
    * The dialect's subject is text, not bytes, whatever the options say.
    *
    * PCRE2 without `PCRE2_UTF` matches bytes, and that is the right thing for

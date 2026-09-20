@@ -413,6 +413,13 @@ static int assertion_holds(
     case GRX_ASSERT_START_LINE:
       return (position == 0 && !request->not_bol)
           || (has_before && in_class(bt, inst->x, before));
+
+    case GRX_ASSERT_START_LINE_INTERIOR:
+      // The same, less the position after a newline that ends the
+      // subject: there is no line there to be at the start of.
+      return (position == 0 && !request->not_bol)
+          || (position != request->length && has_before
+              && in_class(bt, inst->x, before));
     case GRX_ASSERT_END_LINE:
       return (position == request->length && !request->not_eol)
           || (has_after && in_class(bt, inst->x, after));

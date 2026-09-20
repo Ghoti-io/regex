@@ -713,6 +713,95 @@ TEST(Perl, PerlsTemplateGrammarIsTheInterpolationSubset) {
   EXPECT_EQ(replace_all(GRX_SYNTAX_PERL, "(a)", "a", "\\$1 is $1"), "$1 is a");
 }
 
+TEST(Perl, MultilineCaretStopsAtANewlineThatEndsTheSubject) {
+  // pcre2pattern, PCRE2_MULTILINE: a circumflex "does not match after a
+  // newline that ends the string". Perl agrees - `"a\nb\n" =~ /^/gm` reports
+  // 0 and 2, not 0, 2 and 4 - and ECMAScript does not, because ECMA-262
+  // 22.2.2.7 asks only whether the character before this position is a line
+  // terminator. So the two engines run two different assertions, and this is
+  // the pattern that tells them apart.
+  EXPECT_FALSE(search("b\\s^", "a\nb\n", GRX_SYNTAX_PCRE, "m").matched);
+  EXPECT_FALSE(search("b\\s^", "a\nb\n", GRX_SYNTAX_PERL, "m").matched);
+  EXPECT_TRUE(search("b\\s^", "a\nb\n", GRX_SYNTAX_ECMASCRIPT, "m").matched);
+
+  // The interior newline still starts a line in all three.
+  EXPECT_TRUE(search("a\\s^b", "a\nb\n", GRX_SYNTAX_PCRE, "m").matched);
+  EXPECT_TRUE(search("a\\s^b", "a\nb\n", GRX_SYNTAX_ECMASCRIPT, "m").matched);
+}
+
+TEST(Perl, ABraceAfterBackslashNIsTheQuantifierOnlyWhenItCouldBeOne) {
+  // `\N{3}` is three of anything in both references, and the spaces and the
+  // comment do not change that: pcre2test reports "abb" for every one of
+  // these against "abbbbc".
+  EXPECT_EQ(search("\\N{3}", "abbbbc").end, 3u);
+  EXPECT_EQ(search("\\N{ 3 }", "abbbbc").end, 3u);
+  EXPECT_EQ(search("\\N (?#c) {3}", "abbbbc", GRX_SYNTAX_PCRE, "x").end, 3u);
+  EXPECT_EQ(search("\\N {3,4}", "abbbbc", GRX_SYNTAX_PERL, "x").end, 4u);
+
+  // A brace that cannot be a quantifier is the `\N{name}` spelling, which
+  // neither reference lets this library reach: PCRE2 refuses it outright
+  // ("PCRE2 does not support \N{name}") and Perl's needs a table of
+  // character names that is not generated here.
+  EXPECT_EQ(compile("\\N{SPACE}").diag, GRX_DIAG_INVALID_ESCAPE);
+
+  // Where they part: perl refuses a *detached* name with "Missing braces on
+  // \N{}", while pcre2test compiles `/\N {U+41}/x,utf` as `\N` followed by
+  // six ordinary characters. Perl's half is the one with corpus records.
+  EXPECT_EQ(compile("abc\\N {SPACE}", GRX_SYNTAX_PERL, "x").diag,
+      GRX_DIAG_INVALID_ESCAPE);
+  EXPECT_EQ(compile("\\N(?#c){SPACE}", GRX_SYNTAX_PERL).diag,
+      GRX_DIAG_INVALID_ESCAPE);
+  Attempt detached = compile("a\\N {SPACE}", GRX_SYNTAX_PCRE, "x");
+  EXPECT_EQ(detached.result, GRX_OK);
+  grx_regex_free(detached.regex);
+}
+
+TEST(Perl, BackslashNInAClassIsOnlyTheCodePointForm) {
+  // "not a newline" is not a set operation a class can express, so pcre2test
+  // refuses `[\N]`. `[\N{4}]` is the same refusal wearing a quantifier's
+  // clothes, and reported it as an internal fault here until it was asked.
+  EXPECT_EQ(compile("[\\N]").diag, GRX_DIAG_INVALID_CLASS_ITEM);
+  EXPECT_EQ(compile("[\\N{4}]").diag, GRX_DIAG_INVALID_CLASS_ITEM);
+
+  // A code point is a class item like any other.
+  EXPECT_TRUE(search("(*UTF)[\\N{U+0041}]", "A", GRX_SYNTAX_PCRE).matched);
+}
+
+TEST(Perl, PerlLetsAnUnderscoreSeparateHexDigits) {
+  // `\x{_1_0000}` is U+10000 in Perl, the way an underscore separates the
+  // digits of a numeric literal. PCRE2 says "Malformed \x{ escape" for the
+  // same pattern, so this is a flavour difference and not a shared leniency.
+  EXPECT_TRUE(
+      search("\\x{_1_0000}", "\xF0\x90\x80\x80", GRX_SYNTAX_PERL).matched);
+  EXPECT_EQ(compile("\\x{_1_0000}", GRX_SYNTAX_PCRE).diag,
+      GRX_DIAG_INVALID_HEX_ESCAPE);
+
+  // A digit is still required. Perl reads `\x{_}` as zero; this refuses it,
+  // which is the one place the two part and is recorded as a deviation
+  // rather than left to be discovered.
+  EXPECT_EQ(compile("\\x{_}", GRX_SYNTAX_PERL).diag,
+      GRX_DIAG_INVALID_HEX_ESCAPE);
+}
+
+TEST(Perl, TheCasedLetterAliasesAreSpeltThreeWays) {
+  // U+3400 is Lo: a letter, and not a cased one. `\p{L&}` is Cased_Letter in
+  // both references, so it does not match. `\p{L_}` is Cased_Letter in Perl
+  // and plain Letter in PCRE2, which reaches it through the loose rule that
+  // deletes underscores - one character's difference between two dialects
+  // that otherwise share a spelling rule.
+  const std::string han = "\xE3\x90\x80";
+  EXPECT_FALSE(search("(*UTF)\\p{L&}", han, GRX_SYNTAX_PCRE).matched);
+  EXPECT_FALSE(search("\\p{L&}", han, GRX_SYNTAX_PERL).matched);
+  EXPECT_FALSE(search("\\p{L_}", han, GRX_SYNTAX_PERL).matched);
+  EXPECT_TRUE(search("(*UTF)\\p{L_}", han, GRX_SYNTAX_PCRE).matched);
+
+  // All four spellings still agree about a lower-case letter.
+  for (const char * spelling : {"\\p{L&}", "\\p{L_}", "\\p{Lc}",
+           "\\p{Cased_Letter}"}) {
+    EXPECT_TRUE(search(spelling, "a", GRX_SYNTAX_PERL).matched) << spelling;
+  }
+}
+
 int main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

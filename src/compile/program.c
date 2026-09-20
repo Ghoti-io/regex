@@ -29,7 +29,8 @@ const char * grx_opcode_name(GRX_Opcode op) {
 static const char * assert_name(uint8_t kind) {
   static const char * const names[GRX_ASSERT_COUNT] = {
     "start-subject", "end-subject", "end-before-newline", "start-line",
-    "end-line", "word-boundary", "not-word-boundary", "search-start",
+    "start-line-interior", "end-line", "word-boundary",
+    "not-word-boundary", "search-start",
   };
   return kind < GRX_ASSERT_COUNT ? names[kind] : "?";
 }
