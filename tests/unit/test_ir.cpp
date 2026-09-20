@@ -226,6 +226,27 @@ TEST(Ir, DumpRendersEveryNodeKind) {
   uint32_t name = 0;
   ASSERT_EQ(grx_ir_add_name(ir, "n", 1, &name), GRX_OK);
 
+  // A fold run with something in it, so the dump has edges to render rather
+  // than an empty list: a two-position string crossed one position at a
+  // time or both at once, which is the shape `ss` compiles to.
+  uint32_t edges = 0;
+  ASSERT_EQ(grx_ir_fold_run_begin(ir, &edges), GRX_OK);
+  const GRX_IRFoldEdge fold_edges[] = {{0, 1, cls}, {0, 2, cls}, {1, 2, cls}};
+  for (const GRX_IRFoldEdge & edge : fold_edges) {
+    ASSERT_EQ(grx_ir_fold_run_push(ir, edges, edge), GRX_OK);
+  }
+  EXPECT_EQ(grx_ir_fold_run_count(ir, edges), 3u);
+
+  // Out of range is 0 rather than a crash, and an edge index past the end
+  // writes nothing.
+  GRX_IRFoldEdge probe {9, 9, 9};
+  EXPECT_EQ(grx_ir_fold_run_count(ir, 9999), 0u);
+  EXPECT_EQ(grx_ir_fold_run_edge(ir, edges, 3, &probe), 0);
+  EXPECT_EQ(probe.from, 9u);
+  ASSERT_EQ(grx_ir_fold_run_edge(ir, edges, 1, &probe), 1);
+  EXPECT_EQ(probe.from, 0u);
+  EXPECT_EQ(probe.to, 2u);
+
   for (int i = 0; i < GRX_IR_COUNT; i++) {
     GRX_IRKind kind = (GRX_IRKind)i;
     if (kind == GRX_IR_CONCAT) {
@@ -280,6 +301,10 @@ TEST(Ir, DumpRendersEveryNodeKind) {
         node->mode = GRX_VERB_COMMIT;
         node->a = name;
         break;
+      case GRX_IR_FOLD_RUN:
+        node->a = edges;
+        node->b = 2;
+        break;
       default:
         break;
     }
@@ -297,6 +322,9 @@ TEST(Ir, DumpRendersEveryNodeKind) {
   EXPECT_NE(dump.find("backref #1 unset=empty caseless"), std::string::npos)
       << dump;
   EXPECT_NE(dump.find("assert end-line"), std::string::npos) << dump;
+  EXPECT_NE(dump.find("fold-run 2 positions 0->1:#0 0->2:#0 1->2:#0"),
+      std::string::npos)
+      << dump;
 
   grx_ir_free(ir);
 }

@@ -317,6 +317,66 @@ static Span walk(Analysis * analysis, uint32_t node_index) {
       break;
     }
 
+    case GRX_IR_FOLD_RUN: {
+      // The shortest and longest path through the graph, in bytes. Each edge
+      // consumes one character from a class, so its cost is that class's
+      // narrowest and widest encoding, and the answer is the usual shortest-
+      // and longest-path walk done backwards from the end.
+      //
+      // No array for the per-position answers, because an edge spans at most
+      // GRX_FULL_FOLD_MAX positions: a window of one more than that is
+      // enough, and position `i` never overwrites one it still has to read.
+      size_t shortest[GRX_FULL_FOLD_MAX + 1] = {0};
+      size_t longest[GRX_FULL_FOLD_MAX + 1] = {0};
+      size_t window = GRX_FULL_FOLD_MAX + 1;
+      size_t n = node->b;
+      shortest[n % window] = 0;
+      longest[n % window] = 0;
+
+      // The edges are ordered by the position they leave, so walking them
+      // backwards visits the positions in the order this needs them.
+      size_t cursor = grx_ir_fold_run_count(analysis->ir, node->a);
+      for (size_t step = n; step > 0; step--) {
+        size_t at = step - 1;
+        size_t low = GRX_NPOS;
+        size_t high = 0;
+        while (cursor > 0) {
+          GRX_IRFoldEdge edge;
+          if (!grx_ir_fold_run_edge(
+                  analysis->ir, node->a, cursor - 1, &edge)
+              || edge.from != at) {
+            break;
+          }
+          cursor--;
+
+          size_t narrow = 1;
+          size_t wide = 1;
+          if (analysis->ir->flags & GRX_PROGRAM_UTF) {
+            size_t count = 0;
+            const GRX_CharRange * ranges = grx_class_table_get(
+                &analysis->ir->classes, edge.class_index, &count);
+            if (ranges && count) {
+              narrow = encoded_width(ranges[0].low);
+              wide = encoded_width(ranges[count - 1].high);
+            }
+          }
+          size_t reached = shortest[edge.to % window] + narrow;
+          if (reached < low) {
+            low = reached;
+          }
+          reached = longest[edge.to % window] + wide;
+          if (reached > high) {
+            high = reached;
+          }
+        }
+        shortest[at % window] = low == GRX_NPOS ? 0 : low;
+        longest[at % window] = high;
+      }
+
+      span = (Span) {shortest[0], longest[0], 0, 0, 0};
+      break;
+    }
+
     case GRX_IR_CONCAT:
       span = walk_concat(analysis, node);
       break;

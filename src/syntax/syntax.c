@@ -271,9 +271,20 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     .dollar = GRX_DOLLAR_BEFORE_FINAL_NEWLINE,
     .shorthands = GRX_SHORTHANDS_UNICODE,
     .shorthands_utf = GRX_SHORTHANDS_UNICODE,
-    .fold = GRX_FOLD_SIMPLE,
-    .fold_utf = GRX_FOLD_SIMPLE,
+    // Full folding, which is the one thing about Perl's `/i` that a class
+    // cannot express: `ß` matches "ss" and `ff` matches the `ﬀ` ligature,
+    // so a caseless match here can be a different length from the pattern
+    // that asked for it. See GRX_IR_FOLD_RUN.
+    .fold = GRX_FOLD_FULL,
+    .fold_utf = GRX_FOLD_FULL,
     .property_match = GRX_PROPERTY_LOOSE_PERL,
+    // Perl has no byte mode. A Perl string is a sequence of characters and
+    // `/u` says which *rules* to apply to them, not whether to decode them;
+    // the row said nothing and so took PCRE2's answer, which is that a
+    // subject is bytes until the caller says otherwise. The corpus is the
+    // evidence: its subjects are Perl's own character strings written out
+    // as UTF-8, and its offsets are the byte offsets into that.
+    .subject_is_text = 1,
     // The interpolation subset of section 5.11. A Perl template is a double-
     // quoted string, so the escape is `\$` and not `$$` - `$$` is the
     // process id, which is why the two rules cannot both be true of one

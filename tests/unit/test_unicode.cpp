@@ -646,6 +646,53 @@ TEST(Fold, TheOrbitTableCanBeWalkedAsWellAsQueried) {
   EXPECT_EQ(grx_unicode_orbit(GRX_FOLD_SIMPLE, 'a', nullptr), 0u);
 }
 
+TEST(Case, FullFoldingIsASequenceAndItsSourcesAreFindable) {
+  // The two halves lowering needs: what a code point folds to, and what
+  // folds to a sequence. Both come from CaseFolding.txt status F, which is
+  // a hundred and four entries in Unicode 17.
+  uint32_t folded[GRX_FULL_FOLD_MAX];
+  ASSERT_EQ(grx_unicode_fold_full(0x00DF, folded), 2u);
+  EXPECT_EQ(folded[0], 's');
+  EXPECT_EQ(folded[1], 's');
+  ASSERT_EQ(grx_unicode_fold_full(0x1E9E, folded), 2u);
+  EXPECT_EQ(folded[0], 's');
+  EXPECT_EQ(folded[1], 's');
+  ASSERT_EQ(grx_unicode_fold_full(0x0390, folded), 3u);
+
+  // A code point with no full fold of its own gets its simple one, so the
+  // caller has one answer to read rather than two cases to tell apart.
+  ASSERT_EQ(grx_unicode_fold_full('A', folded), 1u);
+  EXPECT_EQ(folded[0], 'a');
+  ASSERT_EQ(grx_unicode_fold_full(0x017F, folded), 1u);
+  EXPECT_EQ(folded[0], 's');
+
+  uint32_t sources[GRX_FULL_FOLD_SOURCE_MAX];
+  const uint32_t ss[] = {'s', 's'};
+  ASSERT_EQ(grx_unicode_fold_full_sources(ss, 2, sources), 2u);
+  EXPECT_EQ(sources[0], 0x00DFu);
+  EXPECT_EQ(sources[1], 0x1E9Eu);
+
+  // The sources of a single code point are its simple orbit *less* anything
+  // whose full fold is longer: U+1E9E shares an orbit with U+00DF and folds
+  // fully to "ss", so it belongs to the two-position edge above and not to
+  // this one. Getting that wrong would make `(?i)ß` match one `ẞ` twice.
+  const uint32_t s[] = {'s'};
+  ASSERT_EQ(grx_unicode_fold_full_sources(s, 1, sources), 3u);
+  EXPECT_EQ(sources[0], 'S');
+  EXPECT_EQ(sources[1], 's');
+  EXPECT_EQ(sources[2], 0x017Fu);
+
+  // And nothing folds to `ß` itself, because `ß` does not: its full fold is
+  // "ss", and so is U+1E9E's. A folded string can therefore never contain
+  // this code point, which is why no edge is ever asked for it.
+  const uint32_t sharp[] = {0x00DF};
+  EXPECT_EQ(grx_unicode_fold_full_sources(sharp, 1, sources), 0u);
+
+  // Nothing folds to this, so an edge over it is never built.
+  const uint32_t nothing[] = {'x', 'q'};
+  EXPECT_EQ(grx_unicode_fold_full_sources(nothing, 2, sources), 0u);
+}
+
 TEST(UnicodeVersion, IsThePinnedRelease) {
   // documentation/unicode.md section 1: one UCD release per library minor
   // version, named in tools/unicode/UCD_VERSION and reported here, so that a

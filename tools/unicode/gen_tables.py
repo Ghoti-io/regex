@@ -287,8 +287,10 @@ def read_script_extensions(path, script_value_to_long):
 def read_case_folding(path):
     """CaseFolding.txt: the C and S statuses, which are the simple folding.
 
-    F (full) and T (Turkic) are deliberately not read; see
-    documentation/design.md section 10.
+    T (Turkic) is deliberately not read; see documentation/design.md
+    section 10. F (full) is read by read_full_folding() into a table of its
+    own, because a full fold is a *sequence* and does not fit a code-point
+    map.
     """
     folds = {}
     for fields in read_records(path):
@@ -303,6 +305,27 @@ def read_case_folding(path):
             raise ValueError("status %s with a multi-code-point mapping" % status)
         folds[code] = int(mapping[0], 16)
     return folds
+
+
+def read_full_folding(path):
+    """CaseFolding.txt status F: the folds that are more than one code point.
+
+    A hundred and four of them, each two or three code points long - `ß` to
+    "ss", the `ﬁ` ligature to "fi", `ΐ` to three. Status C is the case where
+    the simple and the full fold agree and is already in read_case_folding()'s
+    table; a code point appears here only when they differ, so the two tables
+    do not overlap and "the full fold" is this one if present and that one
+    otherwise.
+    """
+    full = {}
+    for fields in read_records(path):
+        if len(fields) < 3 or fields[1] != "F":
+            continue
+        mapping = tuple(int(code, 16) for code in fields[2].split())
+        if len(mapping) < 2:
+            raise ValueError("status F with a single-code-point mapping")
+        full[int(fields[0], 16)] = mapping
+    return full
 
 
 def read_special_casing(path):
@@ -645,6 +668,7 @@ def build_tables(ucd, version):
         add(KIND_BINARY, name, binaries[name], prop_aliases)
 
     folds = read_case_folding(os.path.join(ucd, "CaseFolding.txt"))
+    full_folds = read_full_folding(os.path.join(ucd, "CaseFolding.txt"))
     special_upper = read_special_casing(
         os.path.join(ucd, "SpecialCasing.txt"))
 
@@ -670,6 +694,7 @@ def build_tables(ucd, version):
         "string_sets": strings["sets"],
         "string_sequences": strings["sequences"],
         "folds": folds,
+        "full_folds": full_folds,
         "fold_orbits": fold_orbits,
         "es_map": es_map,
         "es_orbits": es_orbits,
@@ -762,6 +787,20 @@ typedef struct GRX_UnicodeCaseMap {
 } GRX_UnicodeCaseMap;
 
 /**
+ * @brief One code point whose full case fold is more than one code point.
+ *
+ * Sorted by `code`, so a lookup is a binary search. The whole table is a
+ * hundred and four entries, which is why the reverse question - *which* code
+ * points fold to this sequence - is answered by a scan rather than by a
+ * second index.
+ */
+typedef struct GRX_UnicodeFullFold {
+  uint32_t code;   ///< The code point folded.
+  uint32_t length; ///< Code points in `to`: 2 or 3.
+  uint32_t to[3];  ///< The fold; entries past `length` are 0.
+} GRX_UnicodeFullFold;
+
+/**
  * @brief One code point's membership in a fold orbit.
  *
  * Every member of an orbit has an entry, so a lookup is one binary search
@@ -830,6 +869,17 @@ extern const size_t grx_unicode_loose_prop_name_count;
 /** Simple case folding: CaseFolding.txt statuses C and S. */
 extern const GRX_UnicodeCaseMap grx_unicode_fold_map[];
 extern const size_t grx_unicode_fold_map_count;
+
+/**
+ * Full case folding: CaseFolding.txt status F, the folds of more than one
+ * code point.
+ *
+ * Only the code points whose full fold differs from their simple one are
+ * here, so a full fold is this table's entry when it has one and
+ * grx_unicode_fold_map's otherwise.
+ */
+extern const GRX_UnicodeFullFold grx_unicode_full_folds[];
+extern const size_t grx_unicode_full_fold_count;
 
 extern const GRX_UnicodeOrbit grx_unicode_fold_orbits[];
 extern const size_t grx_unicode_fold_orbit_count;
@@ -990,10 +1040,22 @@ def write_case(out_dir, tables):
         out.write("};\n")
         out.write("const size_t %s_count = %d;\n\n" % (base, len(orbits)))
 
+    def emit_full_folds(out, full):
+        out.write("const GRX_UnicodeFullFold grx_unicode_full_folds[] = {\n")
+        for code in sorted(full):
+            mapping = full[code]
+            padded = list(mapping) + [0] * (3 - len(mapping))
+            out.write("  {0x%04X, %d, {0x%04X,0x%04X,0x%04X}},\n"
+                      % (code, len(mapping), padded[0], padded[1], padded[2]))
+        out.write("};\n")
+        out.write("const size_t grx_unicode_full_fold_count = %d;\n\n"
+                  % len(full))
+
     with open(path, "w", encoding="utf-8") as out:
         out.write(HEADER_NOTICE % tables["version"])
         out.write('\n#include "tables_internal.h"\n\n')
         emit_map(out, "grx_unicode_fold_map", tables["folds"])
+        emit_full_folds(out, tables["full_folds"])
         emit_orbits(out, "grx_unicode_fold_orbit", tables["fold_orbits"])
         emit_map(out, "grx_unicode_es_legacy_map", tables["es_map"])
         emit_orbits(

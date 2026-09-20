@@ -305,10 +305,30 @@ question rather than for an answer.
 | Value | Meaning | Dialects |
 | --- | --- | --- |
 | `SIMPLE_FOLD` | Unicode simple case folding; a caseless literal is its fold orbit ([unicode.md](unicode.md) §5) | PCRE2, Python (its `_sre` equivalence table is this), Java with `UNICODE_CASE`, RE2, Rust, Tcl, Ruby (**probe**: Onigmo can do multi-char folds), ECMAScript `u`/`v` |
-| `FULL_FOLD` | full folding, including length-changing (`ß` ~ `ss`) | Perl. **Deviation:** implemented as `SIMPLE_FOLD`; [design.md](design.md) §10 |
+| `FULL_FOLD` | full folding, including length-changing (`ß` ~ `ss`) | Perl. Built; [design.md](design.md) §5.2 |
 | `ES_LEGACY` | ECMA-262 Canonicalize without `u`: simple uppercase mapping, rejected if it is multi-unit or maps non-ASCII to ASCII | ECMAScript without `u` |
 | `ASCII_ONLY` | A-Z only | Java without `UNICODE_CASE`; PCRE2 without UTF; POSIX and GNU (deviation: the locale is treated as C); Vim `\c`, Emacs (**probe**) |
 | `CULTURE` | .NET's culture-sensitive `ToLower`. **Deviation:** implemented as `SIMPLE_FOLD`, i.e. `CultureInvariant` | .NET |
+
+**Full folding is a property of a run, not of a character.** `ß` folds to
+"ss" and the `ﬀ` ligature folds to "ff", so under Perl's `/i` one pattern
+character can match two subject characters and two pattern characters can
+match one. The two meet in the middle, which is why the run is what is
+folded: `sß` and `ßs` both fold to "sss", and Perl matches either against
+the other.
+
+It stops at three boundaries. A *class* is folded simply, because a class
+matches one character - `[ß]` does not match "ss". `/aa` drops it entirely,
+because every code point with a full fold is outside ASCII and every one of
+those folds is at least partly inside it, so there is no full fold that rule
+would let through. And PCRE2 does not have it at all, which is one of the
+reasons `GRX_SYNTAX_PERL` and `GRX_SYNTAX_PCRE` are separate dialects.
+
+**Perl's subject is text.** There is no byte mode in Perl: a Perl string is a
+sequence of characters, and `/u`, `/a` and `/l` say which *rules* apply to
+them rather than whether to decode them. This library's Perl dialect
+therefore reads its subject as UTF-8 whatever the flags say, where PCRE2's
+reads bytes until `PCRE2_UTF` says otherwise.
 
 ### 5.9 `\w`, `\d`, `\s`, `\b`, POSIX classes, property names
 

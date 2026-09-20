@@ -146,7 +146,7 @@ table as a constant for exactly this purpose.
 
 ## 5. Case folding
 
-Three operations, all compile-time ([design.md](design.md) §5.2):
+Five operations, all compile-time ([design.md](design.md) §5.2):
 
 - **`fold_simple(cp)`**: `CaseFolding.txt` statuses C and S. One code point
   in, one out.
@@ -164,8 +164,25 @@ Three operations, all compile-time ([design.md](design.md) §5.2):
   ECMAScript is the only dialect with this rule, and it is the rule under
   which JavaScript's `/[a-z]/i` does not match `ſ` while `/[a-z]/iu` does.
 
-Full case folding (status F) is deliberately not implemented; see
-[design.md](design.md) §10.
+- **`fold_full(cp, out)`**: `CaseFolding.txt` status F where there is one
+  and the simple fold otherwise, so the answer is one to three code points
+  and is always the full fold. A hundred and four code points have one in
+  Unicode 17 - `ß` to "ss", `ΐ` to three - and `GRX_FULL_FOLD_MAX` is 3
+  because nothing is longer.
+- **`fold_full_sources(sequence, length, out)`**: the reverse. Which code
+  points fold to exactly this sequence, which is what lowering asks to turn
+  a folded string into the classes that can produce it. Two answers matter
+  and neither is obvious: `ß` and `ẞ` are the sources of "ss", and the
+  sources of "s" are the simple orbit **less those two** - `ẞ`'s full fold is
+  "ss", so it belongs to the two-position edge and not to the one-position
+  one. A single-code-point sequence is answered from the orbit table; a
+  longer one by walking the hundred and four, which is cheaper than a second
+  index for a question asked once per edge at compile time.
+
+Full case folding is what makes Perl's `/i` able to change the length of
+what it matched. How that is compiled - a graph over the positions of the
+folded string, emitted as ordinary `SPLIT`, `CLASS` and `JMP` instructions -
+is [design.md](design.md) §5.2.
 
 ## 6. Property names
 

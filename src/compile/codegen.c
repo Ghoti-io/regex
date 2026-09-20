@@ -373,6 +373,182 @@ static GRX_Result gen_alternate(Codegen * codegen, const GRX_IRNode * node) {
 }
 
 /**
+ * Generate a full-fold run: the folded string as a graph of class matches.
+ *
+ * The node holds positions 0..`b` of the folded string and the edges over
+ * them (GRX_IR_FOLD_RUN). One block of instructions per position, in the
+ * order they are walked, and every jump between them is forward - so the
+ * blocks are emitted in one pass and the jumps patched afterwards.
+ *
+ * A block with several edges leaving it is a SPLIT chain, the way an
+ * alternation is. The arms are dead ends rather than real alternatives,
+ * because the classes leaving a position are disjoint and at most one of
+ * them can match - but saying so with a SPLIT costs nothing and needs no
+ * instruction that means "and nothing else can follow".
+ *
+ * Reversed, the walk runs from the last position to the first and a block
+ * holds the edges arriving at its position rather than the ones leaving it.
+ * The class instructions carry GRX_INST_REVERSE from the node, so what
+ * changes here is only which block comes after which.
+ */
+static GRX_Result gen_fold_run(Codegen * codegen, const GRX_IRNode * node) {
+  size_t states = (size_t)node->b + 1;
+  size_t edge_count = grx_ir_fold_run_count(codegen->ir, node->a);
+  if (!edge_count) {
+    return fail(codegen, GRX_DIAG_INTERNAL, node);
+  }
+
+  const GRX_Allocator * allocator = codegen->program->insts.allocator;
+  // Where each position's block starts, and the first edge leaving each
+  // position. Both are indexed by position and both are scaffolding, so
+  // they are arenas with the program's allocator rather than anything the
+  // program keeps.
+  GRX_Arena block;
+  GRX_Arena first_edge;
+  GRX_Arena fixups;
+  grx_arena_init(&block, allocator, sizeof(uint32_t), 0, GRX_DIAG_NONE);
+  grx_arena_init(&first_edge, allocator, sizeof(uint32_t), 0, GRX_DIAG_NONE);
+  grx_arena_init(&fixups, allocator, sizeof(uint32_t), 0, GRX_DIAG_NONE);
+
+  GRX_Result result = GRX_OK;
+  for (size_t i = 0; i < states && result == GRX_OK; i++) {
+    uint32_t none = GRX_INDEX_NONE;
+    uint32_t end = (uint32_t)edge_count;
+    result = grx_arena_append(&block, &none, NULL);
+    if (result == GRX_OK) {
+      result = grx_arena_append(&first_edge, &end, NULL);
+    }
+  }
+
+  // The edges arrive ordered by the position they leave, so one pass fills
+  // the index and a later lookup is a walk from it rather than a search.
+  for (size_t i = edge_count; i > 0 && result == GRX_OK; i--) {
+    GRX_IRFoldEdge edge;
+    if (!grx_ir_fold_run_edge(codegen->ir, node->a, i - 1, &edge)
+        || edge.from >= states) {
+      result = GRX_ERR_INTERNAL;
+      break;
+    }
+    uint32_t * slot = GRX_ARENA_AT(uint32_t, &first_edge, edge.from);
+    *slot = (uint32_t)(i - 1);
+  }
+
+  int reverse = reversed(node);
+  for (size_t step = 0; step < node->b && result == GRX_OK; step++) {
+    // Forwards the walk leaves position `step`; backwards it arrives at
+    // position `b - step`, and the edges it may take are the ones that end
+    // there.
+    size_t at = reverse ? node->b - step : step;
+    uint32_t * start = GRX_ARENA_AT(uint32_t, &block, at);
+    *start = here(codegen);
+
+    // The edges this block chooses between, gathered before any of them is
+    // emitted: a reversed block's come from up to three earlier positions.
+    size_t taken[GRX_FULL_FOLD_MAX];
+    size_t count = 0;
+    if (!reverse) {
+      const uint32_t * from = GRX_ARENA_AT(const uint32_t, &first_edge, at);
+      for (size_t i = *from; i < edge_count && count < GRX_FULL_FOLD_MAX; i++) {
+        GRX_IRFoldEdge edge;
+        if (!grx_ir_fold_run_edge(codegen->ir, node->a, i, &edge)
+            || edge.from != at) {
+          break;
+        }
+        taken[count++] = i;
+      }
+    }
+    else {
+      for (size_t span = 1; span <= GRX_FULL_FOLD_MAX && span <= at; span++) {
+        const uint32_t * from
+            = GRX_ARENA_AT(const uint32_t, &first_edge, at - span);
+        for (size_t i = *from; i < edge_count; i++) {
+          GRX_IRFoldEdge edge;
+          if (!grx_ir_fold_run_edge(codegen->ir, node->a, i, &edge)
+              || edge.from != at - span) {
+            break;
+          }
+          if (edge.to == at && count < GRX_FULL_FOLD_MAX) {
+            taken[count++] = i;
+          }
+        }
+      }
+    }
+    if (!count) {
+      result = GRX_ERR_INTERNAL;
+      break;
+    }
+
+    for (size_t i = 0; i < count && result == GRX_OK; i++) {
+      GRX_IRFoldEdge edge;
+      if (!grx_ir_fold_run_edge(codegen->ir, node->a, taken[i], &edge)) {
+        result = GRX_ERR_INTERNAL;
+        break;
+      }
+
+      uint32_t split = GRX_INDEX_NONE;
+      if (i + 1 < count) {
+        result = emit(codegen, GRX_OP_SPLIT, 0, 0, 0, node, &split);
+        if (result != GRX_OK) {
+          break;
+        }
+        patch_x(codegen, split, here(codegen));
+      }
+
+      result = emit(
+          codegen, GRX_OP_CLASS, 0, edge.class_index, 0, node, NULL);
+      uint32_t jump = GRX_INDEX_NONE;
+      if (result == GRX_OK) {
+        result = emit(codegen, GRX_OP_JMP, 0, 0, 0, node, &jump);
+      }
+      if (result == GRX_OK) {
+        uint32_t target = reverse ? edge.from : edge.to;
+        result = grx_arena_append(&fixups, &jump, NULL);
+        if (result == GRX_OK) {
+          result = grx_arena_append(&fixups, &target, NULL);
+        }
+      }
+      if (result != GRX_OK) {
+        break;
+      }
+
+      if (split != GRX_INDEX_NONE) {
+        patch_y(codegen, split, here(codegen));
+      }
+    }
+  }
+
+  if (result == GRX_OK) {
+    // The position the walk ends at is where the run's instructions stop,
+    // and the only block that is not emitted: there is nothing to consume
+    // there.
+    uint32_t * done = GRX_ARENA_AT(uint32_t, &block, reverse ? 0 : node->b);
+    *done = here(codegen);
+
+    for (size_t i = 0; i + 1 < fixups.count; i += 2) {
+      const uint32_t * jump = GRX_ARENA_AT(const uint32_t, &fixups, i);
+      const uint32_t * target = GRX_ARENA_AT(const uint32_t, &fixups, i + 1);
+      const uint32_t * to = GRX_ARENA_AT(const uint32_t, &block, *target);
+      if (!jump || !target || !to || *to == GRX_INDEX_NONE) {
+        result = GRX_ERR_INTERNAL;
+        break;
+      }
+      patch_x(codegen, *jump, *to);
+    }
+  }
+
+  grx_arena_clear(&block);
+  grx_arena_clear(&first_edge);
+  grx_arena_clear(&fixups);
+  if (result == GRX_ERR_INTERNAL) {
+    return fail(codegen, GRX_DIAG_INTERNAL, node);
+  }
+  if (result != GRX_OK) {
+    return fail(codegen, GRX_DIAG_OUT_OF_MEMORY, node);
+  }
+  return GRX_OK;
+}
+
+/**
  * Generate one unbounded repetition of a body, with its loop guard.
  *
  *     top:   split body, exit        (arms swapped when lazy)
@@ -812,6 +988,9 @@ static GRX_Result gen(Codegen * codegen, uint32_t node_index) {
 
     case GRX_IR_SCAN:
       return gen_scan(codegen, node);
+
+    case GRX_IR_FOLD_RUN:
+      return gen_fold_run(codegen, node);
 
     case GRX_IR_COND:
       return gen_cond(codegen, node);

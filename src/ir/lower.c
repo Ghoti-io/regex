@@ -561,6 +561,9 @@ static GRX_Result word_class(Lowering * low, uint32_t * out_index) {
 // Node kinds
 // --------------------------------------------------------------------------
 
+static GRX_Result lower_run(Lowering * low, const uint32_t * points,
+    size_t length, const GRX_Node * node, uint32_t * out_node);
+
 /**
  * Lower one code point.
  *
@@ -605,40 +608,175 @@ static GRX_Result lower_codepoint(Lowering * low, uint32_t codepoint,
   return GRX_OK;
 }
 
-/** Lower a literal run: one node per code point, concatenated. */
-static GRX_Result lower_literal(
-    Lowering * low, const GRX_Node * node, uint32_t * out_node) {
-  if (node->b == 1) {
-    const uint32_t * codepoint
-        = GRX_ARENA_AT(const uint32_t, &low->pattern->literals, node->a);
-    if (!codepoint) {
-      return fail(low, GRX_DIAG_INTERNAL, node);
-    }
-    return lower_codepoint(low, *codepoint, node, out_node);
-  }
+/**
+ * Build the folded form of a run of code points.
+ *
+ * Under full folding this is what the pattern actually says: `ß` is "ss",
+ * the `ﬃ` ligature is "ffi", and everything else is itself folded simply.
+ * The result can be up to three times as long as the run, which is why it
+ * is built rather than computed in place.
+ */
+static GRX_Result fold_run_target(Lowering * low, const uint32_t * points,
+    size_t length, GRX_Arena * out_target) {
+  grx_arena_init(
+      out_target, low->ir->allocator, sizeof(uint32_t), 0, GRX_DIAG_NONE);
 
-  GRX_Result result = add(low, GRX_IR_CONCAT, node, out_node);
-  if (result != GRX_OK) {
-    return result;
-  }
-
-  for (uint32_t i = 0; i < node->b; i++) {
-    const uint32_t * codepoint
-        = GRX_ARENA_AT(const uint32_t, &low->pattern->literals, node->a + i);
-    if (!codepoint) {
-      return fail(low, GRX_DIAG_INTERNAL, node);
-    }
-    uint32_t child = GRX_INDEX_NONE;
-    result = lower_codepoint(low, *codepoint, node, &child);
-    if (result == GRX_OK) {
-      result = attach(low, *out_node, child);
-    }
-    if (result != GRX_OK) {
-      return result;
+  for (size_t i = 0; i < length; i++) {
+    uint32_t folded[GRX_FULL_FOLD_MAX];
+    size_t written = grx_unicode_fold_full(points[i], folded);
+    for (size_t j = 0; j < written; j++) {
+      GRX_Result result = grx_arena_append(out_target, &folded[j], NULL);
+      if (result != GRX_OK) {
+        return result;
+      }
     }
   }
 
   return GRX_OK;
+}
+
+/**
+ * Whether a run needs the fold-run node, or lowers one code point at a time.
+ *
+ * Two things make it necessary, and neither is common. The run's fold may be
+ * *longer* than the run, which means a pattern character stands for more
+ * than one subject character. Or the fold may contain a sequence that some
+ * single character folds to, which means the reverse: `ff` is two pattern
+ * characters and the `ﬀ` ligature matches both of them.
+ *
+ * When neither holds, the fold is the run's own code points folded simply
+ * and the chain of classes lower_run() already builds is exactly right.
+ */
+static int fold_run_needed(const uint32_t * target, size_t n, size_t length) {
+  if (n != length) {
+    return 1;
+  }
+
+  for (size_t i = 0; i < n; i++) {
+    for (size_t span = 2; span <= GRX_FULL_FOLD_MAX && i + span <= n; span++) {
+      uint32_t sources[GRX_FULL_FOLD_SOURCE_MAX];
+      if (grx_unicode_fold_full_sources(target + i, span, sources)) {
+        return 1;
+      }
+    }
+  }
+
+  return 0;
+}
+
+/**
+ * Build a run's fold and say whether the run has to be matched as one.
+ *
+ * The fold is built either way, because deciding needs it; the caller owns
+ * `out_target` and clears it. A `wanted` of zero means every code point can
+ * be lowered on its own, which is the answer for all but a handful of runs.
+ */
+static GRX_Result fold_run_plan(Lowering * low, const uint32_t * points,
+    size_t length, GRX_Arena * out_target, int * out_wanted) {
+  *out_wanted = 0;
+  GRX_Result result = fold_run_target(low, points, length, out_target);
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  const uint32_t * folded = GRX_ARENA_AT(const uint32_t, out_target, 0);
+  if (folded) {
+    *out_wanted = fold_run_needed(folded, out_target->count, length);
+  }
+  return GRX_OK;
+}
+
+/**
+ * Lower a run of code points that full folding cannot take one at a time.
+ *
+ * The node is the folded string and the edges over its positions; see
+ * GRX_IR_FOLD_RUN for what those mean and why codegen rather than lowering
+ * turns them into instructions.
+ */
+static GRX_Result lower_fold_run(Lowering * low, const uint32_t * target,
+    size_t n, const GRX_Node * node, uint32_t * out_node) {
+  if (n > GRX_INDEX_NONE - 1) {
+    return fail(low, GRX_DIAG_LIMIT_PROGRAM_SIZE, node);
+  }
+
+  uint32_t edges = GRX_INDEX_NONE;
+  GRX_Result result = grx_ir_fold_run_begin(low->ir, &edges);
+  if (result != GRX_OK) {
+    return storage_failed(low, result, node);
+  }
+
+  for (size_t i = 0; i < n; i++) {
+    int left = 0;
+    for (size_t span = 1; span <= GRX_FULL_FOLD_MAX && i + span <= n; span++) {
+      uint32_t sources[GRX_FULL_FOLD_SOURCE_MAX];
+      size_t count
+          = grx_unicode_fold_full_sources(target + i, span, sources);
+      if (!count) {
+        continue;
+      }
+
+      GRX_CharClass cls;
+      grx_charclass_init(&cls, low->ir->allocator);
+      result = GRX_OK;
+      for (size_t j = 0; j < count && result == GRX_OK; j++) {
+        result
+            = grx_charclass_add_range(&cls, sources[j], sources[j], low->limits);
+      }
+      uint32_t class_index = GRX_INDEX_NONE;
+      if (result == GRX_OK) {
+        result = intern(low, &cls, node, &class_index);
+      }
+      grx_charclass_clear(&cls);
+      if (result != GRX_OK) {
+        return result;
+      }
+
+      GRX_IRFoldEdge edge = {
+        .from = (uint32_t)i,
+        .to = (uint32_t)(i + span),
+        .class_index = class_index,
+      };
+      result = grx_ir_fold_run_push(low->ir, edges, edge);
+      if (result != GRX_OK) {
+        return storage_failed(low, result, node);
+      }
+      left = 1;
+    }
+
+    // Every position must have somewhere to go, and every one does: a
+    // folded string is built out of fold *results*, and a fold result is
+    // its own source at worst. Said here rather than assumed, because the
+    // alternative is a graph with a dead end in it reaching codegen, where
+    // it would be a wrong answer rather than a refusal.
+    if (!left) {
+      return fail(low, GRX_DIAG_INTERNAL, node);
+    }
+  }
+
+  result = add(low, GRX_IR_FOLD_RUN, node, out_node);
+  if (result != GRX_OK) {
+    return result;
+  }
+  grx_ir_node(low->ir, *out_node)->a = edges;
+  grx_ir_node(low->ir, *out_node)->b = (uint32_t)n;
+  return GRX_OK;
+}
+
+/** Lower a literal run: one node per code point, concatenated. */
+static GRX_Result lower_literal(
+    Lowering * low, const GRX_Node * node, uint32_t * out_node) {
+  // The run is contiguous in the pattern's literal arena, so it is handed on
+  // as a pointer and a length rather than read out one index at a time. That
+  // matters here and not only for tidiness: under full folding the run is
+  // folded *as a run*, and a caller that could only see one code point at a
+  // time could not do that.
+  const uint32_t * points
+      = GRX_ARENA_AT(const uint32_t, &low->pattern->literals, node->a);
+  if (!points) {
+    return fail(low, GRX_DIAG_INTERNAL, node);
+  }
+
+  return lower_run(low, points, node->b, node, out_node);
 }
 
 /** Lower `.`: everything but the line terminators, unless dot-all is on. */
@@ -842,8 +980,13 @@ static void adopt_options(Lowering * low, uint32_t options) {
   low->fold = GRX_FOLD_NONE;
   if (options & GRX_OPT_CASELESS) {
     low->fold = utf ? low->profile.fold_utf : low->profile.fold;
+    // `/aa` cuts every orbit at U+0080, and it takes full folding with it:
+    // every code point with a full fold is outside ASCII and every one of
+    // those folds is at least partly inside it, so there is no full fold
+    // `/aa` would let through. `ß` stops matching "ss" there, which is the
+    // same rule that stops `s` matching U+017F.
     if ((options & GRX_OPT_ASCII_FOLD_SEPARATE)
-        && low->fold == GRX_FOLD_SIMPLE) {
+        && (low->fold == GRX_FOLD_SIMPLE || low->fold == GRX_FOLD_FULL)) {
       low->fold = GRX_FOLD_SIMPLE_ASCII_APART;
     }
   }
@@ -1464,6 +1607,72 @@ static GRX_Result lower_sequence(Lowering * low, const GRX_Node * node,
     }
     uint32_t next = child_node->next_sibling;
 
+    // Under full folding, adjacent literals are folded *together*: the
+    // parser gives each code point a node of its own, and `sß` against "ßs"
+    // only matches because the fold of one may finish inside the fold of
+    // the next. Every other folding, and every run that turns out not to
+    // need this, takes the ordinary path below.
+    if (kind == GRX_IR_CONCAT && low->fold == GRX_FOLD_FULL
+        && child_node->kind == GRX_NODE_LITERAL) {
+      uint32_t after = child;
+      GRX_Arena run;
+      grx_arena_init(
+          &run, low->ir->allocator, sizeof(uint32_t), 0, GRX_DIAG_NONE);
+      for (uint32_t scan = child; scan != GRX_INDEX_NONE;) {
+        const GRX_Node * literal = grx_pattern_node(low->pattern, scan);
+        if (!literal || literal->kind != GRX_NODE_LITERAL) {
+          break;
+        }
+        const uint32_t * points = GRX_ARENA_AT(
+            const uint32_t, &low->pattern->literals, literal->a);
+        if (!points) {
+          result = GRX_ERR_INVALID;
+          break;
+        }
+        for (uint32_t i = 0; i < literal->b && result == GRX_OK; i++) {
+          result = grx_arena_append(&run, &points[i], NULL);
+        }
+        if (result != GRX_OK) {
+          break;
+        }
+        after = literal->next_sibling;
+        scan = after;
+      }
+
+      // Initialised before the gather can fail, so that the one clear at the
+      // bottom is correct on every path out of here.
+      GRX_Arena target;
+      grx_arena_init(
+          &target, low->ir->allocator, sizeof(uint32_t), 0, GRX_DIAG_NONE);
+      int wanted = 0;
+      if (result == GRX_OK) {
+        result = fold_run_plan(low,
+            GRX_ARENA_AT(const uint32_t, &run, 0), run.count, &target,
+            &wanted);
+      }
+      if (result == GRX_OK && wanted) {
+        uint32_t lowered = GRX_INDEX_NONE;
+        result = lower_fold_run(low,
+            GRX_ARENA_AT(const uint32_t, &target, 0), target.count,
+            child_node, &lowered);
+        if (result == GRX_OK) {
+          result = attach(low, *out_node, lowered);
+        }
+        grx_arena_clear(&target);
+        grx_arena_clear(&run);
+        if (result != GRX_OK) {
+          return result;
+        }
+        child = after;
+        continue;
+      }
+      grx_arena_clear(&target);
+      grx_arena_clear(&run);
+      if (result != GRX_OK) {
+        return storage_failed(low, result, node);
+      }
+    }
+
     uint32_t lowered = GRX_INDEX_NONE;
     result = lower_node(low, child, &lowered);
     if (result == GRX_OK) {
@@ -1833,6 +2042,25 @@ static GRX_Result evaluate_class_set(
 /** One run as a concatenation of code points, each folded if need be. */
 static GRX_Result lower_run(Lowering * low, const uint32_t * points,
     size_t length, const GRX_Node * node, uint32_t * out_node) {
+  // Full folding first, because it is the one folding that cannot be taken a
+  // code point at a time - and, for most runs, it turns out that it can be
+  // after all, which is what fold_run_needed() decides.
+  if (low->fold == GRX_FOLD_FULL && length) {
+    GRX_Arena target;
+    int wanted = 0;
+    GRX_Result result = fold_run_plan(low, points, length, &target, &wanted);
+    if (result == GRX_OK && wanted) {
+      const uint32_t * folded = GRX_ARENA_AT(const uint32_t, &target, 0);
+      result = lower_fold_run(low, folded, target.count, node, out_node);
+      grx_arena_clear(&target);
+      return result;
+    }
+    grx_arena_clear(&target);
+    if (result != GRX_OK) {
+      return storage_failed(low, result, node);
+    }
+  }
+
   if (length == 1) {
     return lower_codepoint(low, points[0], node, out_node);
   }

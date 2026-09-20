@@ -31,6 +31,24 @@ extern "C" {
 #define GRX_FOLD_ORBIT_MAX 4
 
 /**
+ * @brief The most code points a full case fold produces.
+ *
+ * CaseFolding.txt status F: `ß` is two, `ΐ` is three, and nothing in
+ * Unicode 17 is longer.
+ */
+#define GRX_FULL_FOLD_MAX 3
+
+/**
+ * @brief The most code points that can share one full fold.
+ *
+ * The sources of a single-code-point target are its simple orbit, so this
+ * is at least @ref GRX_FOLD_ORBIT_MAX; the longest multi-code-point target
+ * has two sources (`ß` and `ẞ` both fold to "ss"). Four is the larger of
+ * the two and covers both questions.
+ */
+#define GRX_FULL_FOLD_SOURCE_MAX 4
+
+/**
  * @brief Decode one UTF-8 sequence.
  *
  * Strict: an overlong encoding, a surrogate (U+D800..U+DFFF), a code point
@@ -107,13 +125,48 @@ size_t grx_unicode_fold_orbit(
     uint32_t codepoint, uint32_t out[GRX_FOLD_ORBIT_MAX]);
 
 /**
+ * @brief Full case folding of one code point.
+ *
+ * CaseFolding.txt status F where there is one and the simple fold
+ * otherwise, so the answer is one to three code points and is always the
+ * *full* fold: `ß` gives "ss", `ẞ` gives "ss" as well, and `a` gives "a".
+ *
+ * A fold that is longer than what it folded is what makes a caseless match
+ * change length, which is why this is not something a single instruction
+ * can apply (documentation/design.md section 3.4.4).
+ *
+ * @param codepoint The code point to fold.
+ * @param out Receives the fold. Required, with room for
+ *   @ref GRX_FULL_FOLD_MAX.
+ * @return The number of code points written, at least 1.
+ */
+size_t grx_unicode_fold_full(
+    uint32_t codepoint, uint32_t out[GRX_FULL_FOLD_MAX]);
+
+/**
+ * @brief Every code point whose full fold is exactly this sequence.
+ *
+ * The reverse of grx_unicode_fold_full(), and the question lowering asks to
+ * turn a folded string into the classes that can produce it: what matches
+ * "ss" in one character is `ß` and `ẞ`, and what matches "s" in one
+ * character is the simple orbit of `s` less those two.
+ *
+ * @param sequence The folded code points. NULL or empty is 0.
+ * @param length How many, at most @ref GRX_FULL_FOLD_MAX.
+ * @param out Receives the sources. Required, with room for
+ *   @ref GRX_FULL_FOLD_SOURCE_MAX.
+ * @return The number written; 0 when nothing folds to this sequence.
+ */
+size_t grx_unicode_fold_full_sources(const uint32_t * sequence, size_t length,
+    uint32_t out[GRX_FULL_FOLD_SOURCE_MAX]);
+
+/**
  * @brief Which folding a dialect uses for a caseless match.
  *
- * documentation/dialects.md section 5.8. Two of the five values there are
- * absent because they are implemented as SIMPLE and recorded as deviations:
- * Perl's full folding, which would change the length of what was matched,
- * and .NET's culture-sensitive folding, which would need a locale this
- * library does not have.
+ * documentation/dialects.md section 5.8. One of the five values there is
+ * absent because it is implemented as SIMPLE and recorded as a deviation:
+ * .NET's culture-sensitive folding, which would need a locale this library
+ * does not have.
  */
 typedef enum {
   GRX_FOLD_NONE = 0,   ///< Not caseless; nothing folds.
@@ -130,6 +183,18 @@ typedef enum {
    * folding with every orbit cut at U+0080.
    */
   GRX_FOLD_SIMPLE_ASCII_APART,
+  /**
+   * Unicode full case folding: Perl's `/i`.
+   *
+   * The only value here under which a caseless match can change length -
+   * `ß` matches "ss" and the `ﬃ` ligature matches "ffi" - so it is the only
+   * one a *class* cannot express, and grx_unicode_orbit() answers for it as
+   * though it were SIMPLE. A class matches one character, and UTS #18 says
+   * so: full folding applies to the text a pattern spells out, not to the
+   * sets it names. Lowering is where the difference lives; see
+   * GRX_IR_FOLD_RUN.
+   */
+  GRX_FOLD_FULL,
   GRX_FOLD_COUNT       ///< Closes the enum; not a folding.
 } GRX_FoldKind;
 

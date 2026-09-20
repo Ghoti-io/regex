@@ -88,6 +88,33 @@ typedef enum {
   GRX_IR_KEEP,       ///< Reset the reported start of the match.
   GRX_IR_VERB,       ///< A backtracking control verb; `mode` says which.
   GRX_IR_SCAN,       ///< Match the one child against the substring `a` names.
+  /**
+   * A run of literal text matched under *full* case folding.
+   *
+   * Every other caseless construct is a class, because simple folding maps
+   * one code point to one code point and a class is exactly the set of the
+   * ones that agree. Full folding does not: `ß` folds to "ss", so one
+   * pattern character can stand for two subject characters - and `ff` folds
+   * to "ff", so two pattern characters can stand for one subject character,
+   * the `ﬀ` ligature. Neither fits in a class, and neither fits in a chain
+   * of classes, because the two can meet in the middle: `sß` and `ßs` both
+   * fold to "sss" and Perl matches one against the other.
+   *
+   * So the run is matched against its *fold*. `a` names a packed list of
+   * edges over the positions 0..`b` of that folded string, where an edge
+   * from `i` to `j` carries the class of characters whose full fold is
+   * exactly positions `i` to `j`. A path from 0 to `b` is a sequence of
+   * subject characters whose folds concatenate to the whole of it, which is
+   * the definition of a caseless match under full folding.
+   *
+   * The edges leaving a position are disjoint - a character has one full
+   * fold and so appears on one of them - so the walk is deterministic and
+   * there is at most one path for any subject. Codegen emits it as
+   * instructions rather than lowering emitting it as nodes, because the
+   * paths share their tails and a tree cannot say so: `s` repeated thirty
+   * times has a Fibonacci number of paths and thirty-one states.
+   */
+  GRX_IR_FOLD_RUN,
   GRX_IR_COUNT       ///< Closes the enum; not a node kind.
 } GRX_IRKind;
 
@@ -138,6 +165,8 @@ typedef enum {
  * | COND | group number | - | GRX_CondKind | HAS_ELSE; children |
  * | RECURSE | target group number | the definition's byte offset, or GRX_INDEX_NONE | - | - |
  * | VERB | name offset, or GRX_INDEX_NONE | - | GRX_VerbKind | - |
+ * | SCAN | scan-list offset | - | - | one child |
+ * | FOLD_RUN | edge-list offset | positions in the folded string | - | - |
  */
 typedef struct GRX_IRNode {
   GRX_IRKind kind;       ///< What this node is.
@@ -192,6 +221,15 @@ typedef struct GRX_IR {
    * first of these groups that is set", and a number is the whole of it.
    */
   GRX_Arena scan_lists;
+  /**
+   * The edge lists of GRX_IR_FOLD_RUN, as length-prefixed runs.
+   *
+   * A count, then that many triples: the position an edge leaves, the
+   * position it arrives at, and the index of the class it consumes one
+   * character from. Ordered by the position they leave, so codegen can walk
+   * a run's states without sorting.
+   */
+  GRX_Arena fold_runs;
   size_t capture_count;            ///< Capturing groups, excluding group 0.
   /**
    * How long a *variable*-length lookbehind body the dialect allows, or
@@ -338,6 +376,55 @@ GRX_Result grx_ir_scan_list_push(
  */
 const uint32_t * grx_ir_scan_list(
     const GRX_IR * ir, uint32_t offset, size_t * out_count);
+
+/** @brief One edge of a GRX_IR_FOLD_RUN: what it consumes, and where to. */
+typedef struct GRX_IRFoldEdge {
+  uint32_t from;  ///< Position in the folded string this edge leaves.
+  uint32_t to;    ///< Position it arrives at; always greater than `from`.
+  uint32_t class_index; ///< The class one character comes from.
+} GRX_IRFoldEdge;
+
+/**
+ * @brief Begin a fold-run edge list, and report where it starts.
+ *
+ * @param ir The IR.
+ * @param out_offset Receives the run's offset.
+ * @return GRX_OK, GRX_ERR_OOM, or GRX_ERR_INVALID.
+ */
+GRX_Result grx_ir_fold_run_begin(GRX_IR * ir, uint32_t * out_offset);
+
+/**
+ * @brief Append one edge to the run begun at `offset`.
+ *
+ * @param ir The IR.
+ * @param offset The run's offset.
+ * @param edge The edge.
+ * @return GRX_OK, GRX_ERR_OOM, or GRX_ERR_INVALID.
+ */
+GRX_Result grx_ir_fold_run_push(
+    GRX_IR * ir, uint32_t offset, GRX_IRFoldEdge edge);
+
+/**
+ * @brief The edges of the fold run at an offset.
+ *
+ * @param ir The IR.
+ * @param offset The run's offset.
+ * @param out_count Receives how many edges it holds. Required.
+ * @param out_edge Receives the edge at `index`. Required.
+ * @param index Which edge; ignored when `out_count` alone is wanted.
+ * @return Non-zero when `index` named an edge and it was written.
+ */
+int grx_ir_fold_run_edge(const GRX_IR * ir, uint32_t offset, size_t index,
+    GRX_IRFoldEdge * out_edge);
+
+/**
+ * @brief How many edges the fold run at an offset holds.
+ *
+ * @param ir The IR.
+ * @param offset The run's offset.
+ * @return The count, or 0 when the offset is out of range.
+ */
+size_t grx_ir_fold_run_count(const GRX_IR * ir, uint32_t offset);
 
 /**
  * @brief Write a human-readable form of the IR.

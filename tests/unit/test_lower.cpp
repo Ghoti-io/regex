@@ -253,6 +253,46 @@ TEST(Lower, TheTwoFoldingsAreDifferentFunctions) {
   EXPECT_EQ(spans(Compiled("[a-z]", "i"), long_s), "nomatch");
 }
 
+TEST(Lower, AFullFoldRunBecomesAGraphOfOrdinaryClassMatches) {
+  // documentation/design.md section 5.2. Full folding cannot be a class, so
+  // the run is matched against its fold as a small graph - but the graph is
+  // emitted as instructions the engines already had, which is the whole
+  // reason none of them needed changing.
+  const std::string sharp_s = "\xC3\x9F";
+  Compiled folded("(?i)ss", "", nullptr, GRX_SYNTAX_PERL);
+  ASSERT_TRUE(folded.ok());
+
+  // Two positions to cross, so two one-character edges and one that crosses
+  // both - and a SPLIT to choose. No new opcode appears.
+  EXPECT_TRUE(uses(folded, "split")) << folded.disassembly();
+  EXPECT_TRUE(uses(folded, "class")) << folded.disassembly();
+  EXPECT_FALSE(uses(folded, "char")) << folded.disassembly();
+  EXPECT_EQ(spans(folded, sharp_s), "0:2");
+  EXPECT_EQ(spans(folded, "ss"), "0:2");
+
+  // Every engine runs it, because a program of splits and classes is
+  // regular. That is the property the graph was shaped to keep.
+  GRX_Facts facts = folded.facts();
+  EXPECT_TRUE(facts.is_regular);
+  EXPECT_EQ(spans(folded, sharp_s, GRX_ENGINE_PIKE), "0:2");
+  EXPECT_EQ(spans(folded, sharp_s, GRX_ENGINE_BACKTRACK), "0:2");
+
+  // A run that does not need it is still one class per code point: `abc`
+  // has no full fold anywhere in it and no fold of a subject character can
+  // cover two of its positions.
+  Compiled plain("(?i)abc", "", nullptr, GRX_SYNTAX_PERL);
+  ASSERT_TRUE(plain.ok());
+  EXPECT_FALSE(uses(plain, "split")) << plain.disassembly();
+  EXPECT_EQ(spans(plain, "ABC"), "0:3");
+
+  // And the graph reverses with everything else inside a lookbehind: the
+  // positions are walked from the last to the first.
+  Compiled behind("(?i)x(?<=" + sharp_s + "x)", "", nullptr, GRX_SYNTAX_PERL);
+  ASSERT_TRUE(behind.ok());
+  EXPECT_NE(behind.disassembly().find("reverse"), std::string::npos);
+  EXPECT_EQ(spans(behind, "ssx"), "2:3");
+}
+
 TEST(Lower, ALookbehindBodyIsCompiledBackwards) {
   // documentation/design.md section 3.5.2: a lookbehind body is an ordinary
   // sub-program whose instructions step backwards. That is what lets it be

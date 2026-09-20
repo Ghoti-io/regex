@@ -554,7 +554,8 @@ Two rules about what a dialect is not:
   is, and it is not.
 - **Not a family.** `GRX_SYNTAX_PERL` and `GRX_SYNTAX_PCRE` stay separate
   because PCRE2 has verbs and `\K` restrictions Perl does not, and Perl has
-  full case folding PCRE2 does not. Where two names genuinely agree, they
+  full case folding PCRE2 does not - `(?i)ß` matches "ss" under one and
+  nothing under the other. Where two names genuinely agree, they
   share a profile row rather than being merged.
 
 Each dialect is pinned to a version of the implementation it names
@@ -595,11 +596,36 @@ matches.
 ### 5.2 Case folding is a compile-time operation
 
 §3.2. The Unicode module provides the simple fold, the fold *orbit* (every
-code point sharing a fold), and the per-dialect variants; the engines never
-call any of them. A dialect whose real implementation does *full* folding
-(Perl and Ruby match `ß` against `ss` under `/i`) gets simple folding here
-and a recorded deviation, because a fold that changes the length of what was
-matched cannot be expressed as a class and would need a different engine.
+code point sharing a fold), the full fold and the per-dialect variants; the
+engines never call any of them.
+
+Simple folding is a class: the orbit of `a` is `{A, a}`, and a caseless
+literal is that set. **Full folding is not**, because it maps one code point
+to a sequence - `ß` to "ss", the `ﬁ` ligature to "fi" - so a caseless match
+can be a different length from the pattern that asked for it, in either
+direction. That was recorded as a deviation for as long as it was one; it is
+implemented now, and the way it stays a compile-time operation is worth
+writing down.
+
+A run of literal text is matched against its *fold*. Lowering builds that
+folded string and, over its positions, the edges of a graph: an edge from
+`i` to `j` carries the class of characters whose full fold is exactly
+positions `i` to `j`. A path from one end to the other is a sequence of
+subject characters whose folds concatenate to the whole of it, which is the
+definition of the match. The edges leaving a position are disjoint - a
+character has one full fold - so the walk is deterministic and a subject has
+at most one path.
+
+Codegen turns the graph into instructions rather than lowering turning it
+into nodes, because the paths share their tails and a tree cannot say so:
+`s` written thirty times has thirty-one positions and a Fibonacci number of
+paths. As instructions it is `SPLIT`, `CLASS` and `JMP` - nothing an engine
+had to learn, so all three still run it and a caseless Perl pattern keeps
+the linear-time guarantee.
+
+A *class* is still folded simply. UTS #18 applies full folding to the text a
+pattern spells out and not to the sets it names, and a class matches one
+character, so `[ß]` cannot match two. Perl agrees.
 
 ### 5.3 Properties and names
 
@@ -789,9 +815,13 @@ blocks the first work packages.
 3. **Invalid UTF-8 subjects** are `GRX_ERR_INVALID` (§5.1), not a new
    code. Recommendation: keep the suite vocabulary; the offset is one call
    away.
-4. **Full case folding** for Perl and Ruby is a deviation (§5.2).
-   Recommendation: accept it for 1.0; revisit only if a consumer needs
-   `ß`/`ss`.
+4. **Full case folding** for Perl and Ruby was a deviation (§5.2).
+   **Decided against, and built**: the recommendation was to accept simple
+   folding for 1.0 and revisit only if a consumer needed `ß`/`ss`, and what
+   made it worth doing sooner was that the graph turns out to compile to
+   instructions the engines already had. Eleven corpus records that had been
+   listed as gaps now pass. Ruby has no front end yet and will get the same
+   profile row when it does.
 5. **UCD version policy** ([unicode.md](unicode.md) §1): pin one release
    per library minor version. Recommendation: 17.0.0 now, because Node 22 -
    the ECMAScript oracle - reports it, and vectors generated from an oracle

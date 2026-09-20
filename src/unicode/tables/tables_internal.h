@@ -71,6 +71,20 @@ typedef struct GRX_UnicodeCaseMap {
 } GRX_UnicodeCaseMap;
 
 /**
+ * @brief One code point whose full case fold is more than one code point.
+ *
+ * Sorted by `code`, so a lookup is a binary search. The whole table is a
+ * hundred and four entries, which is why the reverse question - *which* code
+ * points fold to this sequence - is answered by a scan rather than by a
+ * second index.
+ */
+typedef struct GRX_UnicodeFullFold {
+  uint32_t code;   ///< The code point folded.
+  uint32_t length; ///< Code points in `to`: 2 or 3.
+  uint32_t to[3];  ///< The fold; entries past `length` are 0.
+} GRX_UnicodeFullFold;
+
+/**
  * @brief One code point's membership in a fold orbit.
  *
  * Every member of an orbit has an entry, so a lookup is one binary search
@@ -139,6 +153,17 @@ extern const size_t grx_unicode_loose_prop_name_count;
 /** Simple case folding: CaseFolding.txt statuses C and S. */
 extern const GRX_UnicodeCaseMap grx_unicode_fold_map[];
 extern const size_t grx_unicode_fold_map_count;
+
+/**
+ * Full case folding: CaseFolding.txt status F, the folds of more than one
+ * code point.
+ *
+ * Only the code points whose full fold differs from their simple one are
+ * here, so a full fold is this table's entry when it has one and
+ * grx_unicode_fold_map's otherwise.
+ */
+extern const GRX_UnicodeFullFold grx_unicode_full_folds[];
+extern const size_t grx_unicode_full_fold_count;
 
 extern const GRX_UnicodeOrbit grx_unicode_fold_orbits[];
 extern const size_t grx_unicode_fold_orbit_count;

@@ -92,6 +92,95 @@ size_t grx_unicode_fold_orbit(
       grx_unicode_fold_orbit_members, codepoint, out);
 }
 
+/**
+ * Binary search the full-fold table.
+ *
+ * @return The entry for `codepoint`, or NULL when its full fold is its
+ *   simple one - which is every code point but a hundred and four.
+ */
+static const GRX_UnicodeFullFold * full_fold_lookup(uint32_t codepoint) {
+  size_t low = 0;
+  size_t high = grx_unicode_full_fold_count;
+  while (low < high) {
+    size_t mid = low + (high - low) / 2;
+    if (codepoint < grx_unicode_full_folds[mid].code) {
+      high = mid;
+    }
+    else if (codepoint > grx_unicode_full_folds[mid].code) {
+      low = mid + 1;
+    }
+    else {
+      return &grx_unicode_full_folds[mid];
+    }
+  }
+
+  return NULL;
+}
+
+size_t grx_unicode_fold_full(
+    uint32_t codepoint, uint32_t out[GRX_FULL_FOLD_MAX]) {
+  if (!out) {
+    return 0;
+  }
+
+  const GRX_UnicodeFullFold * entry = full_fold_lookup(codepoint);
+  if (!entry) {
+    out[0] = grx_unicode_fold_simple(codepoint);
+    return 1;
+  }
+
+  for (size_t i = 0; i < entry->length; i++) {
+    out[i] = entry->to[i];
+  }
+  return entry->length;
+}
+
+size_t grx_unicode_fold_full_sources(const uint32_t * sequence, size_t length,
+    uint32_t out[GRX_FULL_FOLD_SOURCE_MAX]) {
+  if (!out || !sequence || !length || length > GRX_FULL_FOLD_MAX) {
+    return 0;
+  }
+
+  size_t written = 0;
+
+  // A one-code-point target is the ordinary case and its sources are the
+  // simple orbit - less any member whose *full* fold is longer, because that
+  // member covers more of the target than this one position. U+1E9E is the
+  // example: it shares a simple orbit with U+00DF and folds fully to "ss",
+  // so it belongs to the two-position edge and not to this one.
+  if (length == 1) {
+    uint32_t orbit[GRX_FOLD_ORBIT_MAX];
+    size_t count = grx_unicode_fold_orbit(sequence[0], orbit);
+    for (size_t i = 0; i < count && written < GRX_FULL_FOLD_SOURCE_MAX; i++) {
+      if (!full_fold_lookup(orbit[i])) {
+        out[written++] = orbit[i];
+      }
+    }
+    return written;
+  }
+
+  // A longer target can only come from the full-fold table, which is small
+  // enough to walk: a hundred and four entries, asked once per edge while a
+  // pattern is being compiled.
+  for (size_t i = 0;
+      i < grx_unicode_full_fold_count && written < GRX_FULL_FOLD_SOURCE_MAX;
+      i++) {
+    const GRX_UnicodeFullFold * entry = &grx_unicode_full_folds[i];
+    if (entry->length != length) {
+      continue;
+    }
+    size_t same = 0;
+    while (same < length && entry->to[same] == sequence[same]) {
+      same++;
+    }
+    if (same == length) {
+      out[written++] = entry->code;
+    }
+  }
+
+  return written;
+}
+
 uint32_t grx_unicode_es_legacy_canonicalize(uint32_t codepoint) {
   return map_lookup(grx_unicode_es_legacy_map,
       grx_unicode_es_legacy_map_count, codepoint);
@@ -116,6 +205,10 @@ size_t grx_unicode_orbit(GRX_FoldKind kind, uint32_t codepoint,
 
   switch (kind) {
     case GRX_FOLD_SIMPLE:
+    // Full folding's orbits *are* the simple ones: what it adds is not a
+    // wider set of characters but the ability for one of them to stand for
+    // several, which no orbit can say.
+    case GRX_FOLD_FULL:
       return grx_unicode_fold_orbit(codepoint, out);
     case GRX_FOLD_SIMPLE_ASCII_APART: {
       // The simple orbit, less whatever is on the other side of U+0080.
@@ -156,6 +249,7 @@ size_t grx_unicode_orbit_table_size(GRX_FoldKind kind) {
   switch (kind) {
     case GRX_FOLD_SIMPLE:
     case GRX_FOLD_SIMPLE_ASCII_APART:
+    case GRX_FOLD_FULL:
       return grx_unicode_fold_orbit_count;
     case GRX_FOLD_ES_LEGACY:
       return grx_unicode_es_legacy_orbit_count;
@@ -179,6 +273,7 @@ size_t grx_unicode_orbit_table_at(GRX_FoldKind kind, size_t index,
   switch (kind) {
     case GRX_FOLD_SIMPLE:
     case GRX_FOLD_SIMPLE_ASCII_APART:
+    case GRX_FOLD_FULL:
       // The same table. Where the two differ is in what a *class* closure
       // does with an orbit that straddles U+0080, which is
       // grx_charclass_fold_closure()'s business and not this table's.

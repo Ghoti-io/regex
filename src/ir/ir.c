@@ -25,7 +25,7 @@ static const char * ir_kind_name(GRX_IRKind kind) {
   static const char * const names[GRX_IR_COUNT] = {
     "empty", "char", "class", "any", "concat", "alternate", "repeat",
     "capture", "backref", "assert", "look", "atomic", "cond", "recurse",
-    "keep", "verb", "scan",
+    "keep", "verb", "scan", "fold-run",
   };
   return (unsigned)kind < GRX_IR_COUNT ? names[kind] : "?";
 }
@@ -154,6 +154,8 @@ GRX_Result grx_ir_create(const GRX_Allocator * allocator,
   grx_arena_init(&ir->marks, allocator, sizeof(uint32_t), 0, GRX_DIAG_NONE);
   grx_arena_init(
       &ir->scan_lists, allocator, sizeof(uint32_t), 0, GRX_DIAG_NONE);
+  grx_arena_init(
+      &ir->fold_runs, allocator, sizeof(uint32_t), 0, GRX_DIAG_NONE);
 
   *out_ir = ir;
   return GRX_OK;
@@ -335,6 +337,65 @@ const uint32_t * grx_ir_scan_list(
   return GRX_ARENA_AT(const uint32_t, &ir->scan_lists, offset + 1);
 }
 
+GRX_Result grx_ir_fold_run_begin(GRX_IR * ir, uint32_t * out_offset) {
+  if (!ir || !out_offset) {
+    return GRX_ERR_INVALID;
+  }
+
+  uint32_t zero = 0;
+  *out_offset = (uint32_t)ir->fold_runs.count;
+  return grx_arena_append(&ir->fold_runs, &zero, NULL);
+}
+
+GRX_Result grx_ir_fold_run_push(
+    GRX_IR * ir, uint32_t offset, GRX_IRFoldEdge edge) {
+  if (!ir || offset >= ir->fold_runs.count) {
+    return GRX_ERR_INVALID;
+  }
+
+  const uint32_t fields[3] = {edge.from, edge.to, edge.class_index};
+  for (size_t i = 0; i < 3; i++) {
+    GRX_Result result = grx_arena_append(&ir->fold_runs, &fields[i], NULL);
+    if (result != GRX_OK) {
+      return result;
+    }
+  }
+
+  uint32_t * count = GRX_ARENA_AT(uint32_t, &ir->fold_runs, offset);
+  if (!count) {
+    return GRX_ERR_INVALID;
+  }
+  (*count)++;
+  return GRX_OK;
+}
+
+size_t grx_ir_fold_run_count(const GRX_IR * ir, uint32_t offset) {
+  if (!ir || offset >= ir->fold_runs.count) {
+    return 0;
+  }
+
+  const uint32_t * count
+      = GRX_ARENA_AT(const uint32_t, &ir->fold_runs, offset);
+  return count ? *count : 0;
+}
+
+int grx_ir_fold_run_edge(const GRX_IR * ir, uint32_t offset, size_t index,
+    GRX_IRFoldEdge * out_edge) {
+  if (!out_edge || index >= grx_ir_fold_run_count(ir, offset)) {
+    return 0;
+  }
+
+  const uint32_t * fields = GRX_ARENA_AT(
+      const uint32_t, &ir->fold_runs, offset + 1 + index * 3);
+  if (!fields) {
+    return 0;
+  }
+  out_edge->from = fields[0];
+  out_edge->to = fields[1];
+  out_edge->class_index = fields[2];
+  return 1;
+}
+
 /** Write the payload that belongs to this node's kind. */
 static void dump_payload(FILE * out, const GRX_IR * ir, const GRX_IRNode * node) {
   switch (node->kind) {
@@ -400,6 +461,19 @@ static void dump_payload(FILE * out, const GRX_IR * ir, const GRX_IRNode * node)
     case GRX_IR_VERB:
       fprintf(out, " %s", verb_name(node->mode));
       break;
+    case GRX_IR_FOLD_RUN: {
+      // The edges, not the folded string: the string is recoverable from
+      // them and the edges are what a reader has to check.
+      fprintf(out, " %u position%s", node->b, node->b == 1 ? "" : "s");
+      size_t edges = grx_ir_fold_run_count(ir, node->a);
+      for (size_t i = 0; i < edges; i++) {
+        GRX_IRFoldEdge edge;
+        if (grx_ir_fold_run_edge(ir, node->a, i, &edge)) {
+          fprintf(out, " %u->%u:#%u", edge.from, edge.to, edge.class_index);
+        }
+      }
+      break;
+    }
     default:
       break;
   }
@@ -486,5 +560,6 @@ void grx_ir_free(GRX_IR * ir) {
   grx_arena_clear(&ir->names);
   grx_arena_clear(&ir->marks);
   grx_arena_clear(&ir->scan_lists);
+  grx_arena_clear(&ir->fold_runs);
   gcu_allocator_free(allocator, ir);
 }

@@ -1341,6 +1341,68 @@ TEST(Perl, ASubroutineCallNamesADefinitionRatherThanANumber) {
   EXPECT_EQ(span_of("(a(?R)?b)", "aabb", GRX_SYNTAX_PERL), "0-4");
 }
 
+TEST(Perl, CaselessMatchingUsesFullFoldingAndSoCanChangeLength) {
+  // Perl's `/i` is Unicode *full* case folding, and full folding is the one
+  // kind a class cannot express: it maps one code point to a sequence. So a
+  // caseless match can be a different length from the pattern that asked for
+  // it, in either direction.
+  const std::string sharp_s = "\xC3\x9F";        // U+00DF
+  const std::string capital_sharp_s = "\xE1\xBA\x9E"; // U+1E9E
+  const std::string ff = "\xEF\xAC\x80";        // U+FB00, the ff ligature
+  const std::string fi = "\xEF\xAC\x81";        // U+FB01
+  const std::string ffi = "\xEF\xAC\x83";       // U+FB03
+  const std::string ffl = "\xEF\xAC\x84";       // U+FB04
+  const std::string st = "\xEF\xAC\x85";        // U+FB05
+
+  // One pattern character standing for two subject characters.
+  EXPECT_EQ(span_of("(?i)" + sharp_s, "ss", GRX_SYNTAX_PERL), "0-2");
+  EXPECT_EQ(span_of("(?i)" + sharp_s, sharp_s, GRX_SYNTAX_PERL), "0-2");
+  EXPECT_EQ(span_of("(?i)" + sharp_s, capital_sharp_s, GRX_SYNTAX_PERL), "0-3");
+
+  // Two pattern characters standing for one subject character.
+  EXPECT_EQ(span_of("(?i)ss", sharp_s, GRX_SYNTAX_PERL), "0-2");
+  EXPECT_EQ(span_of("(?i)ff", ff, GRX_SYNTAX_PERL), "0-3");
+  EXPECT_EQ(span_of("(?i)fi", fi, GRX_SYNTAX_PERL), "0-3");
+  EXPECT_EQ(span_of("(?i)ffiffl", ffi + ffl, GRX_SYNTAX_PERL), "0-6");
+  EXPECT_EQ(span_of("(?i)ssst", sharp_s + st, GRX_SYNTAX_PERL), "0-5");
+
+  // And the case that makes this a property of the *run* rather than of each
+  // character: the two meet in the middle. `sß` and `ßs` both fold to "sss",
+  // so the pattern's first `s` is matched by the first half of the subject's
+  // `ß` and the pattern's `ß` finishes inside the subject's `s`.
+  EXPECT_EQ(span_of("(?i)s" + sharp_s, sharp_s + "s", GRX_SYNTAX_PERL), "0-3");
+
+  // A fold run is an ordinary part of a pattern: quantified, inside a
+  // lookbehind, and next to things that are not folded at all.
+  EXPECT_EQ(span_of("(?i)" + sharp_s + "+", "ssss", GRX_SYNTAX_PERL), "0-4");
+  EXPECT_EQ(span_of("(?i)x(?<=" + sharp_s + "x)", "ssx", GRX_SYNTAX_PERL),
+      "2-3");
+  EXPECT_EQ(span_of("(?i)a" + sharp_s + "b", "aSSb", GRX_SYNTAX_PERL), "0-4");
+
+  // Nothing that does not need it is changed: an ASCII run is still an
+  // ASCII run, and a non-caseless one is not folded at all.
+  EXPECT_EQ(span_of("(?i)abc", "ABC", GRX_SYNTAX_PERL), "0-3");
+  EXPECT_EQ(span_of(sharp_s, "ss", GRX_SYNTAX_PERL), "nomatch");
+
+  // A class is not a run. UTS #18 applies full folding to the text a pattern
+  // spells out and not to the sets it names, and Perl agrees: a class
+  // matches one character, so `[ß]` cannot match two.
+  EXPECT_EQ(span_of("(?i)[" + sharp_s + "]", "ss", GRX_SYNTAX_PERL),
+      "nomatch");
+  EXPECT_EQ(span_of("(?i)[" + sharp_s + "]", sharp_s, GRX_SYNTAX_PERL), "0-2");
+}
+
+TEST(Perl, PcreFoldsSimplyWherePerlFoldsFully) {
+  // The same pattern, the same subject, two dialects. PCRE2 has no full
+  // folding - pcre2pattern says so, and pcre2test agrees - so this is a
+  // difference between the dialects rather than a gap in one of them, and
+  // it is the reason the fold kind is a row in the profile table.
+  const std::string sharp_s = "\xC3\x9F";
+  EXPECT_EQ(span_of("(?i)" + sharp_s, "ss", GRX_SYNTAX_PERL), "0-2");
+  EXPECT_EQ(span_of("(?i)" + sharp_s, "ss", GRX_SYNTAX_PCRE), "nomatch");
+  EXPECT_EQ(span_of("(?i)ss", sharp_s, GRX_SYNTAX_PCRE), "nomatch");
+}
+
 int main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
