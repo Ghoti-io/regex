@@ -16,8 +16,6 @@
 # failure it does not recognise. The *reason* is written by hand. A reason
 # that begins "not yet classified" is one nobody has looked at, and is meant
 # to be read as the admission it is.
-pcre		( {32742} {42})(?<!\\1{65481})		a repeat count the reference folds and this library expands
-pcre		()(?<=(?0))		lookbehind length: the reference computes a bound from a backreference or a call and this library does not
 pcre		(*napla:)+		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
 pcre		(*napla:a(*ACCEPT)zz|(.))\\1..		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
 pcre		(*napla:a|(*COMMIT)(.))\\1\\1		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
@@ -28,17 +26,10 @@ pcre		(*naplb:)+		non-atomic lookaround: refused until a verb inside one can tel
 pcre		(?(*napla:xx)bc)		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
 pcre		(?(*script_run:xxx)zzz)		`(*script_run:`: refused, it constrains the body and a group does not
 pcre		(?<*(.)..|(.)...)(\\1|\\2)		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
-pcre		(?<=b(?1))xyz(b+)pqrstuvew		lookbehind length: the reference computes a bound from a backreference or a call and this library does not
 pcre		(?|(?<a>A)|(?<b>B))		branch reset: the numbering is shared, and the names and references inside one are not checked against it yet
 pcre		(?|([ab]))...(?<=\\1)z		branch reset: the numbering is shared, and the names and references inside one are not checked against it yet
-pcre		(X{65535})(?<=\\1{32770})		a repeat count the reference folds and this library expands
-pcre		(\\2)((?=(?<=\\1)))		lookbehind length: the reference computes a bound from a backreference or a call and this library does not
-pcre		(a(?<=b(?1)))		lookbehind length: the reference computes a bound from a backreference or a call and this library does not
 pcre		(a)(?(DEFINE)(b))(?2){0,1999}?(?2)		a repeat of a subroutine call: the reference compiles one copy and this library expands it past max_program_size
 pcre		(a)(?2){0,1999}?(b)		a repeat of a subroutine call: the reference compiles one copy and this library expands it past max_program_size
-pcre		(a)(?<=b+(?1))		lookbehind length: the reference computes a bound from a backreference or a call and this library does not
-pcre		(a+)(?<=b(?1))		lookbehind length: the reference computes a bound from a backreference or a call and this library does not
-pcre		(a\\2)(b\\1)(?<=\\2)		lookbehind length: the reference computes a bound from a backreference or a call and this library does not
 pcre		[a-[.xxx.]]+		POSIX collating element: refused, there is no locale here
 pcre		[a-[=xxx=]]+		POSIX collating element: refused, there is no locale here
 pcre		\\A(*napla:.*\\b(\\w++))(?>.*?\\b\\1\\b){3}		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind

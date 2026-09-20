@@ -40,19 +40,22 @@ typedef struct {
   int anchored_start; ///< Every match must begin where the search began.
   int anchored_end;   ///< Every match must end at the end of the subject.
   /**
-   * The length is not merely unbounded but unknowable from the tree.
+   * The length could not be worked out from the tree at all.
    *
-   * A backreference or a subroutine call matches whatever something else
-   * did, so its length is a property of the subject and not of the pattern.
-   * Told apart from an ordinary unbounded span because a dialect that bounds
-   * its variable-length lookbehind does not apply that bound here: pcre2test
-   * refuses `(?<=a+)` and accepts `(a)(?<=b\1)`, and the two differ in
-   * nothing else.
+   * Not the same as unbounded. A backreference matches whatever its group
+   * did, and that group usually has a length this walk can measure, which is
+   * why pcre2test accepts `(a)(?<=\1)` and refuses `(a)(?<=\1+)`. The one
+   * that cannot be measured is the reference whose target is being measured
+   * already - `(a\2)(b\1)` - and a dialect that bounds its lookbehind
+   * refuses that, because a bound nobody can compute is not a bound.
    */
   int unknown_length;
 } Span;
 
 /** The accumulating answer for the whole program. */
+/** How many references deep the measuring of a group's length will go. */
+#define GRX_ANALYSIS_MAX_REFERENCES 32
+
 typedef struct {
   const GRX_IR * ir;
   int is_regular;
@@ -62,6 +65,15 @@ typedef struct {
   size_t max_lookbehind;
   size_t max_variable_lookbehind;
   size_t depth;
+  /**
+   * The groups whose length is being measured, innermost last.
+   *
+   * A reference to one of these is a reference to something whose answer
+   * depends on this answer, so it has none: `(a\2)(b\1)` is two groups each
+   * of which is as long as the other.
+   */
+  uint32_t resolving[GRX_ANALYSIS_MAX_REFERENCES];
+  size_t resolving_count;
 } Analysis;
 
 /** How deep the walk will go before it gives up rather than overflowing. */
@@ -210,6 +222,53 @@ static Span walk_alternate(Analysis * analysis, const GRX_IRNode * node) {
   return span;
 }
 
+/**
+ * How long the text a group captured can be.
+ *
+ * What a backreference or a subroutine call matches is a property of the
+ * group it names, not of the subject, and pcre2test measures it: `(a)(?<=\1)`
+ * compiles and `(a)(?<=\1+)` does not, which is the difference between a
+ * bound of one and no bound at all. A group already being measured has no
+ * answer this can give - `(a\2)(b\1)` is two groups each as long as the
+ * other - and neither has `(?0)`, which is the whole pattern.
+ *
+ * The minimum comes back as zero whatever the group's is: a reference to a
+ * group that did not participate matches the empty string in ECMAScript and
+ * fails in the Perl family, and neither is "at least what the group was".
+ */
+static Span group_span(Analysis * analysis, uint32_t group) {
+  Span unknown = {0, GRX_NPOS, 0, 0, 1};
+  if (!group || analysis->resolving_count >= GRX_ANALYSIS_MAX_REFERENCES) {
+    return unknown;
+  }
+  for (size_t i = 0; i < analysis->resolving_count; i++) {
+    if (analysis->resolving[i] == group) {
+      return unknown;
+    }
+  }
+
+  uint32_t body = GRX_INDEX_NONE;
+  for (size_t i = 0; i < analysis->ir->nodes.count; i++) {
+    const GRX_IRNode * node = grx_ir_node(analysis->ir, (uint32_t)i);
+    if (node && node->kind == GRX_IR_CAPTURE && node->a == group) {
+      body = node->first_child;
+      break;
+    }
+  }
+  if (body == GRX_INDEX_NONE) {
+    return unknown;
+  }
+
+  analysis->resolving[analysis->resolving_count++] = group;
+  Span span = walk(analysis, body);
+  analysis->resolving_count--;
+
+  span.min_length = 0;
+  span.anchored_start = 0;
+  span.anchored_end = 0;
+  return span;
+}
+
 static Span walk(Analysis * analysis, uint32_t node_index) {
   Span span = {0, GRX_NPOS, 0, 0, 0};
 
@@ -311,8 +370,14 @@ static Span walk(Analysis * analysis, uint32_t node_index) {
         }
         // A body that matches more than one length is the one a dialect may
         // bound separately: PCRE2 takes `(?<=a{256})` and refuses
-        // `(?<=\d{1,256})`, and the two differ only in this test.
-        if (!body.unknown_length && body.min_length != body.max_length
+        // `(?<=\d{1,256})`, and the two differ only in this test. A body
+        // whose length could not be worked out at all counts as exceeding
+        // every finite bound, which is pcre2test's answer for
+        // `(a\2)(b\1)(?<=\2)`: a bound nobody can compute is not one.
+        if (body.unknown_length) {
+          analysis->max_variable_lookbehind = GRX_NPOS;
+        }
+        else if (body.min_length != body.max_length
             && body.max_length > analysis->max_variable_lookbehind) {
           analysis->max_variable_lookbehind = body.max_length;
         }
@@ -324,15 +389,20 @@ static Span walk(Analysis * analysis, uint32_t node_index) {
     case GRX_IR_BACKREF:
       analysis->has_backreference = 1;
       analysis->is_regular = 0;
-      // A backreference matches whatever its group did, which is anything
-      // from nothing to the whole subject.
-      span = (Span) {0, GRX_NPOS, 0, 0, 1};
+      // A backreference matches whatever its group did, so its length is
+      // that group's - measured here rather than given up on, because that
+      // is the difference between the lookbehind pcre2test accepts and the
+      // one it refuses.
+      span = group_span(analysis, node->a);
       break;
 
     case GRX_IR_RECURSE:
       analysis->has_recursion = 1;
       analysis->is_regular = 0;
-      span = (Span) {0, GRX_NPOS, 0, 0, 1};
+      // A call matches what its target matches, which is the same question a
+      // backreference asks - and `(?0)`, the whole pattern, is the one that
+      // has no answer.
+      span = group_span(analysis, node->a);
       break;
 
     case GRX_IR_COND:
@@ -384,6 +454,8 @@ GRX_Result grx_analyze_ir(const GRX_IR * ir, GRX_Facts * out_facts) {
     .max_lookbehind = 0,
     .max_variable_lookbehind = 0,
     .depth = 0,
+    .resolving = {0},
+    .resolving_count = 0,
   };
 
   Span span = ir->root == GRX_INDEX_NONE ? (Span) {0, 0, 0, 0, 0}
@@ -456,6 +528,8 @@ int grx_ir_can_match_empty(const GRX_IR * ir, uint32_t node_index) {
     .max_lookbehind = 0,
     .max_variable_lookbehind = 0,
     .depth = 0,
+    .resolving = {0},
+    .resolving_count = 0,
   };
   Span span = walk(&analysis, node_index);
   return span.min_length == 0;

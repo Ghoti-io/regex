@@ -1084,6 +1084,30 @@ TEST(Perl, AVerbInsideAPositiveAssertionEndsTheAttemptOutsideIt) {
       "nomatch");
 }
 
+TEST(Perl, ALookbehindIsBoundedByWhatItsReferencesCanMatch) {
+  // pcre2test measures a backreference by the group it names rather than
+  // giving up on it: `(a)(?<=\1)` is a lookbehind of one character and
+  // compiles, and `(a)(?<=\1+)` has no bound at all and does not.
+  EXPECT_EQ(compile_result("(a)(?<=\\1)"), GRX_OK);
+  EXPECT_EQ(compile_result("(ab)(?<=\\1)"), GRX_OK);
+  EXPECT_EQ(compile_result("(a|bc)(?<=\\1)"), GRX_OK);
+  EXPECT_EQ(compile_result("(a)(?<=\\1+)"), GRX_ERR_SYNTAX);
+
+  // A subroutine call asks the same question, and `(?0)` - the whole
+  // pattern - is the one with no answer.
+  EXPECT_EQ(compile_result("(a+)(?<=b(?1))"), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("()(?<=(?0))"), GRX_ERR_SYNTAX);
+
+  // Two groups each as long as the other have no bound this can compute,
+  // and a bound nobody can compute is not a bound.
+  EXPECT_EQ(compile_result("(a\\2)(b\\1)(?<=\\2)"), GRX_ERR_SYNTAX);
+
+  // ECMAScript bounds no lookbehind at all, so every one of these compiles
+  // there - the measuring is the same, and what differs is the dialect's
+  // answer to a body it cannot bound.
+  EXPECT_EQ(compile_result("(a)(?<=\\1+)", GRX_SYNTAX_ECMASCRIPT), GRX_OK);
+}
+
 int main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
