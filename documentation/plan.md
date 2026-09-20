@@ -310,10 +310,24 @@ the Perl family. *Done:* rates published. *Depends on:* WP-04.
 `(?{})` refused with its diagnostic. *Done:* `re_tests` vectors pass.
 *Depends on:* WP-18.
 
-**WP-22 PCRE2 and Perl replacement templates.** *core, S.* Including
-PCRE2's extended substitution syntax. *Depends on:* WP-16.
+**WP-22 PCRE2 and Perl replacement templates.** *core, S.* **Landed**, less
+PCRE2's extended substitution syntax. Both rows of
+[dialects.md](dialects.md) section 5.11 are written and checked against their
+references: `${n}`, `${name}` and the bare `$name` for PCRE2, `$+{name}` and
+`\$` escaping for Perl, and the three different answers to a reference the
+pattern has no group for - an error, nothing, and the text as written.
 
-**M3.** PCRE2 and Perl conformant; the engine feature set complete.
+What is *not* here is `PCRE2_SUBSTITUTE_EXTENDED`: `\U`, `\L`, `${n:+a:b}`
+and `$*MARK`. It is an option pcre2_substitute() reads only when asked, this
+library does not expose it, and the ordinary grammar is what a caller gets by
+default. Perl's `\U` and its kin are left out for a different reason - they
+are string operators that happen to be legal in a replacement, and
+implementing them without the rest of interpolation would be a grammar this
+library invented. *Depends on:* WP-16.
+
+**M3.** **Reached**, less what `tests/data/vectors/known-gaps.txt` names.
+PCRE2 and Perl parse, compile, match and substitute; the engine feature set
+is complete.
 
 ### Phase 4: POSIX and GNU
 

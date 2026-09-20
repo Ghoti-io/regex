@@ -170,7 +170,7 @@ Nothing is allocated for the caller to free on a failing call.
 | Conditionals, recursion and subroutine calls, `\K`, the control verbs | working - on the backtracking engine, which is the only one that can run them |
 | Bit-state engine | working - the backtracker with a memo, and the linear bound back |
 | Search window, NOTBOL/NOTEOL/NOTEMPTY, `grx_regex_search_next()` | working |
-| `grx_regex_replace()` and `grx_regex_split()` | working - ECMAScript's template grammar and split rule |
+| `grx_regex_replace()` and `grx_regex_split()` | working - ECMAScript's, PCRE2's and Perl's template grammars, and the split rule |
 | `grx_pattern_lint()`, the JSON Schema subset check | working |
 | Limits | measured, not guessed; dialects.md section 7 |
 | The `text` seam for JSON Schema | working - `pattern` and `patternProperties` validate through this library |
@@ -294,7 +294,7 @@ to 173 milliseconds on an idle machine - 276 to 414 on a busy one, which is
 the number that matters - and answered by another engine in under one.
 [dialects.md](documentation/dialects.md) §7 is the report.
 
-381 tests plus the vector corpus, clean under Valgrind and under
+387 tests plus the vector corpus, clean under Valgrind and under
 ASan+UBSan. `make coverage` reports 90.8%; three of the five directories
 [testing.md](documentation/testing.md) §12 sets a 90% floor for are over it
 and two are under, with the shortfall counted there rather than explained

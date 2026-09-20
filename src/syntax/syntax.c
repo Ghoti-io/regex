@@ -260,6 +260,23 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     .fold = GRX_FOLD_SIMPLE,
     .fold_utf = GRX_FOLD_SIMPLE,
     .property_match = GRX_PROPERTY_LOOSE,
+    // The interpolation subset of section 5.11. A Perl template is a double-
+    // quoted string, so the escape is `\$` and not `$$` - `$$` is the
+    // process id, which is why the two rules cannot both be true of one
+    // dialect. A reference to a group that does not exist interpolates
+    // undef, which is the empty string.
+    //
+    // The case operators `\U \L \E \u \l \Q` are not here: they are string
+    // operators that happen to be legal in a replacement, and implementing
+    // them without the rest of Perl's interpolation would be a grammar this
+    // library invented.
+    .template_spec = {
+      .sigil = '$',
+      .features = GRX_TMPL_NUMBER | GRX_TMPL_NUMBER_BRACED
+          | GRX_TMPL_NAME_PLUS_BRACE | GRX_TMPL_WHOLE | GRX_TMPL_PREFIX
+          | GRX_TMPL_SUFFIX | GRX_TMPL_BACKSLASH_ESCAPE,
+      .missing = GRX_TMPL_MISSING_EMPTY,
+    },
   },
   [GRX_SYNTAX_PCRE] = {
     .recursion_is_atomic = 1,
@@ -270,6 +287,21 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     .fold = GRX_FOLD_ASCII,
     .fold_utf = GRX_FOLD_SIMPLE,
     .property_match = GRX_PROPERTY_LOOSE,
+    // pcre2_substitute()'s grammar, section 5.11. No `$&`, no `` $` `` and
+    // no `$'`: PCRE2 never took those, and a reference to a group the
+    // pattern does not have is an error rather than literal text.
+    //
+    // What is *not* here is the extended substitution syntax - `\U`, `\L`,
+    // `${n:+a:b}`, `$*MARK` - which pcre2_substitute() reads only under
+    // PCRE2_SUBSTITUTE_EXTENDED. It is an option this library does not
+    // expose, and the ordinary grammar is the one a caller gets by default.
+    .template_spec = {
+      .sigil = '$',
+      .features = GRX_TMPL_NUMBER | GRX_TMPL_NUMBER_BRACED
+          | GRX_TMPL_NAME_BRACED | GRX_TMPL_NAME_BARE
+          | GRX_TMPL_DOUBLE_SIGIL,
+      .missing = GRX_TMPL_MISSING_ERROR,
+    },
   },
 
   // ECMAScript. Every value here is ECMA-262's, and each of the four that

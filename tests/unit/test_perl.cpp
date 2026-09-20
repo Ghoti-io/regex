@@ -652,6 +652,67 @@ TEST(Perl, TheVariableLookbehindBoundIsTheDialectsAndNotTheCallers) {
   grx_regex_free(es.regex);
 }
 
+// --------------------------------------------------------------------------
+// The replacement templates
+// --------------------------------------------------------------------------
+
+namespace {
+
+/** Replace every match, and report the text or the diagnostic. */
+std::string replace_all(GRX_Syntax syntax, const std::string & pattern,
+    const std::string & subject, const std::string & tmpl) {
+  Attempt attempt = compile(pattern, syntax);
+  if (attempt.result != GRX_OK) {
+    return "compile failed";
+  }
+
+  GRX_Text text = {nullptr, 0, nullptr};
+  GRX_Error error;
+  grx_error_clear(&error);
+  GRX_Result result = grx_regex_replace(attempt.regex, subject.data(),
+      subject.size(), tmpl.data(), tmpl.size(), GRX_REPLACE_GLOBAL, nullptr,
+      nullptr, &error, &text);
+  std::string answer = result == GRX_OK
+      ? std::string(text.data, text.length)
+      : std::string("error: ") + grx_diag_string(error.diag);
+  grx_text_free(&text);
+  grx_regex_free(attempt.regex);
+  return answer;
+}
+
+} // namespace
+
+TEST(Perl, Pcre2sTemplateGrammarIsPcre2Substitutes) {
+  // Every answer here is pcre2test's, asked with `\=replace=`.
+  EXPECT_EQ(replace_all(GRX_SYNTAX_PCRE, "(a)(b)", "ab", "$1-$2"), "a-b");
+  EXPECT_EQ(replace_all(GRX_SYNTAX_PCRE, "(a)(b)", "ab", "${1}${2}"), "ab");
+  EXPECT_EQ(
+      replace_all(GRX_SYNTAX_PCRE, "(?<x>a)(?<y>b)", "ab", "$x-${y}"), "a-b");
+  EXPECT_EQ(replace_all(GRX_SYNTAX_PCRE, "(a)", "a", "$$ and $1"), "$ and a");
+
+  // A reference to a group the pattern does not have is an error, where
+  // ECMAScript leaves the text alone and Perl interpolates nothing. All
+  // three rows of section 5.11 differ here, which is why the rule is a
+  // field and not a shared default.
+  EXPECT_EQ(replace_all(GRX_SYNTAX_PCRE, "(a)", "a", "$9"),
+      "error: replacement template names a group the pattern does not have");
+  EXPECT_EQ(replace_all(GRX_SYNTAX_ECMASCRIPT, "(a)", "a", "$9"), "$9");
+  EXPECT_EQ(replace_all(GRX_SYNTAX_PERL, "(a)", "a", "[$9]"), "[]");
+}
+
+TEST(Perl, PerlsTemplateGrammarIsTheInterpolationSubset) {
+  // Every answer here is Perl 5.40's, asked with `s///g`.
+  EXPECT_EQ(replace_all(GRX_SYNTAX_PERL, "(a)(b)", "ab", "[$1|${2}]"), "[a|b]");
+  EXPECT_EQ(replace_all(GRX_SYNTAX_PERL, "(?<x>a)", "a", "<$+{x}>"), "<a>");
+  EXPECT_EQ(
+      replace_all(GRX_SYNTAX_PERL, "b", "abc", "[$`|$&|$']"), "a[a|b|c]c");
+
+  // A Perl template is a double-quoted string, so the escape is `\$` and not
+  // `$$` - `$$` is the process id, which is why one dialect cannot have both
+  // rules.
+  EXPECT_EQ(replace_all(GRX_SYNTAX_PERL, "(a)", "a", "\\$1 is $1"), "$1 is a");
+}
+
 int main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

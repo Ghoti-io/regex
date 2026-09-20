@@ -115,6 +115,24 @@ typedef enum {
  * substitutes nothing.
  */
 #define GRX_TMPL_NAME_NEEDS_NAMED_GROUPS GRX_BIT(8)
+/**
+ * @brief `$name`: a name with no bracket around it at all.
+ *
+ * PCRE2's, and the one spelling that has to be read greedily - `$1x` is the
+ * group named `1x` where there is one, so a reader that stopped at the first
+ * character that could not continue a number would get it wrong.
+ */
+#define GRX_TMPL_NAME_BARE GRX_BIT(9)
+/** @brief Perl's `$+{name}`, the named-capture hash. */
+#define GRX_TMPL_NAME_PLUS_BRACE GRX_BIT(10)
+/**
+ * @brief A backslash escapes the next character, rather than a doubled sigil.
+ *
+ * Perl's templates are interpolated strings: `\$` is a literal dollar and
+ * `$$` is the process id. The two rules are mutually exclusive, and a
+ * dialect that had both would be one whose templates cannot be written.
+ */
+#define GRX_TMPL_BACKSLASH_ESCAPE GRX_BIT(11)
 
 /** @brief What a reference to a group the pattern does not have does. */
 typedef enum {

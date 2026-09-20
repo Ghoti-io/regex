@@ -150,12 +150,12 @@ static size_t digits_naming_a_group(const char * text, size_t length,
  * @return Bytes consumed from `<` onwards, or 0 when this is not a reference.
  */
 static size_t named_reference(const GRX_Regex * regex, const char * text,
-    size_t length, size_t at, GRX_TemplateOpKind * out_kind,
-    uint32_t * out_group) {
-  if (at >= length || text[at] != '<') {
+    size_t length, size_t at, char opener, char closer,
+    GRX_TemplateOpKind * out_kind, uint32_t * out_group) {
+  if (at >= length || text[at] != opener) {
     return 0;
   }
-  const char * close = memchr(text + at, '>', length - at);
+  const char * close = memchr(text + at, closer, length - at);
   if (!close) {
     return 0;
   }
@@ -183,6 +183,104 @@ static size_t named_reference(const GRX_Regex * regex, const char * text,
   return name_length + 2;
 }
 
+/**
+ * Read a bare name: `$name`, PCRE2's and Go's spelling.
+ *
+ * Greedily, which is the rule and not an implementation choice: Go's
+ * documentation says `$1x` is the group named `1x`, and PCRE2 reads a name
+ * the same way. A reader that stopped at the first character which cannot
+ * continue a *number* would resolve `$1x` as group 1 followed by "x".
+ */
+static size_t bare_name_reference(const GRX_Regex * regex, const char * text,
+    size_t length, size_t at, GRX_TemplateOpKind * out_kind,
+    uint32_t * out_group) {
+  size_t end = at;
+  while (end < length) {
+    char c = text[end];
+    int name_char = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
+        || (c >= '0' && c <= '9') || c == '_';
+    if (!name_char) {
+      break;
+    }
+    end++;
+  }
+
+  size_t name_length = end - at;
+  if (!name_length) {
+    return 0;
+  }
+
+  char name[256];
+  if (name_length >= sizeof(name)) {
+    *out_kind = GRX_TPL_NOTHING;
+    return name_length;
+  }
+  memcpy(name, text + at, name_length);
+  name[name_length] = '\0';
+
+  size_t index = 0;
+  if (grx_regex_capture_index(regex, name, &index) == GRX_OK) {
+    *out_kind = GRX_TPL_GROUP;
+    *out_group = (uint32_t)index;
+    return name_length;
+  }
+
+  // Not a name this pattern has. It may still be a *number*, which the
+  // caller reads instead: `${1}` and `$1` are the same reference.
+  return 0;
+}
+
+/**
+ * Read `${...}`: a number or a name, depending on what is inside.
+ *
+ * One reader for both because the braces do not say which it is, and a
+ * template that wrote `${1}` against a group named `1` would otherwise
+ * depend on which of two functions was tried first.
+ */
+static size_t braced_reference(const GRX_TemplateSpec * spec,
+    const GRX_Regex * regex, const char * text, size_t length, size_t at,
+    size_t captures, GRX_TemplateOpKind * out_kind, uint32_t * out_group) {
+  if (at >= length || text[at] != '{') {
+    return 0;
+  }
+  const char * close = memchr(text + at, '}', length - at);
+  if (!close) {
+    return 0;
+  }
+  size_t inner = (size_t)(close - (text + at)) - 1;
+  if (!inner) {
+    return 0;
+  }
+
+  int all_digits = 1;
+  for (size_t i = 0; i < inner; i++) {
+    char c = text[at + 1 + i];
+    if (c < '0' || c > '9') {
+      all_digits = 0;
+      break;
+    }
+  }
+
+  if (all_digits) {
+    if (!(spec->features & GRX_TMPL_NUMBER_BRACED)) {
+      return 0;
+    }
+    uint32_t value = 0;
+    for (size_t i = 0; i < inner && value <= captures; i++) {
+      value = value * 10 + (uint32_t)(text[at + 1 + i] - '0');
+    }
+    *out_kind = value && value <= captures ? GRX_TPL_GROUP : GRX_TPL_NOTHING;
+    *out_group = value;
+    return inner + 2;
+  }
+
+  if (!(spec->features & GRX_TMPL_NAME_BRACED)) {
+    return 0;
+  }
+  return named_reference(
+      regex, text, length, at, '{', '}', out_kind, out_group);
+}
+
 GRX_Result grx_template_parse(const GRX_TemplateSpec * spec,
     const GRX_Regex * regex, const char * text, size_t length,
     const GRX_Allocator * allocator, GRX_Error * out_error,
@@ -203,6 +301,24 @@ GRX_Result grx_template_parse(const GRX_TemplateSpec * spec,
   size_t i = 0;
   size_t literal_from = 0;
   while (i < length) {
+    if (text[i] == '\\' && (spec->features & GRX_TMPL_BACKSLASH_ESCAPE)
+        && i + 1 < length) {
+      // Perl's templates are interpolated strings: `\$` is a literal dollar
+      // and `$$` is the process id, so the two escaping rules are mutually
+      // exclusive and a dialect has one or the other.
+      GRX_Result result
+          = emit_literal(out_template, literal_from, i - literal_from);
+      if (result == GRX_OK) {
+        result = emit_literal(out_template, i + 1, 1);
+      }
+      if (result != GRX_OK) {
+        grx_template_clear(out_template);
+        return fail(out_error, GRX_DIAG_OUT_OF_MEMORY, i, 2);
+      }
+      i += 2;
+      literal_from = i;
+      continue;
+    }
     if (text[i] != sigil) {
       i++;
       continue;
@@ -246,7 +362,29 @@ GRX_Result grx_template_parse(const GRX_TemplateSpec * spec,
       }
       else if (c == '<' && (spec->features & GRX_TMPL_NAME_ANGLE)
           && (named || !(spec->features & GRX_TMPL_NAME_NEEDS_NAMED_GROUPS))) {
-        consumed = named_reference(regex, text, length, after, &kind, &group);
+        consumed = named_reference(
+            regex, text, length, after, '<', '>', &kind, &group);
+      }
+      else if (c == '{'
+          && (spec->features
+              & (GRX_TMPL_NUMBER_BRACED | GRX_TMPL_NAME_BRACED))) {
+        consumed = braced_reference(
+            spec, regex, text, length, after, captures, &kind, &group);
+        if (consumed && kind == GRX_TPL_NOTHING
+            && spec->missing == GRX_TMPL_MISSING_ERROR) {
+          grx_template_clear(out_template);
+          return fail(out_error, GRX_DIAG_TEMPLATE_UNKNOWN_GROUP, start,
+              1 + consumed);
+        }
+      }
+      else if (c == '+' && (spec->features & GRX_TMPL_NAME_PLUS_BRACE)
+          && after + 1 < length && text[after + 1] == '{') {
+        // Perl's `$+{name}`: the named-capture hash, spelled as a lookup.
+        consumed = named_reference(
+            regex, text, length, after + 1, '{', '}', &kind, &group);
+        if (consumed) {
+          consumed += 1;
+        }
       }
       else if (c >= '0' && c <= '9' && (spec->features & GRX_TMPL_NUMBER)) {
         consumed
@@ -254,7 +392,28 @@ GRX_Result grx_template_parse(const GRX_TemplateSpec * spec,
         if (consumed) {
           kind = GRX_TPL_GROUP;
         }
-        else if (spec->missing != GRX_TMPL_MISSING_LITERAL) {
+        else if (spec->missing == GRX_TMPL_MISSING_ERROR) {
+          grx_template_clear(out_template);
+          return fail(out_error, GRX_DIAG_TEMPLATE_UNKNOWN_GROUP, start, 2);
+        }
+        else if (spec->missing == GRX_TMPL_MISSING_EMPTY) {
+          // Perl interpolates undef, which is the empty string, and consumes
+          // the digits. ECMAScript is the LITERAL row and leaves them alone,
+          // which is the branch below. The three rows were two for one
+          // revision, and `[$9]` under Perl was an error rather than "[]".
+          size_t digits = 0;
+          while (after + digits < length && text[after + digits] >= '0'
+              && text[after + digits] <= '9') {
+            digits++;
+          }
+          consumed = digits;
+          kind = GRX_TPL_NOTHING;
+        }
+      }
+      else if (spec->features & GRX_TMPL_NAME_BARE) {
+        consumed
+            = bare_name_reference(regex, text, length, after, &kind, &group);
+        if (!consumed && spec->missing == GRX_TMPL_MISSING_ERROR) {
           grx_template_clear(out_template);
           return fail(out_error, GRX_DIAG_TEMPLATE_UNKNOWN_GROUP, start, 2);
         }
