@@ -1289,6 +1289,27 @@ TEST(Perl, TheTwoRepeatCountsTheDialectsAnswerDifferently) {
   EXPECT_EQ(compile_result("(a){3,1}", GRX_SYNTAX_PCRE), GRX_ERR_SYNTAX);
 }
 
+TEST(Perl, PerlQuantifiesAnAnchorAndPcre2DoesNot) {
+  // `a$?` and `^*` compile in perl and are error 109 in pcre2test. The
+  // corpus row that asked is `m?^xy\?$?`, which Perl's own harness reads as
+  // the match operator and every importer here reads as a pattern ending in
+  // a quantified `$`.
+  EXPECT_EQ(span_of("m?^xy\\?$?", "xy?", GRX_SYNTAX_PERL), "0-3");
+  EXPECT_EQ(compile_result("a$?", GRX_SYNTAX_PERL), GRX_OK);
+  EXPECT_EQ(compile_result("^*", GRX_SYNTAX_PERL), GRX_OK);
+  EXPECT_EQ(compile_result("a$?", GRX_SYNTAX_PCRE), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("^*", GRX_SYNTAX_PCRE), GRX_ERR_SYNTAX);
+}
+
+TEST(Perl, AGroupInsideABranchResetHasNoLengthToMeasure) {
+  // Its number is shared with the other branches', so which of them a
+  // reference means is not decided until the match runs. pcre2test refuses
+  // this even with one branch, and takes the same lookbehind over a group
+  // written outside one.
+  EXPECT_EQ(compile_result("(?|([ab]))...(?<=\\1)z"), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("([ab])...(?<=\\1)z"), GRX_OK);
+}
+
 int main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

@@ -267,10 +267,10 @@ cannot mean "the suite ran nothing".
 | Corpus | Records | Agreeing |
 | --- | --- | --- |
 | ECMAScript, from Node 22 and test262 | 28,559 | **100%** |
-| PCRE2, from pcre2test 10.46's `testinput1` and `testinput2` | 1,869 | **99.63%** |
-| Perl, from `re_tests` under Perl 5.40 | 1,707 | **95.49%** |
+| PCRE2, from pcre2test 10.46's `testinput1` and `testinput2` | 1,869 | **99.68%** |
+| Perl, from `re_tests` under Perl 5.40 | 1,707 | **95.55%** |
 
-The 84 that do not agree are listed one per line in
+The 82 that do not agree are listed one per line in
 `tests/data/vectors/known-gaps.txt`, with the construct that is missing
 written beside each. That file is a gate in both directions: a vector that
 fails and is not listed fails the suite; a vector that *is* listed and passes
@@ -279,7 +279,7 @@ corpus no longer has fails it as well. So the list can only shrink by
 somebody noticing, and the percentages above are over the whole corpus - a
 known gap is counted and named, never counted as a pass.
 
-They are all Perl's now but seven. The largest groups are 18 patterns of the
+They are all Perl's now but six. The largest groups are 18 patterns of the
 `.X(.+)+X` shape, which the Pike and bit-state engines both answer and the
 plain backtracker runs out of budget on; 16 using Perl's `\b{wb}` and its
 three relatives; 11 needing full case folding; and 17 turning on what Perl

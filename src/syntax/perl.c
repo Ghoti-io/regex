@@ -3584,11 +3584,21 @@ static GRX_Result pcre_check_quantifier_target(
       return grx_parse_fail(
           parser, GRX_DIAG_NOTHING_TO_REPEAT, offset, length);
 
+    case GRX_NODE_ANCHOR:
+      // `a$?` and `^*` compile in perl and are error 109 in pcre2test. The
+      // corpus row that asked is `m?^xy\?$?`, which reads as the match
+      // operator in Perl's own harness and as a pattern ending in a
+      // quantified `$` everywhere the importer looks at it.
+      if (flavour(parser) == FLAVOUR_PERL) {
+        return GRX_OK;
+      }
+      return grx_parse_fail(
+          parser, GRX_DIAG_NOTHING_TO_REPEAT, offset, length);
+
     // A lookaround *is* quantifiable here, which surprised this file's first
     // draft: `/(?=a)*/` compiles in pcre2test 10.46, where the same pattern
     // is a syntax error in ECMAScript's Unicode mode. So is `(*ACCEPT)*`.
     // Both were refused until the corpus said otherwise.
-    case GRX_NODE_ANCHOR:
     case GRX_NODE_EMPTY:
       return grx_parse_fail(
           parser, GRX_DIAG_NOTHING_TO_REPEAT, offset, length);

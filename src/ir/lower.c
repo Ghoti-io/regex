@@ -2030,8 +2030,18 @@ static GRX_Result lower_node(
 
     case GRX_NODE_BRANCH_RESET: {
       uint32_t outer = low->options;
+      uint32_t first = (uint32_t)low->ir->nodes.count;
       GRX_Result result = lower_sequence(low, node, GRX_IR_ALTERNATE, out_node);
       adopt_options(low, outer);
+      // Mark the captures the branches produced. The alternation this became
+      // says nothing about the numbering they shared, and a reference to one
+      // of those numbers is the thing analysis cannot measure.
+      for (uint32_t i = first; i < (uint32_t)low->ir->nodes.count; i++) {
+        GRX_IRNode * inner = grx_ir_node(low->ir, i);
+        if (inner && inner->kind == GRX_IR_CAPTURE) {
+          inner->flags |= GRX_IR_BRANCH_RESET;
+        }
+      }
       return result;
     }
 

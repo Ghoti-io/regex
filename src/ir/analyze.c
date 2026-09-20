@@ -248,14 +248,24 @@ static Span group_span(Analysis * analysis, uint32_t group) {
   }
 
   uint32_t body = GRX_INDEX_NONE;
+  size_t found = 0;
+  int branch_reset = 0;
   for (size_t i = 0; i < analysis->ir->nodes.count; i++) {
     const GRX_IRNode * node = grx_ir_node(analysis->ir, (uint32_t)i);
     if (node && node->kind == GRX_IR_CAPTURE && node->a == group) {
-      body = node->first_child;
-      break;
+      if (!found) {
+        body = node->first_child;
+      }
+      branch_reset = branch_reset || (node->flags & GRX_IR_BRANCH_RESET);
+      found++;
     }
   }
-  if (body == GRX_INDEX_NONE) {
+  // A group written inside `(?|...)` shares its number with the other
+  // branches', so which of them a reference means is not decided until the
+  // match runs and there is no length here to give. pcre2test refuses
+  // `(?|([ab]))...(?<=\1)z` even with one branch, and takes the same
+  // lookbehind over a group written outside one.
+  if (body == GRX_INDEX_NONE || found > 1 || branch_reset) {
     return unknown;
   }
 

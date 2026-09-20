@@ -97,6 +97,18 @@ typedef enum {
 #define GRX_IR_REVERSE GRX_BIT(2)
 
 /**
+ * @brief CAPTURE: this group is one branch of a `(?|...)`.
+ *
+ * The branch reset itself is gone by here - it lowers to an alternation, and
+ * the numbering it shared is already in each capture's `a`. What survives is
+ * the fact that a reference to that number may mean any of them, which is
+ * what stops a lookbehind containing one from being measured: pcre2test
+ * refuses `(?|([ab]))...(?<=\1)z` and takes the same lookbehind over a group
+ * written once.
+ */
+#define GRX_IR_BRANCH_RESET GRX_BIT(3)
+
+/**
  * @brief One node of the intermediate representation.
  *
  * `a`, `b`, `mode`, `min` and `max` are the kind-specific payload:
