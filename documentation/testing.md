@@ -188,6 +188,13 @@ be defects rather than missing constructs - among them a multiline `^` that
 matched after a newline ending the subject, which is ECMAScript's rule and
 neither reference's.
 
+A reason is a claim, and a claim can be wrong. Twenty-one entries blamed "an
+optimisation this library does not have" and nine blamed a lookbehind's
+length; asked directly, the first twenty-one were three different things and
+seven of the nine were a bound this library could have computed and did not.
+Both were rewritten from what was measured. An entry whose reason has never
+been checked against the reference is an entry that has not been read.
+
 A failure prints the record verbatim, the engine, the expected and actual
 spans, and both dump outputs.
 

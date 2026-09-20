@@ -39,7 +39,7 @@ pcre		\\[()]{65535}(?<A>)		a repeat count the reference folds and this library e
 pcre		^(?|(\\*)(*napla:\\S*_(\\2?+.+))|(\\w)(?=\\S*_(\\2?+\\1)))+_\\2$		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
 pcre		^(?|(\\*)(*napla:\\S*_(\\3?+.+))|(\\w)(?=\\S*_((\\2?+\\1))))+_\\2$		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
 pcre		z{65536}		a repeat count above 65535: the reference calls it a syntax error and this library a limit
-pcre	J	(?<A>[ab])...(?<=\\k'A')(?<A>)z		lookbehind length: the reference computes a bound from a backreference or a call and this library does not
+pcre	J	(?<A>[ab])...(?<=\\k'A')(?<A>)z		a backreference to a duplicated name inside a lookbehind: the reference will not bound one and this library bounds it by the first group of that name
 perl		(((aa){2})+)	aaaaaaaaaa	a capture an iteration set before failing: Perl keeps it, this library and PCRE2 discard it
 perl		(((a{2}){2})+)	aaaaaaaaaa	a capture an iteration set before failing: Perl keeps it, this library and PCRE2 discard it
 perl		((?(1)aa|b))+	baaaa	a conditional whose test and the capture-reset rule disagree
@@ -52,13 +52,13 @@ perl		()?(?(1)a|b)	a	a conditional whose test and the capture-reset rule disagre
 perl		(.*?)a(?!(a+)b\\2c)	baaabaac	a capture set inside a failed negative lookahead: Perl keeps it, this library and PCRE2 discard it
 perl		(?(DEFINE)(?<a>(?:[ab]|[cd](*ACCEPT)|[ef])g))(?&a)(?&a)	agcq	a conditional whose test and the capture-reset rule disagree
 perl		(?(DEFINE)(?<a>(?:[ab]|[cd](*ACCEPT)|[ef])g))(?&a)(?&a)	cc	a conditional whose test and the capture-reset rule disagree
-perl		(?<!([cd](*ACCEPT)|x)gggg)blrph	cblrph	lookbehind length: the reference computes a bound from a backreference or a call and this library does not
-perl		(?<!([cd](*ACCEPT)|x)gggg)blrph	dblrph	lookbehind length: the reference computes a bound from a backreference or a call and this library does not
-perl		(?<=([cd](*ACCEPT)|x)gggg)blrph	cblrph	lookbehind length: the reference computes a bound from a backreference or a call and this library does not
-perl		(?<=([cd](*ACCEPT)|x)gggg)blrph	dblrph	lookbehind length: the reference computes a bound from a backreference or a call and this library does not
-perl		(?<=([cd](*ACCEPT)|x)gggg)blrph	xggggblrph	lookbehind length: the reference computes a bound from a backreference or a call and this library does not
-perl		(?=foo)(?<=(a??))	afoo	lookbehind length: the reference computes a bound from a backreference or a call and this library does not
-perl		(?=foo)(?<=(|a|aa))	aafoo	lookbehind length: the reference computes a bound from a backreference or a call and this library does not
+perl		(?<!([cd](*ACCEPT)|x)gggg)blrph	cblrph	`(*ACCEPT)` inside a lookbehind: the reference ends the assertion there, and this library runs the body in reverse, where the verb accepts at the wrong end
+perl		(?<!([cd](*ACCEPT)|x)gggg)blrph	dblrph	`(*ACCEPT)` inside a lookbehind: the reference ends the assertion there, and this library runs the body in reverse, where the verb accepts at the wrong end
+perl		(?<=([cd](*ACCEPT)|x)gggg)blrph	cblrph	`(*ACCEPT)` inside a lookbehind: the reference ends the assertion there, and this library runs the body in reverse, where the verb accepts at the wrong end
+perl		(?<=([cd](*ACCEPT)|x)gggg)blrph	dblrph	`(*ACCEPT)` inside a lookbehind: the reference ends the assertion there, and this library runs the body in reverse, where the verb accepts at the wrong end
+perl		(?<=([cd](*ACCEPT)|x)gggg)blrph	xggggblrph	`(*ACCEPT)` inside a lookbehind: the reference ends the assertion there, and this library runs the body in reverse, where the verb accepts at the wrong end
+perl		(?=foo)(?<=(a??))	afoo	a capture inside a variable-length lookbehind: the reference reports the span of a longer body than this library tries first
+perl		(?=foo)(?<=(|a|aa))	aafoo	a capture inside a variable-length lookbehind: the reference reports the span of a longer body than this library tries first
 perl		(?a-x		Perl's charset modifiers `a`, `d`, `l`, `u`: this library has one character-set semantics, not five
 perl		(?a:((?u)\\w)\\W)	ÀÀ	Perl's charset modifiers `a`, `d`, `l`, `u`: this library has one character-set semantics, not five
 perl		(?a:\\p{Any})	Ā	Perl's charset modifiers `a`, `d`, `l`, `u`: this library has one character-set semantics, not five
@@ -69,7 +69,7 @@ perl		(?iaa:A?\\K*)	African_Feh	Perl's charset modifiers `a`, `d`, `l`, `u`: thi
 perl		(?iaa:A?\\K+)	African_Feh	Perl's charset modifiers `a`, `d`, `l`, `u`: this library has one character-set semantics, not five
 perl		(?iaax:A? \\K +)	African_Feh	Perl's charset modifiers `a`, `d`, `l`, `u`: this library has one character-set semantics, not five
 perl		(?il)\\x{100}|\\x{100}|\\x{FE}	þ	Perl's charset modifiers `a`, `d`, `l`, `u`: this library has one character-set semantics, not five
-perl		(?iu)(?<=\\xdf)hbase	sshbase	lookbehind length: the reference computes a bound from a backreference or a call and this library does not
+perl		(?iu)(?<=\\xdf)hbase	sshbase	full case folding: implemented as simple folding, a deviation recorded in design.md section 10
 perl		(?l:a?\\D)	b	Perl's charset modifiers `a`, `d`, `l`, `u`: this library has one character-set semantics, not five
 perl		(?l:a?\\w)	b	Perl's charset modifiers `a`, `d`, `l`, `u`: this library has one character-set semantics, not five
 perl		(?|(?<a>a)|(?<b>b))(?(<a>)x|y)\\1	bxb 	branch reset: the numbering is shared, and the names and references inside one are not checked against it yet

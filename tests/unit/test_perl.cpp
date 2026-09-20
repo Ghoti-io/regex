@@ -1108,6 +1108,33 @@ TEST(Perl, ALookbehindIsBoundedByWhatItsReferencesCanMatch) {
   EXPECT_EQ(compile_result("(a)(?<=\\1+)", GRX_SYNTAX_ECMASCRIPT), GRX_OK);
 }
 
+TEST(Perl, AThenGoesToTheNextAlternativeOfItsEnclosingGroup) {
+  // The half of `(*THEN)` the other tests never reach: one with somewhere to
+  // go. pcre2test matches "ac" here, because the verb sends the search to
+  // the second branch of the group rather than to the next starting
+  // position, which is what a `(*PRUNE)` in the same place would do.
+  EXPECT_EQ(span_of("(?:a(*THEN)b|ac)", "ac"), "0-2");
+  EXPECT_EQ(span_of("(?:a(*PRUNE)b|ac)", "ac"), "nomatch");
+
+  // A mark set inside the branch the verb abandons goes with it.
+  EXPECT_EQ(mark_of("(?:a(*MARK:M)(*THEN)b|ac)", "ac"), "");
+  EXPECT_EQ(span_of("(?:a(*MARK:M)(*THEN)b|ac)", "ac"), "0-2");
+}
+
+TEST(Perl, TheTwoConstructsRefuseTheirOwnMalformedSpellings) {
+  // An operator with nothing before it, which is the one place the `&` arm
+  // of the extended-class operator table is reached: everywhere else the
+  // intersection reader has already consumed it.
+  EXPECT_EQ(compile_result("(?[ & [a] ])"), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("(?[ ^ [a] ])"), GRX_ERR_SYNTAX);
+
+  // A scan-substring name with no closing delimiter.
+  EXPECT_EQ(compile_result("(*scs:(<x)a)"), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("(*scs:('x)a)"), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("(*scs:()a)"), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("(*scs:"), GRX_ERR_SYNTAX);
+}
+
 int main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
