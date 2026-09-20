@@ -351,7 +351,31 @@ reads bytes until `PCRE2_UTF` says otherwise.
 POSIX bracket classes (`[:alpha:]` and the other eleven) are ASCII in POSIX
 and GNU (C locale), Unicode in Perl, PCRE2 under `UCP`, Ruby, Tcl, Rust,
 Vim; RE2 is ASCII. `\b` is defined from `\w` in every dialect; Perl's
-`\b{wb}` (UAX #29 word boundaries) is a later tier.
+`\b{wb}` and its relatives are built. Perl accepts exactly five spellings -
+`\b{gcb}`, `\b{g}` (an alias for it), `\b{wb}`, `\b{sb}` and `\b{lb}`, each
+with a `\B{...}` negation and optional blanks inside the braces - and they
+are **four algorithms across two standards**: the first three are UAX #29,
+and `lb` is UAX #14. `\X` is the fifth construct built on the same tables:
+one extended grapheme cluster, defined as one character plus every character
+that does not begin a new one, so it and `\b{gcb}` are one algorithm.
+
+Three things about them are worth knowing.
+
+**The ends of the subject.** UAX #29 breaks at the start and the end of text;
+UAX #14 never breaks at the start (LB2) and always does at the end (LB3). An
+*empty* subject has no boundary of any kind, which is neither standard's
+wording and is what Perl does - there are no characters, so there is nothing
+for a boundary to fall between.
+
+**They are assertions.** Zero width, no capture state, so a program holding
+one is still regular and the lockstep engine still runs it. `\X` consumes,
+but it lowers to ordinary nodes - one `ANY`, then a greedy loop of
+"not-a-boundary and another `ANY`", wrapped atomically because a cluster does
+not come apart.
+
+**PCRE2 has none of it.** pcre2test reads `\b{wb}` as a word boundary
+followed by four ordinary characters, which is a wrong answer wearing a right
+one's clothes, and is why these are Perl's alone here.
 
 ### 5.10 Iteration after an empty match
 
@@ -536,13 +560,11 @@ to be complete for every shipped tier.
 | Perl | `(?[ ])` is PCRE2's grammar only | Perl's nests and takes different operands; a shared reader would accept neither exactly | `GRX_ERR_SYNTAX` |
 | Perl | A capture set inside a *failed* negative lookahead is discarded | PCRE2 discards it and ECMA-262 22.2.2.4 says to; Perl keeps it | - |
 | PCRE2 | Callouts `(?C...)` are read and have no effect | no callback API; a callout with no function registered changes no match, so accepting it answers the same question | - |
-| PCRE2, Perl | `\X`, the extended grapheme cluster | the break rules are [plan.md](plan.md) WP-12's and are not generated yet; "any character" is not a grapheme cluster | `GRX_ERR_UNSUPPORTED` |
 | PCRE2 | `(*script_run:`, `(*sr:`, `(*asr:` | each constrains what its body may match and an ordinary group does not | `GRX_ERR_UNSUPPORTED` |
 | PCRE2, Perl | `\C`, one code unit | the subject here is code points, and a construct that can land inside a character has no honest approximation | `GRX_ERR_UNSUPPORTED` |
 | PCRE2 | `(*LIMIT_MATCH=n)` and kin are accepted and not applied | the limits are the caller's and this front end has no writable copy; lowering one from inside a pattern is later work | - |
 | PCRE2, Perl | `(?(VERSION>=n.n))` is answered against 10.46 | this library emulates that version rather than being it | - |
 | Perl | `/l` asks for the locale's semantics and gets the C locale's | there is no other locale here (section 6), and the C locale's word characters are the ASCII ones | - |
-| Perl | `\b{wb}`, `\B{gcb}` and the other Unicode boundary escapes | the break rules again | `GRX_ERR_UNSUPPORTED` |
 | POSIX | Submatch rules approximated in the first POSIX release | [design.md](design.md) §2 | - |
 | POSIX | `[[.ch.]]` multi-character collating elements, `[[=e=]]` | no collation | `GRX_ERR_UNSUPPORTED` |
 | .NET | Culture-sensitive folding is invariant; balancing groups deferred | §5.8; [design.md](design.md) §2 | `GRX_ERR_UNSUPPORTED` for balancing groups |

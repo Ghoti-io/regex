@@ -38,6 +38,7 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "../unicode/break_internal.h"
 #include "../unicode/unicode_internal.h"
 #include "exec_internal.h"
 
@@ -663,6 +664,31 @@ static int assertion_holds(
       int word_after = has_after && in_class(bt, inst->x, after);
       int boundary = word_before != word_after;
       return inst->mode == GRX_ASSERT_WORD_BOUNDARY ? boundary : !boundary;
+    }
+
+    // The four segmentation boundaries. Each reads the subject itself, so
+    // the instruction carries no class and the window is not consulted: a
+    // boundary is a fact about the text, and `(*scs:` narrowing what may be
+    // *matched* does not move where a sentence ends.
+    case GRX_ASSERT_GRAPHEME_BOUNDARY:
+    case GRX_ASSERT_NOT_GRAPHEME_BOUNDARY:
+    case GRX_ASSERT_WORD_SEG_BOUNDARY:
+    case GRX_ASSERT_NOT_WORD_SEG_BOUNDARY:
+    case GRX_ASSERT_SENTENCE_BOUNDARY:
+    case GRX_ASSERT_NOT_SENTENCE_BOUNDARY:
+    case GRX_ASSERT_LINE_BOUNDARY:
+    case GRX_ASSERT_NOT_LINE_BOUNDARY: {
+      static const GRX_BreakKind kinds[] = {
+        GRX_BREAK_GRAPHEME, GRX_BREAK_GRAPHEME,
+        GRX_BREAK_WORD, GRX_BREAK_WORD,
+        GRX_BREAK_SENTENCE, GRX_BREAK_SENTENCE,
+        GRX_BREAK_LINE, GRX_BREAK_LINE,
+      };
+      size_t which = (size_t)inst->mode - GRX_ASSERT_GRAPHEME_BOUNDARY;
+      int boundary = grx_unicode_break_at(
+          kinds[which], request->subject, request->length, position);
+      // The odd members of the run are the `\B{...}` spellings.
+      return (which % 2) ? !boundary : boundary;
     }
     case GRX_ASSERT_SEARCH_START:
       return position == request->start;

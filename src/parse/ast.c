@@ -75,6 +75,8 @@ const char * grx_node_kind_name(GRX_NodeKind kind) {
       return "keep";
     case GRX_NODE_BRANCH_RESET:
       return "branch-reset";
+    case GRX_NODE_GRAPHEME:
+      return "grapheme";
     case GRX_NODE_COUNT:
     default:
       return "?";
@@ -108,6 +110,22 @@ static const char * anchor_name(uint32_t kind) {
       return "word-start";
     case GRX_ANCHOR_WORD_END:
       return "word-end";
+    case GRX_ANCHOR_GRAPHEME_BOUNDARY:
+      return "grapheme-boundary";
+    case GRX_ANCHOR_NOT_GRAPHEME_BOUNDARY:
+      return "not-grapheme-boundary";
+    case GRX_ANCHOR_WORD_SEG_BOUNDARY:
+      return "word-seg-boundary";
+    case GRX_ANCHOR_NOT_WORD_SEG_BOUNDARY:
+      return "not-word-seg-boundary";
+    case GRX_ANCHOR_SENTENCE_BOUNDARY:
+      return "sentence-boundary";
+    case GRX_ANCHOR_NOT_SENTENCE_BOUNDARY:
+      return "not-sentence-boundary";
+    case GRX_ANCHOR_LINE_BOUNDARY:
+      return "line-boundary";
+    case GRX_ANCHOR_NOT_LINE_BOUNDARY:
+      return "not-line-boundary";
     case GRX_ANCHOR_COUNT:
     default:
       return "?";

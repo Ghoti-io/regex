@@ -454,9 +454,30 @@ static GRX_Result read_property(GRX_Parser * parser, int negated, size_t start,
   return GRX_OK;
 }
 
-/** The bound types `\b{...}` names, from perlrebackslash. */
-static const char * const bound_type_names[] = {
-  "wb", "sb", "lb", "gcb", NULL
+/**
+ * The bound types `\b{...}` names, and the boundary each one asserts.
+ *
+ * From perlrebackslash, and checked against perl 5.40 rather than read off
+ * it: `g` is an alias for `gcb` and was missing from this table until that
+ * check, so `\b{g}` was refused where Perl compiles it. Uppercase and long
+ * spellings are not accepted - `\b{WB}` is an error in Perl too.
+ *
+ * The negated spelling is the same table: `\B{wb}` is the entry's `negated`
+ * anchor, which is how `\b` and `\B` are already told apart.
+ */
+typedef struct {
+  const char * name;
+  GRX_AnchorKind anchor;
+  GRX_AnchorKind negated;
+} BoundType;
+
+static const BoundType bound_types[] = {
+  {"gcb", GRX_ANCHOR_GRAPHEME_BOUNDARY, GRX_ANCHOR_NOT_GRAPHEME_BOUNDARY},
+  {"g", GRX_ANCHOR_GRAPHEME_BOUNDARY, GRX_ANCHOR_NOT_GRAPHEME_BOUNDARY},
+  {"wb", GRX_ANCHOR_WORD_SEG_BOUNDARY, GRX_ANCHOR_NOT_WORD_SEG_BOUNDARY},
+  {"sb", GRX_ANCHOR_SENTENCE_BOUNDARY, GRX_ANCHOR_NOT_SENTENCE_BOUNDARY},
+  {"lb", GRX_ANCHOR_LINE_BOUNDARY, GRX_ANCHOR_NOT_LINE_BOUNDARY},
+  {NULL, GRX_ANCHOR_COUNT, GRX_ANCHOR_COUNT},
 };
 
 /**
@@ -464,17 +485,16 @@ static const char * const bound_type_names[] = {
  *
  * Perl's, and only Perl's: pcre2test compiles `/\b{wb}/` as a word boundary
  * followed by four ordinary characters, which is what this library did for
- * both until it was asked. The four bound types are UAX #29's break
- * algorithms, and none of their tables is generated here - so the spelling is
- * read and refused, rather than read as something else.
+ * both until it was asked. Three of the four are UAX #29's break algorithms
+ * and the fourth is UAX #14's; src/unicode/break.c has them.
  *
  * `out_handled` is cleared when this is not the `\b{...}` form at all, so
  * that the caller carries on with the ordinary boundary. A sentinel result
  * cannot say that: grx_parse_fail() returns GRX_ERR_SYNTAX too, and reading
  * "not a bound" out of "an unknown bound type" let `\b{nosuch}` compile.
  */
-static GRX_Result read_bound_type(
-    GRX_Parser * parser, size_t start, int * out_handled) {
+static GRX_Result read_bound_type(GRX_Parser * parser, size_t start,
+    int negated, int * out_handled, GRX_AnchorKind * out_anchor) {
   *out_handled = 0;
   if (flavour(parser) != FLAVOUR_PERL || byte_at(parser, 0) != '{') {
     return GRX_OK;
@@ -506,11 +526,11 @@ static GRX_Result read_bound_type(
     return grx_parse_fail(
         parser, GRX_DIAG_INVALID_ESCAPE, start, parser->position - start);
   }
-  for (size_t i = 0; bound_type_names[i]; i++) {
-    if (strlen(bound_type_names[i]) == length
-        && memcmp(bound_type_names[i], name, length) == 0) {
-      return grx_parse_fail(parser, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, start,
-          parser->position - start);
+  for (size_t i = 0; bound_types[i].name; i++) {
+    if (strlen(bound_types[i].name) == length
+        && memcmp(bound_types[i].name, name, length) == 0) {
+      *out_anchor = negated ? bound_types[i].negated : bound_types[i].anchor;
+      return GRX_OK;
     }
   }
 
@@ -915,8 +935,15 @@ static GRX_Result read_escape(GRX_Parser * parser, int in_class, Escape * out) {
       parser->position++;
       if (!in_class) {
         int handled = 0;
-        GRX_Result bound = read_bound_type(parser, start, &handled);
+        GRX_AnchorKind bound_anchor = GRX_ANCHOR_WORD_BOUNDARY;
+        GRX_Result bound
+            = read_bound_type(parser, start, 0, &handled, &bound_anchor);
         if (handled) {
+          if (bound == GRX_OK) {
+            out->kind = ESC_ANCHOR;
+            out->anchor = bound_anchor;
+            out->length = parser->position - start;
+          }
           return bound;
         }
       }
@@ -940,8 +967,15 @@ static GRX_Result read_escape(GRX_Parser * parser, int in_class, Escape * out) {
       parser->position++;
       if (c == 'B') {
         int handled = 0;
-        GRX_Result bound = read_bound_type(parser, start, &handled);
+        GRX_AnchorKind bound_anchor = GRX_ANCHOR_NOT_WORD_BOUNDARY;
+        GRX_Result bound
+            = read_bound_type(parser, start, 1, &handled, &bound_anchor);
         if (handled) {
+          if (bound == GRX_OK) {
+            out->kind = ESC_ANCHOR;
+            out->anchor = bound_anchor;
+            out->length = parser->position - start;
+          }
           return bound;
         }
       }
@@ -1282,11 +1316,10 @@ static GRX_Result pcre_atom_escape(GRX_Parser * parser, uint32_t * out_node) {
       return newline_set_node(parser, start, out_node);
 
     case ESC_GRAPHEME:
-      // An extended grapheme cluster. The break rules are
-      // documentation/plan.md WP-12's table and are not generated yet, and
-      // "any character" is not a grapheme cluster.
-      return grx_parse_fail(
-          parser, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, start, escape.length);
+      // One extended grapheme cluster. What that *is* is lowering's
+      // business; the parser only records that this is what was written.
+      return plain_node(
+          parser, GRX_NODE_GRAPHEME, start, escape.length, out_node);
 
     case ESC_NOT_NEWLINE:
       // An ANY node that is not allowed to be dot-all, rather than a class:

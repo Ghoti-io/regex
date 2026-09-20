@@ -64,6 +64,21 @@ typedef struct GRX_UnicodeName {
   uint16_t property;  ///< Index into grx_unicode_properties.
 } GRX_UnicodeName;
 
+/**
+ * @brief One run of code points sharing a break property value.
+ *
+ * Sorted by `low` and non-overlapping, so a lookup is a binary search. Only
+ * the runs a UCD file lists are here; a code point in none of them has the
+ * property's default, which is value 0 in every one of these tables - Other
+ * for the UAX #29 properties, XX for line breaking, None for
+ * Indic_Conjunct_Break.
+ */
+typedef struct GRX_UnicodeBreakRange {
+  uint32_t low;   ///< First code point of the run.
+  uint32_t high;  ///< Last code point of the run.
+  uint32_t value; ///< The property value, as the matching enum numbers it.
+} GRX_UnicodeBreakRange;
+
 /** @brief One entry of a case-mapping table. */
 typedef struct GRX_UnicodeCaseMap {
   uint32_t from; ///< The code point mapped.
@@ -149,6 +164,27 @@ extern const size_t grx_unicode_loose_name_count;
 
 extern const GRX_UnicodeName grx_unicode_loose_prop_names[];
 extern const size_t grx_unicode_loose_prop_name_count;
+
+/**
+ * The break properties: UAX #29's three, UAX #14's one, and the
+ * Indic_Conjunct_Break that UAX #29's GB9c needs.
+ */
+extern const GRX_UnicodeBreakRange grx_unicode_gcb_ranges[];
+extern const size_t grx_unicode_gcb_range_count;
+extern const GRX_UnicodeBreakRange grx_unicode_wb_ranges[];
+extern const size_t grx_unicode_wb_range_count;
+extern const GRX_UnicodeBreakRange grx_unicode_sb_ranges[];
+extern const size_t grx_unicode_sb_range_count;
+extern const GRX_UnicodeBreakRange grx_unicode_lb_ranges[];
+extern const size_t grx_unicode_lb_range_count;
+extern const GRX_UnicodeBreakRange grx_unicode_incb_ranges[];
+extern const size_t grx_unicode_incb_range_count;
+extern const GRX_UnicodeBreakRange grx_unicode_extpict_ranges[];
+extern const size_t grx_unicode_extpict_range_count;
+extern const GRX_UnicodeBreakRange grx_unicode_ea_ranges[];
+extern const size_t grx_unicode_ea_range_count;
+extern const GRX_UnicodeBreakRange grx_unicode_epcn_ranges[];
+extern const size_t grx_unicode_epcn_range_count;
 
 /** Simple case folding: CaseFolding.txt statuses C and S. */
 extern const GRX_UnicodeCaseMap grx_unicode_fold_map[];

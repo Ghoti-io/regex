@@ -46,6 +46,14 @@ ucd/Blocks.txt
 ucd/DerivedNormalizationProps.txt
 ucd/extracted/DerivedGeneralCategory.txt
 ucd/auxiliary/GraphemeBreakProperty.txt
+ucd/auxiliary/WordBreakProperty.txt
+ucd/auxiliary/SentenceBreakProperty.txt
+ucd/LineBreak.txt
+ucd/EastAsianWidth.txt
+ucd/auxiliary/GraphemeBreakTest.txt
+ucd/auxiliary/WordBreakTest.txt
+ucd/auxiliary/SentenceBreakTest.txt
+ucd/auxiliary/LineBreakTest.txt
 ucd/emoji/emoji-data.txt
 emoji/emoji-sequences.txt
 emoji/emoji-zwj-sequences.txt

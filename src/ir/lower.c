@@ -779,6 +779,101 @@ static GRX_Result lower_literal(
   return lower_run(low, points, node->b, node, out_node);
 }
 
+/**
+ * Lower `\X`: one extended grapheme cluster.
+ *
+ * A cluster is one character followed by every character that does not begin
+ * a new one, so that is what this builds:
+ *
+ *     ANY ( NOT_GRAPHEME_BOUNDARY ANY )*
+ *
+ * with both repeats greedy. Written out of the boundary assertion rather
+ * than out of a second reading of UAX #29, which is the point: `\X` and
+ * `\b{gcb}` are one algorithm, and a change to the rules cannot move one
+ * without moving the other.
+ *
+ * `ANY` here is the dot-all one - a cluster may contain a line terminator,
+ * and `\X` matches CR LF as a single cluster, which is rule GB3.
+ */
+static GRX_Result lower_grapheme(
+    Lowering * low, const GRX_Node * node, uint32_t * out_node) {
+  // Atomic, because a grapheme cluster does not come apart. `\X\X` against
+  // one cluster must not match by letting the first `\X` give back half of
+  // it, and Perl agrees: it reports no match there. Without this the greedy
+  // loop backtracks and two `\X` share one cluster between them.
+  GRX_Result result = add(low, GRX_IR_ATOMIC, node, out_node);
+  if (result != GRX_OK) {
+    return result;
+  }
+  uint32_t atomic = *out_node;
+
+  uint32_t sequence = GRX_INDEX_NONE;
+  result = add(low, GRX_IR_CONCAT, node, &sequence);
+  if (result != GRX_OK) {
+    return result;
+  }
+  result = attach(low, atomic, sequence);
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  uint32_t first = GRX_INDEX_NONE;
+  result = add(low, GRX_IR_ANY, node, &first);
+  if (result != GRX_OK) {
+    return result;
+  }
+  grx_ir_node(low->ir, first)->a = GRX_INDEX_NONE;
+  result = attach(low, sequence, first);
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  uint32_t repeat = GRX_INDEX_NONE;
+  result = add(low, GRX_IR_REPEAT, node, &repeat);
+  if (result != GRX_OK) {
+    return result;
+  }
+  GRX_IRNode * loop = grx_ir_node(low->ir, repeat);
+  loop->min = 0;
+  loop->max = GRX_REPEAT_INF;
+  loop->mode = GRX_REPEAT_GREEDY;
+  loop->empty_loop = (uint8_t)low->profile.empty_loop;
+  loop->capture_reset = (uint8_t)low->profile.capture_reset;
+
+  uint32_t body = GRX_INDEX_NONE;
+  result = add(low, GRX_IR_CONCAT, node, &body);
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  uint32_t guard = GRX_INDEX_NONE;
+  result = add(low, GRX_IR_ASSERT, node, &guard);
+  if (result != GRX_OK) {
+    return result;
+  }
+  grx_ir_node(low->ir, guard)->mode = GRX_ASSERT_NOT_GRAPHEME_BOUNDARY;
+  grx_ir_node(low->ir, guard)->a = GRX_INDEX_NONE;
+
+  uint32_t more = GRX_INDEX_NONE;
+  result = add(low, GRX_IR_ANY, node, &more);
+  if (result != GRX_OK) {
+    return result;
+  }
+  grx_ir_node(low->ir, more)->a = GRX_INDEX_NONE;
+
+  result = attach(low, body, guard);
+  if (result == GRX_OK) {
+    result = attach(low, body, more);
+  }
+  if (result == GRX_OK) {
+    result = attach(low, repeat, body);
+  }
+  if (result == GRX_OK) {
+    result = attach(low, sequence, repeat);
+  }
+  return result;
+}
+
 /** Lower `.`: everything but the line terminators, unless dot-all is on. */
 static GRX_Result lower_any(
     Lowering * low, const GRX_Node * node, uint32_t * out_node) {
@@ -870,6 +965,34 @@ static GRX_Result lower_anchor(
       break;
     case GRX_ANCHOR_SEARCH_START:
       kind = GRX_ASSERT_SEARCH_START;
+      break;
+
+    // The segmentation boundaries need no set: the algorithm reads the
+    // subject itself, so nothing is interned for them and `needs_word` stays
+    // where it was.
+    case GRX_ANCHOR_GRAPHEME_BOUNDARY:
+      kind = GRX_ASSERT_GRAPHEME_BOUNDARY;
+      break;
+    case GRX_ANCHOR_NOT_GRAPHEME_BOUNDARY:
+      kind = GRX_ASSERT_NOT_GRAPHEME_BOUNDARY;
+      break;
+    case GRX_ANCHOR_WORD_SEG_BOUNDARY:
+      kind = GRX_ASSERT_WORD_SEG_BOUNDARY;
+      break;
+    case GRX_ANCHOR_NOT_WORD_SEG_BOUNDARY:
+      kind = GRX_ASSERT_NOT_WORD_SEG_BOUNDARY;
+      break;
+    case GRX_ANCHOR_SENTENCE_BOUNDARY:
+      kind = GRX_ASSERT_SENTENCE_BOUNDARY;
+      break;
+    case GRX_ANCHOR_NOT_SENTENCE_BOUNDARY:
+      kind = GRX_ASSERT_NOT_SENTENCE_BOUNDARY;
+      break;
+    case GRX_ANCHOR_LINE_BOUNDARY:
+      kind = GRX_ASSERT_LINE_BOUNDARY;
+      break;
+    case GRX_ANCHOR_NOT_LINE_BOUNDARY:
+      kind = GRX_ASSERT_NOT_LINE_BOUNDARY;
       break;
 
     case GRX_ANCHOR_WORD_START:
@@ -2281,6 +2404,9 @@ static GRX_Result lower_node(
 
     case GRX_NODE_OPTIONS:
       return lower_options(low, node, out_node);
+
+    case GRX_NODE_GRAPHEME:
+      return lower_grapheme(low, node, out_node);
 
     case GRX_NODE_BRANCH_RESET: {
       uint32_t outer = low->options;

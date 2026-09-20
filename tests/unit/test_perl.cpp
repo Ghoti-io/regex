@@ -625,7 +625,6 @@ TEST(Perl, TheConstructsThisLibraryRefusesSayWhyAndNotSomethingElse) {
   // decision; refusing them as *syntax errors* would be a lie about the
   // pattern, so each reports GRX_ERR_UNSUPPORTED instead.
   const char * refused[] = {
-    "\\X",                     // a grapheme cluster
     "\\C",                     // one code unit
     "(*script_run:abc)",       // constrains the body
   };
@@ -1163,17 +1162,28 @@ TEST(Perl, ANonAtomicLookaroundCanBeReEntered) {
   EXPECT_EQ(compile_result("(?(*napla:xx)bc)"), GRX_ERR_SYNTAX);
 }
 
-TEST(Perl, PerlsBoundTypesAreReadAndRefusedRatherThanMisread) {
+TEST(Perl, PerlsBoundTypesAreReadRatherThanMisread) {
   // `\b{wb}` is Perl's, and only Perl's: pcre2test compiles it as a word
   // boundary followed by four ordinary characters. This library did the same
   // for both until it was asked, which is a wrong answer wearing a right
-  // one's clothes - the four bound types are UAX #29's break algorithms and
-  // none of their tables is generated here.
+  // one's clothes.
+  //
+  // `g` is in this list because it was missing from the one in the parser:
+  // perlrebackslash gives it as an alias for `gcb`, and `\b{g}` was refused
+  // here while Perl compiled it. No corpus record uses it, so the check was
+  // against perl 5.40 rather than against the vectors.
   for (const char * spelling : {"\\b{wb}", "\\b{ wb }", "\\B{gcb}",
-           "\\b{sb}", "\\b{lb}"}) {
-    EXPECT_EQ(compile_result(spelling, GRX_SYNTAX_PERL), GRX_ERR_UNSUPPORTED)
-        << spelling;
+           "\\b{g}", "\\B{ g }", "\\b{sb}", "\\b{lb}"}) {
+    EXPECT_EQ(compile_result(spelling, GRX_SYNTAX_PERL), GRX_OK) << spelling;
     EXPECT_EQ(compile_result(spelling, GRX_SYNTAX_PCRE), GRX_OK) << spelling;
+  }
+
+  // Uppercase and long names are refused, because Perl refuses them: the
+  // accepted spellings are five, lower-case, with optional blanks inside the
+  // braces and nothing else.
+  for (const char * spelling : {"\\b{WB}", "\\b{Word_Boundary}", "\\b{GCB}"}) {
+    EXPECT_EQ(compile_result(spelling, GRX_SYNTAX_PERL), GRX_ERR_SYNTAX)
+        << spelling;
   }
 
   // An unknown one is a syntax error, not an unimplemented construct, and
@@ -1401,6 +1411,77 @@ TEST(Perl, PcreFoldsSimplyWherePerlFoldsFully) {
   EXPECT_EQ(span_of("(?i)" + sharp_s, "ss", GRX_SYNTAX_PERL), "0-2");
   EXPECT_EQ(span_of("(?i)" + sharp_s, "ss", GRX_SYNTAX_PCRE), "nomatch");
   EXPECT_EQ(span_of("(?i)ss", sharp_s, GRX_SYNTAX_PCRE), "nomatch");
+}
+
+TEST(Perl, TheSegmentationBoundariesAreAlgorithmsRatherThanSets) {
+  // `\b` asks whether the characters either side are in the word class, and
+  // a class is what the instruction carries. These four cannot be a class:
+  // where a grapheme cluster ends is a dozen rules over the surrounding
+  // text, and a line break is thirty. src/unicode/break.c has them, gated
+  // against the Unicode Consortium's own conformance files in
+  // tests/unit/test_break.cpp.
+  const std::string combining = "e\xCC\x81";      // e + U+0301
+  const std::string hangul = "\xE1\x84\x80\xE1\x85\xA1"; // U+1100 U+1161
+
+  // A grapheme boundary falls between letters and not inside a combining
+  // sequence or a Hangul syllable.
+  EXPECT_EQ(span_of("a\\b{gcb}b", "ab", GRX_SYNTAX_PERL), "0-2");
+  EXPECT_EQ(span_of("e\\b{gcb}", combining, GRX_SYNTAX_PERL), "nomatch");
+  EXPECT_EQ(span_of("e\\B{gcb}", combining, GRX_SYNTAX_PERL), "0-1");
+  EXPECT_EQ(span_of("\xE1\x84\x80\\B{gcb}", hangul, GRX_SYNTAX_PERL), "0-3");
+
+  // A word boundary is not a grapheme boundary: "ab" has one of the second
+  // between the letters and none of the first.
+  EXPECT_EQ(span_of("a\\b{wb}b", "ab", GRX_SYNTAX_PERL), "nomatch");
+  EXPECT_EQ(span_of("a\\B{wb}b", "ab", GRX_SYNTAX_PERL), "0-2");
+
+  // UAX #14 never breaks at the start of the text (LB2) where UAX #29 always
+  // does (GB1, WB1, SB1). That is the one place the four disagree about the
+  // same position, so it is the one worth pinning.
+  EXPECT_EQ(span_of("^\\b{gcb}", "a", GRX_SYNTAX_PERL), "0-0");
+  EXPECT_EQ(span_of("^\\b{wb}", "a", GRX_SYNTAX_PERL), "0-0");
+  EXPECT_EQ(span_of("^\\b{sb}", "a", GRX_SYNTAX_PERL), "0-0");
+  EXPECT_EQ(span_of("^\\b{lb}", "a", GRX_SYNTAX_PERL), "nomatch");
+
+  // An empty subject has no boundary of any kind. Neither standard says so -
+  // both break at the ends - but there are no characters, so there is
+  // nothing for a boundary to fall between, and it is what Perl answers.
+  for (const char * kind : {"gcb", "g", "wb", "sb", "lb"}) {
+    EXPECT_EQ(span_of(std::string("\\b{") + kind + "}", "", GRX_SYNTAX_PERL),
+        "nomatch")
+        << kind;
+    EXPECT_EQ(span_of(std::string("\\B{") + kind + "}", "", GRX_SYNTAX_PERL),
+        "0-0")
+        << kind;
+  }
+
+  // PCRE2 has none of them: it reads `\b{wb}` as a word boundary and four
+  // ordinary characters, which is a wrong answer wearing a right one's
+  // clothes and is why the spelling is Perl's alone here.
+  EXPECT_EQ(span_of("\\b{wb}", "a{wb}", GRX_SYNTAX_PCRE), "1-5");
+}
+
+TEST(Perl, AGraphemeClusterIsOneThingAndDoesNotComeApart) {
+  // `\X` is built out of the grapheme boundary rather than out of a second
+  // reading of UAX #29: one character, then every character that does not
+  // begin a new cluster. One algorithm, so the two cannot disagree.
+  const std::string combining = "e\xCC\x81";              // e + U+0301
+  const std::string crlf = "a\r\nb";
+  const std::string flag = "\xF0\x9F\x87\xA6\xF0\x9F\x87\xA7"; // two RI
+
+  EXPECT_EQ(span_of("\\X", combining, GRX_SYNTAX_PERL), "0-3");
+  EXPECT_EQ(span_of("a\\K\\X", crlf, GRX_SYNTAX_PERL), "1-3");
+  EXPECT_EQ(span_of("\\X", flag, GRX_SYNTAX_PERL), "0-8");
+
+  // Atomic, because a cluster does not come apart: `\X\X` against one
+  // cluster must not match by letting the first give back half of it. Perl
+  // reports no match here, and so does this.
+  EXPECT_EQ(span_of("\\X\\X", combining, GRX_SYNTAX_PERL), "nomatch");
+  EXPECT_EQ(span_of("\\X\\X", flag, GRX_SYNTAX_PERL), "nomatch");
+  EXPECT_EQ(span_of("\\X\\X", combining + combining, GRX_SYNTAX_PERL), "0-6");
+
+  // An empty subject has no cluster in it.
+  EXPECT_EQ(span_of("\\X", "", GRX_SYNTAX_PERL), "nomatch");
 }
 
 int main(int argc, char ** argv) {

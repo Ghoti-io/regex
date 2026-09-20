@@ -328,6 +328,168 @@ def read_full_folding(path):
     return full
 
 
+# The break properties, in the order their values are numbered. Each list is
+# the file's own value names; "Other" (or "XX" for line breaking) is value 0
+# and is what a code point the file does not list gets, per the `@missing`
+# line each of them carries.
+#
+# The order is the enum's order in the generated header, so it is written
+# here once and read there rather than being a second list to keep in step.
+BREAK_VALUES = {
+    "gcb": ["Other", "CR", "LF", "Control", "Extend", "ZWJ",
+            "Regional_Indicator", "Prepend", "SpacingMark", "L", "V", "T",
+            "LV", "LVT"],
+    "wb": ["Other", "CR", "LF", "Newline", "Extend", "ZWJ",
+           "Regional_Indicator", "Format", "Katakana", "Hebrew_Letter",
+           "ALetter", "Single_Quote", "Double_Quote", "MidNumLet",
+           "MidLetter", "MidNum", "Numeric", "ExtendNumLet", "WSegSpace"],
+    "sb": ["Other", "CR", "LF", "Sep", "Format", "Sp", "Lower", "Upper",
+           "OLetter", "Numeric", "ATerm", "SContinue", "STerm", "Close",
+           "Extend"],
+    "lb": ["XX", "AI", "AK", "AL", "AP", "AS", "B2", "BA", "BB", "BK", "CB",
+           "CJ", "CL", "CM", "CP", "CR", "EB", "EM", "EX", "GL", "H2", "H3",
+           "HH", "HL", "HY", "ID", "IN", "IS", "JL", "JT", "JV", "LF", "NL",
+           "NS", "NU", "OP", "PO", "PR", "QU", "RI", "SA", "SG", "SP", "SY",
+           "VF", "VI", "WJ", "ZW", "ZWJ",
+           # Not in LineBreak.txt. LB15a, LB15b and LB19 ask which *kind* of
+           # quotation mark a QU is, by its General_Category, so the split is
+           # made here and the rules read a class instead of a second table.
+           "QU_PI", "QU_PF"],
+    # East_Asian_Width in {F, W, H}, which LB19a and LB30 spell $EastAsian.
+    "ea": ["No", "Yes"],
+    # Extended_Pictographic and unassigned, which is LB30b's second line.
+    "epcn": ["No", "Yes"],
+    "incb": ["None", "Consonant", "Extend", "Linker"],
+    # A binary property, in the same shape as the rest so that the boundary
+    # rules have one kind of table to read. It is already a `\p{...}`
+    # property; emitted again here because GB11 and WB3c ask for it once per
+    # character, and resolving a property *name* at match time would be a
+    # string lookup in the middle of an assertion.
+    "extpict": ["No", "Yes"],
+}
+
+
+def read_break_property(path, values):
+    """One of the UAX #29 or UAX #14 break property files.
+
+    `<range> ; <Value> # comment`, the same shape as every other derived
+    file. A value the list does not name is a generator error rather than a
+    silently dropped range: the whole point of the list is that the C enum
+    and this file cannot drift apart, and a new UCD adding a break value
+    should stop the build rather than assign it to "Other".
+    """
+    index = {name: number for number, name in enumerate(values)}
+    ranges = {}
+    for fields in read_records(path):
+        if len(fields) < 2:
+            continue
+        name = fields[1].strip()
+        if name not in index:
+            raise ValueError("%s: unknown break value %r" % (path, name))
+        ranges.setdefault(index[name], []).append(
+            parse_codepoint_range(fields[0]))
+    return {value: normalize(rows) for value, rows in ranges.items()}
+
+
+def read_east_asian(path):
+    """EastAsianWidth.txt, reduced to the one question the rules ask."""
+    ranges = []
+    for fields in read_records(path):
+        if len(fields) < 2:
+            continue
+        if fields[1].strip() in ("F", "W", "H"):
+            ranges.append(parse_codepoint_range(fields[0]))
+    return {1: normalize(ranges)}
+
+
+def resolve_line_break(breaks, categories, extended_pictographic):
+    """Apply LB1, and split QU by its punctuation category.
+
+    LB1 resolves the classes that "cannot be determined from the character
+    alone" before any other rule runs: AI, SG and XX become AL, SA becomes CM
+    for a mark and AL otherwise, and CJ becomes NS. Doing it here rather than
+    at match time means the table an engine reads is the one the rules talk
+    about, and nothing has to carry General_Category into a boundary test.
+
+    Returns the resolved table plus the Extended_Pictographic-and-unassigned
+    set that LB30b needs.
+    """
+    index = {name: number for number, name in enumerate(BREAK_VALUES["lb"])}
+    marks = union(categories.get("Mn", []), categories.get("Mc", []))
+
+    resolved = {}
+    def put(value, rows):
+        resolved.setdefault(value, []).extend(rows)
+
+    for value, rows in breaks.items():
+        name = BREAK_VALUES["lb"][value]
+        if name in ("AI", "SG", "XX"):
+            put(index["AL"], rows)
+        elif name == "CJ":
+            put(index["NS"], rows)
+        elif name == "SA":
+            put(index["CM"], intersect(rows, marks))
+            put(index["AL"], subtract(rows, marks))
+        elif name == "QU":
+            put(index["QU_PI"], intersect(rows, categories.get("Pi", [])))
+            put(index["QU_PF"], intersect(rows, categories.get("Pf", [])))
+            put(index["QU"], subtract(
+                rows, union(categories.get("Pi", []), categories.get("Pf", []))))
+        else:
+            put(value, rows)
+
+    # Unassigned code points are XX by default and so resolve to AL, but the
+    # table only lists what the file lists: a code point in no run already
+    # reads as value 0. Value 0 is XX, which LB1 has just turned into AL, so
+    # the default has to move with it - and the simplest way to say that is
+    # to make sure XX itself never appears.
+    resolved.pop(index["XX"], None)
+
+    unassigned = complement(categories_assigned(categories))
+    epcn = {1: intersect(extended_pictographic.get(1, []), unassigned)}
+    return {value: normalize(rows) for value, rows in resolved.items() if rows}, epcn
+
+
+def categories_assigned(categories):
+    """Every code point some General_Category other than Cn covers."""
+    rows = []
+    for name, ranges in categories.items():
+        if name != "Cn":
+            rows.extend(ranges)
+    return normalize(rows)
+
+
+def read_extended_pictographic(path):
+    """Extended_Pictographic out of emoji-data.txt, as a break-shaped table."""
+    ranges = []
+    for fields in read_records(path):
+        if len(fields) < 2 or fields[1].strip() != "Extended_Pictographic":
+            continue
+        ranges.append(parse_codepoint_range(fields[0]))
+    return {1: normalize(ranges)}
+
+
+def read_incb(path):
+    """Indic_Conjunct_Break, which DerivedCoreProperties.txt spells in three.
+
+    `<range> ; InCB; <Value> # comment` - a property name and a value where
+    every other line in that file has only a name. UAX #29's GB9c needs it,
+    and it is the one part of the grapheme rules that is not in
+    GraphemeBreakProperty.txt.
+    """
+    index = {name: number for number, name in enumerate(BREAK_VALUES["incb"])}
+    ranges = {}
+    for fields in read_records(path):
+        if len(fields) < 3 or fields[1].strip() != "InCB":
+            continue
+        name = fields[2].strip()
+        if name not in index:
+            raise ValueError("%s: unknown InCB value %r" % (path, name))
+        ranges.setdefault(index[name], []).append(
+            parse_codepoint_range(fields[0]))
+    return {value: normalize(rows) for value, rows in ranges.items()}
+
+
 def read_special_casing(path):
     """SpecialCasing.txt: the unconditional full uppercase mappings.
 
@@ -667,6 +829,31 @@ def build_tables(ucd, version):
     for name in sorted(binaries):
         add(KIND_BINARY, name, binaries[name], prop_aliases)
 
+    # The break properties. Each becomes a flat table of (low, high, value)
+    # sorted by `low`, which is what a boundary algorithm reads one code
+    # point at a time.
+    breaks = {
+        "gcb": read_break_property(
+            os.path.join(ucd, "GraphemeBreakProperty.txt"),
+            BREAK_VALUES["gcb"]),
+        "wb": read_break_property(
+            os.path.join(ucd, "WordBreakProperty.txt"), BREAK_VALUES["wb"]),
+        "sb": read_break_property(
+            os.path.join(ucd, "SentenceBreakProperty.txt"),
+            BREAK_VALUES["sb"]),
+        "lb": read_break_property(
+            os.path.join(ucd, "LineBreak.txt"), BREAK_VALUES["lb"]),
+        "incb": read_incb(os.path.join(ucd, "DerivedCoreProperties.txt")),
+        "extpict": read_extended_pictographic(
+            os.path.join(ucd, "emoji-data.txt")),
+        "ea": read_east_asian(os.path.join(ucd, "EastAsianWidth.txt")),
+    }
+
+    # LB1 and the QU split, done once here so that the table an engine reads
+    # is the one UAX #14's rules are written against.
+    breaks["lb"], breaks["epcn"] = resolve_line_break(
+        breaks["lb"], categories, breaks["extpict"])
+
     folds = read_case_folding(os.path.join(ucd, "CaseFolding.txt"))
     full_folds = read_full_folding(os.path.join(ucd, "CaseFolding.txt"))
     special_upper = read_special_casing(
@@ -693,6 +880,7 @@ def build_tables(ucd, version):
         "properties": properties,
         "string_sets": strings["sets"],
         "string_sequences": strings["sequences"],
+        "breaks": breaks,
         "folds": folds,
         "full_folds": full_folds,
         "fold_orbits": fold_orbits,
@@ -701,6 +889,11 @@ def build_tables(ucd, version):
         "simple_upper": simple_upper,
         "simple_lower": simple_lower,
     }
+
+
+def subtract(a, b):
+    """The code points in `a` and not in `b`."""
+    return intersect(a, complement(b))
 
 
 def intersect(a, b):
@@ -779,6 +972,21 @@ typedef struct GRX_UnicodeName {
   uint16_t kind;      ///< A @ref GRX_UPropKind.
   uint16_t property;  ///< Index into grx_unicode_properties.
 } GRX_UnicodeName;
+
+/**
+ * @brief One run of code points sharing a break property value.
+ *
+ * Sorted by `low` and non-overlapping, so a lookup is a binary search. Only
+ * the runs a UCD file lists are here; a code point in none of them has the
+ * property's default, which is value 0 in every one of these tables - Other
+ * for the UAX #29 properties, XX for line breaking, None for
+ * Indic_Conjunct_Break.
+ */
+typedef struct GRX_UnicodeBreakRange {
+  uint32_t low;   ///< First code point of the run.
+  uint32_t high;  ///< Last code point of the run.
+  uint32_t value; ///< The property value, as the matching enum numbers it.
+} GRX_UnicodeBreakRange;
 
 /** @brief One entry of a case-mapping table. */
 typedef struct GRX_UnicodeCaseMap {
@@ -865,6 +1073,27 @@ extern const size_t grx_unicode_loose_name_count;
 
 extern const GRX_UnicodeName grx_unicode_loose_prop_names[];
 extern const size_t grx_unicode_loose_prop_name_count;
+
+/**
+ * The break properties: UAX #29's three, UAX #14's one, and the
+ * Indic_Conjunct_Break that UAX #29's GB9c needs.
+ */
+extern const GRX_UnicodeBreakRange grx_unicode_gcb_ranges[];
+extern const size_t grx_unicode_gcb_range_count;
+extern const GRX_UnicodeBreakRange grx_unicode_wb_ranges[];
+extern const size_t grx_unicode_wb_range_count;
+extern const GRX_UnicodeBreakRange grx_unicode_sb_ranges[];
+extern const size_t grx_unicode_sb_range_count;
+extern const GRX_UnicodeBreakRange grx_unicode_lb_ranges[];
+extern const size_t grx_unicode_lb_range_count;
+extern const GRX_UnicodeBreakRange grx_unicode_incb_ranges[];
+extern const size_t grx_unicode_incb_range_count;
+extern const GRX_UnicodeBreakRange grx_unicode_extpict_ranges[];
+extern const size_t grx_unicode_extpict_range_count;
+extern const GRX_UnicodeBreakRange grx_unicode_ea_ranges[];
+extern const size_t grx_unicode_ea_range_count;
+extern const GRX_UnicodeBreakRange grx_unicode_epcn_ranges[];
+extern const size_t grx_unicode_epcn_range_count;
 
 /** Simple case folding: CaseFolding.txt statuses C and S. */
 extern const GRX_UnicodeCaseMap grx_unicode_fold_map[];
@@ -1062,6 +1291,40 @@ def write_case(out_dir, tables):
             out, "grx_unicode_es_legacy_orbit", tables["es_orbits"])
 
 
+def write_breaks(out_dir, tables):
+    """The five break-property tables, one flat sorted array each."""
+    path = os.path.join(out_dir, "tables_break.c")
+    with open(path, "w", encoding="utf-8") as out:
+        out.write(HEADER_NOTICE % tables["version"])
+        out.write('\n#include "tables_internal.h"\n\n')
+
+        for name in ("gcb", "wb", "sb", "lb", "incb", "extpict", "ea",
+                     "epcn"):
+            rows = []
+            for value, ranges in tables["breaks"][name].items():
+                for low, high in ranges:
+                    rows.append((low, high, value))
+            rows.sort()
+
+            # Non-overlapping is the whole basis of the binary search, and a
+            # UCD that listed a code point twice would otherwise produce a
+            # table whose answer depends on where the search landed.
+            for earlier, later in zip(rows, rows[1:]):
+                if earlier[1] >= later[0]:
+                    raise ValueError(
+                        "%s: overlapping runs at U+%04X" % (name, later[0]))
+
+            out.write("const GRX_UnicodeBreakRange grx_unicode_%s_ranges[] = {\n"
+                      % name)
+            for start in range(0, len(rows), 3):
+                chunk = rows[start:start + 3]
+                out.write("  " + " ".join(
+                    "{0x%04X,0x%04X,%d}," % row for row in chunk) + "\n")
+            out.write("};\n")
+            out.write("const size_t grx_unicode_%s_range_count = %d;\n\n"
+                      % (name, len(rows)))
+
+
 def write_strings(out_dir, tables):
     """The properties of strings, as one flat code-point array and an index.
 
@@ -1137,6 +1400,7 @@ def main(argv):
     write_header(out_dir, tables)
     write_ranges(out_dir, tables)
     write_case(out_dir, tables)
+    write_breaks(out_dir, tables)
     write_strings(out_dir, tables)
 
     total_ranges = sum(len(prop["ranges"]) for prop in tables["properties"])

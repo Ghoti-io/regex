@@ -1,0 +1,4482 @@
+# Perl's segmentation boundaries and `\X`, with Perl 5.40 as the
+# oracle. Written by tools/corpus/make_boundary_vectors.py.
+#
+# The algorithms are gated against the Unicode Consortium's own
+# conformance files in tests/unit/test_break.cpp; this is the other
+# half, which is what the *dialect* does with them - the ends of the
+# subject, the empty subject, and any tailoring Perl applies to line
+# breaking, which UAX #14 permits and does not describe.
+dialect: perl
+unicode: 17.0
+
+pattern: x\\b{gcb}y
+flags: 
+subject: 
+expect: nomatch
+
+pattern: x\\b{gcb}y
+flags: 
+subject: x
+expect: nomatch
+
+pattern: x\\b{gcb}y
+flags: 
+subject: xy
+expect: 0-2
+
+pattern: x\\b{gcb}y
+flags: 
+subject: x y
+expect: nomatch
+
+pattern: x\\b{gcb}y
+flags: 
+subject: e\u0301
+expect: nomatch
+
+pattern: x\\b{gcb}y
+flags: 
+subject: xe\u0301y
+expect: nomatch
+
+pattern: x\\b{gcb}y
+flags: 
+subject: \u1100\u1161\u11A8
+expect: nomatch
+
+pattern: x\\b{gcb}y
+flags: 
+subject: \u{1F1E6}\u{1F1E7}
+expect: nomatch
+
+pattern: x\\b{gcb}y
+flags: 
+subject: \u{1F1E6}\u{1F1E7}\u{1F1E8}
+expect: nomatch
+
+pattern: x\\b{gcb}y
+flags: 
+subject: \u{1F468}\u200D\u{1F469}
+expect: nomatch
+
+pattern: x\\b{gcb}y
+flags: 
+subject: a\r\nb
+expect: nomatch
+
+pattern: x\\b{gcb}y
+flags: 
+subject: a\rb
+expect: nomatch
+
+pattern: x\\b{gcb}y
+flags: 
+subject: a\nb
+expect: nomatch
+
+pattern: x\\b{gcb}y
+flags: 
+subject: Mr. Smith left.  He did.
+expect: nomatch
+
+pattern: x\\b{gcb}y
+flags: 
+subject: subtract .5 now
+expect: nomatch
+
+pattern: x\\b{gcb}y
+flags: 
+subject: x-y
+expect: nomatch
+
+pattern: x\\b{gcb}y
+flags: 
+subject: a\u00ADy
+expect: nomatch
+
+pattern: x\\b{gcb}y
+flags: 
+subject: 12.5%
+expect: nomatch
+
+pattern: x\\b{gcb}y
+flags: 
+subject: $12
+expect: nomatch
+
+pattern: x\\b{gcb}y
+flags: 
+subject: \u65E5\u672C\u8A9E\u3002\u6B21
+expect: nomatch
+
+pattern: x\\b{gcb}y
+flags: 
+subject: x\u200Bz
+expect: nomatch
+
+pattern: x\\b{gcb}y
+flags: 
+subject: x\u00A0z
+expect: nomatch
+
+pattern: x\\b{gcb}y
+flags: 
+subject: x\u2060z
+expect: nomatch
+
+pattern: x\\b{gcb}y
+flags: 
+subject: can't stop
+expect: nomatch
+
+pattern: x\\b{gcb}y
+flags: 
+subject: \u05D0-\u05D1
+expect: nomatch
+
+pattern: \\b{gcb}
+flags: 
+subject: 
+expect: nomatch
+
+pattern: \\b{gcb}
+flags: 
+subject: x
+expect: 0-0
+
+pattern: \\b{gcb}
+flags: 
+subject: xy
+expect: 0-0
+
+pattern: \\b{gcb}
+flags: 
+subject: x y
+expect: 0-0
+
+pattern: \\b{gcb}
+flags: 
+subject: e\u0301
+expect: 0-0
+
+pattern: \\b{gcb}
+flags: 
+subject: xe\u0301y
+expect: 0-0
+
+pattern: \\b{gcb}
+flags: 
+subject: \u1100\u1161\u11A8
+expect: 0-0
+
+pattern: \\b{gcb}
+flags: 
+subject: \u{1F1E6}\u{1F1E7}
+expect: 0-0
+
+pattern: \\b{gcb}
+flags: 
+subject: \u{1F1E6}\u{1F1E7}\u{1F1E8}
+expect: 0-0
+
+pattern: \\b{gcb}
+flags: 
+subject: \u{1F468}\u200D\u{1F469}
+expect: 0-0
+
+pattern: \\b{gcb}
+flags: 
+subject: a\r\nb
+expect: 0-0
+
+pattern: \\b{gcb}
+flags: 
+subject: a\rb
+expect: 0-0
+
+pattern: \\b{gcb}
+flags: 
+subject: a\nb
+expect: 0-0
+
+pattern: \\b{gcb}
+flags: 
+subject: Mr. Smith left.  He did.
+expect: 0-0
+
+pattern: \\b{gcb}
+flags: 
+subject: subtract .5 now
+expect: 0-0
+
+pattern: \\b{gcb}
+flags: 
+subject: x-y
+expect: 0-0
+
+pattern: \\b{gcb}
+flags: 
+subject: a\u00ADy
+expect: 0-0
+
+pattern: \\b{gcb}
+flags: 
+subject: 12.5%
+expect: 0-0
+
+pattern: \\b{gcb}
+flags: 
+subject: $12
+expect: 0-0
+
+pattern: \\b{gcb}
+flags: 
+subject: \u65E5\u672C\u8A9E\u3002\u6B21
+expect: 0-0
+
+pattern: \\b{gcb}
+flags: 
+subject: x\u200Bz
+expect: 0-0
+
+pattern: \\b{gcb}
+flags: 
+subject: x\u00A0z
+expect: 0-0
+
+pattern: \\b{gcb}
+flags: 
+subject: x\u2060z
+expect: 0-0
+
+pattern: \\b{gcb}
+flags: 
+subject: can't stop
+expect: 0-0
+
+pattern: \\b{gcb}
+flags: 
+subject: \u05D0-\u05D1
+expect: 0-0
+
+pattern: (?s).\\b{gcb}.
+flags: 
+subject: 
+expect: nomatch
+
+pattern: (?s).\\b{gcb}.
+flags: 
+subject: x
+expect: nomatch
+
+pattern: (?s).\\b{gcb}.
+flags: 
+subject: xy
+expect: 0-2
+
+pattern: (?s).\\b{gcb}.
+flags: 
+subject: x y
+expect: 0-2
+
+pattern: (?s).\\b{gcb}.
+flags: 
+subject: e\u0301
+expect: nomatch
+
+pattern: (?s).\\b{gcb}.
+flags: 
+subject: xe\u0301y
+expect: 0-2
+
+pattern: (?s).\\b{gcb}.
+flags: 
+subject: \u1100\u1161\u11A8
+expect: nomatch
+
+pattern: (?s).\\b{gcb}.
+flags: 
+subject: \u{1F1E6}\u{1F1E7}
+expect: nomatch
+
+pattern: (?s).\\b{gcb}.
+flags: 
+subject: \u{1F1E6}\u{1F1E7}\u{1F1E8}
+expect: 4-12
+
+pattern: (?s).\\b{gcb}.
+flags: 
+subject: \u{1F468}\u200D\u{1F469}
+expect: nomatch
+
+pattern: (?s).\\b{gcb}.
+flags: 
+subject: a\r\nb
+expect: 0-2
+
+pattern: (?s).\\b{gcb}.
+flags: 
+subject: a\rb
+expect: 0-2
+
+pattern: (?s).\\b{gcb}.
+flags: 
+subject: a\nb
+expect: 0-2
+
+pattern: (?s).\\b{gcb}.
+flags: 
+subject: Mr. Smith left.  He did.
+expect: 0-2
+
+pattern: (?s).\\b{gcb}.
+flags: 
+subject: subtract .5 now
+expect: 0-2
+
+pattern: (?s).\\b{gcb}.
+flags: 
+subject: x-y
+expect: 0-2
+
+pattern: (?s).\\b{gcb}.
+flags: 
+subject: a\u00ADy
+expect: 0-3
+
+pattern: (?s).\\b{gcb}.
+flags: 
+subject: 12.5%
+expect: 0-2
+
+pattern: (?s).\\b{gcb}.
+flags: 
+subject: $12
+expect: 0-2
+
+pattern: (?s).\\b{gcb}.
+flags: 
+subject: \u65E5\u672C\u8A9E\u3002\u6B21
+expect: 0-6
+
+pattern: (?s).\\b{gcb}.
+flags: 
+subject: x\u200Bz
+expect: 0-4
+
+pattern: (?s).\\b{gcb}.
+flags: 
+subject: x\u00A0z
+expect: 0-3
+
+pattern: (?s).\\b{gcb}.
+flags: 
+subject: x\u2060z
+expect: 0-4
+
+pattern: (?s).\\b{gcb}.
+flags: 
+subject: can't stop
+expect: 0-2
+
+pattern: (?s).\\b{gcb}.
+flags: 
+subject: \u05D0-\u05D1
+expect: 0-3
+
+pattern: x\\B{gcb}y
+flags: 
+subject: 
+expect: nomatch
+
+pattern: x\\B{gcb}y
+flags: 
+subject: x
+expect: nomatch
+
+pattern: x\\B{gcb}y
+flags: 
+subject: xy
+expect: nomatch
+
+pattern: x\\B{gcb}y
+flags: 
+subject: x y
+expect: nomatch
+
+pattern: x\\B{gcb}y
+flags: 
+subject: e\u0301
+expect: nomatch
+
+pattern: x\\B{gcb}y
+flags: 
+subject: xe\u0301y
+expect: nomatch
+
+pattern: x\\B{gcb}y
+flags: 
+subject: \u1100\u1161\u11A8
+expect: nomatch
+
+pattern: x\\B{gcb}y
+flags: 
+subject: \u{1F1E6}\u{1F1E7}
+expect: nomatch
+
+pattern: x\\B{gcb}y
+flags: 
+subject: \u{1F1E6}\u{1F1E7}\u{1F1E8}
+expect: nomatch
+
+pattern: x\\B{gcb}y
+flags: 
+subject: \u{1F468}\u200D\u{1F469}
+expect: nomatch
+
+pattern: x\\B{gcb}y
+flags: 
+subject: a\r\nb
+expect: nomatch
+
+pattern: x\\B{gcb}y
+flags: 
+subject: a\rb
+expect: nomatch
+
+pattern: x\\B{gcb}y
+flags: 
+subject: a\nb
+expect: nomatch
+
+pattern: x\\B{gcb}y
+flags: 
+subject: Mr. Smith left.  He did.
+expect: nomatch
+
+pattern: x\\B{gcb}y
+flags: 
+subject: subtract .5 now
+expect: nomatch
+
+pattern: x\\B{gcb}y
+flags: 
+subject: x-y
+expect: nomatch
+
+pattern: x\\B{gcb}y
+flags: 
+subject: a\u00ADy
+expect: nomatch
+
+pattern: x\\B{gcb}y
+flags: 
+subject: 12.5%
+expect: nomatch
+
+pattern: x\\B{gcb}y
+flags: 
+subject: $12
+expect: nomatch
+
+pattern: x\\B{gcb}y
+flags: 
+subject: \u65E5\u672C\u8A9E\u3002\u6B21
+expect: nomatch
+
+pattern: x\\B{gcb}y
+flags: 
+subject: x\u200Bz
+expect: nomatch
+
+pattern: x\\B{gcb}y
+flags: 
+subject: x\u00A0z
+expect: nomatch
+
+pattern: x\\B{gcb}y
+flags: 
+subject: x\u2060z
+expect: nomatch
+
+pattern: x\\B{gcb}y
+flags: 
+subject: can't stop
+expect: nomatch
+
+pattern: x\\B{gcb}y
+flags: 
+subject: \u05D0-\u05D1
+expect: nomatch
+
+pattern: \\B{gcb}
+flags: 
+subject: 
+expect: 0-0
+
+pattern: \\B{gcb}
+flags: 
+subject: x
+expect: nomatch
+
+pattern: \\B{gcb}
+flags: 
+subject: xy
+expect: nomatch
+
+pattern: \\B{gcb}
+flags: 
+subject: x y
+expect: nomatch
+
+pattern: \\B{gcb}
+flags: 
+subject: e\u0301
+expect: 1-1
+
+pattern: \\B{gcb}
+flags: 
+subject: xe\u0301y
+expect: 2-2
+
+pattern: \\B{gcb}
+flags: 
+subject: \u1100\u1161\u11A8
+expect: 3-3
+
+pattern: \\B{gcb}
+flags: 
+subject: \u{1F1E6}\u{1F1E7}
+expect: 4-4
+
+pattern: \\B{gcb}
+flags: 
+subject: \u{1F1E6}\u{1F1E7}\u{1F1E8}
+expect: 4-4
+
+pattern: \\B{gcb}
+flags: 
+subject: \u{1F468}\u200D\u{1F469}
+expect: 4-4
+
+pattern: \\B{gcb}
+flags: 
+subject: a\r\nb
+expect: 2-2
+
+pattern: \\B{gcb}
+flags: 
+subject: a\rb
+expect: nomatch
+
+pattern: \\B{gcb}
+flags: 
+subject: a\nb
+expect: nomatch
+
+pattern: \\B{gcb}
+flags: 
+subject: Mr. Smith left.  He did.
+expect: nomatch
+
+pattern: \\B{gcb}
+flags: 
+subject: subtract .5 now
+expect: nomatch
+
+pattern: \\B{gcb}
+flags: 
+subject: x-y
+expect: nomatch
+
+pattern: \\B{gcb}
+flags: 
+subject: a\u00ADy
+expect: nomatch
+
+pattern: \\B{gcb}
+flags: 
+subject: 12.5%
+expect: nomatch
+
+pattern: \\B{gcb}
+flags: 
+subject: $12
+expect: nomatch
+
+pattern: \\B{gcb}
+flags: 
+subject: \u65E5\u672C\u8A9E\u3002\u6B21
+expect: nomatch
+
+pattern: \\B{gcb}
+flags: 
+subject: x\u200Bz
+expect: nomatch
+
+pattern: \\B{gcb}
+flags: 
+subject: x\u00A0z
+expect: nomatch
+
+pattern: \\B{gcb}
+flags: 
+subject: x\u2060z
+expect: nomatch
+
+pattern: \\B{gcb}
+flags: 
+subject: can't stop
+expect: nomatch
+
+pattern: \\B{gcb}
+flags: 
+subject: \u05D0-\u05D1
+expect: nomatch
+
+pattern: (?s).\\B{gcb}.
+flags: 
+subject: 
+expect: nomatch
+
+pattern: (?s).\\B{gcb}.
+flags: 
+subject: x
+expect: nomatch
+
+pattern: (?s).\\B{gcb}.
+flags: 
+subject: xy
+expect: nomatch
+
+pattern: (?s).\\B{gcb}.
+flags: 
+subject: x y
+expect: nomatch
+
+pattern: (?s).\\B{gcb}.
+flags: 
+subject: e\u0301
+expect: 0-3
+
+pattern: (?s).\\B{gcb}.
+flags: 
+subject: xe\u0301y
+expect: 1-4
+
+pattern: (?s).\\B{gcb}.
+flags: 
+subject: \u1100\u1161\u11A8
+expect: 0-6
+
+pattern: (?s).\\B{gcb}.
+flags: 
+subject: \u{1F1E6}\u{1F1E7}
+expect: 0-8
+
+pattern: (?s).\\B{gcb}.
+flags: 
+subject: \u{1F1E6}\u{1F1E7}\u{1F1E8}
+expect: 0-8
+
+pattern: (?s).\\B{gcb}.
+flags: 
+subject: \u{1F468}\u200D\u{1F469}
+expect: 0-7
+
+pattern: (?s).\\B{gcb}.
+flags: 
+subject: a\r\nb
+expect: 1-3
+
+pattern: (?s).\\B{gcb}.
+flags: 
+subject: a\rb
+expect: nomatch
+
+pattern: (?s).\\B{gcb}.
+flags: 
+subject: a\nb
+expect: nomatch
+
+pattern: (?s).\\B{gcb}.
+flags: 
+subject: Mr. Smith left.  He did.
+expect: nomatch
+
+pattern: (?s).\\B{gcb}.
+flags: 
+subject: subtract .5 now
+expect: nomatch
+
+pattern: (?s).\\B{gcb}.
+flags: 
+subject: x-y
+expect: nomatch
+
+pattern: (?s).\\B{gcb}.
+flags: 
+subject: a\u00ADy
+expect: nomatch
+
+pattern: (?s).\\B{gcb}.
+flags: 
+subject: 12.5%
+expect: nomatch
+
+pattern: (?s).\\B{gcb}.
+flags: 
+subject: $12
+expect: nomatch
+
+pattern: (?s).\\B{gcb}.
+flags: 
+subject: \u65E5\u672C\u8A9E\u3002\u6B21
+expect: nomatch
+
+pattern: (?s).\\B{gcb}.
+flags: 
+subject: x\u200Bz
+expect: nomatch
+
+pattern: (?s).\\B{gcb}.
+flags: 
+subject: x\u00A0z
+expect: nomatch
+
+pattern: (?s).\\B{gcb}.
+flags: 
+subject: x\u2060z
+expect: nomatch
+
+pattern: (?s).\\B{gcb}.
+flags: 
+subject: can't stop
+expect: nomatch
+
+pattern: (?s).\\B{gcb}.
+flags: 
+subject: \u05D0-\u05D1
+expect: nomatch
+
+pattern: x\\b{g}y
+flags: 
+subject: 
+expect: nomatch
+
+pattern: x\\b{g}y
+flags: 
+subject: x
+expect: nomatch
+
+pattern: x\\b{g}y
+flags: 
+subject: xy
+expect: 0-2
+
+pattern: x\\b{g}y
+flags: 
+subject: x y
+expect: nomatch
+
+pattern: x\\b{g}y
+flags: 
+subject: e\u0301
+expect: nomatch
+
+pattern: x\\b{g}y
+flags: 
+subject: xe\u0301y
+expect: nomatch
+
+pattern: x\\b{g}y
+flags: 
+subject: \u1100\u1161\u11A8
+expect: nomatch
+
+pattern: x\\b{g}y
+flags: 
+subject: \u{1F1E6}\u{1F1E7}
+expect: nomatch
+
+pattern: x\\b{g}y
+flags: 
+subject: \u{1F1E6}\u{1F1E7}\u{1F1E8}
+expect: nomatch
+
+pattern: x\\b{g}y
+flags: 
+subject: \u{1F468}\u200D\u{1F469}
+expect: nomatch
+
+pattern: x\\b{g}y
+flags: 
+subject: a\r\nb
+expect: nomatch
+
+pattern: x\\b{g}y
+flags: 
+subject: a\rb
+expect: nomatch
+
+pattern: x\\b{g}y
+flags: 
+subject: a\nb
+expect: nomatch
+
+pattern: x\\b{g}y
+flags: 
+subject: Mr. Smith left.  He did.
+expect: nomatch
+
+pattern: x\\b{g}y
+flags: 
+subject: subtract .5 now
+expect: nomatch
+
+pattern: x\\b{g}y
+flags: 
+subject: x-y
+expect: nomatch
+
+pattern: x\\b{g}y
+flags: 
+subject: a\u00ADy
+expect: nomatch
+
+pattern: x\\b{g}y
+flags: 
+subject: 12.5%
+expect: nomatch
+
+pattern: x\\b{g}y
+flags: 
+subject: $12
+expect: nomatch
+
+pattern: x\\b{g}y
+flags: 
+subject: \u65E5\u672C\u8A9E\u3002\u6B21
+expect: nomatch
+
+pattern: x\\b{g}y
+flags: 
+subject: x\u200Bz
+expect: nomatch
+
+pattern: x\\b{g}y
+flags: 
+subject: x\u00A0z
+expect: nomatch
+
+pattern: x\\b{g}y
+flags: 
+subject: x\u2060z
+expect: nomatch
+
+pattern: x\\b{g}y
+flags: 
+subject: can't stop
+expect: nomatch
+
+pattern: x\\b{g}y
+flags: 
+subject: \u05D0-\u05D1
+expect: nomatch
+
+pattern: \\b{g}
+flags: 
+subject: 
+expect: nomatch
+
+pattern: \\b{g}
+flags: 
+subject: x
+expect: 0-0
+
+pattern: \\b{g}
+flags: 
+subject: xy
+expect: 0-0
+
+pattern: \\b{g}
+flags: 
+subject: x y
+expect: 0-0
+
+pattern: \\b{g}
+flags: 
+subject: e\u0301
+expect: 0-0
+
+pattern: \\b{g}
+flags: 
+subject: xe\u0301y
+expect: 0-0
+
+pattern: \\b{g}
+flags: 
+subject: \u1100\u1161\u11A8
+expect: 0-0
+
+pattern: \\b{g}
+flags: 
+subject: \u{1F1E6}\u{1F1E7}
+expect: 0-0
+
+pattern: \\b{g}
+flags: 
+subject: \u{1F1E6}\u{1F1E7}\u{1F1E8}
+expect: 0-0
+
+pattern: \\b{g}
+flags: 
+subject: \u{1F468}\u200D\u{1F469}
+expect: 0-0
+
+pattern: \\b{g}
+flags: 
+subject: a\r\nb
+expect: 0-0
+
+pattern: \\b{g}
+flags: 
+subject: a\rb
+expect: 0-0
+
+pattern: \\b{g}
+flags: 
+subject: a\nb
+expect: 0-0
+
+pattern: \\b{g}
+flags: 
+subject: Mr. Smith left.  He did.
+expect: 0-0
+
+pattern: \\b{g}
+flags: 
+subject: subtract .5 now
+expect: 0-0
+
+pattern: \\b{g}
+flags: 
+subject: x-y
+expect: 0-0
+
+pattern: \\b{g}
+flags: 
+subject: a\u00ADy
+expect: 0-0
+
+pattern: \\b{g}
+flags: 
+subject: 12.5%
+expect: 0-0
+
+pattern: \\b{g}
+flags: 
+subject: $12
+expect: 0-0
+
+pattern: \\b{g}
+flags: 
+subject: \u65E5\u672C\u8A9E\u3002\u6B21
+expect: 0-0
+
+pattern: \\b{g}
+flags: 
+subject: x\u200Bz
+expect: 0-0
+
+pattern: \\b{g}
+flags: 
+subject: x\u00A0z
+expect: 0-0
+
+pattern: \\b{g}
+flags: 
+subject: x\u2060z
+expect: 0-0
+
+pattern: \\b{g}
+flags: 
+subject: can't stop
+expect: 0-0
+
+pattern: \\b{g}
+flags: 
+subject: \u05D0-\u05D1
+expect: 0-0
+
+pattern: (?s).\\b{g}.
+flags: 
+subject: 
+expect: nomatch
+
+pattern: (?s).\\b{g}.
+flags: 
+subject: x
+expect: nomatch
+
+pattern: (?s).\\b{g}.
+flags: 
+subject: xy
+expect: 0-2
+
+pattern: (?s).\\b{g}.
+flags: 
+subject: x y
+expect: 0-2
+
+pattern: (?s).\\b{g}.
+flags: 
+subject: e\u0301
+expect: nomatch
+
+pattern: (?s).\\b{g}.
+flags: 
+subject: xe\u0301y
+expect: 0-2
+
+pattern: (?s).\\b{g}.
+flags: 
+subject: \u1100\u1161\u11A8
+expect: nomatch
+
+pattern: (?s).\\b{g}.
+flags: 
+subject: \u{1F1E6}\u{1F1E7}
+expect: nomatch
+
+pattern: (?s).\\b{g}.
+flags: 
+subject: \u{1F1E6}\u{1F1E7}\u{1F1E8}
+expect: 4-12
+
+pattern: (?s).\\b{g}.
+flags: 
+subject: \u{1F468}\u200D\u{1F469}
+expect: nomatch
+
+pattern: (?s).\\b{g}.
+flags: 
+subject: a\r\nb
+expect: 0-2
+
+pattern: (?s).\\b{g}.
+flags: 
+subject: a\rb
+expect: 0-2
+
+pattern: (?s).\\b{g}.
+flags: 
+subject: a\nb
+expect: 0-2
+
+pattern: (?s).\\b{g}.
+flags: 
+subject: Mr. Smith left.  He did.
+expect: 0-2
+
+pattern: (?s).\\b{g}.
+flags: 
+subject: subtract .5 now
+expect: 0-2
+
+pattern: (?s).\\b{g}.
+flags: 
+subject: x-y
+expect: 0-2
+
+pattern: (?s).\\b{g}.
+flags: 
+subject: a\u00ADy
+expect: 0-3
+
+pattern: (?s).\\b{g}.
+flags: 
+subject: 12.5%
+expect: 0-2
+
+pattern: (?s).\\b{g}.
+flags: 
+subject: $12
+expect: 0-2
+
+pattern: (?s).\\b{g}.
+flags: 
+subject: \u65E5\u672C\u8A9E\u3002\u6B21
+expect: 0-6
+
+pattern: (?s).\\b{g}.
+flags: 
+subject: x\u200Bz
+expect: 0-4
+
+pattern: (?s).\\b{g}.
+flags: 
+subject: x\u00A0z
+expect: 0-3
+
+pattern: (?s).\\b{g}.
+flags: 
+subject: x\u2060z
+expect: 0-4
+
+pattern: (?s).\\b{g}.
+flags: 
+subject: can't stop
+expect: 0-2
+
+pattern: (?s).\\b{g}.
+flags: 
+subject: \u05D0-\u05D1
+expect: 0-3
+
+pattern: x\\B{g}y
+flags: 
+subject: 
+expect: nomatch
+
+pattern: x\\B{g}y
+flags: 
+subject: x
+expect: nomatch
+
+pattern: x\\B{g}y
+flags: 
+subject: xy
+expect: nomatch
+
+pattern: x\\B{g}y
+flags: 
+subject: x y
+expect: nomatch
+
+pattern: x\\B{g}y
+flags: 
+subject: e\u0301
+expect: nomatch
+
+pattern: x\\B{g}y
+flags: 
+subject: xe\u0301y
+expect: nomatch
+
+pattern: x\\B{g}y
+flags: 
+subject: \u1100\u1161\u11A8
+expect: nomatch
+
+pattern: x\\B{g}y
+flags: 
+subject: \u{1F1E6}\u{1F1E7}
+expect: nomatch
+
+pattern: x\\B{g}y
+flags: 
+subject: \u{1F1E6}\u{1F1E7}\u{1F1E8}
+expect: nomatch
+
+pattern: x\\B{g}y
+flags: 
+subject: \u{1F468}\u200D\u{1F469}
+expect: nomatch
+
+pattern: x\\B{g}y
+flags: 
+subject: a\r\nb
+expect: nomatch
+
+pattern: x\\B{g}y
+flags: 
+subject: a\rb
+expect: nomatch
+
+pattern: x\\B{g}y
+flags: 
+subject: a\nb
+expect: nomatch
+
+pattern: x\\B{g}y
+flags: 
+subject: Mr. Smith left.  He did.
+expect: nomatch
+
+pattern: x\\B{g}y
+flags: 
+subject: subtract .5 now
+expect: nomatch
+
+pattern: x\\B{g}y
+flags: 
+subject: x-y
+expect: nomatch
+
+pattern: x\\B{g}y
+flags: 
+subject: a\u00ADy
+expect: nomatch
+
+pattern: x\\B{g}y
+flags: 
+subject: 12.5%
+expect: nomatch
+
+pattern: x\\B{g}y
+flags: 
+subject: $12
+expect: nomatch
+
+pattern: x\\B{g}y
+flags: 
+subject: \u65E5\u672C\u8A9E\u3002\u6B21
+expect: nomatch
+
+pattern: x\\B{g}y
+flags: 
+subject: x\u200Bz
+expect: nomatch
+
+pattern: x\\B{g}y
+flags: 
+subject: x\u00A0z
+expect: nomatch
+
+pattern: x\\B{g}y
+flags: 
+subject: x\u2060z
+expect: nomatch
+
+pattern: x\\B{g}y
+flags: 
+subject: can't stop
+expect: nomatch
+
+pattern: x\\B{g}y
+flags: 
+subject: \u05D0-\u05D1
+expect: nomatch
+
+pattern: \\B{g}
+flags: 
+subject: 
+expect: 0-0
+
+pattern: \\B{g}
+flags: 
+subject: x
+expect: nomatch
+
+pattern: \\B{g}
+flags: 
+subject: xy
+expect: nomatch
+
+pattern: \\B{g}
+flags: 
+subject: x y
+expect: nomatch
+
+pattern: \\B{g}
+flags: 
+subject: e\u0301
+expect: 1-1
+
+pattern: \\B{g}
+flags: 
+subject: xe\u0301y
+expect: 2-2
+
+pattern: \\B{g}
+flags: 
+subject: \u1100\u1161\u11A8
+expect: 3-3
+
+pattern: \\B{g}
+flags: 
+subject: \u{1F1E6}\u{1F1E7}
+expect: 4-4
+
+pattern: \\B{g}
+flags: 
+subject: \u{1F1E6}\u{1F1E7}\u{1F1E8}
+expect: 4-4
+
+pattern: \\B{g}
+flags: 
+subject: \u{1F468}\u200D\u{1F469}
+expect: 4-4
+
+pattern: \\B{g}
+flags: 
+subject: a\r\nb
+expect: 2-2
+
+pattern: \\B{g}
+flags: 
+subject: a\rb
+expect: nomatch
+
+pattern: \\B{g}
+flags: 
+subject: a\nb
+expect: nomatch
+
+pattern: \\B{g}
+flags: 
+subject: Mr. Smith left.  He did.
+expect: nomatch
+
+pattern: \\B{g}
+flags: 
+subject: subtract .5 now
+expect: nomatch
+
+pattern: \\B{g}
+flags: 
+subject: x-y
+expect: nomatch
+
+pattern: \\B{g}
+flags: 
+subject: a\u00ADy
+expect: nomatch
+
+pattern: \\B{g}
+flags: 
+subject: 12.5%
+expect: nomatch
+
+pattern: \\B{g}
+flags: 
+subject: $12
+expect: nomatch
+
+pattern: \\B{g}
+flags: 
+subject: \u65E5\u672C\u8A9E\u3002\u6B21
+expect: nomatch
+
+pattern: \\B{g}
+flags: 
+subject: x\u200Bz
+expect: nomatch
+
+pattern: \\B{g}
+flags: 
+subject: x\u00A0z
+expect: nomatch
+
+pattern: \\B{g}
+flags: 
+subject: x\u2060z
+expect: nomatch
+
+pattern: \\B{g}
+flags: 
+subject: can't stop
+expect: nomatch
+
+pattern: \\B{g}
+flags: 
+subject: \u05D0-\u05D1
+expect: nomatch
+
+pattern: (?s).\\B{g}.
+flags: 
+subject: 
+expect: nomatch
+
+pattern: (?s).\\B{g}.
+flags: 
+subject: x
+expect: nomatch
+
+pattern: (?s).\\B{g}.
+flags: 
+subject: xy
+expect: nomatch
+
+pattern: (?s).\\B{g}.
+flags: 
+subject: x y
+expect: nomatch
+
+pattern: (?s).\\B{g}.
+flags: 
+subject: e\u0301
+expect: 0-3
+
+pattern: (?s).\\B{g}.
+flags: 
+subject: xe\u0301y
+expect: 1-4
+
+pattern: (?s).\\B{g}.
+flags: 
+subject: \u1100\u1161\u11A8
+expect: 0-6
+
+pattern: (?s).\\B{g}.
+flags: 
+subject: \u{1F1E6}\u{1F1E7}
+expect: 0-8
+
+pattern: (?s).\\B{g}.
+flags: 
+subject: \u{1F1E6}\u{1F1E7}\u{1F1E8}
+expect: 0-8
+
+pattern: (?s).\\B{g}.
+flags: 
+subject: \u{1F468}\u200D\u{1F469}
+expect: 0-7
+
+pattern: (?s).\\B{g}.
+flags: 
+subject: a\r\nb
+expect: 1-3
+
+pattern: (?s).\\B{g}.
+flags: 
+subject: a\rb
+expect: nomatch
+
+pattern: (?s).\\B{g}.
+flags: 
+subject: a\nb
+expect: nomatch
+
+pattern: (?s).\\B{g}.
+flags: 
+subject: Mr. Smith left.  He did.
+expect: nomatch
+
+pattern: (?s).\\B{g}.
+flags: 
+subject: subtract .5 now
+expect: nomatch
+
+pattern: (?s).\\B{g}.
+flags: 
+subject: x-y
+expect: nomatch
+
+pattern: (?s).\\B{g}.
+flags: 
+subject: a\u00ADy
+expect: nomatch
+
+pattern: (?s).\\B{g}.
+flags: 
+subject: 12.5%
+expect: nomatch
+
+pattern: (?s).\\B{g}.
+flags: 
+subject: $12
+expect: nomatch
+
+pattern: (?s).\\B{g}.
+flags: 
+subject: \u65E5\u672C\u8A9E\u3002\u6B21
+expect: nomatch
+
+pattern: (?s).\\B{g}.
+flags: 
+subject: x\u200Bz
+expect: nomatch
+
+pattern: (?s).\\B{g}.
+flags: 
+subject: x\u00A0z
+expect: nomatch
+
+pattern: (?s).\\B{g}.
+flags: 
+subject: x\u2060z
+expect: nomatch
+
+pattern: (?s).\\B{g}.
+flags: 
+subject: can't stop
+expect: nomatch
+
+pattern: (?s).\\B{g}.
+flags: 
+subject: \u05D0-\u05D1
+expect: nomatch
+
+pattern: x\\b{wb}y
+flags: 
+subject: 
+expect: nomatch
+
+pattern: x\\b{wb}y
+flags: 
+subject: x
+expect: nomatch
+
+pattern: x\\b{wb}y
+flags: 
+subject: xy
+expect: nomatch
+
+pattern: x\\b{wb}y
+flags: 
+subject: x y
+expect: nomatch
+
+pattern: x\\b{wb}y
+flags: 
+subject: e\u0301
+expect: nomatch
+
+pattern: x\\b{wb}y
+flags: 
+subject: xe\u0301y
+expect: nomatch
+
+pattern: x\\b{wb}y
+flags: 
+subject: \u1100\u1161\u11A8
+expect: nomatch
+
+pattern: x\\b{wb}y
+flags: 
+subject: \u{1F1E6}\u{1F1E7}
+expect: nomatch
+
+pattern: x\\b{wb}y
+flags: 
+subject: \u{1F1E6}\u{1F1E7}\u{1F1E8}
+expect: nomatch
+
+pattern: x\\b{wb}y
+flags: 
+subject: \u{1F468}\u200D\u{1F469}
+expect: nomatch
+
+pattern: x\\b{wb}y
+flags: 
+subject: a\r\nb
+expect: nomatch
+
+pattern: x\\b{wb}y
+flags: 
+subject: a\rb
+expect: nomatch
+
+pattern: x\\b{wb}y
+flags: 
+subject: a\nb
+expect: nomatch
+
+pattern: x\\b{wb}y
+flags: 
+subject: \u0915\u094D\u0937
+expect: nomatch
+
+pattern: x\\b{wb}y
+flags: 
+subject: \u0915\u094D\u0915
+expect: nomatch
+
+pattern: x\\b{wb}y
+flags: 
+subject: Mr. Smith left.  He did.
+expect: nomatch
+
+pattern: x\\b{wb}y
+flags: 
+subject: subtract .5 now
+expect: nomatch
+
+pattern: x\\b{wb}y
+flags: 
+subject: x-y
+expect: nomatch
+
+pattern: x\\b{wb}y
+flags: 
+subject: a\u00ADy
+expect: nomatch
+
+pattern: x\\b{wb}y
+flags: 
+subject: 12.5%
+expect: nomatch
+
+pattern: x\\b{wb}y
+flags: 
+subject: $12
+expect: nomatch
+
+pattern: x\\b{wb}y
+flags: 
+subject: \u65E5\u672C\u8A9E\u3002\u6B21
+expect: nomatch
+
+pattern: x\\b{wb}y
+flags: 
+subject: x\u200Bz
+expect: nomatch
+
+pattern: x\\b{wb}y
+flags: 
+subject: x\u00A0z
+expect: nomatch
+
+pattern: x\\b{wb}y
+flags: 
+subject: x\u2060z
+expect: nomatch
+
+pattern: x\\b{wb}y
+flags: 
+subject: can't stop
+expect: nomatch
+
+pattern: x\\b{wb}y
+flags: 
+subject: \u05D0-\u05D1
+expect: nomatch
+
+pattern: \\b{wb}
+flags: 
+subject: 
+expect: nomatch
+
+pattern: \\b{wb}
+flags: 
+subject: x
+expect: 0-0
+
+pattern: \\b{wb}
+flags: 
+subject: xy
+expect: 0-0
+
+pattern: \\b{wb}
+flags: 
+subject: x y
+expect: 0-0
+
+pattern: \\b{wb}
+flags: 
+subject: e\u0301
+expect: 0-0
+
+pattern: \\b{wb}
+flags: 
+subject: xe\u0301y
+expect: 0-0
+
+pattern: \\b{wb}
+flags: 
+subject: \u1100\u1161\u11A8
+expect: 0-0
+
+pattern: \\b{wb}
+flags: 
+subject: \u{1F1E6}\u{1F1E7}
+expect: 0-0
+
+pattern: \\b{wb}
+flags: 
+subject: \u{1F1E6}\u{1F1E7}\u{1F1E8}
+expect: 0-0
+
+pattern: \\b{wb}
+flags: 
+subject: \u{1F468}\u200D\u{1F469}
+expect: 0-0
+
+pattern: \\b{wb}
+flags: 
+subject: a\r\nb
+expect: 0-0
+
+pattern: \\b{wb}
+flags: 
+subject: a\rb
+expect: 0-0
+
+pattern: \\b{wb}
+flags: 
+subject: a\nb
+expect: 0-0
+
+pattern: \\b{wb}
+flags: 
+subject: \u0915\u094D\u0937
+expect: 0-0
+
+pattern: \\b{wb}
+flags: 
+subject: \u0915\u094D\u0915
+expect: 0-0
+
+pattern: \\b{wb}
+flags: 
+subject: Mr. Smith left.  He did.
+expect: 0-0
+
+pattern: \\b{wb}
+flags: 
+subject: subtract .5 now
+expect: 0-0
+
+pattern: \\b{wb}
+flags: 
+subject: x-y
+expect: 0-0
+
+pattern: \\b{wb}
+flags: 
+subject: a\u00ADy
+expect: 0-0
+
+pattern: \\b{wb}
+flags: 
+subject: 12.5%
+expect: 0-0
+
+pattern: \\b{wb}
+flags: 
+subject: $12
+expect: 0-0
+
+pattern: \\b{wb}
+flags: 
+subject: \u65E5\u672C\u8A9E\u3002\u6B21
+expect: 0-0
+
+pattern: \\b{wb}
+flags: 
+subject: x\u200Bz
+expect: 0-0
+
+pattern: \\b{wb}
+flags: 
+subject: x\u00A0z
+expect: 0-0
+
+pattern: \\b{wb}
+flags: 
+subject: x\u2060z
+expect: 0-0
+
+pattern: \\b{wb}
+flags: 
+subject: can't stop
+expect: 0-0
+
+pattern: \\b{wb}
+flags: 
+subject: \u05D0-\u05D1
+expect: 0-0
+
+pattern: (?s).\\b{wb}.
+flags: 
+subject: 
+expect: nomatch
+
+pattern: (?s).\\b{wb}.
+flags: 
+subject: x
+expect: nomatch
+
+pattern: (?s).\\b{wb}.
+flags: 
+subject: xy
+expect: nomatch
+
+pattern: (?s).\\b{wb}.
+flags: 
+subject: x y
+expect: 0-2
+
+pattern: (?s).\\b{wb}.
+flags: 
+subject: e\u0301
+expect: nomatch
+
+pattern: (?s).\\b{wb}.
+flags: 
+subject: xe\u0301y
+expect: nomatch
+
+pattern: (?s).\\b{wb}.
+flags: 
+subject: \u1100\u1161\u11A8
+expect: nomatch
+
+pattern: (?s).\\b{wb}.
+flags: 
+subject: \u{1F1E6}\u{1F1E7}
+expect: nomatch
+
+pattern: (?s).\\b{wb}.
+flags: 
+subject: \u{1F1E6}\u{1F1E7}\u{1F1E8}
+expect: 4-12
+
+pattern: (?s).\\b{wb}.
+flags: 
+subject: \u{1F468}\u200D\u{1F469}
+expect: nomatch
+
+pattern: (?s).\\b{wb}.
+flags: 
+subject: a\r\nb
+expect: 0-2
+
+pattern: (?s).\\b{wb}.
+flags: 
+subject: a\rb
+expect: 0-2
+
+pattern: (?s).\\b{wb}.
+flags: 
+subject: a\nb
+expect: 0-2
+
+pattern: (?s).\\b{wb}.
+flags: 
+subject: \u0915\u094D\u0937
+expect: nomatch
+
+pattern: (?s).\\b{wb}.
+flags: 
+subject: \u0915\u094D\u0915
+expect: nomatch
+
+pattern: (?s).\\b{wb}.
+flags: 
+subject: Mr. Smith left.  He did.
+expect: 1-3
+
+pattern: (?s).\\b{wb}.
+flags: 
+subject: subtract .5 now
+expect: 7-9
+
+pattern: (?s).\\b{wb}.
+flags: 
+subject: x-y
+expect: 0-2
+
+pattern: (?s).\\b{wb}.
+flags: 
+subject: a\u00ADy
+expect: nomatch
+
+pattern: (?s).\\b{wb}.
+flags: 
+subject: 12.5%
+expect: 3-5
+
+pattern: (?s).\\b{wb}.
+flags: 
+subject: $12
+expect: 0-2
+
+pattern: (?s).\\b{wb}.
+flags: 
+subject: \u65E5\u672C\u8A9E\u3002\u6B21
+expect: 0-6
+
+pattern: (?s).\\b{wb}.
+flags: 
+subject: x\u200Bz
+expect: 0-4
+
+pattern: (?s).\\b{wb}.
+flags: 
+subject: x\u00A0z
+expect: 0-3
+
+pattern: (?s).\\b{wb}.
+flags: 
+subject: x\u2060z
+expect: nomatch
+
+pattern: (?s).\\b{wb}.
+flags: 
+subject: can't stop
+expect: 4-6
+
+pattern: (?s).\\b{wb}.
+flags: 
+subject: \u05D0-\u05D1
+expect: 0-3
+
+pattern: x\\B{wb}y
+flags: 
+subject: 
+expect: nomatch
+
+pattern: x\\B{wb}y
+flags: 
+subject: x
+expect: nomatch
+
+pattern: x\\B{wb}y
+flags: 
+subject: xy
+expect: 0-2
+
+pattern: x\\B{wb}y
+flags: 
+subject: x y
+expect: nomatch
+
+pattern: x\\B{wb}y
+flags: 
+subject: e\u0301
+expect: nomatch
+
+pattern: x\\B{wb}y
+flags: 
+subject: xe\u0301y
+expect: nomatch
+
+pattern: x\\B{wb}y
+flags: 
+subject: \u1100\u1161\u11A8
+expect: nomatch
+
+pattern: x\\B{wb}y
+flags: 
+subject: \u{1F1E6}\u{1F1E7}
+expect: nomatch
+
+pattern: x\\B{wb}y
+flags: 
+subject: \u{1F1E6}\u{1F1E7}\u{1F1E8}
+expect: nomatch
+
+pattern: x\\B{wb}y
+flags: 
+subject: \u{1F468}\u200D\u{1F469}
+expect: nomatch
+
+pattern: x\\B{wb}y
+flags: 
+subject: a\r\nb
+expect: nomatch
+
+pattern: x\\B{wb}y
+flags: 
+subject: a\rb
+expect: nomatch
+
+pattern: x\\B{wb}y
+flags: 
+subject: a\nb
+expect: nomatch
+
+pattern: x\\B{wb}y
+flags: 
+subject: \u0915\u094D\u0937
+expect: nomatch
+
+pattern: x\\B{wb}y
+flags: 
+subject: \u0915\u094D\u0915
+expect: nomatch
+
+pattern: x\\B{wb}y
+flags: 
+subject: Mr. Smith left.  He did.
+expect: nomatch
+
+pattern: x\\B{wb}y
+flags: 
+subject: subtract .5 now
+expect: nomatch
+
+pattern: x\\B{wb}y
+flags: 
+subject: x-y
+expect: nomatch
+
+pattern: x\\B{wb}y
+flags: 
+subject: a\u00ADy
+expect: nomatch
+
+pattern: x\\B{wb}y
+flags: 
+subject: 12.5%
+expect: nomatch
+
+pattern: x\\B{wb}y
+flags: 
+subject: $12
+expect: nomatch
+
+pattern: x\\B{wb}y
+flags: 
+subject: \u65E5\u672C\u8A9E\u3002\u6B21
+expect: nomatch
+
+pattern: x\\B{wb}y
+flags: 
+subject: x\u200Bz
+expect: nomatch
+
+pattern: x\\B{wb}y
+flags: 
+subject: x\u00A0z
+expect: nomatch
+
+pattern: x\\B{wb}y
+flags: 
+subject: x\u2060z
+expect: nomatch
+
+pattern: x\\B{wb}y
+flags: 
+subject: can't stop
+expect: nomatch
+
+pattern: x\\B{wb}y
+flags: 
+subject: \u05D0-\u05D1
+expect: nomatch
+
+pattern: \\B{wb}
+flags: 
+subject: 
+expect: 0-0
+
+pattern: \\B{wb}
+flags: 
+subject: x
+expect: nomatch
+
+pattern: \\B{wb}
+flags: 
+subject: xy
+expect: 1-1
+
+pattern: \\B{wb}
+flags: 
+subject: x y
+expect: nomatch
+
+pattern: \\B{wb}
+flags: 
+subject: e\u0301
+expect: 1-1
+
+pattern: \\B{wb}
+flags: 
+subject: xe\u0301y
+expect: 1-1
+
+pattern: \\B{wb}
+flags: 
+subject: \u1100\u1161\u11A8
+expect: 3-3
+
+pattern: \\B{wb}
+flags: 
+subject: \u{1F1E6}\u{1F1E7}
+expect: 4-4
+
+pattern: \\B{wb}
+flags: 
+subject: \u{1F1E6}\u{1F1E7}\u{1F1E8}
+expect: 4-4
+
+pattern: \\B{wb}
+flags: 
+subject: \u{1F468}\u200D\u{1F469}
+expect: 4-4
+
+pattern: \\B{wb}
+flags: 
+subject: a\r\nb
+expect: 2-2
+
+pattern: \\B{wb}
+flags: 
+subject: a\rb
+expect: nomatch
+
+pattern: \\B{wb}
+flags: 
+subject: a\nb
+expect: nomatch
+
+pattern: \\B{wb}
+flags: 
+subject: \u0915\u094D\u0937
+expect: 3-3
+
+pattern: \\B{wb}
+flags: 
+subject: \u0915\u094D\u0915
+expect: 3-3
+
+pattern: \\B{wb}
+flags: 
+subject: Mr. Smith left.  He did.
+expect: 1-1
+
+pattern: \\B{wb}
+flags: 
+subject: subtract .5 now
+expect: 1-1
+
+pattern: \\B{wb}
+flags: 
+subject: x-y
+expect: nomatch
+
+pattern: \\B{wb}
+flags: 
+subject: a\u00ADy
+expect: 1-1
+
+pattern: \\B{wb}
+flags: 
+subject: 12.5%
+expect: 1-1
+
+pattern: \\B{wb}
+flags: 
+subject: $12
+expect: 2-2
+
+pattern: \\B{wb}
+flags: 
+subject: \u65E5\u672C\u8A9E\u3002\u6B21
+expect: nomatch
+
+pattern: \\B{wb}
+flags: 
+subject: x\u200Bz
+expect: nomatch
+
+pattern: \\B{wb}
+flags: 
+subject: x\u00A0z
+expect: nomatch
+
+pattern: \\B{wb}
+flags: 
+subject: x\u2060z
+expect: 1-1
+
+pattern: \\B{wb}
+flags: 
+subject: can't stop
+expect: 1-1
+
+pattern: \\B{wb}
+flags: 
+subject: \u05D0-\u05D1
+expect: nomatch
+
+pattern: (?s).\\B{wb}.
+flags: 
+subject: 
+expect: nomatch
+
+pattern: (?s).\\B{wb}.
+flags: 
+subject: x
+expect: nomatch
+
+pattern: (?s).\\B{wb}.
+flags: 
+subject: xy
+expect: 0-2
+
+pattern: (?s).\\B{wb}.
+flags: 
+subject: x y
+expect: nomatch
+
+pattern: (?s).\\B{wb}.
+flags: 
+subject: e\u0301
+expect: 0-3
+
+pattern: (?s).\\B{wb}.
+flags: 
+subject: xe\u0301y
+expect: 0-2
+
+pattern: (?s).\\B{wb}.
+flags: 
+subject: \u1100\u1161\u11A8
+expect: 0-6
+
+pattern: (?s).\\B{wb}.
+flags: 
+subject: \u{1F1E6}\u{1F1E7}
+expect: 0-8
+
+pattern: (?s).\\B{wb}.
+flags: 
+subject: \u{1F1E6}\u{1F1E7}\u{1F1E8}
+expect: 0-8
+
+pattern: (?s).\\B{wb}.
+flags: 
+subject: \u{1F468}\u200D\u{1F469}
+expect: 0-7
+
+pattern: (?s).\\B{wb}.
+flags: 
+subject: a\r\nb
+expect: 1-3
+
+pattern: (?s).\\B{wb}.
+flags: 
+subject: a\rb
+expect: nomatch
+
+pattern: (?s).\\B{wb}.
+flags: 
+subject: a\nb
+expect: nomatch
+
+pattern: (?s).\\B{wb}.
+flags: 
+subject: \u0915\u094D\u0937
+expect: 0-6
+
+pattern: (?s).\\B{wb}.
+flags: 
+subject: \u0915\u094D\u0915
+expect: 0-6
+
+pattern: (?s).\\B{wb}.
+flags: 
+subject: Mr. Smith left.  He did.
+expect: 0-2
+
+pattern: (?s).\\B{wb}.
+flags: 
+subject: subtract .5 now
+expect: 0-2
+
+pattern: (?s).\\B{wb}.
+flags: 
+subject: x-y
+expect: nomatch
+
+pattern: (?s).\\B{wb}.
+flags: 
+subject: a\u00ADy
+expect: 0-3
+
+pattern: (?s).\\B{wb}.
+flags: 
+subject: 12.5%
+expect: 0-2
+
+pattern: (?s).\\B{wb}.
+flags: 
+subject: $12
+expect: 1-3
+
+pattern: (?s).\\B{wb}.
+flags: 
+subject: \u65E5\u672C\u8A9E\u3002\u6B21
+expect: nomatch
+
+pattern: (?s).\\B{wb}.
+flags: 
+subject: x\u200Bz
+expect: nomatch
+
+pattern: (?s).\\B{wb}.
+flags: 
+subject: x\u00A0z
+expect: nomatch
+
+pattern: (?s).\\B{wb}.
+flags: 
+subject: x\u2060z
+expect: 0-4
+
+pattern: (?s).\\B{wb}.
+flags: 
+subject: can't stop
+expect: 0-2
+
+pattern: (?s).\\B{wb}.
+flags: 
+subject: \u05D0-\u05D1
+expect: nomatch
+
+pattern: x\\b{sb}y
+flags: 
+subject: 
+expect: nomatch
+
+pattern: x\\b{sb}y
+flags: 
+subject: x
+expect: nomatch
+
+pattern: x\\b{sb}y
+flags: 
+subject: xy
+expect: nomatch
+
+pattern: x\\b{sb}y
+flags: 
+subject: x y
+expect: nomatch
+
+pattern: x\\b{sb}y
+flags: 
+subject: e\u0301
+expect: nomatch
+
+pattern: x\\b{sb}y
+flags: 
+subject: xe\u0301y
+expect: nomatch
+
+pattern: x\\b{sb}y
+flags: 
+subject: \u1100\u1161\u11A8
+expect: nomatch
+
+pattern: x\\b{sb}y
+flags: 
+subject: \u{1F1E6}\u{1F1E7}
+expect: nomatch
+
+pattern: x\\b{sb}y
+flags: 
+subject: \u{1F1E6}\u{1F1E7}\u{1F1E8}
+expect: nomatch
+
+pattern: x\\b{sb}y
+flags: 
+subject: \u{1F468}\u200D\u{1F469}
+expect: nomatch
+
+pattern: x\\b{sb}y
+flags: 
+subject: a\r\nb
+expect: nomatch
+
+pattern: x\\b{sb}y
+flags: 
+subject: a\rb
+expect: nomatch
+
+pattern: x\\b{sb}y
+flags: 
+subject: a\nb
+expect: nomatch
+
+pattern: x\\b{sb}y
+flags: 
+subject: \u0915\u094D\u0937
+expect: nomatch
+
+pattern: x\\b{sb}y
+flags: 
+subject: \u0915\u094D\u0915
+expect: nomatch
+
+pattern: x\\b{sb}y
+flags: 
+subject: Mr. Smith left.  He did.
+expect: nomatch
+
+pattern: x\\b{sb}y
+flags: 
+subject: subtract .5 now
+expect: nomatch
+
+pattern: x\\b{sb}y
+flags: 
+subject: x-y
+expect: nomatch
+
+pattern: x\\b{sb}y
+flags: 
+subject: a\u00ADy
+expect: nomatch
+
+pattern: x\\b{sb}y
+flags: 
+subject: 12.5%
+expect: nomatch
+
+pattern: x\\b{sb}y
+flags: 
+subject: $12
+expect: nomatch
+
+pattern: x\\b{sb}y
+flags: 
+subject: \u65E5\u672C\u8A9E\u3002\u6B21
+expect: nomatch
+
+pattern: x\\b{sb}y
+flags: 
+subject: x\u200Bz
+expect: nomatch
+
+pattern: x\\b{sb}y
+flags: 
+subject: x\u00A0z
+expect: nomatch
+
+pattern: x\\b{sb}y
+flags: 
+subject: x\u2060z
+expect: nomatch
+
+pattern: x\\b{sb}y
+flags: 
+subject: can't stop
+expect: nomatch
+
+pattern: x\\b{sb}y
+flags: 
+subject: \u05D0-\u05D1
+expect: nomatch
+
+pattern: \\b{sb}
+flags: 
+subject: 
+expect: nomatch
+
+pattern: \\b{sb}
+flags: 
+subject: x
+expect: 0-0
+
+pattern: \\b{sb}
+flags: 
+subject: xy
+expect: 0-0
+
+pattern: \\b{sb}
+flags: 
+subject: x y
+expect: 0-0
+
+pattern: \\b{sb}
+flags: 
+subject: e\u0301
+expect: 0-0
+
+pattern: \\b{sb}
+flags: 
+subject: xe\u0301y
+expect: 0-0
+
+pattern: \\b{sb}
+flags: 
+subject: \u1100\u1161\u11A8
+expect: 0-0
+
+pattern: \\b{sb}
+flags: 
+subject: \u{1F1E6}\u{1F1E7}
+expect: 0-0
+
+pattern: \\b{sb}
+flags: 
+subject: \u{1F1E6}\u{1F1E7}\u{1F1E8}
+expect: 0-0
+
+pattern: \\b{sb}
+flags: 
+subject: \u{1F468}\u200D\u{1F469}
+expect: 0-0
+
+pattern: \\b{sb}
+flags: 
+subject: a\r\nb
+expect: 0-0
+
+pattern: \\b{sb}
+flags: 
+subject: a\rb
+expect: 0-0
+
+pattern: \\b{sb}
+flags: 
+subject: a\nb
+expect: 0-0
+
+pattern: \\b{sb}
+flags: 
+subject: \u0915\u094D\u0937
+expect: 0-0
+
+pattern: \\b{sb}
+flags: 
+subject: \u0915\u094D\u0915
+expect: 0-0
+
+pattern: \\b{sb}
+flags: 
+subject: Mr. Smith left.  He did.
+expect: 0-0
+
+pattern: \\b{sb}
+flags: 
+subject: subtract .5 now
+expect: 0-0
+
+pattern: \\b{sb}
+flags: 
+subject: x-y
+expect: 0-0
+
+pattern: \\b{sb}
+flags: 
+subject: a\u00ADy
+expect: 0-0
+
+pattern: \\b{sb}
+flags: 
+subject: 12.5%
+expect: 0-0
+
+pattern: \\b{sb}
+flags: 
+subject: $12
+expect: 0-0
+
+pattern: \\b{sb}
+flags: 
+subject: \u65E5\u672C\u8A9E\u3002\u6B21
+expect: 0-0
+
+pattern: \\b{sb}
+flags: 
+subject: x\u200Bz
+expect: 0-0
+
+pattern: \\b{sb}
+flags: 
+subject: x\u00A0z
+expect: 0-0
+
+pattern: \\b{sb}
+flags: 
+subject: x\u2060z
+expect: 0-0
+
+pattern: \\b{sb}
+flags: 
+subject: can't stop
+expect: 0-0
+
+pattern: \\b{sb}
+flags: 
+subject: \u05D0-\u05D1
+expect: 0-0
+
+pattern: (?s).\\b{sb}.
+flags: 
+subject: 
+expect: nomatch
+
+pattern: (?s).\\b{sb}.
+flags: 
+subject: x
+expect: nomatch
+
+pattern: (?s).\\b{sb}.
+flags: 
+subject: xy
+expect: nomatch
+
+pattern: (?s).\\b{sb}.
+flags: 
+subject: x y
+expect: nomatch
+
+pattern: (?s).\\b{sb}.
+flags: 
+subject: e\u0301
+expect: nomatch
+
+pattern: (?s).\\b{sb}.
+flags: 
+subject: xe\u0301y
+expect: nomatch
+
+pattern: (?s).\\b{sb}.
+flags: 
+subject: \u1100\u1161\u11A8
+expect: nomatch
+
+pattern: (?s).\\b{sb}.
+flags: 
+subject: \u{1F1E6}\u{1F1E7}
+expect: nomatch
+
+pattern: (?s).\\b{sb}.
+flags: 
+subject: \u{1F1E6}\u{1F1E7}\u{1F1E8}
+expect: nomatch
+
+pattern: (?s).\\b{sb}.
+flags: 
+subject: \u{1F468}\u200D\u{1F469}
+expect: nomatch
+
+pattern: (?s).\\b{sb}.
+flags: 
+subject: a\r\nb
+expect: 2-4
+
+pattern: (?s).\\b{sb}.
+flags: 
+subject: a\rb
+expect: 1-3
+
+pattern: (?s).\\b{sb}.
+flags: 
+subject: a\nb
+expect: 1-3
+
+pattern: (?s).\\b{sb}.
+flags: 
+subject: \u0915\u094D\u0937
+expect: nomatch
+
+pattern: (?s).\\b{sb}.
+flags: 
+subject: \u0915\u094D\u0915
+expect: nomatch
+
+pattern: (?s).\\b{sb}.
+flags: 
+subject: Mr. Smith left.  He did.
+expect: 3-5
+
+pattern: (?s).\\b{sb}.
+flags: 
+subject: subtract .5 now
+expect: nomatch
+
+pattern: (?s).\\b{sb}.
+flags: 
+subject: x-y
+expect: nomatch
+
+pattern: (?s).\\b{sb}.
+flags: 
+subject: a\u00ADy
+expect: nomatch
+
+pattern: (?s).\\b{sb}.
+flags: 
+subject: 12.5%
+expect: nomatch
+
+pattern: (?s).\\b{sb}.
+flags: 
+subject: $12
+expect: nomatch
+
+pattern: (?s).\\b{sb}.
+flags: 
+subject: \u65E5\u672C\u8A9E\u3002\u6B21
+expect: 9-15
+
+pattern: (?s).\\b{sb}.
+flags: 
+subject: x\u200Bz
+expect: nomatch
+
+pattern: (?s).\\b{sb}.
+flags: 
+subject: x\u00A0z
+expect: nomatch
+
+pattern: (?s).\\b{sb}.
+flags: 
+subject: x\u2060z
+expect: nomatch
+
+pattern: (?s).\\b{sb}.
+flags: 
+subject: can't stop
+expect: nomatch
+
+pattern: (?s).\\b{sb}.
+flags: 
+subject: \u05D0-\u05D1
+expect: nomatch
+
+pattern: x\\B{sb}y
+flags: 
+subject: 
+expect: nomatch
+
+pattern: x\\B{sb}y
+flags: 
+subject: x
+expect: nomatch
+
+pattern: x\\B{sb}y
+flags: 
+subject: xy
+expect: 0-2
+
+pattern: x\\B{sb}y
+flags: 
+subject: x y
+expect: nomatch
+
+pattern: x\\B{sb}y
+flags: 
+subject: e\u0301
+expect: nomatch
+
+pattern: x\\B{sb}y
+flags: 
+subject: xe\u0301y
+expect: nomatch
+
+pattern: x\\B{sb}y
+flags: 
+subject: \u1100\u1161\u11A8
+expect: nomatch
+
+pattern: x\\B{sb}y
+flags: 
+subject: \u{1F1E6}\u{1F1E7}
+expect: nomatch
+
+pattern: x\\B{sb}y
+flags: 
+subject: \u{1F1E6}\u{1F1E7}\u{1F1E8}
+expect: nomatch
+
+pattern: x\\B{sb}y
+flags: 
+subject: \u{1F468}\u200D\u{1F469}
+expect: nomatch
+
+pattern: x\\B{sb}y
+flags: 
+subject: a\r\nb
+expect: nomatch
+
+pattern: x\\B{sb}y
+flags: 
+subject: a\rb
+expect: nomatch
+
+pattern: x\\B{sb}y
+flags: 
+subject: a\nb
+expect: nomatch
+
+pattern: x\\B{sb}y
+flags: 
+subject: \u0915\u094D\u0937
+expect: nomatch
+
+pattern: x\\B{sb}y
+flags: 
+subject: \u0915\u094D\u0915
+expect: nomatch
+
+pattern: x\\B{sb}y
+flags: 
+subject: Mr. Smith left.  He did.
+expect: nomatch
+
+pattern: x\\B{sb}y
+flags: 
+subject: subtract .5 now
+expect: nomatch
+
+pattern: x\\B{sb}y
+flags: 
+subject: x-y
+expect: nomatch
+
+pattern: x\\B{sb}y
+flags: 
+subject: a\u00ADy
+expect: nomatch
+
+pattern: x\\B{sb}y
+flags: 
+subject: 12.5%
+expect: nomatch
+
+pattern: x\\B{sb}y
+flags: 
+subject: $12
+expect: nomatch
+
+pattern: x\\B{sb}y
+flags: 
+subject: \u65E5\u672C\u8A9E\u3002\u6B21
+expect: nomatch
+
+pattern: x\\B{sb}y
+flags: 
+subject: x\u200Bz
+expect: nomatch
+
+pattern: x\\B{sb}y
+flags: 
+subject: x\u00A0z
+expect: nomatch
+
+pattern: x\\B{sb}y
+flags: 
+subject: x\u2060z
+expect: nomatch
+
+pattern: x\\B{sb}y
+flags: 
+subject: can't stop
+expect: nomatch
+
+pattern: x\\B{sb}y
+flags: 
+subject: \u05D0-\u05D1
+expect: nomatch
+
+pattern: \\B{sb}
+flags: 
+subject: 
+expect: 0-0
+
+pattern: \\B{sb}
+flags: 
+subject: x
+expect: nomatch
+
+pattern: \\B{sb}
+flags: 
+subject: xy
+expect: 1-1
+
+pattern: \\B{sb}
+flags: 
+subject: x y
+expect: 1-1
+
+pattern: \\B{sb}
+flags: 
+subject: e\u0301
+expect: 1-1
+
+pattern: \\B{sb}
+flags: 
+subject: xe\u0301y
+expect: 1-1
+
+pattern: \\B{sb}
+flags: 
+subject: \u1100\u1161\u11A8
+expect: 3-3
+
+pattern: \\B{sb}
+flags: 
+subject: \u{1F1E6}\u{1F1E7}
+expect: 4-4
+
+pattern: \\B{sb}
+flags: 
+subject: \u{1F1E6}\u{1F1E7}\u{1F1E8}
+expect: 4-4
+
+pattern: \\B{sb}
+flags: 
+subject: \u{1F468}\u200D\u{1F469}
+expect: 4-4
+
+pattern: \\B{sb}
+flags: 
+subject: a\r\nb
+expect: 1-1
+
+pattern: \\B{sb}
+flags: 
+subject: a\rb
+expect: 1-1
+
+pattern: \\B{sb}
+flags: 
+subject: a\nb
+expect: 1-1
+
+pattern: \\B{sb}
+flags: 
+subject: \u0915\u094D\u0937
+expect: 3-3
+
+pattern: \\B{sb}
+flags: 
+subject: \u0915\u094D\u0915
+expect: 3-3
+
+pattern: \\B{sb}
+flags: 
+subject: Mr. Smith left.  He did.
+expect: 1-1
+
+pattern: \\B{sb}
+flags: 
+subject: subtract .5 now
+expect: 1-1
+
+pattern: \\B{sb}
+flags: 
+subject: x-y
+expect: 1-1
+
+pattern: \\B{sb}
+flags: 
+subject: a\u00ADy
+expect: 1-1
+
+pattern: \\B{sb}
+flags: 
+subject: 12.5%
+expect: 1-1
+
+pattern: \\B{sb}
+flags: 
+subject: $12
+expect: 1-1
+
+pattern: \\B{sb}
+flags: 
+subject: \u65E5\u672C\u8A9E\u3002\u6B21
+expect: 3-3
+
+pattern: \\B{sb}
+flags: 
+subject: x\u200Bz
+expect: 1-1
+
+pattern: \\B{sb}
+flags: 
+subject: x\u00A0z
+expect: 1-1
+
+pattern: \\B{sb}
+flags: 
+subject: x\u2060z
+expect: 1-1
+
+pattern: \\B{sb}
+flags: 
+subject: can't stop
+expect: 1-1
+
+pattern: \\B{sb}
+flags: 
+subject: \u05D0-\u05D1
+expect: 2-2
+
+pattern: (?s).\\B{sb}.
+flags: 
+subject: 
+expect: nomatch
+
+pattern: (?s).\\B{sb}.
+flags: 
+subject: x
+expect: nomatch
+
+pattern: (?s).\\B{sb}.
+flags: 
+subject: xy
+expect: 0-2
+
+pattern: (?s).\\B{sb}.
+flags: 
+subject: x y
+expect: 0-2
+
+pattern: (?s).\\B{sb}.
+flags: 
+subject: e\u0301
+expect: 0-3
+
+pattern: (?s).\\B{sb}.
+flags: 
+subject: xe\u0301y
+expect: 0-2
+
+pattern: (?s).\\B{sb}.
+flags: 
+subject: \u1100\u1161\u11A8
+expect: 0-6
+
+pattern: (?s).\\B{sb}.
+flags: 
+subject: \u{1F1E6}\u{1F1E7}
+expect: 0-8
+
+pattern: (?s).\\B{sb}.
+flags: 
+subject: \u{1F1E6}\u{1F1E7}\u{1F1E8}
+expect: 0-8
+
+pattern: (?s).\\B{sb}.
+flags: 
+subject: \u{1F468}\u200D\u{1F469}
+expect: 0-7
+
+pattern: (?s).\\B{sb}.
+flags: 
+subject: a\r\nb
+expect: 0-2
+
+pattern: (?s).\\B{sb}.
+flags: 
+subject: a\rb
+expect: 0-2
+
+pattern: (?s).\\B{sb}.
+flags: 
+subject: a\nb
+expect: 0-2
+
+pattern: (?s).\\B{sb}.
+flags: 
+subject: \u0915\u094D\u0937
+expect: 0-6
+
+pattern: (?s).\\B{sb}.
+flags: 
+subject: \u0915\u094D\u0915
+expect: 0-6
+
+pattern: (?s).\\B{sb}.
+flags: 
+subject: Mr. Smith left.  He did.
+expect: 0-2
+
+pattern: (?s).\\B{sb}.
+flags: 
+subject: subtract .5 now
+expect: 0-2
+
+pattern: (?s).\\B{sb}.
+flags: 
+subject: x-y
+expect: 0-2
+
+pattern: (?s).\\B{sb}.
+flags: 
+subject: a\u00ADy
+expect: 0-3
+
+pattern: (?s).\\B{sb}.
+flags: 
+subject: 12.5%
+expect: 0-2
+
+pattern: (?s).\\B{sb}.
+flags: 
+subject: $12
+expect: 0-2
+
+pattern: (?s).\\B{sb}.
+flags: 
+subject: \u65E5\u672C\u8A9E\u3002\u6B21
+expect: 0-6
+
+pattern: (?s).\\B{sb}.
+flags: 
+subject: x\u200Bz
+expect: 0-4
+
+pattern: (?s).\\B{sb}.
+flags: 
+subject: x\u00A0z
+expect: 0-3
+
+pattern: (?s).\\B{sb}.
+flags: 
+subject: x\u2060z
+expect: 0-4
+
+pattern: (?s).\\B{sb}.
+flags: 
+subject: can't stop
+expect: 0-2
+
+pattern: (?s).\\B{sb}.
+flags: 
+subject: \u05D0-\u05D1
+expect: 0-3
+
+pattern: x\\b{lb}y
+flags: 
+subject: 
+expect: nomatch
+
+pattern: x\\b{lb}y
+flags: 
+subject: xy
+expect: nomatch
+
+pattern: x\\b{lb}y
+flags: 
+subject: x y
+expect: nomatch
+
+pattern: x\\b{lb}y
+flags: 
+subject: e\u0301
+expect: nomatch
+
+pattern: x\\b{lb}y
+flags: 
+subject: xe\u0301y
+expect: nomatch
+
+pattern: x\\b{lb}y
+flags: 
+subject: \u1100\u1161\u11A8
+expect: nomatch
+
+pattern: x\\b{lb}y
+flags: 
+subject: \u{1F1E6}\u{1F1E7}
+expect: nomatch
+
+pattern: x\\b{lb}y
+flags: 
+subject: \u{1F1E6}\u{1F1E7}\u{1F1E8}
+expect: nomatch
+
+pattern: x\\b{lb}y
+flags: 
+subject: \u{1F468}\u200D\u{1F469}
+expect: nomatch
+
+pattern: x\\b{lb}y
+flags: 
+subject: a\r\nb
+expect: nomatch
+
+pattern: x\\b{lb}y
+flags: 
+subject: a\rb
+expect: nomatch
+
+pattern: x\\b{lb}y
+flags: 
+subject: a\nb
+expect: nomatch
+
+pattern: x\\b{lb}y
+flags: 
+subject: \u0915\u094D\u0937
+expect: nomatch
+
+pattern: x\\b{lb}y
+flags: 
+subject: \u0915\u094D\u0915
+expect: nomatch
+
+pattern: x\\b{lb}y
+flags: 
+subject: Mr. Smith left.  He did.
+expect: nomatch
+
+pattern: x\\b{lb}y
+flags: 
+subject: x-y
+expect: nomatch
+
+pattern: x\\b{lb}y
+flags: 
+subject: a\u00ADy
+expect: nomatch
+
+pattern: x\\b{lb}y
+flags: 
+subject: 12.5%
+expect: nomatch
+
+pattern: x\\b{lb}y
+flags: 
+subject: $12
+expect: nomatch
+
+pattern: x\\b{lb}y
+flags: 
+subject: \u65E5\u672C\u8A9E\u3002\u6B21
+expect: nomatch
+
+pattern: x\\b{lb}y
+flags: 
+subject: x\u200Bz
+expect: nomatch
+
+pattern: x\\b{lb}y
+flags: 
+subject: x\u00A0z
+expect: nomatch
+
+pattern: x\\b{lb}y
+flags: 
+subject: x\u2060z
+expect: nomatch
+
+pattern: x\\b{lb}y
+flags: 
+subject: can't stop
+expect: nomatch
+
+pattern: \\b{lb}
+flags: 
+subject: 
+expect: nomatch
+
+pattern: \\b{lb}
+flags: 
+subject: xy
+expect: 2-2
+
+pattern: \\b{lb}
+flags: 
+subject: x y
+expect: 2-2
+
+pattern: \\b{lb}
+flags: 
+subject: e\u0301
+expect: 3-3
+
+pattern: \\b{lb}
+flags: 
+subject: xe\u0301y
+expect: 5-5
+
+pattern: \\b{lb}
+flags: 
+subject: \u1100\u1161\u11A8
+expect: 9-9
+
+pattern: \\b{lb}
+flags: 
+subject: \u{1F1E6}\u{1F1E7}
+expect: 8-8
+
+pattern: \\b{lb}
+flags: 
+subject: \u{1F1E6}\u{1F1E7}\u{1F1E8}
+expect: 8-8
+
+pattern: \\b{lb}
+flags: 
+subject: \u{1F468}\u200D\u{1F469}
+expect: 11-11
+
+pattern: \\b{lb}
+flags: 
+subject: a\r\nb
+expect: 3-3
+
+pattern: \\b{lb}
+flags: 
+subject: a\rb
+expect: 2-2
+
+pattern: \\b{lb}
+flags: 
+subject: a\nb
+expect: 2-2
+
+pattern: \\b{lb}
+flags: 
+subject: \u0915\u094D\u0937
+expect: 9-9
+
+pattern: \\b{lb}
+flags: 
+subject: \u0915\u094D\u0915
+expect: 9-9
+
+pattern: \\b{lb}
+flags: 
+subject: Mr. Smith left.  He did.
+expect: 4-4
+
+pattern: \\b{lb}
+flags: 
+subject: x-y
+expect: 2-2
+
+pattern: \\b{lb}
+flags: 
+subject: a\u00ADy
+expect: 3-3
+
+pattern: \\b{lb}
+flags: 
+subject: 12.5%
+expect: 5-5
+
+pattern: \\b{lb}
+flags: 
+subject: $12
+expect: 3-3
+
+pattern: \\b{lb}
+flags: 
+subject: \u65E5\u672C\u8A9E\u3002\u6B21
+expect: 3-3
+
+pattern: \\b{lb}
+flags: 
+subject: x\u200Bz
+expect: 4-4
+
+pattern: \\b{lb}
+flags: 
+subject: x\u00A0z
+expect: 4-4
+
+pattern: \\b{lb}
+flags: 
+subject: x\u2060z
+expect: 5-5
+
+pattern: \\b{lb}
+flags: 
+subject: can't stop
+expect: 6-6
+
+pattern: (?s).\\b{lb}.
+flags: 
+subject: 
+expect: nomatch
+
+pattern: (?s).\\b{lb}.
+flags: 
+subject: xy
+expect: nomatch
+
+pattern: (?s).\\b{lb}.
+flags: 
+subject: x y
+expect: 1-3
+
+pattern: (?s).\\b{lb}.
+flags: 
+subject: e\u0301
+expect: nomatch
+
+pattern: (?s).\\b{lb}.
+flags: 
+subject: xe\u0301y
+expect: nomatch
+
+pattern: (?s).\\b{lb}.
+flags: 
+subject: \u1100\u1161\u11A8
+expect: nomatch
+
+pattern: (?s).\\b{lb}.
+flags: 
+subject: \u{1F1E6}\u{1F1E7}
+expect: nomatch
+
+pattern: (?s).\\b{lb}.
+flags: 
+subject: \u{1F1E6}\u{1F1E7}\u{1F1E8}
+expect: 4-12
+
+pattern: (?s).\\b{lb}.
+flags: 
+subject: \u{1F468}\u200D\u{1F469}
+expect: nomatch
+
+pattern: (?s).\\b{lb}.
+flags: 
+subject: a\r\nb
+expect: 2-4
+
+pattern: (?s).\\b{lb}.
+flags: 
+subject: a\rb
+expect: 1-3
+
+pattern: (?s).\\b{lb}.
+flags: 
+subject: a\nb
+expect: 1-3
+
+pattern: (?s).\\b{lb}.
+flags: 
+subject: \u0915\u094D\u0937
+expect: nomatch
+
+pattern: (?s).\\b{lb}.
+flags: 
+subject: \u0915\u094D\u0915
+expect: nomatch
+
+pattern: (?s).\\b{lb}.
+flags: 
+subject: Mr. Smith left.  He did.
+expect: 3-5
+
+pattern: (?s).\\b{lb}.
+flags: 
+subject: x-y
+expect: 1-3
+
+pattern: (?s).\\b{lb}.
+flags: 
+subject: a\u00ADy
+expect: 1-4
+
+pattern: (?s).\\b{lb}.
+flags: 
+subject: 12.5%
+expect: nomatch
+
+pattern: (?s).\\b{lb}.
+flags: 
+subject: $12
+expect: nomatch
+
+pattern: (?s).\\b{lb}.
+flags: 
+subject: \u65E5\u672C\u8A9E\u3002\u6B21
+expect: 0-6
+
+pattern: (?s).\\b{lb}.
+flags: 
+subject: x\u200Bz
+expect: 1-5
+
+pattern: (?s).\\b{lb}.
+flags: 
+subject: x\u00A0z
+expect: nomatch
+
+pattern: (?s).\\b{lb}.
+flags: 
+subject: x\u2060z
+expect: nomatch
+
+pattern: (?s).\\b{lb}.
+flags: 
+subject: can't stop
+expect: 5-7
+
+pattern: x\\B{lb}y
+flags: 
+subject: 
+expect: nomatch
+
+pattern: x\\B{lb}y
+flags: 
+subject: xy
+expect: 0-2
+
+pattern: x\\B{lb}y
+flags: 
+subject: x y
+expect: nomatch
+
+pattern: x\\B{lb}y
+flags: 
+subject: e\u0301
+expect: nomatch
+
+pattern: x\\B{lb}y
+flags: 
+subject: xe\u0301y
+expect: nomatch
+
+pattern: x\\B{lb}y
+flags: 
+subject: \u1100\u1161\u11A8
+expect: nomatch
+
+pattern: x\\B{lb}y
+flags: 
+subject: \u{1F1E6}\u{1F1E7}
+expect: nomatch
+
+pattern: x\\B{lb}y
+flags: 
+subject: \u{1F1E6}\u{1F1E7}\u{1F1E8}
+expect: nomatch
+
+pattern: x\\B{lb}y
+flags: 
+subject: \u{1F468}\u200D\u{1F469}
+expect: nomatch
+
+pattern: x\\B{lb}y
+flags: 
+subject: a\r\nb
+expect: nomatch
+
+pattern: x\\B{lb}y
+flags: 
+subject: a\rb
+expect: nomatch
+
+pattern: x\\B{lb}y
+flags: 
+subject: a\nb
+expect: nomatch
+
+pattern: x\\B{lb}y
+flags: 
+subject: \u0915\u094D\u0937
+expect: nomatch
+
+pattern: x\\B{lb}y
+flags: 
+subject: \u0915\u094D\u0915
+expect: nomatch
+
+pattern: x\\B{lb}y
+flags: 
+subject: Mr. Smith left.  He did.
+expect: nomatch
+
+pattern: x\\B{lb}y
+flags: 
+subject: x-y
+expect: nomatch
+
+pattern: x\\B{lb}y
+flags: 
+subject: a\u00ADy
+expect: nomatch
+
+pattern: x\\B{lb}y
+flags: 
+subject: 12.5%
+expect: nomatch
+
+pattern: x\\B{lb}y
+flags: 
+subject: $12
+expect: nomatch
+
+pattern: x\\B{lb}y
+flags: 
+subject: \u65E5\u672C\u8A9E\u3002\u6B21
+expect: nomatch
+
+pattern: x\\B{lb}y
+flags: 
+subject: x\u200Bz
+expect: nomatch
+
+pattern: x\\B{lb}y
+flags: 
+subject: x\u00A0z
+expect: nomatch
+
+pattern: x\\B{lb}y
+flags: 
+subject: x\u2060z
+expect: nomatch
+
+pattern: x\\B{lb}y
+flags: 
+subject: can't stop
+expect: nomatch
+
+pattern: \\B{lb}
+flags: 
+subject: 
+expect: 0-0
+
+pattern: \\B{lb}
+flags: 
+subject: xy
+expect: 0-0
+
+pattern: \\B{lb}
+flags: 
+subject: x y
+expect: 0-0
+
+pattern: \\B{lb}
+flags: 
+subject: e\u0301
+expect: 0-0
+
+pattern: \\B{lb}
+flags: 
+subject: xe\u0301y
+expect: 0-0
+
+pattern: \\B{lb}
+flags: 
+subject: \u1100\u1161\u11A8
+expect: 0-0
+
+pattern: \\B{lb}
+flags: 
+subject: \u{1F1E6}\u{1F1E7}
+expect: 0-0
+
+pattern: \\B{lb}
+flags: 
+subject: \u{1F1E6}\u{1F1E7}\u{1F1E8}
+expect: 0-0
+
+pattern: \\B{lb}
+flags: 
+subject: \u{1F468}\u200D\u{1F469}
+expect: 0-0
+
+pattern: \\B{lb}
+flags: 
+subject: a\r\nb
+expect: 0-0
+
+pattern: \\B{lb}
+flags: 
+subject: a\rb
+expect: 0-0
+
+pattern: \\B{lb}
+flags: 
+subject: a\nb
+expect: 0-0
+
+pattern: \\B{lb}
+flags: 
+subject: \u0915\u094D\u0937
+expect: 0-0
+
+pattern: \\B{lb}
+flags: 
+subject: \u0915\u094D\u0915
+expect: 0-0
+
+pattern: \\B{lb}
+flags: 
+subject: Mr. Smith left.  He did.
+expect: 0-0
+
+pattern: \\B{lb}
+flags: 
+subject: x-y
+expect: 0-0
+
+pattern: \\B{lb}
+flags: 
+subject: a\u00ADy
+expect: 0-0
+
+pattern: \\B{lb}
+flags: 
+subject: 12.5%
+expect: 0-0
+
+pattern: \\B{lb}
+flags: 
+subject: $12
+expect: 0-0
+
+pattern: \\B{lb}
+flags: 
+subject: \u65E5\u672C\u8A9E\u3002\u6B21
+expect: 0-0
+
+pattern: \\B{lb}
+flags: 
+subject: x\u200Bz
+expect: 0-0
+
+pattern: \\B{lb}
+flags: 
+subject: x\u00A0z
+expect: 0-0
+
+pattern: \\B{lb}
+flags: 
+subject: x\u2060z
+expect: 0-0
+
+pattern: \\B{lb}
+flags: 
+subject: can't stop
+expect: 0-0
+
+pattern: (?s).\\B{lb}.
+flags: 
+subject: 
+expect: nomatch
+
+pattern: (?s).\\B{lb}.
+flags: 
+subject: xy
+expect: 0-2
+
+pattern: (?s).\\B{lb}.
+flags: 
+subject: x y
+expect: 0-2
+
+pattern: (?s).\\B{lb}.
+flags: 
+subject: e\u0301
+expect: 0-3
+
+pattern: (?s).\\B{lb}.
+flags: 
+subject: xe\u0301y
+expect: 0-2
+
+pattern: (?s).\\B{lb}.
+flags: 
+subject: \u1100\u1161\u11A8
+expect: 0-6
+
+pattern: (?s).\\B{lb}.
+flags: 
+subject: \u{1F1E6}\u{1F1E7}
+expect: 0-8
+
+pattern: (?s).\\B{lb}.
+flags: 
+subject: \u{1F1E6}\u{1F1E7}\u{1F1E8}
+expect: 0-8
+
+pattern: (?s).\\B{lb}.
+flags: 
+subject: \u{1F468}\u200D\u{1F469}
+expect: 0-7
+
+pattern: (?s).\\B{lb}.
+flags: 
+subject: a\r\nb
+expect: 0-2
+
+pattern: (?s).\\B{lb}.
+flags: 
+subject: a\rb
+expect: 0-2
+
+pattern: (?s).\\B{lb}.
+flags: 
+subject: a\nb
+expect: 0-2
+
+pattern: (?s).\\B{lb}.
+flags: 
+subject: \u0915\u094D\u0937
+expect: 0-6
+
+pattern: (?s).\\B{lb}.
+flags: 
+subject: \u0915\u094D\u0915
+expect: 0-6
+
+pattern: (?s).\\B{lb}.
+flags: 
+subject: Mr. Smith left.  He did.
+expect: 0-2
+
+pattern: (?s).\\B{lb}.
+flags: 
+subject: x-y
+expect: 0-2
+
+pattern: (?s).\\B{lb}.
+flags: 
+subject: a\u00ADy
+expect: 0-3
+
+pattern: (?s).\\B{lb}.
+flags: 
+subject: 12.5%
+expect: 0-2
+
+pattern: (?s).\\B{lb}.
+flags: 
+subject: $12
+expect: 0-2
+
+pattern: (?s).\\B{lb}.
+flags: 
+subject: \u65E5\u672C\u8A9E\u3002\u6B21
+expect: 6-12
+
+pattern: (?s).\\B{lb}.
+flags: 
+subject: x\u200Bz
+expect: 0-4
+
+pattern: (?s).\\B{lb}.
+flags: 
+subject: x\u00A0z
+expect: 0-3
+
+pattern: (?s).\\B{lb}.
+flags: 
+subject: x\u2060z
+expect: 0-4
+
+pattern: (?s).\\B{lb}.
+flags: 
+subject: can't stop
+expect: 0-2
+
+pattern: \\X
+flags: 
+subject: 
+expect: nomatch
+
+pattern: \\X
+flags: 
+subject: x
+expect: 0-1
+
+pattern: \\X
+flags: 
+subject: xy
+expect: 0-1
+
+pattern: \\X
+flags: 
+subject: x y
+expect: 0-1
+
+pattern: \\X
+flags: 
+subject: e\u0301
+expect: 0-3
+
+pattern: \\X
+flags: 
+subject: xe\u0301y
+expect: 0-1
+
+pattern: \\X
+flags: 
+subject: \u1100\u1161\u11A8
+expect: 0-9
+
+pattern: \\X
+flags: 
+subject: \u{1F1E6}\u{1F1E7}
+expect: 0-8
+
+pattern: \\X
+flags: 
+subject: \u{1F1E6}\u{1F1E7}\u{1F1E8}
+expect: 0-8
+
+pattern: \\X
+flags: 
+subject: \u{1F468}\u200D\u{1F469}
+expect: 0-11
+
+pattern: \\X
+flags: 
+subject: a\r\nb
+expect: 0-1
+
+pattern: \\X
+flags: 
+subject: a\rb
+expect: 0-1
+
+pattern: \\X
+flags: 
+subject: a\nb
+expect: 0-1
+
+pattern: \\X
+flags: 
+subject: Mr. Smith left.  He did.
+expect: 0-1
+
+pattern: \\X
+flags: 
+subject: subtract .5 now
+expect: 0-1
+
+pattern: \\X
+flags: 
+subject: x-y
+expect: 0-1
+
+pattern: \\X
+flags: 
+subject: a\u00ADy
+expect: 0-1
+
+pattern: \\X
+flags: 
+subject: 12.5%
+expect: 0-1
+
+pattern: \\X
+flags: 
+subject: $12
+expect: 0-1
+
+pattern: \\X
+flags: 
+subject: \u65E5\u672C\u8A9E\u3002\u6B21
+expect: 0-3
+
+pattern: \\X
+flags: 
+subject: x\u200Bz
+expect: 0-1
+
+pattern: \\X
+flags: 
+subject: x\u00A0z
+expect: 0-1
+
+pattern: \\X
+flags: 
+subject: x\u2060z
+expect: 0-1
+
+pattern: \\X
+flags: 
+subject: can't stop
+expect: 0-1
+
+pattern: \\X
+flags: 
+subject: \u05D0-\u05D1
+expect: 0-2
+
+pattern: \\X\\X
+flags: 
+subject: 
+expect: nomatch
+
+pattern: \\X\\X
+flags: 
+subject: x
+expect: nomatch
+
+pattern: \\X\\X
+flags: 
+subject: xy
+expect: 0-2
+
+pattern: \\X\\X
+flags: 
+subject: x y
+expect: 0-2
+
+pattern: \\X\\X
+flags: 
+subject: e\u0301
+expect: nomatch
+
+pattern: \\X\\X
+flags: 
+subject: xe\u0301y
+expect: 0-4
+
+pattern: \\X\\X
+flags: 
+subject: \u1100\u1161\u11A8
+expect: nomatch
+
+pattern: \\X\\X
+flags: 
+subject: \u{1F1E6}\u{1F1E7}
+expect: nomatch
+
+pattern: \\X\\X
+flags: 
+subject: \u{1F1E6}\u{1F1E7}\u{1F1E8}
+expect: 0-12
+
+pattern: \\X\\X
+flags: 
+subject: \u{1F468}\u200D\u{1F469}
+expect: nomatch
+
+pattern: \\X\\X
+flags: 
+subject: a\r\nb
+expect: 0-3
+
+pattern: \\X\\X
+flags: 
+subject: a\rb
+expect: 0-2
+
+pattern: \\X\\X
+flags: 
+subject: a\nb
+expect: 0-2
+
+pattern: \\X\\X
+flags: 
+subject: Mr. Smith left.  He did.
+expect: 0-2
+
+pattern: \\X\\X
+flags: 
+subject: subtract .5 now
+expect: 0-2
+
+pattern: \\X\\X
+flags: 
+subject: x-y
+expect: 0-2
+
+pattern: \\X\\X
+flags: 
+subject: a\u00ADy
+expect: 0-3
+
+pattern: \\X\\X
+flags: 
+subject: 12.5%
+expect: 0-2
+
+pattern: \\X\\X
+flags: 
+subject: $12
+expect: 0-2
+
+pattern: \\X\\X
+flags: 
+subject: \u65E5\u672C\u8A9E\u3002\u6B21
+expect: 0-6
+
+pattern: \\X\\X
+flags: 
+subject: x\u200Bz
+expect: 0-4
+
+pattern: \\X\\X
+flags: 
+subject: x\u00A0z
+expect: 0-3
+
+pattern: \\X\\X
+flags: 
+subject: x\u2060z
+expect: 0-4
+
+pattern: \\X\\X
+flags: 
+subject: can't stop
+expect: 0-2
+
+pattern: \\X\\X
+flags: 
+subject: \u05D0-\u05D1
+expect: 0-3
+
+pattern: a?\\X
+flags: 
+subject: 
+expect: nomatch
+
+pattern: a?\\X
+flags: 
+subject: x
+expect: 0-1
+
+pattern: a?\\X
+flags: 
+subject: xy
+expect: 0-1
+
+pattern: a?\\X
+flags: 
+subject: x y
+expect: 0-1
+
+pattern: a?\\X
+flags: 
+subject: e\u0301
+expect: 0-3
+
+pattern: a?\\X
+flags: 
+subject: xe\u0301y
+expect: 0-1
+
+pattern: a?\\X
+flags: 
+subject: \u1100\u1161\u11A8
+expect: 0-9
+
+pattern: a?\\X
+flags: 
+subject: \u{1F1E6}\u{1F1E7}
+expect: 0-8
+
+pattern: a?\\X
+flags: 
+subject: \u{1F1E6}\u{1F1E7}\u{1F1E8}
+expect: 0-8
+
+pattern: a?\\X
+flags: 
+subject: \u{1F468}\u200D\u{1F469}
+expect: 0-11
+
+pattern: a?\\X
+flags: 
+subject: a\r\nb
+expect: 0-3
+
+pattern: a?\\X
+flags: 
+subject: a\rb
+expect: 0-2
+
+pattern: a?\\X
+flags: 
+subject: a\nb
+expect: 0-2
+
+pattern: a?\\X
+flags: 
+subject: Mr. Smith left.  He did.
+expect: 0-1
+
+pattern: a?\\X
+flags: 
+subject: subtract .5 now
+expect: 0-1
+
+pattern: a?\\X
+flags: 
+subject: x-y
+expect: 0-1
+
+pattern: a?\\X
+flags: 
+subject: a\u00ADy
+expect: 0-3
+
+pattern: a?\\X
+flags: 
+subject: 12.5%
+expect: 0-1
+
+pattern: a?\\X
+flags: 
+subject: $12
+expect: 0-1
+
+pattern: a?\\X
+flags: 
+subject: \u65E5\u672C\u8A9E\u3002\u6B21
+expect: 0-3
+
+pattern: a?\\X
+flags: 
+subject: x\u200Bz
+expect: 0-1
+
+pattern: a?\\X
+flags: 
+subject: x\u00A0z
+expect: 0-1
+
+pattern: a?\\X
+flags: 
+subject: x\u2060z
+expect: 0-1
+
+pattern: a?\\X
+flags: 
+subject: can't stop
+expect: 0-1
+
+pattern: a?\\X
+flags: 
+subject: \u05D0-\u05D1
+expect: 0-2
+
+pattern: (?s)^\\X$
+flags: 
+subject: 
+expect: nomatch
+
+pattern: (?s)^\\X$
+flags: 
+subject: x
+expect: 0-1
+
+pattern: (?s)^\\X$
+flags: 
+subject: xy
+expect: nomatch
+
+pattern: (?s)^\\X$
+flags: 
+subject: x y
+expect: nomatch
+
+pattern: (?s)^\\X$
+flags: 
+subject: e\u0301
+expect: 0-3
+
+pattern: (?s)^\\X$
+flags: 
+subject: xe\u0301y
+expect: nomatch
+
+pattern: (?s)^\\X$
+flags: 
+subject: \u1100\u1161\u11A8
+expect: 0-9
+
+pattern: (?s)^\\X$
+flags: 
+subject: \u{1F1E6}\u{1F1E7}
+expect: 0-8
+
+pattern: (?s)^\\X$
+flags: 
+subject: \u{1F1E6}\u{1F1E7}\u{1F1E8}
+expect: nomatch
+
+pattern: (?s)^\\X$
+flags: 
+subject: \u{1F468}\u200D\u{1F469}
+expect: 0-11
+
+pattern: (?s)^\\X$
+flags: 
+subject: a\r\nb
+expect: nomatch
+
+pattern: (?s)^\\X$
+flags: 
+subject: a\rb
+expect: nomatch
+
+pattern: (?s)^\\X$
+flags: 
+subject: a\nb
+expect: nomatch
+
+pattern: (?s)^\\X$
+flags: 
+subject: Mr. Smith left.  He did.
+expect: nomatch
+
+pattern: (?s)^\\X$
+flags: 
+subject: subtract .5 now
+expect: nomatch
+
+pattern: (?s)^\\X$
+flags: 
+subject: x-y
+expect: nomatch
+
+pattern: (?s)^\\X$
+flags: 
+subject: a\u00ADy
+expect: nomatch
+
+pattern: (?s)^\\X$
+flags: 
+subject: 12.5%
+expect: nomatch
+
+pattern: (?s)^\\X$
+flags: 
+subject: $12
+expect: nomatch
+
+pattern: (?s)^\\X$
+flags: 
+subject: \u65E5\u672C\u8A9E\u3002\u6B21
+expect: nomatch
+
+pattern: (?s)^\\X$
+flags: 
+subject: x\u200Bz
+expect: nomatch
+
+pattern: (?s)^\\X$
+flags: 
+subject: x\u00A0z
+expect: nomatch
+
+pattern: (?s)^\\X$
+flags: 
+subject: x\u2060z
+expect: nomatch
+
+pattern: (?s)^\\X$
+flags: 
+subject: can't stop
+expect: nomatch
+
+pattern: (?s)^\\X$
+flags: 
+subject: \u05D0-\u05D1
+expect: nomatch
+
+pattern: \\X+
+flags: 
+subject: 
+expect: nomatch
+
+pattern: \\X+
+flags: 
+subject: x
+expect: 0-1
+
+pattern: \\X+
+flags: 
+subject: xy
+expect: 0-2
+
+pattern: \\X+
+flags: 
+subject: x y
+expect: 0-3
+
+pattern: \\X+
+flags: 
+subject: e\u0301
+expect: 0-3
+
+pattern: \\X+
+flags: 
+subject: xe\u0301y
+expect: 0-5
+
+pattern: \\X+
+flags: 
+subject: \u1100\u1161\u11A8
+expect: 0-9
+
+pattern: \\X+
+flags: 
+subject: \u{1F1E6}\u{1F1E7}
+expect: 0-8
+
+pattern: \\X+
+flags: 
+subject: \u{1F1E6}\u{1F1E7}\u{1F1E8}
+expect: 0-12
+
+pattern: \\X+
+flags: 
+subject: \u{1F468}\u200D\u{1F469}
+expect: 0-11
+
+pattern: \\X+
+flags: 
+subject: a\r\nb
+expect: 0-4
+
+pattern: \\X+
+flags: 
+subject: a\rb
+expect: 0-3
+
+pattern: \\X+
+flags: 
+subject: a\nb
+expect: 0-3
+
+pattern: \\X+
+flags: 
+subject: Mr. Smith left.  He did.
+expect: 0-24
+
+pattern: \\X+
+flags: 
+subject: subtract .5 now
+expect: 0-15
+
+pattern: \\X+
+flags: 
+subject: x-y
+expect: 0-3
+
+pattern: \\X+
+flags: 
+subject: a\u00ADy
+expect: 0-4
+
+pattern: \\X+
+flags: 
+subject: 12.5%
+expect: 0-5
+
+pattern: \\X+
+flags: 
+subject: $12
+expect: 0-3
+
+pattern: \\X+
+flags: 
+subject: \u65E5\u672C\u8A9E\u3002\u6B21
+expect: 0-15
+
+pattern: \\X+
+flags: 
+subject: x\u200Bz
+expect: 0-5
+
+pattern: \\X+
+flags: 
+subject: x\u00A0z
+expect: 0-4
+
+pattern: \\X+
+flags: 
+subject: x\u2060z
+expect: 0-5
+
+pattern: \\X+
+flags: 
+subject: can't stop
+expect: 0-10
+
+pattern: \\X+
+flags: 
+subject: \u05D0-\u05D1
+expect: 0-5
+
+# Left out, with the reason each time. See EXCLUSIONS in
+# tools/corpus/make_boundary_vectors.py.
+#   34 rows: GB9c, the Indic conjunct break, is Unicode 15.1 and Perl has 15.0
+#   6 rows: LB15c, the decimal mark after a space, is Unicode 16
+#   6 rows: LB21a's HH class, the unambiguous hyphen, is Unicode 17
+#   6 rows: perl finds no \b{lb} at all in a one-character subject, though the boundary is there: `.\b{lb}` matches at that same position. A defect in the oracle's unanchored search, not a rule

@@ -99,6 +99,24 @@ typedef enum {
   GRX_ASSERT_WORD_BOUNDARY,     ///< `\b`; uses the word set.
   GRX_ASSERT_NOT_WORD_BOUNDARY, ///< `\B`; uses the word set.
   GRX_ASSERT_SEARCH_START,      ///< `\G`: where this search attempt began.
+  /**
+   * The four segmentation boundaries, and their negations.
+   *
+   * The only assertions here whose answer is an algorithm rather than a set:
+   * `\b` asks whether the characters either side are in the word class, and
+   * a class is what the instruction carries, but a grapheme cluster boundary
+   * is a dozen rules over the surrounding text and a line break is thirty.
+   * They still consume nothing and carry no state, which is what keeps a
+   * program containing one runnable by every engine.
+   */
+  GRX_ASSERT_GRAPHEME_BOUNDARY,
+  GRX_ASSERT_NOT_GRAPHEME_BOUNDARY,
+  GRX_ASSERT_WORD_SEG_BOUNDARY,
+  GRX_ASSERT_NOT_WORD_SEG_BOUNDARY,
+  GRX_ASSERT_SENTENCE_BOUNDARY,
+  GRX_ASSERT_NOT_SENTENCE_BOUNDARY,
+  GRX_ASSERT_LINE_BOUNDARY,
+  GRX_ASSERT_NOT_LINE_BOUNDARY,
   GRX_ASSERT_COUNT              ///< Closes the enum; not an assertion.
 } GRX_AssertKind;
 

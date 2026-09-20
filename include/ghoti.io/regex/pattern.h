@@ -76,6 +76,16 @@ typedef enum {
   GRX_NODE_SCAN,
   GRX_NODE_KEEP,        ///< `\K`, which resets the reported match start.
   GRX_NODE_BRANCH_RESET, ///< `(?|...)`, which renumbers per alternative.
+  /**
+   * `\X`: one extended grapheme cluster.
+   *
+   * A node rather than an expansion in the parser, because what a cluster is
+   * belongs to the dialect's Unicode rules and not to its spelling. Lowering
+   * turns it into "one character, then every following character that is not
+   * a cluster boundary", which is the definition - so `\X` and `\b{gcb}`
+   * are one algorithm and cannot come apart.
+   */
+  GRX_NODE_GRAPHEME,
   GRX_NODE_COUNT        ///< Closes the enum; not a node kind.
 } GRX_NodeKind;
 

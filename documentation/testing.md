@@ -721,6 +721,38 @@ This is the corpus that sets `max_steps` and `max_backtrack`
 prefilters of Phase 8, which must not make a pathological pair pathological
 again by bypassing the engine that handled it.
 
+## 10.2 The segmentation conformance files
+
+`tests/unit/test_break.cpp` runs the Unicode Consortium's own data for the
+four boundary algorithms: `GraphemeBreakTest.txt` (766 lines),
+`WordBreakTest.txt` (1,944), `SentenceBreakTest.txt` (512) and
+`LineBreakTest.txt` (19,338). Each line is a string with `÷` where a boundary
+falls and `×` where one does not, so a line asserts something about *every*
+position rather than about one of them.
+
+This is the strongest gate in the suite by a distance, and it is the reason
+these algorithms are in rather than approximated. The sixteen `\b{...}`
+records the Perl corpus contributed all use the **empty subject**: they would
+pass against an implementation that was wrong everywhere else. Sentences
+failed four cases on the first run, and the bug was real - UAX #29 §6.2's
+limit on the ignore rules, which made an `Extend` after a line feed part of
+the line feed and ended a sentence that had already ended.
+
+The files are not committed (`third_party/ucd/` is excluded), so a checkout
+without them skips with a message rather than failing, as
+`make check-unicode-tables` does.
+
+`tests/data/vectors/perl/boundaries.rxt` is the second gate and answers a
+different question: not where a boundary falls, but what the *dialect* does
+with it. Generated from Perl by `tools/corpus/make_boundary_vectors.py`.
+Perl 5.40.1 carries UCD 15.0.0 and these tables are 17.0.0, so rows whose
+answer changed between those editions are excluded **by name**, with the rule
+and the version beside each - and so is one row where the oracle is simply
+wrong: Perl finds no `\b{lb}` anywhere in a one-character subject, though
+`.\b{lb}` matches at that very position. Excluding a row for a reason that
+is written down and checkable is not the same as excluding whatever failed,
+and the difference is the whole value of the file.
+
 ## 10.1 The limits report
 
 `make check-limits` runs `tools/limits/measure.py`, which is the other half

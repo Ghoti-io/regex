@@ -32,6 +32,10 @@ static const char * assert_name(uint8_t kind) {
     "start-subject", "end-subject", "end-before-newline", "start-line",
     "start-line-interior", "end-line", "word-boundary",
     "not-word-boundary", "search-start",
+    "grapheme-boundary", "not-grapheme-boundary",
+    "word-seg-boundary", "not-word-seg-boundary",
+    "sentence-boundary", "not-sentence-boundary",
+    "line-boundary", "not-line-boundary",
   };
   return kind < GRX_ASSERT_COUNT ? names[kind] : "?";
 }

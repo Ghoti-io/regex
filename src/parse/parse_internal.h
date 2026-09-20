@@ -66,6 +66,21 @@ typedef enum {
   GRX_ANCHOR_END_BUFFER,      ///< GNU's `\'`.
   GRX_ANCHOR_WORD_START,      ///< GNU's `\<`.
   GRX_ANCHOR_WORD_END,        ///< GNU's `\>`.
+  /**
+   * Perl's segmentation boundaries: `\b{gcb}` and its three relatives.
+   *
+   * Written out one spelling per constant rather than a kind plus a negated
+   * flag, because that is how the rest of this enum is written and how
+   * lowering reads it: `\b` and `\B` are two constants here too.
+   */
+  GRX_ANCHOR_GRAPHEME_BOUNDARY,     ///< `\b{gcb}`, and its alias `\b{g}`.
+  GRX_ANCHOR_NOT_GRAPHEME_BOUNDARY, ///< `\B{gcb}`, `\B{g}`.
+  GRX_ANCHOR_WORD_SEG_BOUNDARY,     ///< `\b{wb}`.
+  GRX_ANCHOR_NOT_WORD_SEG_BOUNDARY, ///< `\B{wb}`.
+  GRX_ANCHOR_SENTENCE_BOUNDARY,     ///< `\b{sb}`.
+  GRX_ANCHOR_NOT_SENTENCE_BOUNDARY, ///< `\B{sb}`.
+  GRX_ANCHOR_LINE_BOUNDARY,         ///< `\b{lb}`.
+  GRX_ANCHOR_NOT_LINE_BOUNDARY,     ///< `\B{lb}`.
   GRX_ANCHOR_COUNT            ///< Closes the enum; not an anchor.
 } GRX_AnchorKind;
 

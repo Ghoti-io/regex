@@ -1,7 +1,8 @@
 # Unicode data
 
-**Status:** built, except the properties of strings and the grapheme rules
-(WP-12). The codec, the tables, both foldings and both name resolvers are in
+**Status:** built, except the properties of strings (WP-12). The codec, the
+tables, both foldings, the four segmentation algorithms and both name
+resolvers are in
 `src/unicode`; `make check-unicode-tables` proves the committed tables are
 what the generator produces. Owned by [design.md](design.md) §5.
 
@@ -86,7 +87,9 @@ derived in the generator from the ranges, never written by hand.
 | POSIX classes `[:alpha:]` ... `[:xdigit:]`, ASCII and Unicode definitions | derived from the above per the profile | `[[:alpha:]]` |
 | Word characters: ASCII, Unicode (`\p{L}\p{N}\p{M}\p{Pc}` plus join controls, per UTS #18), and ECMAScript's `iu` set (ASCII plus U+017F and U+212A) | derived | `\w`, `\b` per dialect |
 | Properties of strings for ECMAScript `v`: `RGI_Emoji`, `Basic_Emoji`, `Emoji_Keycap_Sequence`, `RGI_Emoji_Flag_Sequence`, `RGI_Emoji_Modifier_Sequence`, `RGI_Emoji_Tag_Sequence`, `RGI_Emoji_ZWJ_Sequence` | `emoji-sequences.txt`, `emoji-zwj-sequences.txt` | `\p{RGI_Emoji}` in `v` mode, which matches a *string* and so lowers to an alternation of literal sequences, not a class |
-| Extended grapheme cluster rules | `GraphemeBreakProperty.txt`, `emoji-data.txt` | `\X`, PCRE2 and Perl; later tier |
+| Grapheme cluster breaks | `GraphemeBreakProperty.txt`, `emoji-data.txt`, `DerivedCoreProperties.txt` (`InCB`) | `\X` and `\b{gcb}`, UAX #29 |
+| Word and sentence breaks | `WordBreakProperty.txt`, `SentenceBreakProperty.txt` | `\b{wb}`, `\b{sb}`, UAX #29 |
+| Line break opportunities | `LineBreak.txt`, `EastAsianWidth.txt` | `\b{lb}`, UAX #14 |
 
 The two emoji sequence files are not in the UCD. UTS #51 publishes them
 beside it, at `Public/<version>/emoji/` rather than `Public/<version>/ucd/`,
@@ -184,6 +187,48 @@ what it matched. How that is compiled - a graph over the positions of the
 folded string, emitted as ordinary `SPLIT`, `CLASS` and `JMP` instructions -
 is [design.md](design.md) §5.2.
 
+## 5.1 Segmentation
+
+Four algorithms, one entry point (`grx_unicode_break_at`), and one question:
+is there a boundary at this byte offset? Perl spells them `\b{gcb}`,
+`\b{wb}`, `\b{sb}` and `\b{lb}`; `\X` is built out of the first.
+
+| Boundary | Standard | Rules | Data |
+| --- | --- | --- | --- |
+| Grapheme cluster | UAX #29 §3.1.1 | GB1–GB999 | `Grapheme_Cluster_Break`, `Extended_Pictographic`, `Indic_Conjunct_Break` |
+| Word | UAX #29 §4.1 | WB1–WB999 | `Word_Break`, `Extended_Pictographic` |
+| Sentence | UAX #29 §5.1 | SB1–SB998 | `Sentence_Break` |
+| Line | UAX #14 rev. 55 | LB1–LB31 | `Line_Break`, `East_Asian_Width`, General_Category |
+
+Three things are done in the generator rather than at match time, because
+they are facts about a code point and not about a position. **LB1** resolves
+`AI`, `SG` and `XX` to `AL`, `SA` to `CM` or `AL` by General_Category, and
+`CJ` to `NS`, so the table an engine reads is the one the rules are written
+against. **`QU` is split** into `QU_PI` and `QU_PF`, because LB15a, LB15b and
+LB19 ask which kind of quotation mark it is. **`$EastAsian`** becomes a flag,
+because LB19a and LB30 ask it of any character.
+
+Two of UAX #29's rules are easy to get wrong and are worth naming. §6.2 says
+the "ignore" rules do not apply after `sot`, `CR`, `LF` or `Newline` (and
+after `Sep` for sentences): an `Extend` following a line feed is its own
+character, not part of the line feed. And `GB9c`, the Indic conjunct break,
+is Unicode 15.1 and newer than most implementations.
+
+**The gate is the Unicode Consortium's own conformance data.**
+`tests/unit/test_break.cpp` runs `GraphemeBreakTest.txt`,
+`WordBreakTest.txt`, `SentenceBreakTest.txt` and `LineBreakTest.txt` - 22,560
+lines between them - and checks *every* position in each, not one of them.
+The files are not committed, so a checkout without `third_party/ucd/` skips
+with a message the way `make check-unicode-tables` does.
+
+The second gate is `tests/data/vectors/perl/boundaries.rxt`, generated from
+Perl by `tools/corpus/make_boundary_vectors.py`. It answers a different
+question - what the *dialect* does with the ends of the subject, with an
+empty subject, and with the negated spellings. Perl 5.40.1 carries UCD 15.0.0
+where these tables are 17.0.0, so the rows whose answer changed between those
+editions are excluded by name, each with the rule and the version that
+introduced it written beside it.
+
 ## 6. Property names
 
 Two resolvers over the same alias tables:
@@ -230,8 +275,9 @@ Two resolvers over the same alias tables:
 - **Collation.** POSIX `[[.ch.]]` beyond a single character, and
   `[[=e=]]` equivalence classes, are `GRX_ERR_UNSUPPORTED`; nothing here
   has a collation order.
-- **Bidi, line breaking, segmentation** other than the grapheme rules
-  `\X` needs.
+- **Bidi and the other segmentation properties.** Bidi_Class and
+  Bidi_Paired_Bracket are not generated; no dialect's pattern language
+  reaches them.
 - **Locale.** There is no locale. A dialect whose reference implementation
   consults one is treated as running in a Unicode locale, and that is
   recorded as a deviation on its [dialects.md](dialects.md) row.
