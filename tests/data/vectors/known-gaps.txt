@@ -17,8 +17,6 @@
 # that begins "not yet classified" is one nobody has looked at, and is meant
 # to be read as the admission it is.
 pcre		(?(*script_run:xxx)zzz)		`(*script_run:`: refused, it constrains the body and a group does not
-pcre		(a)(?(DEFINE)(b))(?2){0,1999}?(?2)		a repeat of a subroutine call: the reference compiles one copy and this library expands it past max_program_size
-pcre		(a)(?2){0,1999}?(b)		a repeat of a subroutine call: the reference compiles one copy and this library expands it past max_program_size
 pcre		[a-[.xxx.]]+		POSIX collating element: refused, there is no locale here
 pcre		[a-[=xxx=]]+		POSIX collating element: refused, there is no locale here
 pcre	J	(?<A>[ab])...(?<=\\k'A')(?<A>)z		a backreference to a duplicated name inside a lookbehind: the reference will not bound one and this library bounds it by the first group of that name
@@ -26,8 +24,6 @@ perl		(((aa){2})+)	aaaaaaaaaa	Perl's capture state after a failed attempt: `((a)
 perl		(((a{2}){2})+)	aaaaaaaaaa	Perl's capture state after a failed attempt: `((a)|b)+` against "ab" reports group 2 unset in Perl and "a" in PCRE2, and the rule behind that is not one this library can state - see the four probes in documentation/dialects.md section 5.5
 perl		((?(1)aa|b))+	baaaa	Perl's capture state after a failed attempt: a conditional testing a group a later iteration entered and failed - see documentation/dialects.md section 5.5
 perl		((?(1)a|b))+	baaa	Perl's capture state after a failed attempt: a conditional testing a group a later iteration entered and failed - see documentation/dialects.md section 5.5
-perl		((?|(?<a>a)(?-1)|(?<b>b)(?-1)|(?<c>c)(?-1)))	bb 	branch reset: a name or a relative call inside one means the branch it was written in, and this library resolves both to the number all the branches share
-perl		((?|(?<a>a)(?-1)|(?<b>b)(?-1)|(?<c>c)(?-1)))	cc 	branch reset: a name or a relative call inside one means the branch it was written in, and this library resolves both to the number all the branches share
 perl		((\\3|b)\\2(a)){2,}	bbaababbabaaaaabbaaaabba	a backreference to the group it is written inside: Perl reads what the previous iteration captured and this library reads nothing - see documentation/dialects.md section 5.5
 perl		(.*?)a(?!(a+)b\\2c)	baaabaac	Perl's capture state after a failed attempt: `((a)|b)+` against "ab" reports group 2 unset in Perl and "a" in PCRE2, and the rule behind that is not one this library can state - see the four probes in documentation/dialects.md section 5.5
 perl		(?(DEFINE)(?<a>(?:[ab]|[cd](*ACCEPT)|[ef])g))(?&a)(?&a)	agcq	Perl's capture state after a failed attempt: a conditional testing a group a later iteration entered and failed - see documentation/dialects.md section 5.5
@@ -40,9 +36,8 @@ perl		(?<=([cd](*ACCEPT)|x)gggg)blrph	xggggblrph	`(*ACCEPT)` inside a lookbehind
 perl		(?=foo)(?<=(a??))	afoo	a capture inside a variable-length lookbehind: the reference reports the span of a longer body than this library tries first
 perl		(?=foo)(?<=(|a|aa))	aafoo	a capture inside a variable-length lookbehind: the reference reports the span of a longer body than this library tries first
 perl		(?iu)(?<=\\xdf)hbase	sshbase	full case folding: implemented as simple folding, a deviation recorded in design.md section 10
-perl		(?|(?<a>a)|(?<b>b))(?(<a>)x|y)\\1	bxb 	branch reset: a name or a relative call inside one means the branch it was written in, and this library resolves both to the number all the branches share
-perl		(?|(?<a>a)|(?<b>b))(?(<a>)x|y)\\1	byb 	branch reset: a name or a relative call inside one means the branch it was written in, and this library resolves both to the number all the branches share
-perl		(?|(?<a>a)|(?<b>b))\\1(?&a)(?&b)	bbab 	branch reset: a name or a relative call inside one means the branch it was written in, and this library resolves both to the number all the branches share
+perl		(?|(?<a>a)|(?<b>b))(?(<a>)x|y)\\1	bxb 	a conditional testing a name a branch reset shares: `(?(<a>)` asks whether the group *written* as `a` participated, and the branches of a `(?|...)` have one capture slot between them - so the slot can say that the number participated and not which definition set it. A subroutine call now names a definition rather than a number; a conditional would need the participation to be per definition too, which is state no engine here carries
+perl		(?|(?<a>a)|(?<b>b))(?(<a>)x|y)\\1	byb 	a conditional testing a name a branch reset shares: `(?(<a>)` asks whether the group *written* as `a` participated, and the branches of a `(?|...)` have one capture slot between them - so the slot can say that the number participated and not which definition set it. A subroutine call now names a definition rather than a number; a conditional would need the participation to be per definition too, which is state no engine here carries
 perl		X(?!b+(?!(c+)*(?!(c+)*d))).*X	aXbbbbbbbcccccccccccccaaaX	Perl's capture state after a failed attempt: `((a)|b)+` against "ab" reports group 2 unset in Perl and "a" in PCRE2, and the rule behind that is not one this library can state - see the four probes in documentation/dialects.md section 5.5
 perl		\\B{ gcb }		`\b{wb}` and kin: Perl's Unicode boundary escapes, not implemented
 perl		\\B{ lb }		`\b{wb}` and kin: Perl's Unicode boundary escapes, not implemented

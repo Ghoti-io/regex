@@ -196,11 +196,20 @@ typedef struct GRX_ClassItem {
  * | ANCHOR | GRX_AnchorKind | - | - |
  * | LOOKAROUND | GRX_LookKind | - | one child |
  * | CONDITIONAL | GRX_CondKind | group number or name offset | HAS_ELSE; children are the condition (for ASSERTION), then, else |
- * | RECURSE | target group number, 0 for the whole pattern | name offset | NAMED, RELATIVE |
+ * | RECURSE | target group number, 0 for the whole pattern | name offset when NAMED, else the definition's own byte offset or GRX_INDEX_NONE | NAMED, RELATIVE |
  * | CONTROL | GRX_VerbKind | argument name offset, or GRX_INDEX_NONE | - |
  * | OPTIONS | options to set | options to clear | SCOPED; one child when scoped |
  * | CLASS_OP | GRX_ClassOpKind | - | children are the operands |
  * | STRING_SET | first string in `strings` | count of strings | - |
+ *
+ * RECURSE's `b` carries two things because a call names a *definition*, not
+ * a number, and the two spellings say so differently. `(?&b)` names one and
+ * the name is what has to survive, because the group it names may be written
+ * later. `(?-1)` names one by position, and a `(?|...)` can give several
+ * definitions the same number - so what survives there is where the
+ * definition was written, which is the only thing that tells them apart.
+ * CONDITIONAL's `b` is shared between a number and a name for the same
+ * reason: one field, and a flag that says how to read it.
  *
  * `\R` is a STRING_SET: it matches one of a fixed set of sequences, which is
  * what that kind is for. `\X` has no representation here yet - it is an

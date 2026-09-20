@@ -126,6 +126,14 @@ typedef struct {
   uint32_t name;       ///< ESC_PROPERTY, ESC_BACKREF, ESC_SUBROUTINE.
   uint32_t group;      ///< ESC_BACKREF, ESC_SUBROUTINE: a number, or 0.
   int relative;        ///< ESC_BACKREF, ESC_SUBROUTINE: `\g{-1}`.
+  /**
+   * ESC_SUBROUTINE: where the definition this call re-enters was written.
+   *
+   * GRX_NPOS when the number is all there is to go on. See
+   * definition_offset(): one number can have several definitions and a
+   * relative call means the nearest of them, not the first.
+   */
+  size_t definition;
   GRX_AnchorKind anchor; ///< ESC_ANCHOR.
   size_t offset;       ///< Where the backslash was.
   size_t length;       ///< Bytes the whole escape spans.
@@ -655,6 +663,42 @@ static GRX_Result resolve_relative(GRX_Parser * parser, int sign,
 }
 
 /**
+ * Where the group currently numbered `group` was written.
+ *
+ * A `(?|...)` gives one number several definitions, and a subroutine call
+ * written inside one means the definition in its own branch:
+ * `(?|(?<a>a)(?-1)|(?<b>b)(?-1))` calls `a` from the first branch and `b`
+ * from the second, though both calls resolve to the same number. So the
+ * number alone cannot say what a call re-enters, and this says which
+ * definition is the current one where the call stands.
+ *
+ * Read out of the tree rather than counted a second time: the nodes are
+ * appended in the order they are opened, so the last GROUP node carrying
+ * this number is the one most recently opened, which is what "relative to
+ * where it stands" means.
+ *
+ * @return The byte offset of its opening parenthesis, or GRX_NPOS when
+ *   nothing has opened that number yet - a forward `(?+1)`, which has no
+ *   definition to point at and falls back to the number.
+ */
+static size_t definition_offset(GRX_Parser * parser, uint32_t group) {
+  if (!group) {
+    return GRX_NPOS;
+  }
+
+  for (size_t i = parser->pattern->nodes.count; i > 0; i--) {
+    const GRX_Node * node
+        = grx_pattern_node(parser->pattern, (uint32_t)(i - 1));
+    if (node && node->kind == GRX_NODE_GROUP
+        && (node->flags & GRX_NODE_CAPTURING) && node->a == group) {
+      return node->offset < GRX_INDEX_NONE ? node->offset : GRX_NPOS;
+    }
+  }
+
+  return GRX_NPOS;
+}
+
+/**
  * Read a `\g` reference, the `g` already consumed.
  *
  * Five spellings and two meanings. `\g1`, `\g{1}`, `\g{-1}` and `\g{name}`
@@ -709,7 +753,12 @@ static GRX_Result read_g_reference(GRX_Parser * parser, size_t start,
     out->name = GRX_INDEX_NONE;
     out->relative = sign != 0;
     if (sign) {
-      return resolve_relative(parser, sign, value, start, &out->group);
+      GRX_Result result
+          = resolve_relative(parser, sign, value, start, &out->group);
+      if (result == GRX_OK && subroutine) {
+        out->definition = definition_offset(parser, out->group);
+      }
+      return result;
     }
     if (!value) {
       // `\g0` is an error; `\g<0>` is a call to the whole pattern, which is
@@ -830,6 +879,7 @@ static GRX_Result read_escape(GRX_Parser * parser, int in_class, Escape * out) {
     .name = GRX_INDEX_NONE,
     .group = 0,
     .relative = 0,
+    .definition = GRX_NPOS,
     .anchor = GRX_ANCHOR_CARET,
     .offset = start,
     .length = 0,
@@ -1202,9 +1252,15 @@ static GRX_Result pcre_atom_escape(GRX_Parser * parser, uint32_t * out_node) {
       if (result == GRX_OK) {
         GRX_Node * node = grx_pattern_node(parser->pattern, *out_node);
         node->a = escape.group;
+        // `b` is the name where there is one and the definition's own offset
+        // otherwise, which is the same split read_recursion() writes and the
+        // NAMED flag is what tells them apart.
         node->b = escape.name;
         if (escape.name != GRX_INDEX_NONE) {
           node->flags |= GRX_NODE_NAMED;
+        }
+        else if (escape.definition != GRX_NPOS) {
+          node->b = (uint32_t)escape.definition;
         }
         if (escape.relative) {
           node->flags |= GRX_NODE_RELATIVE;
@@ -3061,6 +3117,10 @@ static GRX_Result read_recursion(GRX_Parser * parser, size_t start,
         return result;
       }
       out->flags |= GRX_NODE_RELATIVE;
+      size_t where = definition_offset(parser, out->a);
+      if (where != GRX_NPOS) {
+        out->b = (uint32_t)where;
+      }
     }
     else {
       if (value > (uint64_t)parser->group_count) {

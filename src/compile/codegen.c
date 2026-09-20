@@ -62,12 +62,37 @@ typedef struct {
    * it must not execute.
    */
   uint32_t called[GRX_CODEGEN_MAX_CALLED];   ///< Group numbers, in order.
+  /**
+   * Which definition of each, as the byte offset it was written at.
+   *
+   * A group number is not a program: a `(?|...)` gives one number a
+   * definition per branch, and a call names one of them. So the key here is
+   * the pair, and two calls to different definitions of the same number get
+   * a block each rather than sharing the first one's.
+   */
+  uint32_t called_definition[GRX_CODEGEN_MAX_CALLED];
   uint32_t entry[GRX_CODEGEN_MAX_CALLED];    ///< Their block starts.
   size_t called_count;
-  uint32_t fixups[GRX_CODEGEN_MAX_CALLED * 4]; ///< CALL instruction indices.
-  uint32_t fixup_group[GRX_CODEGEN_MAX_CALLED * 4];
-  size_t fixup_count;
+  /**
+   * One entry per CALL instruction waiting for its block's address.
+   *
+   * An arena rather than an array, and capped by max_program_size rather
+   * than by a constant of its own. There is one of these per CALL and a CALL
+   * is an instruction, so the program's own cap already bounds them - and a
+   * fixed array here made `(a)(?2){0,1999}?(b)` refuse with "program is
+   * larger than max_program_size" over a program of four thousand
+   * instructions and a cap of two hundred thousand. A limit that names
+   * something the caller cannot change is worse than no limit.
+   */
+  GRX_Arena fixups;
 } Codegen;
+
+/** One CALL waiting to be pointed at the block for its target. */
+typedef struct {
+  uint32_t call;       ///< The CALL instruction's index.
+  uint32_t group;      ///< The group it re-enters.
+  uint32_t definition; ///< Which definition of it; see call_target().
+} Fixup;
 
 static GRX_Result gen(Codegen * codegen, uint32_t node_index);
 
@@ -574,11 +599,6 @@ static GRX_Result gen_cond(Codegen * codegen, const GRX_IRNode * node) {
  * wrapping this node in GRX_IR_ATOMIC where it applies.
  */
 static GRX_Result gen_call(Codegen * codegen, const GRX_IRNode * node) {
-  if (codegen->fixup_count
-      >= sizeof(codegen->fixups) / sizeof(*codegen->fixups)) {
-    return fail(codegen, GRX_DIAG_LIMIT_PROGRAM_SIZE, node);
-  }
-
   uint32_t call = GRX_INDEX_NONE;
   GRX_Result result = emit(
       codegen, GRX_OP_CALL, 0, GRX_INDEX_NONE, node->a, node, &call);
@@ -586,9 +606,14 @@ static GRX_Result gen_call(Codegen * codegen, const GRX_IRNode * node) {
     return result;
   }
 
-  codegen->fixups[codegen->fixup_count] = call;
-  codegen->fixup_group[codegen->fixup_count] = node->a;
-  codegen->fixup_count++;
+  Fixup fixup = {.call = call, .group = node->a, .definition = node->b};
+  result = grx_arena_append(&codegen->fixups, &fixup, NULL);
+  if (result != GRX_OK) {
+    return fail(codegen,
+        result == GRX_ERR_LIMIT ? GRX_DIAG_LIMIT_PROGRAM_SIZE
+                                : GRX_DIAG_OUT_OF_MEMORY,
+        node);
+  }
   return GRX_OK;
 }
 
@@ -840,15 +865,23 @@ static GRX_Result copy_classes(
  * the capture node with that number, found by a scan rather than by an index:
  * the numbers are the pattern's, not the arena's, and a table mapping one to
  * the other would be a second thing to keep in step with lowering.
+ *
+ * `definition` is the byte offset the wanted one was written at, or
+ * GRX_INDEX_NONE for the first of them - which is what a call by number
+ * means, and all a pattern without a `(?|...)` ever has. Where it is given,
+ * a repeat that expanded the group into several copies still matches: the
+ * copies share the offset they came from, and the first is as good as any.
  */
-static uint32_t call_target(const GRX_IR * ir, uint32_t group) {
+static uint32_t call_target(
+    const GRX_IR * ir, uint32_t group, uint32_t definition) {
   if (!group) {
     return ir->root;
   }
 
   for (size_t i = 0; i < ir->nodes.count; i++) {
     const GRX_IRNode * node = grx_ir_node(ir, (uint32_t)i);
-    if (node && node->kind == GRX_IR_CAPTURE && node->a == group) {
+    if (node && node->kind == GRX_IR_CAPTURE && node->a == group
+        && (definition == GRX_INDEX_NONE || node->offset == definition)) {
       return (uint32_t)i;
     }
   }
@@ -864,12 +897,19 @@ static uint32_t call_target(const GRX_IR * ir, uint32_t group) {
  * target appears rather than over a list fixed in advance.
  */
 static GRX_Result gen_subroutines(Codegen * codegen) {
-  for (size_t next = 0; next < codegen->fixup_count;) {
-    uint32_t group = codegen->fixup_group[next];
+  for (size_t next = 0; next < codegen->fixups.count;) {
+    const Fixup * fixup = GRX_ARENA_AT(Fixup, &codegen->fixups, next);
+    if (!fixup) {
+      return fail(codegen, GRX_DIAG_INTERNAL, NULL);
+    }
+    uint32_t group = fixup->group;
+    uint32_t definition = fixup->definition;
+    uint32_t call = fixup->call;
 
     size_t known = codegen->called_count;
     for (size_t i = 0; i < codegen->called_count; i++) {
-      if (codegen->called[i] == group) {
+      if (codegen->called[i] == group
+          && codegen->called_definition[i] == definition) {
         known = i;
         break;
       }
@@ -880,7 +920,7 @@ static GRX_Result gen_subroutines(Codegen * codegen) {
           >= sizeof(codegen->called) / sizeof(*codegen->called)) {
         return fail(codegen, GRX_DIAG_LIMIT_PROGRAM_SIZE, NULL);
       }
-      uint32_t target = call_target(codegen->ir, group);
+      uint32_t target = call_target(codegen->ir, group, definition);
       if (target == GRX_INDEX_NONE) {
         return fail(codegen, GRX_DIAG_INVALID_RECURSION, NULL);
       }
@@ -889,6 +929,7 @@ static GRX_Result gen_subroutines(Codegen * codegen) {
       // makes to its own group finds the entry already recorded rather than
       // starting a second copy of it.
       codegen->called[codegen->called_count] = group;
+      codegen->called_definition[codegen->called_count] = definition;
       codegen->entry[codegen->called_count] = here(codegen);
       codegen->called_count++;
 
@@ -904,7 +945,7 @@ static GRX_Result gen_subroutines(Codegen * codegen) {
       continue;
     }
 
-    patch_x(codegen, codegen->fixups[next], codegen->entry[known]);
+    patch_x(codegen, call, codegen->entry[known]);
     next++;
   }
 
@@ -925,22 +966,22 @@ GRX_Result grx_codegen_program(const GRX_IR * ir, const GRX_Limits * limits,
     .registers = 0,
     .no_memo = 0,
     .called = {0},
+    .called_definition = {0},
     .entry = {0},
     .called_count = 0,
     .fixups = {0},
-    .fixup_group = {0},
-    .fixup_count = 0,
   };
+  grx_arena_init(&codegen.fixups, out_program->insts.allocator, sizeof(Fixup),
+      limits->max_program_size, GRX_DIAG_LIMIT_PROGRAM_SIZE);
 
   GRX_Result result = copy_classes(&codegen, &ir->classes);
-  if (result != GRX_OK) {
-    return result;
-  }
 
   // Group 0 is the whole match, so the program brackets everything in its
   // two slots. An engine therefore never special-cases the overall span: it
   // is capture 0 and comes out of the same array as the rest.
-  result = emit(&codegen, GRX_OP_SAVE, 0, 0, 0, NULL, NULL);
+  if (result == GRX_OK) {
+    result = emit(&codegen, GRX_OP_SAVE, 0, 0, 0, NULL, NULL);
+  }
   if (result == GRX_OK && ir->root != GRX_INDEX_NONE) {
     result = gen(&codegen, ir->root);
   }
@@ -956,6 +997,10 @@ GRX_Result grx_codegen_program(const GRX_IR * ir, const GRX_Limits * limits,
     // end of the instruction before it.
     result = gen_subroutines(&codegen);
   }
+
+  // The fixups are scaffolding: every one of them has been spent patching a
+  // CALL by now, and the program keeps nothing that points into them.
+  grx_arena_clear(&codegen.fixups);
   if (result != GRX_OK) {
     return result;
   }

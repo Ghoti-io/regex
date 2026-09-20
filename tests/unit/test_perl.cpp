@@ -1310,6 +1310,37 @@ TEST(Perl, AGroupInsideABranchResetHasNoLengthToMeasure) {
   EXPECT_EQ(compile_result("([ab])...(?<=\\1)z"), GRX_OK);
 }
 
+TEST(Perl, ASubroutineCallNamesADefinitionRatherThanANumber) {
+  // A `(?|...)` gives one number a definition per branch, and they are not
+  // the same program: the three branches below match `a`, `b` and `c`. Which
+  // one a call re-enters is therefore not a question the number can answer,
+  // and the call has to carry where its target was written.
+  //
+  // `(?-1)` means the definition beside it - the group most recently opened
+  // where the call stands - so each branch calls its own and the pattern
+  // matches a doubled letter of any of the three. Resolving it to the number
+  // instead sent all three calls to the first branch's, which matched "aa"
+  // and refused "bb" and "cc".
+  const char * doubled = "((?|(?<a>a)(?-1)|(?<b>b)(?-1)|(?<c>c)(?-1)))";
+  EXPECT_EQ(span_of(doubled, "aa", GRX_SYNTAX_PERL), "0-2");
+  EXPECT_EQ(span_of(doubled, "bb", GRX_SYNTAX_PERL), "0-2");
+  EXPECT_EQ(span_of(doubled, "cc", GRX_SYNTAX_PERL), "0-2");
+  EXPECT_EQ(span_of(doubled, "ab", GRX_SYNTAX_PERL), "nomatch");
+
+  // A name names a definition too, and here the two names are the same
+  // number. `(?&a)` matches `a` and `(?&b)` matches `b`, so "bbab" is the
+  // branch's own `b`, the backreference to it, then one of each.
+  EXPECT_EQ(span_of("(?|(?<a>a)|(?<b>b))\\1(?&a)(?&b)", "bbab",
+                GRX_SYNTAX_PERL),
+      "0-4");
+
+  // Outside a branch reset nothing changes: one number, one definition, and
+  // a call by number still finds it.
+  EXPECT_EQ(span_of("(a|b)(?1)", "ab", GRX_SYNTAX_PERL), "0-2");
+  EXPECT_EQ(span_of("(?<x>a|b)(?&x)", "ba", GRX_SYNTAX_PERL), "0-2");
+  EXPECT_EQ(span_of("(a(?R)?b)", "aabb", GRX_SYNTAX_PERL), "0-4");
+}
+
 int main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

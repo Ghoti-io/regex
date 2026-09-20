@@ -334,6 +334,52 @@ TEST(Limits, EveryEnforcedLimitRefusesWhenTightAndCapsNothingAtZero) {
 }
 
 /**
+ * A call is refused by max_program_size or not at all.
+ *
+ * Every CALL a program holds needs one entry in a list codegen keeps while
+ * it patches them, and that list was a fixed array of a thousand and
+ * twenty-four. `(a)(?2){0,1999}?(b)` - a pcre2test row, and one pcre2 itself
+ * compiles into a single copy with a counter - has one CALL per expanded
+ * iteration, so it overflowed the array and was refused with "program is
+ * larger than max_program_size" over a program of some four thousand
+ * instructions against a cap of two hundred thousand.
+ *
+ * Raising max_program_size did nothing, because max_program_size was not the
+ * limit; nothing a caller could set was. A refusal that names a knob which
+ * does not turn is worse than no limit, which is the sentence the test above
+ * exists for, so this is the same rule applied to a limit that was hiding.
+ */
+TEST(Limits, ARepeatedSubroutineCallIsBoundedByTheProgramAndNothingElse) {
+  GRX_Limits limits;
+  grx_limits_default(&limits);
+
+  GRX_Regex * regex = nullptr;
+  GRX_Error error;
+  grx_error_clear(&error);
+  const char * pattern = "(a)(?2){0,1999}?(b)";
+  ASSERT_EQ(grx_regex_compile_with_allocator(pattern, strlen(pattern),
+                GRX_SYNTAX_PCRE, 0, &limits, nullptr, &error, &regex),
+      GRX_OK)
+      << error.message;
+
+  GRX_Facts facts;
+  grx_regex_facts(regex, &facts);
+  EXPECT_LT(facts.program_size, limits.max_program_size);
+  grx_regex_free(regex);
+
+  // And the cap still binds: set it below what the pattern needs and the
+  // refusal is the one the caller can act on.
+  limits.max_program_size = 64;
+  regex = nullptr;
+  grx_error_clear(&error);
+  EXPECT_EQ(grx_regex_compile_with_allocator(pattern, strlen(pattern),
+                GRX_SYNTAX_PCRE, 0, &limits, nullptr, &error, &regex),
+      GRX_ERR_LIMIT);
+  EXPECT_EQ(error.diag, GRX_DIAG_LIMIT_PROGRAM_SIZE);
+  grx_regex_free(regex);
+}
+
+/**
  * grx_limits_unlimited() caps nothing, field by field.
  *
  * Compared against the structure rather than against behaviour, because the

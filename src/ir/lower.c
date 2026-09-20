@@ -849,8 +849,18 @@ static void adopt_options(Lowering * low, uint32_t options) {
   }
 }
 
-static GRX_Result resolve_name(
-    Lowering * low, const char * name, uint32_t * out_group) {
+/**
+ * The group a name stands for, and where that group was written.
+ *
+ * The first node carrying the name, which is PCRE2's rule for a name a
+ * `(?J)` pattern gives to more than one group. `out_definition` is optional
+ * and matters only to a subroutine call: a `(?|...)` gives one number
+ * several definitions, and `(?&b)` means the one *written* as `b`, which the
+ * number cannot say. Everything else here reads a capture slot, and a slot
+ * belongs to the number.
+ */
+static GRX_Result resolve_name(Lowering * low, const char * name,
+    uint32_t * out_group, size_t * out_definition) {
   for (size_t i = 0; i < low->pattern->nodes.count; i++) {
     const GRX_Node * node = grx_pattern_node(low->pattern, (uint32_t)i);
     if (!node || node->kind != GRX_NODE_GROUP
@@ -860,6 +870,9 @@ static GRX_Result resolve_name(
     const char * candidate = grx_pattern_name(low->pattern, node->b);
     if (candidate && strcmp(candidate, name) == 0) {
       *out_group = node->a;
+      if (out_definition) {
+        *out_definition = node->offset;
+      }
       return GRX_OK;
     }
   }
@@ -1033,11 +1046,22 @@ static GRX_Result lower_verb(
 static GRX_Result lower_recurse(
     Lowering * low, const GRX_Node * node, uint32_t * out_node) {
   uint32_t group = node->a;
+  // Which *definition* the call re-enters, as a byte offset into the pattern.
+  // The number is not enough inside a `(?|...)`, where several groups share
+  // one: `(?|(?<a>a)|(?<b>b))(?&b)` calls the second, and a call in the
+  // second branch of `(?|(?<a>a)(?-1)|(?<b>b)(?-1))` calls the one beside it.
+  // GRX_INDEX_NONE means the number is all there is - `(?R)`, `(?2)`, a
+  // forward `(?+1)` - and codegen then takes the first definition, which is
+  // what those spellings mean.
+  size_t definition = GRX_NPOS;
   if (node->flags & GRX_NODE_NAMED) {
     const char * name = grx_pattern_name(low->pattern, node->b);
-    if (!name || resolve_name(low, name, &group) != GRX_OK) {
+    if (!name || resolve_name(low, name, &group, &definition) != GRX_OK) {
       return fail(low, GRX_DIAG_UNKNOWN_GROUP_NAME, node);
     }
+  }
+  else if (node->b != GRX_INDEX_NONE) {
+    definition = node->b;
   }
 
   GRX_Result result = add(low, GRX_IR_RECURSE, node, out_node);
@@ -1045,6 +1069,8 @@ static GRX_Result lower_recurse(
     return result;
   }
   grx_ir_node(low->ir, *out_node)->a = group;
+  grx_ir_node(low->ir, *out_node)->b
+      = definition < GRX_INDEX_NONE ? (uint32_t)definition : GRX_INDEX_NONE;
 
   if (!low->profile.recursion_is_atomic) {
     return GRX_OK;
@@ -1228,7 +1254,7 @@ static GRX_Result lower_conditional(
   uint32_t group = node->b;
   if (node->flags & GRX_NODE_NAMED) {
     const char * name = grx_pattern_name(low->pattern, node->b);
-    if (!name || resolve_name(low, name, &group) != GRX_OK) {
+    if (!name || resolve_name(low, name, &group, NULL) != GRX_OK) {
       return fail(low, GRX_DIAG_UNKNOWN_GROUP_NAME, node);
     }
   }
@@ -1299,7 +1325,7 @@ static GRX_Result lower_backref(
   uint32_t group = node->a;
   if (node->flags & GRX_NODE_NAMED) {
     const char * name = grx_pattern_name(low->pattern, node->b);
-    if (!name || resolve_name(low, name, &group) != GRX_OK) {
+    if (!name || resolve_name(low, name, &group, NULL) != GRX_OK) {
       return fail(low, GRX_DIAG_UNKNOWN_GROUP_NAME, node);
     }
   }

@@ -574,6 +574,12 @@ static void dump_payload(
       }
       else {
         fprintf(out, " #%u", node->a);
+        if (node->b != GRX_INDEX_NONE) {
+          // Which definition of that number, by where it was written. Only a
+          // `(?|...)` gives a number more than one, so this is absent from
+          // most dumps and is the whole story where it is not.
+          fprintf(out, " at=%u", node->b);
+        }
       }
       break;
     case GRX_NODE_CONTROL:

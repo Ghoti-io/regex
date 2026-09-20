@@ -75,7 +75,16 @@ typedef enum {
   GRX_IR_LOOK,       ///< A lookaround over its one child.
   GRX_IR_ATOMIC,     ///< Its one child, with no backtracking back into it.
   GRX_IR_COND,       ///< A conditional; children are condition, then, else.
-  GRX_IR_RECURSE,    ///< Re-enter group `a`, or the whole pattern when 0.
+  /**
+   * Re-enter group `a`, or the whole pattern when 0.
+   *
+   * `b` names *which definition* of that group, by the byte offset it was
+   * written at, or is GRX_INDEX_NONE for the first one. A `(?|...)` is the
+   * only thing that makes those differ, and it makes them differ enough to
+   * matter: the three branches of `(?|(?<a>a)|(?<b>b)|(?<c>c))` are one
+   * number and three programs.
+   */
+  GRX_IR_RECURSE,
   GRX_IR_KEEP,       ///< Reset the reported start of the match.
   GRX_IR_VERB,       ///< A backtracking control verb; `mode` says which.
   GRX_IR_SCAN,       ///< Match the one child against the substring `a` names.
@@ -127,7 +136,7 @@ typedef enum {
  * | LOOK | - | - | GRX_LookKind | one child |
  * | ATOMIC | - | - | - | one child |
  * | COND | group number | - | GRX_CondKind | HAS_ELSE; children |
- * | RECURSE | target group number | - | - | - |
+ * | RECURSE | target group number | the definition's byte offset, or GRX_INDEX_NONE | - | - |
  * | VERB | name offset, or GRX_INDEX_NONE | - | GRX_VerbKind | - |
  */
 typedef struct GRX_IRNode {

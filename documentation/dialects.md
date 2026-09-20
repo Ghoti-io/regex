@@ -401,6 +401,26 @@ the dialect's rule for a reference to a group that does not exist.
 | Subroutine `(?&n)`, `(?1)`, `\g<n>` | yes | no | no | no | no | `\g<n>` | no |
 | Name syntax | `[A-Za-z_][A-Za-z0-9_]*`, 32 chars (PCRE2) | IdentifierName, Unicode | identifier | `[a-zA-Z][a-zA-Z0-9]*` | identifier | identifier | `[A-Za-z0-9_]+` |
 
+**A subroutine call names a definition, not a number.** `(?|...)` renumbers
+each branch from the same start, so one number can have a definition in every
+branch - and those are different programs. In
+`((?|(?<a>a)(?-1)|(?<b>b)(?-1)|(?<c>c)(?-1)))` all three calls resolve to
+group 2, and Perl runs each against the group beside it, so the pattern
+matches `aa`, `bb` and `cc`. `(?&b)` in `(?|(?<a>a)|(?<b>b))` is the same
+question asked by name.
+
+So a call carries where its target was written, and not only which number it
+is. `(?R)`, a call by number, and a forward `(?+1)` have no definition to
+point at and take the first, which is what those spellings mean.
+
+A *conditional* asks a different question - whether the group participated -
+and that one this library cannot answer per definition. `(?(<a>)x|y)` after
+`(?|(?<a>a)|(?<b>b))` is false in Perl when the `b` branch matched, but the
+branches have one capture slot between them, and a slot records that the
+number participated rather than which definition set it. The two records that
+turn on it are listed in `tests/data/vectors/known-gaps.txt` with that
+sentence beside them.
+
 ### 5.15 Flags and default options
 
 `grx_options_parse(syntax, string)` reads the dialect's own alphabet;
