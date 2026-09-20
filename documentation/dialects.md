@@ -247,8 +247,25 @@ The two rules that make `(a*)*` against `b` report different things:
 | Empty iteration | `FAIL_IF_EMPTY_AFTER_MIN`: an iteration that consumes nothing, once `min` is satisfied, fails (22.2.2.3.1 RepeatMatcher step 2.b) | ECMAScript |
 | | `BREAK_ON_EMPTY`: the iteration succeeds and the loop stops | Perl, PCRE2, Python, Java (**probe**), .NET (**probe**), Ruby (**probe**), RE2, Rust |
 | | `LONGEST`: irrelevant; the match is the longest, and an empty iteration adds nothing | POSIX, GNU, Tcl |
-| Capture reset | `RESET_EACH_ITERATION`: captures inside the group are cleared at the start of every iteration (RepeatMatcher step 4) | ECMAScript, **Perl** (probed; but see below) |
+| Capture reset | `RESET_EACH_ITERATION`: captures inside the group are cleared at the **start** of every iteration (RepeatMatcher step 4) | ECMAScript |
+| | `RESET_AFTER_EACH_ITERATION`: an iteration clears, on the way **out**, the ones it did not itself set | **Perl** (probed) |
 | | `KEEP_LAST_SET`: a capture set in an earlier iteration survives if a later one does not set it | PCRE2, Python, Java (**probe**), .NET, Ruby (**probe**), RE2 (**probe**), Rust (**probe**) |
+
+The first two report the same spans. After the last iteration, a capture it
+did not set is gone either way, which is why one value stood for both until
+something asked the other question: what the *next* iteration can see.
+`((?(2)x|y)(a))+` against `yaxa` matches the whole subject in perl and in
+pcre2test, and it can only do that if the second iteration's conditional
+still sees what the first captured — clearing early hides group 2, takes the
+`y` branch, and stops after `ya`. The clearing is real all the same:
+`((a)|b)+(?(2)x|y)` against `abx` does not match in perl, because by the time
+the conditional outside the loop runs, the iteration that took `b` has taken
+group 2 away.
+
+Only a conditional or a backreference can tell the two apart, so codegen
+emits the late form only for a pattern that has one — which is also why it is
+free: anything that reads a capture back already keeps a program off the
+memoising engines ([design.md](design.md) §3.5.3).
 
 Consequences the tests state:
 
@@ -557,6 +574,30 @@ makes `x*` split `"abc"` into three pieces rather than seven, and it is a
 rule about the piece boundary rather than about the match - `a*` splitting
 `"baac"` yields `b` and `c`, with the `aa` consumed as a separator and the
 empty matches at either end of it ignored.
+
+### 5.17 Captures a failed negative lookaround made
+
+| Value | Meaning | Dialects |
+| --- | --- | --- |
+| `CLEAR` | the writes the body made before failing are discarded | ECMAScript (22.2.2.4), PCRE2 |
+| `KEEP` | they stand | Perl |
+
+A negative lookaround succeeds by having its body fail, and the body may have
+captured something on its way to failing. `a(?!(b)c)` against `abd` is the
+whole of it: the body matches the `b`, fails on the `c`, and perl 5.40
+reports group 1 as `"b"` where pcre2test 10.46 and Node report it unset.
+Probed three ways rather than read from one.
+
+A *positive* lookaround needs no axis. One that succeeded keeps what its body
+captured in every dialect, and one that failed takes the whole construct with
+it, so there is nothing left to disagree about.
+
+Under `KEEP` the writes still become undo frames, so backtracking past the
+whole assertion puts them back; what the value changes is whether the
+assertion itself does. What it does *not* settle is what the last write was
+when the body's failing part is a loop — see
+`tests/data/vectors/known-gaps.txt`, where four records turn on where Perl's
+own engine happens to restore an offset rather than on any rule.
 
 ## 6. Deviations
 

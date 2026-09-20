@@ -213,6 +213,22 @@ typedef struct {
    */
   size_t look_end;
 
+  /**
+   * The stack height above which a capture undo is *not* applied, or
+   * GRX_NPOS.
+   *
+   * Set while the body of a negative lookaround runs in a dialect that keeps
+   * what the body captured (GRX_INST_KEEP_CAPTURES). Ordinary backtracking
+   * puts a capture back as it unwinds, so by the time a failing body has run
+   * out of paths its writes are already gone - which is the right answer
+   * everywhere except here, where the assertion succeeding *because* the
+   * body failed is supposed to leave them standing.
+   *
+   * Frames below the floor are the caller's and are undone normally, so
+   * backtracking past the whole assertion still puts everything back.
+   */
+  size_t keep_floor;
+
   VerbStop verb_stop;    ///< What a control verb asked for, or VERB_NONE.
   size_t skip_to;        ///< Where `(*SKIP)` fired, for VERB_STOP_SKIP.
 
@@ -488,6 +504,14 @@ static int backtrack(Backtrack * bt, uint32_t * out_pc, size_t * out_position,
         *out_position = frame.position;
         return 1;
       case FRAME_CAPTURE:
+        if (bt->keep_floor != GRX_NPOS && bt->depth >= bt->keep_floor) {
+          // Inside a negative lookaround body whose writes are meant to
+          // survive it. A register is still put back: it is the loop's own
+          // bookkeeping, not something a caller can read.
+          break;
+        }
+        bt->slots[frame.pc] = frame.position;
+        break;
       case FRAME_REGISTER:
         bt->slots[frame.pc] = frame.position;
         break;
@@ -854,6 +878,48 @@ static int run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
     int toplevel, size_t * out_end);
 
 /**
+ * Leave the innermost subroutine call, and say where to carry on.
+ *
+ * Two instructions reach here: the RET a call's block ends in, and an
+ * `(*ACCEPT)` inside the call, which pcre2pattern says returns from the
+ * subroutine rather than ending the match. What the call captured is not
+ * kept - pcre2pattern again: the values are reset to what they were before
+ * it - and the restoring is slot by slot through the undo stack, so that
+ * backtracking past the whole call still puts back what *it* found.
+ *
+ * @param bt The run.
+ * @param in_out_pc Receives the instruction to continue at.
+ * @param position Where the call is returning from.
+ * @return Non-zero on success; zero with `bt->failure` set otherwise.
+ */
+static int return_from_call(
+    Backtrack * bt, uint32_t * in_out_pc, size_t position) {
+  if (!bt->call_depth) {
+    bt->failure = GRX_ERR_INTERNAL;
+    return 0;
+  }
+
+  size_t depth = bt->call_depth - 1;
+  const size_t * saved = bt->call_slots + depth * bt->captures;
+  for (size_t i = 0; i < bt->captures; i++) {
+    if (bt->slots[i] == saved[i]) {
+      continue;
+    }
+    size_t restored = saved[i];
+    if (!save_slot(bt, i)) {
+      return 0;
+    }
+    bt->slots[i] = restored;
+  }
+  if (!push(bt, FRAME_CALL, (uint32_t)bt->call_depth, position)) {
+    return 0;
+  }
+  *in_out_pc = bt->call_return[depth];
+  bt->call_depth = depth;
+  return 1;
+}
+
+/**
  * Run a lookbehind's body forwards, from every start its length allows.
  *
  * The second of the two lookbehind models (documentation/design.md section
@@ -941,6 +1007,11 @@ static int look_behind_forward(Backtrack * bt, uint32_t body, size_t position,
 static int run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
     int toplevel, size_t * out_end) {
   const GRX_Limits * limits = bt->request->limits;
+  // The call depth this run started at. `(*ACCEPT)` ends the innermost thing
+  // it is inside, and a sub-match's own body is one of those: a call entered
+  // *before* this run began belongs to the caller, so a verb here must not
+  // return from it.
+  size_t call_floor = bt->call_depth;
 
   for (;;) {
     bt->steps++;
@@ -1071,6 +1142,30 @@ static int run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
         continue;
       }
 
+      case GRX_OP_RESET_STALE: {
+        // This iteration is ending. A group whose start is before where the
+        // iteration began was set by an earlier one, and the dialect's rule
+        // is that this iteration takes it away on the way out. Through the
+        // undo stack, so backtracking into the loop puts it back.
+        size_t index = bt->captures + inst->x;
+        if (index >= bt->captures + bt->registers) {
+          bt->failure = GRX_ERR_INTERNAL;
+          return 0;
+        }
+        size_t began = bt->slots[index];
+        size_t first = inst->y;
+        if (first + 1 < bt->captures && bt->slots[first] != GRX_NPOS
+            && bt->slots[first] < began) {
+          if (!save_slot(bt, first) || !save_slot(bt, first + 1)) {
+            return 0;
+          }
+          bt->slots[first] = GRX_NPOS;
+          bt->slots[first + 1] = GRX_NPOS;
+        }
+        pc++;
+        continue;
+      }
+
       case GRX_OP_PROGRESS_CHECK: {
         size_t index = bt->captures + inst->x;
         int stalled = index < bt->captures + bt->registers
@@ -1172,6 +1267,10 @@ static int run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
         size_t min = 0;
         size_t max = 0;
         int body_matched;
+        size_t outer_keep = bt->keep_floor;
+        if (negative && (inst->flags & GRX_INST_KEEP_CAPTURES)) {
+          bt->keep_floor = body_floor;
+        }
         if (grx_program_look_span(bt->program, inst->x, &min, &max)) {
           body_matched = look_behind_forward(
               bt, pc + 1, position, min, max, before, &end);
@@ -1182,6 +1281,7 @@ static int run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
           body_matched = run(bt, pc + 1, position, body_floor, 0, &end);
           bt->look_end = outer_look_end;
         }
+        bt->keep_floor = outer_keep;
         bt->depth = body_floor;
         if (bt->failure != GRX_OK) {
           gcu_allocator_free(bt->allocator, before);
@@ -1203,9 +1303,12 @@ static int run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
           break;
         }
 
-        if (negative) {
+        if (negative && !(inst->flags & GRX_INST_KEEP_CAPTURES)) {
           // ECMA-262 22.2.2.4: a negative lookaround leaves the captures as
           // they were, whatever its body touched on the way to failing.
+          // Perl does not - see GRX_INST_KEEP_CAPTURES - and there the
+          // writes fall through to the same bookkeeping a positive
+          // lookaround's do.
           memcpy(bt->slots, before, bt->captures * sizeof(size_t));
         }
         else {
@@ -1356,6 +1459,29 @@ static int run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
       case GRX_OP_VERB:
         switch ((GRX_VerbKind)inst->mode) {
           case GRX_VERB_ACCEPT:
+            if (bt->call_depth > call_floor) {
+              // pcre2pattern: "in a recursion or subroutine call, (*ACCEPT)
+              // causes only that subroutine to return". Perl agrees -
+              // `(?(DEFINE)(?<a>x(*ACCEPT)y))(?&a)z` matches "xz" in both,
+              // where ending the whole match here would stop at the `x`. The
+              // open groups inside the call are closed first, because the
+              // verb is still an accept as far as they are concerned, and
+              // then the call returns the way RET does.
+              for (size_t i = 0; i + 1 < bt->captures; i += 2) {
+                if (bt->slots[i] != GRX_NPOS
+                    && bt->slots[i + 1] == GRX_NPOS) {
+                  if (!save_slot(bt, i + 1)) {
+                    return 0;
+                  }
+                  bt->slots[i + 1] = position;
+                }
+              }
+              if (!return_from_call(bt, &pc, position)) {
+                return 0;
+              }
+              continue;
+            }
+
             // The match ends here, with whatever the groups hold. The
             // closing SAVE of group 0 is skipped over, so it is written by
             // hand: an accepted match has an end whether or not the program
@@ -1477,33 +1603,11 @@ static int run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
         continue;
       }
 
-      case GRX_OP_RET: {
-        if (!bt->call_depth) {
-          bt->failure = GRX_ERR_INTERNAL;
+      case GRX_OP_RET:
+        if (!return_from_call(bt, &pc, position)) {
           return 0;
         }
-        size_t depth = bt->call_depth - 1;
-        const size_t * saved = bt->call_slots + depth * bt->captures;
-        // What the call captured is not kept: pcre2pattern says the values
-        // are reset to what they were before it. Slot by slot, so that
-        // backtracking past the whole call still puts back what *it* found.
-        for (size_t i = 0; i < bt->captures; i++) {
-          if (bt->slots[i] == saved[i]) {
-            continue;
-          }
-          size_t restored = saved[i];
-          if (!save_slot(bt, i)) {
-            return 0;
-          }
-          bt->slots[i] = restored;
-        }
-        if (!push(bt, FRAME_CALL, (uint32_t)bt->call_depth, position)) {
-          return 0;
-        }
-        pc = bt->call_return[depth];
-        bt->call_depth = depth;
         continue;
-      }
 
       default:
         bt->failure = GRX_ERR_INTERNAL;
@@ -1558,6 +1662,7 @@ GRX_Result grx_exec_backtrack(
     .call_depth = 0,
     .call_capacity = 0,
     .look_end = GRX_NPOS,
+    .keep_floor = GRX_NPOS,
     .verb_stop = VERB_NONE,
     .skip_to = 0,
     .window_start = 0,

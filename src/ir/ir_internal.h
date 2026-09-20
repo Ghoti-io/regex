@@ -174,6 +174,16 @@ typedef enum {
 #define GRX_IR_LOOK_FORWARD GRX_BIT(4)
 
 /**
+ * @brief LOOK: a negative one keeps what its body captured before failing.
+ *
+ * The dialect's answer to GRX_NegativeLookCaptures, made explicit on the
+ * node - the profile does not reach an engine, and this is a fact about one
+ * assertion rather than about the run. Set only on a negative lookaround,
+ * because a positive one has no such question.
+ */
+#define GRX_IR_LOOK_KEEP_CAPTURES GRX_BIT(5)
+
+/**
  * @brief One node of the intermediate representation.
  *
  * `a`, `b`, `mode`, `min` and `max` are the kind-specific payload:
@@ -189,7 +199,7 @@ typedef enum {
  * | CAPTURE | group number | name offset, or GRX_INDEX_NONE | - | one child |
  * | BACKREF | group number | - | - | `backref_unset`, CASELESS |
  * | ASSERT | class index for the line or word set, else GRX_INDEX_NONE | - | GRX_AssertKind | - |
- * | LOOK | length-span offset, when LOOK_FORWARD | - | GRX_LookKind | LOOK_FORWARD; one child |
+ * | LOOK | length-span offset, when LOOK_FORWARD | - | GRX_LookKind | LOOK_FORWARD, LOOK_KEEP_CAPTURES; one child |
  * | ATOMIC | - | - | - | one child |
  * | COND | group number | - | GRX_CondKind | HAS_ELSE; children |
  * | RECURSE | target group number | the definition's byte offset, or GRX_INDEX_NONE | - | - |

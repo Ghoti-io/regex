@@ -75,6 +75,26 @@ typedef enum {
 } GRX_LookbehindLimit;
 
 /**
+ * @brief What a *negative* lookaround leaves behind in the capture slots.
+ *
+ * documentation/dialects.md section 5.17. A negative lookaround succeeds by
+ * having its body fail, and the body may have captured something on its way
+ * to failing. ECMA-262 22.2.2.4 says those writes are discarded; Perl keeps
+ * them, so `a(?!(b)c)` against "abd" reports group 1 as "b" there and unset
+ * in both of the others. Probed three ways rather than read: see
+ * tests/data/probe/report.md.
+ *
+ * A *positive* lookaround needs no axis. One that succeeded keeps what its
+ * body captured in every dialect, and one that failed takes the whole
+ * construct with it, so there is nothing left to disagree about.
+ */
+typedef enum {
+  GRX_NEGATIVE_LOOK_CLEAR = 0, ///< Discarded. ECMAScript, PCRE2.
+  GRX_NEGATIVE_LOOK_KEEP,      ///< Kept as the body left them. Perl.
+  GRX_NEGATIVE_LOOK_COUNT      ///< Closes the enum; not a rule.
+} GRX_NegativeLookCaptures;
+
+/**
  * @brief Which code points `\w`, `\d` and `\s` stand for.
  *
  * documentation/dialects.md section 5.9. One enum rather than three because
@@ -173,6 +193,7 @@ typedef struct GRX_Profile {
   GRX_CaptureResetMode capture_reset; ///< Captures between iterations.
   GRX_BackrefUnsetMode backref_unset; ///< A reference to an unset group.
   GRX_LookbehindLimit lookbehind;   ///< How long a lookbehind may be.
+  GRX_NegativeLookCaptures negative_look; ///< Captures a failed body made.
   GRX_IterationRule iteration;      ///< Search-all after an empty match.
   GRX_DollarRule dollar;            ///< `$` without multiline.
   GRX_NewlineSet newlines;          ///< The line-terminator set.

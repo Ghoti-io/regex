@@ -240,6 +240,20 @@ typedef enum {
 typedef enum {
   GRX_CAPTURE_KEEP_LAST_SET = 0, ///< A capture set earlier survives.
   GRX_CAPTURE_RESET_EACH,        ///< Every iteration clears them first.
+  /**
+   * An iteration clears the ones *it* did not set, on the way out.
+   *
+   * The same reported answer as RESET_EACH - after the last iteration, the
+   * captures it did not set are gone either way - and a different answer to
+   * one question: what the *next* iteration can see. Perl clears late, so
+   * `((?(2)x|y)(a))+` against "yaxa" takes the `x` branch second time round,
+   * where clearing early would hide group 2 from the conditional and take
+   * `y`. pcre2test agrees with Perl on that and keeps its captures besides.
+   *
+   * Only observable through a conditional or a backreference, which is why
+   * codegen emits the late form only for a pattern that has one.
+   */
+  GRX_CAPTURE_RESET_AFTER_EACH,
   GRX_CAPTURE_RESET_COUNT        ///< Closes the enum; not a mode.
 } GRX_CaptureResetMode;
 

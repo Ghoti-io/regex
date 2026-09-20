@@ -638,6 +638,31 @@ static void add_thread(
         break;
       }
 
+      case GRX_OP_RESET_STALE: {
+        // The late half of GRX_CAPTURE_RESET_AFTER_EACH: a group set by an
+        // earlier iteration than this one, in an iteration that is ending
+        // without setting it. Reachable here only in principle - the rule is
+        // emitted only for a pattern that reads a capture back, and every
+        // way of doing that keeps a program off this engine - but a thread
+        // that met it and did nothing would report the wrong spans.
+        PikeState * writable = state_for_write(pike, current);
+        if (!writable) {
+          break;
+        }
+        size_t index = pike->captures + inst->x;
+        size_t first = inst->y;
+        if (index < pike->slots && first + 1 < pike->captures
+            && writable->slots[first] != GRX_NPOS
+            && writable->slots[first] < writable->slots[index]) {
+          writable->slots[first] = GRX_NPOS;
+          writable->slots[first + 1] = GRX_NPOS;
+        }
+        pike->stack[depth].pc = current_pc + 1;
+        pike->stack[depth].state = writable;
+        depth++;
+        break;
+      }
+
       case GRX_OP_PROGRESS_CHECK: {
         size_t index = pike->captures + inst->x;
         int stalled = index < pike->slots

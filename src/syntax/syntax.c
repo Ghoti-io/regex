@@ -262,12 +262,19 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     // as the empty string in perl and in pcre2test, and as unset in
     // ECMAScript - and this row said nothing, so it got ECMAScript's answer.
     .empty_loop = GRX_EMPTY_LOOP_BREAK,
-    // RESET_EACH, not KEEP_LAST_SET: Perl 5.40 reports group 2 of
+    // RESET_AFTER_EACH, not KEEP_LAST_SET: Perl 5.40 reports group 2 of
     // `((a)|b)+` against "ab" as unset, where PCRE2 and Python report "a".
+    // *After* each, not before: `((?(2)x|y)(a))+` against "yaxa" matches the
+    // whole subject in perl and in pcre2test, which it can only do if the
+    // second iteration's conditional still sees what the first captured.
     // Probed rather than read; see tests/data/probe/report.md and
     // documentation/dialects.md section 5.5.
-    .capture_reset = GRX_CAPTURE_RESET_EACH,
+    .capture_reset = GRX_CAPTURE_RESET_AFTER_EACH,
     .lookbehind = GRX_LOOKBEHIND_BOUNDED,
+    // Perl alone. `a(?!(b)c)` against "abd" reports group 1 as "b" here and
+    // unset in pcre2test and in Node: the body captured it before failing,
+    // and Perl does not take it back. ECMA-262 22.2.2.4 says the other two.
+    .negative_look = GRX_NEGATIVE_LOOK_KEEP,
     .dollar = GRX_DOLLAR_BEFORE_FINAL_NEWLINE,
     .shorthands = GRX_SHORTHANDS_UNICODE,
     .shorthands_utf = GRX_SHORTHANDS_UNICODE,

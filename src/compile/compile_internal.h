@@ -65,6 +65,7 @@ extern "C" {
  * | ASSERT | class index for the line or word set, else GRX_INDEX_NONE | - | GRX_AssertKind |
  * | PROGRESS_SET | register | - | - |
  * | RESET | first capture slot | one past the last | - |
+ * | RESET_STALE | the register holding this iteration's start | one group's first slot | - |
  * | PROGRESS_CHECK | register | continuation when the loop must exit | GRX_EmptyLoopMode |
  * | BACKREF | group number | - | GRX_BackrefUnsetMode |
  * | LOOK | length-span offset, or GRX_INDEX_NONE | continuation after the body | GRX_LookKind |
@@ -105,6 +106,21 @@ typedef enum {
    * express "clear these on entry but keep them if the loop exits here".
    */
   GRX_OP_RESET,
+  /**
+   * @brief Clear one group if this iteration did not set it.
+   *
+   * The late half of GRX_CAPTURE_RESET_AFTER_EACH. `x` names the register a
+   * PROGRESS_SET filled with the position this iteration began at, and `y`
+   * is one group's first slot: a group whose start is before that was set by
+   * an earlier iteration, and an iteration that ends without setting it
+   * takes it away on the way out.
+   *
+   * One instruction per group rather than a slot range, so that the register
+   * fits alongside without a third operand or a side table. A loop's body
+   * has as many of these as it has captures, which is the same order as the
+   * SAVEs already in it.
+   */
+  GRX_OP_RESET_STALE,
   GRX_OP_PROGRESS_CHECK, ///< Apply the empty-iteration rule at a loop's end.
   GRX_OP_BACKREF,      ///< Match what a group matched earlier.
   /**
@@ -165,6 +181,17 @@ typedef enum {
  * turn of the loop.
  */
 #define GRX_INST_ALTERNATION GRX_BIT(1)
+
+/**
+ * @brief LOOK: a negative one keeps what its body captured before failing.
+ *
+ * documentation/dialects.md section 5.17, resolved. Perl reports group 1 of
+ * `a(?!(b)c)` against "abd" as "b"; pcre2test and Node report it unset,
+ * which is what ECMA-262 22.2.2.4 requires. The writes still become undo
+ * frames, so backtracking past the whole assertion puts them back - what the
+ * flag changes is whether the assertion itself does.
+ */
+#define GRX_INST_KEEP_CAPTURES GRX_BIT(2)
 
 /**
  * @brief One compiled instruction.

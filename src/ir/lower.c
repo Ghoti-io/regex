@@ -1718,6 +1718,10 @@ static GRX_Result lower_look(
   }
   GRX_IRNode * look = grx_ir_node(low->ir, *out_node);
   look->mode = (uint8_t)kind;
+  if ((kind == GRX_LOOK_AHEAD_NEGATIVE || kind == GRX_LOOK_BEHIND_NEGATIVE)
+      && low->profile.negative_look == GRX_NEGATIVE_LOOK_KEEP) {
+    look->flags |= GRX_IR_LOOK_KEEP_CAPTURES;
+  }
   if (forward) {
     look->flags |= GRX_IR_LOOK_FORWARD;
     // The span itself is not knowable yet - measuring a subtree is the

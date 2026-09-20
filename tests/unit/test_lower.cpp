@@ -216,6 +216,103 @@ TEST(Lower, TheTwoLoopRulesBecomeModesOnTheInstruction) {
   EXPECT_EQ(spans(Compiled("(?:(a)|b){2}", ""), "ba"), "0:2 1:2");
 }
 
+TEST(Lower, PerlClearsALoopsCapturesOnTheWayOutOfTheIteration) {
+  // Both halves of the rule at once. ECMA-262 clears at the *start* of an
+  // iteration (RepeatMatcher step 4); Perl clears at the end, and of an
+  // iteration that ends without setting them. The two report the same spans
+  // - after the last iteration, what it did not set is gone either way - and
+  // differ only in what the *next* iteration can see.
+  Compiled perl("((?(2)x|y)(a))+", "", nullptr, GRX_SYNTAX_PERL);
+  ASSERT_TRUE(perl.ok());
+  // The second iteration's conditional still sees what the first captured,
+  // so it takes `x` and the whole subject matches. Clearing early would hide
+  // group 2, take `y`, and stop after "ya". Checked against perl 5.40 and
+  // pcre2test 10.46, which agree.
+  EXPECT_EQ(spans(perl, "yaxa"), "0:4 2:4 3:4");
+  EXPECT_EQ(spans(Compiled("((?(2)x|y)(a)){2}", "", nullptr, GRX_SYNTAX_PERL),
+                "yaxa"), "0:4 2:4 3:4");
+
+  // A group the repeated group itself names, which is the same question one
+  // level up: `(?(1)` in the second iteration sees what the first captured.
+  EXPECT_EQ(spans(Compiled("((?(1)a|b))+", "", nullptr, GRX_SYNTAX_PERL),
+                "baaa"), "0:4 3:4");
+
+  // And the reported answer is unchanged, which is the point: an iteration
+  // that does not set a capture still takes it away.
+  Compiled reset("((a)|b)+", "", nullptr, GRX_SYNTAX_PERL);
+  ASSERT_TRUE(reset.ok());
+  EXPECT_EQ(spans(reset, "ab"), "0:2 1:2 -");
+  EXPECT_EQ(spans(reset, "ba"), "0:2 1:2 1:2");
+  // Including to a conditional *after* the loop, where the clearing has
+  // happened: perl does not match this either.
+  EXPECT_EQ(spans(Compiled("((a)|b)+(?(2)x|y)", "", nullptr, GRX_SYNTAX_PERL),
+                "abx"), "nomatch");
+
+  // The late form costs a register, so it is emitted only where the
+  // difference can be seen - by a conditional or a backreference. A pattern
+  // with neither reports the same spans from the early form, one
+  // instruction less, and stays memoizable.
+  EXPECT_FALSE(uses(reset, "reset-stale")) << reset.disassembly();
+  EXPECT_TRUE(uses(reset, "reset")) << reset.disassembly();
+  EXPECT_TRUE(uses(perl, "reset-stale")) << perl.disassembly();
+
+  // ECMAScript keeps the early form whatever the pattern contains: 22.2.2.3.1
+  // says the clearing happens before the iteration runs.
+  Compiled ecma("((a)|b)+", "u");
+  ASSERT_TRUE(ecma.ok());
+  EXPECT_FALSE(uses(ecma, "reset-stale")) << ecma.disassembly();
+  EXPECT_EQ(spans(ecma, "ab"), "0:2 1:2 -");
+}
+
+TEST(Lower, WhatANegativeLookaroundLeavesInTheCaptureSlots) {
+  // documentation/dialects.md section 5.17. A negative lookaround succeeds by
+  // having its body fail, and the body may have captured on its way to
+  // failing. ECMA-262 22.2.2.4 discards those writes; Perl keeps them.
+  // Probed three ways: perl 5.40 reports group 1 here, pcre2test 10.46 and
+  // Node report it unset.
+  EXPECT_EQ(spans(Compiled("a(?!(b)c)", "", nullptr, GRX_SYNTAX_PERL), "abd"),
+      "0:1 1:2");
+  EXPECT_EQ(spans(Compiled("a(?!(b)c)", "", nullptr, GRX_SYNTAX_PCRE), "abd"),
+      "0:1 -");
+  EXPECT_EQ(spans(Compiled("a(?!(b)c)", "u"), "abd"), "0:1 -");
+
+  // A body that never got as far as the capture leaves it unset in all three:
+  // there is nothing to keep.
+  EXPECT_EQ(spans(Compiled("(x)(?!(y))z", "", nullptr, GRX_SYNTAX_PERL), "xz"),
+      "0:2 0:1 -");
+
+  // A *positive* lookaround needs no rule. One that succeeded keeps what its
+  // body captured everywhere, and one that failed takes the construct with
+  // it, so there is nothing left to disagree about.
+  EXPECT_EQ(spans(Compiled("a(?=(b))", "", nullptr, GRX_SYNTAX_PERL), "ab"),
+      "0:1 1:2");
+  EXPECT_EQ(spans(Compiled("a(?=(b))", "u"), "ab"), "0:1 1:2");
+}
+
+TEST(Lower, AcceptInsideASubroutineCallReturnsFromIt) {
+  // pcre2pattern: "in a recursion or subroutine call, (*ACCEPT) causes only
+  // that subroutine to return". Perl agrees, and both match the whole of
+  // "xz" - ending the match at the verb would stop at the `x`.
+  for (GRX_Syntax syntax : {GRX_SYNTAX_PERL, GRX_SYNTAX_PCRE}) {
+    Compiled called(
+        "(?(DEFINE)(?<a>x(*ACCEPT)y))(?&a)z", "", nullptr, syntax);
+    ASSERT_TRUE(called.ok());
+    EXPECT_EQ(spans(called, "xz"), "0:2 -");
+
+    // Reached outside any call, the same verb ends the match - which is what
+    // it does everywhere else, and what this must not have changed.
+    Compiled direct("(a(*ACCEPT)b)c", "", nullptr, syntax);
+    ASSERT_TRUE(direct.ok());
+    EXPECT_EQ(spans(direct, "ac"), "0:1 0:1");
+
+    // Inside a call, the groups the call opened are still closed at the verb,
+    // and then thrown away on return like any other call's captures.
+    Compiled both("(a(*ACCEPT)b)(?1)c", "", nullptr, syntax);
+    ASSERT_TRUE(both.ok());
+    EXPECT_EQ(spans(both, "aac"), "0:1 0:1");
+  }
+}
+
 TEST(Lower, FoldingHappensBeforeNegationAndNotAfter) {
   // The rule that decides whether `/[^a]/i` matches "A". A caseless class is
   // the closure of its positive content, *then* complemented; the other order

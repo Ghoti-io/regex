@@ -66,6 +66,22 @@ typedef struct {
    */
   int forward_tail;
   /**
+   * The pattern can read a capture back: it has a conditional or a
+   * backreference somewhere.
+   *
+   * What decides between the two forms of GRX_CAPTURE_RESET_AFTER_EACH's
+   * clearing. Clearing late needs a register, and a register is history the
+   * bit-state memo's (pc, position) key does not carry - so it is only worth
+   * having where the difference can be seen, and the difference can only be
+   * seen by something that reads a capture back. A pattern with neither gets
+   * the early form, which reports exactly the same spans for one instruction
+   * less and keeps the program memoizable.
+   *
+   * Anything that can read a capture back already makes a program
+   * unmemoizable on its own account, so the register costs nothing here.
+   */
+  int captures_are_read;
+  /**
    * Where each called group's subroutine block starts, and which groups need
    * one.
    *
@@ -224,7 +240,11 @@ static void capture_span(const GRX_IR * ir, uint32_t node_index,
  */
 static GRX_Result emit_capture_reset(
     Codegen * codegen, const GRX_IRNode * node, uint32_t body) {
-  if (node->capture_reset != GRX_CAPTURE_RESET_EACH) {
+  if (node->capture_reset == GRX_CAPTURE_KEEP_LAST_SET
+      || (node->capture_reset == GRX_CAPTURE_RESET_AFTER_EACH
+          && codegen->captures_are_read)) {
+    // KEEP_LAST_SET clears nothing at all; the late form clears at the end
+    // of the iteration instead, in emit_capture_reset_late().
     return GRX_OK;
   }
 
@@ -236,6 +256,48 @@ static GRX_Result emit_capture_reset(
   }
 
   return emit(codegen, GRX_OP_RESET, 0, low * 2, high * 2, node, NULL);
+}
+
+/**
+ * Whether this repeat clears its captures at the end of an iteration.
+ *
+ * The late form of the dialect's rule, and only where the difference can be
+ * seen: see Codegen::captures_are_read.
+ */
+static int resets_captures_late(Codegen * codegen, const GRX_IRNode * node) {
+  return node->capture_reset == GRX_CAPTURE_RESET_AFTER_EACH
+      && codegen->captures_are_read;
+}
+
+/**
+ * Emit the clearing an iteration does on its way out.
+ *
+ * One instruction per capture in the body: a group whose start is before
+ * `reg`'s position was set by an earlier iteration, and this one is ending
+ * without setting it. `reg` is the register a PROGRESS_SET filled at the
+ * head of the same iteration.
+ */
+static GRX_Result emit_capture_reset_late(
+    Codegen * codegen, const GRX_IRNode * node, uint32_t body, uint32_t reg) {
+  if (!resets_captures_late(codegen, node)) {
+    return GRX_OK;
+  }
+
+  uint32_t low = GRX_INDEX_NONE;
+  uint32_t high = 0;
+  capture_span(codegen->ir, body, &low, &high);
+  if (low == GRX_INDEX_NONE || high <= low) {
+    return GRX_OK;
+  }
+
+  for (uint32_t group = low; group < high; group++) {
+    GRX_Result result
+        = emit(codegen, GRX_OP_RESET_STALE, 0, reg, group * 2, node, NULL);
+    if (result != GRX_OK) {
+      return result;
+    }
+  }
+  return GRX_OK;
 }
 
 /** Whether a node runs right to left. */
@@ -635,7 +697,11 @@ static GRX_Result gen_star(
   // program unmemoizable: a progress register is history the bit-state
   // engine's (pc, position) key does not capture.
   int guard = grx_ir_can_match_empty(codegen->ir, body_index);
-  uint32_t reg = guard ? codegen->registers++ : 0;
+  // The late capture reset wants the same number the guard wants - where
+  // this iteration began - so one register serves both, and a loop that
+  // needs only the reset still gets one.
+  int late = resets_captures_late(codegen, node);
+  uint32_t reg = (guard || late) ? codegen->registers++ : 0;
 
   uint32_t top = here(codegen);
   uint32_t split = GRX_INDEX_NONE;
@@ -646,7 +712,7 @@ static GRX_Result gen_star(
 
   uint32_t body_start = here(codegen);
   result = GRX_OK;
-  if (guard) {
+  if (guard || late) {
     result = emit(codegen, GRX_OP_PROGRESS_SET, 0, reg, 0, node, NULL);
   }
   if (result == GRX_OK) {
@@ -654,6 +720,11 @@ static GRX_Result gen_star(
   }
   if (result == GRX_OK) {
     result = gen(codegen, body_index);
+  }
+  // Before the check, because the check is what leaves the loop: an
+  // iteration that ends by exiting has still ended.
+  if (result == GRX_OK) {
+    result = emit_capture_reset_late(codegen, node, body_index, reg);
   }
   uint32_t check = GRX_INDEX_NONE;
   if (result == GRX_OK && guard) {
@@ -719,10 +790,24 @@ static GRX_Result gen_repeat(Codegen * codegen, const GRX_IRNode * node) {
 static GRX_Result gen_repeat_body(Codegen * codegen, const GRX_IRNode * node,
     uint32_t body, int lazy) {
 
+  // The mandatory copies need the register too: `((?(2)x|y)(a)){2}` is the
+  // same question as the unbounded form, asked twice.
+  int late = resets_captures_late(codegen, node);
+  uint32_t late_reg = late ? codegen->registers++ : 0;
+
   for (uint32_t i = 0; i < node->min; i++) {
-    GRX_Result result = emit_capture_reset(codegen, node, body);
+    GRX_Result result = GRX_OK;
+    if (late) {
+      result = emit(codegen, GRX_OP_PROGRESS_SET, 0, late_reg, 0, node, NULL);
+    }
+    if (result == GRX_OK) {
+      result = emit_capture_reset(codegen, node, body);
+    }
     if (result == GRX_OK) {
       result = gen(codegen, body);
+    }
+    if (result == GRX_OK) {
+      result = emit_capture_reset_late(codegen, node, body, late_reg);
     }
     if (result != GRX_OK) {
       return result;
@@ -749,7 +834,7 @@ static GRX_Result gen_repeat_body(Codegen * codegen, const GRX_IRNode * node,
   // in that order, so the copies cannot tread on each other. A body that
   // cannot match empty needs none of it; see gen_star().
   int guard = grx_ir_can_match_empty(codegen->ir, body);
-  uint32_t reg = guard ? codegen->registers++ : 0;
+  uint32_t reg = guard ? codegen->registers++ : late_reg;
 
   for (uint32_t i = 0; i < optional; i++) {
     uint32_t split = GRX_INDEX_NONE;
@@ -773,7 +858,7 @@ static GRX_Result gen_repeat_body(Codegen * codegen, const GRX_IRNode * node,
     // two apart, and the guard is why group 1 comes out as "a" rather than
     // as the empty string the second iteration would have set it to.
     result = GRX_OK;
-    if (guard) {
+    if (guard || late) {
       result = emit(codegen, GRX_OP_PROGRESS_SET, 0, reg, 0, node, NULL);
     }
     if (result == GRX_OK) {
@@ -781,6 +866,9 @@ static GRX_Result gen_repeat_body(Codegen * codegen, const GRX_IRNode * node,
     }
     if (result == GRX_OK) {
       result = gen(codegen, body);
+    }
+    if (result == GRX_OK) {
+      result = emit_capture_reset_late(codegen, node, body, reg);
     }
     if (result == GRX_OK && guard) {
       result = emit(codegen, GRX_OP_PROGRESS_CHECK, node->empty_loop, reg,
@@ -965,6 +1053,12 @@ static GRX_Result gen_look(Codegen * codegen, const GRX_IRNode * node) {
       = emit(codegen, GRX_OP_LOOK, node->mode, span, 0, node, &look);
   if (result != GRX_OK) {
     return result;
+  }
+  if (node->flags & GRX_IR_LOOK_KEEP_CAPTURES) {
+    GRX_Inst * marked = grx_program_at(codegen->program, look);
+    if (marked) {
+      marked->flags |= GRX_INST_KEEP_CAPTURES;
+    }
   }
 
   // Set rather than raised: the distance a guard measures is *this*
@@ -1281,8 +1375,21 @@ GRX_Result grx_codegen_program(const GRX_IR * ir, const GRX_Limits * limits,
     return GRX_ERR_INVALID;
   }
 
+  // Whether anything in the pattern reads a capture back. One pass over the
+  // flat node arena rather than a walk, because the question is about the
+  // tree's contents and not its shape.
+  int captures_are_read = 0;
+  for (size_t i = 0; i < ir->nodes.count && !captures_are_read; i++) {
+    const GRX_IRNode * node = grx_ir_node(ir, (uint32_t)i);
+    if (node
+        && (node->kind == GRX_IR_BACKREF || node->kind == GRX_IR_COND)) {
+      captures_are_read = 1;
+    }
+  }
+
   Codegen codegen = {
     .ir = ir,
+    .captures_are_read = captures_are_read,
     .program = out_program,
     .limits = limits,
     .error = out_error,

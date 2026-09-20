@@ -19,7 +19,8 @@
 const char * grx_opcode_name(GRX_Opcode op) {
   static const char * const names[GRX_OP_COUNT] = {
     "match", "char", "class", "any", "any-nl", "split", "jmp", "save",
-    "assert", "progress-set", "reset", "progress-check", "backref", "look",
+    "assert", "progress-set", "reset", "reset-stale", "progress-check",
+    "backref", "look",
     "scan", "rewind", "atomic-begin", "atomic-end", "cond", "call", "ret",
     "keep", "verb",
   };
@@ -173,6 +174,9 @@ static void dump_operands(
       break;
     case GRX_OP_RESET:
       fprintf(out, "slots %u..%u", inst->x, inst->y ? inst->y - 1 : 0);
+      break;
+    case GRX_OP_RESET_STALE:
+      fprintf(out, "r%u, slot %u  (group %u)", inst->x, inst->y, inst->y / 2);
       break;
     case GRX_OP_PROGRESS_CHECK:
       fprintf(out, "r%u, %u  (%s)", inst->x, inst->y,
