@@ -675,26 +675,46 @@ asked to.**
 
 ## 10. The ReDoS corpus
 
-`tests/data/redos/ecmascript.rxt`, using `expect: limit`: 17 pattern and
-subject pairs that are exponential or high-polynomial under backtracking -
-the classical `(a+)+$`, `(a|aa)+$`, `(.*a){20}$`, `(x+x+)+y`, the shape the
-2016 Stack Overflow outage was, the one the Java `Pattern` documentation
-warns about, and the "trim and split" patterns that appear in real
-validation code. Written by `tools/limits/make_redos_corpus.py`, which
-carries the provenance of each row beside it.
+`tests/data/redos/ecmascript.rxt`: 17 pattern and subject pairs that are
+exponential or high-polynomial under an unmemoised backtracker - the
+classical `(a+)+$`, `(a|aa)+$`, `(.*a){20}$`, `(x+x+)+y`, the shape the 2016
+Stack Overflow outage was, the one the Java `Pattern` documentation warns
+about, and the "trim and split" patterns that appear in real validation
+code. Written by `tools/limits/make_redos_corpus.py`, which carries the
+provenance of each row beside it.
+
+Each row records what the **backtracking engine** does with the pair at the
+default limits, and fifteen of the seventeen now say a span or `nomatch`
+rather than `limit`. That is the late memo (`design.md` §3.5.3): the
+backtracker arms the bit-state bitmap once a run has taken more steps than
+there are `(instruction, position)` states to take them from, which is the
+point at which it has provably repeated itself. The fifteen cost between one
+and eight thousand steps.
+
+The two that still say `limit` - `(a|a?)+$` and `(a*)*$` - are the two whose
+body can match empty. A loop like that carries a progress register, the
+register is state the memo's key does not include, and so the memo would be
+unsound and is never armed. They are the shape of the exponential case this
+library still has, which is why the corpus is still here.
 
 `tests/conformance/test_redos.cpp` checks two things about every row, and
 the second is the one that matters:
 
-- the backtracker returns `GRX_ERR_LIMIT` **quickly**. A limit reached after
-  a minute is not a defence against a hostile pattern; it is the same outage
-  with a different ending. Currently 105 to 173 ms on an idle machine and 276
-  to 414 on a busy one, against a budget of one second.
-- the Pike VM or the bit-state engine **answers**. A library whose only
-  response to `(a+)+$` is "I gave up" has not solved the problem, it has
-  renamed it. Currently under a millisecond for every row. A second test
-  doubles the subject three times and checks that the step count does not
-  square, so the answer stays an answer as the subject grows.
+- the backtracker reaches the recorded verdict **quickly**, whether that
+  verdict is an answer or `GRX_ERR_LIMIT`. A limit reached after a minute is
+  not a defence against a hostile pattern; it is the same outage with a
+  different ending. Currently under a millisecond for an answered row and
+  about 120 ms for a refused one, against a budget of one second.
+- the Pike VM or the bit-state engine **answers**, and agrees. A library
+  whose only response to `(a+)+$` is "I gave up" has not solved the problem,
+  it has renamed it. Currently under a millisecond for every row. A second
+  test doubles the subject three times and checks that the step count does
+  not square, so the answer stays an answer as the subject grows.
+
+A row whose verdict changes fails this test rather than being absorbed by
+it. The memo's reach is meant to be something a person decided and wrote
+down, not something that drifted: if a change makes `(a*)*$` answerable, the
+corpus is regenerated and this section says so.
 
 This is the corpus that sets `max_steps` and `max_backtrack`
 ([dialects.md](dialects.md) §7), and it is a regression suite for the

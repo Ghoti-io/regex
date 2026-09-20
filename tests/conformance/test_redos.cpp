@@ -3,18 +3,24 @@
  *
  * The ReDoS corpus.
  *
- * Every record in `tests/data/redos/` is a pattern and subject pair that a
- * backtracking engine cannot finish. The conformance runner would check only
- * that the backtracker reports GRX_ERR_LIMIT, and that is half the claim.
- * The other half is what makes the limit worth having:
+ * Every record in `tests/data/redos/` is a pattern and subject pair that an
+ * unmemoised backtracking engine cannot finish, and each says what *this*
+ * backtracker does with it. Most of them it answers: it arms the bit-state
+ * memo once a run has cost more than a memoised one could
+ * (src/exec/exec_backtrack.c). The two whose body can match empty carry a
+ * progress register, which makes a memo keyed on (instruction, position)
+ * unsound, so those are still refused.
+ *
+ * The conformance runner would check the verdict and no more, and that is
+ * half the claim. The other half is what makes either outcome worth having:
  *
  * - it has to arrive **quickly**. A limit reached after a minute is not a
  *   defence against a hostile pattern; it is the same outage with a
- *   different ending.
+ *   different ending. Neither is an answer that takes one.
  * - another engine has to **answer**. A library whose only response to
  *   `(a+)+$` is "I gave up" has not solved the problem, it has renamed it.
  *   Where the Pike VM or the bit-state engine can run the program, it must
- *   return a real answer at the same limits.
+ *   return a real answer at the same limits, and the same one.
  *
  * The two together are the reason this library has three engines rather than
  * one, so they are tested together rather than left to the runner.
@@ -71,17 +77,64 @@ bool under_valgrind() {
   return preload && std::strstr(preload, "vgpreload");
 }
 
+/** Render a match the way a record's `expect:` field spells it. */
+std::string spans_of(const GRX_Match * match, int matched) {
+  if (!matched) {
+    return "nomatch";
+  }
+  std::string out;
+  for (size_t i = 0; i < grx_match_count(match); i++) {
+    GRX_Capture capture {GRX_NPOS, GRX_NPOS};
+    grx_match_group(match, i, &capture);
+    if (i) {
+      out += " ";
+    }
+    out += capture.start == GRX_NPOS
+        ? "-"
+        : std::to_string(capture.start) + "-" + std::to_string(capture.end);
+  }
+  return out;
+}
+
+/** The same rendering of what a record says should happen. */
+std::string expected_of(const grxtest::Record & record) {
+  if (record.expectation == grxtest::Expectation::Limit) {
+    return "limit";
+  }
+  if (record.expectation != grxtest::Expectation::Spans) {
+    return "nomatch";
+  }
+  std::string out;
+  for (size_t i = 0; i < record.spans.size(); i++) {
+    const grxtest::Span & span = record.spans[i];
+    if (i) {
+      out += " ";
+    }
+    if (!span.set) {
+      out += "-";
+      continue;
+    }
+    size_t start = span.start == grxtest::kSubjectLength ? record.subject.size()
+                                                         : span.start;
+    size_t end = span.end == grxtest::kSubjectLength ? record.subject.size()
+                                                     : span.end;
+    out += std::to_string(start) + "-" + std::to_string(end);
+  }
+  return out;
+}
+
 struct Attempt {
   GRX_Result result;
   int matched;
   long milliseconds;
   size_t steps;
+  std::string spans; ///< Rendered the way a record's `expect:` field is.
 };
 
 Attempt run(GRX_Regex * regex, const std::string & subject,
     GRX_Engine engine, const GRX_Limits * limits) {
   GRX_Match * match = nullptr;
-  Attempt attempt {GRX_ERR_INTERNAL, 0, 0, 0};
+  Attempt attempt {GRX_ERR_INTERNAL, 0, 0, 0, ""};
   if (grx_match_create(regex, nullptr, &match) != GRX_OK) {
     return attempt;
   }
@@ -94,13 +147,16 @@ Attempt run(GRX_Regex * regex, const std::string & subject,
           std::chrono::steady_clock::now() - began)
             .count();
   attempt.steps = grx_match_steps(match);
+  attempt.spans = attempt.result == GRX_ERR_LIMIT ? "limit"
+      : attempt.result != GRX_OK ? grx_result_string(attempt.result)
+                                 : spans_of(match, attempt.matched);
   grx_match_destroy(match);
   return attempt;
 }
 
 } // namespace
 
-TEST(ReDoS, EveryPairIsRefusedQuicklyAndAnsweredByAnotherEngine) {
+TEST(ReDoS, EveryPairIsAnsweredOrRefusedQuicklyAndNeverOnlyByOneEngine) {
   grxtest::VectorFile file;
   std::string error;
   ASSERT_TRUE(grxtest::read_vector_file(
@@ -113,22 +169,24 @@ TEST(ReDoS, EveryPairIsRefusedQuicklyAndAnsweredByAnotherEngine) {
   grx_limits_default(&limits);
 
   size_t answered = 0;
+  size_t refused = 0;
   size_t ran = 0;
   long slowest_refusal = 0;
   long slowest_answer = 0;
 
-  // Under Valgrind, four rows rather than seventeen. Each row costs
+  // Under Valgrind, five rows rather than seventeen. A refused row costs
   // max_steps - ten million - and memcheck is thirty times slower, so the
   // full corpus was six minutes of a twelve-minute suite and dominated it.
   //
-  // Four is enough for what Valgrind is here to see. Every row takes the
-  // same three paths - compile, backtrack until the limit, answer on the
-  // safe engine - and the memory each allocates differs only in size.
-  // Nothing here reaches the bit-state engine at all: every one of these
-  // patterns is regular, so the safe engine is always the Pike VM, and
-  // bit-state's allocation is checked by test_bitstate.cpp, which also runs
-  // under Valgrind.
-  const size_t rows = under_valgrind() ? 4 : file.records.size();
+  // Five rather than four, because the fourth row is the first one that is
+  // still refused, and the refusal path - backtrack until the limit, then
+  // answer on another engine - is the one with memory to leak on the way out.
+  // Every other row takes the same two paths and the memory each allocates
+  // differs only in size. Nothing here reaches the bit-state engine at all:
+  // every one of these patterns is regular, so the safe engine is always the
+  // Pike VM, and bit-state's allocation is checked by test_bitstate.cpp,
+  // which also runs under Valgrind.
+  const size_t rows = under_valgrind() ? 5 : file.records.size();
 
   for (const grxtest::Record & record : file.records) {
     if (ran++ >= rows) {
@@ -143,23 +201,32 @@ TEST(ReDoS, EveryPairIsRefusedQuicklyAndAnsweredByAnotherEngine) {
         GRX_OK)
         << record.pattern << ": " << compile_error.message;
 
-    // Half one: the backtracker gives up, and does so inside the budget.
+    // Half one: the backtracker does what the record says, inside the
+    // budget. A row whose verdict has changed is not a failure of this test
+    // to describe - it is a corpus that has gone stale, and saying so is
+    // what makes the memo's reach something a person decided rather than
+    // something that drifted.
+    const std::string expected = expected_of(record);
     Attempt backtrack
         = run(regex, record.subject, GRX_ENGINE_BACKTRACK, &limits);
-    EXPECT_EQ(backtrack.result, GRX_ERR_LIMIT)
-        << "/" << record.pattern << "/ finished on the backtracker in "
+    EXPECT_EQ(backtrack.spans, expected)
+        << "/" << record.pattern << "/ on the backtracker, after "
         << backtrack.steps
-        << " steps; it is no longer a pathological pair and the corpus "
-           "should say so";
+        << " steps; the corpus says " << expected
+        << " and should be regenerated if that is no longer true";
     if (!under_valgrind()) {
       EXPECT_LT(backtrack.milliseconds, kBudgetMilliseconds)
           << "/" << record.pattern << "/ took " << backtrack.milliseconds
-          << " ms to be refused";
+          << " ms";
     }
-    slowest_refusal = std::max(slowest_refusal, backtrack.milliseconds);
+    if (expected == "limit") {
+      refused++;
+      slowest_refusal = std::max(slowest_refusal, backtrack.milliseconds);
+    }
 
     // Half two: an engine that can run the program does, at the same
-    // limits, without a limit.
+    // limits, without a limit - and says the same thing where the
+    // backtracker said anything at all.
     GRX_Facts facts;
     grx_regex_facts(regex, &facts);
     GRX_Engine other = facts.is_regular ? GRX_ENGINE_PIKE
@@ -177,6 +244,10 @@ TEST(ReDoS, EveryPairIsRefusedQuicklyAndAnsweredByAnotherEngine) {
       EXPECT_LT(safe.steps, backtrack.steps)
           << "/" << record.pattern
           << "/ cost the safe engine as much as the backtracker";
+      if (expected != "limit") {
+        EXPECT_EQ(safe.spans, backtrack.spans)
+            << "/" << record.pattern << "/: the engines disagree";
+      }
       slowest_answer = std::max(slowest_answer, safe.milliseconds);
     }
 
@@ -188,9 +259,9 @@ TEST(ReDoS, EveryPairIsRefusedQuicklyAndAnsweredByAnotherEngine) {
   // corpus is where that would have to be recorded rather than discovered.
   EXPECT_EQ(answered, rows) << "some pair has no engine that can answer it";
 
-  printf("\nredos: %zu of %zu pairs; slowest refusal %ld ms, slowest answer "
-         "%ld ms\n",
-      rows, file.records.size(), slowest_refusal, slowest_answer);
+  printf("\nredos: %zu of %zu pairs, %zu still refused by the backtracker; "
+         "slowest refusal %ld ms, slowest answer %ld ms\n",
+      rows, file.records.size(), refused, slowest_refusal, slowest_answer);
 }
 
 TEST(ReDoS, TheSafeEnginesStayLinearAsTheSubjectGrows) {

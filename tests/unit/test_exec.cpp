@@ -384,14 +384,101 @@ TEST(Backtrack, RunsWhatTheLockstepEngineCannot) {
   }
 }
 
-TEST(Backtrack, ExponentialPatternsHitTheLimitRatherThanHanging) {
-  // The patterns a backtracking engine is famous for. There is no clever
-  // answer here - the engine really does explore exponentially many paths -
-  // so the promise is not speed but *termination*: max_steps turns a hang
-  // into GRX_ERR_LIMIT, and GRX_ERR_LIMIT is not "no match", because "no
-  // match" is a fact about the subject and a limit is a fact about the
+TEST(Backtrack, ExponentialPatternsTheMemoCanHelpAreAnsweredRatherThanRefused) {
+  // The patterns a backtracking engine is famous for, on the backtracker,
+  // and they are answered. Nothing clever happens to the search itself: the
+  // engine arms the bit-state memo once it has taken more steps than there
+  // are (instruction, position) states to take them from, which is the point
+  // at which it has provably repeated itself. Perl does the same thing under
+  // the name "super-linear cache".
+  //
+  // The step budget here is two hundred thousand and the answers cost a few
+  // thousand, so this is not a test of the budget being generous.
+  const char * patterns[] = {"(a+)+b", "(a|aa)*b", "(x+x+)+y"};
+
+  GRX_Limits limits;
+  grx_limits_default(&limits);
+  limits.max_steps = 200000;
+
+  for (const char * pattern : patterns) {
+    Regex regex(pattern);
+    ASSERT_TRUE(regex.ok()) << pattern;
+
+    const std::string subject(40, pattern[1] == 'x' ? 'x' : 'a');
+    int matched = 1;
+    EXPECT_EQ(grx_regex_search(regex.get(), subject.data(), subject.size(), 0,
+                  GRX_ENGINE_BACKTRACK, &limits, nullptr, &matched),
+        GRX_OK)
+        << pattern;
+    EXPECT_FALSE(matched) << pattern;
+
+    // The same answer from the lockstep engine, which never needed the memo
+    // because its bound is structural.
+    matched = 1;
+    EXPECT_EQ(grx_regex_search(regex.get(), subject.data(), subject.size(), 0,
+                  GRX_ENGINE_PIKE, &limits, nullptr, &matched),
+        GRX_OK)
+        << pattern;
+    EXPECT_FALSE(matched) << pattern;
+  }
+}
+
+TEST(Backtrack, ABitmapThatWillNotFitLeavesTheRunUnmemoisedRatherThanRefused) {
+  // The one place the late memo differs from the bit-state engine in kind
+  // rather than in timing. There, the bitmap is the promise the caller asked
+  // for by naming the engine, so one that will not fit in max_match_memory
+  // is GRX_ERR_LIMIT before a single step. Here it is an optimisation the
+  // engine reached for on its own, so a bitmap that will not fit is simply
+  // not allocated and the run goes on to whatever limit it was heading for.
+  //
+  // Sixty-four bytes is under what `(a+)+b` over forty characters needs -
+  // about twelve instructions times forty-one positions, which is sixty-two
+  // bytes of bits - and over what anything else in the run allocates, so it
+  // separates the two.
+  Regex regex("(a+)+b");
+  ASSERT_TRUE(regex.ok());
+  const std::string subject(40, 'a');
+
+  GRX_Limits limits;
+  grx_limits_default(&limits);
+  limits.max_steps = 200000;
+  limits.max_match_memory = 32;
+
+  int matched = 1;
+  EXPECT_EQ(grx_regex_search(regex.get(), subject.data(), subject.size(), 0,
+                GRX_ENGINE_BACKTRACK, &limits, nullptr, &matched),
+      GRX_ERR_LIMIT);
+  EXPECT_FALSE(matched);
+
+  // The same budget on the engine that promised the bitmap refuses before it
+  // starts, and raising the budget lets the backtracker answer.
+  matched = 1;
+  EXPECT_EQ(grx_regex_search(regex.get(), subject.data(), subject.size(), 0,
+                GRX_ENGINE_BITSTATE, &limits, nullptr, &matched),
+      GRX_ERR_LIMIT);
+
+  limits.max_match_memory = 8 * 1024;
+  matched = 1;
+  EXPECT_EQ(grx_regex_search(regex.get(), subject.data(), subject.size(), 0,
+                GRX_ENGINE_BACKTRACK, &limits, nullptr, &matched),
+      GRX_OK);
+  EXPECT_FALSE(matched);
+}
+
+TEST(Backtrack, ExponentialPatternsTheMemoCannotHelpHitTheLimitRatherThanHanging) {
+  // The rest of them, and the reason this engine still has an exponential
+  // worst case to document. A memo keyed on (instruction, position) is only
+  // sound when nothing else distinguishes two arrivals at the same pair, and
+  // each of these carries something that does: `(a*)*b` a progress register,
+  // because its body can match empty; `(a+)+b\1` a capture a
+  // backreference will compare against; `((?=a)a+)+b` a lookaround, whose
+  // sub-run would need a bitmap of its own.
+  //
+  // So the promise for these is not speed but *termination*: max_steps turns
+  // a hang into GRX_ERR_LIMIT, and GRX_ERR_LIMIT is not "no match", because
+  // "no match" is a fact about the subject and a limit is a fact about the
   // budget.
-  const char * patterns[] = {"(a+)+b", "(a|aa)*b", "(a*)*b"};
+  const char * patterns[] = {"(a*)*b", "(a+)+b\\1", "((?=a)a+)+b"};
 
   GRX_Limits limits;
   grx_limits_default(&limits);
@@ -406,16 +493,6 @@ TEST(Backtrack, ExponentialPatternsHitTheLimitRatherThanHanging) {
     EXPECT_EQ(grx_regex_search(regex.get(), subject.data(), subject.size(), 0,
                   GRX_ENGINE_BACKTRACK, &limits, nullptr, &matched),
         GRX_ERR_LIMIT)
-        << pattern;
-    EXPECT_FALSE(matched) << pattern;
-
-    // And the same pattern on the lockstep engine answers immediately,
-    // because its bound is structural. This pair is the whole argument for
-    // having two engines.
-    matched = 1;
-    EXPECT_EQ(grx_regex_search(regex.get(), subject.data(), subject.size(), 0,
-                  GRX_ENGINE_PIKE, &limits, nullptr, &matched),
-        GRX_OK)
         << pattern;
     EXPECT_FALSE(matched) << pattern;
   }

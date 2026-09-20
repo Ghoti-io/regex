@@ -43,24 +43,6 @@ perl		(?iu)(?<=\\xdf)hbase	sshbase	full case folding: implemented as simple fold
 perl		(?|(?<a>a)|(?<b>b))(?(<a>)x|y)\\1	bxb 	branch reset: a name or a relative call inside one means the branch it was written in, and this library resolves both to the number all the branches share
 perl		(?|(?<a>a)|(?<b>b))(?(<a>)x|y)\\1	byb 	branch reset: a name or a relative call inside one means the branch it was written in, and this library resolves both to the number all the branches share
 perl		(?|(?<a>a)|(?<b>b))\\1(?&a)(?&b)	bbab 	branch reset: a name or a relative call inside one means the branch it was written in, and this library resolves both to the number all the branches share
-perl		.X(.+)+X	bbbbXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backtrack on the backtracker alone; the Pike and bit-state engines both answer it, and agree with the reference
-perl		.X(.+)+X	bbbbXcXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backtrack on the backtracker alone; the Pike and bit-state engines both answer it, and agree with the reference
-perl		.X(.+)+XX	bbbbXXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backtrack on the backtracker alone; the Pike and bit-state engines both answer it, and agree with the reference
-perl		.X(.+)+XX	bbbbXcXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backtrack on the backtracker alone; the Pike and bit-state engines both answer it, and agree with the reference
-perl		.X(.+)+[X]	bbbbXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backtrack on the backtracker alone; the Pike and bit-state engines both answer it, and agree with the reference
-perl		.X(.+)+[X]	bbbbXcXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backtrack on the backtracker alone; the Pike and bit-state engines both answer it, and agree with the reference
-perl		.X(.+)+[X][X]	bbbbXXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backtrack on the backtracker alone; the Pike and bit-state engines both answer it, and agree with the reference
-perl		.X(.+)+[X][X]	bbbbXcXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backtrack on the backtracker alone; the Pike and bit-state engines both answer it, and agree with the reference
-perl		.XX(.+)+X	bbbbXXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backtrack on the backtracker alone; the Pike and bit-state engines both answer it, and agree with the reference
-perl		.XX(.+)+X	bbbbXXcXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backtrack on the backtracker alone; the Pike and bit-state engines both answer it, and agree with the reference
-perl		.XX(.+)+[X]	bbbbXXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backtrack on the backtracker alone; the Pike and bit-state engines both answer it, and agree with the reference
-perl		.XX(.+)+[X]	bbbbXXcXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backtrack on the backtracker alone; the Pike and bit-state engines both answer it, and agree with the reference
-perl		.[X](.+)+[X]	bbbbXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backtrack on the backtracker alone; the Pike and bit-state engines both answer it, and agree with the reference
-perl		.[X](.+)+[X]	bbbbXcXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backtrack on the backtracker alone; the Pike and bit-state engines both answer it, and agree with the reference
-perl		.[X](.+)+[X][X]	bbbbXXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backtrack on the backtracker alone; the Pike and bit-state engines both answer it, and agree with the reference
-perl		.[X](.+)+[X][X]	bbbbXcXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backtrack on the backtracker alone; the Pike and bit-state engines both answer it, and agree with the reference
-perl		.[X][X](.+)+[X]	bbbbXXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backtrack on the backtracker alone; the Pike and bit-state engines both answer it, and agree with the reference
-perl		.[X][X](.+)+[X]	bbbbXXcXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backtrack on the backtracker alone; the Pike and bit-state engines both answer it, and agree with the reference
 perl		X(?!b+(?!(c+)*(?!(c+)*d))).*X	aXbbbbbbbcccccccccccccaaaX	Perl's capture state after a failed attempt: `((a)|b)+` against "ab" reports group 2 unset in Perl and "a" in PCRE2, and the rule behind that is not one this library can state - see the four probes in documentation/dialects.md section 5.5
 perl		\\B{ gcb }		`\b{wb}` and kin: Perl's Unicode boundary escapes, not implemented
 perl		\\B{ lb }		`\b{wb}` and kin: Perl's Unicode boundary escapes, not implemented

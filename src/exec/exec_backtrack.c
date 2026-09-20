@@ -142,17 +142,39 @@ typedef struct {
   GRX_Result failure;    ///< Set when a limit stopped the run.
 
   /**
-   * The bit-state engine's visited set: one bit per (instruction, position),
-   * or NULL when this run is the plain backtracker.
+   * The visited set: one bit per (instruction, position), or NULL while the
+   * run has no memo.
    *
    * Indexed pc * (length + 1) + position. It is *not* cleared between
    * starting positions, and that is the whole of what makes the search
    * linear rather than merely each attempt: a state that failed from an
    * earlier start will fail from a later one, because what it does next
    * depends on nothing else.
+   *
+   * The bit-state engine allocates this before the first step. The plain
+   * backtracker allocates it partway through, when `memo_after` says the
+   * run has already cost more than a memoised one ever could.
    */
   unsigned char * visited;
   size_t stride;         ///< Positions per instruction: length + 1.
+
+  /**
+   * The step count past which the plain backtracker starts memoising, or 0
+   * for a run that will not.
+   *
+   * Perl's answer to `.X(.+)+X` is a cache it switches on once an attempt
+   * has gone on long enough to look super-linear, and this is that: the
+   * engine that has to be able to run anything keeps running the programs a
+   * memo would be unsound for, and stops being exponential on the ones it
+   * would not.
+   *
+   * The threshold is the number of (instruction, position) states, because
+   * that is exactly the work a memoised run can do before it runs out of
+   * states to visit. A run still under it has not yet repeated enough to pay
+   * for the bitmap; a run past it has provably repeated itself, since it has
+   * taken more steps than there are distinct states to take them from.
+   */
+  size_t memo_after;
 
   /**
    * The subroutine call stack.
@@ -235,6 +257,32 @@ static int already_tried(Backtrack * bt, uint32_t pc, size_t position) {
   }
   bt->visited[byte] |= bit;
   return 0;
+}
+
+/**
+ * Switch the memo on partway through a run, if it can be afforded.
+ *
+ * Called once, the first time the step count passes `memo_after`. Failing to
+ * allocate is not an error: the bitmap is an optimisation here rather than a
+ * promise, and a run that cannot have one carries on to whatever limit it was
+ * going to reach anyway. `memo_after` is cleared either way, so the attempt
+ * is not repeated at every step from here on.
+ *
+ * Starting late costs nothing but the pruning that was not done: every bit
+ * the map holds is still a state that was entered and failed, which is the
+ * only thing already_tried() reads it for.
+ */
+static void enable_memo(Backtrack * bt) {
+  size_t bytes = grx_exec_bitmap_bytes(bt->request->regex, bt->request->length);
+  bt->memo_after = 0;
+  if (bytes == GRX_NPOS) {
+    return;
+  }
+  const GRX_Limits * limits = bt->request->limits;
+  if (limits->max_match_memory && bytes > limits->max_match_memory) {
+    return;
+  }
+  bt->visited = gcu_allocator_calloc(bt->allocator, bytes, 1);
 }
 
 /** Make room for `wanted` active calls, charged against max_match_memory. */
@@ -752,6 +800,10 @@ static int run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
     if (limits->max_steps && bt->steps > limits->max_steps) {
       bt->failure = GRX_ERR_LIMIT;
       return 0;
+    }
+
+    if (bt->memo_after && bt->steps > bt->memo_after) {
+      enable_memo(bt);
     }
 
     if (already_tried(bt, pc, position)) {
@@ -1330,6 +1382,7 @@ GRX_Result grx_exec_backtrack(
     .failure = GRX_OK,
     .visited = NULL,
     .stride = request->length + 1,
+    .memo_after = 0,
     .call_return = NULL,
     .call_group = NULL,
     .call_slots = NULL,
@@ -1371,6 +1424,20 @@ GRX_Result grx_exec_backtrack(
     if (!bt.visited) {
       gcu_allocator_free(bt.allocator, bt.slots);
       return GRX_ERR_OOM;
+    }
+  }
+  else if (grx_exec_program_is_memoizable(request->regex)) {
+    // The plain backtracker, on a program the memo would be sound for: arm
+    // the late cache rather than allocating a bitmap a run that never needs
+    // one would pay for. The threshold is the state count; anything past it
+    // is repeated work. Programs the memo would be *unsound* for - a
+    // backreference, a lookaround, a recursion, a progress register - get
+    // nothing, and are the reason this engine still has an exponential worst
+    // case to document.
+    size_t instructions = program->insts.count;
+    size_t positions = request->length + 1;
+    if (instructions && positions <= GRX_NPOS / instructions) {
+      bt.memo_after = instructions * positions;
     }
   }
 

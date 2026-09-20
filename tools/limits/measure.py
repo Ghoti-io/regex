@@ -12,9 +12,11 @@ at which the pattern still compiles, which is how much of that resource it
 needs. A default below any of those maxima would reject working software.
 
 The second corpus is patterns that must not work. `tests/data/redos/` holds
-pairs that are exponential under backtracking; each must hit `max_steps`
-within a wall clock bound at the default limits. A default above that bound
-would leave a caller exposed for as long as it took.
+pairs that are exponential under an unmemoised backtracker. Most are now
+answered - the engine arms the bit-state memo once a run has cost more than a
+memoised one could - and the rest must hit `max_steps` within a wall clock
+bound at the default limits. A default above that bound would leave a caller
+exposed for as long as it took.
 
 The two pull in opposite directions and the report prints both, so that a
 default can be read as the number between them rather than as a preference.
@@ -326,6 +328,8 @@ def report_redos(matcher):
     print()
     print("redos: %d pairs, on the backtracking engine at default limits"
           % len(rows))
+    print("(a pair the memo reaches is answered rather than refused; the "
+          "clock is what matters either way)")
     print()
 
     slowest = 0.0
@@ -346,7 +350,7 @@ def report_redos(matcher):
         print("  %7.0f ms  %-14s /%s/" % (elapsed * 1000, answer, pattern))
 
     print()
-    print("slowest refusal: %.0f ms, /%s/" % (slowest * 1000, slowest_pattern))
+    print("slowest row: %.0f ms, /%s/" % (slowest * 1000, slowest_pattern))
     return 0
 
 

@@ -687,19 +687,25 @@ low. The tool now refuses a record it cannot hold, which is the only way a
 number like this stays honest: a measurement that silently measures
 something smaller than it claims is worse than one that fails.
 
-Below: all 17 pairs in the ReDoS corpus are refused in 105 to 173
-milliseconds on an idle machine, and in 276 to 414 on the same machine with
-six other cores busy - against plan.md WP-08's bound of one second. Both
+Below: 15 of the 17 pairs in the ReDoS corpus are no longer refused at all.
+The backtracker arms the bit-state memo once a run has cost more than a
+memoised one could ([design.md](design.md) §3.5.2), and those fifteen come
+back with an answer in one to eight thousand steps - under a millisecond.
+
+The two that remain are `(a|a?)+$` and `(a*)*$`, whose bodies can match
+empty: the loop carries a progress register, the register is state the memo's
+key does not include, and so the memo is never armed. They are refused in 120
+to 134 milliseconds on an idle machine, and in 140 to 231 on the same machine
+with six other cores busy - against plan.md WP-08's bound of one second. Both
 ranges are recorded because the second is the one that matters: a bound is
 worth having only if it holds when the machine is under load, which is when
-an attack would be happening. Every pair is *answered* by the Pike VM or the
-bit-state engine in under a millisecond at the same limits, which is the
-point: a limit is a defence only because there is another engine that does
-not need it.
+an attack would be happening. Both are *answered* by the Pike VM in under a
+millisecond at the same limits, which is the point: a limit is a defence only
+because there is another engine that does not need it.
 
 `max_steps` stays at 10,000,000, and the numbers above are why rather than a
-preference. Lowering it to a million would refuse a pathological pair in
-about 15 ms instead of 150 - but would also cap a legitimate scan at 333 KB,
+preference. Lowering it to a million would refuse a still-pathological pair
+in about 15 ms instead of 130 - but would also cap a legitimate scan at 333 KB,
 and a caller scanning documents that large is not the one being attacked. A
 caller who *is* - one compiling patterns from a file it did not write -
 should lower it, and now has the arithmetic to choose by: divide it by three

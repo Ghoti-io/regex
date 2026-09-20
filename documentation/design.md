@@ -375,6 +375,22 @@ Either exhausted is `GRX_ERR_LIMIT` with the count in the match object, and
 is never reported as "no match", because "no match" is a fact about the
 subject and a limit is a fact about the budget.
 
+**The late memo.** This engine is the one that has to be able to run
+anything, but that is no reason for it to be exponential on the programs it
+does *not* have to. When the program is memoizable (§3.5.3) it arms the same
+visited bitmap partway through a run: once the step count passes the number
+of `(instruction, position)` states, which is exactly the work a memoised run
+could do before running out of states to visit, and so the point at which the
+run has provably repeated itself. Perl does this and calls it the super-linear
+cache. The bitmap is charged against `max_match_memory` and simply not
+allocated if it will not fit, because here it is an optimisation rather than
+the promise it is on the bit-state engine.
+
+This is why the ReDoS corpus ([testing.md](testing.md) §10) records fifteen
+of its seventeen rows as *answered*. The exponential worst case that remains
+is the programs the memo would be unsound for, and the corpus's two remaining
+`limit` rows are that case written down.
+
 Lookbehind runs the body's reverse-direction instructions from the current
 position backwards; a lookbehind body may itself contain anything the
 backtracker runs, including captures, which is the ECMAScript semantics and
@@ -393,7 +409,12 @@ is that it extends the linear-time guarantee to atomic groups, possessive
 quantifiers and conditionals on group-set, none of which the Pike VM can run.
 The memory budget is `max_match_memory` (§6.2), and a bitmap that will not
 fit in it is `GRX_ERR_LIMIT` rather than a silent fall back to the engine
-that can hang.
+that can hang. What separates this engine from the plain backtracker on a
+program both can run is *when* the bitmap starts working: here from the first
+step, there only once the run has shown it needs one. So there is a step
+budget at which this engine answers and the other has not yet finished, which
+is what `tests/unit/test_bitstate.cpp` measures by binary-searching the
+smallest budget each needs.
 
 **Built.** One condition was missing from the list above and is worth
 naming, because it is not obvious: a program carrying an *empty-iteration

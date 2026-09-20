@@ -268,9 +268,9 @@ cannot mean "the suite ran nothing".
 | --- | --- | --- |
 | ECMAScript, from Node 22 and test262 | 28,559 | **100%** |
 | PCRE2, from pcre2test 10.46's `testinput1` and `testinput2` | 1,869 | **99.68%** |
-| Perl, from `re_tests` under Perl 5.40 | 1,707 | **95.55%** |
+| Perl, from `re_tests` under Perl 5.40 | 1,707 | **96.60%** |
 
-The 82 that do not agree are listed one per line in
+The 64 that do not agree are listed one per line in
 `tests/data/vectors/known-gaps.txt`, with the construct that is missing
 written beside each. That file is a gate in both directions: a vector that
 fails and is not listed fails the suite; a vector that *is* listed and passes
@@ -279,23 +279,27 @@ corpus no longer has fails it as well. So the list can only shrink by
 somebody noticing, and the percentages above are over the whole corpus - a
 known gap is counted and named, never counted as a pass.
 
-They are all Perl's now but six. The largest groups are 18 patterns of the
-`.X(.+)+X` shape, which the Pike and bit-state engines both answer and the
-plain backtracker runs out of budget on; 16 using Perl's `\b{wb}` and its
-three relatives; 11 needing full case folding; and 17 turning on what Perl
-does to a capture group a later iteration entered and failed, which
-[dialects.md](documentation/dialects.md) section 5.5 states as four
-measurements and no rule.
+They are all Perl's now but six. The largest groups are 16 using Perl's
+`\b{wb}` and its three relatives; 11 needing full case folding; and 17
+turning on what Perl does to a capture group a later iteration entered and
+failed, which [dialects.md](documentation/dialects.md) section 5.5 states as
+four measurements and no rule.
 
 **Linear time.** `(a|aa)*b`, `(a+)+b` and `(a*)*b` - the patterns that make a
 backtracking engine hang - run against 100,000 characters in around fifty
 milliseconds, and a test asserts the *scaling* rather than the wall clock.
+The backtracking engine finishes most of them too: on a program whose
+behaviour is a function of `(instruction, position)` alone it arms the
+bit-state bitmap once a run has cost more than a memoised one could, which
+is Perl's super-linear cache under another name.
 
 **Limits.** Measured, not guessed. 264 real patterns were asked how much of
 each resource they need and the tightest default leaves five times what the
-costliest of them uses; the 17 pairs in the ReDoS corpus are refused in 105
-to 173 milliseconds on an idle machine - 276 to 414 on a busy one, which is
-the number that matters - and answered by another engine in under one.
+costliest of them uses; 15 of the 17 pairs in the ReDoS corpus are now
+answered by the backtracker itself in under a millisecond, and the two whose
+body can match empty - the shape whose progress register makes the memo
+unsound - are refused in about 120 milliseconds and answered by another
+engine in under one.
 [dialects.md](documentation/dialects.md) §7 is the report.
 
 387 tests plus the vector corpus, clean under Valgrind and under

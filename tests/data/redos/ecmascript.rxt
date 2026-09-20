@@ -1,12 +1,19 @@
 # The ReDoS corpus: pattern and subject pairs that are exponential or
 # high-polynomial under backtracking (documentation/testing.md section 10).
 #
-# Every record expects GRX_ERR_LIMIT from the backtracking engine at the
+# Each record says what the *backtracking* engine does with the pair at the
 # default limits, and tests/conformance/test_redos.cpp additionally requires
-# that it arrive within a wall clock bound and that the engines which *can*
-# answer do, without a limit. Those two halves are the point: a limit is only
-# a defence if it fires quickly, and it is only acceptable if there is
-# another engine that does not need it.
+# that the answer or the refusal arrive within a wall clock bound and that
+# another engine answer it too. Those halves are the point: a limit is only a
+# defence if it fires quickly, and it is only acceptable if there is another
+# engine that does not need it.
+#
+# Fifteen of the seventeen are now answered rather than refused: the
+# backtracker arms the bit-state memo once a run has cost more than a
+# memoised one could (src/exec/exec_backtrack.c). The two that still say
+# `limit` are the two whose body can match empty, which makes a memo keyed on
+# (instruction, position) unsound - so they are the shape of the exponential
+# case this library still has, and the reason the corpus is still here.
 #
 # This corpus is what sets max_steps and max_backtrack
 # (documentation/plan.md WP-14), and it is a regression suite for the
@@ -20,23 +27,24 @@ pattern: (a+)+$
 flags: u
 subject: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!
 engines: backtrack
-expect: limit
+expect: nomatch
 
 # the anchored form
 pattern: ^(a+)+$
 flags: u
 subject: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!
 engines: backtrack
-expect: limit
+expect: nomatch
 
 # overlapping alternatives
 pattern: (a|aa)+$
 flags: u
 subject: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!
 engines: backtrack
-expect: limit
+expect: nomatch
 
-# an alternative that can match empty
+# an alternative that can match empty, so the loop carries a progress
+# register and the memo would be unsound
 pattern: (a|a?)+$
 flags: u
 subject: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!
@@ -48,84 +56,85 @@ pattern: (x+x+)+y
 flags: u
 subject: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx!
 engines: backtrack
-expect: limit
+expect: nomatch
 
-# OWASP's second example
+# OWASP's second example; the outer star takes zero iterations, so the
+# answer is an empty match at the end rather than no match
 pattern: ([a-zA-Z]+)*$
 flags: u
 subject: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!
 engines: backtrack
-expect: limit
+expect: 37-37 -
 
 # the 'trim' shape, seen in the wild
 pattern: (\w+\s?)+$
 flags: u
 subject: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!
 engines: backtrack
-expect: limit
+expect: nomatch
 
 # its unanchored-body variant
 pattern: ^(\w+\s?)*$
 flags: u
 subject: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!
 engines: backtrack
-expect: limit
+expect: nomatch
 
 # high-polynomial rather than exponential
 pattern: (.*a){20}$
 flags: u
 subject: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 engines: backtrack
-expect: limit
+expect: 0-40 39-40
 
 # the Stack Overflow outage of 2016
 pattern: (.*,){11}P
 flags: u
 subject: ,,,,,,,,,,,,,,,,,,,,,,
 engines: backtrack
-expect: limit
+expect: nomatch
 
 # the Java Pattern documentation's own warning
 pattern: ^(([a-z])+.)+[A-Z]([a-z])+$
 flags: u
 subject: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!
 engines: backtrack
-expect: limit
+expect: nomatch
 
 # digits, for a schema that validates numbers
 pattern: (\d+)*x
 flags: u
 subject: 1111111111111111111111111111111111111111!
 engines: backtrack
-expect: limit
+expect: nomatch
 
 # a body whose first half can match empty; the shape a 'trim and split' pattern falls into
 pattern: ^(\s*\w+)+$
 flags: u
 subject: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!
 engines: backtrack
-expect: limit
+expect: nomatch
 
 # the same with two optional separators, which is what a CSV field pattern looks like
 pattern: ^(\w+,?\s?)+$
 flags: u
 subject: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!
 engines: backtrack
-expect: limit
+expect: nomatch
 
 # the same, caselessly
 pattern: (a+)+$
 flags: iu
 subject: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA!
 engines: backtrack
-expect: limit
+expect: nomatch
 
 # three overlapping alternatives
 pattern: (a|b|ab)*bc
 flags: u
 subject: abababababababababababababababababababababab!
 engines: backtrack
-expect: limit
+expect: nomatch
 
 # an empty-capable body, which carries a progress guard and so is not memoizable
 pattern: (a*)*$

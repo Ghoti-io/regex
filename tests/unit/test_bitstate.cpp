@@ -294,10 +294,21 @@ TEST(BitState, LeftmostFirstSurvivesTheMemo) {
 // The memo does something
 // --------------------------------------------------------------------------
 
-TEST(BitState, CompletesWhatMakesTheBacktrackerGiveUp) {
-  // The point of the engine. Each row is a classic catastrophic
-  // backtracking pair - a subject that makes the plain backtracker explore
-  // exponentially many ways to fail.
+TEST(BitState, PaysLessThanTheBacktrackerForTheSameAnswer) {
+  // The point of the engine, now that the backtracker arms the same memo
+  // late (src/exec/exec_backtrack.c, `memo_after`). Both engines finish
+  // these; what separates them is *when* the bitmap starts working.
+  //
+  // The bit-state engine has it from the first step, so it never visits a
+  // state twice. The backtracker allocates it only after the step count
+  // passes the number of states, because until then the run has not shown
+  // that it is repeating itself, and a bitmap for a pattern that was going
+  // to finish anyway is memory nobody asked for. So there is a budget at
+  // which one answers and the other has not yet stopped exploring, and the
+  // smallest budget each needs is the measurement that shows it.
+  //
+  // Binary search for that smallest budget rather than the clock, for the
+  // same reason tools/limits/grx_limits.c does: a clock measures the machine.
   struct Row {
     const char * pattern;
     std::string subject;
@@ -323,28 +334,50 @@ TEST(BitState, CompletesWhatMakesTheBacktrackerGiveUp) {
     {"(\\w+\\s?)+$", std::string(34, 'a') + "!", "none"},
   };
 
+  // The smallest max_steps at which `engine` answers `row`, or 0 when it
+  // does not answer within `ceiling`.
+  auto cheapest = [](const Regex & regex, const std::string & subject,
+                      GRX_Engine engine, const char * expected) -> size_t {
+    const size_t ceiling = 2000000;
+    GRX_Limits limits;
+    grx_limits_default(&limits);
+    limits.max_steps = ceiling;
+    if (search_on(regex, subject, engine, &limits) != expected) {
+      return 0;
+    }
+    size_t low = 1;
+    size_t high = ceiling;
+    while (low < high) {
+      size_t middle = low + (high - low) / 2;
+      limits.max_steps = middle;
+      if (search_on(regex, subject, engine, &limits) == expected) {
+        high = middle;
+      }
+      else {
+        low = middle + 1;
+      }
+    }
+    return low;
+  };
+
   for (const Row & row : rows) {
     Regex regex(row.pattern);
     ASSERT_TRUE(regex.ok()) << row.pattern;
 
-    // The plain backtracker runs out of budget, which is what the budget is
-    // for and is not a wrong answer - it is no answer.
-    GRX_Limits limits;
-    grx_limits_default(&limits);
-    limits.max_steps = 2000000;
-    EXPECT_EQ(search_on(regex, row.subject, GRX_ENGINE_BACKTRACK, &limits),
-        kLimit)
-        << row.pattern;
+    size_t bitstate
+        = cheapest(regex, row.subject, GRX_ENGINE_BITSTATE, row.expected);
+    size_t backtrack
+        = cheapest(regex, row.subject, GRX_ENGINE_BACKTRACK, row.expected);
 
-    // The bit-state engine answers, under the same budget, in bounded time.
-    auto began = std::chrono::steady_clock::now();
-    std::string answer
-        = search_on(regex, row.subject, GRX_ENGINE_BITSTATE, &limits);
-    auto took = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::steady_clock::now() - began);
-    EXPECT_EQ(answer, row.expected) << row.pattern;
-    EXPECT_LT(took.count(), 2000)
-        << row.pattern << " took " << took.count() << " ms";
+    ASSERT_GT(bitstate, 0u) << row.pattern << " on the bit-state engine";
+    ASSERT_GT(backtrack, 0u)
+        << row.pattern
+        << " on the backtracker: it no longer finishes this at all, which is "
+           "a regression in the late memo rather than a fact about this row";
+    EXPECT_LT(bitstate, backtrack)
+        << row.pattern << ": bit-state needed " << bitstate
+        << " steps and the backtracker " << backtrack
+        << "; the memo is supposed to cost the engine that has it less";
   }
 }
 

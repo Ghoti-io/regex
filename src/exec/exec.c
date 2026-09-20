@@ -160,6 +160,13 @@ static GRX_Result exec(const GRX_Regex * regex, const char * subject,
   // *program* and bit-state's by the program times the subject. Choosing
   // bit-state for a regular program is a speed decision, and speed decisions
   // are Phase 8 (documentation/design.md section 3.5.5).
+  //
+  // The bottom row is the only one with an exponential worst case left. A
+  // backtracker asked to run a *memoizable* program arms the same memo
+  // partway through, once the run has cost more than a memoised one could
+  // (exec_backtrack.c, `memo_after`), so the difference between the middle
+  // row and a named GRX_ENGINE_BACKTRACK is when the bitmap is allocated
+  // rather than whether the run finishes.
   GRX_Engine engine = options->engine;
   int needs_backtracking = grx_exec_program_needs_backtracking(regex);
   int memoizable = grx_exec_program_is_memoizable(regex);
