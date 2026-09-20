@@ -899,6 +899,20 @@ TEST(Perl, AnExtendedClassIgnoresSpacesAndTabsOnly) {
   EXPECT_EQ(compile_result("(?[ [a]\n| [b] ])"), GRX_ERR_SYNTAX);
 }
 
+TEST(Perl, EmbeddedCodeIsPerlsAndPcre2HasNoneAtAll) {
+  // Two different refusals for one spelling. Perl has `(?{...})` and this
+  // library will not run code, so it says so; PCRE2 has no embedded code at
+  // all, so `(?{` is a `{` after `(?` and pcre2test reports "unrecognized
+  // character after (? or (?-". Saying "not implemented yet" there would
+  // promise a construct the dialect does not have.
+  EXPECT_EQ(compile("a(?{ 1 })b", GRX_SYNTAX_PERL).result, GRX_ERR_UNSUPPORTED);
+  EXPECT_EQ(compile("a(?{ 1 })b", GRX_SYNTAX_PCRE).diag,
+      GRX_DIAG_INVALID_GROUP_SYNTAX);
+  EXPECT_EQ(compile("a(??{ 1 })b", GRX_SYNTAX_PERL).result,
+      GRX_ERR_UNSUPPORTED);
+  EXPECT_EQ(compile("a(?{)b", GRX_SYNTAX_PCRE).result, GRX_ERR_SYNTAX);
+}
+
 int main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

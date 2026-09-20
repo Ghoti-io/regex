@@ -267,10 +267,10 @@ cannot mean "the suite ran nothing".
 | Corpus | Records | Agreeing |
 | --- | --- | --- |
 | ECMAScript, from Node 22 and test262 | 28,559 | **100%** |
-| PCRE2, from pcre2test 10.46's `testinput1` and `testinput2` | 1,884 | **93.74%** |
+| PCRE2, from pcre2test 10.46's `testinput1` and `testinput2` | 1,884 | **94.00%** |
 | Perl, from `re_tests` under Perl 5.40 | 1,707 | **95.08%** |
 
-The 202 that do not agree are listed one per line in
+The 197 that do not agree are listed one per line in
 `tests/data/vectors/known-gaps.txt`, with the construct that is missing
 written beside each. That file is a gate in both directions: a vector that
 fails and is not listed fails the suite, and a vector that *is* listed and

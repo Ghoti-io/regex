@@ -455,6 +455,7 @@ to be complete for every shipped tier.
 | ECMAScript | A match cannot begin or end between the halves of a surrogate pair | as above | - |
 | Perl | Full case folding is simple folding | [design.md](design.md) §5.2 | - |
 | Perl | `(?{ })`, `(??{ })`, `\N{name}` by name | code execution; name table size | `GRX_ERR_UNSUPPORTED` |
+| PCRE2 | `(?{ })` is not a construct it has at all | pcre2test: "unrecognized character after (? or (?-" | `GRX_ERR_SYNTAX` |
 | Perl | `(?[ ])` is PCRE2's grammar only | Perl's nests and takes different operands; a shared reader would accept neither exactly | `GRX_ERR_SYNTAX` |
 | Perl | A capture set inside a *failed* negative lookahead is discarded | PCRE2 discards it and ECMA-262 22.2.2.4 says to; Perl keeps it | - |
 | PCRE2 | Callouts `(?C...)` are read and have no effect | no callback API; a callout with no function registered changes no match, so accepting it answers the same question | - |

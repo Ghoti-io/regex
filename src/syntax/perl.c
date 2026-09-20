@@ -2890,9 +2890,19 @@ static GRX_Result pcre_group_open(GRX_Parser * parser, GRX_GroupOpen * out) {
   }
 
   if (c == '{' || (c == '?' && byte_at(parser, 1) == '{')) {
-    // Perl's embedded code. Refused with its own diagnostic rather than
-    // GRX_DIAG_INVALID_GROUP_SYNTAX: the construct is real and this library
-    // will never have it, which is not the same as a malformed group.
+    // Perl's embedded code, `(?{...})` and `(??{...})`. Refused with its own
+    // diagnostic rather than GRX_DIAG_INVALID_GROUP_SYNTAX: the construct is
+    // real and this library will never have it, which is not the same as a
+    // malformed group.
+    //
+    // PCRE2 is the other way round. It has no embedded code at all, so `(?{`
+    // is not a construct it declines to run - it is a `{` after `(?`, which
+    // pcre2test reports as "unrecognized character after (? or (?-". Saying
+    // "not implemented yet" there would promise a construct the dialect does
+    // not have.
+    if (flavour(parser) == FLAVOUR_PCRE) {
+      return grx_parse_fail(parser, GRX_DIAG_INVALID_GROUP_SYNTAX, start, 3);
+    }
     return grx_parse_fail(
         parser, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, start, 3);
   }

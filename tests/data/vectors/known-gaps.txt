@@ -112,11 +112,6 @@ pcre		a(*MARK:A)aa(*PRUNE:A)a(*SKIP:A)b|a+c		`(*MARK:name)`: no API reads a mark
 pcre		a(?:(*:X))(*SKIP:X)(*F)|(.)		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
 pcre		a(?=.(*:X))(*SKIP:X)(*F)|(.)		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
 pcre		a(?>(*:X))(*SKIP:X)(*F)|(.)		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
-pcre		a(?{"{"})b		Perl's embedded code `(?{...})`: refused as unsupported where the reference calls it a syntax error
-pcre		a(?{"{"}})b		Perl's embedded code `(?{...})`: refused as unsupported where the reference calls it a syntax error
-pcre		a(?{)b		Perl's embedded code `(?{...})`: refused as unsupported where the reference calls it a syntax error
-pcre		a(?{{})b		Perl's embedded code `(?{...})`: refused as unsupported where the reference calls it a syntax error
-pcre		a(?{}})b		Perl's embedded code `(?{...})`: refused as unsupported where the reference calls it a syntax error
 pcre		a+(*:Z)b(*COMMIT:X)(*SKIP:X)c|.*		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
 pcre		a+(*:Z)b(*COMMIT:X)(*SKIP:Z)c|.*		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
 pcre		aaa(*MARK:A)a(*SKIP:A)b|a+c		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
