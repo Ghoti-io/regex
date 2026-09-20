@@ -546,7 +546,8 @@ static GRX_Result parse_atom(GRX_Parser * parser, uint32_t * out_node) {
       if (open.kind == GRX_NODE_LOOKAROUND) {
         parser->in_lookaround = 1;
         if (open.a == GRX_LOOK_BEHIND_POSITIVE
-            || open.a == GRX_LOOK_BEHIND_NEGATIVE) {
+            || open.a == GRX_LOOK_BEHIND_NEGATIVE
+            || open.a == GRX_LOOK_BEHIND_NON_ATOMIC) {
           parser->in_lookbehind = 1;
         }
       }

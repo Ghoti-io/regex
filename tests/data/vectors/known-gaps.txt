@@ -16,28 +16,15 @@
 # failure it does not recognise. The *reason* is written by hand. A reason
 # that begins "not yet classified" is one nobody has looked at, and is meant
 # to be read as the admission it is.
-pcre		(*napla:)+		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
-pcre		(*napla:a(*ACCEPT)zz|(.))\\1..		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
-pcre		(*napla:a|(*COMMIT)(.))\\1\\1		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
-pcre		(*napla:a|(.)(*ACCEPT)zz)\\1..		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
-pcre		(*napla:a|(.))\\1\\1		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
-pcre		(*naplb:(.)..|(.)...)(\\1|\\2)		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
-pcre		(*naplb:)+		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
-pcre		(?(*napla:xx)bc)		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
 pcre		(?(*script_run:xxx)zzz)		`(*script_run:`: refused, it constrains the body and a group does not
-pcre		(?<*(.)..|(.)...)(\\1|\\2)		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
 pcre		(?|(?<a>A)|(?<b>B))		branch reset: the numbering is shared, and the names and references inside one are not checked against it yet
 pcre		(?|([ab]))...(?<=\\1)z		branch reset: the numbering is shared, and the names and references inside one are not checked against it yet
 pcre		(a)(?(DEFINE)(b))(?2){0,1999}?(?2)		a repeat of a subroutine call: the reference compiles one copy and this library expands it past max_program_size
 pcre		(a)(?2){0,1999}?(b)		a repeat of a subroutine call: the reference compiles one copy and this library expands it past max_program_size
 pcre		[a-[.xxx.]]+		POSIX collating element: refused, there is no locale here
 pcre		[a-[=xxx=]]+		POSIX collating element: refused, there is no locale here
-pcre		\\A(*napla:.*\\b(\\w++))(?>.*?\\b\\1\\b){3}		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
-pcre		\\A(?*.*\\b(\\w++))(?>.*?\\b\\1\\b){3}		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
 pcre		\\[()]{65535}()		a repeat count the reference folds and this library expands
 pcre		\\[()]{65535}(?<A>)		a repeat count the reference folds and this library expands
-pcre		^(?|(\\*)(*napla:\\S*_(\\2?+.+))|(\\w)(?=\\S*_(\\2?+\\1)))+_\\2$		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
-pcre		^(?|(\\*)(*napla:\\S*_(\\3?+.+))|(\\w)(?=\\S*_((\\2?+\\1))))+_\\2$		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
 pcre		z{65536}		a repeat count above 65535: the reference calls it a syntax error and this library a limit
 pcre	J	(?<A>[ab])...(?<=\\k'A')(?<A>)z		a backreference to a duplicated name inside a lookbehind: the reference will not bound one and this library bounds it by the first group of that name
 perl		(((aa){2})+)	aaaaaaaaaa	a capture an iteration set before failing: Perl keeps it, this library and PCRE2 discard it

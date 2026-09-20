@@ -1357,7 +1357,8 @@ static GRX_Result lower_look(
     Lowering * low, const GRX_Node * node, uint32_t * out_node) {
   GRX_LookKind kind = (GRX_LookKind)node->a;
   int behind = kind == GRX_LOOK_BEHIND_POSITIVE
-      || kind == GRX_LOOK_BEHIND_NEGATIVE;
+      || kind == GRX_LOOK_BEHIND_NEGATIVE
+      || kind == GRX_LOOK_BEHIND_NON_ATOMIC;
 
   GRX_Result result = add(low, GRX_IR_LOOK, node, out_node);
   if (result != GRX_OK) {

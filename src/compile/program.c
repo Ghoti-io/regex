@@ -20,8 +20,8 @@ const char * grx_opcode_name(GRX_Opcode op) {
   static const char * const names[GRX_OP_COUNT] = {
     "match", "char", "class", "any", "any-nl", "split", "jmp", "save",
     "assert", "progress-set", "reset", "progress-check", "backref", "look",
-    "scan", "atomic-begin", "atomic-end", "cond", "call", "ret", "keep",
-    "verb",
+    "scan", "rewind", "atomic-begin", "atomic-end", "cond", "call", "ret",
+    "keep", "verb",
   };
   return (unsigned)op < GRX_OP_COUNT ? names[op] : "?";
 }
@@ -40,6 +40,7 @@ static const char * assert_name(uint8_t kind) {
 static const char * look_name(uint8_t kind) {
   static const char * const names[GRX_LOOK_COUNT] = {
     "ahead", "ahead-negative", "behind", "behind-negative",
+    "ahead-non-atomic", "behind-non-atomic",
   };
   return kind < GRX_LOOK_COUNT ? names[kind] : "?";
 }

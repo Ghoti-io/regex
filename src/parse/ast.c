@@ -126,6 +126,7 @@ static const char * shorthand_name(uint32_t kind) {
 static const char * look_name(uint32_t kind) {
   static const char * const names[GRX_LOOK_COUNT] = {
     "ahead", "ahead-negative", "behind", "behind-negative",
+    "ahead-non-atomic", "behind-non-atomic",
   };
   return kind < GRX_LOOK_COUNT ? names[kind] : "?";
 }

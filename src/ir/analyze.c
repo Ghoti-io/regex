@@ -364,7 +364,8 @@ static Span walk(Analysis * analysis, uint32_t node_index) {
       // GRX_Facts::max_length already means by unbounded, and because it is
       // SIZE_MAX no later body can lower it.
       if (node->mode == GRX_LOOK_BEHIND_POSITIVE
-          || node->mode == GRX_LOOK_BEHIND_NEGATIVE) {
+          || node->mode == GRX_LOOK_BEHIND_NEGATIVE
+          || node->mode == GRX_LOOK_BEHIND_NON_ATOMIC) {
         if (body.max_length > analysis->max_lookbehind) {
           analysis->max_lookbehind = body.max_length;
         }

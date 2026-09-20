@@ -1692,6 +1692,12 @@ static const AltGroupRow alt_group_table[] = {
   {"positive_lookbehind", GRX_NODE_LOOKAROUND, GRX_LOOK_BEHIND_POSITIVE},
   {"nlb", GRX_NODE_LOOKAROUND, GRX_LOOK_BEHIND_NEGATIVE},
   {"negative_lookbehind", GRX_NODE_LOOKAROUND, GRX_LOOK_BEHIND_NEGATIVE},
+  {"napla", GRX_NODE_LOOKAROUND, GRX_LOOK_AHEAD_NON_ATOMIC},
+  {"non_atomic_positive_lookahead", GRX_NODE_LOOKAROUND,
+      GRX_LOOK_AHEAD_NON_ATOMIC},
+  {"naplb", GRX_NODE_LOOKAROUND, GRX_LOOK_BEHIND_NON_ATOMIC},
+  {"non_atomic_positive_lookbehind", GRX_NODE_LOOKAROUND,
+      GRX_LOOK_BEHIND_NON_ATOMIC},
   {NULL, GRX_NODE_GROUP, 0},
 };
 
@@ -1707,8 +1713,6 @@ static const AltGroupRow alt_group_table[] = {
  */
 static const char * const unsupported_star[] = {
   "script_run", "sr", "atomic_script_run", "asr",
-  "napla", "non_atomic_positive_lookahead",
-  "naplb", "non_atomic_positive_lookbehind",
   NULL
 };
 
@@ -2417,6 +2421,16 @@ static GRX_Result read_conditional_body(GRX_Parser * parser, uint32_t node) {
     if (result != GRX_OK) {
       return result;
     }
+    const GRX_Node * test = grx_pattern_node(parser->pattern, condition);
+    if (test && test->kind == GRX_NODE_LOOKAROUND
+        && (test->a == (uint32_t)GRX_LOOK_AHEAD_NON_ATOMIC
+            || test->a == (uint32_t)GRX_LOOK_BEHIND_NON_ATOMIC)) {
+      // pcre2test refuses `(?(*napla:xx)bc)`. A condition is asked once and
+      // answered once; there is nowhere for a second way through it to be
+      // tried from, so the non-atomic kind has nothing to offer here.
+      return grx_parse_fail(parser, GRX_DIAG_INVALID_CONDITION, start,
+          parser->position - start);
+    }
     if (grx_pattern_add_child(parser->pattern, node, condition) != GRX_OK) {
       return grx_parse_fail(parser, GRX_DIAG_INTERNAL, start, 0);
     }
@@ -2925,11 +2939,14 @@ static GRX_Result pcre_group_open(GRX_Parser * parser, GRX_GroupOpen * out) {
   }
 
   if (c == '*' || (c == '<' && byte_at(parser, 1) == '*')) {
-    // `(?*` and `(?<*` are `(*napla:` and `(*naplb:` written short, and are
-    // refused for the reason the long spellings are. Before the named-group
-    // branch, which would otherwise read `(?<*` as a name beginning `*`.
-    return grx_parse_fail(
-        parser, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, start, 3);
+    // `(?*` and `(?<*` are `(*napla:` and `(*naplb:` written short. Before
+    // the named-group branch, which would otherwise read `(?<*` as a name
+    // beginning with an asterisk.
+    out->kind = GRX_NODE_LOOKAROUND;
+    out->a = c == '*' ? GRX_LOOK_AHEAD_NON_ATOMIC
+                      : GRX_LOOK_BEHIND_NON_ATOMIC;
+    parser->position += c == '*' ? 1 : 2;
+    return GRX_OK;
   }
 
   if (c == '<' && (byte_at(parser, 1) == '=' || byte_at(parser, 1) == '!')) {

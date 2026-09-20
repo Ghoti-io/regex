@@ -44,6 +44,7 @@ static const char * assert_name(uint8_t kind) {
 static const char * look_name(uint8_t kind) {
   static const char * const names[GRX_LOOK_COUNT] = {
     "ahead", "ahead-negative", "behind", "behind-negative",
+    "ahead-non-atomic", "behind-non-atomic",
   };
   return kind < GRX_LOOK_COUNT ? names[kind] : "?";
 }

@@ -116,6 +116,15 @@ typedef enum {
    * instruction, the way a LOOK's does, and ends in its own MATCH.
    */
   GRX_OP_SCAN,
+  /**
+   * Put the position back where `x`'s register recorded it.
+   *
+   * What makes a non-atomic lookaround non-atomic: its body is inlined into
+   * the program rather than run as a sub-match, so its backtrack points stay
+   * on the stack and can be returned to. All that separates the body from
+   * ordinary text is that the position is restored afterwards.
+   */
+  GRX_OP_REWIND,
   GRX_OP_ATOMIC_BEGIN, ///< Start a region whose backtrack points are dropped.
   GRX_OP_ATOMIC_END,   ///< End it, discarding them.
   GRX_OP_COND,         ///< Branch on whether a group participated, and kin.

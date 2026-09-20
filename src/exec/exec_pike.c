@@ -673,6 +673,7 @@ static int program_is_runnable(const GRX_Program * program) {
       case GRX_OP_KEEP:
       case GRX_OP_VERB:
       case GRX_OP_SCAN:
+      case GRX_OP_REWIND:
         return 0;
       default:
         break;

@@ -628,7 +628,6 @@ TEST(Perl, TheConstructsThisLibraryRefusesSayWhyAndNotSomethingElse) {
     "\\X",                     // a grapheme cluster
     "\\C",                     // one code unit
     "(*script_run:abc)",       // constrains the body
-    "(*napla:a)",              // a non-atomic lookahead
   };
 
   for (const char * pattern : refused) {
@@ -1133,6 +1132,35 @@ TEST(Perl, TheTwoConstructsRefuseTheirOwnMalformedSpellings) {
   EXPECT_EQ(compile_result("(*scs:('x)a)"), GRX_ERR_SYNTAX);
   EXPECT_EQ(compile_result("(*scs:()a)"), GRX_ERR_SYNTAX);
   EXPECT_EQ(compile_result("(*scs:"), GRX_ERR_SYNTAX);
+}
+
+TEST(Perl, ANonAtomicLookaroundCanBeReEntered) {
+  // An ordinary lookaround is atomic: once its body has succeeded, nothing
+  // goes back in for a second way through it. `(?=a|(.))\1` against "aa"
+  // therefore fails - the first branch matched, group one is unset, and the
+  // backreference has nothing to compare. `(*napla:a|(.))\1` gives the `a`
+  // back, takes `(.)` instead, and matches. pcre2test answers both that way.
+  EXPECT_EQ(span_of("(?=a|(.))\\1", "aa"), "nomatch");
+  EXPECT_EQ(span_of("(*napla:a|(.))\\1", "aa"), "0-1");
+  EXPECT_EQ(group_of("(*napla:a|(.))\\1", "aa", 1), "0-1");
+
+  // Behind as well, where the body runs backwards and the rewind undoes
+  // that the same way.
+  EXPECT_EQ(span_of("(*naplb:(.)|x)\\1", "aa"), "1-2");
+
+  // `(?*` and `(?<*` are the same two constructs written short.
+  EXPECT_EQ(span_of("(?*a|(.))\\1", "aa"), "0-1");
+  EXPECT_EQ(compile_result("(?<*a)"), GRX_OK);
+
+  // Still zero-width, so it may be repeated, and a non-atomic lookbehind is
+  // still a lookbehind: pcre2test bounds its body like any other.
+  EXPECT_EQ(compile_result("(*napla:)+"), GRX_OK);
+  EXPECT_EQ(compile_result("(*naplb:a{1,4})"), GRX_OK);
+  EXPECT_EQ(compile_result("(*naplb:a+)"), GRX_ERR_SYNTAX);
+
+  // A condition is asked once and answered once, so there is nowhere for a
+  // second way through it to be tried from. pcre2test refuses this.
+  EXPECT_EQ(compile_result("(?(*napla:xx)bc)"), GRX_ERR_SYNTAX);
 }
 
 int main(int argc, char ** argv) {

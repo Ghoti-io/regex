@@ -91,6 +91,7 @@ static GRX_Result emit(Codegen * codegen, GRX_Opcode op, uint8_t mode,
     case GRX_OP_KEEP:
     case GRX_OP_VERB:
     case GRX_OP_SCAN:
+    case GRX_OP_REWIND:
     case GRX_OP_COND:
     case GRX_OP_CALL:
     case GRX_OP_RET:
@@ -591,7 +592,42 @@ static GRX_Result gen_call(Codegen * codegen, const GRX_IRNode * node) {
   return GRX_OK;
 }
 
+/**
+ * Emit a non-atomic lookaround: the body inline, and the position put back.
+ *
+ * The whole difference from gen_look() is that there is no sub-match. The
+ * body's instructions are the outer program's, so the choice points it
+ * leaves stay on the backtrack stack and can be returned to - which is what
+ * "non-atomic" means. A register records where the body started and a REWIND
+ * puts the position back, so the construct still consumes nothing.
+ *
+ * A non-atomic lookbehind needs nothing else: its body carries GRX_IR_REVERSE
+ * already, so its instructions walk backwards and the REWIND undoes that the
+ * same way.
+ */
+static GRX_Result gen_non_atomic_look(
+    Codegen * codegen, const GRX_IRNode * node) {
+  uint32_t reg = codegen->registers++;
+  GRX_Result result
+      = emit(codegen, GRX_OP_PROGRESS_SET, 0, reg, 0, node, NULL);
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  result = gen(codegen, node->first_child);
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  return emit(codegen, GRX_OP_REWIND, 0, reg, 0, node, NULL);
+}
+
 static GRX_Result gen_look(Codegen * codegen, const GRX_IRNode * node) {
+  if (node->mode == GRX_LOOK_AHEAD_NON_ATOMIC
+      || node->mode == GRX_LOOK_BEHIND_NON_ATOMIC) {
+    return gen_non_atomic_look(codegen, node);
+  }
+
   uint32_t look = GRX_INDEX_NONE;
   GRX_Result result
       = emit(codegen, GRX_OP_LOOK, node->mode, 0, 0, node, &look);

@@ -858,6 +858,20 @@ static int run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
         continue;
       }
 
+      case GRX_OP_REWIND: {
+        // The tail of a non-atomic lookaround: the body ran as ordinary
+        // instructions, and this is what makes it consume nothing. No undo
+        // frame - the position is the caller's own local, restored by
+        // backtracking like any other.
+        size_t index = bt->captures + inst->x;
+        if (index < bt->captures + bt->registers
+            && bt->slots[index] != GRX_NPOS) {
+          position = bt->slots[index];
+        }
+        pc++;
+        continue;
+      }
+
       case GRX_OP_PROGRESS_CHECK: {
         size_t index = bt->captures + inst->x;
         int stalled = index < bt->captures + bt->registers

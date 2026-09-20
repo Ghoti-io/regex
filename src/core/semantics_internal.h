@@ -108,6 +108,20 @@ typedef enum {
   GRX_LOOK_AHEAD_NEGATIVE,     ///< `(?!a)`.
   GRX_LOOK_BEHIND_POSITIVE,    ///< `(?<=a)`.
   GRX_LOOK_BEHIND_NEGATIVE,    ///< `(?<!a)`.
+  /**
+   * `(*napla:a)`, also spelt `(?*a)`: a lookahead that can be re-entered.
+   *
+   * An ordinary lookaround is atomic - once its body has succeeded, nothing
+   * goes back in to find a second way through it, so the captures it set are
+   * the ones the first success left. PCRE2 10.43 added the other kind:
+   * `(*napla:a|(.))\1\1` can give back the `a` and take the `(.)` branch
+   * instead when the backreferences that follow do not match.
+   *
+   * Negative forms do not exist and cannot: a negative assertion holds or
+   * does not, and there is nothing inside it to come back for.
+   */
+  GRX_LOOK_AHEAD_NON_ATOMIC,
+  GRX_LOOK_BEHIND_NON_ATOMIC,  ///< `(*naplb:a)`, also spelt `(?<*a)`.
   GRX_LOOK_COUNT               ///< Closes the enum; not a lookaround.
 } GRX_LookKind;
 
