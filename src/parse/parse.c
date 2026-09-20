@@ -415,7 +415,7 @@ static GRX_Result parse_quantifier(
       parser->position = start;
       return GRX_OK;
     }
-    if (bounds.min > bounds.max) {
+    if (bounds.min > bounds.max && !parser->spec.allow_impossible_repeat) {
       return grx_parse_fail(parser, GRX_DIAG_QUANTIFIER_OUT_OF_ORDER, start,
           parser->position - start);
     }

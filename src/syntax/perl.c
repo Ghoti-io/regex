@@ -3341,7 +3341,10 @@ static GRX_Result pcre_group_open(GRX_Parser * parser, GRX_GroupOpen * out) {
 static GRX_Result check_repeat_bound(
     GRX_Parser * parser, uint64_t min, uint64_t max) {
   if (min > GRX_PCRE_REPEAT_MAX || max > GRX_PCRE_REPEAT_MAX) {
-    return grx_parse_fail(parser, GRX_DIAG_LIMIT_REPEAT_COUNT,
+    // The dialect's cap, not a caller's: pcre2test reports `/z{65536}/` as
+    // "number too big in {} quantifier", and no option raises it. A limit is
+    // what GRX_Limits sets.
+    return grx_parse_fail(parser, GRX_DIAG_REPEAT_COUNT_TOO_LARGE,
         parser->position, 0);
   }
 

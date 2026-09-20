@@ -22,9 +22,6 @@ pcre		(a)(?(DEFINE)(b))(?2){0,1999}?(?2)		a repeat of a subroutine call: the ref
 pcre		(a)(?2){0,1999}?(b)		a repeat of a subroutine call: the reference compiles one copy and this library expands it past max_program_size
 pcre		[a-[.xxx.]]+		POSIX collating element: refused, there is no locale here
 pcre		[a-[=xxx=]]+		POSIX collating element: refused, there is no locale here
-pcre		\\[()]{65535}()		a repeat count the reference folds and this library expands
-pcre		\\[()]{65535}(?<A>)		a repeat count the reference folds and this library expands
-pcre		z{65536}		a repeat count above 65535: the reference calls it a syntax error and this library a limit
 pcre	J	(?<A>[ab])...(?<=\\k'A')(?<A>)z		a backreference to a duplicated name inside a lookbehind: the reference will not bound one and this library bounds it by the first group of that name
 perl		(((aa){2})+)	aaaaaaaaaa	Perl's capture state after a failed attempt: `((a)|b)+` against "ab" reports group 2 unset in Perl and "a" in PCRE2, and the rule behind that is not one this library can state - see the four probes in documentation/dialects.md section 5.5
 perl		(((a{2}){2})+)	aaaaaaaaaa	Perl's capture state after a failed attempt: `((a)|b)+` against "ab" reports group 2 unset in Perl and "a" in PCRE2, and the rule behind that is not one this library can state - see the four probes in documentation/dialects.md section 5.5
@@ -33,7 +30,6 @@ perl		((?(1)a|b))+	baaa	Perl's capture state after a failed attempt: a condition
 perl		((?|(?<a>a)(?-1)|(?<b>b)(?-1)|(?<c>c)(?-1)))	bb 	branch reset: the numbering is shared, and the names and references inside one are not checked against it yet
 perl		((?|(?<a>a)(?-1)|(?<b>b)(?-1)|(?<c>c)(?-1)))	cc 	branch reset: the numbering is shared, and the names and references inside one are not checked against it yet
 perl		((\\3|b)\\2(a)){2,}	bbaababbabaaaaabbaaaabba	a backreference to the group it is written inside: Perl reads what the previous iteration captured and this library reads nothing - see documentation/dialects.md section 5.5
-perl		((def){37,17})?ABC	ABC	a quantifier whose minimum is above its maximum: Perl compiles it as a group that never matches
 perl		(.*?)a(?!(a+)b\\2c)	baaabaac	Perl's capture state after a failed attempt: `((a)|b)+` against "ab" reports group 2 unset in Perl and "a" in PCRE2, and the rule behind that is not one this library can state - see the four probes in documentation/dialects.md section 5.5
 perl		(?(DEFINE)(?<a>(?:[ab]|[cd](*ACCEPT)|[ef])g))(?&a)(?&a)	agcq	Perl's capture state after a failed attempt: a conditional testing a group a later iteration entered and failed - see documentation/dialects.md section 5.5
 perl		(?(DEFINE)(?<a>(?:[ab]|[cd](*ACCEPT)|[ef])g))(?&a)(?&a)	cc	Perl's capture state after a failed attempt: a conditional testing a group a later iteration entered and failed - see documentation/dialects.md section 5.5

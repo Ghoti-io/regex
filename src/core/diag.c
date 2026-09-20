@@ -55,6 +55,8 @@ static const DiagRow diag_table[GRX_DIAG_COUNT] = {
       = {"quantifier applied to a quantifier", GRX_ERR_SYNTAX},
   [GRX_DIAG_QUANTIFIER_OUT_OF_ORDER]
       = {"quantifier minimum exceeds its maximum", GRX_ERR_SYNTAX},
+  [GRX_DIAG_REPEAT_COUNT_TOO_LARGE]
+      = {"repeat count is too large for this dialect", GRX_ERR_SYNTAX},
   [GRX_DIAG_INVALID_QUANTIFIER]
       = {"malformed repetition count", GRX_ERR_SYNTAX},
   [GRX_DIAG_QUANTIFIED_ASSERTION]

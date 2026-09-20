@@ -90,6 +90,10 @@ static const GRX_SyntaxSpec spec_table[GRX_SYNTAX_COUNT] = {
     .features = ALT | REP | LAZY | POSS | NCAP | NAME | BREF | LAH | LBH
         | ATOM | COND | RECU | FLAG | CMNT | PCLS | UPRP | WORD | ANCH | QUOT
         | HEX | OCT | CTRL | SUBR,
+    // perl warns "Quantifier {n,m} with n > m can't match" and compiles it
+    // anyway, as a group that never matches. pcre2test refuses the same
+    // pattern outright.
+    .allow_impossible_repeat = 1,
     // documentation/dialects.md section 5.15: Perl's subject is a Unicode
     // string, so UTF is on unless the caller turns it off. The field had
     // been empty since the table was written, and what it cost was visible

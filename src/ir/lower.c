@@ -1328,6 +1328,28 @@ static GRX_Result lower_repeat(
     return fail(low, GRX_DIAG_INTERNAL, node);
   }
 
+  if (node->min > node->max) {
+    // Only Perl's parser lets one of these through, and what it means there
+    // is a construct that never matches: `((def){37,17})?ABC` matches "ABC"
+    // with group 1 unset. An empty class rather than a failing verb, because
+    // a class matches nothing without making the program irregular - the
+    // Pike engine can still run the rest of the pattern.
+    GRX_CharClass empty;
+    grx_charclass_init(&empty, low->ir->allocator);
+    uint32_t class_index = GRX_INDEX_NONE;
+    GRX_Result impossible = intern(low, &empty, node, &class_index);
+    grx_charclass_clear(&empty);
+    if (impossible != GRX_OK) {
+      return impossible;
+    }
+    impossible = add(low, GRX_IR_CLASS, node, out_node);
+    if (impossible != GRX_OK) {
+      return impossible;
+    }
+    grx_ir_node(low->ir, *out_node)->a = class_index;
+    return GRX_OK;
+  }
+
   uint32_t body = GRX_INDEX_NONE;
   GRX_Result result = lower_node(low, node->first_child, &body);
   if (result != GRX_OK) {

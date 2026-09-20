@@ -99,6 +99,15 @@ typedef enum {
   GRX_DIAG_QUANTIFIER_OUT_OF_ORDER, ///< `{3,1}`: the minimum exceeds the max.
   GRX_DIAG_QUANTIFIED_ASSERTION,   ///< A quantifier on a zero-width assertion.
   GRX_DIAG_INVALID_QUANTIFIER,     ///< `a{,3}`: a `{` that is not a quantifier.
+  /**
+   * @brief A repeat count above what the dialect's grammar allows.
+   *
+   * PCRE2 and Perl stop at 65535 and call it "number too big in {}
+   * quantifier" - a property of the dialect that no caller can raise, which
+   * is what separates it from GRX_DIAG_LIMIT_REPEAT_COUNT and
+   * GRX_Limits::max_repeat_count.
+   */
+  GRX_DIAG_REPEAT_COUNT_TOO_LARGE,
 
   // Escapes and code points.
   GRX_DIAG_INVALID_ESCAPE,         ///< An escape this dialect does not define.

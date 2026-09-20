@@ -1271,6 +1271,24 @@ TEST(Perl, AnIterationThatConsumedNothingStopsTheLoopRatherThanFailing) {
   EXPECT_EQ(group_of("(a*)+", "b", 1, GRX_SYNTAX_ECMASCRIPT), "0-0");
 }
 
+TEST(Perl, TheTwoRepeatCountsTheDialectsAnswerDifferently) {
+  // 65535 is the dialect's cap and no option raises it, so it is a syntax
+  // error and not a limit: pcre2test reports `/z{65536}/` as "number too big
+  // in {} quantifier". GRX_Limits::max_repeat_count is the other thing, and
+  // reporting both as one made a corpus record look like a resource failure.
+  EXPECT_EQ(compile("z{65536}").diag, GRX_DIAG_REPEAT_COUNT_TOO_LARGE);
+  EXPECT_EQ(compile_result("z{65536}"), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("z{65535}"), GRX_OK);
+
+  // perl warns about `{n,m}` with n > m and compiles it as a construct that
+  // never matches, so the optional group around it takes its empty branch.
+  // pcre2test refuses the same pattern outright.
+  EXPECT_EQ(span_of("((def){37,17})?ABC", "ABC", GRX_SYNTAX_PERL), "0-3");
+  EXPECT_EQ(group_of("((def){37,17})?ABC", "ABC", 1, GRX_SYNTAX_PERL), "-");
+  EXPECT_FALSE(search("(def){37,17}", "def", GRX_SYNTAX_PERL).matched);
+  EXPECT_EQ(compile_result("(a){3,1}", GRX_SYNTAX_PCRE), GRX_ERR_SYNTAX);
+}
+
 int main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

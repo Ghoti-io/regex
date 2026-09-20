@@ -68,12 +68,31 @@ REPEATABLE = {"x": "xx"}
 
 # Modifiers that say something about *how pcre2test runs*, not about the
 # pattern, and so can be dropped without changing what is being asserted.
+#
+# Seven were here that do not belong, and each of them recorded a verdict for
+# a pattern nobody asked about:
+#
+#   hex                the pattern is written in hexadecimal, so the text on
+#                      the line is not the pattern at all - 27 records
+#   expand             pcre2test expands a repeat rather than letting PCRE2
+#                      compile it compactly, and the expansion is what runs
+#                      out of room: `/\[()]{65535}()/expand` fails and
+#                      `/\[()]{65535}()/` does not - 6 records
+#   tables, locale     a different character table, so a different answer to
+#                      which characters are letters - 5 records
+#   never_backslash_c  PCRE2_NEVER_BACKSLASH_C, which makes `\C` a compile
+#                      error: a rule about the pattern - 1 record
+#   posix, posix_nosub compiled through the POSIX wrapper, which is a
+#                      different grammar
+#
+# They are skipped and counted now, which is what this list's own rule says
+# to do with a modifier the corpus cannot express.
 IGNORABLE_MODIFIERS = {
     "jit", "jitfast", "jitverify", "no_jit", "info", "debug", "fullbincode",
     "memory", "no_start_optimize", "auto_callout", "callout_info",
-    "bincode", "hex", "expand", "posix", "posix_nosub", "push", "pushcopy",
-    "pushtablescopy", "get_all", "no_auto_possess", "never_backslash_c",
-    "use_offset_limit", "framesize", "stackguard", "tables", "locale",
+    "bincode", "push", "pushcopy",
+    "pushtablescopy", "get_all", "no_auto_possess",
+    "use_offset_limit", "framesize", "stackguard",
 }
 
 PATTERN_LINE = re.compile(r"^/((?:[^/\\]|\\.)*)/([A-Za-z0-9_,=\s]*)$")

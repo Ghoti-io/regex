@@ -477,6 +477,19 @@ Tally run_directory(const std::string & directory,
     }
   }
 
+  // An entry naming a record that is no longer in the corpus is as stale as
+  // one whose record now passes, and nothing above can notice it: the loop
+  // only ever sees records. A corpus shrinks - an importer that learns a
+  // modifier it cannot express drops the cases carrying it - and the entries
+  // those cases left behind would otherwise sit in the file for ever,
+  // counted in no denominator and excusing nothing.
+  for (const auto & entry : gaps) {
+    if (!entry.second) {
+      out_failures->push_back("known-gaps.txt names a record the corpus does "
+          "not have; remove the entry:\n" + entry.first);
+    }
+  }
+
   return total;
 }
 

@@ -195,6 +195,13 @@ seven of the nine were a bound this library could have computed and did not.
 Both were rewritten from what was measured. An entry whose reason has never
 been checked against the reference is an entry that has not been read.
 
+The file is a gate in a third direction too: an entry naming a record the
+corpus no longer has fails the suite. A corpus shrinks - the pcre2test
+importer learned that `hex`, `expand` and `tables` are not modifiers it can
+drop, and the thirty-nine cases carrying them left - and nothing in the run
+would otherwise notice the entries they left behind, because the loop only
+ever sees records.
+
 A failure prints the record verbatim, the engine, the expected and actual
 spans, and both dump outputs.
 

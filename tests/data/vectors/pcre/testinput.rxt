@@ -4516,10 +4516,6 @@ pattern: \\w(?R)*\\w
 flags: 
 expect: compiles
 
-pattern: 65 00 64
-flags: 
-expect: compiles
-
 pattern: [[:digit:]-   ]
 flags: xx
 expect: compiles
@@ -6180,10 +6176,6 @@ pattern: (?:a(?C`code`)){3}X
 flags: 
 expect: compiles
 
-pattern: \x2061 28 3f 43 27 78 00 7a 27 29 62
-flags: 
-expect: compiles
-
 pattern: (?(?!)^)
 flags: 
 expect: compiles
@@ -6408,27 +6400,11 @@ pattern: \x0B(?-x):?
 flags: x
 expect: compiles
 
-pattern: 0b 28 3f 2d 78 29 3a
-flags: x
-expect: compiles
-
 pattern: a|(b)c
 flags: 
 expect: compiles
 
 pattern: ()()()
-flags: 
-expect: compiles
-
-pattern: efg
-flags: 
-expect: compiles
-
-pattern: eff
-flags: 
-expect: compiles
-
-pattern: effg
 flags: 
 expect: compiles
 
@@ -6441,26 +6417,6 @@ flags:
 expect: compiles
 
 pattern: aaa
-flags: 
-expect: compiles
-
-pattern: \\[AB]{6000000000000000000000}
-flags: 
-expect: compiles
-
-pattern: '(*U'
-flags: 
-expect: error syntax
-
-pattern: '(*'
-flags: 
-expect: error syntax
-
-pattern: '('
-flags: 
-expect: error syntax
-
-pattern: 
 flags: 
 expect: compiles
 
@@ -6496,10 +6452,6 @@ pattern: ab(?C1)c
 flags: 
 expect: compiles
 
-pattern: 'ab(?C1)c'
-flags: 
-expect: compiles
-
 pattern: ()(?<=(?0))
 flags: 
 expect: error syntax
@@ -6520,6 +6472,10 @@ pattern: {\uFFFD\u0344\uFFFD\u0344\uFFFD{'{22{2{{2{'{22{\x12{22{2{'{22{2{{2{{222
 flags: 
 expect: compiles
 
+pattern: 
+flags: 
+expect: compiles
+
 pattern: (?(?(?(?(?(?))))))
 flags: 
 expect: error syntax
@@ -6527,10 +6483,6 @@ expect: error syntax
 pattern: (*:ab)*
 flags: 
 expect: error syntax
-
-pattern: (?:\\[A|B|C|D|E|F|G|H|I|J|]{200}Z)
-flags: 
-expect: compiles
 
 pattern: .+(?(?C'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX'))?!XXXX.=X
 flags: 
@@ -6557,10 +6509,6 @@ flags:
 expect: error syntax
 
 pattern: (R?){65}
-flags: 
-expect: compiles
-
-pattern: \\[(a)]{60}
 flags: 
 expect: compiles
 
@@ -6791,14 +6739,6 @@ expect: error syntax
 pattern: foobar
 flags: 
 expect: compiles
-
-pattern: \\[()]{65535}()
-flags: 
-expect: error syntax
-
-pattern: \\[()]{65535}(?<A>)
-flags: 
-expect: error syntax
 
 pattern: a(?:(*ACCEPT))??bc
 flags: 

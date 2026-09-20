@@ -194,6 +194,15 @@ typedef struct GRX_SyntaxSpec {
    * told that one had already been applied.
    */
   int allow_double_quantifier;
+  /**
+   * Non-zero when `{3,1}` is a quantifier that can never be satisfied.
+   *
+   * Perl compiles `((def){37,17})?ABC` and matches "ABC": the inner repeat
+   * never matches, so the optional group takes its empty branch. PCRE2
+   * refuses the same pattern, and so does every other dialect here, which is
+   * why this is a flag rather than the shared parser's default.
+   */
+  int allow_impossible_repeat;
 } GRX_SyntaxSpec;
 
 /**
