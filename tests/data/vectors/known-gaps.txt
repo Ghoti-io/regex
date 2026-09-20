@@ -34,7 +34,6 @@ perl		((?|(?<a>a)(?-1)|(?<b>b)(?-1)|(?<c>c)(?-1)))	bb 	branch reset: the numberi
 perl		((?|(?<a>a)(?-1)|(?<b>b)(?-1)|(?<c>c)(?-1)))	cc 	branch reset: the numbering is shared, and the names and references inside one are not checked against it yet
 perl		((\\3|b)\\2(a)){2,}	bbaababbabaaaaabbaaaabba	a backreference to the group it is written inside: Perl reads what the previous iteration captured and this library reads nothing - see documentation/dialects.md section 5.5
 perl		((def){37,17})?ABC	ABC	a quantifier whose minimum is above its maximum: Perl compiles it as a group that never matches
-perl		()?(?(1)a|b)	a	Perl's capture state after a failed attempt: a conditional testing a group a later iteration entered and failed - see documentation/dialects.md section 5.5
 perl		(.*?)a(?!(a+)b\\2c)	baaabaac	Perl's capture state after a failed attempt: `((a)|b)+` against "ab" reports group 2 unset in Perl and "a" in PCRE2, and the rule behind that is not one this library can state - see the four probes in documentation/dialects.md section 5.5
 perl		(?(DEFINE)(?<a>(?:[ab]|[cd](*ACCEPT)|[ef])g))(?&a)(?&a)	agcq	Perl's capture state after a failed attempt: a conditional testing a group a later iteration entered and failed - see documentation/dialects.md section 5.5
 perl		(?(DEFINE)(?<a>(?:[ab]|[cd](*ACCEPT)|[ef])g))(?&a)(?&a)	cc	Perl's capture state after a failed attempt: a conditional testing a group a later iteration entered and failed - see documentation/dialects.md section 5.5
@@ -45,19 +44,7 @@ perl		(?<=([cd](*ACCEPT)|x)gggg)blrph	dblrph	`(*ACCEPT)` inside a lookbehind: th
 perl		(?<=([cd](*ACCEPT)|x)gggg)blrph	xggggblrph	`(*ACCEPT)` inside a lookbehind: the reference ends the assertion there, and this library runs the body in reverse, where the verb accepts at the wrong end
 perl		(?=foo)(?<=(a??))	afoo	a capture inside a variable-length lookbehind: the reference reports the span of a longer body than this library tries first
 perl		(?=foo)(?<=(|a|aa))	aafoo	a capture inside a variable-length lookbehind: the reference reports the span of a longer body than this library tries first
-perl		(?a-x		Perl's charset modifiers `a`, `d`, `l`, `u`: this library has one character-set semantics, not five
-perl		(?a:((?u)\\w)\\W)	ÀÀ	Perl's charset modifiers `a`, `d`, `l`, `u`: this library has one character-set semantics, not five
-perl		(?a:\\p{Any})	Ā	Perl's charset modifiers `a`, `d`, `l`, `u`: this library has one character-set semantics, not five
-perl		(?aa:\\p{Any})	Ā	Perl's charset modifiers `a`, `d`, `l`, `u`: this library has one character-set semantics, not five
-perl		(?aia:s)	S	Perl's charset modifiers `a`, `d`, `l`, `u`: this library has one character-set semantics, not five
-perl		(?aia:s)	ſ	Perl's charset modifiers `a`, `d`, `l`, `u`: this library has one character-set semantics, not five
-perl		(?iaa:A?\\K*)	African_Feh	Perl's charset modifiers `a`, `d`, `l`, `u`: this library has one character-set semantics, not five
-perl		(?iaa:A?\\K+)	African_Feh	Perl's charset modifiers `a`, `d`, `l`, `u`: this library has one character-set semantics, not five
-perl		(?iaax:A? \\K +)	African_Feh	Perl's charset modifiers `a`, `d`, `l`, `u`: this library has one character-set semantics, not five
-perl		(?il)\\x{100}|\\x{100}|\\x{FE}	þ	Perl's charset modifiers `a`, `d`, `l`, `u`: this library has one character-set semantics, not five
 perl		(?iu)(?<=\\xdf)hbase	sshbase	full case folding: implemented as simple folding, a deviation recorded in design.md section 10
-perl		(?l:a?\\D)	b	Perl's charset modifiers `a`, `d`, `l`, `u`: this library has one character-set semantics, not five
-perl		(?l:a?\\w)	b	Perl's charset modifiers `a`, `d`, `l`, `u`: this library has one character-set semantics, not five
 perl		(?|(?<a>a)|(?<b>b))(?(<a>)x|y)\\1	bxb 	branch reset: the numbering is shared, and the names and references inside one are not checked against it yet
 perl		(?|(?<a>a)|(?<b>b))(?(<a>)x|y)\\1	byb 	branch reset: the numbering is shared, and the names and references inside one are not checked against it yet
 perl		(?|(?<a>a)|(?<b>b))\\1(?&a)(?&b)	bbab 	branch reset: the numbering is shared, and the names and references inside one are not checked against it yet
@@ -79,7 +66,6 @@ perl		.[X](.+)+[X][X]	bbbbXXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backt
 perl		.[X](.+)+[X][X]	bbbbXcXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backtrack on the backtracker alone; the Pike and bit-state engines both answer it, and agree with the reference
 perl		.[X][X](.+)+[X]	bbbbXXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backtrack on the backtracker alone; the Pike and bit-state engines both answer it, and agree with the reference
 perl		.[X][X](.+)+[X]	bbbbXXcXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backtrack on the backtracker alone; the Pike and bit-state engines both answer it, and agree with the reference
-perl		2(]*)?$\\1	2	a backreference to the group it is written inside: Perl reads what the previous iteration captured and this library reads nothing - see documentation/dialects.md section 5.5
 perl		X(?!b+(?!(c+)*(?!(c+)*d))).*X	aXbbbbbbbcccccccccccccaaaX	Perl's capture state after a failed attempt: `((a)|b)+` against "ab" reports group 2 unset in Perl and "a" in PCRE2, and the rule behind that is not one this library can state - see the four probes in documentation/dialects.md section 5.5
 perl		\\B{ gcb }		`\b{wb}` and kin: Perl's Unicode boundary escapes, not implemented
 perl		\\B{ lb }		`\b{wb}` and kin: Perl's Unicode boundary escapes, not implemented
@@ -107,7 +93,7 @@ perl		^(a\\1?){4}$	aaaaaa	a backreference to the group it is written inside: Per
 perl		^(a\\1?){4}$	aaaaaaaaaa	a backreference to the group it is written inside: Perl reads what the previous iteration captured and this library reads nothing - see documentation/dialects.md section 5.5
 perl		a?\\X	aĀ	`\X` grapheme cluster: the break rules are plan.md WP-12 and are not generated yet
 perl		m?^xy\\?$?	xy?	importer: a re_tests record whose pattern carries its own `m?...?` delimiters
-perl	i	^(?d:\\xdf|_)*_	ſſ_	Perl's charset modifiers `a`, `d`, `l`, `u`: this library has one character-set semantics, not five
+perl	i	^(?d:\\xdf|_)*_	ſſ_	full case folding: implemented as simple folding, a deviation recorded in design.md section 10
 perl	i	ff	ﬀﬁ	full case folding: implemented as simple folding, a deviation recorded in design.md section 10
 perl	i	ff	ﬁﬀ	full case folding: implemented as simple folding, a deviation recorded in design.md section 10
 perl	i	ffiffl	abcdefﬃﬄ	full case folding: implemented as simple folding, a deviation recorded in design.md section 10

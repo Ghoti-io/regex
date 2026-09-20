@@ -226,8 +226,10 @@ TEST(Options, RefusesWhatItCannotHonour) {
     // and the gap is here.
     {GRX_SYNTAX_PYTHON, "L", GRX_ERR_UNSUPPORTED,
         GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, 0},
-    {GRX_SYNTAX_PERL, "a", GRX_ERR_UNSUPPORTED,
-        GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, 0},
+    // Perl's four charset modifiers exclude each other, and `a` is the one
+    // that may be written twice.
+    {GRX_SYNTAX_PERL, "au", GRX_ERR_SYNTAX, GRX_DIAG_CONFLICTING_FLAGS, 1},
+    {GRX_SYNTAX_PERL, "aaa", GRX_ERR_SYNTAX, GRX_DIAG_DUPLICATE_FLAG, 2},
     // POSIX has no flag letters at all; its options are API arguments.
     {GRX_SYNTAX_POSIX_ERE, "i", GRX_ERR_SYNTAX, GRX_DIAG_UNKNOWN_FLAG, 0},
     // A letter that may be written twice may not be written three times,

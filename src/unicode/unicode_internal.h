@@ -120,6 +120,16 @@ typedef enum {
   GRX_FOLD_SIMPLE,     ///< Unicode simple case folding.
   GRX_FOLD_ES_LEGACY,  ///< ECMA-262 Canonicalize without `u`.
   GRX_FOLD_ASCII,      ///< A-Z and a-z only. POSIX, and PCRE2 without UTF.
+  /**
+   * Simple folding with the ASCII range held apart from the rest.
+   *
+   * Perl's `/aa`. Under `/ai` the letter `s` matches U+017F because the two
+   * share a fold orbit; under `/aai` it does not, and `\x{C0}` still matches
+   * `\x{E0}` because both of those are outside ASCII. So this is not
+   * GRX_FOLD_ASCII, which would stop the second pair as well - it is simple
+   * folding with every orbit cut at U+0080.
+   */
+  GRX_FOLD_SIMPLE_ASCII_APART,
   GRX_FOLD_COUNT       ///< Closes the enum; not a folding.
 } GRX_FoldKind;
 

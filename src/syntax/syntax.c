@@ -253,6 +253,11 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
   // The Perl family. Full folding is implemented as simple folding and
   // recorded as a deviation (design.md section 10).
   [GRX_SYNTAX_PERL] = {
+    // An iteration that consumed nothing succeeds and stops the loop, which
+    // is section 5.5's BREAK_ON_EMPTY. `(a*)*` against "b" reports group 1
+    // as the empty string in perl and in pcre2test, and as unset in
+    // ECMAScript - and this row said nothing, so it got ECMAScript's answer.
+    .empty_loop = GRX_EMPTY_LOOP_BREAK,
     // RESET_EACH, not KEEP_LAST_SET: Perl 5.40 reports group 2 of
     // `((a)|b)+` against "ab" as unset, where PCRE2 and Python report "a".
     // Probed rather than read; see tests/data/probe/report.md and
@@ -284,6 +289,7 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     },
   },
   [GRX_SYNTAX_PCRE] = {
+    .empty_loop = GRX_EMPTY_LOOP_BREAK,
     .recursion_is_atomic = 1,
     .lookbehind = GRX_LOOKBEHIND_BOUNDED,
     .dollar = GRX_DOLLAR_BEFORE_FINAL_NEWLINE,
@@ -597,8 +603,16 @@ static const FlagRow perl_flags[] = {
   {'x', FLAG_OPTION, GRX_OPT_EXTENDED, 0, GRX_OPT_EXTENDED_MORE},
   {'n', FLAG_OPTION, GRX_OPT_NO_CAPTURE, 0, 0},
   {'p', FLAG_NO_EFFECT, 0, 0, 0}, // Preserve the match; a search-API concern.
-  {'a', FLAG_UNSUPPORTED, 0, 0, 0}, // ASCII-restrict; WP-21.
-  {'u', FLAG_OPTION, GRX_OPT_UTF, 0, 0},
+  // The four charset modifiers, which choose one character-set semantics
+  // and so exclude each other. `a` is the only letter in any alphabet that
+  // may appear twice and mean a third thing: `/aa` also stops caseless
+  // matching folding across the ASCII boundary, which `/a` alone allows.
+  // `l` asks for the locale's semantics and gets the C locale's, which is
+  // the only locale this library has - documentation/dialects.md section 6.
+  {'a', FLAG_OPTION, GRX_OPT_ASCII_CLASSES, 2, GRX_OPT_ASCII_FOLD_SEPARATE},
+  {'l', FLAG_OPTION, GRX_OPT_ASCII_CLASSES, 2, 0},
+  {'u', FLAG_OPTION, GRX_OPT_UTF, 2, 0},
+  {'d', FLAG_NO_EFFECT, 0, 2, 0}, // The dialect's own default semantics.
   {0, FLAG_OPTION, 0, 0, 0},
 };
 

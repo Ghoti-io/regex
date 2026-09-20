@@ -117,6 +117,18 @@ size_t grx_unicode_orbit(GRX_FoldKind kind, uint32_t codepoint,
   switch (kind) {
     case GRX_FOLD_SIMPLE:
       return grx_unicode_fold_orbit(codepoint, out);
+    case GRX_FOLD_SIMPLE_ASCII_APART: {
+      // The simple orbit, less whatever is on the other side of U+0080.
+      size_t count = grx_unicode_fold_orbit(codepoint, out);
+      int ascii = codepoint < 0x80;
+      size_t kept = 0;
+      for (size_t i = 0; i < count; i++) {
+        if ((out[i] < 0x80) == ascii) {
+          out[kept++] = out[i];
+        }
+      }
+      return kept;
+    }
     case GRX_FOLD_ES_LEGACY:
       return grx_unicode_es_legacy_orbit(codepoint, out);
     case GRX_FOLD_ASCII:
@@ -143,6 +155,7 @@ size_t grx_unicode_orbit(GRX_FoldKind kind, uint32_t codepoint,
 size_t grx_unicode_orbit_table_size(GRX_FoldKind kind) {
   switch (kind) {
     case GRX_FOLD_SIMPLE:
+    case GRX_FOLD_SIMPLE_ASCII_APART:
       return grx_unicode_fold_orbit_count;
     case GRX_FOLD_ES_LEGACY:
       return grx_unicode_es_legacy_orbit_count;
@@ -165,6 +178,10 @@ size_t grx_unicode_orbit_table_at(GRX_FoldKind kind, size_t index,
   const uint32_t * members;
   switch (kind) {
     case GRX_FOLD_SIMPLE:
+    case GRX_FOLD_SIMPLE_ASCII_APART:
+      // The same table. Where the two differ is in what a *class* closure
+      // does with an orbit that straddles U+0080, which is
+      // grx_charclass_fold_closure()'s business and not this table's.
       entry = &grx_unicode_fold_orbits[index];
       members = grx_unicode_fold_orbit_members;
       break;

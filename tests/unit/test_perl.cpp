@@ -1211,6 +1211,66 @@ TEST(Perl, ABranchResetGivesOneNumberOneName) {
   EXPECT_EQ(compile_result("(?|(?<a>A)|(?<b>B))", GRX_SYNTAX_PERL), GRX_OK);
 }
 
+TEST(Perl, TheCharsetModifiersChooseASemanticsAndExcludeEachOther) {
+  // Perl's `/a` holds the shorthands and the POSIX classes to ASCII, which
+  // is the narrowing counterpart of `(*UCP)`. `\xC3\x80` is U+00C0.
+  const std::string agrave = "\xC3\x80";
+  EXPECT_FALSE(search("(?a:\\w)", agrave, GRX_SYNTAX_PERL).matched);
+  EXPECT_TRUE(search("(?u:\\w)", agrave, GRX_SYNTAX_PERL).matched);
+  EXPECT_TRUE(search("(?d:\\w)", agrave, GRX_SYNTAX_PERL).matched);
+
+  // `/l` asks for the locale's semantics and gets the C locale's, which is
+  // the only locale this library has.
+  EXPECT_FALSE(search("(?l:\\w)", agrave, GRX_SYNTAX_PERL).matched);
+  EXPECT_TRUE(search("(?l:a?\\w)", "b", GRX_SYNTAX_PERL).matched);
+
+  // The scope is the group's, so an inner letter wins inside it.
+  EXPECT_TRUE(search("(?a:((?u)\\w)\\W)", agrave + agrave,
+      GRX_SYNTAX_PERL).matched);
+
+  // One semantics per pattern, and `a` is the one letter that may be written
+  // twice - the two need not be adjacent, so `(?aia:` is `/aa`.
+  EXPECT_EQ(compile_result("(?al:a)", GRX_SYNTAX_PERL), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("(?au:a)", GRX_SYNTAX_PERL), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("(?aaa:a)", GRX_SYNTAX_PERL), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("(?uu:a)", GRX_SYNTAX_PERL), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("(?aia:a)", GRX_SYNTAX_PERL), GRX_OK);
+}
+
+TEST(Perl, TheSecondAOfSlashAaCutsEveryFoldOrbitAtAscii) {
+  // U+017F is the long s, which simple folding puts in one orbit with `s`
+  // and `S`. Under `/ai` the letter `s` matches it; under `/aai` it does
+  // not - and U+00C0 still matches U+00E0, because both of those are
+  // outside ASCII. So `/aa` is not "fold ASCII only", which would stop the
+  // second pair too.
+  const std::string long_s = "\xC5\xBF";
+  EXPECT_TRUE(search("(?ai:s)", long_s, GRX_SYNTAX_PERL).matched);
+  EXPECT_FALSE(search("(?aai:s)", long_s, GRX_SYNTAX_PERL).matched);
+  EXPECT_TRUE(search("(?aia:s)", "S", GRX_SYNTAX_PERL).matched);
+  EXPECT_TRUE(search("(?aai:\xC3\x80)", "\xC3\xA0", GRX_SYNTAX_PERL).matched);
+
+  // `\K` may be repeated in Perl and is error 109 in pcre2test. Repeating it
+  // changes nothing - it moves the reported start to here, and moving it
+  // here again leaves it here - which is why `(?iaa:A?\K*)` reports 1-1.
+  EXPECT_EQ(span_of("(?iaa:A?\\K*)", "African_Feh", GRX_SYNTAX_PERL), "1-1");
+  EXPECT_EQ(compile_result("A\\K*", GRX_SYNTAX_PCRE), GRX_ERR_SYNTAX);
+}
+
+TEST(Perl, AnIterationThatConsumedNothingStopsTheLoopRatherThanFailing) {
+  // documentation/dialects.md section 5.5's BREAK_ON_EMPTY. `(a*)*` against
+  // "b" reports group 1 as the empty string in perl and in pcre2test, and as
+  // unset in ECMAScript, whose RepeatMatcher fails the iteration instead.
+  // Neither the Perl row nor the PCRE2 row said which it was, so both got
+  // the zero that means ECMAScript's - and nothing asked until `\K*` did.
+  EXPECT_EQ(group_of("(a*)*", "b", 1, GRX_SYNTAX_PERL), "0-0");
+  EXPECT_EQ(group_of("(a*)*", "b", 1, GRX_SYNTAX_PCRE), "0-0");
+  EXPECT_EQ(group_of("(a*)*", "b", 1, GRX_SYNTAX_ECMASCRIPT), "-");
+
+  // `(a*)+` sets it in all three: one iteration is forced.
+  EXPECT_EQ(group_of("(a*)+", "b", 1, GRX_SYNTAX_PERL), "0-0");
+  EXPECT_EQ(group_of("(a*)+", "b", 1, GRX_SYNTAX_ECMASCRIPT), "0-0");
+}
+
 int main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

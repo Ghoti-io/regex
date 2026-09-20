@@ -168,8 +168,9 @@ static GRX_Result posix_class_set(Lowering * low, const GRX_ClassItem * item,
   // is the other case and needs no flag: its classes are Unicode by default,
   // which its profile already says by naming the Unicode sets in *both*
   // shorthand columns.
-  int wide = (low->options & GRX_OPT_UCP)
-      || low->profile.shorthands == GRX_SHORTHANDS_UNICODE;
+  int wide = !(low->options & GRX_OPT_ASCII_CLASSES)
+      && ((low->options & GRX_OPT_UCP)
+          || low->profile.shorthands == GRX_SHORTHANDS_UNICODE);
 
   struct Range { uint32_t lo; uint32_t hi; };
   static const struct Range ascii_only[] = {{0x00, 0x7F}};
@@ -831,9 +832,20 @@ static void adopt_options(Lowering * low, uint32_t options) {
   low->options = options;
   int utf = (options & GRX_OPT_UTF) != 0 || (options & GRX_OPT_UCP) != 0;
   low->shorthands = utf ? low->profile.shorthands_utf : low->profile.shorthands;
+  // Perl's `/a` and `/l`, which narrow where GRX_OPT_UCP widens. Applied
+  // after the UTF choice rather than instead of it, because the two are
+  // written together: `(?a)` under a dialect whose subject is Unicode still
+  // means "and the shorthands are ASCII".
+  if (options & GRX_OPT_ASCII_CLASSES) {
+    low->shorthands = GRX_SHORTHANDS_ASCII;
+  }
   low->fold = GRX_FOLD_NONE;
   if (options & GRX_OPT_CASELESS) {
     low->fold = utf ? low->profile.fold_utf : low->profile.fold;
+    if ((options & GRX_OPT_ASCII_FOLD_SEPARATE)
+        && low->fold == GRX_FOLD_SIMPLE) {
+      low->fold = GRX_FOLD_SIMPLE_ASCII_APART;
+    }
   }
 }
 

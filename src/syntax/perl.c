@@ -1645,6 +1645,74 @@ static uint32_t option_for_letter(char c) {
 }
 
 /**
+ * Perl's charset modifiers, gathered as the letters are read.
+ *
+ * `a`, `d`, `l` and `u` each choose a character-set semantics, so a pattern
+ * may name one: perl reports `(?al:a)` as 'Regexp modifier "a" may appear a
+ * maximum of twice'. `a` is the one letter that may appear twice and mean a
+ * third thing - `/aa` also stops caseless matching folding across the ASCII
+ * boundary - and the two need not be adjacent: `(?aia:s)` is `/aa` with an
+ * `i` in the middle.
+ */
+typedef struct {
+  char letter;  ///< The charset letter seen, or 0.
+  int count;    ///< How many times, for the `a` that may repeat.
+} CharsetChoice;
+
+/**
+ * Take one charset letter, or the `p` that keeps them company.
+ *
+ * What each asks for:
+ *
+ *   `u`, `d`  the dialect's own semantics, which for Perl is Unicode
+ *   `a`       the shorthands and the POSIX classes are ASCII
+ *   `aa`      the same, and no fold orbit crosses U+0080
+ *   `l`       the locale's semantics, which here is the C locale's - this
+ *             library has no other, and the C locale's answer to "which
+ *             characters are word characters" is the ASCII one
+ */
+static GRX_Result read_charset_letter(
+    GRX_Parser * parser, char c, int clearing, CharsetChoice * choice) {
+  size_t at = parser->position;
+  parser->position++;
+
+  if (c == 'p') {
+    return GRX_OK;
+  }
+  if (clearing) {
+    // perl: a charset modifier cannot be unset, only replaced.
+    return grx_parse_fail(parser, GRX_DIAG_UNKNOWN_FLAG, at, 1);
+  }
+  if (choice->letter && choice->letter != c) {
+    return grx_parse_fail(parser, GRX_DIAG_CONFLICTING_FLAGS, at, 1);
+  }
+  if (choice->letter == c && c != 'a') {
+    return grx_parse_fail(parser, GRX_DIAG_DUPLICATE_FLAG, at, 1);
+  }
+
+  choice->letter = c;
+  if (++choice->count > 2) {
+    // perl: "may appear a maximum of twice".
+    return grx_parse_fail(parser, GRX_DIAG_DUPLICATE_FLAG, at, 1);
+  }
+
+  return GRX_OK;
+}
+
+/** The option bits a gathered charset choice asks for. */
+static uint32_t charset_options(const CharsetChoice * choice) {
+  uint32_t options = 0;
+  if (choice->letter == 'a' || choice->letter == 'l') {
+    options = GRX_OPT_ASCII_CLASSES;
+  }
+  if (choice->letter == 'a' && choice->count == 2) {
+    options |= GRX_OPT_ASCII_FOLD_SEPARATE;
+  }
+
+  return options;
+}
+
+/**
  * Read the letters of an inline option setting, up to `:` or `)`.
  *
  * `(?i-m:...)`, `(?^i...)` and `(?xx)` are all this grammar. `^` means
@@ -1658,6 +1726,7 @@ static GRX_Result read_option_letters(GRX_Parser * parser, size_t start,
   uint32_t set = 0;
   uint32_t clear = 0;
   int clearing = 0;
+  CharsetChoice charset_choice = {0, 0};
 
   int reset = grx_parse_eat(parser, '^');
   if (reset) {
@@ -1682,20 +1751,17 @@ static GRX_Result read_option_letters(GRX_Parser * parser, size_t start,
       continue;
     }
 
+    if (flavour(parser) == FLAVOUR_PERL && (c == 'p' || c == 'a' || c == 'd'
+            || c == 'l' || c == 'u')) {
+      GRX_Result charset = read_charset_letter(parser, c, clearing, &charset_choice);
+      if (charset != GRX_OK) {
+        return charset;
+      }
+      continue;
+    }
+
     uint32_t option = option_for_letter(c);
     if (!option) {
-      if (flavour(parser) == FLAVOUR_PERL && (c == 'p' || c == 'a' || c == 'd'
-              || c == 'l' || c == 'u')) {
-        // Perl's charset and preserve modifiers. `p` has no compile-time
-        // effect; the other four choose a character-set semantics this
-        // library does not have a second of.
-        parser->position++;
-        if (c == 'p') {
-          continue;
-        }
-        return grx_parse_fail(parser, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED,
-            parser->position - 1, 1);
-      }
       return grx_parse_fail(parser, GRX_DIAG_UNKNOWN_FLAG, parser->position, 1);
     }
 
@@ -1717,6 +1783,19 @@ static GRX_Result read_option_letters(GRX_Parser * parser, size_t start,
 
   if (grx_parse_at_end(parser)) {
     return grx_parse_fail(parser, GRX_DIAG_UNMATCHED_OPEN_PAREN, start, 1);
+  }
+
+  if (charset_choice.letter) {
+    // Applied after the loop rather than as each letter arrives, because
+    // `(?aia:s)` is `/aa` with an `i` in the middle: what the second `a`
+    // means is not known until the string ends. Every one of the four is
+    // exclusive, so the choice sets what it wants and clears what the other
+    // three would have - `(?a:(?u:\w))` has to widen again, and a letter
+    // that only ever set bits could not.
+    uint32_t wanted = charset_options(&charset_choice);
+    uint32_t both = GRX_OPT_ASCII_CLASSES | GRX_OPT_ASCII_FOLD_SEPARATE;
+    set = (set & ~both) | wanted;
+    clear = (clear & ~both) | (both & ~wanted);
   }
 
   *out_set = set;
@@ -3491,12 +3570,22 @@ static GRX_Result pcre_check_quantifier_target(
   }
 
   switch (atom->kind) {
+    case GRX_NODE_KEEP:
+      // `\K*` compiles in perl and is error 109 in pcre2test. It is the
+      // only atom the two dialects disagree about repeating, and repeating
+      // it changes nothing: `\K` moves the reported start to here, and
+      // moving it here again leaves it here.
+      if (flavour(parser) == FLAVOUR_PERL) {
+        return GRX_OK;
+      }
+      return grx_parse_fail(
+          parser, GRX_DIAG_NOTHING_TO_REPEAT, offset, length);
+
     // A lookaround *is* quantifiable here, which surprised this file's first
     // draft: `/(?=a)*/` compiles in pcre2test 10.46, where the same pattern
     // is a syntax error in ECMAScript's Unicode mode. So is `(*ACCEPT)*`.
     // Both were refused until the corpus said otherwise.
     case GRX_NODE_ANCHOR:
-    case GRX_NODE_KEEP:
     case GRX_NODE_EMPTY:
       return grx_parse_fail(
           parser, GRX_DIAG_NOTHING_TO_REPEAT, offset, length);

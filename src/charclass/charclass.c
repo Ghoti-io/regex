@@ -382,18 +382,33 @@ GRX_Result grx_charclass_fold_closure(GRX_CharClass * cls, GRX_FoldKind kind,
     uint32_t members[GRX_FOLD_ORBIT_MAX];
     size_t count = grx_unicode_orbit_table_at(kind, i, members);
 
-    int touched = 0;
+    // Two halves rather than one, because Perl's `/aa` cuts every orbit at
+    // U+0080: a class holding `s` gains `S` and not U+017F, and a class
+    // holding U+00C0 still gains U+00E0. For every other folding the two
+    // halves are asked the same question and answer it together.
+    int apart = kind == GRX_FOLD_SIMPLE_ASCII_APART;
+    int touched_ascii = 0;
+    int touched_wide = 0;
     for (size_t j = 0; j < count; j++) {
-      if (grx_charclass_contains(cls, members[j])) {
-        touched = 1;
-        break;
+      if (!grx_charclass_contains(cls, members[j])) {
+        continue;
+      }
+      if (!apart || members[j] < 0x80) {
+        touched_ascii = 1;
+      }
+      if (!apart || members[j] >= 0x80) {
+        touched_wide = 1;
       }
     }
-    if (!touched) {
+    if (!touched_ascii && !touched_wide) {
       continue;
     }
 
     for (size_t j = 0; j < count && result == GRX_OK; j++) {
+      int side = !apart || members[j] < 0x80 ? touched_ascii : touched_wide;
+      if (!side) {
+        continue;
+      }
       result = grx_charclass_add_range(
           &additions, members[j], members[j], limits);
     }

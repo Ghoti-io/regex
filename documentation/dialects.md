@@ -227,7 +227,7 @@ The two rules that make `(a*)*` against `b` report different things:
 | Empty iteration | `FAIL_IF_EMPTY_AFTER_MIN`: an iteration that consumes nothing, once `min` is satisfied, fails (22.2.2.3.1 RepeatMatcher step 2.b) | ECMAScript |
 | | `BREAK_ON_EMPTY`: the iteration succeeds and the loop stops | Perl, PCRE2, Python, Java (**probe**), .NET (**probe**), Ruby (**probe**), RE2, Rust |
 | | `LONGEST`: irrelevant; the match is the longest, and an empty iteration adds nothing | POSIX, GNU, Tcl |
-| Capture reset | `RESET_EACH_ITERATION`: captures inside the group are cleared at the start of every iteration (RepeatMatcher step 4) | ECMAScript, **Perl** (probed) |
+| Capture reset | `RESET_EACH_ITERATION`: captures inside the group are cleared at the start of every iteration (RepeatMatcher step 4) | ECMAScript, **Perl** (probed; but see below) |
 | | `KEEP_LAST_SET`: a capture set in an earlier iteration survives if a later one does not set it | PCRE2, Python, Java (**probe**), .NET, Ruby (**probe**), RE2 (**probe**), Rust (**probe**) |
 
 Consequences the tests state:
@@ -417,10 +417,21 @@ each other - `u` and `v` - are `GRX_DIAG_CONFLICTING_FLAGS` in either order,
 which needed an exclusion *group* rather than a mask of forbidden option bits:
 `v` implies `u`, so a mask catches `vu` and misses `uv`.
 
+Perl's four charset modifiers - `a`, `d`, `l`, `u` - are one such group, with
+one wrinkle no other letter has: `a` may be written twice, and the two need
+not be adjacent, so `(?aia:s)` is `/aa`. What each chooses:
+
+| Letter | Meaning here |
+| --- | --- |
+| `u`, `d` | the dialect's own semantics, which for Perl is Unicode |
+| `a` | `\w`, `\d`, `\s`, `\b` and the POSIX classes are ASCII |
+| `aa` | the same, and no fold orbit crosses U+0080: `/ai` lets `s` match U+017F and `/aai` does not, while U+00C0 still matches U+00E0 under both |
+| `l` | the locale's semantics, which is the C locale's here - see section 6 |
+
 | Dialect | Alphabet | Notes |
 | --- | --- | --- |
 | POSIX, GNU | none (API flags `REG_ICASE`, `REG_NEWLINE`) | `GRX_OPT_CASELESS`, `GRX_OPT_MULTILINE` |
-| Perl | `msixxnpau` | `xx` is extended-more; `n` is no-capture |
+| Perl | `msixxnpadlu` | `xx` is extended-more; `n` is no-capture; `a`, `d`, `l`, `u` are the charset modifiers and exclude each other, and `a` twice is `/aa` |
 | PCRE2 | `imsxnUJ` and the `(*...)` leading directives | `U` ungreedy, `J` dupnames |
 | ECMAScript | `dgimsuvy` | `u` and `v` exclusive; `g`/`y` rejected here |
 | Python | `aiLmsux` | `L` (locale) rejected as unsupported; `a` is ASCII |
@@ -490,7 +501,7 @@ to be complete for every shipped tier.
 | PCRE2, Perl | `\C`, one code unit | the subject here is code points, and a construct that can land inside a character has no honest approximation | `GRX_ERR_UNSUPPORTED` |
 | PCRE2 | `(*LIMIT_MATCH=n)` and kin are accepted and not applied | the limits are the caller's and this front end has no writable copy; lowering one from inside a pattern is later work | - |
 | PCRE2, Perl | `(?(VERSION>=n.n))` is answered against 10.46 | this library emulates that version rather than being it | - |
-| Perl | The charset modifiers `a`, `aa`, `d`, `l`, `u` | one character-set semantics here, not five | `GRX_ERR_UNSUPPORTED` |
+| Perl | `/l` asks for the locale's semantics and gets the C locale's | there is no other locale here (section 6), and the C locale's word characters are the ASCII ones | - |
 | Perl | `\b{wb}`, `\B{gcb}` and the other Unicode boundary escapes | the break rules again | `GRX_ERR_UNSUPPORTED` |
 | POSIX | Submatch rules approximated in the first POSIX release | [design.md](design.md) §2 | - |
 | POSIX | `[[.ch.]]` multi-character collating elements, `[[=e=]]` | no collation | `GRX_ERR_UNSUPPORTED` |

@@ -102,7 +102,27 @@ typedef enum {
    * does. What it turns off is a check, so a pattern that is valid without
    * it is valid with it.
    */
-  GRX_OPT_DUPLICATE_NAMES = GRX_BIT(12)
+  GRX_OPT_DUPLICATE_NAMES = GRX_BIT(12),
+  /**
+   * @brief `\w`, `\d`, `\s`, `\b` and the POSIX classes are ASCII.
+   *
+   * Perl's `/a`, and the narrowing counterpart of GRX_OPT_UCP: it holds the
+   * shorthands to their ASCII definitions whatever the subject is. Perl's
+   * `/l` sets it too - this library has no locale and says so
+   * (documentation/dialects.md section 6), and the C locale's answer to
+   * "which characters are word characters" is the ASCII one.
+   */
+  GRX_OPT_ASCII_CLASSES = GRX_BIT(13),
+  /**
+   * @brief Caseless matching does not fold across the ASCII boundary.
+   *
+   * The second `a` of Perl's `/aa`. Under `/ai` the letter `s` matches
+   * U+017F, because simple folding puts them in one orbit; under `/aai` it
+   * does not, while U+00C0 and U+00E0 still match each other. It is
+   * therefore not "fold ASCII only", which would stop the second pair as
+   * well.
+   */
+  GRX_OPT_ASCII_FOLD_SEPARATE = GRX_BIT(14)
 } GRX_Option;
 
 /**
