@@ -99,6 +99,17 @@ typedef enum {
   GRX_SHORTHAND_COUNT         ///< Closes the enum; not a shorthand.
 } GRX_ShorthandKind;
 
+/**
+ * @brief What one entry of a `(*scs:(...)...)` group list is.
+ *
+ * The list reaches the pattern as a run of code points, two per entry: one
+ * of these, then either the group number or the offset of the name. Two
+ * kinds because a number can be resolved while parsing and a name cannot -
+ * `(*scs:(<x>)a)(?<x>a)` names a group the parser has not reached.
+ */
+#define GRX_SCAN_ENTRY_GROUP 0u
+#define GRX_SCAN_ENTRY_NAME 1u
+
 /** @brief A set operation between character classes. */
 typedef enum {
   GRX_CLASS_OP_UNION = 0,   ///< Implicit in `[ab]`; explicit nowhere.

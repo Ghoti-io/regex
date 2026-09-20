@@ -69,6 +69,8 @@ const char * grx_node_kind_name(GRX_NodeKind kind) {
       return "class-op";
     case GRX_NODE_STRING_SET:
       return "string-set";
+    case GRX_NODE_SCAN:
+      return "scan";
     case GRX_NODE_KEEP:
       return "keep";
     case GRX_NODE_BRANCH_RESET:

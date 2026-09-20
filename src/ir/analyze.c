@@ -346,6 +346,17 @@ static Span walk(Analysis * analysis, uint32_t node_index) {
       span = (Span) {0, 0, 0, 0, 0};
       break;
 
+    case GRX_IR_SCAN:
+      // Zero-width where it stands, whatever its body matches: the body runs
+      // over a captured substring and consumes nothing here. The body is
+      // walked all the same, so that what it contains still reaches the
+      // facts - `(?<=ab(*scs:(1)cd))` is a fixed-length lookbehind of two,
+      // and was refused as variable until this case existed.
+      analysis->is_regular = 0;
+      (void)walk(analysis, node->first_child);
+      span = (Span) {0, 0, 0, 0, 0};
+      break;
+
     case GRX_IR_COUNT:
     default:
       analysis->is_regular = 0;

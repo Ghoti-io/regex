@@ -90,6 +90,7 @@ static GRX_Result emit(Codegen * codegen, GRX_Opcode op, uint8_t mode,
   switch (op) {
     case GRX_OP_KEEP:
     case GRX_OP_VERB:
+    case GRX_OP_SCAN:
     case GRX_OP_COND:
     case GRX_OP_CALL:
     case GRX_OP_RET:
@@ -616,6 +617,53 @@ static GRX_Result gen_look(Codegen * codegen, const GRX_IRNode * node) {
   return GRX_OK;
 }
 
+/**
+ * Emit `(*scs:(...)body)`: the group list, then the body as a sub-program.
+ *
+ * The list is copied into the program because a program outlives the IR. The
+ * layout is a LOOK's - the body follows the instruction and ends in a MATCH
+ * of its own - so `x` is free to hold the list's offset.
+ */
+static GRX_Result gen_scan(Codegen * codegen, const GRX_IRNode * node) {
+  size_t count = 0;
+  const uint32_t * groups = grx_ir_scan_list(codegen->ir, node->a, &count);
+  if (!groups || !count) {
+    return fail(codegen, GRX_DIAG_INTERNAL, node);
+  }
+
+  uint32_t offset = (uint32_t)codegen->program->scan_lists.count;
+  uint32_t total = (uint32_t)count;
+  if (grx_arena_append(&codegen->program->scan_lists, &total, NULL) != GRX_OK) {
+    return fail(codegen, GRX_DIAG_OUT_OF_MEMORY, node);
+  }
+  for (size_t i = 0; i < count; i++) {
+    uint32_t group = groups[i];
+    if (grx_arena_append(&codegen->program->scan_lists, &group, NULL)
+        != GRX_OK) {
+      return fail(codegen, GRX_DIAG_OUT_OF_MEMORY, node);
+    }
+  }
+
+  uint32_t scan = GRX_INDEX_NONE;
+  GRX_Result result
+      = emit(codegen, GRX_OP_SCAN, 0, offset, 0, node, &scan);
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  result = gen(codegen, node->first_child);
+  if (result != GRX_OK) {
+    return result;
+  }
+  result = emit(codegen, GRX_OP_MATCH, 0, 0, 0, node, NULL);
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  patch_y(codegen, scan, here(codegen));
+  return GRX_OK;
+}
+
 static GRX_Result gen(Codegen * codegen, uint32_t node_index) {
   const GRX_IRNode * node = grx_ir_node(codegen->ir, node_index);
   if (!node) {
@@ -700,6 +748,9 @@ static GRX_Result gen(Codegen * codegen, uint32_t node_index) {
 
     case GRX_IR_VERB:
       return emit(codegen, GRX_OP_VERB, node->mode, node->a, 0, node, NULL);
+
+    case GRX_IR_SCAN:
+      return gen_scan(codegen, node);
 
     case GRX_IR_COND:
       return gen_cond(codegen, node);

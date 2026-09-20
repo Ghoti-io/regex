@@ -78,6 +78,7 @@ typedef enum {
   GRX_IR_RECURSE,    ///< Re-enter group `a`, or the whole pattern when 0.
   GRX_IR_KEEP,       ///< Reset the reported start of the match.
   GRX_IR_VERB,       ///< A backtracking control verb; `mode` says which.
+  GRX_IR_SCAN,       ///< Match the one child against the substring `a` names.
   GRX_IR_COUNT       ///< Closes the enum; not a node kind.
 } GRX_IRKind;
 
@@ -162,6 +163,14 @@ typedef struct GRX_IR {
    * grx_match_mark(), which has the regex to look it up in.
    */
   GRX_Arena marks;
+  /**
+   * The group lists of `(*scs:(...)...)`, as length-prefixed runs.
+   *
+   * A count, then that many group numbers, resolved and checked. The names
+   * and the relative forms are gone by here: what an engine needs is "the
+   * first of these groups that is set", and a number is the whole of it.
+   */
+  GRX_Arena scan_lists;
   size_t capture_count;            ///< Capturing groups, excluding group 0.
   /**
    * How long a *variable*-length lookbehind body the dialect allows, or
@@ -273,6 +282,41 @@ size_t grx_ir_mark_count(const GRX_IR * ir);
  * @return The NUL-terminated name, or NULL when the index is out of range.
  */
 const char * grx_ir_mark_name(const GRX_IR * ir, uint32_t index);
+
+/**
+ * @brief Begin a scan list, and report where it starts.
+ *
+ * The count is written as a placeholder and patched by
+ * grx_ir_scan_list_push() as the groups arrive, the way the pattern's string
+ * runs are built.
+ *
+ * @param ir The IR.
+ * @param out_offset Receives the run's offset.
+ * @return GRX_OK, GRX_ERR_OOM, or GRX_ERR_INVALID.
+ */
+GRX_Result grx_ir_scan_list_begin(GRX_IR * ir, uint32_t * out_offset);
+
+/**
+ * @brief Append one group number to the run begun at `offset`.
+ *
+ * @param ir The IR.
+ * @param offset The run's offset.
+ * @param group The group number.
+ * @return GRX_OK, GRX_ERR_OOM, or GRX_ERR_INVALID.
+ */
+GRX_Result grx_ir_scan_list_push(
+    GRX_IR * ir, uint32_t offset, uint32_t group);
+
+/**
+ * @brief The scan list at an offset.
+ *
+ * @param ir The IR.
+ * @param offset The run's offset.
+ * @param out_count Receives how many groups it names. Required.
+ * @return The first group number, or NULL when the offset is out of range.
+ */
+const uint32_t * grx_ir_scan_list(
+    const GRX_IR * ir, uint32_t offset, size_t * out_count);
 
 /**
  * @brief Write a human-readable form of the IR.

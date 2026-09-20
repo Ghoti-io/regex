@@ -855,6 +855,89 @@ static GRX_Result resolve_name(
   return GRX_ERR_SYNTAX;
 }
 
+/**
+ * Lower `(*scs:(...)body)`.
+ *
+ * The group list is resolved here rather than in the parser because a name
+ * may belong to a group written later: `(*scs:(<x>)a)(?<x>a)` is a pattern
+ * pcre2test compiles. What comes out is a run of group numbers, which is all
+ * an engine needs - it takes the first of them that is set.
+ */
+static GRX_Result lower_scan(
+    Lowering * low, const GRX_Node * node, uint32_t * out_node) {
+  size_t written = 0;
+  const uint32_t * entries
+      = grx_pattern_string(low->pattern, node->a, &written, NULL);
+  if (!entries || !written || (written & 1)) {
+    return fail(low, GRX_DIAG_INTERNAL, node);
+  }
+
+  uint32_t list = GRX_INDEX_NONE;
+  GRX_Result result = grx_ir_scan_list_begin(low->ir, &list);
+  if (result != GRX_OK) {
+    return storage_failed(low, result, node);
+  }
+
+  for (size_t i = 0; i < written; i += 2) {
+    if (entries[i] == GRX_SCAN_ENTRY_NAME) {
+      // Every group of that name, in the order they were written, and not
+      // just the first: `(?J)(?:(?'A'a)|(?<A>b))(*scs:('A')b)` scans the one
+      // that captured, which is the second. A duplicated name is one name
+      // for several groups, so it contributes several entries.
+      const char * name = grx_pattern_name(low->pattern, entries[i + 1]);
+      if (!name) {
+        return fail(low, GRX_DIAG_INTERNAL, node);
+      }
+      int found = 0;
+      for (size_t j = 0; j < low->pattern->nodes.count; j++) {
+        const GRX_Node * candidate
+            = grx_pattern_node(low->pattern, (uint32_t)j);
+        if (!candidate || candidate->kind != GRX_NODE_GROUP
+            || !(candidate->flags & GRX_NODE_NAMED)) {
+          continue;
+        }
+        const char * spelling
+            = grx_pattern_name(low->pattern, candidate->b);
+        if (!spelling || strcmp(spelling, name) != 0) {
+          continue;
+        }
+        found = 1;
+        result = grx_ir_scan_list_push(low->ir, list, candidate->a);
+        if (result != GRX_OK) {
+          return storage_failed(low, result, node);
+        }
+      }
+      if (!found) {
+        return fail(low, GRX_DIAG_UNKNOWN_GROUP_NAME, node);
+      }
+      continue;
+    }
+
+    uint32_t group = entries[i + 1];
+    if (!group || group > low->pattern->capture_count) {
+      return fail(low, GRX_DIAG_INVALID_BACKREFERENCE, node);
+    }
+    result = grx_ir_scan_list_push(low->ir, list, group);
+    if (result != GRX_OK) {
+      return storage_failed(low, result, node);
+    }
+  }
+
+  result = add(low, GRX_IR_SCAN, node, out_node);
+  if (result != GRX_OK) {
+    return result;
+  }
+  grx_ir_node(low->ir, *out_node)->a = list;
+
+  uint32_t body = GRX_INDEX_NONE;
+  result = lower_node(low, node->first_child, &body);
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  return attach(low, *out_node, body);
+}
+
 /** Lower `(*ACCEPT)` and its kin: the verb is the node's whole meaning. */
 /** Emit one verb node, with the mark index it names or none. */
 static GRX_Result verb_node(Lowering * low, const GRX_Node * node,
@@ -1922,6 +2005,9 @@ static GRX_Result lower_node(
       // strings, which is what the node kind means, so both lower the same
       // way - longest alternative first, then the single code points.
       return lower_class_set(low, node, out_node);
+
+    case GRX_NODE_SCAN:
+      return lower_scan(low, node, out_node);
 
     case GRX_NODE_CLASS_OP: {
       // Two grammars build this: ECMAScript's `v` mode, where an operand may

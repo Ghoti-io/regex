@@ -17,13 +17,7 @@
 # that begins "not yet classified" is one nobody has looked at, and is meant
 # to be read as the admission it is.
 pcre		( {32742} {42})(?<!\\1{65481})		a repeat count the reference folds and this library expands
-pcre		()()()(?<=ab(*ACCEPT)(*scs:(1,2,3))cd|efg)xyz		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		()()()(?<=ab(*scs:(1,2,3))cd)xyz		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		()()(*scs:(1,2,1,2,1,2,2,'XYZ'))		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		()(*scs:(1)+a)		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		()(*scs:(1,1,1,1,1,1,1,1,2))		`(*scs:` scan substring: refused, it constrains the body and a group does not
 pcre		()(?<=(?0))		lookbehind length: the reference computes a bound from a backreference or a call and this library does not
-pcre		()(\\w++)=(*scs:(2)(?=abc))(\\w++)		`(*scs:` scan substring: refused, it constrains the body and a group does not
 pcre		(*napla:)+		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
 pcre		(*napla:a(*ACCEPT)zz|(.))\\1..		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
 pcre		(*napla:a|(*COMMIT)(.))\\1\\1		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
@@ -31,75 +25,29 @@ pcre		(*napla:a|(.)(*ACCEPT)zz)\\1..		non-atomic lookaround: refused until a ver
 pcre		(*napla:a|(.))\\1\\1		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
 pcre		(*naplb:(.)..|(.)...)(\\1|\\2)		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
 pcre		(*naplb:)+		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
-pcre		(*scan_substring:(		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		(*scan_substring:(1)a|b)		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		(*scan_substring:(<name>)a|b)		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		(*scs:		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		(*scs:('name'		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		(*scs:(0)a)		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		(*scs:(1)a)(a)|x		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		(*scs:(1)a)?(a)		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		(*scs:(1)a)??(a)		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		(*scs:(1)a|b)		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		(*scs:(<name>)a|b)		`(*scs:` scan substring: refused, it constrains the body and a group does not
 pcre		(?(*napla:xx)bc)		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
 pcre		(?(*script_run:xxx)zzz)		`(*script_run:`: refused, it constrains the body and a group does not
 pcre		(?<*(.)..|(.)...)(\\1|\\2)		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
-pcre		(?<=(abc))(def)(*scs:(2)(*scs:(1)(*SKIP)x)).+|(ef.+)		`(*scs:` scan substring: refused, it constrains the body and a group does not
 pcre		(?<=b(?1))xyz(b+)pqrstuvew		lookbehind length: the reference computes a bound from a backreference or a call and this library does not
 pcre		(?|(?<a>A)|(?<b>B))		branch reset: the numbering is shared, and the names and references inside one are not checked against it yet
 pcre		(?|([ab]))...(?<=\\1)z		branch reset: the numbering is shared, and the names and references inside one are not checked against it yet
 pcre		(X{65535})(?<=\\1{32770})		a repeat count the reference folds and this library expands
-pcre		([a-zA-Z]+)(*scs:(1).*?(?<ABC>[A-Z]+)(*scan_substring:('ABC').*(.)\\3))#+		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		([a-z])([a-z]++)(#+)(*scs:(2)(ab.))		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		([a-z]++)##(*scs:(1)(abc))?!		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		([a-z]++)##(*scs:(1)(abc))??(?(2)!|:)		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		([a-z]++)##(*scs:(1)(abc)|xyz){8}(?(2)!|:)		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		([a-z]{2})[a-z](*scs:(1)(.*?))\\2$		`(*scs:` scan substring: refused, it constrains the body and a group does not
 pcre		(\\2)((?=(?<=\\1)))		lookbehind length: the reference computes a bound from a backreference or a call and this library does not
-pcre		(\\d++)(*scs:(1)\\d+$)(\\w+)		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		(\\d++)(*scs:(1)\\d+\\Z)(\\w+)		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		(\\d++)(*scs:(1)\\d+\\z)(\\w+)		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		(\\w++)=(?(*scs:(1)(abc))pqr|xyz)(\\w++)		`(*scs:` scan substring: refused, it constrains the body and a group does not
 pcre		(a(?<=b(?1)))		lookbehind length: the reference computes a bound from a backreference or a call and this library does not
-pcre		(a)(*scs:(1)a(*ACCEPT))bbb		`(*scs:` scan substring: refused, it constrains the body and a group does not
 pcre		(a)(?(DEFINE)(b))(?2){0,1999}?(?2)		a repeat of a subroutine call: the reference compiles one copy and this library expands it past max_program_size
 pcre		(a)(?2){0,1999}?(b)		a repeat of a subroutine call: the reference compiles one copy and this library expands it past max_program_size
 pcre		(a)(?<=b+(?1))		lookbehind length: the reference computes a bound from a backreference or a call and this library does not
-pcre		(a)(b)(*scs:(2)(*scs:(1)a(*COMMIT)x)).+|(.+)		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		(a)(b)(*scs:(2)(*scs:(1)a(*PRUNE)x)).+|(.+)		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		(a)(b+)(*scs:(1)a(*ACCEPT))(\\2)		`(*scs:` scan substring: refused, it constrains the body and a group does not
 pcre		(a+)(?<=b(?1))		lookbehind length: the reference computes a bound from a backreference or a call and this library does not
 pcre		(a\\2)(b\\1)(?<=\\2)		lookbehind length: the reference computes a bound from a backreference or a call and this library does not
-pcre		(abc)(def)(*MARK:markstr)(*scs:(2)(?:(*scs:(1)abc(*SKIP:markstr)x))).+|(.+)		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		(abc)(def)(*scs:(1)(*scs:(2)de(*SKIP)x)).+|(.+)		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		(abc)(def)(*scs:(2)(*scs:(1)(*SKIP)x)).+|(.+)		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		(abc)(def)(*scs:(2)(?:(*scs:(1)abc(*SKIP:notfound)x|abcd|(abc)))).+		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		(xyz)(abc)(*scs:(-1)abc)(*scs:(-2)\\1)		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		[A-Z]{3}([A-Z]++)#(*scs:(1)(?<=BC)XY)#		`(*scs:` scan substring: refused, it constrains the body and a group does not
 pcre		[a-[.xxx.]]+		POSIX collating element: refused, there is no locale here
 pcre		[a-[=xxx=]]+		POSIX collating element: refused, there is no locale here
 pcre		\\A(*napla:.*\\b(\\w++))(?>.*?\\b\\1\\b){3}		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
 pcre		\\A(?*.*\\b(\\w++))(?>.*?\\b\\1\\b){3}		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
 pcre		\\[()]{65535}()		a repeat count the reference folds and this library expands
 pcre		\\[()]{65535}(?<A>)		a repeat count the reference folds and this library expands
-pcre		\\b(\\w++)(*scs:(1)^)		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		^(([a-z]([a-z]*+))(*scs:(2).(?=(?1)|$)\\3)|#){5}		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		^(?:(.){20,30}#|([a-z]++)(*scs:(1)(a+)(*THEN)b){20,30}#|(.){20,30}!)		`(*scs:` scan substring: refused, it constrains the body and a group does not
 pcre		^(?|(\\*)(*napla:\\S*_(\\2?+.+))|(\\w)(?=\\S*_(\\2?+\\1)))+_\\2$		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
 pcre		^(?|(\\*)(*napla:\\S*_(\\3?+.+))|(\\w)(?=\\S*_((\\2?+\\1))))+_\\2$		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
-pcre		^([a-z]++)#(*scs:(1)a|ab|abc|abcd|abcde|abcdef|(abcdefg))\\2		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		^([a-z]++)(*scs:(1)((a+)(*THEN)b))?		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		^([a-z]++)(*scs:(1)((a+)(*THEN)b)|(a+)(*THEN)c|(aa))		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		^([a-z]++)(*scs:(1)(a+)(*THEN)b|(a+)(*THEN)c|(aa))		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		^([a-z]++)(*scs:(1)(abc|(a+)(*THEN)b))?		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		^([a-z]++)(?:((?6))|((?7))|((?8))|(#))(?(DEFINE)((*scs:(1)abc(*PRUNE)d))((*scs:(1)abc(*COMMIT)e))((*scs:(1)abc(*SKIP)f)))		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		f(?:(*scs:(+1,+2)(?<=(.)))|()){16}		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		x(?|(*scs:(1)(?<=(.)))|()){8}		`(*scs:` scan substring: refused, it constrains the body and a group does not
 pcre		z{65536}		a repeat count above 65535: the reference calls it a syntax error and this library a limit
-pcre	J	(*scs:(<GOOD_NAME>)a)(?<GOOD_NAME>a)(?<GOOD_NAME>b)(?<GOOD_NAME>c)(?<GOOD_NAME>d)|x		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre	J	(?:(?'A'a)|(?<A>b))(*scs:('A')b)c		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre	J	(?:(?<YYY>[a-z]++)|(?<YYY>[0-9]++)|$)(*scan_substring:('YYY')((?<START>.).*\\k<START>$))		`(*scs:` scan substring: refused, it constrains the body and a group does not
 pcre	J	(?<A>[ab])...(?<=\\k'A')(?<A>)z		lookbehind length: the reference computes a bound from a backreference or a call and this library does not
 perl		(((aa){2})+)	aaaaaaaaaa	a capture an iteration set before failing: Perl keeps it, this library and PCRE2 discard it
 perl		(((a{2}){2})+)	aaaaaaaaaa	a capture an iteration set before failing: Perl keeps it, this library and PCRE2 discard it

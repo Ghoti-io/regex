@@ -108,6 +108,14 @@ typedef enum {
   GRX_OP_PROGRESS_CHECK, ///< Apply the empty-iteration rule at a loop's end.
   GRX_OP_BACKREF,      ///< Match what a group matched earlier.
   GRX_OP_LOOK,         ///< Run a sub-program without consuming input.
+  /**
+   * Run the sub-program that follows over a captured substring.
+   *
+   * `x` is the scan list's offset in the program's `scan_lists`; `y` is
+   * where the outer program resumes. The body begins at the next
+   * instruction, the way a LOOK's does, and ends in its own MATCH.
+   */
+  GRX_OP_SCAN,
   GRX_OP_ATOMIC_BEGIN, ///< Start a region whose backtrack points are dropped.
   GRX_OP_ATOMIC_END,   ///< End it, discarding them.
   GRX_OP_COND,         ///< Branch on whether a group participated, and kin.
@@ -162,6 +170,13 @@ typedef struct GRX_Inst {
 typedef struct GRX_Program {
   GRX_Arena insts;                ///< GRX_Inst; execution starts at index 0.
   GRX_ClassTable classes;         ///< Every class an instruction names.
+  /**
+   * The group lists `GRX_OP_SCAN` names, as length-prefixed runs.
+   *
+   * A count, then that many group numbers. Copied out of the IR rather than
+   * shared with it, because a program outlives the tree it came from.
+   */
+  GRX_Arena scan_lists;
   uint32_t flags;                 ///< GRX_PROGRAM_* bits.
   uint32_t register_count;        ///< Progress registers a thread needs.
   GRX_MatchPreference preference; ///< Which match a search reports.
@@ -227,6 +242,17 @@ GRX_Inst * grx_program_at(const GRX_Program * program, uint32_t index);
  * @return A lowercase mnemonic, or "?" for a value out of range. Never NULL.
  */
 const char * grx_opcode_name(GRX_Opcode op);
+
+/**
+ * @brief The scan list at an offset in a program.
+ *
+ * @param program The program.
+ * @param offset The run's offset, as a GRX_OP_SCAN's `x` holds it.
+ * @param out_count Receives how many groups it names. Required.
+ * @return The first group number, or NULL when the offset is out of range.
+ */
+const uint32_t * grx_program_scan_list(
+    const GRX_Program * program, uint32_t offset, size_t * out_count);
 
 /**
  * @brief Write a disassembly of a program.

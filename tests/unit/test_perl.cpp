@@ -1010,6 +1010,80 @@ TEST(Perl, OnlyAcceptMayBeQuantified) {
   EXPECT_EQ(compile_result("a(*:x)*b"), GRX_ERR_SYNTAX);
 }
 
+TEST(Perl, AScanSubstringRunsItsBodyOverACapturedSubstring) {
+  // PCRE2 10.45's `(*scs:(n)...)`. Every answer here is pcre2test's.
+  //
+  // Anchored at the substring's start, and not required to reach its end:
+  // `(*scs:(1)a)` holds for a group that captured "ab" and `(*scs:(1)b)`
+  // does not.
+  EXPECT_EQ(span_of("(ab)(*scs:(1)a)", "ab"), "0-2");
+  EXPECT_EQ(span_of("(ab)(*scs:(1)b)", "ab"), "nomatch");
+
+  // The substring stands in for the whole subject, so `\z` is its end and
+  // `^` its start - and the outer text on either side is unreadable.
+  EXPECT_EQ(span_of("(\\d++)(*scs:(1)\\d+\\z)(\\w+)", "12ab"), "0-4");
+  EXPECT_EQ(span_of("\\b(\\w++)(*scs:(1)^)", "hello world"), "0-5");
+
+  // Zero-width where it stands: the outer match carries on from the same
+  // place, which is what lets `(\w+)=(*scs:(1)\d+)(\w+)` drive `\w+` back
+  // until group one is all digits.
+  EXPECT_EQ(span_of("(\\w+)=(*scs:(1)\\d+)(\\w+)", "a1=xx"), "1-5");
+  EXPECT_EQ(span_of("(\\w+)=(*scs:(1)\\d+)(\\w+)", "11=xx"), "0-5");
+}
+
+TEST(Perl, AScanSubstringTakesTheFirstGroupInItsListThatIsSet) {
+  // Not the first that matches: pcre2test answers `(?:(x)|y)(b)(*scs:(1,2)b)`
+  // against "yb" by scanning group two, because group one never captured.
+  EXPECT_EQ(span_of("(?:(x)|y)(b)(*scs:(1,2)b)", "yb"), "0-2");
+  EXPECT_EQ(span_of("(?:(x)|y)(b)(*scs:(1,2)x)", "yb"), "nomatch");
+
+  // A group that captured nothing at all leaves no substring to scan, so the
+  // assertion cannot hold.
+  EXPECT_EQ(span_of("(*scs:(1)a)(a)|x", "a"), "nomatch");
+
+  // The list takes the five spellings a subroutine call takes, and the
+  // relative ones are resolved where they stand.
+  EXPECT_EQ(span_of("(xyz)(abc)(*scs:(-1)abc)", "xyzabc"), "0-6");
+
+  // A duplicated name is one name for several groups, so it contributes
+  // several entries and the first *set* one is scanned - here the second.
+  EXPECT_EQ(span_of("(?J)(?:(?'A'a)|(?<A>b))(*scs:('A')b)c", "bc"), "0-2");
+
+  // A group the pattern does not have, and group zero, are both refused -
+  // and `(*scs:(<x>)a)(?<x>a)` is not, because a name may be written later.
+  EXPECT_EQ(compile_result("(*scs:(1)a|b)"), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("(*scs:(0)a)"), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("(*scs:(<name>)a|b)"), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("(*scs:(<x>)a)(?<x>a)"), GRX_OK);
+  EXPECT_EQ(compile_result("(*scan_substring:(<x>)a)(?<x>a)"), GRX_OK);
+}
+
+TEST(Perl, AVerbInsideAPositiveAssertionEndsTheAttemptOutsideIt) {
+  // pcre2test settles all four, and this library confined them to the
+  // assertion until `(*scs:...)` made the question unavoidable. A `(*PRUNE)`
+  // that fires inside a positive lookahead ends the attempt at that starting
+  // position, so the second branch is tried one character later.
+  EXPECT_EQ(span_of("a(?=b(*PRUNE)x).+|(.+)", "abcd"), "1-4");
+  EXPECT_EQ(span_of("a(?=b(*COMMIT)x).+|(.+)", "abcd"), "nomatch");
+  EXPECT_EQ(span_of("a(?=b(*SKIP)x).+|(.+)", "abcd"), "2-4");
+
+  // A negative assertion discards it: the assertion succeeded, so nothing
+  // failed and there is nothing to stop.
+  EXPECT_EQ(span_of("a(?!b(*PRUNE)x).+|(.+)", "abcd"), "0-4");
+  EXPECT_EQ(span_of("a(?!b(*COMMIT)x).+|(.+)", "abcd"), "0-4");
+
+  // A `(*THEN)` with no alternative to go to is confined whatever the sign.
+  // At the top level the same exhaustion is a `(*PRUNE)`, which is why it
+  // needs a stop of its own rather than borrowing that one.
+  EXPECT_EQ(span_of("a(?=b(*THEN)x)c|a.+|(.+)", "abcd"), "0-4");
+
+  // And out of a scan substring, which is a positive assertion too.
+  EXPECT_EQ(span_of("(a)(b)(*scs:(2)(*scs:(1)a(*PRUNE)x)).+|(.+)", "abcd"),
+      "1-4");
+  EXPECT_EQ(span_of("(a)(b)(*scs:(2)(*scs:(1)a(*COMMIT)x)).+|(.+)", "abcd"),
+      "nomatch");
+}
+
 int main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

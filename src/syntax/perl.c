@@ -1706,10 +1706,15 @@ static const AltGroupRow alt_group_table[] = {
  * in, and one an ordinary lookaround would silently get wrong.
  */
 static const char * const unsupported_star[] = {
-  "script_run", "sr", "atomic_script_run", "asr", "scs", "scan_substring",
+  "script_run", "sr", "atomic_script_run", "asr",
   "napla", "non_atomic_positive_lookahead",
   "naplb", "non_atomic_positive_lookbehind",
   NULL
+};
+
+/** The two spellings of PCRE2's scan substring. */
+static const char * const scan_substring_names[] = {
+  "scs", "scan_substring", NULL
 };
 
 /** Whether everything before `start` is leading `(*...)` directives. */
@@ -1822,6 +1827,8 @@ static GRX_Result apply_directive(GRX_Parser * parser, const char * name,
 }
 
 /** Read a `(*...)` construct, the `(` consumed and the `*` next. */
+static GRX_Result read_scan_body(GRX_Parser * parser, uint32_t node);
+
 static GRX_Result read_star_construct(GRX_Parser * parser, size_t start,
     GRX_GroupOpen * out) {
   parser->position++; // The `*`.
@@ -1850,6 +1857,23 @@ static GRX_Result read_star_construct(GRX_Parser * parser, size_t start,
       return grx_parse_fail(parser, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, start,
           parser->position - start + 1);
     }
+  }
+
+  for (size_t i = 0; scan_substring_names[i]; i++) {
+    if (strlen(scan_substring_names[i]) != length
+        || memcmp(scan_substring_names[i], name, length) != 0) {
+      continue;
+    }
+    if (!has_argument) {
+      return grx_parse_fail(parser, GRX_DIAG_INVALID_GROUP_SYNTAX, start,
+          parser->position - start + 1);
+    }
+    parser->position++; // The `:`.
+    out->kind = GRX_NODE_SCAN;
+    out->a = GRX_INDEX_NONE;
+    out->has_body = 1;
+    out->read_body = read_scan_body;
+    return GRX_OK;
   }
 
   for (size_t i = 0; alt_group_table[i].name; i++) {
@@ -2472,6 +2496,139 @@ static GRX_Result read_branch_reset_body(GRX_Parser * parser, uint32_t node) {
   }
 
   parser->groups_opened = highest;
+  return GRX_OK;
+}
+
+/**
+ * Read one entry of a scan-substring group list.
+ *
+ * `1`, `-1`, `+1`, `<name>` and `'name'`, which are the same five spellings
+ * a subroutine call takes. A number is resolved here, relative or not,
+ * because the parser is what knows how many groups have been opened; a name
+ * is not, because `(*scs:(<x>)a)(?<x>a)` names a group written later.
+ *
+ * Each entry reaches the pattern as two code points: a kind and a value.
+ */
+static GRX_Result read_scan_entry(GRX_Parser * parser, uint32_t run) {
+  size_t start = parser->position;
+  char open = byte_at(parser, 0);
+
+  if (open == '<' || open == '\'') {
+    char close = open == '<' ? '>' : '\'';
+    parser->position++;
+    size_t first = parser->position;
+    while (!grx_parse_at_end(parser) && byte_at(parser, 0) != close) {
+      parser->position++;
+    }
+    if (grx_parse_at_end(parser) || parser->position == first) {
+      return grx_parse_fail(parser, GRX_DIAG_INVALID_GROUP_NAME, start,
+          parser->position - start);
+    }
+    uint32_t offset = GRX_INDEX_NONE;
+    GRX_Result result = grx_pattern_add_name(parser->pattern,
+        parser->text + first, parser->position - first, &offset);
+    if (result != GRX_OK) {
+      return grx_parse_fail(parser, GRX_DIAG_OUT_OF_MEMORY, start, 0);
+    }
+    parser->position++; // The closing delimiter.
+    if (grx_pattern_string_push(parser->pattern, run, GRX_SCAN_ENTRY_NAME)
+            != GRX_OK
+        || grx_pattern_string_push(parser->pattern, run, offset) != GRX_OK) {
+      return grx_parse_fail(parser, GRX_DIAG_OUT_OF_MEMORY, start, 0);
+    }
+    return GRX_OK;
+  }
+
+  int sign = 0;
+  if (open == '+' || open == '-') {
+    sign = open == '-' ? -1 : 1;
+    parser->position++;
+  }
+  if (!is_decimal(byte_at(parser, 0))) {
+    return grx_parse_fail(parser, GRX_DIAG_INVALID_GROUP_SYNTAX, start, 1);
+  }
+
+  uint64_t value = 0;
+  while (is_decimal(byte_at(parser, 0))) {
+    value = value * 10 + (uint64_t)(byte_at(parser, 0) - '0');
+    if (value > 0xFFFFu) {
+      return grx_parse_fail(
+          parser, GRX_DIAG_INVALID_BACKREFERENCE, start, parser->position - start);
+    }
+    parser->position++;
+  }
+
+  uint32_t group = 0;
+  if (sign) {
+    GRX_Result result = resolve_relative(parser, sign, value, start, &group);
+    if (result != GRX_OK) {
+      return result;
+    }
+  }
+  else {
+    // pcre2test refuses `(*scs:(0)a)`: group 0 is the whole match, which is
+    // not a captured substring and is not finished being one when the scan
+    // would run.
+    if (!value || value > (uint64_t)parser->group_count) {
+      return grx_parse_fail(parser, GRX_DIAG_INVALID_BACKREFERENCE, start,
+          parser->position - start);
+    }
+    group = (uint32_t)value;
+  }
+
+  if (grx_pattern_string_push(parser->pattern, run, GRX_SCAN_ENTRY_GROUP)
+          != GRX_OK
+      || grx_pattern_string_push(parser->pattern, run, group) != GRX_OK) {
+    return grx_parse_fail(parser, GRX_DIAG_OUT_OF_MEMORY, start, 0);
+  }
+
+  return GRX_OK;
+}
+
+/**
+ * Read the body of `(*scs:...)`, the `(*scs:` already consumed.
+ *
+ * The group list first, then an ordinary alternation. The list is what makes
+ * this construct different from a lookahead: the body does not run here, it
+ * runs over the text one of those groups captured, anchored at its start and
+ * with the substring standing in for the whole subject.
+ */
+static GRX_Result read_scan_body(GRX_Parser * parser, uint32_t node) {
+  size_t start = parser->position;
+
+  if (!grx_parse_eat(parser, '(')) {
+    return grx_parse_fail(parser, GRX_DIAG_INVALID_GROUP_SYNTAX, start, 1);
+  }
+
+  uint32_t run = GRX_INDEX_NONE;
+  if (grx_pattern_string_begin(parser->pattern, &run) != GRX_OK) {
+    return grx_parse_fail(parser, GRX_DIAG_OUT_OF_MEMORY, start, 0);
+  }
+
+  for (;;) {
+    GRX_Result result = read_scan_entry(parser, run);
+    if (result != GRX_OK) {
+      return result;
+    }
+    if (!grx_parse_eat(parser, ',')) {
+      break;
+    }
+  }
+
+  if (!grx_parse_eat(parser, ')')) {
+    return grx_parse_fail(parser, GRX_DIAG_INVALID_GROUP_SYNTAX, start, 1);
+  }
+  grx_pattern_node(parser->pattern, node)->a = run;
+
+  uint32_t body = GRX_INDEX_NONE;
+  GRX_Result result = grx_parse_alternation(parser, &body);
+  if (result != GRX_OK) {
+    return result;
+  }
+  if (grx_pattern_add_child(parser->pattern, node, body) != GRX_OK) {
+    return grx_parse_fail(parser, GRX_DIAG_INTERNAL, start, 0);
+  }
+
   return GRX_OK;
 }
 

@@ -25,7 +25,7 @@ static const char * ir_kind_name(GRX_IRKind kind) {
   static const char * const names[GRX_IR_COUNT] = {
     "empty", "char", "class", "any", "concat", "alternate", "repeat",
     "capture", "backref", "assert", "look", "atomic", "cond", "recurse",
-    "keep", "verb",
+    "keep", "verb", "scan",
   };
   return (unsigned)kind < GRX_IR_COUNT ? names[kind] : "?";
 }
@@ -151,6 +151,8 @@ GRX_Result grx_ir_create(const GRX_Allocator * allocator,
   grx_class_table_init(&ir->classes, allocator, limits->max_class_ranges);
   grx_arena_init(&ir->names, allocator, sizeof(char), 0, GRX_DIAG_NONE);
   grx_arena_init(&ir->marks, allocator, sizeof(uint32_t), 0, GRX_DIAG_NONE);
+  grx_arena_init(
+      &ir->scan_lists, allocator, sizeof(uint32_t), 0, GRX_DIAG_NONE);
 
   *out_ir = ir;
   return GRX_OK;
@@ -287,6 +289,49 @@ const char * grx_ir_mark_name(const GRX_IR * ir, uint32_t index) {
 
   const uint32_t * offset = GRX_ARENA_AT(const uint32_t, &ir->marks, index);
   return offset ? grx_ir_name(ir, *offset) : NULL;
+}
+
+GRX_Result grx_ir_scan_list_begin(GRX_IR * ir, uint32_t * out_offset) {
+  if (!ir || !out_offset) {
+    return GRX_ERR_INVALID;
+  }
+
+  uint32_t zero = 0;
+  *out_offset = (uint32_t)ir->scan_lists.count;
+  return grx_arena_append(&ir->scan_lists, &zero, NULL);
+}
+
+GRX_Result grx_ir_scan_list_push(
+    GRX_IR * ir, uint32_t offset, uint32_t group) {
+  if (!ir || offset >= ir->scan_lists.count) {
+    return GRX_ERR_INVALID;
+  }
+
+  GRX_Result result = grx_arena_append(&ir->scan_lists, &group, NULL);
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  uint32_t * count = GRX_ARENA_AT(uint32_t, &ir->scan_lists, offset);
+  if (!count) {
+    return GRX_ERR_INVALID;
+  }
+  (*count)++;
+  return GRX_OK;
+}
+
+const uint32_t * grx_ir_scan_list(
+    const GRX_IR * ir, uint32_t offset, size_t * out_count) {
+  if (!ir || !out_count || offset >= ir->scan_lists.count) {
+    return NULL;
+  }
+
+  const uint32_t * count = GRX_ARENA_AT(const uint32_t, &ir->scan_lists, offset);
+  if (!count) {
+    return NULL;
+  }
+  *out_count = *count;
+  return GRX_ARENA_AT(const uint32_t, &ir->scan_lists, offset + 1);
 }
 
 /** Write the payload that belongs to this node's kind. */
@@ -439,5 +484,6 @@ void grx_ir_free(GRX_IR * ir) {
   grx_class_table_clear(&ir->classes);
   grx_arena_clear(&ir->names);
   grx_arena_clear(&ir->marks);
+  grx_arena_clear(&ir->scan_lists);
   gcu_allocator_free(allocator, ir);
 }

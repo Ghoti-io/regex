@@ -101,6 +101,16 @@ typedef enum {
   VERB_STOP_PRUNE,   ///< No more attempts from this starting position.
   VERB_STOP_SKIP,    ///< The same, and the next start is `skip_to`.
   VERB_STOP_COMMIT,  ///< No more attempts from any starting position.
+  /**
+   * A `(*THEN)` that found no alternative to go to.
+   *
+   * perlre: a `(*THEN)` outside any alternation behaves as `(*PRUNE)`, and
+   * at the top level this is exactly that. It is a value of its own because
+   * an assertion is a boundary it does not cross: pcre2test matches "abcd"
+   * with `a(?=b(*THEN)x)c|a.+`, where a real `(*PRUNE)` in the same place
+   * would have ended the attempt at offset zero.
+   */
+  VERB_STOP_THEN,
 } VerbStop;
 
 /** One mark that has been passed: which name, and where. */
@@ -179,6 +189,18 @@ typedef struct {
   size_t mark_capacity;
   uint32_t mark;          ///< The last mark still on this path, or NONE.
   uint32_t nomatch_mark;  ///< The last mark reached at all, or NONE.
+
+  /**
+   * The stretch of subject that counts as the subject right now.
+   *
+   * [0, length) everywhere except inside `(*scs:(n)...)`, where pcre2pattern
+   * says the captured substring "is treated as the whole subject" - so `^`
+   * holds at its start, `$` and `\z` at its end, and nothing outside it can
+   * be read. Every place that would have asked the request how long the
+   * subject is asks these instead.
+   */
+  size_t window_start;
+  size_t window_end;
 } Backtrack;
 
 /**
@@ -294,6 +316,31 @@ static int push(Backtrack * bt, FrameKind kind, uint32_t pc, size_t position) {
   bt->stack[bt->depth].pc = pc;
   bt->stack[bt->depth].position = position;
   bt->depth++;
+  return 1;
+}
+
+/**
+ * Decide what a verb that fired inside an assertion's body does to the rest.
+ *
+ * pcre2test settles all four: `a(?=b(*PRUNE)x).+|(.+)` against "abcd"
+ * matches at offset one and `a(?=b(*COMMIT)x).+|(.+)` does not match at all,
+ * so a `(*PRUNE)`, `(*COMMIT)` or `(*SKIP)` inside a *positive* assertion
+ * whose body failed ends the attempt outside it too. A negative assertion
+ * discards it - the assertion succeeded, so nothing failed - and a
+ * `(*THEN)` with no alternative is confined to the assertion whatever its
+ * sign.
+ *
+ * @return Non-zero when the caller must abandon this run as well.
+ */
+static int verb_escapes_assertion(Backtrack * bt, int negative) {
+  if (bt->verb_stop == VERB_NONE) {
+    return 0;
+  }
+  if (negative || bt->verb_stop == VERB_STOP_THEN) {
+    bt->verb_stop = VERB_NONE;
+    return 0;
+  }
+
   return 1;
 }
 
@@ -420,8 +467,9 @@ static int backtrack(Backtrack * bt, uint32_t * out_pc, size_t * out_position,
             }
           }
           // No alternative left. perlre: a `(*THEN)` outside any alternation
-          // behaves as `(*PRUNE)`.
-          bt->verb_stop = VERB_STOP_PRUNE;
+          // behaves as `(*PRUNE)` - but only as far as the nearest assertion,
+          // which is why this is its own stop and not that one.
+          bt->verb_stop = VERB_STOP_THEN;
           return 0;
         }
         bt->verb_stop = frame.pc == (uint32_t)GRX_VERB_COMMIT
@@ -459,7 +507,7 @@ static int backtrack(Backtrack * bt, uint32_t * out_pc, size_t * out_position,
 
 static int read_forward(const Backtrack * bt, size_t position,
     uint32_t * out_codepoint, size_t * out_width) {
-  if (position >= bt->request->length) {
+  if (position >= bt->window_end) {
     return 0;
   }
   if (!bt->utf) {
@@ -469,7 +517,7 @@ static int read_forward(const Backtrack * bt, size_t position,
   }
 
   size_t width = grx_unicode_utf8_decode(bt->request->subject + position,
-      bt->request->length - position, out_codepoint);
+      bt->window_end - position, out_codepoint);
   if (!width) {
     return 0;
   }
@@ -479,7 +527,9 @@ static int read_forward(const Backtrack * bt, size_t position,
 
 static int read_backward(const Backtrack * bt, size_t position,
     uint32_t * out_codepoint, size_t * out_width) {
-  if (!position) {
+  // A window begins on a character boundary - it is a capture span - so
+  // scanning back from inside it never walks past its start.
+  if (position <= bt->window_start) {
     return 0;
   }
   if (!bt->utf) {
@@ -495,6 +545,22 @@ static int read_backward(const Backtrack * bt, size_t position,
   }
   *out_width = width;
   return 1;
+}
+
+/**
+ * Whether the caller said the start of the subject is not a start of line.
+ *
+ * A flag about the *caller's* subject, so it says nothing about the start of
+ * a scan-substring window: inside one, `^` holds because the substring is
+ * the subject there, and PCRE2_NOTBOL was about a different string.
+ */
+static int at_subject_start_suppressed(const Backtrack * bt) {
+  return bt->request->not_bol && !bt->window_start;
+}
+
+/** The same for the end, and PCRE2_NOTEOL. */
+static int at_subject_end_suppressed(const Backtrack * bt) {
+  return bt->request->not_eol && bt->window_end == bt->request->length;
 }
 
 static int in_class(const Backtrack * bt, uint32_t index, uint32_t codepoint) {
@@ -518,30 +584,30 @@ static int assertion_holds(
   // switch in exec_pike.c, which this one has to agree with exactly.
   switch ((GRX_AssertKind)inst->mode) {
     case GRX_ASSERT_START_SUBJECT:
-      return position == 0 && !request->not_bol;
+      return position == bt->window_start && !at_subject_start_suppressed(bt);
     case GRX_ASSERT_END_SUBJECT:
-      return position == request->length && !request->not_eol;
+      return position == bt->window_end && !at_subject_end_suppressed(bt);
     case GRX_ASSERT_END_BEFORE_NEWLINE:
-      if (request->not_eol) {
+      if (at_subject_end_suppressed(bt)) {
         return 0;
       }
-      if (position == request->length) {
+      if (position == bt->window_end) {
         return 1;
       }
       return has_after && in_class(bt, inst->x, after)
-          && position + width == request->length;
+          && position + width == bt->window_end;
     case GRX_ASSERT_START_LINE:
-      return (position == 0 && !request->not_bol)
+      return (position == bt->window_start && !at_subject_start_suppressed(bt))
           || (has_before && in_class(bt, inst->x, before));
 
     case GRX_ASSERT_START_LINE_INTERIOR:
       // The same, less the position after a newline that ends the
       // subject: there is no line there to be at the start of.
-      return (position == 0 && !request->not_bol)
-          || (position != request->length && has_before
+      return (position == bt->window_start && !at_subject_start_suppressed(bt))
+          || (position != bt->window_end && has_before
               && in_class(bt, inst->x, before));
     case GRX_ASSERT_END_LINE:
-      return (position == request->length && !request->not_eol)
+      return (position == bt->window_end && !at_subject_end_suppressed(bt))
           || (has_after && in_class(bt, inst->x, after));
     case GRX_ASSERT_WORD_BOUNDARY:
     case GRX_ASSERT_NOT_WORD_BOUNDARY: {
@@ -599,7 +665,7 @@ static int backref_matches(const Backtrack * bt, const GRX_Inst * inst,
       }
       at = position - length;
     }
-    else if (position + length > bt->request->length) {
+    else if (position + length > bt->window_end) {
       return 0;
     }
     if (memcmp(bt->request->subject + from, bt->request->subject + at, length)
@@ -897,6 +963,11 @@ static int run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
           gcu_allocator_free(bt->allocator, before);
           return 0;
         }
+        if (verb_escapes_assertion(bt, negative)) {
+          memcpy(bt->slots, before, bt->captures * sizeof(size_t));
+          gcu_allocator_free(bt->allocator, before);
+          return 0;
+        }
 
         if (body_matched == negative) {
           // A positive lookaround whose body failed, or a negative one whose
@@ -927,6 +998,96 @@ static int run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
             }
             bt->slots[i] = current;
           }
+        }
+        gcu_allocator_free(bt->allocator, before);
+
+        pc = inst->y;
+        continue;
+      }
+
+      case GRX_OP_SCAN: {
+        // `(*scs:(n)body)`. The body runs over what one group captured, with
+        // that substring standing in for the whole subject: anchored at its
+        // start, unable to read past its end, and zero-width where it
+        // stands. Which group: the first of the listed ones that is set,
+        // which is how pcre2test answers `(?:(x)|y)(b)(*scs:(1,2)b)` - group
+        // one is unset, so the scan runs over group two.
+        size_t count = 0;
+        const uint32_t * groups
+            = grx_program_scan_list(bt->program, inst->x, &count);
+        if (!groups) {
+          bt->failure = GRX_ERR_INVALID;
+          return 0;
+        }
+
+        size_t from = GRX_NPOS;
+        size_t to = GRX_NPOS;
+        for (size_t i = 0; i < count; i++) {
+          size_t first = (size_t)groups[i] * 2;
+          if (first + 1 < bt->captures && bt->slots[first] != GRX_NPOS
+              && bt->slots[first + 1] != GRX_NPOS) {
+            from = bt->slots[first];
+            to = bt->slots[first + 1];
+            break;
+          }
+        }
+        if (from == GRX_NPOS) {
+          // No listed group has captured anything, so there is no substring
+          // to scan and the assertion cannot hold.
+          ok = 0;
+          break;
+        }
+
+        size_t * before = gcu_allocator_malloc(
+            bt->allocator, bt->captures * sizeof(size_t));
+        if (!before) {
+          bt->failure = GRX_ERR_OOM;
+          return 0;
+        }
+        memcpy(before, bt->slots, bt->captures * sizeof(size_t));
+
+        size_t outer_start = bt->window_start;
+        size_t outer_end = bt->window_end;
+        bt->window_start = from;
+        bt->window_end = to;
+        size_t body_floor = bt->depth;
+        size_t end = 0;
+        int body_matched = run(bt, pc + 1, from, body_floor, 0, &end);
+        bt->depth = body_floor;
+        bt->window_start = outer_start;
+        bt->window_end = outer_end;
+        if (bt->failure != GRX_OK) {
+          gcu_allocator_free(bt->allocator, before);
+          return 0;
+        }
+        if (verb_escapes_assertion(bt, 0)) {
+          memcpy(bt->slots, before, bt->captures * sizeof(size_t));
+          gcu_allocator_free(bt->allocator, before);
+          return 0;
+        }
+
+        if (!body_matched) {
+          memcpy(bt->slots, before, bt->captures * sizeof(size_t));
+          gcu_allocator_free(bt->allocator, before);
+          ok = 0;
+          break;
+        }
+
+        // The captures the body set stand, and are undone if the whole
+        // construct is backtracked past - the same bookkeeping a positive
+        // lookaround does, for the same reason.
+        for (size_t i = 0; i < bt->captures; i++) {
+          if (bt->slots[i] == before[i]) {
+            continue;
+          }
+          size_t old = before[i];
+          size_t current = bt->slots[i];
+          bt->slots[i] = old;
+          if (!save_slot(bt, i)) {
+            gcu_allocator_free(bt->allocator, before);
+            return 0;
+          }
+          bt->slots[i] = current;
         }
         gcu_allocator_free(bt->allocator, before);
 
@@ -1162,6 +1323,8 @@ GRX_Result grx_exec_backtrack(
     .call_capacity = 0,
     .verb_stop = VERB_NONE,
     .skip_to = 0,
+    .window_start = 0,
+    .window_end = request->length,
     .marks = NULL,
     .mark_depth = 0,
     .mark_capacity = 0,
@@ -1220,6 +1383,11 @@ GRX_Result grx_exec_backtrack(
     if (bt.failure != GRX_OK) {
       result = bt.failure;
       break;
+    }
+    // A `(*THEN)` that reached the top with no alternative left is a
+    // `(*PRUNE)` there, which is the ordinary "try the next position".
+    if (bt.verb_stop == VERB_STOP_THEN) {
+      bt.verb_stop = VERB_STOP_PRUNE;
     }
     if (bt.verb_stop == VERB_STOP_COMMIT) {
       // `(*COMMIT)`: no further starting position is tried at all. The four

@@ -20,7 +20,8 @@ const char * grx_opcode_name(GRX_Opcode op) {
   static const char * const names[GRX_OP_COUNT] = {
     "match", "char", "class", "any", "any-nl", "split", "jmp", "save",
     "assert", "progress-set", "reset", "progress-check", "backref", "look",
-    "atomic-begin", "atomic-end", "cond", "call", "ret", "keep", "verb",
+    "scan", "atomic-begin", "atomic-end", "cond", "call", "ret", "keep",
+    "verb",
   };
   return (unsigned)op < GRX_OP_COUNT ? names[op] : "?";
 }
@@ -92,6 +93,8 @@ void grx_program_init(GRX_Program * program, const GRX_Allocator * allocator,
   grx_arena_init(&program->insts, allocator, sizeof(GRX_Inst),
       limits->max_program_size, GRX_DIAG_LIMIT_PROGRAM_SIZE);
   grx_class_table_init(&program->classes, allocator, limits->max_class_ranges);
+  grx_arena_init(
+      &program->scan_lists, allocator, sizeof(uint32_t), 0, GRX_DIAG_NONE);
   program->flags = 0;
   program->register_count = 0;
   program->preference = GRX_PREFER_LEFTMOST_FIRST;
@@ -221,6 +224,21 @@ GRX_Result grx_program_dump(const GRX_Program * program, FILE * out) {
   return GRX_OK;
 }
 
+const uint32_t * grx_program_scan_list(
+    const GRX_Program * program, uint32_t offset, size_t * out_count) {
+  if (!program || !out_count || offset >= program->scan_lists.count) {
+    return NULL;
+  }
+
+  const uint32_t * count
+      = GRX_ARENA_AT(const uint32_t, &program->scan_lists, offset);
+  if (!count) {
+    return NULL;
+  }
+  *out_count = *count;
+  return GRX_ARENA_AT(const uint32_t, &program->scan_lists, offset + 1);
+}
+
 void grx_program_clear(GRX_Program * program) {
   if (!program) {
     return;
@@ -228,5 +246,6 @@ void grx_program_clear(GRX_Program * program) {
 
   grx_arena_clear(&program->insts);
   grx_class_table_clear(&program->classes);
+  grx_arena_clear(&program->scan_lists);
   program->register_count = 0;
 }

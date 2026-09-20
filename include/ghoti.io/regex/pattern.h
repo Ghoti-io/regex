@@ -65,6 +65,15 @@ typedef enum {
   GRX_NODE_OPTIONS,     ///< `(?i)` bare, or `(?i:a)` scoped.
   GRX_NODE_CLASS_OP,    ///< A set operation between classes: `&&`, `--`.
   GRX_NODE_STRING_SET,  ///< A set of strings: `\q{ab|cd}`, and `\R`.
+  /**
+   * @brief `(*scs:(n)...)`: match the body against a captured substring.
+   *
+   * PCRE2 10.45's scan substring. Zero-width where it stands, like a
+   * lookahead, but the body runs somewhere else entirely - over the text one
+   * of the named groups captured, treated as though it were the whole
+   * subject. `a` names the group list as written; the one child is the body.
+   */
+  GRX_NODE_SCAN,
   GRX_NODE_KEEP,        ///< `\K`, which resets the reported match start.
   GRX_NODE_BRANCH_RESET, ///< `(?|...)`, which renumbers per alternative.
   GRX_NODE_COUNT        ///< Closes the enum; not a node kind.
