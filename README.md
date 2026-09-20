@@ -258,7 +258,7 @@ turn a denial-of-service defence into a wrong validation result. It becomes
 `GTEXT_JSON_E_LIMIT`, which is neither valid nor invalid, and a caller can
 tell the difference.
 
-**Vectors.** **32,150 checked-in `.rxt` records** run in `make test`, with no
+**Vectors.** **33,457 checked-in `.rxt` records** run in `make test`, with no
 oracle needed. Their expectations are the references' own, not this
 library's. A deliberately wrong record sits beside them in a self-test
 corpus, and a test expects the runner to fail it - so that "the suite passes"
@@ -269,8 +269,10 @@ cannot mean "the suite ran nothing".
 | ECMAScript, from Node 22 and test262 | 28,559 | **100%** |
 | PCRE2, from pcre2test 10.46's `testinput1` and `testinput2` | 1,869 | **100%** |
 | Perl, from `re_tests` under Perl 5.40, and generated boundary vectors | 2,600 | **99.69%** |
+| GNU ERE, from Spencer's test set answered by glibc 2.41 | 270 | **98.15%** |
+| GNU BRE, the same set read as a basic RE | 159 | **99.37%** |
 
-The 8 that do not agree are listed one per line in
+The 14 that do not agree are listed one per line in
 `tests/data/vectors/known-gaps.txt`, with the reason written beside each. That file is a gate in both directions: a vector that
 fails and is not listed fails the suite; a vector that *is* listed and passes
 fails it too, with "remove the entry"; and an entry naming a record the
@@ -278,12 +280,19 @@ corpus no longer has fails it as well. So the list can only shrink by
 somebody noticing, and the percentages above are over the whole corpus - a
 known gap is counted and named, never counted as a pass.
 
-They are all Perl's now, and none of them is a construct that is missing.
-Six turn on what a *failed* attempt leaves in the capture slots, which is a
-fact about where Perl's own engine restores an offset rather than a rule a
-second engine can follow; the other two are a branch reset defect this Perl
-has and [#24577](https://github.com/Perl/perl5/issues/24577) already
-records.
+None of them is a construct that is missing. Eight are Perl's: six turn on
+what a *failed* attempt leaves in the capture slots, which is a fact about
+where Perl's own engine restores an offset rather than a rule a second engine
+can follow, and two are a branch reset defect this Perl has and
+[#24577](https://github.com/Perl/perl5/issues/24577) already records.
+
+The other six are the POSIX submatch rules, and they are scheduled rather
+than unexplained. Five differ only in *which* iteration of a repeat each
+group ends up holding - the overall match agrees with glibc - which needs the
+tagged-transition machinery WP-26 names and defers past 1.0. The sixth is the
+one that changes an extent: POSIX wants the leftmost-**longest** match and
+both engines here find the leftmost-first, which is WP-24. The profile
+already says `GRX_PREFER_LEFTMOST_LONGEST`; no engine reads it yet.
 
 **Linear time.** `(a|aa)*b`, `(a+)+b` and `(a*)*b` - the patterns that make a
 backtracking engine hang - run against 100,000 characters in around fifty

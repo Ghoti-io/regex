@@ -115,6 +115,47 @@ int grx_parse_eat(GRX_Parser * parser, char expected) {
  * is when there was no `\Q` - which is what PCRE2 and Java both do with a
  * stray `\E`.
  */
+/**
+ * Whether this dialect spells its grouping operators with a backslash.
+ *
+ * A POSIX basic RE inverts the usual rule: `\(` opens a group and `(` is an
+ * ordinary character, `\{` begins an interval and `{` is a brace, and GNU's
+ * `\|` alternates where `|` is a pipe. The spec table has said so since the
+ * table was written - `escaped_specials` on the two BRE rows - and nothing
+ * read it, which is the same defect shape as a limit that is in the header
+ * and enforced nowhere.
+ *
+ * Only the operators that *nest or join* invert. `*` is bare in a BRE as
+ * well, which is why this is asked per operator rather than once.
+ */
+static int operators_are_escaped(const GRX_Parser * parser) {
+  return parser->spec.escaped_specials != 0;
+}
+
+/** Whether `op`, spelled the way this dialect spells it, stands here. */
+static int at_operator(const GRX_Parser * parser, char op) {
+  size_t at = parser->position;
+  if (operators_are_escaped(parser)) {
+    return at + 1 < parser->length && parser->text[at] == '\\'
+        && parser->text[at + 1] == op;
+  }
+  return at < parser->length && parser->text[at] == op;
+}
+
+/** How many bytes this dialect's spelling of an operator takes. */
+static size_t operator_width(const GRX_Parser * parser) {
+  return operators_are_escaped(parser) ? 2u : 1u;
+}
+
+/** Consume `op` if it stands here, and say whether it did. */
+static int eat_operator(GRX_Parser * parser, char op) {
+  if (!at_operator(parser, op)) {
+    return 0;
+  }
+  parser->position += operator_width(parser);
+  return 1;
+}
+
 static int in_quote(GRX_Parser * parser) {
   if (parser->quote_end == GRX_NPOS) {
     return 0;
@@ -294,9 +335,19 @@ static GRX_Result add_child(
 static void prescan(GRX_Parser * parser) {
   int in_class = 0;
   int first_in_class = 0;
+  // In a basic RE the group opener *is* a backslash sequence, so the skip
+  // below would step straight over every group there is. `a\(b*\)c\1d`
+  // counted no groups at all, which made its `\1` a reference to a group
+  // that does not exist.
+  const int escaped = parser->spec.escaped_specials != 0;
+
   for (size_t i = 0; i < parser->length; i++) {
     char c = parser->text[i];
     if (c == '\\') {
+      if (escaped && !in_class && i + 1 < parser->length
+          && parser->text[i + 1] == '(') {
+        parser->group_count++;
+      }
       i++; // Skip whatever it escapes, including `[`, `]` and `(`.
       continue;
     }
@@ -317,7 +368,8 @@ static void prescan(GRX_Parser * parser) {
       }
       continue;
     }
-    if (c != '(') {
+    // A bare `(` is an ordinary character where the operators are escaped.
+    if (c != '(' || escaped) {
       continue;
     }
 
@@ -386,23 +438,32 @@ static GRX_Result parse_quantifier(
   uint32_t min = 0;
   uint32_t max = GRX_REPEAT_INF;
 
-  char c = parser->text[parser->position];
-  if (c == '*') {
+  // Asked before anything is consumed: a dialect may say the character here
+  // is not a quantifier at all, and then it must be left for the next atom.
+  if (parser->frontend->quantifier_applies
+      && !parser->frontend->quantifier_applies(parser, *node)) {
+    return GRX_OK;
+  }
+
+  // `*` is bare in every dialect, a BRE included. `+`, `?` and `{` are the
+  // ones a BRE spells with a backslash, which is why each is asked for
+  // rather than switched on the character here.
+  if (parser->text[parser->position] == '*') {
     parser->position++;
   }
-  else if (c == '+') {
+  else if (at_operator(parser, '+')) {
     min = 1;
-    parser->position++;
+    parser->position += operator_width(parser);
   }
-  else if (c == '?') {
+  else if (at_operator(parser, '?')) {
     max = 1;
-    parser->position++;
+    parser->position += operator_width(parser);
   }
-  else if (c == '{') {
+  else if (at_operator(parser, '{')) {
     if (!(parser->spec.features & GRX_FEATURE_BOUNDED_REPEAT)) {
       return GRX_OK;
     }
-    parser->position++;
+    parser->position += operator_width(parser);
     GRX_Quantifier bounds = {0, GRX_REPEAT_INF, 0};
     GRX_Result result
         = parser->frontend->brace_quantifier(parser, &bounds);
@@ -448,15 +509,16 @@ static GRX_Result parse_quantifier(
     return skipped_suffix;
   }
 
+  // The lazy suffix is only read by a dialect that has one. Where there is
+  // none, the `?` is left where it is: POSIX reads `a*?` as `?` applied to
+  // `a*` - glibc matches "aa" with it - and consuming it here to report a
+  // double quantifier would refuse a pattern the reference accepts, and
+  // would report it at the wrong place for the dialects that do refuse it.
+  // parse_term() is where a second quantifier is judged.
   GRX_RepeatMode mode = GRX_REPEAT_GREEDY;
-  if (grx_parse_eat(parser, '?')) {
-    mode = (parser->spec.features & GRX_FEATURE_NON_GREEDY)
-        ? GRX_REPEAT_LAZY
-        : GRX_REPEAT_GREEDY;
-    if (mode == GRX_REPEAT_GREEDY) {
-      return grx_parse_fail(parser, GRX_DIAG_DOUBLE_QUANTIFIER, start,
-          parser->position - start);
-    }
+  if ((parser->spec.features & GRX_FEATURE_NON_GREEDY)
+      && grx_parse_eat(parser, '?')) {
+    mode = GRX_REPEAT_LAZY;
   }
   else if ((parser->spec.features & GRX_FEATURE_POSSESSIVE)
       && grx_parse_eat(parser, '+')) {
@@ -513,8 +575,10 @@ static GRX_Result parse_atom(GRX_Parser * parser, uint32_t * out_node) {
 
   char c = parser->text[parser->position];
 
-  if (c == '(') {
-    parser->position++;
+  // Asked before the `\\` dispatch below, because in a BRE the group opener
+  // *is* a backslash sequence and must not be handed to atom_escape.
+  if (at_operator(parser, '(')) {
+    parser->position += operator_width(parser);
     // Saved before the hook runs, not after: a hook that reads `(?i:` sets
     // the options as part of reading it, and a save taken afterwards would
     // restore the value it had just written. `^a(?i:b)c$` matching "aBC" is
@@ -541,6 +605,7 @@ static GRX_Result parse_atom(GRX_Parser * parser, uint32_t * out_node) {
         return grx_parse_fail(parser, GRX_DIAG_LIMIT_NESTING_DEPTH, start, 1);
       }
       parser->depth++;
+      parser->group_depth++;
       int outer_lookbehind = parser->in_lookbehind;
       int outer_lookaround = parser->in_lookaround;
       if (open.kind == GRX_NODE_LOOKAROUND) {
@@ -566,6 +631,7 @@ static GRX_Result parse_atom(GRX_Parser * parser, uint32_t * out_node) {
         }
       }
       parser->depth--;
+      parser->group_depth--;
       parser->in_lookbehind = outer_lookbehind;
       parser->in_lookaround = outer_lookaround;
       parser->options = outer_options;
@@ -573,7 +639,7 @@ static GRX_Result parse_atom(GRX_Parser * parser, uint32_t * out_node) {
         return result;
       }
 
-      if (!grx_parse_eat(parser, ')')) {
+      if (!eat_operator(parser, ')')) {
         return grx_parse_fail(
             parser, GRX_DIAG_UNMATCHED_OPEN_PAREN, start, 1);
       }
@@ -602,26 +668,36 @@ static GRX_Result parse_atom(GRX_Parser * parser, uint32_t * out_node) {
     return add_node(parser, GRX_NODE_ANY, start, 1, out_node);
   }
 
-  if (c == '^' || c == '$') {
-    parser->position++;
-    GRX_Result result = add_node(parser, GRX_NODE_ANCHOR, start, 1, out_node);
-    if (result != GRX_OK) {
-      return result;
+  // Where the operators are escaped, none of the three groups below is an
+  // operator: a basic RE's `^` is an anchor only at the start of the RE or
+  // of a subexpression, its `*` is a character wherever no atom precedes it,
+  // and its `)` is just a right parenthesis. All three go to literal_atom(),
+  // whose whole purpose is that "this character has no operator meaning
+  // here" is a dialect's call - and the front end turns the two anchors back
+  // into anchors where they are ones.
+  if (!operators_are_escaped(parser)) {
+    if (c == '^' || c == '$') {
+      parser->position++;
+      GRX_Result result
+          = add_node(parser, GRX_NODE_ANCHOR, start, 1, out_node);
+      if (result != GRX_OK) {
+        return result;
+      }
+      grx_pattern_node(parser->pattern, *out_node)->a
+          = c == '^' ? GRX_ANCHOR_CARET : GRX_ANCHOR_DOLLAR;
+      return GRX_OK;
     }
-    grx_pattern_node(parser->pattern, *out_node)->a
-        = c == '^' ? GRX_ANCHOR_CARET : GRX_ANCHOR_DOLLAR;
-    return GRX_OK;
-  }
 
-  if (c == '*' || c == '+' || c == '?') {
-    // A quantifier with nothing before it. Reported here rather than in
-    // parse_quantifier() because at this point there is provably no atom -
-    // the caller only calls this when it is about to read one.
-    return grx_parse_fail(parser, GRX_DIAG_NOTHING_TO_REPEAT, start, 1);
-  }
+    if (c == '*' || c == '+' || c == '?') {
+      // A quantifier with nothing before it. Reported here rather than in
+      // parse_quantifier() because at this point there is provably no atom -
+      // the caller only calls this when it is about to read one.
+      return grx_parse_fail(parser, GRX_DIAG_NOTHING_TO_REPEAT, start, 1);
+    }
 
-  if (c == ')') {
-    return grx_parse_fail(parser, GRX_DIAG_UNMATCHED_CLOSE_PAREN, start, 1);
+    if (c == ')' && !parser->spec.unmatched_close_is_literal) {
+      return grx_parse_fail(parser, GRX_DIAG_UNMATCHED_CLOSE_PAREN, start, 1);
+    }
   }
 
   uint32_t codepoint = 0;
@@ -660,9 +736,28 @@ static GRX_Result parse_term(GRX_Parser * parser, uint32_t * out_node) {
   if (result != GRX_OK) {
     return result;
   }
-  if (again && !parser->spec.allow_double_quantifier) {
+  if (!again) {
+    return GRX_OK;
+  }
+  if (!parser->spec.allow_double_quantifier) {
     return grx_parse_fail(parser, GRX_DIAG_DOUBLE_QUANTIFIER, second,
         parser->position - second);
+  }
+
+  // A dialect that allows a second allows a third: glibc reads `a***` and
+  // `a{1}{1}{1}` as repeats of repeats, and stopping at two would refuse a
+  // pattern the reference accepts. Each turn consumes at least one byte -
+  // parse_quantifier only reports one applied when it read one - so the
+  // loop is bounded by the pattern.
+  for (;;) {
+    int more = 0;
+    result = parse_quantifier(parser, out_node, &more);
+    if (result != GRX_OK) {
+      return result;
+    }
+    if (!more) {
+      break;
+    }
   }
 
   return GRX_OK;
@@ -687,8 +782,20 @@ GRX_Result grx_parse_concatenation(
     if (grx_parse_at_end(parser)) {
       break;
     }
-    char c = parser->text[parser->position];
-    if (!in_quote(parser) && (c == '|' || c == ')')) {
+    if (!in_quote(parser) && at_operator(parser, '|')) {
+      break;
+    }
+    // A `)` ends a branch when there is a group for it to close. Where the
+    // dialect makes an unmatched one an ordinary character, at the top level
+    // it is not a terminator at all and the atom reader takes it.
+    //
+    // Only where the close is the bare character. A basic RE's `\)` is an
+    // operator whatever stands around it - glibc refuses a lone `\)` and
+    // matches a lone `)` - so the two questions are about two different
+    // spellings and only the bare one is ever a literal.
+    if (!in_quote(parser) && at_operator(parser, ')')
+        && (parser->group_depth > 0 || operators_are_escaped(parser)
+            || !parser->spec.unmatched_close_is_literal)) {
       break;
     }
 
@@ -747,7 +854,7 @@ GRX_Result grx_parse_alternation(GRX_Parser * parser, uint32_t * out_node) {
     return result;
   }
 
-  if (grx_parse_at_end(parser) || parser->text[parser->position] != '|'
+  if (grx_parse_at_end(parser) || !at_operator(parser, '|')
       || in_quote(parser)) {
     *out_node = first;
     return GRX_OK;
@@ -766,7 +873,7 @@ GRX_Result grx_parse_alternation(GRX_Parser * parser, uint32_t * out_node) {
     return result;
   }
 
-  while (grx_parse_eat(parser, '|')) {
+  while (eat_operator(parser, '|')) {
     if (parser->limits->max_nesting_depth
         && parser->depth + 1 > parser->limits->max_nesting_depth) {
       return grx_parse_fail(
@@ -860,6 +967,7 @@ GRX_Result grx_parse_pattern(const char * pattern, size_t length,
     .error = out_error,
     .depth = 0,
     .group_count = 0,
+    .group_depth = 0,
     .groups_opened = 0,
     .named_groups = 0,
     .in_lookbehind = 0,

@@ -756,9 +756,17 @@ static int assertion_holds(
       return (position == bt->window_end && !at_subject_end_suppressed(bt))
           || (has_after && in_class(bt, inst->x, after));
     case GRX_ASSERT_WORD_BOUNDARY:
-    case GRX_ASSERT_NOT_WORD_BOUNDARY: {
+    case GRX_ASSERT_NOT_WORD_BOUNDARY:
+    case GRX_ASSERT_WORD_START:
+    case GRX_ASSERT_WORD_END: {
       int word_before = has_before && in_class(bt, inst->x, before);
       int word_after = has_after && in_class(bt, inst->x, after);
+      if (inst->mode == GRX_ASSERT_WORD_START) {
+        return !word_before && word_after;
+      }
+      if (inst->mode == GRX_ASSERT_WORD_END) {
+        return word_before && !word_after;
+      }
       int boundary = word_before != word_after;
       return inst->mode == GRX_ASSERT_WORD_BOUNDARY ? boundary : !boundary;
     }

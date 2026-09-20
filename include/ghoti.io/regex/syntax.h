@@ -203,6 +203,15 @@ typedef struct GRX_SyntaxSpec {
    * why this is a flag rather than the shared parser's default.
    */
   int allow_impossible_repeat;
+  /**
+   * Non-zero when a `)` with no `(` is an ordinary character.
+   *
+   * POSIX's own test set calls this one out - "gag me with a right
+   * parenthesis -- 1003.2 goofed here" - and glibc matches "a)" with `a)`
+   * in both grammars. Everywhere else an unmatched `)` is a syntax error,
+   * which is why this is a flag and not the shared parser's default.
+   */
+  int unmatched_close_is_literal;
 } GRX_SyntaxSpec;
 
 /**

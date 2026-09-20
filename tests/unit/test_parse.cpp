@@ -573,8 +573,8 @@ TEST(EcmaScript, UnicodeSetsModeReadsADifferentClassGrammar) {
 // --------------------------------------------------------------------------
 
 TEST(Parse, AnUnbuiltDialectSaysSoRatherThanGuessing) {
-  // Reading a POSIX pattern with the ECMAScript front end would tell a caller
-  // their pattern is valid for an engine that rejects it. Every dialect
+  // Reading a Python pattern with the ECMAScript front end would tell a
+  // caller their pattern is valid for an engine that rejects it. Every dialect
   // whose hooks are not written reports GRX_ERR_UNSUPPORTED instead.
   //
   // The exclusion list is the list of front ends that exist, and it is meant
@@ -582,7 +582,9 @@ TEST(Parse, AnUnbuiltDialectSaysSoRatherThanGuessing) {
   // without a front end would make the test pass by asserting nothing.
   for (int syntax = 0; syntax < GRX_SYNTAX_COUNT; syntax++) {
     if (syntax == GRX_SYNTAX_ECMASCRIPT || syntax == GRX_SYNTAX_PCRE
-        || syntax == GRX_SYNTAX_PERL) {
+        || syntax == GRX_SYNTAX_PERL || syntax == GRX_SYNTAX_POSIX_BRE
+        || syntax == GRX_SYNTAX_POSIX_ERE || syntax == GRX_SYNTAX_GNU_BRE
+        || syntax == GRX_SYNTAX_GNU_ERE) {
       continue;
     }
     GRX_Pattern * parsed = nullptr;

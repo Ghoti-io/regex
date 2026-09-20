@@ -70,21 +70,43 @@
 // rather than someone else's - which no compiler can catch, and which
 // EveryDialectHasASpec in tests/unit/test_syntax.cpp exists to catch instead.
 static const GRX_SyntaxSpec spec_table[GRX_SYNTAX_COUNT] = {
+  // `.` matches a newline in all four: POSIX has no "dot-all" option because
+  // dot-all is what it does, and `.` against "\n" matches in glibc with no
+  // flags at all. REG_NEWLINE is what turns it off, together with three
+  // other things - see documentation/dialects.md section 5.2.
+  //
+  // A second quantifier is accepted because glibc accepts one: `a**` and
+  // `a{2}{3}` both match there, and so does `a*\?` in a BRE.
   [GRX_SYNTAX_POSIX_BRE] = {
     .features = REP | BREF | PCLS,
+    .default_options = GRX_OPT_DOTALL,
     .escaped_specials = 1,
+    .allow_double_quantifier = 1,
+    .unmatched_close_is_literal = 1,
   },
   [GRX_SYNTAX_POSIX_ERE] = {
     // No backreference: POSIX leaves them out of the extended syntax, which
     // is the one difference people are most often surprised by.
     .features = ALT | REP | PCLS,
+    .default_options = GRX_OPT_DOTALL,
+    .allow_double_quantifier = 1,
+    .unmatched_close_is_literal = 1,
   },
   [GRX_SYNTAX_GNU_BRE] = {
     .features = ALT | REP | BREF | PCLS | WORD | ANCH,
+    .default_options = GRX_OPT_DOTALL,
     .escaped_specials = 1,
+    .allow_double_quantifier = 1,
+    .unmatched_close_is_literal = 1,
   },
   [GRX_SYNTAX_GNU_ERE] = {
+    // Backreferences and `\w`/`\b`, which POSIX ERE has not: glibc's
+    // regcomp answers `(a)\1` against "aa" with a match, so an ERE here is
+    // the GNU one whenever it is reached through regcomp.
     .features = ALT | REP | BREF | PCLS | WORD | ANCH,
+    .default_options = GRX_OPT_DOTALL,
+    .allow_double_quantifier = 1,
+    .unmatched_close_is_literal = 1,
   },
   [GRX_SYNTAX_PERL] = {
     .features = ALT | REP | LAZY | POSS | NCAP | NAME | BREF | LAH | LBH
@@ -215,43 +237,103 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
   // ASCII (a deviation, recorded in dialects.md section 6).
   [GRX_SYNTAX_POSIX_BRE] = {
     .preference = GRX_PREFER_LEFTMOST_LONGEST,
-    .empty_loop = GRX_EMPTY_LOOP_ALLOW,
+    // BREAK rather than ALLOW. ALLOW means "nothing special; the longest
+    // match decides", which presumes a leftmost-longest engine; until
+    // plan.md's WP-24 builds one, a backtracker given ALLOW repeats an empty
+    // iteration until it runs out of budget, and `(a*)*` against "bc"
+    // answered with a limit rather than with a match. BREAK is what
+    // reproduces glibc for both that and `a(b|c?)+d` against "ad".
+    .empty_loop = GRX_EMPTY_LOOP_BREAK,
     .backref_unset = GRX_BACKREF_UNSET_FAILS,
     .lookbehind = GRX_LOOKBEHIND_NONE,
     .dollar = GRX_DOLLAR_END_ONLY,
-    .newlines = GRX_NEWLINES_NONE,
+    // A newline is the line terminator REG_NEWLINE makes `^` and `$` match
+    // at. Without that option `dollar = END_ONLY` keeps them at the ends of
+    // the subject, so naming the set here costs nothing until it is asked
+    // for - and leaving it NONE made REG_NEWLINE a flag with no terminator
+    // to act on, which is a flag that does nothing.
+    .newlines = GRX_NEWLINES_LF,
     .fold = GRX_FOLD_ASCII,
     .fold_utf = GRX_FOLD_ASCII,
+    // glibc matches `^$` against "abc\n" at offset 4 under REG_NEWLINE: the
+    // empty run after a final newline *is* a line here, where PCRE2 and Perl
+    // say it is not.
+    .caret_after_final_newline = 1,
   },
   [GRX_SYNTAX_POSIX_ERE] = {
     .preference = GRX_PREFER_LEFTMOST_LONGEST,
-    .empty_loop = GRX_EMPTY_LOOP_ALLOW,
+    // BREAK rather than ALLOW. ALLOW means "nothing special; the longest
+    // match decides", which presumes a leftmost-longest engine; until
+    // plan.md's WP-24 builds one, a backtracker given ALLOW repeats an empty
+    // iteration until it runs out of budget, and `(a*)*` against "bc"
+    // answered with a limit rather than with a match. BREAK is what
+    // reproduces glibc for both that and `a(b|c?)+d` against "ad".
+    .empty_loop = GRX_EMPTY_LOOP_BREAK,
     .backref_unset = GRX_BACKREF_UNSET_FAILS,
     .lookbehind = GRX_LOOKBEHIND_NONE,
     .dollar = GRX_DOLLAR_END_ONLY,
-    .newlines = GRX_NEWLINES_NONE,
+    // A newline is the line terminator REG_NEWLINE makes `^` and `$` match
+    // at. Without that option `dollar = END_ONLY` keeps them at the ends of
+    // the subject, so naming the set here costs nothing until it is asked
+    // for - and leaving it NONE made REG_NEWLINE a flag with no terminator
+    // to act on, which is a flag that does nothing.
+    .newlines = GRX_NEWLINES_LF,
     .fold = GRX_FOLD_ASCII,
     .fold_utf = GRX_FOLD_ASCII,
+    // glibc matches `^$` against "abc\n" at offset 4 under REG_NEWLINE: the
+    // empty run after a final newline *is* a line here, where PCRE2 and Perl
+    // say it is not.
+    .caret_after_final_newline = 1,
   },
   [GRX_SYNTAX_GNU_BRE] = {
     .preference = GRX_PREFER_LEFTMOST_LONGEST,
-    .empty_loop = GRX_EMPTY_LOOP_ALLOW,
+    // BREAK rather than ALLOW. ALLOW means "nothing special; the longest
+    // match decides", which presumes a leftmost-longest engine; until
+    // plan.md's WP-24 builds one, a backtracker given ALLOW repeats an empty
+    // iteration until it runs out of budget, and `(a*)*` against "bc"
+    // answered with a limit rather than with a match. BREAK is what
+    // reproduces glibc for both that and `a(b|c?)+d` against "ad".
+    .empty_loop = GRX_EMPTY_LOOP_BREAK,
     .backref_unset = GRX_BACKREF_UNSET_FAILS,
     .lookbehind = GRX_LOOKBEHIND_NONE,
     .dollar = GRX_DOLLAR_END_ONLY,
-    .newlines = GRX_NEWLINES_NONE,
+    // A newline is the line terminator REG_NEWLINE makes `^` and `$` match
+    // at. Without that option `dollar = END_ONLY` keeps them at the ends of
+    // the subject, so naming the set here costs nothing until it is asked
+    // for - and leaving it NONE made REG_NEWLINE a flag with no terminator
+    // to act on, which is a flag that does nothing.
+    .newlines = GRX_NEWLINES_LF,
     .fold = GRX_FOLD_ASCII,
     .fold_utf = GRX_FOLD_ASCII,
+    // glibc matches `^$` against "abc\n" at offset 4 under REG_NEWLINE: the
+    // empty run after a final newline *is* a line here, where PCRE2 and Perl
+    // say it is not.
+    .caret_after_final_newline = 1,
   },
   [GRX_SYNTAX_GNU_ERE] = {
     .preference = GRX_PREFER_LEFTMOST_LONGEST,
-    .empty_loop = GRX_EMPTY_LOOP_ALLOW,
+    // BREAK rather than ALLOW. ALLOW means "nothing special; the longest
+    // match decides", which presumes a leftmost-longest engine; until
+    // plan.md's WP-24 builds one, a backtracker given ALLOW repeats an empty
+    // iteration until it runs out of budget, and `(a*)*` against "bc"
+    // answered with a limit rather than with a match. BREAK is what
+    // reproduces glibc for both that and `a(b|c?)+d` against "ad".
+    .empty_loop = GRX_EMPTY_LOOP_BREAK,
     .backref_unset = GRX_BACKREF_UNSET_FAILS,
     .lookbehind = GRX_LOOKBEHIND_NONE,
     .dollar = GRX_DOLLAR_END_ONLY,
-    .newlines = GRX_NEWLINES_NONE,
+    // A newline is the line terminator REG_NEWLINE makes `^` and `$` match
+    // at. Without that option `dollar = END_ONLY` keeps them at the ends of
+    // the subject, so naming the set here costs nothing until it is asked
+    // for - and leaving it NONE made REG_NEWLINE a flag with no terminator
+    // to act on, which is a flag that does nothing.
+    .newlines = GRX_NEWLINES_LF,
     .fold = GRX_FOLD_ASCII,
     .fold_utf = GRX_FOLD_ASCII,
+    // glibc matches `^$` against "abc\n" at offset 4 under REG_NEWLINE: the
+    // empty run after a final newline *is* a line here, where PCRE2 and Perl
+    // say it is not.
+    .caret_after_final_newline = 1,
   },
 
   // The Perl family. Full folding is implemented as simple folding and

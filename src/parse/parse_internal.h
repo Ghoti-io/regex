@@ -432,6 +432,15 @@ typedef struct GRX_Parser {
   size_t depth;                    ///< Nesting, against max_nesting_depth.
   size_t group_count;              ///< Capturing groups the prescan counted.
   size_t groups_opened;            ///< Capturing groups numbered so far.
+  /**
+   * How many group bodies are open around the current position.
+   *
+   * Distinct from `depth`, which counts alternation branches and bracket
+   * nesting too. This one answers exactly one question: is there a `(` for
+   * this `)` to close, or is the `)` an ordinary character - which is what
+   * GRX_SyntaxSpec::unmatched_close_is_literal turns on.
+   */
+  size_t group_depth;
   int named_groups;                ///< Non-zero if the pattern names a group.
   int in_lookbehind;               ///< Non-zero inside a lookbehind body.
   /**
@@ -574,6 +583,29 @@ typedef struct GRX_Frontend {
       size_t offset, size_t length);
 
   /**
+   * Whether the quantifier standing here applies to this atom at all.
+   * May be NULL, meaning it always does.
+   *
+   * POSIX's basic RE is why: an `*` that is the first character of the RE or
+   * of a subexpression, *after an initial `^` if there is one*, is a literal
+   * asterisk. The first half needs nothing - with no atom before it the `*`
+   * is read as an atom already - but `^*` does, because by then `^` is an
+   * anchor and the parser is about to repeat it. glibc matches "*a" with
+   * `^*a`, so the `*` there is a character and not a quantifier.
+   *
+   * Distinct from check_quantifier_target(), which answers "this quantifier
+   * is not allowed here" with a diagnostic. This one answers "that is not a
+   * quantifier", and the caller leaves the position alone so the character
+   * is read as an atom next. GRX_Quantifier::is_quantifier says the same
+   * thing about a `{`.
+   *
+   * @param parser The parser, positioned at the quantifier character.
+   * @param node The atom the quantifier would wrap.
+   * @return Non-zero to read it as a quantifier.
+   */
+  int (*quantifier_applies)(GRX_Parser * parser, uint32_t node);
+
+  /**
    * Consume whatever stands between two atoms and means nothing. May be NULL.
    *
    * Extended mode is why this exists: under `(?x)` an unescaped space and
@@ -612,6 +644,12 @@ extern const GRX_Frontend grx_frontend_pcre;
 
 /** @brief The Perl front end: the PCRE2 rules, less what Perl spells apart. */
 extern const GRX_Frontend grx_frontend_perl;
+
+/** @brief POSIX and GNU, basic and extended. */
+extern const GRX_Frontend grx_frontend_posix_bre;
+extern const GRX_Frontend grx_frontend_posix_ere;
+extern const GRX_Frontend grx_frontend_gnu_bre;
+extern const GRX_Frontend grx_frontend_gnu_ere;
 
 // --------------------------------------------------------------------------
 // The services a hook uses. Declared here so that a front end is a table of

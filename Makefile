@@ -511,7 +511,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 # General commands
 .PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-unicode-tables check-oracle-syntax check-oracle-match check-engine-equivalence \
 	check-oracle-properties check-oracle-numeric-properties \
-	check-oracle-string-properties check-oracles \
+	check-oracle-string-properties check-oracle-posix check-oracles \
 	check-limits check-json-schema-suite vectors vectors-ecmascript \
 	vectors-pcre vectors-perl vectors-gnu
 # Release build commands
@@ -551,7 +551,7 @@ tools: $(APP_DIR)/$(TARGET) $(TOOLS)
 check-oracles: ## Run every differential check against the reference implementation
 check-oracles: check-oracle-syntax check-oracle-match check-oracle-properties \
 	check-oracle-numeric-properties check-oracle-string-properties \
-	check-engine-equivalence
+	check-oracle-posix check-engine-equivalence
 
 check-oracle-properties: ## Compare every Unicode property table against the reference
 check-oracle-properties: $(TOOLS)
@@ -570,6 +570,14 @@ check-oracle-numeric-properties: $(TOOLS)
 	fi; \
 	python3 tools/oracle/numeric_property_diff.py \
 		--driver $(APP_DIR)/tools/grx_properties
+
+check-oracle-posix: ## Compare the POSIX and GNU front ends against glibc
+check-oracle-posix: $(TOOLS)
+	@if ! command -v python3 >/dev/null 2>&1; then \
+		printf "check-oracle-posix: skipped (no python3)\n"; \
+		exit 0; \
+	fi; \
+	python3 tools/oracle/posix_diff.py
 
 check-oracle-string-properties: ## Compare the properties of strings against the reference
 check-oracle-string-properties: $(TOOLS)

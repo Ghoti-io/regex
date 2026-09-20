@@ -331,18 +331,47 @@ is complete.
 
 ### Phase 4: POSIX and GNU
 
-**WP-23 The POSIX and GNU front end.** *front ends, M.* Escaped-operator
-lexing, no escapes in brackets, `[:class:]`/`[=e=]`/`[.x.]` with the
-single-character restriction, the BRE anchor and `*` rules, GNU's escapes,
-`REG_NEWLINE` as `GRX_OPT_MULTILINE`. *Depends on:* WP-06's skeleton.
+**WP-23 The POSIX and GNU front end.** *front ends, M.* **Landed.**
+Escaped-operator lexing, no escapes in brackets,
+`[:class:]`/`[=e=]`/`[.x.]` with the single-character restriction, the BRE
+anchor and `*` rules, GNU's escapes, `REG_NEWLINE` as `GRX_OPT_MULTILINE`.
+*Depends on:* WP-06's skeleton.
+
+The escaped-operator lexing turned out to be already designed: the spec
+table had carried `escaped_specials` on the two BRE rows since it was
+written, and nothing read it. Making it real is four questions in the shared
+parser - is the group opener here, the closer, the alternation, the interval
+- and the front end is then one reader for all four dialects.
+`REG_NEWLINE` is only half done, and section 6 of [dialects.md](dialects.md)
+says which half.
 
 **WP-24 Leftmost-longest.** *engines, M.* The Pike VM's longest mode;
 the backtracker's exhaustive mode for BRE backreferences (exponential, and
 bounded); the documented submatch approximation. *Depends on:* WP-07,
 WP-08.
 
-**WP-25 POSIX and GNU conformance.** *conformance, M.* Spencer's test
-suite converted; glibc, grep and sed as oracles. *Depends on:* WP-04.
+**Next**, and now measured: one vector of the 429 imported turns on it -
+`\(ab*\)[ab]*\1` against "ababaaa", where glibc reports the whole string
+and both engines here report the first four characters. The profile has said
+`GRX_PREFER_LEFTMOST_LONGEST` for the POSIX and GNU rows since the table was
+written and no engine reads it, which is the same shape of unread constant
+`escaped_specials` was. The other five gaps in those corpora are WP-26's,
+not this one's: they agree about the extent and differ about which iteration
+a group kept.
+
+**WP-25 POSIX and GNU conformance.** *conformance, M.* **Landed** for GNU.
+Spencer's test suite converted, with glibc as the oracle through
+`tools/oracle/posix_match.c`; 429 vectors, `gnu-ere` at 98.15% and `gnu-bre`
+at 99.37%. grep and sed were not needed - both read glibc's regex, so they
+are the same oracle behind another command. *Depends on:* WP-04.
+
+What is *not* landed is POSIX proper. glibc's `regcomp` defines what POSIX
+leaves undefined and so answers as GNU, which means the two `posix-*` rows
+have no reference on this machine to be measured against; they are built
+from the standard and differ from the GNU rows only where the feature table
+says. A strict-POSIX oracle - musl, or glibc's own
+`RE_SYNTAX_POSIX_MINIMAL_BASIC` through the GNU entry points - would close
+that, and is the obvious next piece of this package.
 
 **WP-26 Exact POSIX submatches.** *engines, L, deferred.* Okui-Suzuki or
 Laurikari TNFA disambiguation in the Pike VM's longest mode. Scheduled

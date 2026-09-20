@@ -18,12 +18,12 @@
 
 TEST(Parse, NullArgumentsAreInvalid) {
   GRX_Pattern * pattern = nullptr;
-  EXPECT_EQ(grx_pattern_parse(nullptr, GRX_SYNTAX_POSIX_ERE, GRX_OPT_NONE,
+  EXPECT_EQ(grx_pattern_parse(nullptr, GRX_SYNTAX_PYTHON, GRX_OPT_NONE,
                 &pattern),
       GRX_ERR_INVALID);
-  EXPECT_EQ(grx_pattern_parse("a", GRX_SYNTAX_POSIX_ERE, GRX_OPT_NONE, nullptr),
+  EXPECT_EQ(grx_pattern_parse("a", GRX_SYNTAX_PYTHON, GRX_OPT_NONE, nullptr),
       GRX_ERR_INVALID);
-  EXPECT_EQ(grx_pattern_parse_with_allocator(nullptr, 4, GRX_SYNTAX_POSIX_ERE,
+  EXPECT_EQ(grx_pattern_parse_with_allocator(nullptr, 4, GRX_SYNTAX_PYTHON,
                 GRX_OPT_NONE, nullptr, nullptr, nullptr, &pattern),
       GRX_ERR_INVALID);
   EXPECT_EQ(pattern, nullptr);
@@ -41,7 +41,7 @@ TEST(Parse, OutputIsNullOnFailure) {
   // (CONVENTIONS.md section 5), so the output pointer has to be cleared even
   // when it arrived holding something.
   GRX_Pattern * pattern = (GRX_Pattern *)0x1;
-  EXPECT_NE(grx_pattern_parse("a", GRX_SYNTAX_POSIX_ERE, GRX_OPT_NONE, &pattern),
+  EXPECT_NE(grx_pattern_parse("a", GRX_SYNTAX_PYTHON, GRX_OPT_NONE, &pattern),
       GRX_OK);
   EXPECT_EQ(pattern, nullptr);
 }
@@ -53,7 +53,7 @@ TEST(Parse, PatternLongerThanTheLimitIsRejected) {
 
   GRX_Error error;
   GRX_Pattern * pattern = nullptr;
-  EXPECT_EQ(grx_pattern_parse_with_allocator("aaaaaaaa", 8, GRX_SYNTAX_POSIX_ERE,
+  EXPECT_EQ(grx_pattern_parse_with_allocator("aaaaaaaa", 8, GRX_SYNTAX_PYTHON,
                 GRX_OPT_NONE, &limits, nullptr, &error, &pattern),
       GRX_ERR_LIMIT);
   EXPECT_EQ(error.code, GRX_ERR_LIMIT);
@@ -66,7 +66,7 @@ TEST(Parse, ErrorIsClearedBeforeTheAttempt) {
   std::memset(&error, 0xAA, sizeof(error));
 
   GRX_Pattern * pattern = nullptr;
-  (void)grx_pattern_parse_with_allocator("a", 1, GRX_SYNTAX_POSIX_ERE,
+  (void)grx_pattern_parse_with_allocator("a", 1, GRX_SYNTAX_PYTHON,
       GRX_OPT_NONE, nullptr, nullptr, &error, &pattern);
 
   // Whatever the outcome, the caller never reads a position left over from a
@@ -75,12 +75,13 @@ TEST(Parse, ErrorIsClearedBeforeTheAttempt) {
 }
 
 TEST(Parse, ADialectWithNoFrontEndIsRefusedRatherThanApproximated) {
-  // POSIX's front end is plan.md WP-23. Until it exists, reading a POSIX
+  // Python's front end is plan.md WP-30. Until it exists, reading a Python
   // pattern with somebody else's grammar would tell a caller their pattern
-  // is valid for an engine that rejects it (design.md section 4).
+  // is valid for an engine that rejects it (design.md section 4). This
+  // named POSIX until WP-23 built it.
   GRX_Pattern * pattern = nullptr;
   GRX_Error error;
-  EXPECT_EQ(grx_pattern_parse_with_allocator("a", 1, GRX_SYNTAX_POSIX_ERE,
+  EXPECT_EQ(grx_pattern_parse_with_allocator("a", 1, GRX_SYNTAX_PYTHON,
                 GRX_OPT_NONE, nullptr, nullptr, &error, &pattern),
       GRX_ERR_UNSUPPORTED);
   EXPECT_EQ(error.diag, GRX_DIAG_DIALECT_NOT_IMPLEMENTED);
@@ -102,7 +103,7 @@ TEST(Parse, AllocatesNothingOnAFailedParse) {
   grxtest::CountingAllocator allocator;
 
   GRX_Pattern * pattern = nullptr;
-  (void)grx_pattern_parse_with_allocator("a", 1, GRX_SYNTAX_POSIX_ERE,
+  (void)grx_pattern_parse_with_allocator("a", 1, GRX_SYNTAX_PYTHON,
       GRX_OPT_NONE, nullptr, allocator.get(), nullptr, &pattern);
 
   EXPECT_EQ(allocator.live(), 0);

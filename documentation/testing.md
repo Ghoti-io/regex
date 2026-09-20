@@ -320,6 +320,29 @@ or one perl assigns and no table here claims, fails.
 It currently compares 142 values with no disagreement, and reports the two
 values and 111 code points that perl's older UCD does not carry.
 
+### The POSIX differential
+
+`make check-oracle-posix` does for the POSIX and GNU front ends what the
+match check does for ECMAScript: builds patterns by combination - one entry
+per construct the dialect has, one to three of them per pattern - and asks
+both glibc and this library where each matches. About 9,000 cases a run,
+across both grammars.
+
+It exists because the imported vectors are 429 cases somebody chose, and the
+pairs nobody thought to write down are where a front end goes wrong. It
+earned its place immediately: it found the one place `^` disagrees, which no
+imported vector reaches. Without `REG_NEWLINE` glibc answers `^b` against
+"a\nb" with nomatch - so `^` is not a line anchor for a search - and `.*^b`
+against the same subject with a match at 0-3. Those two cannot both be the
+rule, and [dialects.md](dialects.md) §6 records which one is implemented
+here. That family is counted and excluded by name; everything else fails the
+gate. Four seeds over about 44,000 cases find nothing else.
+
+Flags are not varied, because POSIX's options are arguments to `regcomp` and
+the driver spells options as a dialect's flag letters, of which these
+dialects have none. `REG_ICASE` and `REG_NEWLINE` are covered by the
+imported vectors, which carry `options:` instead.
+
 ### The cross-engine check
 
 `make check-engine-equivalence` runs the same rows through every engine that
@@ -579,8 +602,11 @@ absent.
   extent, and `REG_NOTBOL`/`REG_NOTEOL` say the subject's ends are not line
   boundaries, which no option here means.
 
-  Nothing in these files runs yet: the POSIX and GNU front end is WP-23, and
-  until it exists the runner counts all 429 as skipped and names the dialect.
+  The front end that reads them is WP-23, which landed with them:
+  `gnu-ere` answers 265 of 270 and `gnu-bre` 158 of 159. The six that remain
+  are POSIX's submatch rules - five about which iteration of a repeat a group
+  kept, and one about leftmost-longest - and are listed in
+  `known-gaps.txt` against WP-24 and WP-26.
 - **JSON-Schema-Test-Suite** (`tools/jsonschema/`): not a vector import -
   these are run *through* `text`, with this library plugged into its
   regular-expression provider vtable, because what they measure is the pair.

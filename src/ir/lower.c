@@ -996,7 +996,15 @@ static GRX_Result lower_anchor(
       break;
 
     case GRX_ANCHOR_WORD_START:
+      kind = GRX_ASSERT_WORD_START;
+      needs_word = 1;
+      break;
+
     case GRX_ANCHOR_WORD_END:
+      kind = GRX_ASSERT_WORD_END;
+      needs_word = 1;
+      break;
+
     case GRX_ANCHOR_COUNT:
     default:
       return fail(low, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, node);

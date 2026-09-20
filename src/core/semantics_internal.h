@@ -120,6 +120,16 @@ typedef enum {
   GRX_ASSERT_END_LINE,          ///< `$` with multiline; uses the newline set.
   GRX_ASSERT_WORD_BOUNDARY,     ///< `\b`; uses the word set.
   GRX_ASSERT_NOT_WORD_BOUNDARY, ///< `\B`; uses the word set.
+  /**
+   * GNU's `\<` and `\>`: the two halves of a word boundary.
+   *
+   * `\b` asks whether the characters either side differ in wordness; these
+   * ask *which way round*. They carry the same word set and cost the same
+   * two class lookups, which is why they are assertions here rather than the
+   * lookarounds a dialect without them has to write.
+   */
+  GRX_ASSERT_WORD_START,
+  GRX_ASSERT_WORD_END,
   GRX_ASSERT_SEARCH_START,      ///< `\G`: where this search attempt began.
   /**
    * The four segmentation boundaries, and their negations.

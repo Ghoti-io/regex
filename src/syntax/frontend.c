@@ -34,9 +34,17 @@ const GRX_Frontend * grx_frontend_for(GRX_Syntax syntax) {
       return &grx_frontend_pcre;
     case GRX_SYNTAX_PERL:
       return &grx_frontend_perl;
+    case GRX_SYNTAX_POSIX_BRE:
+      return &grx_frontend_posix_bre;
+    case GRX_SYNTAX_POSIX_ERE:
+      return &grx_frontend_posix_ere;
+    case GRX_SYNTAX_GNU_BRE:
+      return &grx_frontend_gnu_bre;
+    case GRX_SYNTAX_GNU_ERE:
+      return &grx_frontend_gnu_ere;
     default:
-      // POSIX, GNU and everything in tiers 2 and beyond. Their packages are
-      // documentation/plan.md WP-23 and later.
+      // Everything in tiers 2 and beyond. Their packages are
+      // documentation/plan.md WP-30 and later.
       return NULL;
   }
 }

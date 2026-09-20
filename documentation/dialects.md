@@ -622,6 +622,66 @@ when the body's failing part is a loop — see
 `tests/data/vectors/known-gaps.txt`, where four records turn on where Perl's
 own engine happens to restore an offset rather than on any rule.
 
+### 5.18 The POSIX and GNU grammars
+
+Four dialects out of one reader, because what separates them is what they
+*have* rather than how anything is spelled. Two axes carry all of it: whether
+the grouping operators are written with a backslash (`escaped_specials`), and
+which feature bits are set.
+
+|  | `posix-bre` | `posix-ere` | `gnu-bre` | `gnu-ere` |
+| --- | --- | --- | --- | --- |
+| Group | `\(`…`\)` | `(`…`)` | `\(`…`\)` | `(`…`)` |
+| Interval | `\{m,n\}` | `{m,n}` | `\{m,n\}` | `{m,n}` |
+| Alternation | none | `|` | `\|` | `|` |
+| Backreference | `\1` | none | `\1` | `\1` |
+| `\w`, `\b`, `\<`, `` \` `` | none | none | yes | yes |
+
+**glibc's `regcomp` is the GNU pair, not the POSIX pair.** It accepts `\|`,
+`\+`, `\?`, `\w`, `\b` and `\<` in a basic RE and `\w` and `\b` in an
+extended one. POSIX leaves a backslash before an ordinary character undefined
+and GNU defines it, so that is a conforming extension rather than a
+disagreement - but it is why the vectors imported from glibc say `gnu-bre`
+and `gnu-ere`, and why the two POSIX rows are built from the standard rather
+than from a reference anything here can ask.
+
+Five rules are worth stating, because none of them is what a reader coming
+from Perl would guess, and each was asked of glibc rather than reasoned out:
+
+**`.` matches a newline.** POSIX has no dot-all option because dot-all is
+what it does; `.` against `"\n"` matches with no flags at all. The spec rows
+carry `GRX_OPT_DOTALL` as a default option for exactly this.
+
+**`REG_NEWLINE` is more than one rule.** It makes `^` and `$` line anchors,
+*and* takes the newline out of `.` and out of a negated bracket expression.
+Only the first is modelled here, as `GRX_OPT_MULTILINE`; the other half is
+listed in section 6. The empty run after a final newline **is** a line here -
+glibc matches `^$` against `"abc\n"` at offset 4 - where PCRE2 and Perl say
+it is not, which is the `caret_after_final_newline` axis.
+
+**There are no escapes inside a bracket expression.** `[\]]` is the class
+holding a backslash, followed by a literal `]`; it matches the two characters
+`\]` and neither one alone. A `]` that is to be a member is written first
+instead, `[]a]`, and a `-` first or last is itself.
+
+**An `*` with nothing to repeat is an asterisk**, in a basic RE: first in the
+RE or in a subexpression, after an initial `^` if there is one. `^*a` matches
+`"*a"`. An *extended* RE refuses the same three characters outright, which is
+the one place the two grammars disagree about what `^*` even is.
+
+**A quantifier may be quantified**, and the two grammars differ about which.
+An extended RE stacks them freely - `a**` is `(a*)*`, `a{2}{3}` is thirty-six
+characters' worth of `a`, and `a*?` is `(a*)?` rather than a lazy repeat,
+there being no lazy repeat in POSIX. A basic RE accepts only `\+` and `\?`
+as the second: `a*\?` and `a*\+` match, while `a**`, `a\+*`, `a*\{1\}`
+and `a\{1\}\{1\}` are all refused.
+
+And one that is neither grammar's fault. **An unmatched `)` is an ordinary
+character.** Spencer's own corpus calls it out - *"gag me with a right
+parenthesis -- 1003.2 goofed here"* - and glibc matches `"a)"` with `a)` in
+both. A basic RE's `\)` is still an operator, so an unmatched one is still
+an error; the two questions are about two spellings.
+
 ## 6. Deviations
 
 Every place this library knowingly differs from the implementation a
@@ -648,6 +708,9 @@ to be complete for every shipped tier.
 | PCRE2, Perl | `\C`, one code unit | the subject here is code points, and a construct that can land inside a character has no honest approximation | `GRX_ERR_UNSUPPORTED` |
 | PCRE2 | `(*LIMIT_MATCH=n)` and kin are accepted and not applied | the limits are the caller's and this front end has no writable copy; lowering one from inside a pattern is later work | - |
 | PCRE2, Perl | `(?(VERSION>=n.n))` is answered against 10.46 | this library emulates that version rather than being it | - |
+| POSIX, GNU | Without `REG_NEWLINE`, `^` is the start of the subject and `$` its end, wherever in the pattern they stand | glibc answers the same question two ways. `^b` against "a\nb" is **nomatch** there, so `^` is not a line anchor for a search - but `.*^b` against the same subject **matches 0-3**, and `.^` matches 1-2, so a `^` reached after something consumed the newline *does* succeed. `a*^b`, `()^b`, `(^)b` and `(a\|)^b` are all nomatch again, which is the same position reached without consuming. Five of 7,033 differential cases turn on it and no imported vector does; the rule here is the consistent reading of the two | - |
+| POSIX, GNU | `REG_NEWLINE` makes `^` and `$` line anchors and does not take the newline out of `.` or out of `[^a]` | the option is two rules and `GRX_OPT_MULTILINE` is one of them; the other needs a second option nothing else in the library wants. Eleven vectors exercise the first half and none the second | - |
+| POSIX BRE, POSIX ERE | Built from the standard, not measured against a reference | glibc's `regcomp` defines what POSIX leaves undefined, so it answers as GNU and cannot be asked what strict POSIX does. The 429 imported vectors are `gnu-bre` and `gnu-ere`; the two POSIX rows differ from them only where the feature table says, and no oracle on this machine can check that | - |
 | Perl | `\p{nv=1/1}` and its kin resolve; perl refuses a fraction that reduces to an integer | UAX #44 §5.9.2 says numeric values match by "numeric equivalencies", and `1/1` is `1`. Perl keys its table by the *spelling* instead, so `1/1`, `2/2` and `0/3` are errors there while `2/4` and `9/12` resolve. Following the stated rule accepts a spelling perl rejects and never changes a match set | - |
 | Perl | `/l` asks for the locale's semantics and gets the C locale's | there is no other locale here (section 6), and the C locale's word characters are the ASCII ones | - |
 | POSIX | Submatch rules approximated in the first POSIX release | [design.md](design.md) §2 | - |
