@@ -3,13 +3,21 @@
  *
  * This library's Unicode property tables, dumped for comparison.
  *
- * `--list` prints every canonical property name, one per line. Otherwise each
- * input line is a property name and each output line is
+ * `--list` prints every canonical property name, one per line, and
+ * `--list-numeric` prints the Numeric_Value ones as `nv=<value>`. Otherwise
+ * each input line is a property name and each output line is
  * `<name>\t<lo>-<hi> <lo>-<hi> ...` in hexadecimal, or `<name>\tunknown`.
+ *
+ * `--perl` resolves those input lines under Perl's spelling rule instead of
+ * ECMAScript's. Only `nv` needs it - it is the one property no strict
+ * dialect can reach - and it means the differ measures the lookup a pattern
+ * actually performs, rational parser included, rather than the table behind
+ * it.
  *
  * Ranges rather than code points, because a property is stored as ranges and
  * printing 1.1 million lines to compare 700 would be slower than the
- * comparison. Used by tools/oracle/property_diff.py.
+ * comparison. Used by tools/oracle/property_diff.py and
+ * tools/oracle/numeric_property_diff.py.
  *
  * Copyright 2026 by Corey Pennycuff
  */
@@ -25,6 +33,15 @@
 #define MAX_NAME 256
 
 int main(int argc, char ** argv) {
+  if (argc > 1 && strcmp(argv[1], "--list-numeric") == 0) {
+    for (uint32_t index = 0; index < grx_unicode_property_count; index++) {
+      if (grx_unicode_properties[index].kind == GRX_UPROP_NV) {
+        printf("nv=%s\n", grx_unicode_properties[index].name);
+      }
+    }
+    return 0;
+  }
+
   if (argc > 1 && strcmp(argv[1], "--list") == 0) {
     // Qualified where the kind needs it. A script value has no lone spelling
     // - `\p{Greek}` is a SyntaxError - so listing the bare name would give a
@@ -32,6 +49,15 @@ int main(int argc, char ** argv) {
     // properties would silently drop out of the check.
     for (uint32_t index = 0; index < grx_unicode_property_count; index++) {
       const GRX_UnicodeProperty * property = &grx_unicode_properties[index];
+      // Numeric_Value is left out rather than listed and skipped. The
+      // reference on the other side of this list is Node, which has no such
+      // property, so every one of its 144 values would answer "unsupported"
+      // on both sides and pad the count with comparisons that never happen.
+      // Perl is the only engine that implements it, and
+      // tools/oracle/numeric_property_diff.py is where it is checked.
+      if (property->kind == GRX_UPROP_NV) {
+        continue;
+      }
       switch (property->kind) {
         case GRX_UPROP_SCRIPT:
           printf("Script=%s\n", property->name);
@@ -48,6 +74,11 @@ int main(int argc, char ** argv) {
       }
     }
     return 0;
+  }
+
+  GRX_PropertyMatch match = GRX_PROPERTY_STRICT;
+  if (argc > 1 && strcmp(argv[1], "--perl") == 0) {
+    match = GRX_PROPERTY_LOOSE_PERL;
   }
 
   char line[MAX_NAME];
@@ -67,9 +98,9 @@ int main(int argc, char ** argv) {
     GRX_Result result = equals
         ? grx_unicode_property_lookup(line, (size_t)(equals - line),
               equals + 1, length - (size_t)(equals - line) - 1,
-              GRX_PROPERTY_STRICT, &property)
+              match, &property)
         : grx_unicode_property_lookup(
-              line, length, NULL, 0, GRX_PROPERTY_STRICT, &property);
+              line, length, NULL, 0, match, &property);
     if (result != GRX_OK) {
       printf("%s\tunknown\n", line);
       continue;

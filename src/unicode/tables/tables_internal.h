@@ -32,6 +32,7 @@ typedef enum {
   GRX_UPROP_GC,         ///< A General_Category value: `\p{gc=Lu}`, `\p{Lu}`.
   GRX_UPROP_SCRIPT,     ///< A Script value: `\p{sc=Greek}`.
   GRX_UPROP_SCX,        ///< A Script_Extensions value: `\p{scx=Greek}`.
+  GRX_UPROP_NV,         ///< A Numeric_Value: `\p{nv=1/2}`.
   GRX_UPROP_KIND_COUNT  ///< Closes the enum; not a kind.
 } GRX_UPropKind;
 
@@ -149,6 +150,31 @@ extern const size_t grx_unicode_string_set_count;
 
 extern const GRX_UnicodeProperty grx_unicode_properties[];
 extern const size_t grx_unicode_property_count;
+
+/**
+ * @brief One Numeric_Value, as the reduced rational it is compared by.
+ *
+ * `\p{nv=...}` is the only property whose values are numbers rather than
+ * names, so it does not appear in the spelling tables: UAX #44 section 5.9.2
+ * says loose matching applies to property values "with the exception of
+ * String Property values", and that for numeric values "numeric
+ * equivalencies are applied" instead. `2/4`, `0.5` and `+1/2` are therefore
+ * one value, while `-1/2` is a different one - which is why the ordinary
+ * loose spelling, that drops `-` along with `_` and space, cannot be used
+ * for these and a separate table exists.
+ *
+ * Sorted by (numerator, denominator). Every entry is reduced and so is
+ * anything the parser produces, which makes equality an integer comparison
+ * rather than a cross-multiplication.
+ */
+typedef struct GRX_UnicodeNumeric {
+  int64_t numerator;   ///< Reduced, and carries the sign.
+  int64_t denominator; ///< Reduced, and always positive.
+  uint32_t property;   ///< Index into grx_unicode_properties.
+} GRX_UnicodeNumeric;
+
+extern const GRX_UnicodeNumeric grx_unicode_numeric_values[];
+extern const size_t grx_unicode_numeric_value_count;
 
 /** Property *names*: "gc", "General_Category", "sc", "scx". */
 extern const GRX_UnicodeName grx_unicode_prop_names[];

@@ -505,6 +505,151 @@ TEST(Property, MembershipMatchesTheStandard) {
   EXPECT_TRUE(has("Cn", 0x0378));
 }
 
+TEST(Property, ANumericValueIsComparedAsANumberAndNotAsASpelling) {
+  // UAX #44 section 5.9.2, as PropertyAliases.txt states it: loose matching
+  // ignores case, whitespace and `_` for every property value, and for
+  // numeric ones "numeric equivalencies are applied" on top - "01.00" is
+  // "1". So these are all one value, and all four spellings are ones perl
+  // accepts and answers identically for.
+  uint32_t half = resolve("nv=1/2", GRX_PROPERTY_LOOSE_PERL);
+  ASSERT_NE(half, UINT32_MAX);
+  EXPECT_EQ(resolve("nv=2/4", GRX_PROPERTY_LOOSE_PERL), half);
+  EXPECT_EQ(resolve("nv=0.5", GRX_PROPERTY_LOOSE_PERL), half);
+  EXPECT_EQ(resolve("nv=+1/2", GRX_PROPERTY_LOOSE_PERL), half);
+  EXPECT_EQ(resolve("nv=00001/2", GRX_PROPERTY_LOOSE_PERL), half);
+
+  // The UCD spells `9/12` and `3/4` both, in DerivedNumericValues.txt, so a
+  // table keyed by spelling would have made these two sets.
+  EXPECT_EQ(resolve("nv=9/12", GRX_PROPERTY_LOOSE_PERL),
+      resolve("nv=3/4", GRX_PROPERTY_LOOSE_PERL));
+
+  // A decimal point and an exponent are the same shift.
+  EXPECT_EQ(resolve("nv=1e2", GRX_PROPERTY_LOOSE_PERL),
+      resolve("nv=100", GRX_PROPERTY_LOOSE_PERL));
+  EXPECT_EQ(resolve("nv=1.0e2", GRX_PROPERTY_LOOSE_PERL),
+      resolve("nv=100", GRX_PROPERTY_LOOSE_PERL));
+  EXPECT_EQ(resolve("nv=2e-1", GRX_PROPERTY_LOOSE_PERL),
+      resolve("nv=1/5", GRX_PROPERTY_LOOSE_PERL));
+
+  EXPECT_TRUE(has("nv=1/2", 0x00BD, GRX_PROPERTY_LOOSE_PERL));
+  EXPECT_TRUE(has("nv=-1/2", 0x0F33, GRX_PROPERTY_LOOSE_PERL));
+}
+
+TEST(Property, TheHyphenInANumericValueIsASignAndNotPunctuation) {
+  // Why `nv` cannot live in the loose spelling tables at all. Loose matching
+  // drops `-` along with `_` and space, which would put U+0F33 TIBETAN DIGIT
+  // HALF ZERO, the one code point whose value is -1/2, into the same set as
+  // the twenty whose value is 1/2.
+  uint32_t negative = resolve("nv=-1/2", GRX_PROPERTY_LOOSE_PERL);
+  uint32_t positive = resolve("nv=1/2", GRX_PROPERTY_LOOSE_PERL);
+  ASSERT_NE(negative, UINT32_MAX);
+  ASSERT_NE(positive, UINT32_MAX);
+  EXPECT_NE(negative, positive);
+  EXPECT_FALSE(has("nv=-1/2", 0x00BD, GRX_PROPERTY_LOOSE_PERL));
+  EXPECT_FALSE(has("nv=1/2", 0x0F33, GRX_PROPERTY_LOOSE_PERL));
+
+  // Zero is the exception that proves it is arithmetic and not text: -0 and
+  // 0 are the same number, so they are the same set. This is the vector
+  // tests/data/vectors/perl/re_tests.rxt line 8200 asks for.
+  uint32_t zero = resolve("nv=0", GRX_PROPERTY_LOOSE_PERL);
+  ASSERT_NE(zero, UINT32_MAX);
+  EXPECT_EQ(resolve("nv=-0", GRX_PROPERTY_LOOSE_PERL), zero);
+  EXPECT_EQ(resolve("nv=+0", GRX_PROPERTY_LOOSE_PERL), zero);
+  EXPECT_EQ(resolve("nv=0.0", GRX_PROPERTY_LOOSE_PERL), zero);
+  EXPECT_EQ(resolve("nv=00", GRX_PROPERTY_LOOSE_PERL), zero);
+  EXPECT_TRUE(has("nv=-0", 0x0660, GRX_PROPERTY_LOOSE_PERL));
+}
+
+TEST(Property, NumericValueCarriesWhatOnlyUnihanKnows) {
+  // DerivedNumericValues.txt rather than UnicodeData.txt field 8, because
+  // the derived file's header defines Numeric_Value as kAccountingNumeric,
+  // kOtherNumeric or kPrimaryNumeric *first* and field 8 only otherwise.
+  // Field 8 is empty for every one of these; perl matches all three.
+  EXPECT_TRUE(has("nv=1", 0x4E00, GRX_PROPERTY_LOOSE_PERL));    // CJK one
+  EXPECT_TRUE(has("nv=10", 0x5341, GRX_PROPERTY_LOOSE_PERL));   // CJK ten
+  EXPECT_TRUE(has("nv=100", 0x767E, GRX_PROPERTY_LOOSE_PERL));  // CJK hundred
+}
+
+TEST(Property, NumericValueIsPerlsAloneAmongTheDialects) {
+  // pcre2test 10.46 and V8 both answer `\p{nv=1}` with "unknown property",
+  // so the spelling rule is the gate: the generator keeps `nv` out of the
+  // strict table and property.c refuses it under PCRE2's loose rule.
+  EXPECT_NE(resolve("nv=1/2", GRX_PROPERTY_LOOSE_PERL), UINT32_MAX);
+  EXPECT_EQ(resolve("nv=1/2", GRX_PROPERTY_LOOSE), UINT32_MAX);
+  EXPECT_EQ(resolve("nv=1/2", GRX_PROPERTY_STRICT), UINT32_MAX);
+  EXPECT_EQ(resolve("Numeric_Value=1/2", GRX_PROPERTY_STRICT), UINT32_MAX);
+
+  // The long name works where the short one does.
+  EXPECT_EQ(resolve("Numeric_Value=1/2", GRX_PROPERTY_LOOSE_PERL),
+      resolve("nv=1/2", GRX_PROPERTY_LOOSE_PERL));
+
+  // And a numeric value is not reachable as a name: "1/2" is not a property.
+  EXPECT_EQ(resolve("1/2", GRX_PROPERTY_LOOSE_PERL), UINT32_MAX);
+}
+
+TEST(Property, ANumericValueThatIsNotANumberNamesNothing) {
+  // Every one of these is a syntax error in perl too. The overflowing one is
+  // refused rather than wrapped: a wrapped value would silently name some
+  // other property's code points.
+  static const char * const refused[] = {
+    "nv=abc", "nv=1//2", "nv=/2", "nv=2/", "nv=", "nv=1/0", "nv=1.5/2",
+    "nv=.5", "nv=99999999999999999999999999", "nv=1e999", "nv=--1", "nv=1/-2",
+  };
+  for (const char * name : refused) {
+    EXPECT_EQ(resolve(name, GRX_PROPERTY_LOOSE_PERL), UINT32_MAX) << name;
+  }
+
+  // A well-formed number the UCD does not carry is refused the same way,
+  // which is what perl does rather than matching nothing.
+  EXPECT_EQ(resolve("nv=7/11", GRX_PROPERTY_LOOSE_PERL), UINT32_MAX);
+}
+
+TEST(Property, ANumericValueIsBytesLikeEveryOtherName) {
+  // The same lesson as ANameMayContainANulAndIsStillJustBytes, for the
+  // parser that reads a numeric value. It writes the caller's text into a
+  // fixed buffer with `_` and whitespace removed, so a value longer than the
+  // buffer, one that is all separators, and one carrying an interior NUL are
+  // the three ways past its bounds if it has any. ASan proves nothing is
+  // read or written outside; this makes the inputs reach it.
+  uint32_t property = 0;
+  const char nul_value[] = "1\0/2";
+  EXPECT_EQ(grx_unicode_property_lookup("nv", 2, nul_value,
+                sizeof(nul_value) - 1, GRX_PROPERTY_LOOSE_PERL, &property),
+      GRX_ERR_SYNTAX);
+
+  const std::string too_long(4096, '9');
+  EXPECT_EQ(grx_unicode_property_lookup("nv", 2, too_long.data(),
+                too_long.size(), GRX_PROPERTY_LOOSE_PERL, &property),
+      GRX_ERR_SYNTAX);
+
+  // All separators: nothing survives the strip, so there is no first digit.
+  const std::string blank(200, '_');
+  EXPECT_EQ(grx_unicode_property_lookup("nv", 2, blank.data(), blank.size(),
+                GRX_PROPERTY_LOOSE_PERL, &property),
+      GRX_ERR_SYNTAX);
+
+  // Every byte value, alone and after a digit, on the theory that a parser
+  // which walks a buffer should not care which byte it is looking at.
+  for (int byte = 0; byte < 256; byte++) {
+    char one[] = {(char)byte};
+    char two[] = {'1', (char)byte};
+    char three[] = {'1', '/', (char)byte};
+    grx_unicode_property_lookup(
+        "nv", 2, one, sizeof(one), GRX_PROPERTY_LOOSE_PERL, &property);
+    grx_unicode_property_lookup(
+        "nv", 2, two, sizeof(two), GRX_PROPERTY_LOOSE_PERL, &property);
+    grx_unicode_property_lookup(
+        "nv", 2, three, sizeof(three), GRX_PROPERTY_LOOSE_PERL, &property);
+  }
+
+  // A run of digits either side of the slash, long enough to overflow both
+  // accumulators, is refused rather than wrapped into some other value.
+  const std::string huge = std::string(40, '9') + "/" + std::string(40, '9');
+  EXPECT_EQ(grx_unicode_property_lookup("nv", 2, huge.data(), huge.size(),
+                GRX_PROPERTY_LOOSE_PERL, &property),
+      GRX_ERR_SYNTAX);
+}
+
 TEST(Property, TheTableAgreesWithTheStandardsOwnArithmetic) {
   // documentation/unicode.md section 4: the generator carries the UCD's code
   // point count across so a test can check the ranges against the standard's

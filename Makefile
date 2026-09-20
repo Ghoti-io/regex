@@ -510,7 +510,8 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 
 # General commands
 .PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-unicode-tables check-oracle-syntax check-oracle-match check-engine-equivalence \
-	check-oracle-properties check-oracle-string-properties check-oracles \
+	check-oracle-properties check-oracle-numeric-properties \
+	check-oracle-string-properties check-oracles \
 	check-limits check-json-schema-suite vectors vectors-ecmascript \
 	vectors-pcre vectors-perl
 # Release build commands
@@ -549,7 +550,8 @@ tools: $(APP_DIR)/$(TARGET) $(TOOLS)
 
 check-oracles: ## Run every differential check against the reference implementation
 check-oracles: check-oracle-syntax check-oracle-match check-oracle-properties \
-	check-oracle-string-properties check-engine-equivalence
+	check-oracle-numeric-properties check-oracle-string-properties \
+	check-engine-equivalence
 
 check-oracle-properties: ## Compare every Unicode property table against the reference
 check-oracle-properties: $(TOOLS)
@@ -558,6 +560,15 @@ check-oracle-properties: $(TOOLS)
 		exit 0; \
 	fi; \
 	python3 tools/oracle/property_diff.py \
+		--driver $(APP_DIR)/tools/grx_properties
+
+check-oracle-numeric-properties: ## Compare the Numeric_Value tables against perl
+check-oracle-numeric-properties: $(TOOLS)
+	@if ! command -v perl >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then \
+		printf "check-oracle-numeric-properties: skipped (no perl or no python3)\n"; \
+		exit 0; \
+	fi; \
+	python3 tools/oracle/numeric_property_diff.py \
 		--driver $(APP_DIR)/tools/grx_properties
 
 check-oracle-string-properties: ## Compare the properties of strings against the reference

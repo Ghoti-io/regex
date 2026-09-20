@@ -268,23 +268,22 @@ cannot mean "the suite ran nothing".
 | --- | --- | --- |
 | ECMAScript, from Node 22 and test262 | 28,559 | **100%** |
 | PCRE2, from pcre2test 10.46's `testinput1` and `testinput2` | 1,869 | **100%** |
-| Perl, from `re_tests` under Perl 5.40, and generated boundary vectors | 2,600 | **99.65%** |
+| Perl, from `re_tests` under Perl 5.40, and generated boundary vectors | 2,600 | **99.69%** |
 
-The 9 that do not agree are listed one per line in
-`tests/data/vectors/known-gaps.txt`, with the construct that is missing
-written beside each. That file is a gate in both directions: a vector that
+The 8 that do not agree are listed one per line in
+`tests/data/vectors/known-gaps.txt`, with the reason written beside each. That file is a gate in both directions: a vector that
 fails and is not listed fails the suite; a vector that *is* listed and passes
 fails it too, with "remove the entry"; and an entry naming a record the
 corpus no longer has fails it as well. So the list can only shrink by
 somebody noticing, and the percentages above are over the whole corpus - a
 known gap is counted and named, never counted as a pass.
 
-They are all Perl's now. Six turn on what a *failed* attempt leaves in the
-capture slots, which is a fact about where Perl's own engine restores an
-offset rather than a rule a second engine can follow; two are a branch reset
-defect this Perl has and [#24577](https://github.com/Perl/perl5/issues/24577)
-already records; and one is `\p{nv=}`, a Unicode property the generated
-tables do not carry.
+They are all Perl's now, and none of them is a construct that is missing.
+Six turn on what a *failed* attempt leaves in the capture slots, which is a
+fact about where Perl's own engine restores an offset rather than a rule a
+second engine can follow; the other two are a branch reset defect this Perl
+has and [#24577](https://github.com/Perl/perl5/issues/24577) already
+records.
 
 **Linear time.** `(a|aa)*b`, `(a+)+b` and `(a*)*b` - the patterns that make a
 backtracking engine hang - run against 100,000 characters in around fifty

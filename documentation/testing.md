@@ -273,7 +273,7 @@ when it found no vectors at all.
 ### The property check
 
 `make check-oracle-properties` asks this library and the reference which code
-points match each `\p{...}` - all 1,114,112 of them, for all 454 properties -
+points match each `\p{...}` - all 1,114,112 of them, for all 457 properties -
 and compares the range arrays.
 
 This is what plan.md WP-09 calls "the real check on WP-02", and it is
@@ -289,6 +289,27 @@ surrogate matches nothing in JavaScript and UTF-8 cannot hold one, so neither
 side is asked. Properties the reference cannot spell - the binary properties
 outside ECMA-262's table 69 - are counted and skipped, because which
 spellings each side accepts is the syntax check's question.
+
+### The numeric property check
+
+`make check-oracle-numeric-properties` does the same job for `\p{nv=...}`,
+which the check above cannot touch: Node has no such property, so all 144 of
+its values would be "the reference cannot spell this" and skipped. Perl is
+the only engine that implements it, so perl is the oracle.
+
+Two things make it a different shape of check. It compares by **set
+membership** rather than by value, because perl will report a code point's
+numeric value only as a decimal and `1/3` comes back as `0.33333333` - two
+values differing past that width would compare equal. And it does not demand
+equality, because the pinned perl carries UCD 15.0.0 against these tables'
+17.0.0 (`tools/corpus/VERSIONS`). The invariant is the one that skew cannot
+break: *every code point perl gives a numeric value must get the same value
+here.* A code point assigned here and `NaN` there is skew in the documented
+direction, counted and reported; a code point both assign and disagree about,
+or one perl assigns and no table here claims, fails.
+
+It currently compares 142 values with no disagreement, and reports the two
+values and 111 code points that perl's older UCD does not carry.
 
 ### The cross-engine check
 

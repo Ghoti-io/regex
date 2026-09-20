@@ -429,6 +429,14 @@ not come apart.
 followed by four ordinary characters, which is a wrong answer wearing a right
 one's clothes, and is why these are Perl's alone here.
 
+**`\p{nv=...}` is Perl's alone too**, for a plainer reason: pcre2test 10.46
+and V8 both answer it with "unknown property". Its values are numbers rather
+than names and match by arithmetic, so `\p{nv=2/4}` and `\p{nv=0.5}` are
+`\p{nv=1/2}`, while `\p{nv=-1/2}` is a different single code point - the
+hyphen is a sign, and is the one piece of punctuation loose matching must not
+drop. [unicode.md](unicode.md) §6.1 has the rule and where the values come
+from.
+
 ### 5.10 Iteration after an empty match
 
 | Value | Rule | Dialects |
@@ -640,6 +648,7 @@ to be complete for every shipped tier.
 | PCRE2, Perl | `\C`, one code unit | the subject here is code points, and a construct that can land inside a character has no honest approximation | `GRX_ERR_UNSUPPORTED` |
 | PCRE2 | `(*LIMIT_MATCH=n)` and kin are accepted and not applied | the limits are the caller's and this front end has no writable copy; lowering one from inside a pattern is later work | - |
 | PCRE2, Perl | `(?(VERSION>=n.n))` is answered against 10.46 | this library emulates that version rather than being it | - |
+| Perl | `\p{nv=1/1}` and its kin resolve; perl refuses a fraction that reduces to an integer | UAX #44 §5.9.2 says numeric values match by "numeric equivalencies", and `1/1` is `1`. Perl keys its table by the *spelling* instead, so `1/1`, `2/2` and `0/3` are errors there while `2/4` and `9/12` resolve. Following the stated rule accepts a spelling perl rejects and never changes a match set | - |
 | Perl | `/l` asks for the locale's semantics and gets the C locale's | there is no other locale here (section 6), and the C locale's word characters are the ASCII ones | - |
 | POSIX | Submatch rules approximated in the first POSIX release | [design.md](design.md) §2 | - |
 | POSIX | `[[.ch.]]` multi-character collating elements, `[[=e=]]` | no collation | `GRX_ERR_UNSUPPORTED` when a dialect has them; **`GRX_ERR_SYNTAX`** in Perl and PCRE2, which do not — pcre2test raises error 113 and perl calls the syntax "reserved for future extensions", so a pattern using one there is not valid rather than not built |

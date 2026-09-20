@@ -78,6 +78,7 @@ derived in the generator from the ranges, never written by hand.
 | Script | `Scripts.txt` | `\p{Script=Greek}`, `\p{sc=Grek}` |
 | Script_Extensions | `ScriptExtensions.txt` | `\p{scx=Grek}` |
 | Binary properties, the ECMA-262 list | `PropList.txt`, `DerivedCoreProperties.txt`, `emoji-data.txt`, `DerivedBinaryProperties.txt` | `\p{Alphabetic}`, `\p{White_Space}`, `\p{Emoji}`, ... |
+| Numeric_Value, one table per distinct value | `DerivedNumericValues.txt` | `\p{nv=1/2}` in Perl, and nowhere else |
 | Property and value aliases | `PropertyAliases.txt`, `PropertyValueAliases.txt` | name resolution, both strict (ECMAScript) and loose (UAX #44) |
 | Simple case folding, and the fold orbits | `CaseFolding.txt` (statuses C and S) | caseless literals and classes at compile time |
 | Simple upper and lower mappings | `UnicodeData.txt` | ECMAScript's non-`u` Canonicalize, which is defined in terms of `toUpperCase` |
@@ -146,6 +147,25 @@ is in ECMAScript's `\s` and not in `White_Space`, and the range count of
 each General_Category value matches the count in `DerivedGeneralCategory.txt`'s
 own `# Total code points` trailer, which the generator copies into the
 table as a constant for exactly this purpose.
+
+Beyond that the tables are checked against shipping engines, which is the
+question a conformance rate is actually about:
+
+```
+make check-oracle-properties          # every property, against Node
+make check-oracle-string-properties   # the `v`-mode string sets, against Node
+make check-oracle-numeric-properties  # Numeric_Value, against perl
+```
+
+The last one exists because Node has no `\p{nv=...}` to ask. It compares by
+set membership rather than by value, since perl will report a code point's
+numeric value only as a decimal and `1/3` comes back as `0.33333333`. And it
+does not demand equality: the pinned perl carries UCD 15.0.0 against these
+tables' 17.0.0, so the invariant checked is the one version skew cannot
+break - *every code point perl gives a numeric value must get the same value
+here*. A code point assigned here and `NaN` in perl is skew in the safe
+direction and is counted; a code point they both assign and disagree about,
+or one perl assigns and no table here claims, fails.
 
 ## 5. Case folding
 
@@ -267,6 +287,47 @@ Two resolvers over the same alias tables:
   and `In` prefixes are accepted where the dialect accepts them. PCRE2
   additionally accepts `\p{Xan}`, `\p{Xwd}` and its other synthetic classes,
   which are entries in the PCRE2 hook, not in the tables.
+
+### 6.1 Numeric values, which are neither
+
+`\p{nv=...}` does not resolve through either table. UAX #44 §5.9.2 gives
+numeric property values their own rule, which `PropertyAliases.txt` states in
+the same breath as the loose one: case, whitespace and `_` are ignored as
+everywhere else, but on top of that *"numeric equivalencies are applied: thus
+`01.00` is equivalent to `1`"*. Two consequences, and both are why a row in
+the spelling tables would be wrong:
+
+- `2/4`, `0.5`, `+1/2` and `00001/2` are one value, and the UCD itself
+  spells the same number more than one way - `UnicodeData.txt` carries
+  `9/12` beside `3/4`. Records are grouped by the reduced rational, so 144
+  values cover the 149 spellings.
+- The `-` that loose matching drops from a *name* is a **sign** in a number.
+  `\p{nv=-1/2}` is U+0F33 TIBETAN DIGIT HALF ZERO alone; `\p{nv=1/2}` is
+  twenty other code points. Dropping it would merge them.
+
+So the values live in `grx_unicode_numeric_values`, a table of reduced
+`(numerator, denominator)` pairs, and `property.c` parses the caller's text
+into the same reduced form before comparing. Both sides being reduced makes
+equality an integer comparison, which is also why the search never
+cross-multiplies: the largest value is 10^16 and the largest denominator 320,
+and their product is close enough to the top of `int64_t` to be worth not
+relying on. A value that overflows, or that the UCD does not carry, is
+`GRX_ERR_SYNTAX` - which is what perl answers too, rather than an empty set.
+
+The source is `DerivedNumericValues.txt` and not `UnicodeData.txt` field 8.
+Its header defines Numeric_Value as the first of `kAccountingNumeric`,
+`kOtherNumeric` or `kPrimaryNumeric` from the Unihan database *if any
+exists*, and field 8 only otherwise: eighty-three code points, the CJK
+ideographs for one, ten, hundred, thousand and the rest, have a numeric value
+that field 8 leaves empty. Field 3 of that file rather than field 1, because
+field 1 is a decimal approximation and the file's own header warns that
+values like `0.16666667` are repeating fractions printed to a fixed width.
+
+This is Perl's property alone - pcre2test 10.46 and V8 both answer
+`\p{nv=1}` with "unknown property" - so it is in the loose property-name
+table, not the strict one, and is refused under PCRE2's loose rule as well.
+That also means `property_diff.py`, which asks Node, cannot check a single
+one of its values; `tools/oracle/numeric_property_diff.py` asks perl instead.
 
 ## 7. What the module does not do
 

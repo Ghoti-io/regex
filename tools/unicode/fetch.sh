@@ -45,6 +45,7 @@ ucd/ScriptExtensions.txt
 ucd/Blocks.txt
 ucd/DerivedNormalizationProps.txt
 ucd/extracted/DerivedGeneralCategory.txt
+ucd/extracted/DerivedNumericValues.txt
 ucd/auxiliary/GraphemeBreakProperty.txt
 ucd/auxiliary/WordBreakProperty.txt
 ucd/auxiliary/SentenceBreakProperty.txt

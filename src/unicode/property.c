@@ -156,6 +156,216 @@ static int find_prop_kind(const GRX_UnicodeName * table, size_t count,
   return 0;
 }
 
+// --------------------------------------------------------------------------
+// Numeric_Value
+// --------------------------------------------------------------------------
+
+/**
+ * Multiply two non-negative values, refusing to wrap.
+ *
+ * Everything here stays non-negative until the sign is applied at the very
+ * end, which is what makes one unsigned-shaped check enough.
+ */
+static int mul_checked(int64_t a, int64_t b, int64_t * out) {
+  if (b != 0 && a > INT64_MAX / b) {
+    return 0;
+  }
+  *out = a * b;
+  return 1;
+}
+
+/** Append one decimal digit, refusing to wrap. */
+static int push_digit(int64_t * value, int digit) {
+  if (!mul_checked(*value, 10, value) || *value > INT64_MAX - digit) {
+    return 0;
+  }
+  *value += digit;
+  return 1;
+}
+
+/** Euclid, over a non-negative `a` and a positive `b`. */
+static int64_t greatest_common_divisor(int64_t a, int64_t b) {
+  while (b != 0) {
+    int64_t remainder = a % b;
+    a = b;
+    b = remainder;
+  }
+  return a;
+}
+
+/**
+ * The text of a `\p{nv=...}` value as a reduced rational.
+ *
+ * UAX #44 section 5.9.2 gives numeric property values a matching rule of
+ * their own. Case, whitespace and `_` are ignored as they are everywhere
+ * else, but the comparison is by "numeric equivalencies" rather than by
+ * spelling: PropertyAliases.txt states it as "01.00" being equivalent to
+ * "1", and it is why `2/4`, `0.5` and `+1/2` are one value here. The hyphen
+ * that loose matching drops from a *name* is a sign in a number, so it
+ * survives - `nv=-1/2` is U+0F33 alone and `nv=1/2` is twenty other code
+ * points. That is the whole reason these values are not in the spelling
+ * tables.
+ *
+ * The grammar, after whitespace and `_` are dropped: an optional sign, then
+ * either `digits/digits` or `digits` with an optional `.digits` and an
+ * optional `e` exponent. A fraction's two parts are integers - `1.5/2` is
+ * not a value in Perl either.
+ *
+ * @return 1 on success, or 0 for text that is not a number and for one too
+ *   large to hold. Both are reported the same way because they have the
+ *   same consequence: no property answers to it.
+ */
+static int parse_rational(const char * text, size_t length,
+    int64_t * out_numerator, int64_t * out_denominator) {
+  char digits[GRX_PROPERTY_NAME_MAX];
+  size_t count = 0;
+
+  for (size_t i = 0; i < length; i++) {
+    char c = text[i];
+    if (c == '_' || c == ' ' || c == '\t' || c == '\n' || c == '\r') {
+      continue;
+    }
+    if (count + 1 >= GRX_PROPERTY_NAME_MAX) {
+      return 0;
+    }
+    digits[count++] = c;
+  }
+  digits[count] = '\0';
+
+  size_t at = 0;
+  int negative = 0;
+  if (at < count && (digits[at] == '+' || digits[at] == '-')) {
+    negative = digits[at] == '-';
+    at++;
+  }
+
+  int64_t numerator = 0;
+  int64_t denominator = 1;
+  size_t first = at;
+  while (at < count && digits[at] >= '0' && digits[at] <= '9') {
+    if (!push_digit(&numerator, digits[at] - '0')) {
+      return 0;
+    }
+    at++;
+  }
+  if (at == first) {
+    return 0;
+  }
+
+  if (at < count && digits[at] == '/') {
+    at++;
+    size_t start = at;
+    denominator = 0;
+    while (at < count && digits[at] >= '0' && digits[at] <= '9') {
+      if (!push_digit(&denominator, digits[at] - '0')) {
+        return 0;
+      }
+      at++;
+    }
+    if (at == start || at != count || denominator == 0) {
+      return 0;
+    }
+  }
+  else {
+    // A decimal point and an exponent both just move the value along a power
+    // of ten, so they are collected as one shift and applied once.
+    int scale = 0;
+    int exponent = 0;
+    int exponent_negative = 0;
+    if (at < count && digits[at] == '.') {
+      at++;
+      while (at < count && digits[at] >= '0' && digits[at] <= '9') {
+        if (!push_digit(&numerator, digits[at] - '0')) {
+          return 0;
+        }
+        scale++;
+        at++;
+      }
+    }
+    if (at < count && (digits[at] == 'e' || digits[at] == 'E')) {
+      at++;
+      if (at < count && (digits[at] == '+' || digits[at] == '-')) {
+        exponent_negative = digits[at] == '-';
+        at++;
+      }
+      size_t start = at;
+      while (at < count && digits[at] >= '0' && digits[at] <= '9') {
+        // Bounded rather than accumulated: an exponent past a few hundred
+        // overflows whatever it is applied to, and the bound keeps the loop
+        // below from running a caller's own digit count.
+        if (exponent < 4096) {
+          exponent = exponent * 10 + (digits[at] - '0');
+        }
+        at++;
+      }
+      if (at == start) {
+        return 0;
+      }
+    }
+    if (at != count) {
+      return 0;
+    }
+
+    int shift = exponent_negative ? -exponent - scale : exponent - scale;
+    for (int i = 0; i < shift; i++) {
+      if (!mul_checked(numerator, 10, &numerator)) {
+        return 0;
+      }
+    }
+    for (int i = 0; i < -shift; i++) {
+      if (!mul_checked(denominator, 10, &denominator)) {
+        return 0;
+      }
+    }
+  }
+
+  // Reducing is what makes equality an integer comparison later. gcd(0, d)
+  // is d, so every spelling of zero - `0`, `-0`, `0.00` - lands on 0/1.
+  int64_t divisor = greatest_common_divisor(numerator, denominator);
+  numerator /= divisor;
+  denominator /= divisor;
+  *out_numerator = negative ? -numerator : numerator;
+  *out_denominator = denominator;
+  return 1;
+}
+
+/** Find the property a numeric value names, by value and not by spelling. */
+static int find_numeric(
+    const char * value, size_t value_length, uint32_t * out_property) {
+  int64_t numerator = 0;
+  int64_t denominator = 0;
+  if (!parse_rational(value, value_length, &numerator, &denominator)) {
+    return 0;
+  }
+
+  // Sorted by numerator and then denominator, both reduced on each side, so
+  // this compares integers and never multiplies.
+  size_t low = 0;
+  size_t high = grx_unicode_numeric_value_count;
+  while (low < high) {
+    size_t mid = low + (high - low) / 2;
+    const GRX_UnicodeNumeric * entry = &grx_unicode_numeric_values[mid];
+    int64_t theirs = entry->numerator;
+    int64_t mine = numerator;
+    if (theirs == mine) {
+      theirs = entry->denominator;
+      mine = denominator;
+    }
+    if (theirs == mine) {
+      *out_property = entry->property;
+      return 1;
+    }
+    if (theirs > mine) {
+      high = mid;
+    }
+    else {
+      low = mid + 1;
+    }
+  }
+
+  return 0;
+}
+
 GRX_Result grx_unicode_property_lookup(const char * name, size_t name_length,
     const char * value, size_t value_length, GRX_PropertyMatch match,
     uint32_t * out_property) {
@@ -184,13 +394,6 @@ GRX_Result grx_unicode_property_lookup(const char * name, size_t name_length,
       }
       name = name_buffer;
     }
-    if (value) {
-      value_length = loosen(value, value_length, value_buffer);
-      if (!value_length) {
-        return GRX_ERR_SYNTAX;
-      }
-      value = value_buffer;
-    }
     names = grx_unicode_loose_names;
     name_count = grx_unicode_loose_name_count;
     props = grx_unicode_loose_prop_names;
@@ -201,6 +404,27 @@ GRX_Result grx_unicode_property_lookup(const char * name, size_t name_length,
     int kind = 0;
     if (!find_prop_kind(props, prop_count, name, name_length, &kind)) {
       return GRX_ERR_SYNTAX;
+    }
+
+    // Numeric_Value before the value is loosened, because loosening drops
+    // the `-` that tells `nv=-1/2` from `nv=1/2`. Perl's alone: pcre2test
+    // 10.46 and V8 both refuse `\p{nv=1}` as an unknown property, and the
+    // generator keeps `nv` out of the strict table so that a lookup can
+    // only arrive here under a loose spelling rule.
+    if (kind == GRX_UPROP_NV) {
+      if (match != GRX_PROPERTY_LOOSE_PERL) {
+        return GRX_ERR_SYNTAX;
+      }
+      return find_numeric(value, value_length, out_property) ? GRX_OK
+                                                             : GRX_ERR_SYNTAX;
+    }
+
+    if (match != GRX_PROPERTY_STRICT) {
+      value_length = loosen(value, value_length, value_buffer);
+      if (!value_length) {
+        return GRX_ERR_SYNTAX;
+      }
+      value = value_buffer;
     }
     if (!find_name(names, name_count, value, value_length, kind,
             out_property)) {

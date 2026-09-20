@@ -182,6 +182,52 @@ class DerivedFileFormat(unittest.TestCase):
         self.assertEqual(by_value["Linker"], [(0x94D, 0x94D)])
 
 
+class NumericValueFormat(unittest.TestCase):
+    def test_reduces_and_groups_by_value_rather_than_spelling(self):
+        # The UCD spells the same number more than one way - UnicodeData.txt
+        # carries 9/12 beside 3/4 - so a table keyed by the text would make
+        # two sets where perl has one.
+        path = write(
+            "# comment\n"
+            "0F33          ; -0.5 ; ; -1/2 # No  TIBETAN DIGIT HALF ZERO\n"
+            "00BD          ; 0.5 ; ; 1/2 # No  VULGAR FRACTION ONE HALF\n"
+            "0B73          ; 0.5 ; ; 2/4 # No  invented, to group with 1/2\n"
+            "00BE          ; 0.75 ; ; 9/12 # No  invented, to reduce to 3/4\n"
+            "2CFD          ; 0.75 ; ; 3/4 # No\n"
+            "0030..0039    ; 0.0 ; ; 0 # Nd  a range\n")
+        try:
+            values = gen.read_numeric_values(path)
+        finally:
+            os.unlink(path)
+
+        self.assertEqual(values[(1, 2)], [(0xBD, 0xBD), (0xB73, 0xB73)])
+        self.assertEqual(values[(3, 4)], [(0xBE, 0xBE), (0x2CFD, 0x2CFD)])
+        self.assertEqual(values[(-1, 2)], [(0xF33, 0xF33)])
+        self.assertEqual(values[(0, 1)], [(0x30, 0x39)])
+        # 2/4 and 9/12 did not become values of their own.
+        self.assertEqual(len(values), 4)
+
+    def test_the_sign_stays_on_the_numerator(self):
+        self.assertEqual(gen.parse_rational("-1/2"), (-1, 2))
+        self.assertEqual(gen.parse_rational("1/2"), (1, 2))
+        self.assertEqual(gen.parse_rational("9/12"), (3, 4))
+        self.assertEqual(gen.parse_rational("3"), (3, 1))
+        # Every spelling of zero is one value, which is what makes `nv=-0`
+        # and `nv=0` the same set.
+        self.assertEqual(gen.parse_rational("-0"), (0, 1))
+        self.assertEqual(gen.parse_rational("0"), (0, 1))
+
+    def test_a_zero_denominator_is_an_error(self):
+        # Not a value; refused rather than divided by.
+        with self.assertRaises(ValueError):
+            gen.parse_rational("1/0")
+
+    def test_the_canonical_name_is_the_ucd_spelling(self):
+        self.assertEqual(gen.rational_name(1, 2), "1/2")
+        self.assertEqual(gen.rational_name(-1, 2), "-1/2")
+        self.assertEqual(gen.rational_name(100, 1), "100")
+
+
 class ScriptExtensionsFormat(unittest.TestCase):
     def test_a_range_joins_every_script_it_lists(self):
         path = write(

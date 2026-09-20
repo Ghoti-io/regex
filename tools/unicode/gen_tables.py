@@ -19,25 +19,31 @@ Copyright 2026 by Corey Pennycuff
 """
 
 import argparse
+import math
 import os
 import sys
 
 MAX_CODEPOINT = 0x10FFFF
 
 # The property kinds, mirrored by GRX_UPropKind in the generated header. A
-# property is one of these four things, and the kind is what disambiguates
+# property is one of these five things, and the kind is what disambiguates
 # `\p{sc=Greek}` from `\p{scx=Greek}`, which name different sets under the
 # same value spelling.
+#
+# `nv` is the odd one: its values are numbers rather than names, so they are
+# not reachable through the spelling tables at all. See read_numeric_values.
 KIND_BINARY = 0
 KIND_GC = 1
 KIND_SCRIPT = 2
 KIND_SCX = 3
+KIND_NV = 4
 
 KIND_NAMES = {
     KIND_BINARY: "GRX_UPROP_BINARY",
     KIND_GC: "GRX_UPROP_GC",
     KIND_SCRIPT: "GRX_UPROP_SCRIPT",
     KIND_SCX: "GRX_UPROP_SCX",
+    KIND_NV: "GRX_UPROP_NV",
 }
 
 # The binary properties ECMA-262 table 69 names, plus the three that its
@@ -269,6 +275,60 @@ def read_property_file(path, column=1):
         low, high = parse_codepoint_range(fields[0])
         sets.setdefault(fields[column], []).append((low, high))
     return {name: normalize(ranges) for name, ranges in sets.items()}
+
+
+def read_numeric_values(path):
+    """DerivedNumericValues.txt: Numeric_Value, as an exact rational.
+
+    Field 3 is the value written as an integer or as `a/b`, which is the one
+    field worth reading: field 1 is a decimal approximation, and the file's
+    own header warns that values like 0.16666667 are repeating fractions
+    printed to a fixed width. A property whose values are compared for
+    equality cannot be built out of an approximation.
+
+    This file rather than UnicodeData.txt field 8 because its header states
+    the derivation that field 8 alone does not satisfy: Numeric_Value is the
+    first of kAccountingNumeric, kOtherNumeric or kPrimaryNumeric from the
+    Unihan database if any exists, and field 8 only otherwise. Eighty-three
+    code points - the CJK ideographs for one, ten, hundred, thousand and the
+    rest - carry a numeric value that field 8 leaves empty.
+
+    Returns a dict of (numerator, denominator) to range list, reduced, with
+    the sign on the numerator. Grouping by the reduced pair rather than by
+    the spelling is what makes `nv=3/4` and `nv=9/12` one set: UnicodeData
+    spells both, and while this derived file happens to reduce them already,
+    nothing in its format promises that.
+    """
+    groups = {}
+    for fields in read_records(path):
+        if len(fields) < 4 or not fields[3]:
+            continue
+        low, high = parse_codepoint_range(fields[0])
+        numerator, denominator = parse_rational(fields[3])
+        groups.setdefault((numerator, denominator), []).append((low, high))
+    return {key: normalize(ranges) for key, ranges in groups.items()}
+
+
+def parse_rational(text):
+    """`-1/2`, `3`, `1/6` to a reduced (numerator, denominator) pair."""
+    if "/" in text:
+        numerator, denominator = text.split("/", 1)
+        numerator = int(numerator)
+        denominator = int(denominator)
+    else:
+        numerator = int(text)
+        denominator = 1
+    if denominator <= 0:
+        raise ValueError("denominator %d in %r" % (denominator, text))
+    divisor = math.gcd(abs(numerator), denominator)
+    return (numerator // divisor, denominator // divisor)
+
+
+def rational_name(numerator, denominator):
+    """The canonical spelling of a numeric value, as the UCD writes it."""
+    if denominator == 1:
+        return "%d" % numerator
+    return "%d/%d" % (numerator, denominator)
 
 
 def read_script_extensions(path, script_value_to_long):
@@ -829,6 +889,21 @@ def build_tables(ucd, version):
     for name in sorted(binaries):
         add(KIND_BINARY, name, binaries[name], prop_aliases)
 
+    # Numeric_Value. Not routed through `add`, because these records have no
+    # spellings: a numeric value is found by arithmetic, not by name, and a
+    # row in the spelling tables would make `\p{1/2}` resolve as though
+    # "1/2" were a binary property.
+    numeric_values = read_numeric_values(
+        os.path.join(ucd, "DerivedNumericValues.txt"))
+    for key in sorted(numeric_values):
+        properties.append({
+            "kind": KIND_NV,
+            "name": rational_name(*key),
+            "ranges": numeric_values[key],
+            "spellings": [],
+            "numeric": key,
+        })
+
     # The break properties. Each becomes a flat table of (low, high, value)
     # sorted by `low`, which is what a boundary algorithm reads one code
     # point at a time.
@@ -941,6 +1016,7 @@ typedef enum {
   GRX_UPROP_GC,         ///< A General_Category value: `\\p{gc=Lu}`, `\\p{Lu}`.
   GRX_UPROP_SCRIPT,     ///< A Script value: `\\p{sc=Greek}`.
   GRX_UPROP_SCX,        ///< A Script_Extensions value: `\\p{scx=Greek}`.
+  GRX_UPROP_NV,         ///< A Numeric_Value: `\\p{nv=1/2}`.
   GRX_UPROP_KIND_COUNT  ///< Closes the enum; not a kind.
 } GRX_UPropKind;
 
@@ -1059,6 +1135,31 @@ extern const size_t grx_unicode_string_set_count;
 extern const GRX_UnicodeProperty grx_unicode_properties[];
 extern const size_t grx_unicode_property_count;
 
+/**
+ * @brief One Numeric_Value, as the reduced rational it is compared by.
+ *
+ * `\\p{nv=...}` is the only property whose values are numbers rather than
+ * names, so it does not appear in the spelling tables: UAX #44 section 5.9.2
+ * says loose matching applies to property values "with the exception of
+ * String Property values", and that for numeric values "numeric
+ * equivalencies are applied" instead. `2/4`, `0.5` and `+1/2` are therefore
+ * one value, while `-1/2` is a different one - which is why the ordinary
+ * loose spelling, that drops `-` along with `_` and space, cannot be used
+ * for these and a separate table exists.
+ *
+ * Sorted by (numerator, denominator). Every entry is reduced and so is
+ * anything the parser produces, which makes equality an integer comparison
+ * rather than a cross-multiplication.
+ */
+typedef struct GRX_UnicodeNumeric {
+  int64_t numerator;   ///< Reduced, and carries the sign.
+  int64_t denominator; ///< Reduced, and always positive.
+  uint32_t property;   ///< Index into grx_unicode_properties.
+} GRX_UnicodeNumeric;
+
+extern const GRX_UnicodeNumeric grx_unicode_numeric_values[];
+extern const size_t grx_unicode_numeric_value_count;
+
 /** Property *names*: "gc", "General_Category", "sc", "scx". */
 extern const GRX_UnicodeName grx_unicode_prop_names[];
 extern const size_t grx_unicode_prop_name_count;
@@ -1170,6 +1271,12 @@ def write_ranges(out_dir, tables):
     for index, prop in enumerate(properties):
         if prop["kind"] == KIND_BINARY and prop["name"] not in permitted_binary:
             continue
+        # A numeric value is matched by arithmetic, in its own table below.
+        # Its spelling list is empty, so this loop would skip it anyway; the
+        # guard is here to say that the emptiness is the point rather than an
+        # oversight for a later reader to "fix".
+        if prop["kind"] == KIND_NV:
+            continue
         for spelling in prop["spellings"]:
             strict.append((spelling, prop["kind"], index))
     strict = sorted(set(strict))
@@ -1187,9 +1294,15 @@ def write_ranges(out_dir, tables):
             ("scx", KIND_SCX)):
         prop_names.append((spelling, kind, 0))
     prop_names = sorted(set(prop_names))
+
+    # `nv` is Perl's alone: pcre2test 10.46 and V8 both reject `\p{nv=1}` as
+    # an unknown property, so it is added to the loose table and not to the
+    # strict one, and property.c gates it further to the Perl spelling rule.
     loose_prop_names = sorted(set(
-        (normalise_loose(name), kind, index)
-        for name, kind, index in prop_names))
+        [(normalise_loose(name), kind, index)
+         for name, kind, index in prop_names]
+        + [(normalise_loose(name), KIND_NV, 0)
+           for name in ("Numeric_Value", "nv")]))
 
     with open(path, "w", encoding="utf-8") as out:
         out.write(HEADER_NOTICE % tables["version"])
@@ -1208,6 +1321,23 @@ def write_ranges(out_dir, tables):
         out.write("};\n")
         out.write("const size_t grx_unicode_property_count = %d;\n\n"
                   % len(records))
+
+        # Numeric values, sorted by the reduced pair. Both stored pairs and
+        # the caller's parsed pair are reduced, so equality is an exact
+        # comparison of two integers and the search never multiplies - which
+        # matters, because the largest value here is 10^16 and a
+        # cross-multiplied comparison against a denominator of 320 would run
+        # close to the top of int64.
+        numeric = sorted(
+            (prop["numeric"], index)
+            for index, prop in enumerate(properties)
+            if prop["kind"] == KIND_NV)
+        out.write("const GRX_UnicodeNumeric grx_unicode_numeric_values[] = {\n")
+        for (numerator, denominator), index in numeric:
+            out.write("  {%d, %d, %d},\n" % (numerator, denominator, index))
+        out.write("};\n")
+        out.write("const size_t grx_unicode_numeric_value_count = %d;\n\n"
+                  % len(numeric))
 
         # The count symbol is spelled from the singular - `..._name_count`
         # beside `..._names` - because that is how the hand-written header
