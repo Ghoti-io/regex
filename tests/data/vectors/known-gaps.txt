@@ -63,8 +63,8 @@ pcre		(\\d++)(*scs:(1)\\d+\\z)(\\w+)		`(*scs:` scan substring: refused, it const
 pcre		(\\w++)=(?(*scs:(1)(abc))pqr|xyz)(\\w++)		`(*scs:` scan substring: refused, it constrains the body and a group does not
 pcre		(a(?<=b(?1)))		lookbehind length: the reference computes a bound from a backreference or a call and this library does not
 pcre		(a)(*scs:(1)a(*ACCEPT))bbb		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		(a)(?(DEFINE)(b))(?2){0,1999}?(?2)		refused by the default limits; the reference answers it with an optimisation this library does not have
-pcre		(a)(?2){0,1999}?(b)		refused by the default limits; the reference answers it with an optimisation this library does not have
+pcre		(a)(?(DEFINE)(b))(?2){0,1999}?(?2)		a repeat of a subroutine call: the reference compiles one copy and this library expands it past max_program_size
+pcre		(a)(?2){0,1999}?(b)		a repeat of a subroutine call: the reference compiles one copy and this library expands it past max_program_size
 pcre		(a)(?<=b+(?1))		lookbehind length: the reference computes a bound from a backreference or a call and this library does not
 pcre		(a)(b)(*scs:(2)(*scs:(1)a(*COMMIT)x)).+|(.+)		`(*scs:` scan substring: refused, it constrains the body and a group does not
 pcre		(a)(b)(*scs:(2)(*scs:(1)a(*PRUNE)x)).+|(.+)		`(*scs:` scan substring: refused, it constrains the body and a group does not
@@ -96,7 +96,7 @@ pcre		^([a-z]++)(*scs:(1)(abc|(a+)(*THEN)b))?		`(*scs:` scan substring: refused,
 pcre		^([a-z]++)(?:((?6))|((?7))|((?8))|(#))(?(DEFINE)((*scs:(1)abc(*PRUNE)d))((*scs:(1)abc(*COMMIT)e))((*scs:(1)abc(*SKIP)f)))		`(*scs:` scan substring: refused, it constrains the body and a group does not
 pcre		f(?:(*scs:(+1,+2)(?<=(.)))|()){16}		`(*scs:` scan substring: refused, it constrains the body and a group does not
 pcre		x(?|(*scs:(1)(?<=(.)))|()){8}		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		z{65536}		refused by the default limits; the reference answers it with an optimisation this library does not have
+pcre		z{65536}		a repeat count above 65535: the reference calls it a syntax error and this library a limit
 pcre	J	(*scs:(<GOOD_NAME>)a)(?<GOOD_NAME>a)(?<GOOD_NAME>b)(?<GOOD_NAME>c)(?<GOOD_NAME>d)|x		`(*scs:` scan substring: refused, it constrains the body and a group does not
 pcre	J	(?:(?'A'a)|(?<A>b))(*scs:('A')b)c		`(*scs:` scan substring: refused, it constrains the body and a group does not
 pcre	J	(?:(?<YYY>[a-z]++)|(?<YYY>[0-9]++)|$)(*scan_substring:('YYY')((?<START>.).*\\k<START>$))		`(*scs:` scan substring: refused, it constrains the body and a group does not
@@ -136,24 +136,24 @@ perl		(?l:a?\\w)	b	Perl's charset modifiers `a`, `d`, `l`, `u`: this library has
 perl		(?|(?<a>a)|(?<b>b))(?(<a>)x|y)\\1	bxb 	branch reset: the numbering is shared, and the names and references inside one are not checked against it yet
 perl		(?|(?<a>a)|(?<b>b))(?(<a>)x|y)\\1	byb 	branch reset: the numbering is shared, and the names and references inside one are not checked against it yet
 perl		(?|(?<a>a)|(?<b>b))\\1(?&a)(?&b)	bbab 	branch reset: the numbering is shared, and the names and references inside one are not checked against it yet
-perl		.X(.+)+X	bbbbXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	refused by the default limits; the reference answers it with an optimisation this library does not have
-perl		.X(.+)+X	bbbbXcXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	refused by the default limits; the reference answers it with an optimisation this library does not have
-perl		.X(.+)+XX	bbbbXXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	refused by the default limits; the reference answers it with an optimisation this library does not have
-perl		.X(.+)+XX	bbbbXcXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	refused by the default limits; the reference answers it with an optimisation this library does not have
-perl		.X(.+)+[X]	bbbbXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	refused by the default limits; the reference answers it with an optimisation this library does not have
-perl		.X(.+)+[X]	bbbbXcXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	refused by the default limits; the reference answers it with an optimisation this library does not have
-perl		.X(.+)+[X][X]	bbbbXXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	refused by the default limits; the reference answers it with an optimisation this library does not have
-perl		.X(.+)+[X][X]	bbbbXcXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	refused by the default limits; the reference answers it with an optimisation this library does not have
-perl		.XX(.+)+X	bbbbXXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	refused by the default limits; the reference answers it with an optimisation this library does not have
-perl		.XX(.+)+X	bbbbXXcXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	refused by the default limits; the reference answers it with an optimisation this library does not have
-perl		.XX(.+)+[X]	bbbbXXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	refused by the default limits; the reference answers it with an optimisation this library does not have
-perl		.XX(.+)+[X]	bbbbXXcXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	refused by the default limits; the reference answers it with an optimisation this library does not have
-perl		.[X](.+)+[X]	bbbbXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	refused by the default limits; the reference answers it with an optimisation this library does not have
-perl		.[X](.+)+[X]	bbbbXcXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	refused by the default limits; the reference answers it with an optimisation this library does not have
-perl		.[X](.+)+[X][X]	bbbbXXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	refused by the default limits; the reference answers it with an optimisation this library does not have
-perl		.[X](.+)+[X][X]	bbbbXcXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	refused by the default limits; the reference answers it with an optimisation this library does not have
-perl		.[X][X](.+)+[X]	bbbbXXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	refused by the default limits; the reference answers it with an optimisation this library does not have
-perl		.[X][X](.+)+[X]	bbbbXXcXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	refused by the default limits; the reference answers it with an optimisation this library does not have
+perl		.X(.+)+X	bbbbXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backtrack on the backtracker alone; the Pike and bit-state engines both answer it, and agree with the reference
+perl		.X(.+)+X	bbbbXcXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backtrack on the backtracker alone; the Pike and bit-state engines both answer it, and agree with the reference
+perl		.X(.+)+XX	bbbbXXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backtrack on the backtracker alone; the Pike and bit-state engines both answer it, and agree with the reference
+perl		.X(.+)+XX	bbbbXcXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backtrack on the backtracker alone; the Pike and bit-state engines both answer it, and agree with the reference
+perl		.X(.+)+[X]	bbbbXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backtrack on the backtracker alone; the Pike and bit-state engines both answer it, and agree with the reference
+perl		.X(.+)+[X]	bbbbXcXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backtrack on the backtracker alone; the Pike and bit-state engines both answer it, and agree with the reference
+perl		.X(.+)+[X][X]	bbbbXXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backtrack on the backtracker alone; the Pike and bit-state engines both answer it, and agree with the reference
+perl		.X(.+)+[X][X]	bbbbXcXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backtrack on the backtracker alone; the Pike and bit-state engines both answer it, and agree with the reference
+perl		.XX(.+)+X	bbbbXXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backtrack on the backtracker alone; the Pike and bit-state engines both answer it, and agree with the reference
+perl		.XX(.+)+X	bbbbXXcXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backtrack on the backtracker alone; the Pike and bit-state engines both answer it, and agree with the reference
+perl		.XX(.+)+[X]	bbbbXXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backtrack on the backtracker alone; the Pike and bit-state engines both answer it, and agree with the reference
+perl		.XX(.+)+[X]	bbbbXXcXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backtrack on the backtracker alone; the Pike and bit-state engines both answer it, and agree with the reference
+perl		.[X](.+)+[X]	bbbbXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backtrack on the backtracker alone; the Pike and bit-state engines both answer it, and agree with the reference
+perl		.[X](.+)+[X]	bbbbXcXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backtrack on the backtracker alone; the Pike and bit-state engines both answer it, and agree with the reference
+perl		.[X](.+)+[X][X]	bbbbXXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backtrack on the backtracker alone; the Pike and bit-state engines both answer it, and agree with the reference
+perl		.[X](.+)+[X][X]	bbbbXcXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backtrack on the backtracker alone; the Pike and bit-state engines both answer it, and agree with the reference
+perl		.[X][X](.+)+[X]	bbbbXXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backtrack on the backtracker alone; the Pike and bit-state engines both answer it, and agree with the reference
+perl		.[X][X](.+)+[X]	bbbbXXcXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backtrack on the backtracker alone; the Pike and bit-state engines both answer it, and agree with the reference
 perl		2(]*)?$\\1	2	a backreference or a call whose target is written after it
 perl		X(?!b+(?!(c+)*(?!(c+)*d))).*X	aXbbbbbbbcccccccccccccaaaX	a capture set inside a failed negative lookahead: Perl keeps it, this library and PCRE2 discard it
 perl		\\B{ gcb }		`\b{wb}` and kin: Perl's Unicode boundary escapes, not implemented
