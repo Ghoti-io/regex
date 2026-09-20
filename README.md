@@ -289,7 +289,7 @@ can follow, and two are a branch reset defect this Perl has and
 The other six are the POSIX submatch rules, and they are scheduled rather
 than unexplained. Five differ only in *which* iteration of a repeat each
 group ends up holding - the overall match agrees with glibc - which needs the
-tagged-transition machinery WP-26 names and defers past 1.0. The sixth is the
+tagged-transition machinery WP-26 names and defers past M4. The sixth is the
 one that changes an extent: POSIX wants the leftmost-**longest** match and
 both engines here find the leftmost-first, which is WP-24. The profile
 already says `GRX_PREFER_LEFTMOST_LONGEST`; no engine reads it yet.

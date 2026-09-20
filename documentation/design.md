@@ -100,7 +100,7 @@ The design consequences:
   recursion depth is `max_nesting_depth` (a small number; §6.2); the engines
   use explicit stacks the allocator provides and the limits cap.
 
-## 2. Non-goals for 1.0
+## 2. Non-goals for the first stable release
 
 Stated so that nobody builds them by accident and so that the reason is on
 record when one of them is wanted.
@@ -854,7 +854,7 @@ blocks the first work packages.
    away.
 4. **Full case folding** for Perl and Ruby was a deviation (§5.2).
    **Decided against, and built**: the recommendation was to accept simple
-   folding for 1.0 and revisit only if a consumer needed `ß`/`ss`, and what
+   folding for now and revisit only if a consumer needed `ß`/`ss`, and what
    made it worth doing sooner was that the graph turns out to compile to
    instructions the engines already had. Eleven corpus records that had been
    listed as gaps now pass. Ruby has no front end yet and will get the same

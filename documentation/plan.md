@@ -40,7 +40,7 @@ Phase 0  Foundations              WP-01 .. WP-05      all lanes, all parallel
 Phase 1  ECMAScript + engines     WP-06 .. WP-11      → M1: JSON Schema ready
 Phase 2  Full ECMAScript, safety  WP-12 .. WP-17      → M2: ECMAScript complete
 Phase 3  PCRE2 and Perl           WP-18 .. WP-22      → M3
-Phase 4  POSIX and GNU            WP-23 .. WP-26      → M4: tier 1 complete = 1.0
+Phase 4  POSIX and GNU            WP-23 .. WP-26      → M4: tier 1 complete
 Phase 5  Tier 2                   WP-30 .. WP-33
 Phase 6  Tier 3                   WP-34 .. WP-35
 Phase 7  Tier 4                   WP-36 .. WP-38
@@ -375,12 +375,11 @@ that, and is the obvious next piece of this package.
 
 **WP-26 Exact POSIX submatches.** *engines, L, deferred.* Okui-Suzuki or
 Laurikari TNFA disambiguation in the Pike VM's longest mode. Scheduled
-after 1.0 unless a consumer needs it.
+after M4 unless a consumer needs it.
 
-**M4 - tier 1 complete - 1.0.** Every tier-1 dialect at its published
+**M4 - tier 1 complete.** Every tier-1 dialect at its published
 conformance rate with every deviation listed; the invariants of
-[design.md](design.md) §9 all enforced by a test; the API frozen and the
-version set to 1.0.0.
+[design.md](design.md) §9 all enforced by a test; the API frozen.
 
 ### Phase 5: tier 2
 
@@ -431,7 +430,7 @@ hold:
    grammar is implemented.
 6. `examples/` has one example in the dialect.
 
-## 5. What "done" means for 1.0
+## 5. What "done" means for the first stable release
 
 - M4: every tier-1 dialect done by §4.
 - Every invariant in [design.md](design.md) §9 has a named test or check.
@@ -440,7 +439,14 @@ hold:
 - `README.md` status table, the parent `README.md` row, and
   `CONVENTIONS.md`'s known-departures section updated.
 - The public headers reviewed against `CONVENTIONS.md` §5 one last time,
-  then `MAJOR_VERSION` set to 1 so the namespace token changes with it.
+  because the namespace token moves with the major version and a review
+  after that is a review too late.
+
+The version *number* is deliberately not named here. The ghoti.io libraries
+are versioned together rather than one at a time, so this library being ready
+is a necessary condition for a release and not a sufficient one, and a number
+written into this plan would be a commitment made by the wrong document.
+When the number changes, Corey says so.
 
 ## 6. Risks, and where the plan absorbs them
 
