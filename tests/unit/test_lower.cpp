@@ -264,6 +264,51 @@ TEST(Lower, PerlClearsALoopsCapturesOnTheWayOutOfTheIteration) {
   EXPECT_EQ(spans(ecma, "ab"), "0:2 1:2 -");
 }
 
+TEST(Lower, AReferenceToAnOpenGroupReadsWhatItLastClosedWith) {
+  // While a group is between its two SAVEs its slots hold a start from this
+  // iteration and an end from the last, which is not a span anybody wrote.
+  // perl 5.40 and pcre2test 10.46 both read the span the group last *closed*
+  // with: in `^(a\1?){4}$` the second iteration's `\1` is the "a" the first
+  // one took, so "aaaaaa" matches as 1 + 1 + 1 + (1 + "a").
+  for (GRX_Syntax syntax : {GRX_SYNTAX_PERL, GRX_SYNTAX_PCRE}) {
+    Compiled self("^(a\\1?){4}$", "", nullptr, syntax);
+    ASSERT_TRUE(self.ok());
+    EXPECT_EQ(spans(self, "aaaaaa"), "0:6 4:6");
+    EXPECT_EQ(spans(self, "aaaaaaaaaa"), "0:10 6:10");
+    // An odd length is reached by taking the empty branch more often, so it
+    // matches too - checked against both references rather than assumed.
+    EXPECT_EQ(spans(self, "aaaaa"), "0:5 4:5");
+    EXPECT_EQ(spans(self, "aaa"), "nomatch");
+
+    // A loop rather than a counted repeat, where the reference reaches back
+    // one iteration each time round.
+    EXPECT_EQ(spans(Compiled("(a\\1?)+", "", nullptr, syntax), "aaa"),
+        "0:3 1:3");
+  }
+
+  // A group that has never closed is unset, not half-written: the `?` takes
+  // the empty branch rather than the reference matching something.
+  EXPECT_EQ(spans(Compiled("(a(b\\1)?)", "", nullptr, GRX_SYNTAX_PERL), "ab"),
+      "0:1 0:1 -");
+
+  // And a reference to a *closed* group reads what it always did - the two
+  // are the same span whenever the group is not open, which is why nothing
+  // else in the corpus moved.
+  EXPECT_EQ(spans(Compiled("(x)(\\1y)", "", nullptr, GRX_SYNTAX_PERL), "xxy"),
+      "0:3 0:1 1:3");
+  // Including after a loop has cleared it: the clearing takes the remembered
+  // span away too, so perl does not match this and neither does this.
+  EXPECT_EQ(spans(Compiled("((a)|b)+\\2c", "", nullptr, GRX_SYNTAX_PERL),
+                "abac"), "nomatch");
+
+  // Inside a lookbehind the body runs backwards and a group writes its *end*
+  // first, so the slot that closes it is the other one. Keying on the odd
+  // slot alone broke eight ECMAScript records; this is one of them.
+  EXPECT_EQ(spans(Compiled("(?<=([abc]+)).\\1", "u"), "aaa"), "1:3 0:1");
+  EXPECT_EQ(spans(Compiled("(?<=(.))(\\w+)(?=\\1)", "u"), "aaa"),
+      "1:2 0:1 1:2");
+}
+
 TEST(Lower, WhatANegativeLookaroundLeavesInTheCaptureSlots) {
   // documentation/dialects.md section 5.17. A negative lookaround succeeds by
   // having its body fail, and the body may have captured on its way to

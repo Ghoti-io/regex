@@ -320,8 +320,23 @@ question rather than for an answer.
 | | `FAIL` | Perl, PCRE2, Python, Java, .NET, Ruby, GNU, Tcl (**probe**), Emacs (**probe**) |
 | Forward reference `\2(a)(b)` | allowed, behaves as unset | ECMAScript, Perl, PCRE2 |
 | | syntax error | Python ("invalid group reference"), Java (**probe**), RE2/Rust (no backreferences) |
-| Reference to the group it is inside, `(a\1)` | allowed, unset on first entry | Perl, PCRE2, ECMAScript |
+| Reference to the group it is inside, `(a\1)` | allowed; reads the span the group last **closed** with | Perl, PCRE2, ECMAScript |
 | | syntax error | Python |
+
+"Unset on first entry" is the first half of that last row and was for a long
+time the only half written down. The second half is what a *later* entry
+reads: while a group is between its two SAVEs its slots hold a start from
+this iteration and an end from the one before, which is not a span anything
+wrote, and both references read the last completed one instead. `^(a\1?){4}$`
+against `aaaaaa` matches in perl and in pcre2test — the second iteration's
+`\1` is the "a" the first took — and reading the live slots gives the empty
+string and no match at all.
+
+The remembered span is not a second life for a capture the dialect has taken
+away: a `RESET` clears it with the live one, so `((a)|b)+\2c` against `abac`
+does not match in perl and does not here. It only exists for the window
+between a group opening and closing, which is why nothing a reference could
+already see changed. See `GRX_PROGRAM_SHADOW_CAPTURES`.
 
 ### 5.7 Backreference versus octal, and the numeric escapes
 

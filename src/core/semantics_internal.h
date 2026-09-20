@@ -71,6 +71,28 @@ extern "C" {
 #define GRX_PROGRAM_NO_MEMO GRX_BIT(1)
 
 /**
+ * @brief Every group keeps the span it had when it last *closed*.
+ *
+ * What a backreference to a group that is still open reads. While a group is
+ * between its two SAVEs its slots hold a start from this iteration and an
+ * end from the last, which is not a span anybody wrote: `^(a\1?){4}$`
+ * against "aaaaaa" matches in perl and in pcre2test, where the second
+ * iteration's `\1` is the "a" the first one took, and reading the live
+ * slots there gives the empty string instead.
+ *
+ * So the closing SAVE writes the pair a second time, to slots after the
+ * registers, and a backreference reads those. For a group that is *not*
+ * open the two are the same thing, which is why nothing else changes; a
+ * RESET or a RESET_STALE clears both, so a loop taking a capture away takes
+ * it away from a reference outside the loop too.
+ *
+ * Set only for a program that contains a backreference. Those are already
+ * excluded from the memo by @ref GRX_Facts, so the extra slots cost nothing
+ * a reference had not already cost, and no other program carries them.
+ */
+#define GRX_PROGRAM_SHADOW_CAPTURES GRX_BIT(2)
+
+/**
  * @brief A zero-width assertion.
  *
  * The line and boundary kinds are parameterised by a character class - the

@@ -1379,10 +1379,17 @@ GRX_Result grx_codegen_program(const GRX_IR * ir, const GRX_Limits * limits,
   // flat node arena rather than a walk, because the question is about the
   // tree's contents and not its shape.
   int captures_are_read = 0;
-  for (size_t i = 0; i < ir->nodes.count && !captures_are_read; i++) {
+  int has_backref = 0;
+  for (size_t i = 0; i < ir->nodes.count; i++) {
     const GRX_IRNode * node = grx_ir_node(ir, (uint32_t)i);
-    if (node
-        && (node->kind == GRX_IR_BACKREF || node->kind == GRX_IR_COND)) {
+    if (!node) {
+      continue;
+    }
+    if (node->kind == GRX_IR_BACKREF) {
+      has_backref = 1;
+      captures_are_read = 1;
+    }
+    else if (node->kind == GRX_IR_COND) {
       captures_are_read = 1;
     }
   }
@@ -1436,6 +1443,11 @@ GRX_Result grx_codegen_program(const GRX_IR * ir, const GRX_Limits * limits,
   }
 
   out_program->flags = ir->flags;
+  if (has_backref) {
+    // A reference can name a group that is still open, and then it wants the
+    // span that group last closed with rather than the half-written one.
+    out_program->flags |= GRX_PROGRAM_SHADOW_CAPTURES;
+  }
   if (codegen.no_memo) {
     out_program->flags |= GRX_PROGRAM_NO_MEMO;
   }

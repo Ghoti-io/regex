@@ -134,6 +134,16 @@ typedef struct {
   const GRX_Allocator * allocator;
   size_t captures;       ///< Capture slots: twice the group count plus two.
   size_t registers;      ///< Progress registers.
+  /**
+   * Where the shadow spans begin in `slots`, or 0 when there are none.
+   *
+   * GRX_PROGRAM_SHADOW_CAPTURES: the span each group had when it last
+   * *closed*, which is what a backreference to a group that is still open
+   * reads. Indices run parallel to the capture slots, so group N's pair is
+   * at `shadow + N * 2`.
+   */
+  size_t shadow;
+  size_t slot_count;     ///< Captures, registers and shadows together.
   size_t * slots;        ///< Captures, then registers.
   Frame * stack;
   size_t depth;          ///< Frames in use.
@@ -354,7 +364,7 @@ static int call_reserve(Backtrack * bt, size_t wanted) {
   bt->call_group = call_group;
 
   size_t * call_slots = gcu_allocator_realloc(bt->allocator, bt->call_slots,
-      capacity * bt->captures * sizeof(size_t));
+      capacity * bt->slot_count * sizeof(size_t));
   if (!call_slots) {
     bt->failure = GRX_ERR_OOM;
     return 0;
@@ -480,11 +490,57 @@ static int find_mark(const Backtrack * bt, uint32_t index, size_t * out_position
 
 /** Record a slot's old value so that backtracking past this point restores it. */
 static int save_slot(Backtrack * bt, size_t index) {
-  if (index >= bt->captures + bt->registers) {
+  if (index >= bt->slot_count) {
     return 1;
   }
-  FrameKind kind = index < bt->captures ? FRAME_CAPTURE : FRAME_REGISTER;
+  // A shadow span is a capture as far as undoing goes: it is what a
+  // backreference reads, so a path that is abandoned must not leave it
+  // behind. A register is the loop's own bookkeeping.
+  FrameKind kind = (index >= bt->captures && index < bt->captures
+      + bt->registers) ? FRAME_REGISTER : FRAME_CAPTURE;
   return push(bt, kind, (uint32_t)index, bt->slots[index]);
+}
+
+/**
+ * Fix a group's shadow span, if this SAVE is the one that closes it.
+ *
+ * Which of a group's two SAVEs closes it depends on which way the
+ * instructions run. Forward the odd slot is written second; inside a reverse
+ * lookbehind body the group writes its *end* first, because that is the
+ * boundary its body reaches first, and the even slot is the one that closes
+ * it. Keying on "odd" alone got that wrong, and `(?<=([abc]+)).\1` against
+ * "aaa" is where the ECMAScript corpus said so.
+ */
+static int shadow_close(Backtrack * bt, size_t slot, int reverse) {
+  if (!bt->shadow || slot >= bt->captures) {
+    return 1;
+  }
+  int closes = reverse ? !(slot & 1u) : (int)(slot & 1u);
+  if (!closes) {
+    return 1;
+  }
+
+  size_t live = slot & ~(size_t)1u;
+  size_t index = bt->shadow + live;
+  if (!save_slot(bt, index) || !save_slot(bt, index + 1)) {
+    return 0;
+  }
+  bt->slots[index] = bt->slots[live];
+  bt->slots[index + 1] = bt->slots[live + 1];
+  return 1;
+}
+
+/** Clear one group's shadow span alongside its live one. */
+static int shadow_clear(Backtrack * bt, size_t slot) {
+  if (!bt->shadow || slot >= bt->captures) {
+    return 1;
+  }
+  size_t index = bt->shadow + slot;
+  if (!save_slot(bt, index)) {
+    return 0;
+  }
+  bt->slots[index] = GRX_NPOS;
+  return 1;
 }
 
 /**
@@ -770,7 +826,17 @@ static int backref_matches(const Backtrack * bt, const GRX_Inst * inst,
   size_t end_slot = start_slot + 1;
   *out_width = 0;
 
-  if (end_slot >= bt->captures || bt->slots[start_slot] == GRX_NPOS
+  if (end_slot >= bt->captures) {
+    return inst->mode == GRX_BACKREF_UNSET_EMPTY;
+  }
+  if (bt->shadow) {
+    // The span the group last closed with, which is the live one unless the
+    // group is open right now. `^(a\1?){4}$` is the case that needs it.
+    start_slot += bt->shadow;
+    end_slot += bt->shadow;
+  }
+
+  if (bt->slots[start_slot] == GRX_NPOS
       || bt->slots[end_slot] == GRX_NPOS) {
     // The group did not participate. Which of two things that means is the
     // dialect's answer, carried here as a mode: ECMAScript matches the empty
@@ -900,8 +966,13 @@ static int return_from_call(
   }
 
   size_t depth = bt->call_depth - 1;
-  const size_t * saved = bt->call_slots + depth * bt->captures;
-  for (size_t i = 0; i < bt->captures; i++) {
+  const size_t * saved = bt->call_slots + depth * bt->slot_count;
+  for (size_t i = 0; i < bt->slot_count; i++) {
+    if (i >= bt->captures && i < bt->captures + bt->registers) {
+      // A progress register is the loop's own bookkeeping and belongs to
+      // whoever is running the loop, not to the call that interrupted it.
+      continue;
+    }
     if (bt->slots[i] == saved[i]) {
       continue;
     }
@@ -1098,12 +1169,18 @@ static int run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
         if (inst->x < bt->captures) {
           bt->slots[inst->x] = position;
         }
+        if (!shadow_close(bt, inst->x, reverse)) {
+          return 0;
+        }
         pc++;
         continue;
 
       case GRX_OP_RESET:
         for (uint32_t slot = inst->x;
             slot < inst->y && slot < bt->captures; slot++) {
+          if (!shadow_clear(bt, slot)) {
+            return 0;
+          }
           if (!save_slot(bt, slot)) {
             return 0;
           }
@@ -1156,7 +1233,9 @@ static int run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
         size_t first = inst->y;
         if (first + 1 < bt->captures && bt->slots[first] != GRX_NPOS
             && bt->slots[first] < began) {
-          if (!save_slot(bt, first) || !save_slot(bt, first + 1)) {
+          if (!save_slot(bt, first) || !save_slot(bt, first + 1)
+              || !shadow_clear(bt, first)
+              || !shadow_clear(bt, first + 1)) {
             return 0;
           }
           bt->slots[first] = GRX_NPOS;
@@ -1596,8 +1675,8 @@ static int run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
         // which `(?(R1))` needs and nothing else records.
         bt->call_return[bt->call_depth] = pc + 1;
         bt->call_group[bt->call_depth] = inst->y;
-        memcpy(bt->call_slots + bt->call_depth * bt->captures, bt->slots,
-            bt->captures * sizeof(size_t));
+        memcpy(bt->call_slots + bt->call_depth * bt->slot_count, bt->slots,
+            bt->slot_count * sizeof(size_t));
         bt->call_depth++;
         pc = inst->x;
         continue;
@@ -1646,6 +1725,8 @@ GRX_Result grx_exec_backtrack(
     .allocator = request->regex->allocator,
     .captures = 2 * (request->regex->capture_count + 1),
     .registers = program->register_count,
+    .shadow = 0,
+    .slot_count = 0,
     .slots = NULL,
     .stack = NULL,
     .depth = 0,
@@ -1677,8 +1758,16 @@ GRX_Result grx_exec_backtrack(
     bt.allocator = grx_allocator_default();
   }
 
+  // The shadow spans sit after the registers, and only for a program that
+  // has a backreference to read them - see GRX_PROGRAM_SHADOW_CAPTURES.
+  bt.slot_count = bt.captures + bt.registers;
+  if (program->flags & GRX_PROGRAM_SHADOW_CAPTURES) {
+    bt.shadow = bt.slot_count;
+    bt.slot_count += bt.captures;
+  }
+
   bt.slots = gcu_allocator_malloc(
-      bt.allocator, (bt.captures + bt.registers) * sizeof(size_t));
+      bt.allocator, bt.slot_count * sizeof(size_t));
   if (!bt.slots) {
     return GRX_ERR_OOM;
   }
@@ -1719,7 +1808,7 @@ GRX_Result grx_exec_backtrack(
   GRX_Result result = GRX_OK;
   size_t start = request->start;
   for (;;) {
-    for (size_t i = 0; i < bt.captures + bt.registers; i++) {
+    for (size_t i = 0; i < bt.slot_count; i++) {
       bt.slots[i] = GRX_NPOS;
     }
     bt.depth = 0;
