@@ -1163,6 +1163,54 @@ TEST(Perl, ANonAtomicLookaroundCanBeReEntered) {
   EXPECT_EQ(compile_result("(?(*napla:xx)bc)"), GRX_ERR_SYNTAX);
 }
 
+TEST(Perl, PerlsBoundTypesAreReadAndRefusedRatherThanMisread) {
+  // `\b{wb}` is Perl's, and only Perl's: pcre2test compiles it as a word
+  // boundary followed by four ordinary characters. This library did the same
+  // for both until it was asked, which is a wrong answer wearing a right
+  // one's clothes - the four bound types are UAX #29's break algorithms and
+  // none of their tables is generated here.
+  for (const char * spelling : {"\\b{wb}", "\\b{ wb }", "\\B{gcb}",
+           "\\b{sb}", "\\b{lb}"}) {
+    EXPECT_EQ(compile_result(spelling, GRX_SYNTAX_PERL), GRX_ERR_UNSUPPORTED)
+        << spelling;
+    EXPECT_EQ(compile_result(spelling, GRX_SYNTAX_PCRE), GRX_OK) << spelling;
+  }
+
+  // An unknown one is a syntax error, not an unimplemented construct, and
+  // `\b{3}` is one of those rather than a quantifier - which is where the
+  // two dialects part, because pcre2test reads it as a quantifier on an
+  // assertion and refuses it for that instead.
+  EXPECT_EQ(compile_result("\\b{nosuch}", GRX_SYNTAX_PERL), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("\\b{}", GRX_SYNTAX_PERL), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("\\b{3}", GRX_SYNTAX_PERL), GRX_ERR_SYNTAX);
+
+  // A brace that is not a bound at all leaves the boundary alone.
+  EXPECT_TRUE(search("\\bx", "x", GRX_SYNTAX_PERL).matched);
+}
+
+TEST(Perl, ABranchResetGivesOneNumberOneName) {
+  // pcre2test: "different names for subpatterns of the same number are not
+  // allowed". The branches of `(?|...)` share their numbering, so naming the
+  // same group two things asks for something a name cannot be.
+  EXPECT_EQ(compile_result("(?|(?<a>A)|(?<b>B))"), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("(?|(?<a>A)(?<b>x)|(?<b>B)(?<a>y))"),
+      GRX_ERR_SYNTAX);
+
+  // The same name twice is what a branch reset is for, and a branch that
+  // leaves the group unnamed is no conflict either.
+  EXPECT_EQ(compile_result("(?|(?<a>A)|(?<a>B))"), GRX_OK);
+  EXPECT_EQ(compile_result("(?|(?<a>A)|(B))"), GRX_OK);
+  EXPECT_EQ(compile_result("(?|(A)|(?<b>B))"), GRX_OK);
+
+  // Outside a branch reset the numbers differ, so the names may too.
+  EXPECT_EQ(compile_result("(?<a>A)|(?<b>B)"), GRX_OK);
+
+  // Perl's rule is the other one: it compiles this and lets each name mean
+  // the branch it was written in, which is a different model of what a name
+  // is and not one this library has.
+  EXPECT_EQ(compile_result("(?|(?<a>A)|(?<b>B))", GRX_SYNTAX_PERL), GRX_OK);
+}
+
 int main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

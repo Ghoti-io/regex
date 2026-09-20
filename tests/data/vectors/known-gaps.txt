@@ -17,7 +17,6 @@
 # that begins "not yet classified" is one nobody has looked at, and is meant
 # to be read as the admission it is.
 pcre		(?(*script_run:xxx)zzz)		`(*script_run:`: refused, it constrains the body and a group does not
-pcre		(?|(?<a>A)|(?<b>B))		branch reset: the numbering is shared, and the names and references inside one are not checked against it yet
 pcre		(?|([ab]))...(?<=\\1)z		branch reset: the numbering is shared, and the names and references inside one are not checked against it yet
 pcre		(a)(?(DEFINE)(b))(?2){0,1999}?(?2)		a repeat of a subroutine call: the reference compiles one copy and this library expands it past max_program_size
 pcre		(a)(?2){0,1999}?(b)		a repeat of a subroutine call: the reference compiles one copy and this library expands it past max_program_size
@@ -27,18 +26,18 @@ pcre		\\[()]{65535}()		a repeat count the reference folds and this library expan
 pcre		\\[()]{65535}(?<A>)		a repeat count the reference folds and this library expands
 pcre		z{65536}		a repeat count above 65535: the reference calls it a syntax error and this library a limit
 pcre	J	(?<A>[ab])...(?<=\\k'A')(?<A>)z		a backreference to a duplicated name inside a lookbehind: the reference will not bound one and this library bounds it by the first group of that name
-perl		(((aa){2})+)	aaaaaaaaaa	a capture an iteration set before failing: Perl keeps it, this library and PCRE2 discard it
-perl		(((a{2}){2})+)	aaaaaaaaaa	a capture an iteration set before failing: Perl keeps it, this library and PCRE2 discard it
-perl		((?(1)aa|b))+	baaaa	a conditional whose test and the capture-reset rule disagree
-perl		((?(1)a|b))+	baaa	a conditional whose test and the capture-reset rule disagree
+perl		(((aa){2})+)	aaaaaaaaaa	Perl's capture state after a failed attempt: `((a)|b)+` against "ab" reports group 2 unset in Perl and "a" in PCRE2, and the rule behind that is not one this library can state - see the four probes in documentation/dialects.md section 5.5
+perl		(((a{2}){2})+)	aaaaaaaaaa	Perl's capture state after a failed attempt: `((a)|b)+` against "ab" reports group 2 unset in Perl and "a" in PCRE2, and the rule behind that is not one this library can state - see the four probes in documentation/dialects.md section 5.5
+perl		((?(1)aa|b))+	baaaa	Perl's capture state after a failed attempt: a conditional testing a group a later iteration entered and failed - see documentation/dialects.md section 5.5
+perl		((?(1)a|b))+	baaa	Perl's capture state after a failed attempt: a conditional testing a group a later iteration entered and failed - see documentation/dialects.md section 5.5
 perl		((?|(?<a>a)(?-1)|(?<b>b)(?-1)|(?<c>c)(?-1)))	bb 	branch reset: the numbering is shared, and the names and references inside one are not checked against it yet
 perl		((?|(?<a>a)(?-1)|(?<b>b)(?-1)|(?<c>c)(?-1)))	cc 	branch reset: the numbering is shared, and the names and references inside one are not checked against it yet
-perl		((\\3|b)\\2(a)){2,}	bbaababbabaaaaabbaaaabba	a backreference or a call whose target is written after it
+perl		((\\3|b)\\2(a)){2,}	bbaababbabaaaaabbaaaabba	a backreference to the group it is written inside: Perl reads what the previous iteration captured and this library reads nothing - see documentation/dialects.md section 5.5
 perl		((def){37,17})?ABC	ABC	a quantifier whose minimum is above its maximum: Perl compiles it as a group that never matches
-perl		()?(?(1)a|b)	a	a conditional whose test and the capture-reset rule disagree
-perl		(.*?)a(?!(a+)b\\2c)	baaabaac	a capture set inside a failed negative lookahead: Perl keeps it, this library and PCRE2 discard it
-perl		(?(DEFINE)(?<a>(?:[ab]|[cd](*ACCEPT)|[ef])g))(?&a)(?&a)	agcq	a conditional whose test and the capture-reset rule disagree
-perl		(?(DEFINE)(?<a>(?:[ab]|[cd](*ACCEPT)|[ef])g))(?&a)(?&a)	cc	a conditional whose test and the capture-reset rule disagree
+perl		()?(?(1)a|b)	a	Perl's capture state after a failed attempt: a conditional testing a group a later iteration entered and failed - see documentation/dialects.md section 5.5
+perl		(.*?)a(?!(a+)b\\2c)	baaabaac	Perl's capture state after a failed attempt: `((a)|b)+` against "ab" reports group 2 unset in Perl and "a" in PCRE2, and the rule behind that is not one this library can state - see the four probes in documentation/dialects.md section 5.5
+perl		(?(DEFINE)(?<a>(?:[ab]|[cd](*ACCEPT)|[ef])g))(?&a)(?&a)	agcq	Perl's capture state after a failed attempt: a conditional testing a group a later iteration entered and failed - see documentation/dialects.md section 5.5
+perl		(?(DEFINE)(?<a>(?:[ab]|[cd](*ACCEPT)|[ef])g))(?&a)(?&a)	cc	Perl's capture state after a failed attempt: a conditional testing a group a later iteration entered and failed - see documentation/dialects.md section 5.5
 perl		(?<!([cd](*ACCEPT)|x)gggg)blrph	cblrph	`(*ACCEPT)` inside a lookbehind: the reference ends the assertion there, and this library runs the body in reverse, where the verb accepts at the wrong end
 perl		(?<!([cd](*ACCEPT)|x)gggg)blrph	dblrph	`(*ACCEPT)` inside a lookbehind: the reference ends the assertion there, and this library runs the body in reverse, where the verb accepts at the wrong end
 perl		(?<=([cd](*ACCEPT)|x)gggg)blrph	cblrph	`(*ACCEPT)` inside a lookbehind: the reference ends the assertion there, and this library runs the body in reverse, where the verb accepts at the wrong end
@@ -80,8 +79,8 @@ perl		.[X](.+)+[X][X]	bbbbXXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backt
 perl		.[X](.+)+[X][X]	bbbbXcXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backtrack on the backtracker alone; the Pike and bit-state engines both answer it, and agree with the reference
 perl		.[X][X](.+)+[X]	bbbbXXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backtrack on the backtracker alone; the Pike and bit-state engines both answer it, and agree with the reference
 perl		.[X][X](.+)+[X]	bbbbXXcXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	exhausts max_backtrack on the backtracker alone; the Pike and bit-state engines both answer it, and agree with the reference
-perl		2(]*)?$\\1	2	a backreference or a call whose target is written after it
-perl		X(?!b+(?!(c+)*(?!(c+)*d))).*X	aXbbbbbbbcccccccccccccaaaX	a capture set inside a failed negative lookahead: Perl keeps it, this library and PCRE2 discard it
+perl		2(]*)?$\\1	2	a backreference to the group it is written inside: Perl reads what the previous iteration captured and this library reads nothing - see documentation/dialects.md section 5.5
+perl		X(?!b+(?!(c+)*(?!(c+)*d))).*X	aXbbbbbbbcccccccccccccaaaX	Perl's capture state after a failed attempt: `((a)|b)+` against "ab" reports group 2 unset in Perl and "a" in PCRE2, and the rule behind that is not one this library can state - see the four probes in documentation/dialects.md section 5.5
 perl		\\B{ gcb }		`\b{wb}` and kin: Perl's Unicode boundary escapes, not implemented
 perl		\\B{ lb }		`\b{wb}` and kin: Perl's Unicode boundary escapes, not implemented
 perl		\\B{ sb }		`\b{wb}` and kin: Perl's Unicode boundary escapes, not implemented
@@ -90,14 +89,22 @@ perl		\\B{gcb}		`\b{wb}` and kin: Perl's Unicode boundary escapes, not implement
 perl		\\B{lb}		`\b{wb}` and kin: Perl's Unicode boundary escapes, not implemented
 perl		\\B{sb}		`\b{wb}` and kin: Perl's Unicode boundary escapes, not implemented
 perl		\\B{wb}		`\b{wb}` and kin: Perl's Unicode boundary escapes, not implemented
+perl		\\b{ gcb }		`\b{wb}` and kin: Perl's Unicode boundary escapes, not implemented
+perl		\\b{ lb }		`\b{wb}` and kin: Perl's Unicode boundary escapes, not implemented
+perl		\\b{ sb }		`\b{wb}` and kin: Perl's Unicode boundary escapes, not implemented
+perl		\\b{ wb }		`\b{wb}` and kin: Perl's Unicode boundary escapes, not implemented
+perl		\\b{gcb}		`\b{wb}` and kin: Perl's Unicode boundary escapes, not implemented
+perl		\\b{lb}		`\b{wb}` and kin: Perl's Unicode boundary escapes, not implemented
+perl		\\b{sb}		`\b{wb}` and kin: Perl's Unicode boundary escapes, not implemented
+perl		\\b{wb}		`\b{wb}` and kin: Perl's Unicode boundary escapes, not implemented
 perl		\\p{nv=-0}	٠	`\p{nv=...}`: the Numeric_Value property, which the generated tables do not carry
-perl		^(.\\1?)(?1)$	aba	a backreference or a call whose target is written after it
-perl		^(a(?(1)\\1)){4}$	aaaaaaaaaa	a conditional whose test and the capture-reset rule disagree
-perl		^(a*?)(?!(aa|aaaa)*$)	aaaaaaaaaaaaaaaaaaaa	a capture set inside a failed negative lookahead: Perl keeps it, this library and PCRE2 discard it
-perl		^(a*?)(?!(aa|aaaa)*$)(?=a\\z)	aaaaaaaa	a capture set inside a failed negative lookahead: Perl keeps it, this library and PCRE2 discard it
-perl		^(a*?)(?!(a{6}|a{5})*$)	aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	a capture set inside a failed negative lookahead: Perl keeps it, this library and PCRE2 discard it
-perl		^(a\\1?){4}$	aaaaaa	a backreference or a call whose target is written after it
-perl		^(a\\1?){4}$	aaaaaaaaaa	a backreference or a call whose target is written after it
+perl		^(.\\1?)(?1)$	aba	a backreference to the group it is written inside: Perl reads what the previous iteration captured and this library reads nothing - see documentation/dialects.md section 5.5
+perl		^(a(?(1)\\1)){4}$	aaaaaaaaaa	Perl's capture state after a failed attempt: a conditional testing a group a later iteration entered and failed - see documentation/dialects.md section 5.5
+perl		^(a*?)(?!(aa|aaaa)*$)	aaaaaaaaaaaaaaaaaaaa	Perl's capture state after a failed attempt: `((a)|b)+` against "ab" reports group 2 unset in Perl and "a" in PCRE2, and the rule behind that is not one this library can state - see the four probes in documentation/dialects.md section 5.5
+perl		^(a*?)(?!(aa|aaaa)*$)(?=a\\z)	aaaaaaaa	Perl's capture state after a failed attempt: `((a)|b)+` against "ab" reports group 2 unset in Perl and "a" in PCRE2, and the rule behind that is not one this library can state - see the four probes in documentation/dialects.md section 5.5
+perl		^(a*?)(?!(a{6}|a{5})*$)	aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	Perl's capture state after a failed attempt: `((a)|b)+` against "ab" reports group 2 unset in Perl and "a" in PCRE2, and the rule behind that is not one this library can state - see the four probes in documentation/dialects.md section 5.5
+perl		^(a\\1?){4}$	aaaaaa	a backreference to the group it is written inside: Perl reads what the previous iteration captured and this library reads nothing - see documentation/dialects.md section 5.5
+perl		^(a\\1?){4}$	aaaaaaaaaa	a backreference to the group it is written inside: Perl reads what the previous iteration captured and this library reads nothing - see documentation/dialects.md section 5.5
 perl		a?\\X	aĀ	`\X` grapheme cluster: the break rules are plan.md WP-12 and are not generated yet
 perl		m?^xy\\?$?	xy?	importer: a re_tests record whose pattern carries its own `m?...?` delimiters
 perl	i	^(?d:\\xdf|_)*_	ſſ_	Perl's charset modifiers `a`, `d`, `l`, `u`: this library has one character-set semantics, not five
@@ -110,4 +117,4 @@ perl	i	ssst	ßﬅ	full case folding: implemented as simple folding, a deviation 
 perl	i	st	ßﬅ	full case folding: implemented as simple folding, a deviation recorded in design.md section 10
 perl	iu	\\xdf\\xdf	abcdefssss	full case folding: implemented as simple folding, a deviation recorded in design.md section 10
 perl	iu	s\\xDF	ßs	full case folding: implemented as simple folding, a deviation recorded in design.md section 10
-perl	x	^ (a|\\3(?1)\\2|(?2)) ((b|c)(?4)?) (?1) (d(?1)) $	abbcdcabbda	a backreference or a call whose target is written after it
+perl	x	^ (a|\\3(?1)\\2|(?2)) ((b|c)(?4)?) (?1) (d(?1)) $	abbcdcabbda	a backreference to the group it is written inside: Perl reads what the previous iteration captured and this library reads nothing - see documentation/dialects.md section 5.5

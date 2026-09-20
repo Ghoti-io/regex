@@ -446,6 +446,72 @@ static GRX_Result read_property(GRX_Parser * parser, int negated, size_t start,
   return GRX_OK;
 }
 
+/** The bound types `\b{...}` names, from perlrebackslash. */
+static const char * const bound_type_names[] = {
+  "wb", "sb", "lb", "gcb", NULL
+};
+
+/**
+ * Read Perl's `\b{...}`, the `b` or `B` already consumed.
+ *
+ * Perl's, and only Perl's: pcre2test compiles `/\b{wb}/` as a word boundary
+ * followed by four ordinary characters, which is what this library did for
+ * both until it was asked. The four bound types are UAX #29's break
+ * algorithms, and none of their tables is generated here - so the spelling is
+ * read and refused, rather than read as something else.
+ *
+ * `out_handled` is cleared when this is not the `\b{...}` form at all, so
+ * that the caller carries on with the ordinary boundary. A sentinel result
+ * cannot say that: grx_parse_fail() returns GRX_ERR_SYNTAX too, and reading
+ * "not a bound" out of "an unknown bound type" let `\b{nosuch}` compile.
+ */
+static GRX_Result read_bound_type(
+    GRX_Parser * parser, size_t start, int * out_handled) {
+  *out_handled = 0;
+  if (flavour(parser) != FLAVOUR_PERL || byte_at(parser, 0) != '{') {
+    return GRX_OK;
+  }
+
+  size_t scan = 1;
+  while (byte_at(parser, scan) == ' ' || byte_at(parser, scan) == '\t') {
+    scan++;
+  }
+  size_t first = scan;
+  while (byte_at(parser, scan) && byte_at(parser, scan) != '}'
+      && byte_at(parser, scan) != ' ' && byte_at(parser, scan) != '\t') {
+    scan++;
+  }
+  size_t length = scan - first;
+  while (byte_at(parser, scan) == ' ' || byte_at(parser, scan) == '\t') {
+    scan++;
+  }
+  if (byte_at(parser, scan) != '}') {
+    // Not a bound at all - `\b` followed by a brace that is something else.
+    return GRX_OK;
+  }
+
+  *out_handled = 1;
+  const char * name = parser->text + parser->position + first;
+  parser->position += scan + 1;
+  if (!length) {
+    // perl: "Empty \b{} in regex".
+    return grx_parse_fail(
+        parser, GRX_DIAG_INVALID_ESCAPE, start, parser->position - start);
+  }
+  for (size_t i = 0; bound_type_names[i]; i++) {
+    if (strlen(bound_type_names[i]) == length
+        && memcmp(bound_type_names[i], name, length) == 0) {
+      return grx_parse_fail(parser, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, start,
+          parser->position - start);
+    }
+  }
+
+  // perl: "'nosuch' is an unknown bound type in regex". `\b{3}` is one of
+  // these and not a quantifier, which is where Perl and PCRE2 part.
+  return grx_parse_fail(
+      parser, GRX_DIAG_INVALID_ESCAPE, start, parser->position - start);
+}
+
 /**
  * Whether the `{` at an offset from here could be a quantifier's.
  *
@@ -797,6 +863,13 @@ static GRX_Result read_escape(GRX_Parser * parser, int in_class, Escape * out) {
   switch (c) {
     case 'b':
       parser->position++;
+      if (!in_class) {
+        int handled = 0;
+        GRX_Result bound = read_bound_type(parser, start, &handled);
+        if (handled) {
+          return bound;
+        }
+      }
       // The one escape whose meaning depends on where it is: a word boundary
       // outside a class and the backspace character inside one. Both
       // dialects, and both references say so in the same sentence.
@@ -815,6 +888,13 @@ static GRX_Result read_escape(GRX_Parser * parser, int in_class, Escape * out) {
         return grx_parse_fail(parser, GRX_DIAG_INVALID_CLASS_ITEM, start, 2);
       }
       parser->position++;
+      if (c == 'B') {
+        int handled = 0;
+        GRX_Result bound = read_bound_type(parser, start, &handled);
+        if (handled) {
+          return bound;
+        }
+      }
       out->kind = ESC_ANCHOR;
       out->anchor = c == 'B'   ? GRX_ANCHOR_NOT_WORD_BOUNDARY
           : c == 'A'           ? GRX_ANCHOR_START_SUBJECT
@@ -2480,9 +2560,56 @@ static GRX_Result read_conditional_body(GRX_Parser * parser, uint32_t node) {
  * pattern ends with is the largest any branch reached - which is why the
  * running total is saved, reset per branch, and raised rather than summed.
  */
+/**
+ * Refuse two groups of the same number with two different names.
+ *
+ * pcre2test: "different names for subpatterns of the same number are not
+ * allowed". Inside `(?|...)` the branches share their numbering, so
+ * `(?|(?<a>A)|(?<b>B))` asks for one group to be called two things -
+ * `(?|(?<a>A)|(?<a>B))` is fine, and so is a branch that leaves it unnamed.
+ *
+ * Checked over the nodes the branch reset created rather than as they are
+ * created, because a name is only a conflict once a later branch has
+ * produced the same number, and the parser reaches that at the `|`.
+ *
+ * PCRE2's rule alone. Perl compiles `(?|(?<a>a)|(?<b>b))` and lets each name
+ * mean the branch it was written in, which is a different model of what a
+ * name is and not one this library has.
+ */
+static GRX_Result check_branch_reset_names(GRX_Parser * parser, size_t first) {
+  if (flavour(parser) != FLAVOUR_PCRE) {
+    return GRX_OK;
+  }
+
+  for (size_t i = first; i < parser->pattern->nodes.count; i++) {
+    const GRX_Node * outer = grx_pattern_node(parser->pattern, (uint32_t)i);
+    if (!outer || outer->kind != GRX_NODE_GROUP
+        || !(outer->flags & GRX_NODE_NAMED)) {
+      continue;
+    }
+    const char * name = grx_pattern_name(parser->pattern, outer->b);
+    for (size_t j = first; j < i; j++) {
+      const GRX_Node * earlier
+          = grx_pattern_node(parser->pattern, (uint32_t)j);
+      if (!earlier || earlier->kind != GRX_NODE_GROUP
+          || !(earlier->flags & GRX_NODE_NAMED) || earlier->a != outer->a) {
+        continue;
+      }
+      const char * other = grx_pattern_name(parser->pattern, earlier->b);
+      if (name && other && strcmp(name, other) != 0) {
+        return grx_parse_fail(parser, GRX_DIAG_INVALID_GROUP_NAME,
+            outer->offset, outer->length);
+      }
+    }
+  }
+
+  return GRX_OK;
+}
+
 static GRX_Result read_branch_reset_body(GRX_Parser * parser, uint32_t node) {
   size_t base = parser->groups_opened;
   size_t highest = base;
+  size_t first_node = parser->pattern->nodes.count;
 
   // `(?|(?'a'x)|(?'a'y))` names one group twice because it *is* one group,
   // and pcre2test accepts it without `(?J)`. Set rather than checked around,
@@ -2510,7 +2637,7 @@ static GRX_Result read_branch_reset_body(GRX_Parser * parser, uint32_t node) {
   }
 
   parser->groups_opened = highest;
-  return GRX_OK;
+  return check_branch_reset_names(parser, first_node);
 }
 
 /**

@@ -250,6 +250,31 @@ so does `(?:(a)|b){2}` against `"ab"`. PCRE2 10.46 and Python 3.13 report
 empty-iteration axis - to the capture-reset axis as well, and the two are
 independent. `tests/data/probe/report.md` has the transcript.
 
+**Perl's rule is not RESET_EACH either.** The row above says Perl resets, on
+the strength of `((a)|b)+`. Four more patterns, asked of Perl 5.40, say that
+whatever Perl does, "captures inside the atom are cleared at the start of
+each iteration" is not it:
+
+| Pattern | Subject | Perl | ECMAScript |
+| --- | --- | --- | --- |
+| `^(a\1?){4}$` | `aaaaaa` | match, `$1` = `aa` | no match |
+| `^(\2?(a)){2}$` | `aaa` | match, `$1` = `aa` | no match |
+| `^((a)\|b\2?){2}$` | `aba` | **no match** | no match |
+| `^(b\2?\|(a)){2}$` | `aba` | match, `$1` = `ba` | no match |
+
+Row one needs the repeated group's own capture to survive into the next
+iteration; row two needs a group *inside* it to survive as well. Row three
+needs it not to - and rows three and four differ in nothing but the order of
+the alternatives, so what cleared the capture in row three was the branch
+that was *entered and failed*. The unrolled form disagrees too:
+`(?:(a)\|b)(?:(a)\|b)` against `ab` keeps `$1` = `"a"`, so whatever this is,
+it is not simply "a failed attempt clears what it touched".
+
+No single rule this page could write covers all four, and a rule nobody can
+state is a rule this library will not implement. The nineteen records in
+`tests/data/vectors/known-gaps.txt` that turn on it are named for the
+question rather than for an answer.
+
 ### 5.6 Backreferences to unset groups; forward and nested references
 
 | Axis | Value | Dialects |
