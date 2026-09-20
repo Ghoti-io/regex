@@ -54,8 +54,26 @@ SUBJECTS = [
 # version that introduced it, and the subject it shows up on, so that a later
 # Perl catching up is a matter of deleting a line and regenerating.
 #
+# That day has arrived and is a decision rather than a chore: perl 5.44.0 is
+# the current stable release and `lib/unicore/version` in it reads 17.0.0,
+# which is exactly the UCD these tables are generated from. Raising the pin
+# in tools/corpus/VERSIONS would retire the first three entries here. It
+# would also re-import t/re/re_tests from a different release, which is why
+# it is not done in passing.
+#
 # The last entry is not a version difference but a defect in the oracle, and
-# it is written down rather than worked around silently.
+# it is written down rather than worked around silently. Searched for on
+# 2026-09-20 and not found: the perl5 issue tracker has nothing matching
+# `\b{lb}`, nothing matching the other bound types that is this, and nothing
+# about the start-position optimiser skipping a valid position. Not found is
+# not the same as not reported, and the reproducer is small enough to check
+# against a newer perl before concluding anything:
+#
+#     perl -e 'print "x" =~ /\b{lb}/      ? "match" : "NO MATCH", "\n"'  # NO MATCH
+#     perl -e 'print "x" =~ /\b{lb}|(?!)/ ? "match" : "NO MATCH", "\n"'  # match
+#
+# `(?!)` never matches, so the two patterns cannot differ - and they do. The
+# engine has it right and the optimisation in front of it does not.
 EXCLUSIONS = [
     (("gcb", "g"), "\u0915\u094d\u0937",
      "GB9c, the Indic conjunct break, is Unicode 15.1 and Perl has 15.0"),
