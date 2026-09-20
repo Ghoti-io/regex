@@ -1678,25 +1678,61 @@ static GRX_Result lower_repeat(
   return attach(low, *out_node, inner);
 }
 
-/** Lower a lookaround, marking a lookbehind's body to run right to left. */
+/**
+ * Whether this lookbehind runs its body forwards from a candidate start.
+ *
+ * The dialect's own bound decides it, because the bound is what pays for it:
+ * a candidate-start loop tries every start the body's length allows, and
+ * only a dialect that caps the *variation* caps that loop
+ * (documentation/design.md section 3.5.2). ECMAScript's lookbehind is
+ * unbounded, so it keeps the reverse model, which costs what the body costs
+ * however far back the body reaches.
+ *
+ * A non-atomic lookbehind keeps the reverse model whatever the dialect says.
+ * It is inlined rather than run as a sub-match - that is the whole of what
+ * makes it non-atomic, since its backtrack points have to stay live in the
+ * caller - and a candidate-start loop has nowhere to put those.
+ *
+ * GRX_LOOKBEHIND_FIXED and GRX_LOOKBEHIND_FIXED_PER_BRANCH are not here
+ * because the two models cannot differ for a body of one length: there is
+ * exactly one candidate start, and both run the same body between the same
+ * two positions. Adding them would change nothing and check nothing.
+ */
+static int look_runs_forward(const Lowering * low, GRX_LookKind kind) {
+  return kind != GRX_LOOK_BEHIND_NON_ATOMIC
+      && low->profile.lookbehind == GRX_LOOKBEHIND_BOUNDED;
+}
+
+/** Lower a lookaround, choosing which way its body runs. */
 static GRX_Result lower_look(
     Lowering * low, const GRX_Node * node, uint32_t * out_node) {
   GRX_LookKind kind = (GRX_LookKind)node->a;
   int behind = kind == GRX_LOOK_BEHIND_POSITIVE
       || kind == GRX_LOOK_BEHIND_NEGATIVE
       || kind == GRX_LOOK_BEHIND_NON_ATOMIC;
+  int forward = behind && look_runs_forward(low, kind);
 
   GRX_Result result = add(low, GRX_IR_LOOK, node, out_node);
   if (result != GRX_OK) {
     return result;
   }
-  grx_ir_node(low->ir, *out_node)->mode = (uint8_t)kind;
+  GRX_IRNode * look = grx_ir_node(low->ir, *out_node);
+  look->mode = (uint8_t)kind;
+  if (forward) {
+    look->flags |= GRX_IR_LOOK_FORWARD;
+    // The span itself is not knowable yet - measuring a subtree is the
+    // analysis pass's job, and the subtree does not exist until below. What
+    // is set here is the claim that it will be measured.
+    look->a = GRX_INDEX_NONE;
+  }
 
-  // Inside a lookbehind every node is marked reverse, and its instructions
-  // step backwards. That is the whole of what makes a lookbehind of any
-  // length work without a second engine (design.md section 3.5.2).
+  // Inside a reverse lookbehind every node is marked reverse, and its
+  // instructions step backwards. That is what lets a lookbehind of any
+  // length be an ordinary sub-program (design.md section 3.5.2). A forward
+  // one leaves the body alone: it is matched left to right like any other,
+  // and it is the *start* the engine has to choose.
   int outer = low->reverse;
-  if (behind) {
+  if (behind && !forward) {
     low->reverse = 1;
   }
 

@@ -213,10 +213,30 @@ other dialect: `LEFTMOST_FIRST`.
 | `BOUNDED` | finite maximum length | Perl 5.30+ (experimental, 255), PCRE2 10.43+ (`max_varlookbehind`, default 255), Java |
 | `UNBOUNDED` | any length; matched right to left | ECMAScript, .NET, Vim |
 
-The engine implements `UNBOUNDED` ([design.md](design.md) §3.5.2); the
-profile value is a *parse-time* restriction that makes the library reject
-what the reference would reject, and `max_lookbehind_length` caps the
-bounded forms.
+This axis does two things, and the second was added when the first turned out
+not to be enough. It is still the *parse-time* restriction that makes the
+library reject what the reference would reject — `max_lookbehind_length` caps
+the bounded forms on top of it — and it now also chooses **which of the two
+lookbehind models** runs the body ([design.md](design.md) §3.5.2):
+
+- `UNBOUNDED` runs the body backwards from the current position, which costs
+  what the body costs however far back it reaches. ECMAScript, .NET.
+- `BOUNDED` matches the body forwards from each start its length allows,
+  furthest back first, and requires it to arrive exactly where the assertion
+  stands. Perl, PCRE2. Affordable *because* the dialect bounds the variation:
+  the candidate starts number `max - min + 1`, which that bound caps at 256.
+
+The two are not interchangeable. Which candidate wins, what a capture inside
+a variable-length body holds, and whether `(*ACCEPT)` has anywhere to stop
+all follow from the model, and Perl and PCRE2 answer each of them the way
+their model does — seven records of the corpus turn on it. `FIXED` and
+`FIXED_PER_ALTERNATIVE` are not distinguished here because a body of one
+length has one candidate start: both models run the same body between the
+same two positions, so there is nothing for the axis to choose between. A
+non-atomic lookbehind keeps the reverse model in every dialect, because it is
+inlined rather than run as a sub-match — that is what makes it non-atomic —
+and a candidate-start loop has nowhere to put the backtrack points it has to
+leave live.
 
 ### 5.5 Empty iterations and captures in loops
 

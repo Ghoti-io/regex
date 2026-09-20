@@ -721,6 +721,21 @@ This is the corpus that sets `max_steps` and `max_backtrack`
 prefilters of Phase 8, which must not make a pathological pair pathological
 again by bypassing the engine that handled it.
 
+**What the forward lookbehind costs.** The model Perl and PCRE2 use
+([design.md](design.md) §3.5.2) is the more expensive of the two per
+assertion, and the cost is worth stating rather than discovering. Measured
+against 20,000 candidate positions, `(?<=a{200})b` costs the same under both
+models — a body of one length has one candidate start whatever its length —
+and `(?<=(a|aa|…|a×59))b` costs about ten times more forwards than
+backwards, because the assertion has to find the branch that spans the
+distance where running backwards takes the first branch that fits. The length
+guard is what keeps that a factor of ten rather than a factor of a hundred:
+without it the same pattern exhausts `max_steps`. The bound is the dialect's
+own 255 bytes of variation, so the factor is a constant and not a second pass
+over the subject — but it is a large constant, and a prefilter (Phase 8) is
+what would stop the assertion being reached at most of those positions at
+all.
+
 ## 10.2 The segmentation conformance files
 
 `tests/unit/test_break.cpp` runs the Unicode Consortium's own data for the

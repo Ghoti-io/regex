@@ -145,6 +145,35 @@ typedef enum {
 #define GRX_IR_BRANCH_RESET GRX_BIT(3)
 
 /**
+ * @brief LOOK: a lookbehind whose body runs forwards from a candidate start.
+ *
+ * The second of the two lookbehind models (documentation/design.md section
+ * 3.5.2). GRX_IR_REVERSE runs the body right to left from the current
+ * position, which is what ECMA-262 describes and what lets a lookbehind of
+ * *any* length cost what its body costs. This one instead tries each start
+ * the body's length allows, furthest back first, and requires the body to
+ * arrive exactly where the assertion stands.
+ *
+ * The two differ in three observable places, all of them in the corpus:
+ * which candidate a variable-length body prefers - Perl takes the longest,
+ * where running the body backwards takes whichever the *body* prefers - what
+ * a capture inside such a body holds, and where `(*ACCEPT)` can end it,
+ * since running forwards there is a place for the verb to stop.
+ *
+ * It is affordable only because a dialect that wants it also bounds the
+ * body's variation: GRX_IR::max_variable_lookbehind caps the number of
+ * candidate starts at 256, so the assertion stays linear in the subject
+ * rather than becoming quadratic. That is why the model follows
+ * GRX_LookbehindLimit and is not a free choice.
+ *
+ * Set on the LOOK node; the body is *not* marked GRX_IR_REVERSE. `a` names
+ * the body's byte length in GRX_IR::look_spans, filled in by the analysis
+ * pass - which is the pass that measures a subtree, and the reason the field
+ * is empty until then.
+ */
+#define GRX_IR_LOOK_FORWARD GRX_BIT(4)
+
+/**
  * @brief One node of the intermediate representation.
  *
  * `a`, `b`, `mode`, `min` and `max` are the kind-specific payload:
@@ -160,7 +189,7 @@ typedef enum {
  * | CAPTURE | group number | name offset, or GRX_INDEX_NONE | - | one child |
  * | BACKREF | group number | - | - | `backref_unset`, CASELESS |
  * | ASSERT | class index for the line or word set, else GRX_INDEX_NONE | - | GRX_AssertKind | - |
- * | LOOK | - | - | GRX_LookKind | one child |
+ * | LOOK | length-span offset, when LOOK_FORWARD | - | GRX_LookKind | LOOK_FORWARD; one child |
  * | ATOMIC | - | - | - | one child |
  * | COND | group number | - | GRX_CondKind | HAS_ELSE; children |
  * | RECURSE | target group number | the definition's byte offset, or GRX_INDEX_NONE | - | - |
@@ -230,6 +259,22 @@ typedef struct GRX_IR {
    * a run's states without sorting.
    */
   GRX_Arena fold_runs;
+  /**
+   * How long the body of a GRX_IR_LOOK_FORWARD lookbehind can be, in bytes.
+   *
+   * Pairs - a minimum then a maximum - named by the LOOK node's `a`. The
+   * candidate starts the engine tries are exactly the positions those two
+   * allow, so this is not an optimisation: it is the assertion's definition
+   * under the forward model, and the bound that keeps it from scanning the
+   * whole subject.
+   *
+   * A table rather than the node's `a` and `b` because a length is a size_t
+   * and those are uint32_t. Truncating would be silent and wrong for
+   * `(?<=(?:a{65535}){65535})`, which is a body no subject can be long
+   * enough to match but a length the encoding still has to tell the truth
+   * about.
+   */
+  GRX_Arena look_spans;
   size_t capture_count;            ///< Capturing groups, excluding group 0.
   /**
    * How long a *variable*-length lookbehind body the dialect allows, or
@@ -383,6 +428,33 @@ typedef struct GRX_IRFoldEdge {
   uint32_t to;    ///< Position it arrives at; always greater than `from`.
   uint32_t class_index; ///< The class one character comes from.
 } GRX_IRFoldEdge;
+
+/**
+ * @brief Record how long a forward lookbehind's body can be.
+ *
+ * Appends; the analysis pass runs once over a tree, so a node is measured
+ * once and there is no offset to overwrite.
+ *
+ * @param ir The IR.
+ * @param out_offset Receives the pair's offset, for the node's `a`.
+ * @param min The body's shortest match, in bytes.
+ * @param max Its longest, or GRX_NPOS when unbounded.
+ * @return GRX_OK, GRX_ERR_OOM, or GRX_ERR_INVALID.
+ */
+GRX_Result grx_ir_look_span_set(
+    GRX_IR * ir, uint32_t * out_offset, size_t min, size_t max);
+
+/**
+ * @brief Read back a span recorded by grx_ir_look_span_set().
+ *
+ * @param ir The IR.
+ * @param offset The LOOK node's `a`.
+ * @param out_min Receives the minimum.
+ * @param out_max Receives the maximum.
+ * @return Non-zero when the offset named a span.
+ */
+int grx_ir_look_span(const GRX_IR * ir, uint32_t offset, size_t * out_min,
+    size_t * out_max);
 
 /**
  * @brief Begin a fold-run edge list, and report where it starts.

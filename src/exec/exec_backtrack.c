@@ -196,6 +196,23 @@ typedef struct {
   size_t call_depth;
   size_t call_capacity;
 
+  /**
+   * Where a sub-match's own MATCH must land, or GRX_NPOS for anywhere.
+   *
+   * Set only while a forward lookbehind's body runs. That model picks a
+   * start and matches the body left to right, so "the assertion holds" is
+   * not "the body matched" but "the body matched and arrived exactly here" -
+   * and the difference has to be inside run(), because a body that stops
+   * short has to keep backtracking for a longer way to reach the same place.
+   * `(?=foo)(?<=(|a|aa))` against "aafoo" is the case: the body prefers the
+   * empty branch, and the assertion needs the one that gets to the `f`.
+   *
+   * `(*ACCEPT)` deliberately does not consult it. The verb ends the
+   * assertion where it fires, which is the whole of what makes
+   * `(?<=([cd](*ACCEPT)|x)gggg)blrph` match "cblrph" in Perl.
+   */
+  size_t look_end;
+
   VerbStop verb_stop;    ///< What a control verb asked for, or VERB_NONE.
   size_t skip_to;        ///< Where `(*SKIP)` fired, for VERB_STOP_SKIP.
 
@@ -666,6 +683,22 @@ static int assertion_holds(
       return inst->mode == GRX_ASSERT_WORD_BOUNDARY ? boundary : !boundary;
     }
 
+    case GRX_ASSERT_LOOK_LENGTH: {
+      // How far is it to the end of this assertion, and can the alternative
+      // that follows span it? Outside a forward lookbehind body there is no
+      // end to measure to, and the guard holds rather than guessing - it is
+      // an optimisation, and one that is not applicable is not one that
+      // fails.
+      size_t min = 0;
+      size_t max = 0;
+      if (bt->look_end == GRX_NPOS || position > bt->look_end
+          || !grx_program_look_span(bt->program, inst->x, &min, &max)) {
+        return 1;
+      }
+      size_t remaining = bt->look_end - position;
+      return remaining >= min && remaining <= max;
+    }
+
     // The four segmentation boundaries. Each reads the subject itself, so
     // the instruction carries no class and the window is not consulted: a
     // boundary is a fact about the text, and `(*scs:` narrowing what may be
@@ -817,6 +850,94 @@ static int backref_matches(const Backtrack * bt, const GRX_Inst * inst,
  * about empty matches. Applying it to a body would make `(?=)` fail under
  * NOTEMPTY, which is a rule about the *result*, not about an assertion.
  */
+static int run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
+    int toplevel, size_t * out_end);
+
+/**
+ * Run a lookbehind's body forwards, from every start its length allows.
+ *
+ * The second of the two lookbehind models (documentation/design.md section
+ * 3.5.2), and the one Perl and PCRE2 use. The body is an ordinary left to
+ * right sub-program; what the assertion adds is the choice of where it
+ * begins and the requirement that it arrive exactly here.
+ *
+ * Furthest back first, which is the order the reference tries and the one
+ * that settles `(?=foo)(?<=(a??))` against "afoo": the body is lazy and
+ * would rather match nothing, but the *assertion* prefers the longest, so
+ * Perl reports group one as "a" and running the body in reverse reports it
+ * empty.
+ *
+ * The loop is bounded by `max - min`, not by how far back `max` reaches: a
+ * body of one length has one candidate however long it is. That bound is
+ * the dialect's - 255 bytes of variation for PCRE2 and Perl, checked at
+ * compile time - and it is what keeps an assertion from costing the subject.
+ *
+ * A start that falls inside a character is not filtered out. It does not
+ * need to be: UTF-8 decoding refuses a continuation byte in lead position,
+ * so such a start matches nothing it could have reached this position with,
+ * and skipping the arithmetic is what keeps the loop off the subject.
+ *
+ * @param bt The run.
+ * @param body The body's first instruction.
+ * @param position Where the assertion stands, and where the body must end.
+ * @param min The body's shortest match, in bytes.
+ * @param max Its longest.
+ * @param before The captures as they were, restored before each candidate.
+ * @param out_end Receives where the body ended.
+ * @return Non-zero when some start matched.
+ */
+static int look_behind_forward(Backtrack * bt, uint32_t body, size_t position,
+    size_t min, size_t max, const size_t * before, size_t * out_end) {
+  size_t available = position - bt->window_start;
+  size_t reach = max < available ? max : available;
+  if (reach < min) {
+    // Not enough subject behind this position for the shortest body.
+    return 0;
+  }
+
+  // The memo is keyed on (instruction, position) and means "this state leads
+  // nowhere". Inside this body it would mean "leads nowhere *ending here*",
+  // which is a different claim at every position the assertion is tried
+  // from - so the body runs without one. The outer program's bits are
+  // untouched and still stand.
+  unsigned char * outer_visited = bt->visited;
+  size_t outer_memo_after = bt->memo_after;
+  size_t outer_look_end = bt->look_end;
+  bt->visited = NULL;
+  bt->memo_after = 0;
+  bt->look_end = position;
+
+  size_t floor = bt->depth;
+  int matched = 0;
+  for (size_t back = reach;; back--) {
+    memcpy(bt->slots, before, bt->captures * sizeof(size_t));
+    bt->depth = floor;
+    matched = run(bt, body, position - back, floor, 0, out_end);
+    bt->depth = floor;
+    if (matched || bt->failure != GRX_OK) {
+      break;
+    }
+    // A `(*COMMIT)`, `(*PRUNE)` or `(*SKIP)` that fired in the body has
+    // already said there are to be no more attempts, and another candidate
+    // start is another attempt. The caller decides how far out the refusal
+    // travels; this only stops adding to it.
+    if (bt->verb_stop != VERB_NONE) {
+      break;
+    }
+    if (back == min) {
+      break;
+    }
+  }
+
+  bt->visited = outer_visited;
+  bt->memo_after = outer_memo_after;
+  bt->look_end = outer_look_end;
+  if (!matched) {
+    memcpy(bt->slots, before, bt->captures * sizeof(size_t));
+  }
+  return matched;
+}
+
 static int run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
     int toplevel, size_t * out_end) {
   const GRX_Limits * limits = bt->request->limits;
@@ -1048,8 +1169,19 @@ static int run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
 
         size_t body_floor = bt->depth;
         size_t end = 0;
-        int body_matched
-            = run(bt, inst->x, position, body_floor, 0, &end);
+        size_t min = 0;
+        size_t max = 0;
+        int body_matched;
+        if (grx_program_look_span(bt->program, inst->x, &min, &max)) {
+          body_matched = look_behind_forward(
+              bt, pc + 1, position, min, max, before, &end);
+        }
+        else {
+          size_t outer_look_end = bt->look_end;
+          bt->look_end = GRX_NPOS;
+          body_matched = run(bt, pc + 1, position, body_floor, 0, &end);
+          bt->look_end = outer_look_end;
+        }
         bt->depth = body_floor;
         if (bt->failure != GRX_OK) {
           gcu_allocator_free(bt->allocator, before);
@@ -1144,7 +1276,10 @@ static int run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
         bt->window_end = to;
         size_t body_floor = bt->depth;
         size_t end = 0;
+        size_t outer_look_end = bt->look_end;
+        bt->look_end = GRX_NPOS;
         int body_matched = run(bt, pc + 1, from, body_floor, 0, &end);
+        bt->look_end = outer_look_end;
         bt->depth = body_floor;
         bt->window_start = outer_start;
         bt->window_end = outer_end;
@@ -1193,6 +1328,14 @@ static int run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
           // Not a match the caller will take. Fall through to backtracking
           // so that a longer alternative from the same position still has
           // its chance.
+          ok = 0;
+          break;
+        }
+        if (!toplevel && bt->look_end != GRX_NPOS
+            && position != bt->look_end) {
+          // A forward lookbehind body that ran out somewhere other than the
+          // assertion. Not the body failing - a shorter way of matching it
+          // than this candidate start needs - so keep backtracking.
           ok = 0;
           break;
         }
@@ -1414,6 +1557,7 @@ GRX_Result grx_exec_backtrack(
     .call_slots = NULL,
     .call_depth = 0,
     .call_capacity = 0,
+    .look_end = GRX_NPOS,
     .verb_stop = VERB_NONE,
     .skip_to = 0,
     .window_start = 0,

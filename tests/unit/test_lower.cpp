@@ -285,12 +285,123 @@ TEST(Lower, AFullFoldRunBecomesAGraphOfOrdinaryClassMatches) {
   EXPECT_FALSE(uses(plain, "split")) << plain.disassembly();
   EXPECT_EQ(spans(plain, "ABC"), "0:3");
 
-  // And the graph reverses with everything else inside a lookbehind: the
-  // positions are walked from the last to the first.
+  // And the graph works inside a lookbehind, where the body is matched
+  // forwards from a candidate start rather than backwards from here: three
+  // bytes back is what the two-position graph needs and what it is given.
+  // Perl is the only dialect that folds fully, and Perl is one of the two
+  // that bound their lookbehind, so the reverse arm of this graph is code no
+  // dialect reaches today - it is still there for the dialect that folds
+  // fully *and* leaves its lookbehind unbounded, which none does yet.
   Compiled behind("(?i)x(?<=" + sharp_s + "x)", "", nullptr, GRX_SYNTAX_PERL);
   ASSERT_TRUE(behind.ok());
-  EXPECT_NE(behind.disassembly().find("reverse"), std::string::npos);
+  EXPECT_EQ(behind.disassembly().find("reverse"), std::string::npos)
+      << behind.disassembly();
   EXPECT_EQ(spans(behind, "ssx"), "2:3");
+  EXPECT_EQ(spans(behind, std::string(sharp_s) + "x"), "2:3");
+}
+
+TEST(Lower, WhichLookbehindModelIsTheDialectsAndNotTheEngines) {
+  // documentation/design.md section 3.5.2. There are two ways to match a
+  // lookbehind and the dialect picks, because the pick costs what the
+  // dialect is willing to pay: running the body backwards from here costs
+  // what the body costs, however far back it reaches, and trying every start
+  // the body's length allows costs the *variation* - which only a dialect
+  // that bounds it has bounded.
+  Compiled ecma("(?<=a{1,3})b", "u");
+  ASSERT_TRUE(ecma.ok());
+  EXPECT_NE(ecma.disassembly().find("reverse"), std::string::npos)
+      << ecma.disassembly();
+  EXPECT_EQ(ecma.disassembly().find("forward="), std::string::npos)
+      << ecma.disassembly();
+
+  Compiled perl("(?<=a{1,3})b", "", nullptr, GRX_SYNTAX_PERL);
+  ASSERT_TRUE(perl.ok());
+  EXPECT_EQ(perl.disassembly().find("reverse"), std::string::npos)
+      << perl.disassembly();
+  EXPECT_NE(perl.disassembly().find("forward=1..3"), std::string::npos)
+      << perl.disassembly();
+
+  // Both answer the assertion the same way when the body has one length to
+  // find. The models are only distinguishable where the body has several.
+  EXPECT_EQ(spans(ecma, "aab"), "2:3");
+  EXPECT_EQ(spans(perl, "aab"), "2:3");
+  EXPECT_EQ(spans(ecma, "b"), "nomatch");
+  EXPECT_EQ(spans(perl, "b"), "nomatch");
+
+  // Where they differ: which of several candidate starts wins, and so what a
+  // capture inside the body holds. Perl takes the longest body, whatever the
+  // body itself would prefer; running it backwards takes whatever the body
+  // prefers, and `a??` prefers nothing at all. Both are in the corpus.
+  Compiled lazy("(?=foo)(?<=(a?\?))", "", nullptr, GRX_SYNTAX_PERL);
+  ASSERT_TRUE(lazy.ok());
+  EXPECT_EQ(spans(lazy, "afoo"), "1:1 0:1");
+
+  Compiled branches("(?=foo)(?<=(|a|aa))", "", nullptr, GRX_SYNTAX_PERL);
+  ASSERT_TRUE(branches.ok());
+  EXPECT_EQ(spans(branches, "aafoo"), "2:2 0:2");
+
+  // And where a verb can end the body: matching forwards gives `(*ACCEPT)`
+  // somewhere to stop, which is why the assertion holds one character back
+  // from a body that would otherwise need five.
+  Compiled accept(
+      "(?<=([cd](*ACCEPT)|x)gggg)blrph", "", nullptr, GRX_SYNTAX_PERL);
+  ASSERT_TRUE(accept.ok());
+  EXPECT_EQ(spans(accept, "cblrph"), "1:6 0:1");
+  EXPECT_EQ(spans(accept, "xggggblrph"), "5:10 0:1");
+  EXPECT_EQ(spans(accept, "zblrph"), "nomatch");
+
+  // A non-atomic lookbehind keeps the reverse model whatever the dialect
+  // says, because it is inlined rather than run as a sub-match - that is
+  // what makes it non-atomic - and a candidate-start loop has nowhere to put
+  // the backtrack points that has to leave live.
+  Compiled non_atomic("(?<*ab)c", "", nullptr, GRX_SYNTAX_PCRE);
+  ASSERT_TRUE(non_atomic.ok());
+  EXPECT_NE(non_atomic.disassembly().find("reverse"), std::string::npos)
+      << non_atomic.disassembly();
+  EXPECT_EQ(spans(non_atomic, "abc"), "2:3");
+}
+
+TEST(Lower, AnAlternativeThatCannotSpanTheDistanceIsNotTried) {
+  // The candidate-start model tries the furthest start first and requires
+  // the body to arrive exactly where the assertion stands, so an alternative
+  // shorter or longer than what is left cannot be the one - and finding that
+  // out by walking it is what makes a bounded lookbehind cost the bound
+  // rather than a constant. The guard says so first.
+  Compiled guarded("(?<=(a|aa|aaa))b", "", nullptr, GRX_SYNTAX_PERL);
+  ASSERT_TRUE(guarded.ok());
+  EXPECT_NE(guarded.disassembly().find("look-length"), std::string::npos)
+      << guarded.disassembly();
+  EXPECT_EQ(spans(guarded, "aaab"), "3:4 0:3");
+  EXPECT_EQ(spans(guarded, "aab"), "2:3 0:2");
+  EXPECT_EQ(spans(guarded, "ab"), "1:2 0:1");
+  EXPECT_EQ(spans(guarded, "b"), "nomatch");
+
+  // Only where the alternative has to span the distance *alone*. With
+  // something after it inside the body, the distance is shared, and a guard
+  // that asked one alternative for all of it would throw away the branch
+  // that matches: `x` is one byte of the five this assertion needs, and
+  // `gggg` is the other four.
+  Compiled shared(
+      "(?<=([cd](*ACCEPT)|x)gggg)blrph", "", nullptr, GRX_SYNTAX_PERL);
+  ASSERT_TRUE(shared.ok());
+  EXPECT_EQ(shared.disassembly().find("look-length"), std::string::npos)
+      << shared.disassembly();
+  EXPECT_EQ(spans(shared, "xggggblrph"), "5:10 0:1");
+
+  // Nor inside a repeat, where one iteration is followed by another rather
+  // than by the end of the body.
+  Compiled repeated("(?<=(a|aa){2})b", "", nullptr, GRX_SYNTAX_PERL);
+  ASSERT_TRUE(repeated.ok());
+  EXPECT_EQ(repeated.disassembly().find("look-length"), std::string::npos)
+      << repeated.disassembly();
+  EXPECT_EQ(spans(repeated, "aaab"), "3:4 1:3");
+
+  // And never for a dialect that runs the body backwards: there is no end to
+  // measure a distance to.
+  Compiled ecma("(?<=(a|aa|aaa))b", "u");
+  ASSERT_TRUE(ecma.ok());
+  EXPECT_EQ(ecma.disassembly().find("look-length"), std::string::npos)
+      << ecma.disassembly();
 }
 
 TEST(Lower, ALookbehindBodyIsCompiledBackwards) {

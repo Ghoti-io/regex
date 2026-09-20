@@ -117,6 +117,25 @@ typedef enum {
   GRX_ASSERT_NOT_SENTENCE_BOUNDARY,
   GRX_ASSERT_LINE_BOUNDARY,
   GRX_ASSERT_NOT_LINE_BOUNDARY,
+  /**
+   * There are between `min` and `max` bytes left before the assertion ends.
+   *
+   * The one assertion no pattern spells. It exists inside a lookbehind body
+   * the engine runs forwards (documentation/design.md section 3.5.2), where
+   * the body must arrive exactly where the assertion stands: an alternative
+   * that cannot span the distance still left is one there is no point
+   * trying, and this is what says so before it is tried rather than after.
+   *
+   * Without it `(?<=(a|aa|aaa))b` walks every branch from every candidate
+   * start and discards all but one, which is how a bounded lookbehind turns
+   * a constant into a large constant. Perl prunes the same way, and the
+   * difference is measurable: see documentation/testing.md section 10.
+   *
+   * Zero-width and stateless like every other assertion here, so it does not
+   * change which engines may run a program - though in practice only the
+   * backtracker ever sees one, since a lookaround is what puts it there.
+   */
+  GRX_ASSERT_LOOK_LENGTH,
   GRX_ASSERT_COUNT              ///< Closes the enum; not an assertion.
 } GRX_AssertKind;
 

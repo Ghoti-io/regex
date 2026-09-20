@@ -50,6 +50,22 @@ typedef struct {
   uint32_t registers;        ///< Progress registers handed out so far.
   int no_memo;               ///< An opcode the bit-state memo cannot survive.
   /**
+   * What is being emitted is the tail of a forward lookbehind body.
+   *
+   * Two claims at once, and the guard on an alternative needs both. Inside
+   * such a body, "how far is it to the end of this assertion" has an answer;
+   * at its *tail*, that distance is what the alternative alone has to span.
+   * An alternative with something after it inside the body does not have to
+   * span the distance on its own, and a guard that says otherwise throws
+   * away a branch that would have matched - which is what
+   * `(?<=([cd](*ACCEPT)|x)gggg)blrph` caught, where the `x` branch spans one
+   * byte of the five the assertion needs and `gggg` spans the rest.
+   *
+   * Narrowed on the way down rather than raised: entering a body sets it,
+   * and anything that can be followed by more of the same body clears it.
+   */
+  int forward_tail;
+  /**
    * Where each called group's subroutine block starts, and which groups need
    * one.
    *
@@ -236,7 +252,12 @@ static GRX_Result gen_concat(Codegen * codegen, const GRX_IRNode * node) {
         return fail(codegen, GRX_DIAG_INTERNAL, node);
       }
       uint32_t next = child_node->next_sibling;
+      int outer_tail = codegen->forward_tail;
+      if (next != GRX_INDEX_NONE) {
+        codegen->forward_tail = 0;
+      }
       GRX_Result result = gen(codegen, child);
+      codegen->forward_tail = outer_tail;
       if (result != GRX_OK) {
         return result;
       }
@@ -313,6 +334,40 @@ static GRX_Result emit_trampoline(
  * is the pattern's order - which is what makes the result leftmost-*first*.
  * Each branch but the last ends by jumping to the shared trampoline.
  */
+/**
+ * Emit "there are between min and max bytes left", for one alternative.
+ *
+ * At the tail of a forward lookbehind body only, where the distance to the
+ * end of the assertion is exactly what this alternative has to span, and one
+ * that cannot is one to skip rather than to try and undo. Perl prunes a
+ * variable lookbehind the same way, and without this `(?<=(a|aa|aaa))b`
+ * costs every branch from every candidate start instead of the one that
+ * fits.
+ *
+ * Emitted only where it prunes: a branch that could be any length at all
+ * rules nothing out, and a guard that never fires is two instructions and a
+ * step per iteration for nothing.
+ */
+static GRX_Result gen_length_guard(
+    Codegen * codegen, const GRX_IRNode * node, uint32_t branch) {
+  size_t min = 0;
+  size_t max = 0;
+  if (!codegen->forward_tail
+      || !grx_ir_span(codegen->ir, branch, &min, &max)
+      || (min == 0 && max == GRX_NPOS)) {
+    return GRX_OK;
+  }
+
+  uint32_t offset = (uint32_t)codegen->program->look_spans.count;
+  if (grx_arena_append(&codegen->program->look_spans, &min, NULL) != GRX_OK
+      || grx_arena_append(&codegen->program->look_spans, &max, NULL)
+          != GRX_OK) {
+    return fail(codegen, GRX_DIAG_OUT_OF_MEMORY, node);
+  }
+  return emit(
+      codegen, GRX_OP_ASSERT, GRX_ASSERT_LOOK_LENGTH, offset, 0, node, NULL);
+}
+
 static GRX_Result gen_alternate(Codegen * codegen, const GRX_IRNode * node) {
   uint32_t child = node->first_child;
   if (child == GRX_INDEX_NONE) {
@@ -337,7 +392,10 @@ static GRX_Result gen_alternate(Codegen * codegen, const GRX_IRNode * node) {
     uint32_t next = child_node->next_sibling;
 
     if (next == GRX_INDEX_NONE) {
-      result = gen(codegen, child);
+      result = gen_length_guard(codegen, node, child);
+      if (result == GRX_OK) {
+        result = gen(codegen, child);
+      }
       if (result != GRX_OK) {
         return result;
       }
@@ -356,7 +414,10 @@ static GRX_Result gen_alternate(Codegen * codegen, const GRX_IRNode * node) {
     }
     patch_x(codegen, split, here(codegen));
 
-    result = gen(codegen, child);
+    result = gen_length_guard(codegen, node, child);
+    if (result == GRX_OK) {
+      result = gen(codegen, child);
+    }
     if (result == GRX_OK) {
       result = emit(codegen, GRX_OP_JMP, 0, stub, 0, node, NULL);
     }
@@ -632,6 +693,9 @@ static GRX_Result gen_star(
  * trampoline, so `a{0,3}` can stop after any number of them and the number
  * of them is bounded only by `max_program_size`.
  */
+static GRX_Result gen_repeat_body(Codegen * codegen, const GRX_IRNode * node,
+    uint32_t body, int lazy);
+
 static GRX_Result gen_repeat(Codegen * codegen, const GRX_IRNode * node) {
   uint32_t body = node->first_child;
   if (body == GRX_INDEX_NONE) {
@@ -639,6 +703,21 @@ static GRX_Result gen_repeat(Codegen * codegen, const GRX_IRNode * node) {
   }
 
   int lazy = node->mode == GRX_REPEAT_LAZY;
+  // One iteration can be followed by another, so nothing inside a repeat is
+  // the tail of the body - except a repeat of exactly one, which is not a
+  // loop at all. `(?<=(a|aa){2})` is the case: the first `a|aa` has a second
+  // one after it, and a guard there would ask one iteration to span both.
+  int outer_tail = codegen->forward_tail;
+  if (node->min != 1 || node->max != 1) {
+    codegen->forward_tail = 0;
+  }
+  GRX_Result repeated = gen_repeat_body(codegen, node, body, lazy);
+  codegen->forward_tail = outer_tail;
+  return repeated;
+}
+
+static GRX_Result gen_repeat_body(Codegen * codegen, const GRX_IRNode * node,
+    uint32_t body, int lazy) {
 
   for (uint32_t i = 0; i < node->min; i++) {
     GRX_Result result = emit_capture_reset(codegen, node, body);
@@ -815,12 +894,52 @@ static GRX_Result gen_non_atomic_look(
     return result;
   }
 
+  // Inlined into the caller's instructions, so a length guard here would be
+  // measuring the caller's distance against this body's alternatives. It is
+  // not the same assertion; it gets no guards.
+  int outer_body = codegen->forward_tail;
+  codegen->forward_tail = 0;
   result = gen(codegen, node->first_child);
+  codegen->forward_tail = outer_body;
   if (result != GRX_OK) {
     return result;
   }
 
   return emit(codegen, GRX_OP_REWIND, 0, reg, 0, node, NULL);
+}
+
+/**
+ * Copy a forward lookbehind's body length into the program.
+ *
+ * The number of candidate starts the engine will try is `max - min + 1`, and
+ * lowering only chose this model for a dialect that caps that at 256
+ * (documentation/design.md section 3.5.2). An unbounded span here would
+ * uncap it, so the pattern is refused as the variable-length lookbehind it
+ * is rather than compiled into a loop with nothing to stop it. compile.c's
+ * own check catches every body whose *variation* is unmeasurable and every
+ * one whose variation is merely too large, so what is left for this to catch
+ * is the body whose two ends both saturate - a length no subject could
+ * reach, and one no bounded dialect should accept for being nominally fixed.
+ */
+static GRX_Result gen_look_span(
+    Codegen * codegen, const GRX_IRNode * node, uint32_t * out_offset) {
+  size_t min = 0;
+  size_t max = 0;
+  if (!grx_ir_look_span(codegen->ir, node->a, &min, &max)) {
+    return fail(codegen, GRX_DIAG_INTERNAL, node);
+  }
+  if (max == GRX_NPOS || min > max) {
+    return fail(codegen, GRX_DIAG_VARIABLE_LOOKBEHIND, node);
+  }
+
+  uint32_t offset = (uint32_t)codegen->program->look_spans.count;
+  if (grx_arena_append(&codegen->program->look_spans, &min, NULL) != GRX_OK
+      || grx_arena_append(&codegen->program->look_spans, &max, NULL)
+          != GRX_OK) {
+    return fail(codegen, GRX_DIAG_OUT_OF_MEMORY, node);
+  }
+  *out_offset = offset;
+  return GRX_OK;
 }
 
 static GRX_Result gen_look(Codegen * codegen, const GRX_IRNode * node) {
@@ -829,15 +948,34 @@ static GRX_Result gen_look(Codegen * codegen, const GRX_IRNode * node) {
     return gen_non_atomic_look(codegen, node);
   }
 
+  // `x` is the length span, not the body: the body is always the next
+  // instruction, so writing that down twice only makes a second place for it
+  // to disagree with itself. A lookahead and a reverse lookbehind have no
+  // span and say so.
+  uint32_t span = GRX_INDEX_NONE;
+  if (node->flags & GRX_IR_LOOK_FORWARD) {
+    GRX_Result measured = gen_look_span(codegen, node, &span);
+    if (measured != GRX_OK) {
+      return measured;
+    }
+  }
+
   uint32_t look = GRX_INDEX_NONE;
   GRX_Result result
-      = emit(codegen, GRX_OP_LOOK, node->mode, 0, 0, node, &look);
+      = emit(codegen, GRX_OP_LOOK, node->mode, span, 0, node, &look);
   if (result != GRX_OK) {
     return result;
   }
 
-  patch_x(codegen, look, here(codegen));
+  // Set rather than raised: the distance a guard measures is *this*
+  // assertion's, and a body nested in another one has its own end or none at
+  // all. Everything that is not a forward lookbehind - a lookahead, a
+  // reverse lookbehind, a scan - clears it, and the engine clears the
+  // matching runtime field in the same places.
+  int outer_body = codegen->forward_tail;
+  codegen->forward_tail = (node->flags & GRX_IR_LOOK_FORWARD) ? 1 : 0;
   result = gen(codegen, node->first_child);
+  codegen->forward_tail = outer_body;
   if (result != GRX_OK) {
     return result;
   }
@@ -888,7 +1026,13 @@ static GRX_Result gen_scan(Codegen * codegen, const GRX_IRNode * node) {
     return result;
   }
 
+  // A scan's body is a sub-match over a captured substring, with an end of
+  // its own; a guard measuring the enclosing assertion's distance would be
+  // measuring against the wrong subject entirely.
+  int outer_body = codegen->forward_tail;
+  codegen->forward_tail = 0;
   result = gen(codegen, node->first_child);
+  codegen->forward_tail = outer_body;
   if (result != GRX_OK) {
     return result;
   }

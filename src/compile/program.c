@@ -35,7 +35,7 @@ static const char * assert_name(uint8_t kind) {
     "grapheme-boundary", "not-grapheme-boundary",
     "word-seg-boundary", "not-word-seg-boundary",
     "sentence-boundary", "not-sentence-boundary",
-    "line-boundary", "not-line-boundary",
+    "line-boundary", "not-line-boundary", "look-length",
   };
   return kind < GRX_ASSERT_COUNT ? names[kind] : "?";
 }
@@ -100,6 +100,8 @@ void grx_program_init(GRX_Program * program, const GRX_Allocator * allocator,
   grx_class_table_init(&program->classes, allocator, limits->max_class_ranges);
   grx_arena_init(
       &program->scan_lists, allocator, sizeof(uint32_t), 0, GRX_DIAG_NONE);
+  grx_arena_init(
+      &program->look_spans, allocator, sizeof(size_t), 0, GRX_DIAG_NONE);
   program->flags = 0;
   program->register_count = 0;
   program->preference = GRX_PREFER_LEFTMOST_FIRST;
@@ -124,7 +126,8 @@ GRX_Inst * grx_program_at(const GRX_Program * program, uint32_t index) {
 }
 
 /** Write the operands that belong to this instruction's opcode. */
-static void dump_operands(FILE * out, const GRX_Inst * inst) {
+static void dump_operands(
+    FILE * out, const GRX_Program * program, const GRX_Inst * inst) {
   switch ((GRX_Opcode)inst->op) {
     case GRX_OP_CHAR:
       if (inst->x >= 0x20 && inst->x < 0x7F) {
@@ -153,7 +156,15 @@ static void dump_operands(FILE * out, const GRX_Inst * inst) {
       break;
     case GRX_OP_ASSERT:
       fputs(assert_name(inst->mode), out);
-      if (inst->x != GRX_INDEX_NONE) {
+      if (inst->mode == GRX_ASSERT_LOOK_LENGTH) {
+        // `x` is a length span here, not a class.
+        size_t min = 0;
+        size_t max = 0;
+        if (grx_program_look_span(program, inst->x, &min, &max)) {
+          fprintf(out, " %zu..%zu", min, max);
+        }
+      }
+      else if (inst->x != GRX_INDEX_NONE) {
         fprintf(out, " set=#%u", inst->x);
       }
       break;
@@ -171,10 +182,18 @@ static void dump_operands(FILE * out, const GRX_Inst * inst) {
       fprintf(out, "#%u  (unset %s)", inst->x,
           backref_unset_name(inst->mode));
       break;
-    case GRX_OP_LOOK:
-      fprintf(out, "%s body=%u next=%u", look_name(inst->mode), inst->x,
-          inst->y);
+    case GRX_OP_LOOK: {
+      // The body is the next instruction, always, so what is worth printing
+      // is the thing that is not derivable: whether this one runs forwards
+      // from a candidate start, and between which lengths.
+      size_t min = 0;
+      size_t max = 0;
+      fprintf(out, "%s next=%u", look_name(inst->mode), inst->y);
+      if (grx_program_look_span(program, inst->x, &min, &max)) {
+        fprintf(out, " forward=%zu..%zu", min, max);
+      }
       break;
+    }
     case GRX_OP_ATOMIC_BEGIN:
       fprintf(out, "end=%u", inst->x);
       break;
@@ -219,7 +238,7 @@ GRX_Result grx_program_dump(const GRX_Program * program, FILE * out) {
     }
 
     fprintf(out, "  %4zu  %-14s ", i, grx_opcode_name((GRX_Opcode)inst->op));
-    dump_operands(out, inst);
+    dump_operands(out, program, inst);
     if (inst->flags & GRX_INST_REVERSE) {
       fputs("  reverse", out);
     }
@@ -227,6 +246,23 @@ GRX_Result grx_program_dump(const GRX_Program * program, FILE * out) {
   }
 
   return GRX_OK;
+}
+
+int grx_program_look_span(const GRX_Program * program, uint32_t offset,
+    size_t * out_min, size_t * out_max) {
+  if (!program || !out_min || !out_max || offset == GRX_INDEX_NONE
+      || offset + 1 >= program->look_spans.count) {
+    return 0;
+  }
+
+  const size_t * pair
+      = GRX_ARENA_AT(const size_t, &program->look_spans, offset);
+  if (!pair) {
+    return 0;
+  }
+  *out_min = pair[0];
+  *out_max = pair[1];
+  return 1;
 }
 
 const uint32_t * grx_program_scan_list(
@@ -252,5 +288,6 @@ void grx_program_clear(GRX_Program * program) {
   grx_arena_clear(&program->insts);
   grx_class_table_clear(&program->classes);
   grx_arena_clear(&program->scan_lists);
+  grx_arena_clear(&program->look_spans);
   program->register_count = 0;
 }

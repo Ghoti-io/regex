@@ -391,10 +391,47 @@ of its seventeen rows as *answered*. The exponential worst case that remains
 is the programs the memo would be unsound for, and the corpus's two remaining
 `limit` rows are that case written down.
 
-Lookbehind runs the body's reverse-direction instructions from the current
-position backwards; a lookbehind body may itself contain anything the
-backtracker runs, including captures, which is the ECMAScript semantics and
-a superset of every other dialect's.
+**The two lookbehind models.** There are two ways to match a lookbehind and
+the *dialect* picks, because the pick costs what the dialect is willing to
+pay. `GRX_LookbehindLimit` ([dialects.md](dialects.md) §5.4) is the axis.
+
+*Reverse* — run the body's reverse-direction instructions from the current
+position backwards. This is what ECMA-262 describes (22.2.2.4, direction -1)
+and what lets a lookbehind of **any** length cost what its body costs,
+however far back the body reaches. It is the model for the dialects whose
+lookbehind is unbounded: ECMAScript and .NET. A body may contain anything the
+backtracker runs, captures included.
+
+*Forward from a candidate start* — try each start the body's length allows,
+furthest back first, and require the body to arrive exactly where the
+assertion stands. This is Perl's and PCRE2's, and it is affordable only
+because those dialects also bound the body's *variation* at 255 bytes: the
+number of candidate starts is `max - min + 1`, so a body of one fixed length
+has one candidate however long it is, and the worst case is a bounded
+constant rather than a second factor of the subject. A dialect that did not
+bound the variation could not have this model, which is why the axis is the
+limit and not a preference.
+
+The two are observably different in three places, all of them in the corpus:
+
+| | reverse | forward |
+| --- | --- | --- |
+| which of several candidates | whichever the *body* prefers | the longest |
+| `(?=foo)(?<=(a??))` on `afoo` | `1-1 1-1` | `1-1 0-1` ← Perl |
+| `(*ACCEPT)` in the body | nowhere to stop | ends the assertion where it fires |
+
+An alternative in the **tail** of a forward body carries a length guard
+(`GRX_ASSERT_LOOK_LENGTH`): the distance left to the assertion is exactly
+what it has to span, so one that cannot is skipped rather than walked and
+undone. Perl prunes the same way. Only in the tail — an alternative with more
+of the body after it shares the distance, and a guard asking it for all of
+that would throw away the branch that matches, which
+`(?<=([cd](*ACCEPT)|x)gggg)blrph` is the corpus record for.
+
+The forward model is the more expensive of the two per assertion, and
+honestly so: a wide alternation costs the branches the guard cannot rule out,
+where running the body backwards costs the first branch that fits. It buys
+agreement with the reference, which for these dialects is the point.
 
 #### 3.5.3 Bit-state backtracker
 

@@ -67,7 +67,7 @@ extern "C" {
  * | RESET | first capture slot | one past the last | - |
  * | PROGRESS_CHECK | register | continuation when the loop must exit | GRX_EmptyLoopMode |
  * | BACKREF | group number | - | GRX_BackrefUnsetMode |
- * | LOOK | first instruction of the body | continuation after the body | GRX_LookKind |
+ * | LOOK | length-span offset, or GRX_INDEX_NONE | continuation after the body | GRX_LookKind |
  * | ATOMIC_BEGIN | matching ATOMIC_END | - | - |
  * | ATOMIC_END | - | - | - |
  * | COND | group number | continuation for the false branch | GRX_CondKind |
@@ -107,7 +107,17 @@ typedef enum {
   GRX_OP_RESET,
   GRX_OP_PROGRESS_CHECK, ///< Apply the empty-iteration rule at a loop's end.
   GRX_OP_BACKREF,      ///< Match what a group matched earlier.
-  GRX_OP_LOOK,         ///< Run a sub-program without consuming input.
+  /**
+   * Run a sub-program without consuming input.
+   *
+   * The body begins at the next instruction and ends in a MATCH of its own,
+   * exactly as GRX_OP_SCAN's does, so `x` carries something else: the offset
+   * of this lookbehind's length span in the program's `look_spans`, or
+   * GRX_INDEX_NONE for every lookahead and for a lookbehind whose body runs
+   * in reverse. A span is present exactly when the assertion is one the
+   * engine matches forwards from a candidate start.
+   */
+  GRX_OP_LOOK,
   /**
    * Run the sub-program that follows over a captured substring.
    *
@@ -186,6 +196,15 @@ typedef struct GRX_Program {
    * shared with it, because a program outlives the tree it came from.
    */
   GRX_Arena scan_lists;
+  /**
+   * The body lengths `GRX_OP_LOOK` names, as minimum-then-maximum pairs.
+   *
+   * A lookbehind the engine runs forwards has to know which starts to try,
+   * and those are exactly the positions its body's length allows. Copied out
+   * of the IR for the same reason the scan lists are: a program outlives the
+   * tree it came from.
+   */
+  GRX_Arena look_spans;
   uint32_t flags;                 ///< GRX_PROGRAM_* bits.
   uint32_t register_count;        ///< Progress registers a thread needs.
   GRX_MatchPreference preference; ///< Which match a search reports.
@@ -260,6 +279,18 @@ const char * grx_opcode_name(GRX_Opcode op);
  * @param out_count Receives how many groups it names. Required.
  * @return The first group number, or NULL when the offset is out of range.
  */
+/**
+ * @brief The body length a LOOK instruction's `x` names.
+ *
+ * @param program The program.
+ * @param offset The instruction's `x`.
+ * @param out_min Receives the body's shortest match, in bytes.
+ * @param out_max Receives its longest.
+ * @return Non-zero when the offset named a span.
+ */
+int grx_program_look_span(const GRX_Program * program, uint32_t offset,
+    size_t * out_min, size_t * out_max);
+
 const uint32_t * grx_program_scan_list(
     const GRX_Program * program, uint32_t offset, size_t * out_count);
 

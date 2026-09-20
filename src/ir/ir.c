@@ -160,6 +160,8 @@ GRX_Result grx_ir_create(const GRX_Allocator * allocator,
       &ir->scan_lists, allocator, sizeof(uint32_t), 0, GRX_DIAG_NONE);
   grx_arena_init(
       &ir->fold_runs, allocator, sizeof(uint32_t), 0, GRX_DIAG_NONE);
+  grx_arena_init(
+      &ir->look_spans, allocator, sizeof(size_t), 0, GRX_DIAG_NONE);
 
   *out_ir = ir;
   return GRX_OK;
@@ -339,6 +341,41 @@ const uint32_t * grx_ir_scan_list(
   }
   *out_count = *count;
   return GRX_ARENA_AT(const uint32_t, &ir->scan_lists, offset + 1);
+}
+
+GRX_Result grx_ir_look_span_set(
+    GRX_IR * ir, uint32_t * out_offset, size_t min, size_t max) {
+  if (!ir || !out_offset) {
+    return GRX_ERR_INVALID;
+  }
+
+  uint32_t offset = (uint32_t)ir->look_spans.count;
+  GRX_Result result = grx_arena_append(&ir->look_spans, &min, NULL);
+  if (result != GRX_OK) {
+    return result;
+  }
+  result = grx_arena_append(&ir->look_spans, &max, NULL);
+  if (result != GRX_OK) {
+    return result;
+  }
+  *out_offset = offset;
+  return GRX_OK;
+}
+
+int grx_ir_look_span(const GRX_IR * ir, uint32_t offset, size_t * out_min,
+    size_t * out_max) {
+  if (!ir || !out_min || !out_max || offset == GRX_INDEX_NONE
+      || offset + 1 >= ir->look_spans.count) {
+    return 0;
+  }
+
+  const size_t * pair = GRX_ARENA_AT(const size_t, &ir->look_spans, offset);
+  if (!pair) {
+    return 0;
+  }
+  *out_min = pair[0];
+  *out_max = pair[1];
+  return 1;
 }
 
 GRX_Result grx_ir_fold_run_begin(GRX_IR * ir, uint32_t * out_offset) {
@@ -565,5 +602,6 @@ void grx_ir_free(GRX_IR * ir) {
   grx_arena_clear(&ir->marks);
   grx_arena_clear(&ir->scan_lists);
   grx_arena_clear(&ir->fold_runs);
+  grx_arena_clear(&ir->look_spans);
   gcu_allocator_free(allocator, ir);
 }

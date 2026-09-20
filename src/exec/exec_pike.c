@@ -417,6 +417,13 @@ static int assertion_holds(
     case GRX_ASSERT_SEARCH_START:
       return position == request->start;
 
+    case GRX_ASSERT_LOOK_LENGTH:
+      // Unreachable here: the guard only appears inside a lookbehind body,
+      // and a program with a lookaround in it is not regular, so this engine
+      // is never handed one. It holds rather than failing all the same - an
+      // assertion that prunes work is not one that decides a match.
+      return 1;
+
     case GRX_ASSERT_COUNT:
     default:
       return 0;

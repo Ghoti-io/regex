@@ -128,11 +128,34 @@ GRX_Result grx_lower_pattern(const GRX_Pattern * pattern,
  * is what decides which engine may run the program and what a caller is told
  * by grx_regex_facts().
  *
+ * Writes as well as reads: a lookbehind that lowering chose to run forwards
+ * gets the body length it needs recorded on its node here, because measuring
+ * a subtree is this pass and nothing else measures one.
+ *
  * @param ir The lowered pattern. Never NULL here.
  * @param out_facts Receives the facts. Never NULL here.
  * @return GRX_OK or a failure code.
  */
-GRX_Result grx_analyze_ir(const GRX_IR * ir, GRX_Facts * out_facts);
+GRX_Result grx_analyze_ir(GRX_IR * ir, GRX_Facts * out_facts);
+
+/**
+ * @brief How long a subtree's match can be, in bytes.
+ *
+ * The same walk grx_analyze_ir() uses, asked about one node - and asked for
+ * the same reason grx_ir_can_match_empty() is: the answer is already written
+ * down once, and codegen having its own would be a second place for it to be
+ * wrong. What codegen wants it for is the length guard inside a forward
+ * lookbehind body, which turns "try this alternative and see" into "this
+ * alternative cannot span what is left".
+ *
+ * @param ir The lowered pattern.
+ * @param node_index The subtree root.
+ * @param out_min Receives the shortest match.
+ * @param out_max Receives the longest, or GRX_NPOS when unbounded.
+ * @return Non-zero when the length is knowable at all.
+ */
+int grx_ir_span(const GRX_IR * ir, uint32_t node_index, size_t * out_min,
+    size_t * out_max);
 
 /**
  * @brief Whether a subtree can match the empty string.
