@@ -51,6 +51,17 @@ typedef enum {
   GRX_SET_UNICODE_SPACE,    ///< `\p{White_Space}`.
   GRX_SET_ASCII_HSPACE,     ///< `[ \t]`, for `\h`.
   GRX_SET_ASCII_VSPACE,     ///< `[\n\v\f\r]`, for `\v`.
+  /**
+   * The Perl family's `\h` and `\v` in UTF mode.
+   *
+   * pcre2pattern lists both sets in full, and they are not the ASCII ones
+   * widened by a property: `\h` is the space separators *plus* the tab and
+   * U+00A0, and `\v` is the line separators plus U+0085. Written out for
+   * that reason - a set nobody can derive has to be a set somebody wrote
+   * down.
+   */
+  GRX_SET_UNICODE_HSPACE,
+  GRX_SET_UNICODE_VSPACE,
   GRX_SET_NEWLINES_LF,      ///< `[\n]`.
   GRX_SET_NEWLINES_ES,      ///< LF, CR, U+2028 and U+2029.
   GRX_SET_NEWLINES_UNICODE, ///< The `\R` set, less the CR LF pair.

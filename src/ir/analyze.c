@@ -39,6 +39,17 @@ typedef struct {
   size_t max_length;  ///< Longest match, or GRX_NPOS when unbounded.
   int anchored_start; ///< Every match must begin where the search began.
   int anchored_end;   ///< Every match must end at the end of the subject.
+  /**
+   * The length is not merely unbounded but unknowable from the tree.
+   *
+   * A backreference or a subroutine call matches whatever something else
+   * did, so its length is a property of the subject and not of the pattern.
+   * Told apart from an ordinary unbounded span because a dialect that bounds
+   * its variable-length lookbehind does not apply that bound here: pcre2test
+   * refuses `(?<=a+)` and accepts `(a)(?<=b\1)`, and the two differ in
+   * nothing else.
+   */
+  int unknown_length;
 } Span;
 
 /** The accumulating answer for the whole program. */
@@ -49,6 +60,7 @@ typedef struct {
   int has_lookaround;
   int has_recursion;
   size_t max_lookbehind;
+  size_t max_variable_lookbehind;
   size_t depth;
 } Analysis;
 
@@ -133,7 +145,7 @@ static Span walk(Analysis * analysis, uint32_t node_index);
 
 /** The span of a node's children, concatenated. */
 static Span walk_concat(Analysis * analysis, const GRX_IRNode * node) {
-  Span span = {0, 0, 0, 0};
+  Span span = {0, 0, 0, 0, 0};
 
   for (uint32_t child = node->first_child; child != GRX_INDEX_NONE;) {
     const GRX_IRNode * child_node = grx_ir_node(analysis->ir, child);
@@ -157,6 +169,7 @@ static Span walk_concat(Analysis * analysis, const GRX_IRNode * node) {
 
     span.min_length = add_length(span.min_length, part.min_length);
     span.max_length = add_length(span.max_length, part.max_length);
+    span.unknown_length = span.unknown_length || part.unknown_length;
     child = child_node->next_sibling;
   }
 
@@ -165,7 +178,7 @@ static Span walk_concat(Analysis * analysis, const GRX_IRNode * node) {
 
 /** The span of a node's children, as alternatives. */
 static Span walk_alternate(Analysis * analysis, const GRX_IRNode * node) {
-  Span span = {GRX_NPOS, 0, 1, 1};
+  Span span = {GRX_NPOS, 0, 1, 1, 0};
   int any = 0;
 
   for (uint32_t child = node->first_child; child != GRX_INDEX_NONE;) {
@@ -187,21 +200,22 @@ static Span walk_alternate(Analysis * analysis, const GRX_IRNode * node) {
     // one branch that can start anywhere means the whole thing can.
     span.anchored_start = span.anchored_start && part.anchored_start;
     span.anchored_end = span.anchored_end && part.anchored_end;
+    span.unknown_length = span.unknown_length || part.unknown_length;
     child = child_node->next_sibling;
   }
 
   if (!any) {
-    return (Span) {0, 0, 0, 0};
+    return (Span) {0, 0, 0, 0, 0};
   }
   return span;
 }
 
 static Span walk(Analysis * analysis, uint32_t node_index) {
-  Span span = {0, GRX_NPOS, 0, 0};
+  Span span = {0, GRX_NPOS, 0, 0, 0};
 
   const GRX_IRNode * node = grx_ir_node(analysis->ir, node_index);
   if (!node) {
-    return (Span) {0, 0, 0, 0};
+    return (Span) {0, 0, 0, 0, 0};
   }
   if (analysis->depth >= GRX_ANALYSIS_MAX_DEPTH) {
     // Deeper than the parser's own cap allows, so this is unreachable for a
@@ -209,13 +223,13 @@ static Span walk(Analysis * analysis, uint32_t node_index) {
     // and the honest answer for a subtree that was not examined is "nothing
     // is known".
     analysis->is_regular = 0;
-    return (Span) {0, GRX_NPOS, 0, 0};
+    return (Span) {0, GRX_NPOS, 0, 0, 0};
   }
   analysis->depth++;
 
   switch (node->kind) {
     case GRX_IR_EMPTY:
-      span = (Span) {0, 0, 0, 0};
+      span = (Span) {0, 0, 0, 0, 0};
       break;
 
     case GRX_IR_CHAR:
@@ -230,7 +244,7 @@ static Span walk(Analysis * analysis, uint32_t node_index) {
       if (analysis->ir->flags & GRX_PROGRAM_UTF) {
         codepoint_widths(analysis->ir, node, &low, &high);
       }
-      span = (Span) {low, high, 0, 0};
+      span = (Span) {low, high, 0, 0, 0};
       break;
     }
 
@@ -253,6 +267,7 @@ static Span walk(Analysis * analysis, uint32_t node_index) {
       // the empty string anywhere.
       span.anchored_start = node->min > 0 && body.anchored_start;
       span.anchored_end = node->min > 0 && body.anchored_end;
+      span.unknown_length = body.unknown_length;
       if (node->mode == GRX_REPEAT_POSSESSIVE) {
         analysis->is_regular = 0;
       }
@@ -269,7 +284,7 @@ static Span walk(Analysis * analysis, uint32_t node_index) {
     }
 
     case GRX_IR_ASSERT:
-      span = (Span) {0, 0, 0, 0};
+      span = (Span) {0, 0, 0, 0, 0};
       if (node->mode == GRX_ASSERT_START_SUBJECT
           || node->mode == GRX_ASSERT_SEARCH_START) {
         span.anchored_start = 1;
@@ -289,12 +304,20 @@ static Span walk(Analysis * analysis, uint32_t node_index) {
       // the whole subject before the start. GRX_NPOS is what
       // GRX_Facts::max_length already means by unbounded, and because it is
       // SIZE_MAX no later body can lower it.
-      if ((node->mode == GRX_LOOK_BEHIND_POSITIVE
-              || node->mode == GRX_LOOK_BEHIND_NEGATIVE)
-          && body.max_length > analysis->max_lookbehind) {
-        analysis->max_lookbehind = body.max_length;
+      if (node->mode == GRX_LOOK_BEHIND_POSITIVE
+          || node->mode == GRX_LOOK_BEHIND_NEGATIVE) {
+        if (body.max_length > analysis->max_lookbehind) {
+          analysis->max_lookbehind = body.max_length;
+        }
+        // A body that matches more than one length is the one a dialect may
+        // bound separately: PCRE2 takes `(?<=a{256})` and refuses
+        // `(?<=\d{1,256})`, and the two differ only in this test.
+        if (!body.unknown_length && body.min_length != body.max_length
+            && body.max_length > analysis->max_variable_lookbehind) {
+          analysis->max_variable_lookbehind = body.max_length;
+        }
       }
-      span = (Span) {0, 0, 0, 0};
+      span = (Span) {0, 0, 0, 0, 0};
       break;
     }
 
@@ -303,13 +326,13 @@ static Span walk(Analysis * analysis, uint32_t node_index) {
       analysis->is_regular = 0;
       // A backreference matches whatever its group did, which is anything
       // from nothing to the whole subject.
-      span = (Span) {0, GRX_NPOS, 0, 0};
+      span = (Span) {0, GRX_NPOS, 0, 0, 1};
       break;
 
     case GRX_IR_RECURSE:
       analysis->has_recursion = 1;
       analysis->is_regular = 0;
-      span = (Span) {0, GRX_NPOS, 0, 0};
+      span = (Span) {0, GRX_NPOS, 0, 0, 1};
       break;
 
     case GRX_IR_COND:
@@ -320,13 +343,13 @@ static Span walk(Analysis * analysis, uint32_t node_index) {
     case GRX_IR_KEEP:
     case GRX_IR_VERB:
       analysis->is_regular = 0;
-      span = (Span) {0, 0, 0, 0};
+      span = (Span) {0, 0, 0, 0, 0};
       break;
 
     case GRX_IR_COUNT:
     default:
       analysis->is_regular = 0;
-      span = (Span) {0, GRX_NPOS, 0, 0};
+      span = (Span) {0, GRX_NPOS, 0, 0, 0};
       break;
   }
 
@@ -348,10 +371,11 @@ GRX_Result grx_analyze_ir(const GRX_IR * ir, GRX_Facts * out_facts) {
     .has_lookaround = 0,
     .has_recursion = 0,
     .max_lookbehind = 0,
+    .max_variable_lookbehind = 0,
     .depth = 0,
   };
 
-  Span span = ir->root == GRX_INDEX_NONE ? (Span) {0, 0, 0, 0}
+  Span span = ir->root == GRX_INDEX_NONE ? (Span) {0, 0, 0, 0, 0}
                                          : walk(&analysis, ir->root);
 
   out_facts->is_regular = analysis.is_regular;
@@ -369,6 +393,7 @@ GRX_Result grx_analyze_ir(const GRX_IR * ir, GRX_Facts * out_facts) {
   out_facts->min_length = span.min_length;
   out_facts->max_length = span.max_length;
   out_facts->max_lookbehind = analysis.max_lookbehind;
+  out_facts->max_variable_lookbehind = analysis.max_variable_lookbehind;
 
   // Duplicate names are a dialect question the front end has already
   // answered - it either rejected them or allowed them - so this only
@@ -418,6 +443,7 @@ int grx_ir_can_match_empty(const GRX_IR * ir, uint32_t node_index) {
     .has_lookaround = 0,
     .has_recursion = 0,
     .max_lookbehind = 0,
+    .max_variable_lookbehind = 0,
     .depth = 0,
   };
   Span span = walk(&analysis, node_index);

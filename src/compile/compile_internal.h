@@ -71,7 +71,7 @@ extern "C" {
  * | ATOMIC_BEGIN | matching ATOMIC_END | - | - |
  * | ATOMIC_END | - | - | - |
  * | COND | group number | continuation for the false branch | GRX_CondKind |
- * | CALL | first instruction of the target | continuation after it returns | - |
+ * | CALL | first instruction of the target | the group being called | - |
  * | RET | - | - | - |
  * | KEEP | - | - | - |
  * | VERB | - | - | GRX_VerbKind |
@@ -127,6 +127,17 @@ typedef enum {
  * ordinary sub-program that happens to run backwards.
  */
 #define GRX_INST_REVERSE GRX_BIT(0)
+
+/**
+ * @brief This SPLIT is one arm of an alternation, not a quantifier's.
+ *
+ * Read by one construct: `(*THEN)`, whose whole definition is "advance to the
+ * next alternative of the innermost enclosing group". Every SPLIT looks the
+ * same to an engine otherwise, and `(a(*THEN)b)*` is the case that says the
+ * distinction is needed - the verb has to leave the group, not take another
+ * turn of the loop.
+ */
+#define GRX_INST_ALTERNATION GRX_BIT(1)
 
 /**
  * @brief One compiled instruction.

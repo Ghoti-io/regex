@@ -37,7 +37,7 @@ TEST(Compile, NullArgumentsAreInvalid) {
 
 TEST(Compile, OutputIsNullOnFailure) {
   GRX_Regex * regex = (GRX_Regex *)0x1;
-  EXPECT_NE(grx_regex_compile("a", GRX_SYNTAX_PCRE, GRX_OPT_NONE, &regex),
+  EXPECT_NE(grx_regex_compile("a", GRX_SYNTAX_POSIX_ERE, GRX_OPT_NONE, &regex),
       GRX_OK);
   EXPECT_EQ(regex, nullptr);
 }
@@ -49,7 +49,7 @@ TEST(Compile, ReportsThePositionOfTheFailure) {
   GRX_Error error;
   GRX_Regex * regex = nullptr;
   GRX_Result result = grx_regex_compile_with_allocator("a", 1,
-      GRX_SYNTAX_PCRE, GRX_OPT_NONE, nullptr, nullptr, &error, &regex);
+      GRX_SYNTAX_POSIX_ERE, GRX_OPT_NONE, nullptr, nullptr, &error, &regex);
 
   ASSERT_NE(result, GRX_OK);
   EXPECT_EQ(error.code, result);
@@ -57,16 +57,33 @@ TEST(Compile, ReportsThePositionOfTheFailure) {
 }
 
 TEST(Compile, ADialectThatIsNotBuiltSaysSo) {
-  // design.md section 4: a dialect that accepts everything is a bug. PCRE2's
-  // front end is plan.md WP-18; until then a PCRE pattern is refused rather
-  // than read with ECMAScript's rules and pronounced valid.
+  // design.md section 4: a dialect that accepts everything is a bug. POSIX's
+  // front end is plan.md WP-23; until then a POSIX pattern is refused rather
+  // than read with somebody else's rules and pronounced valid. `a` is a
+  // valid pattern in every dialect here, so the only thing that can refuse
+  // it is the absence of a front end.
   GRX_Regex * regex = nullptr;
   GRX_Error error;
-  EXPECT_EQ(grx_regex_compile_with_allocator("a", 1, GRX_SYNTAX_PCRE,
+  EXPECT_EQ(grx_regex_compile_with_allocator("a", 1, GRX_SYNTAX_POSIX_ERE,
                 GRX_OPT_NONE, nullptr, nullptr, &error, &regex),
       GRX_ERR_UNSUPPORTED);
   EXPECT_EQ(error.diag, GRX_DIAG_DIALECT_NOT_IMPLEMENTED);
   EXPECT_EQ(regex, nullptr);
+}
+
+TEST(Compile, ThePerlFamilyIsBuilt) {
+  // The other half of the rule above, and the one that goes stale silently:
+  // a dialect this library *does* read has to be reachable through the same
+  // call, or "not implemented" is being reported for a front end that exists.
+  for (GRX_Syntax syntax : {GRX_SYNTAX_PCRE, GRX_SYNTAX_PERL}) {
+    GRX_Regex * regex = nullptr;
+    GRX_Error error;
+    EXPECT_EQ(grx_regex_compile_with_allocator("a(?i:b)c", 8, syntax,
+                  GRX_OPT_NONE, nullptr, nullptr, &error, &regex),
+        GRX_OK)
+        << grx_syntax_name(syntax) << ": " << error.message;
+    grx_regex_free(regex);
+  }
 }
 
 TEST(Compile, TheCommonPathProducesARunnableProgram) {
@@ -108,7 +125,7 @@ TEST(Compile, AllocatesNothingOnAFailedCompile) {
   grxtest::CountingAllocator allocator;
 
   GRX_Regex * regex = nullptr;
-  (void)grx_regex_compile_with_allocator("a", 1, GRX_SYNTAX_PCRE,
+  (void)grx_regex_compile_with_allocator("a", 1, GRX_SYNTAX_POSIX_ERE,
       GRX_OPT_NONE, nullptr, allocator.get(), nullptr, &regex);
 
   EXPECT_EQ(allocator.live(), 0);

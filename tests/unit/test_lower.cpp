@@ -595,13 +595,15 @@ TEST(Sets, TheSetsNoFrontEndAsksForYet) {
   EXPECT_EQ(grx_named_set(&cls, GRX_SET_COUNT, nullptr), GRX_ERR_INVALID);
   EXPECT_EQ(grx_named_set(&cls, (GRX_NamedSet)9999, nullptr), GRX_ERR_INVALID);
 
-  // The shorthands the dialects have and this library has no set for yet.
+  // `\h` and `\v`, which the Perl family has and ECMAScript does not.
   EXPECT_EQ(grx_shorthand_set(&cls, GRX_SHORTHANDS_ASCII,
                 GRX_SHORTHAND_HSPACE, nullptr), GRX_OK);
   EXPECT_EQ(grx_shorthand_set(&cls, GRX_SHORTHANDS_ASCII,
                 GRX_SHORTHAND_VSPACE, nullptr), GRX_OK);
+  // Every value of the enum now names a set this function can build, so the
+  // only thing left to refuse is a value that is not one.
   EXPECT_EQ(grx_shorthand_set(&cls, GRX_SHORTHANDS_ASCII,
-                GRX_SHORTHAND_NOT_NEWLINE, nullptr), GRX_ERR_UNSUPPORTED);
+                GRX_SHORTHAND_COUNT, nullptr), GRX_ERR_UNSUPPORTED);
   grx_charclass_clear(&cls);
 }
 

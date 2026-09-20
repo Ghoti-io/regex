@@ -448,24 +448,53 @@ TEST(Limits, TheDefaultDoesNotBoundAnEcmascriptLookbehind) {
  * has_recursion, the limit has to be enforced at the same time, and this
  * test fails until it is.
  */
-TEST(Limits, RecursionDepthIsReservedUntilADialectHasRecursion) {
-  const char * recursive[] = {"(a)(?R)", "(a)(?1)", "(a)\\g<1>",
-      "(?<n>a)(?&n)", "(a)(?P>1)"};
+TEST(Limits, RecursionDepthIsEnforcedNowThatADialectHasRecursion) {
+  // This test used to assert the opposite: that no dialect compiled any of
+  // these into recursion, so that `max_recursion_depth` was a documented
+  // field nothing read. PCRE2's front end (plan.md WP-18) is what it was
+  // waiting for, and the assertion is now the one it was standing in for -
+  // that the limit refuses a recursion deeper than it allows, rather than
+  // being spent on a pattern that never recurses.
+  const char * recursive[] = {"(a(?R)?b)", "(a(?1)?b)"};
 
-  for (int syntax = 0; syntax < GRX_SYNTAX_COUNT; syntax++) {
-    for (const char * pattern : recursive) {
-      GRX_Regex * regex = nullptr;
-      if (grx_regex_compile(pattern, (GRX_Syntax)syntax, 0, &regex)
-          != GRX_OK) {
-        continue;
-      }
-      GRX_Facts facts;
-      ASSERT_EQ(grx_regex_facts(regex, &facts), GRX_OK);
-      EXPECT_FALSE(facts.has_recursion)
-          << "dialect " << syntax << " compiles " << pattern
-          << " into recursion, so max_recursion_depth must now be enforced "
-             "in grx_compile_program() alongside max_lookbehind_length";
-      grx_regex_free(regex);
-    }
+  for (const char * pattern : recursive) {
+    GRX_Limits limits;
+    grx_limits_default(&limits);
+    limits.max_recursion_depth = 2;
+
+    GRX_Regex * regex = nullptr;
+    GRX_Error error;
+    ASSERT_EQ(grx_regex_compile_with_allocator(pattern, std::strlen(pattern),
+                  GRX_SYNTAX_PCRE, 0, &limits, nullptr, &error, &regex),
+        GRX_OK)
+        << pattern << ": " << error.message;
+
+    GRX_Facts facts;
+    ASSERT_EQ(grx_regex_facts(regex, &facts), GRX_OK);
+    EXPECT_TRUE(facts.has_recursion) << pattern;
+
+    int matched = 0;
+    // Two levels are inside the cap and four are not.
+    EXPECT_EQ(grx_regex_search(regex, "aabb", 4, 0, GRX_ENGINE_BACKTRACK,
+                  &limits, nullptr, &matched),
+        GRX_OK)
+        << pattern;
+    EXPECT_TRUE(matched) << pattern;
+
+    EXPECT_EQ(grx_regex_search(regex, "aaaabbbb", 8, 0, GRX_ENGINE_BACKTRACK,
+                  &limits, nullptr, &matched),
+        GRX_ERR_LIMIT)
+        << pattern << ": a recursion deeper than max_recursion_depth has to "
+                      "be refused, not run";
+
+    // Zero is no limit, as it is for every other field.
+    limits.max_recursion_depth = 0;
+    EXPECT_EQ(grx_regex_search(regex, "aaaabbbb", 8, 0, GRX_ENGINE_BACKTRACK,
+                  &limits, nullptr, &matched),
+        GRX_OK)
+        << pattern;
+    EXPECT_TRUE(matched) << pattern;
+
+    grx_regex_free(regex);
   }
 }

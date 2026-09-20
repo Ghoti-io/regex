@@ -115,7 +115,7 @@ static const char * anchor_name(uint32_t kind) {
 /** The name of a shorthand class escape, for the dump. */
 static const char * shorthand_name(uint32_t kind) {
   static const char * const names[GRX_SHORTHAND_COUNT] = {
-    "d", "D", "w", "W", "s", "S", "h", "H", "v", "V", "N",
+    "d", "D", "w", "W", "s", "S", "h", "H", "v", "V",
   };
   return kind < GRX_SHORTHAND_COUNT ? names[kind] : "?";
 }

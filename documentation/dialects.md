@@ -455,7 +455,17 @@ to be complete for every shipped tier.
 | ECMAScript | A match cannot begin or end between the halves of a surrogate pair | as above | - |
 | Perl | Full case folding is simple folding | [design.md](design.md) §5.2 | - |
 | Perl | `(?{ })`, `(??{ })`, `\N{name}` by name, `(?[ ])` in 1.0 | code execution; name table size; later tier | `GRX_ERR_UNSUPPORTED` |
-| PCRE2 | Callouts `(?C...)` | no callback API | `GRX_ERR_UNSUPPORTED` |
+| Perl | A capture set inside a *failed* negative lookahead is discarded | PCRE2 discards it and ECMA-262 22.2.2.4 says to; Perl keeps it | - |
+| PCRE2 | Callouts `(?C...)` are read and have no effect | no callback API; a callout with no function registered changes no match, so accepting it answers the same question | - |
+| PCRE2, Perl | `\X`, the extended grapheme cluster | the break rules are [plan.md](plan.md) WP-12's and are not generated yet; "any character" is not a grapheme cluster | `GRX_ERR_UNSUPPORTED` |
+| PCRE2 | `(*script_run:`, `(*sr:`, `(*asr:`, `(*scs:` | each constrains what its body may match and an ordinary group does not | `GRX_ERR_UNSUPPORTED` |
+| PCRE2, Perl | `(*napla:`, `(*naplb:`, `(?*`, `(?<*` - the non-atomic lookarounds | they differ from the ordinary ones only in what a verb inside them may do, and reading one as an ordinary lookaround would answer a different question silently | `GRX_ERR_UNSUPPORTED` |
+| PCRE2, Perl | `(*MARK:name)` and a name on `(*PRUNE)`, `(*SKIP)`, `(*THEN)` | no API reads a mark back, and a dropped name would make `(*SKIP:x)` mean `(*SKIP)` | `GRX_ERR_UNSUPPORTED` |
+| PCRE2, Perl | `\C`, one code unit | the subject here is code points, and a construct that can land inside a character has no honest approximation | `GRX_ERR_UNSUPPORTED` |
+| PCRE2 | `(*LIMIT_MATCH=n)` and kin are accepted and not applied | the limits are the caller's and this front end has no writable copy; lowering one from inside a pattern is later work | - |
+| PCRE2, Perl | `(?(VERSION>=n.n))` is answered against 10.46 | this library emulates that version rather than being it | - |
+| Perl | The charset modifiers `a`, `aa`, `d`, `l`, `u` | one character-set semantics here, not five | `GRX_ERR_UNSUPPORTED` |
+| Perl | `\b{wb}`, `\B{gcb}` and the other Unicode boundary escapes | the break rules again | `GRX_ERR_UNSUPPORTED` |
 | POSIX | Submatch rules approximated in the first POSIX release | [design.md](design.md) §2 | - |
 | POSIX | `[[.ch.]]` multi-character collating elements, `[[=e=]]` | no collation | `GRX_ERR_UNSUPPORTED` |
 | .NET | Culture-sensitive folding is invariant; balancing groups deferred | §5.8; [design.md](design.md) §2 | `GRX_ERR_UNSUPPORTED` for balancing groups |
@@ -916,7 +926,18 @@ lint that does that is a lint nobody can rely on.
 Facts that shape the front end and are easy to get wrong; each becomes a
 test.
 
-**PCRE2 10.46.** Verbs `(*ACCEPT)`, `(*FAIL)`, `(*COMMIT)`, `(*PRUNE)`,
+**PCRE2 10.46.** What follows was written from pcre2pattern and corrected by
+pcre2test, which is the only reason several of these lines are right. Five of
+them the documentation did not settle: `\x` with no digits is an error in
+10.46 where older PCRE2 read it as NUL; a quantifier on a lookaround
+*compiles* (`/(?=a)*/` is fine, where ECMAScript's `u` mode calls it a syntax
+error) but one on `(*FAIL)` does not, because `(*FAIL)` is `(?!)` written
+short; `(*ACCEPT:X)` takes an argument that perlre describes as
+argument-less; `xx` ignores space inside a bracket expression and `x` does
+not; and `(?^-i)` is "invalid hyphen in option setting" because `^` has
+already cleared everything.
+
+Verbs `(*ACCEPT)`, `(*FAIL)`, `(*COMMIT)`, `(*PRUNE)`,
 `(*SKIP)`, `(*THEN)`, with and without names; leading directives
 `(*UTF)`, `(*UCP)`, `(*CRLF)`, `(*LF)`, `(*ANYCRLF)`, `(*ANY)`, `(*NUL)`,
 `(*NO_AUTO_POSSESS)`, `(*LIMIT_MATCH=d)` and kin (the limit directives map

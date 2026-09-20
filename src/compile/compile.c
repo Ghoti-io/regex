@@ -117,6 +117,13 @@ GRX_Result grx_compile_program(const GRX_Pattern * pattern,
     result = grx_error_set(out_error, GRX_ERR_LIMIT,
         GRX_DIAG_LIMIT_LOOKBEHIND_LENGTH, GRX_NPOS, 0);
   }
+  if (result == GRX_OK && ir->max_variable_lookbehind != GRX_NPOS
+      && regex->facts.max_variable_lookbehind > ir->max_variable_lookbehind) {
+    // The dialect's own bound, not the caller's: a pattern that exceeds it
+    // is not valid PCRE2, so this is a syntax error and not a limit.
+    result = grx_error_set(out_error, GRX_ERR_SYNTAX,
+        GRX_DIAG_VARIABLE_LOOKBEHIND, GRX_NPOS, 0);
+  }
   if (result == GRX_OK) {
     result = grx_codegen_program(ir, limits, out_error, &regex->program);
   }

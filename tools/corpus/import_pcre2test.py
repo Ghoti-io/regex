@@ -54,9 +54,17 @@ MODIFIER_TO_FLAG = {
     "m": "m", "multiline": "m",
     "s": "s", "dotall": "s",
     "x": "x", "extended": "x",
+    "extended_more": "xx",
     "n": "n", "no_auto_capture": "n",
     "U": "U", "ungreedy": "U",
+    "J": "J", "dupnames": "J",
 }
+
+# The one letter that means something different written twice. `xx` ignores
+# unescaped space and tab inside a bracket expression and `x` does not, so
+# `/[a-  z]/xx` compiles and `/[a-  z]/x` is "range out of order" - which is
+# the pair of verdicts that caught this importer folding the two together.
+REPEATABLE = {"x": "xx"}
 
 # Modifiers that say something about *how pcre2test runs*, not about the
 # pattern, and so can be dropped without changing what is being asserted.
@@ -117,14 +125,28 @@ def flags_for(modifiers):
             parts.extend(chunk)
         else:
             return None
+    seen = []
     for part in parts:
         if part in IGNORABLE_MODIFIERS:
             continue
         letter = MODIFIER_TO_FLAG[part]
-        if letter in flags:
-            continue
-        flags += letter
-    return "".join(sorted(flags))
+        if letter in seen:
+            # A letter twice. For `x` that is a *wider* mode and the run has
+            # to survive; for anything else it is a case this importer has no
+            # way to express, and folding it away would record the verdict
+            # for a pattern nobody asked about. The same defect, in the same
+            # two lines, as test262's "ii" - see documentation/testing.md.
+            if letter in REPEATABLE and seen.count(letter) == 1:
+                seen.append(letter)
+                continue
+            return None
+        seen.append(letter)
+    for letter in sorted(set(seen)):
+        if seen.count(letter) > 1:
+            flags += REPEATABLE[letter]
+        else:
+            flags += letter
+    return flags
 
 
 def ask_pcre2test(patterns):

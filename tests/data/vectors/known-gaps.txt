@@ -1,0 +1,279 @@
+# The vectors this library does not answer the way its oracle does.
+#
+# One line per record: dialect, flags, pattern, subject, and why.
+# Tab-separated; the pattern and the subject are escaped the way the runner
+# escapes them, so that a tab or a newline inside one cannot split the line.
+#
+# This file is a gate in both directions. A vector that fails and is not
+# listed here fails the suite; a vector that is listed here and *passes* fails
+# it too, with "remove the entry" - so the list can only shrink by somebody
+# noticing, and never grows by accident.
+#
+# The rates the README publishes are the rates without these: a known gap is
+# counted and named, never counted as a pass.
+#
+# Regenerating: run testVectors, which prints the line to add beneath every
+# failure it does not recognise. The *reason* is written by hand. A reason
+# that begins "not yet classified" is one nobody has looked at, and is meant
+# to be read as the admission it is.
+pcre		( {32742} {42})(?<!\\1{65481})		a repeat count the reference folds and this library expands
+pcre		((*MARK:A))++a(*SKIP:B)b		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
+pcre		((?x)(*:0))#(?'		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
+pcre		()()()(?<=ab(*ACCEPT)(*scs:(1,2,3))cd|efg)xyz		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		()()()(?<=ab(*scs:(1,2,3))cd)xyz		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		()()(*scs:(1,2,1,2,1,2,2,'XYZ'))		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		()(*scs:(1)+a)		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		()(*scs:(1,1,1,1,1,1,1,1,2))		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		()(?<=(?0))		lookbehind length: the reference computes a bound from a backreference or a call and this library does not
+pcre		()(\\w++)=(*scs:(2)(?=abc))(\\w++)		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		(*:\\)?		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
+pcre		(*:ab)*		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
+pcre		(*:ab\\t(d\\)c)xxx		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
+pcre		(*:pear)apple		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
+pcre		(*napla:)+		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
+pcre		(*napla:a(*ACCEPT)zz|(.))\\1..		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
+pcre		(*napla:a|(*COMMIT)(.))\\1\\1		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
+pcre		(*napla:a|(.)(*ACCEPT)zz)\\1..		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
+pcre		(*napla:a|(.))\\1\\1		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
+pcre		(*naplb:(.)..|(.)...)(\\1|\\2)		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
+pcre		(*naplb:)+		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
+pcre		(*scan_substring:(		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		(*scan_substring:(1)a|b)		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		(*scan_substring:(<name>)a|b)		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		(*scs:		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		(*scs:('name'		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		(*scs:(0)a)		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		(*scs:(1)a)(a)|x		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		(*scs:(1)a)?(a)		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		(*scs:(1)a)??(a)		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		(*scs:(1)a|b)		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		(*scs:(<name>)a|b)		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		(?(*napla:xx)bc)		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
+pcre		(?(*script_run:xxx)zzz)		`(*script_run:`: refused, it constrains the body and a group does not
+pcre		(?:(a(*MARK:X)a+(*SKIP:X)b)){0}(?:(?1)|aac)		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
+pcre		(?<*(.)..|(.)...)(\\1|\\2)		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
+pcre		(?<=(abc))(def)(*scs:(2)(*scs:(1)(*SKIP)x)).+|(ef.+)		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		(?<=b(?1))xyz(b+)pqrstuvew		lookbehind length: the reference computes a bound from a backreference or a call and this library does not
+pcre		(?>a(*:1))(?>b(*:1))(*SKIP:1)x|.*		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
+pcre		(?>a(*:1))(?>b)(*SKIP:1)x|.*		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
+pcre		(?>this line\\s*((?R)|)(*MARK:A))		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
+pcre		(?[ !!\\n ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[ !(\\n) ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[ ![:alpha:] ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[ ![\\n] ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[ !\\d ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[ !\\n & [^\\n\\t] ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[ !\\n ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[ ( [()] ) ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[ ( \\x02 + [:graph:] ) | [ \\x02 [:graph:] ] ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[ (!\\n) ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[ (( [\\n\\t] )) ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[ ((\\n)) ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[ ([:alpha:]) ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[ ([\\n]) ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[ (\\d) ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[ (\\n + \\t) ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[ (\\n) & [\\n\\t] ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[ (\\n) ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[ [()] ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[ [:alpha:] & [a-z\\t] ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[ [:graph:] ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[ [AC] ^ [BC] ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[ [[:graph:]\\x02] ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[ [[:graph:]] ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[ [\\d\\t] & \\d ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[ [\\d] + \\n & [\\n\\t] ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[ [\\d] + \\n + [\\t] ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[ [\\n\\t] & (\\n) ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[ [\\n\\t] & [\\n] ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[ [\\n\\t] & \\n ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[ [\\n] & [\\n\\t] ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[ [\\t] + [\\n] ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[ [^\\n\\t] & !\\n ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[ [a-z\\t] & [:alpha:] ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[ \\d & [\\d\\t] ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[ \\d + \\n ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[ \\d - [2] ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[ \\d ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[ \\d | \\n ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[ \\n & [\\n\\t] + [\\d] ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[ \\n & [\\n\\t] ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[ \\t + \\n ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[[1]])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[[a-c]])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[[a]])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[\\E\\n])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[\\n \\Q\\E])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n&\\n))))))))))))))])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[\\n])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?[\t(\t[\t^\tz\t]\t) ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		(?|(?<a>A)|(?<b>B))		branch reset: the numbering is shared, and the names and references inside one are not checked against it yet
+pcre		(?|([ab]))...(?<=\\1)z		branch reset: the numbering is shared, and the names and references inside one are not checked against it yet
+pcre		(X{65535})(?<=\\1{32770})		a repeat count the reference folds and this library expands
+pcre		([a-zA-Z]+)(*scs:(1).*?(?<ABC>[A-Z]+)(*scan_substring:('ABC').*(.)\\3))#+		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		([a-z])([a-z]++)(#+)(*scs:(2)(ab.))		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		([a-z]++)##(*scs:(1)(abc))?!		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		([a-z]++)##(*scs:(1)(abc))??(?(2)!|:)		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		([a-z]++)##(*scs:(1)(abc)|xyz){8}(?(2)!|:)		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		([a-z]{2})[a-z](*scs:(1)(.*?))\\2$		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		(\\2)((?=(?<=\\1)))		lookbehind length: the reference computes a bound from a backreference or a call and this library does not
+pcre		(\\d++)(*scs:(1)\\d+$)(\\w+)		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		(\\d++)(*scs:(1)\\d+\\Z)(\\w+)		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		(\\d++)(*scs:(1)\\d+\\z)(\\w+)		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		(\\w++)=(?(*scs:(1)(abc))pqr|xyz)(\\w++)		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		(a(?<=b(?1)))		lookbehind length: the reference computes a bound from a backreference or a call and this library does not
+pcre		(a)(*scs:(1)a(*ACCEPT))bbb		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		(a)(?(DEFINE)(b))(?2){0,1999}?(?2)		refused by the default limits; the reference answers it with an optimisation this library does not have
+pcre		(a)(?2){0,1999}?(b)		refused by the default limits; the reference answers it with an optimisation this library does not have
+pcre		(a)(?<=b+(?1))		lookbehind length: the reference computes a bound from a backreference or a call and this library does not
+pcre		(a)(b)(*scs:(2)(*scs:(1)a(*COMMIT)x)).+|(.+)		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		(a)(b)(*scs:(2)(*scs:(1)a(*PRUNE)x)).+|(.+)		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		(a)(b+)(*scs:(1)a(*ACCEPT))(\\2)		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		(a+)(?<=b(?1))		lookbehind length: the reference computes a bound from a backreference or a call and this library does not
+pcre		(a\\2)(b\\1)(?<=\\2)		lookbehind length: the reference computes a bound from a backreference or a call and this library does not
+pcre		(abc)(def)(*MARK:markstr)(*scs:(2)(?:(*scs:(1)abc(*SKIP:markstr)x))).+|(.+)		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		(abc)(def)(*scs:(1)(*scs:(2)de(*SKIP)x)).+|(.+)		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		(abc)(def)(*scs:(2)(*scs:(1)(*SKIP)x)).+|(.+)		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		(abc)(def)(*scs:(2)(?:(*scs:(1)abc(*SKIP:notfound)x|abcd|(abc)))).+		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		(xyz)(abc)(*scs:(-1)abc)(*scs:(-2)\\1)		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		[A-Z]{3}([A-Z]++)#(*scs:(1)(?<=BC)XY)#		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		[\\N{4}]		not yet classified: expected error Invalid pattern syntax, got Internal error
+pcre		[a-[.xxx.]]+		POSIX collating element: refused, there is no locale here
+pcre		[a-[=xxx=]]+		POSIX collating element: refused, there is no locale here
+pcre		\\A(*napla:.*\\b(\\w++))(?>.*?\\b\\1\\b){3}		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
+pcre		\\A(?*.*\\b(\\w++))(?>.*?\\b\\1\\b){3}		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
+pcre		\\[()]{65535}()		a repeat count the reference folds and this library expands
+pcre		\\[()]{65535}(?<A>)		a repeat count the reference folds and this library expands
+pcre		\\b(\\w++)(*scs:(1)^)		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		\\d{0,3}(*:abc)(?C1)xxx		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
+pcre		^(([a-z]([a-z]*+))(*scs:(2).(?=(?1)|$)\\3)|#){5}		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		^(?:(.){20,30}#|([a-z]++)(*scs:(1)(a+)(*THEN)b){20,30}#|(.){20,30}!)		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		^(?[\\x61])+b		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		^(?[\\x61])b		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
+pcre		^(?|(\\*)(*napla:\\S*_(\\2?+.+))|(\\w)(?=\\S*_(\\2?+\\1)))+_\\2$		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
+pcre		^(?|(\\*)(*napla:\\S*_(\\3?+.+))|(\\w)(?=\\S*_((\\2?+\\1))))+_\\2$		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
+pcre		^([a-z]++)#(*scs:(1)a|ab|abc|abcd|abcde|abcdef|(abcdefg))\\2		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		^([a-z]++)(*scs:(1)((a+)(*THEN)b))?		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		^([a-z]++)(*scs:(1)((a+)(*THEN)b)|(a+)(*THEN)c|(aa))		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		^([a-z]++)(*scs:(1)(a+)(*THEN)b|(a+)(*THEN)c|(aa))		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		^([a-z]++)(*scs:(1)(abc|(a+)(*THEN)b))?		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		^([a-z]++)(?:((?6))|((?7))|((?8))|(#))(?(DEFINE)((*scs:(1)abc(*PRUNE)d))((*scs:(1)abc(*COMMIT)e))((*scs:(1)abc(*SKIP)f)))		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		^(a(*:A)(d|e(*:B))z|aeq)		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
+pcre		a(*MARK)b		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
+pcre		a(*MARK:A)aa(*MARK:A)a(*SKIP:A)b|a+c		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
+pcre		a(*MARK:A)aa(*PRUNE:A)a(*SKIP:A)b|a+c		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
+pcre		a(?:(*:X))(*SKIP:X)(*F)|(.)		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
+pcre		a(?=.(*:X))(*SKIP:X)(*F)|(.)		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
+pcre		a(?>(*:X))(*SKIP:X)(*F)|(.)		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
+pcre		a(?{"{"})b		Perl's embedded code `(?{...})`: refused as unsupported where the reference calls it a syntax error
+pcre		a(?{"{"}})b		Perl's embedded code `(?{...})`: refused as unsupported where the reference calls it a syntax error
+pcre		a(?{)b		Perl's embedded code `(?{...})`: refused as unsupported where the reference calls it a syntax error
+pcre		a(?{{})b		Perl's embedded code `(?{...})`: refused as unsupported where the reference calls it a syntax error
+pcre		a(?{}})b		Perl's embedded code `(?{...})`: refused as unsupported where the reference calls it a syntax error
+pcre		a+(*:Z)b(*COMMIT:X)(*SKIP:X)c|.*		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
+pcre		a+(*:Z)b(*COMMIT:X)(*SKIP:Z)c|.*		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
+pcre		aaa(*MARK:A)a(*SKIP:A)b|a+c		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
+pcre		aaaa(*:N)a(*SKIP:N)(*PRUNE)b|a+c		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
+pcre		aaaaa(*:m)(*MARK:m)(*PRUNE)(*SKIP:m)m|a+		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
+pcre		aaaaa(*:m)(*PRUNE:m)(*SKIP:m)m|a+		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
+pcre		aaaaa(*:n)(*MARK:m)(*PRUNE)(*SKIP:m)m|a+		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
+pcre		aaaaa(*:n)(*PRUNE:m)(*SKIP:m)m|a+		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
+pcre		abc(*:)pqr		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
+pcre		abc(*MARK:)pqr		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
+pcre		f(?:(*scs:(+1,+2)(?<=(.)))|()){16}		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		x(?|(*scs:(1)(?<=(.)))|()){8}		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre		z{65536}		refused by the default limits; the reference answers it with an optimisation this library does not have
+pcre	J	(*scs:(<GOOD_NAME>)a)(?<GOOD_NAME>a)(?<GOOD_NAME>b)(?<GOOD_NAME>c)(?<GOOD_NAME>d)|x		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre	J	(?:(?'A'a)|(?<A>b))(*scs:('A')b)c		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre	J	(?:(?<YYY>[a-z]++)|(?<YYY>[0-9]++)|$)(*scan_substring:('YYY')((?<START>.).*\\k<START>$))		`(*scs:` scan substring: refused, it constrains the body and a group does not
+pcre	J	(?<A>[ab])...(?<=\\k'A')(?<A>)z		lookbehind length: the reference computes a bound from a backreference or a call and this library does not
+perl		(((aa){2})+)	aaaaaaaaaa	not yet classified: pike: expected 0-8 0-8 4-8 8-10, got 0-8 0-8 4-8 6-8
+perl		(((a{2}){2})+)	aaaaaaaaaa	not yet classified: pike: expected 0-8 0-8 4-8 8-10, got 0-8 0-8 4-8 6-8
+perl		((?(1)aa|b))+	baaaa	a conditional whose test and the capture-reset rule disagree
+perl		((?(1)a|b))+	baaa	a conditional whose test and the capture-reset rule disagree
+perl		((?|(?<a>a)(?-1)|(?<b>b)(?-1)|(?<c>c)(?-1)))	bb 	branch reset: the numbering is shared, and the names and references inside one are not checked against it yet
+perl		((?|(?<a>a)(?-1)|(?<b>b)(?-1)|(?<c>c)(?-1)))	cc 	branch reset: the numbering is shared, and the names and references inside one are not checked against it yet
+perl		((\\3|b)\\2(a)){2,}	bbaababbabaaaaabbaaaabba	a backreference or a call whose target is written after it
+perl		((def){37,17})?ABC	ABC	not yet classified: compile failed: Invalid pattern syntax (quantifier minimum exceeds its maximum)
+perl		()?(?(1)a|b)	a	a conditional whose test and the capture-reset rule disagree
+perl		(.*?)a(?!(a+)b\\2c)	baaabaac	a capture set inside a failed negative lookahead: Perl keeps it, this library and PCRE2 discard it
+perl		(?(DEFINE)(?<a>(?:[ab]|[cd](*ACCEPT)|[ef])g))(?&a)(?&a)	agcq	a conditional whose test and the capture-reset rule disagree
+perl		(?(DEFINE)(?<a>(?:[ab]|[cd](*ACCEPT)|[ef])g))(?&a)(?&a)	cc	a conditional whose test and the capture-reset rule disagree
+perl		(?<!([cd](*ACCEPT)|x)gggg)blrph	cblrph	lookbehind length: the reference computes a bound from a backreference or a call and this library does not
+perl		(?<!([cd](*ACCEPT)|x)gggg)blrph	dblrph	lookbehind length: the reference computes a bound from a backreference or a call and this library does not
+perl		(?<=([cd](*ACCEPT)|x)gggg)blrph	cblrph	lookbehind length: the reference computes a bound from a backreference or a call and this library does not
+perl		(?<=([cd](*ACCEPT)|x)gggg)blrph	dblrph	lookbehind length: the reference computes a bound from a backreference or a call and this library does not
+perl		(?<=([cd](*ACCEPT)|x)gggg)blrph	xggggblrph	lookbehind length: the reference computes a bound from a backreference or a call and this library does not
+perl		(?=foo)(?<=(a??))	afoo	lookbehind length: the reference computes a bound from a backreference or a call and this library does not
+perl		(?=foo)(?<=(|a|aa))	aafoo	lookbehind length: the reference computes a bound from a backreference or a call and this library does not
+perl		(?a-x		Perl's charset modifiers `a`, `d`, `l`, `u`: this library has one character-set semantics, not five
+perl		(?a:((?u)\\w)\\W)	ÀÀ	Perl's charset modifiers `a`, `d`, `l`, `u`: this library has one character-set semantics, not five
+perl		(?a:\\p{Any})	Ā	Perl's charset modifiers `a`, `d`, `l`, `u`: this library has one character-set semantics, not five
+perl		(?aa:\\p{Any})	Ā	Perl's charset modifiers `a`, `d`, `l`, `u`: this library has one character-set semantics, not five
+perl		(?aia:s)	S	Perl's charset modifiers `a`, `d`, `l`, `u`: this library has one character-set semantics, not five
+perl		(?aia:s)	ſ	Perl's charset modifiers `a`, `d`, `l`, `u`: this library has one character-set semantics, not five
+perl		(?iaa:A?\\K*)	African_Feh	not yet classified: compile failed: Unsupported feature (construct is not implemented yet)
+perl		(?iaa:A?\\K+)	African_Feh	not yet classified: compile failed: Unsupported feature (construct is not implemented yet)
+perl		(?iaax:A? \\K +)	African_Feh	not yet classified: compile failed: Unsupported feature (construct is not implemented yet)
+perl		(?il)\\x{100}|\\x{100}|\\x{FE}	þ	Perl's charset modifiers `a`, `d`, `l`, `u`: this library has one character-set semantics, not five
+perl		(?iu)(?<=\\xdf)hbase	sshbase	lookbehind length: the reference computes a bound from a backreference or a call and this library does not
+perl		(?l:a?\\D)	b	Perl's charset modifiers `a`, `d`, `l`, `u`: this library has one character-set semantics, not five
+perl		(?l:a?\\w)	b	Perl's charset modifiers `a`, `d`, `l`, `u`: this library has one character-set semantics, not five
+perl		(?|(?<a>a)|(?<b>b))(?(<a>)x|y)\\1	bxb 	branch reset: the numbering is shared, and the names and references inside one are not checked against it yet
+perl		(?|(?<a>a)|(?<b>b))(?(<a>)x|y)\\1	byb 	branch reset: the numbering is shared, and the names and references inside one are not checked against it yet
+perl		(?|(?<a>a)|(?<b>b))\\1(?&a)(?&b)	bbab 	branch reset: the numbering is shared, and the names and references inside one are not checked against it yet
+perl		.X(.+)+X	bbbbXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	refused by the default limits; the reference answers it with an optimisation this library does not have
+perl		.X(.+)+X	bbbbXcXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	refused by the default limits; the reference answers it with an optimisation this library does not have
+perl		.X(.+)+XX	bbbbXXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	refused by the default limits; the reference answers it with an optimisation this library does not have
+perl		.X(.+)+XX	bbbbXcXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	refused by the default limits; the reference answers it with an optimisation this library does not have
+perl		.X(.+)+[X]	bbbbXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	refused by the default limits; the reference answers it with an optimisation this library does not have
+perl		.X(.+)+[X]	bbbbXcXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	refused by the default limits; the reference answers it with an optimisation this library does not have
+perl		.X(.+)+[X][X]	bbbbXXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	refused by the default limits; the reference answers it with an optimisation this library does not have
+perl		.X(.+)+[X][X]	bbbbXcXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	refused by the default limits; the reference answers it with an optimisation this library does not have
+perl		.XX(.+)+X	bbbbXXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	refused by the default limits; the reference answers it with an optimisation this library does not have
+perl		.XX(.+)+X	bbbbXXcXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	refused by the default limits; the reference answers it with an optimisation this library does not have
+perl		.XX(.+)+[X]	bbbbXXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	refused by the default limits; the reference answers it with an optimisation this library does not have
+perl		.XX(.+)+[X]	bbbbXXcXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	refused by the default limits; the reference answers it with an optimisation this library does not have
+perl		.[X](.+)+[X]	bbbbXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	refused by the default limits; the reference answers it with an optimisation this library does not have
+perl		.[X](.+)+[X]	bbbbXcXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	refused by the default limits; the reference answers it with an optimisation this library does not have
+perl		.[X](.+)+[X][X]	bbbbXXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	refused by the default limits; the reference answers it with an optimisation this library does not have
+perl		.[X](.+)+[X][X]	bbbbXcXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	refused by the default limits; the reference answers it with an optimisation this library does not have
+perl		.[X][X](.+)+[X]	bbbbXXXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	refused by the default limits; the reference answers it with an optimisation this library does not have
+perl		.[X][X](.+)+[X]	bbbbXXcXaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	refused by the default limits; the reference answers it with an optimisation this library does not have
+perl		2(]*)?$\\1	2	a backreference or a call whose target is written after it
+perl		X(?!b+(?!(c+)*(?!(c+)*d))).*X	aXbbbbbbbcccccccccccccaaaX	a capture set inside a failed negative lookahead: Perl keeps it, this library and PCRE2 discard it
+perl		\\B{ gcb }		`\b{wb}` and kin: Perl's Unicode boundary escapes, not implemented
+perl		\\B{ lb }		`\b{wb}` and kin: Perl's Unicode boundary escapes, not implemented
+perl		\\B{ sb }		`\b{wb}` and kin: Perl's Unicode boundary escapes, not implemented
+perl		\\B{ wb }		`\b{wb}` and kin: Perl's Unicode boundary escapes, not implemented
+perl		\\B{gcb}		`\b{wb}` and kin: Perl's Unicode boundary escapes, not implemented
+perl		\\B{lb}		`\b{wb}` and kin: Perl's Unicode boundary escapes, not implemented
+perl		\\B{sb}		`\b{wb}` and kin: Perl's Unicode boundary escapes, not implemented
+perl		\\B{wb}		`\b{wb}` and kin: Perl's Unicode boundary escapes, not implemented
+perl		\\N(?#comment){SPACE}		not yet classified: expected error Invalid pattern syntax, got No error
+perl		\\p{nv=-0}	٠	not yet classified: compile failed: Invalid pattern syntax (unknown Unicode property)
+perl		\\x{_1_0000}	𐀀	not yet classified: compile failed: Invalid pattern syntax (malformed hexadecimal escape)
+perl		^(.\\1?)(?1)$	aba	a backreference or a call whose target is written after it
+perl		^(a(?(1)\\1)){4}$	aaaaaaaaaa	a conditional whose test and the capture-reset rule disagree
+perl		^(a*?)(?!(aa|aaaa)*$)	aaaaaaaaaaaaaaaaaaaa	a capture set inside a failed negative lookahead: Perl keeps it, this library and PCRE2 discard it
+perl		^(a*?)(?!(aa|aaaa)*$)(?=a\\z)	aaaaaaaa	a capture set inside a failed negative lookahead: Perl keeps it, this library and PCRE2 discard it
+perl		^(a*?)(?!(a{6}|a{5})*$)	aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	a capture set inside a failed negative lookahead: Perl keeps it, this library and PCRE2 discard it
+perl		^(a\\1?){4}$	aaaaaa	a backreference or a call whose target is written after it
+perl		^(a\\1?){4}$	aaaaaaaaaa	a backreference or a call whose target is written after it
+perl		^\\p{L_}	㐀	not yet classified: pike: expected nomatch, got 0-3
+perl		a?\\X	aĀ	`\X` grapheme cluster: the break rules are plan.md WP-12 and are not generated yet
+perl		m?^xy\\?$?	xy?	not yet classified: compile failed: Invalid pattern syntax (quantifier has nothing to repeat)
+perl	i	^(?d:\\xdf|_)*_	ſſ_	Perl's charset modifiers `a`, `d`, `l`, `u`: this library has one character-set semantics, not five
+perl	i	ff	ﬀﬁ	full case folding: implemented as simple folding, a deviation recorded in design.md section 10
+perl	i	ff	ﬁﬀ	full case folding: implemented as simple folding, a deviation recorded in design.md section 10
+perl	i	ffiffl	abcdefﬃﬄ	full case folding: implemented as simple folding, a deviation recorded in design.md section 10
+perl	i	fi	ﬀﬁ	full case folding: implemented as simple folding, a deviation recorded in design.md section 10
+perl	i	fi	ﬁﬀ	full case folding: implemented as simple folding, a deviation recorded in design.md section 10
+perl	i	ssst	ßﬅ	full case folding: implemented as simple folding, a deviation recorded in design.md section 10
+perl	i	st	ßﬅ	full case folding: implemented as simple folding, a deviation recorded in design.md section 10
+perl	iu	\\xdf\\xdf	abcdefssss	full case folding: implemented as simple folding, a deviation recorded in design.md section 10
+perl	iu	s\\xDF	ßs	full case folding: implemented as simple folding, a deviation recorded in design.md section 10
+perl	m	b\\s^	a\nb\n	not yet classified: pike: expected nomatch, got 2-4
+perl	x	^ (a|\\3(?1)\\2|(?2)) ((b|c)(?4)?) (?1) (d(?1)) $	abbcdcabbda	a backreference or a call whose target is written after it
+perl	x	abc\\N {SPACE}		not yet classified: expected error Invalid pattern syntax, got No error
+perl	x	abc\\N {U+41}		not yet classified: expected error Invalid pattern syntax, got No error

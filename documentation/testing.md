@@ -145,18 +145,44 @@ discovers every `.rxt` under the data directory and, per record:
 3. Runs `grx_regex_search()` on each, with the record's limits.
 4. Checks the spans against `expect`, and checks every engine's spans
    against every other's.
-5. Reports, at the end, the counts: passed, failed, skipped by reason, per
-   dialect and per source file. The per-dialect pass rate is what
-   `README.md` publishes.
+5. Reports, at the end, the counts: passed, failed, skipped by reason,
+   known gaps, per dialect and per source file. The per-dialect pass rate is
+   what `README.md` publishes, and it has the known gaps in its denominator.
 
 A dialect with **no front end at all** is a skip rather than a failure, and
 the runner tells the two apart by compiling the pattern `a` in that dialect
 once: a dialect that refuses *that* has not been built yet, which is a
-different thing from a dialect that refuses one construct. This is what lets
-a corpus be imported before the front end that reads it - the PCRE2 and Perl
-vectors are in the tree now and counted as skipped, so that WP-18's and
-WP-21's first run has something to be measured against on the day it exists
-rather than months later.
+different thing from a dialect that refuses one construct. This is what let
+the PCRE2 and Perl corpora be imported before the front ends that read them,
+so that WP-18's and WP-21's first run had something to be measured against on
+the day it existed rather than months later.
+
+### Known gaps
+
+A dialect arrives one construct at a time, and between a front end's first
+commit and its last there are patterns the reference compiles and this
+library does not. `tests/data/vectors/known-gaps.txt` is where those live:
+one line per record - dialect, flags, pattern, subject, and **why** - and the
+runner reads it.
+
+Two ways of holding this were rejected. Letting the suite be red makes a gate
+nobody reads, and one nobody reads is one that stops catching the regression
+it exists for. Publishing a percentage with no list behind it makes a number
+nobody can check. The file is the third way, and it is a gate in **both**
+directions:
+
+- a record that fails and is not listed fails the suite, as before;
+- a record that *is* listed and passes fails the suite too, with "remove the
+  entry" - so an entry cannot outlive the gap it names.
+
+The list can therefore only shrink by somebody noticing, and never grows by
+accident. The key includes the subject, because one pattern appears with
+several and an entry naming only the pattern excuses the subjects that were
+already right: `^(a\1?){4}$` answers three of its four and the fourth is the
+gap.
+
+A reason beginning "not yet classified" is one nobody has looked at, and is
+meant to read as the admission it is. There are sixteen of them today.
 
 A failure prints the record verbatim, the engine, the expected and actual
 spans, and both dump outputs.
@@ -446,6 +472,16 @@ absent.
   with the flags this library maps them to: `x` decides whether `#` starts a
   comment, so `/a#)/x` compiles and `/a#)/` does not, and asking the bare
   pattern recorded the wrong verdict for seven of them.
+
+  A modifier written twice is not a modifier written once. `xx` is extended
+  mode *and* ignores space inside a bracket expression, so `/[a-  z]/xx`
+  compiles and `/[a-  z]/x` is "range out of order" - and this importer folded
+  the two together for one revision, by the same two lines that folded
+  test262's `"ii"` into `"i"`. Both were found the same way: by a front end
+  disagreeing with a verdict the corpus should never have recorded. A
+  duplicate letter is now either a *wider* mode the importer knows about, or a
+  case it refuses to import rather than answer for a pattern nobody asked
+  about.
 
 - **Perl `re_tests`** (`tools/corpus/import_re_tests.py`): the tab-separated
   `pattern subject y/n/c expr expected` format. The corpus's fourth and fifth

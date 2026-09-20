@@ -65,6 +65,15 @@ static GRX_Result storage_failed(
     return GRX_OK;
   }
 
+  // A failure that already said what it was keeps saying it. The two callers
+  // of this both run a step that can fail for its own reason first - an
+  // unknown property name, a POSIX class this library does not widen - and
+  // reporting those as "out of memory" made four corpus records look like
+  // allocation failures when the pattern was simply wrong.
+  if (low->error && low->error->diag != GRX_DIAG_NONE) {
+    return low->error->code;
+  }
+
   GRX_Diag diag = GRX_DIAG_OUT_OF_MEMORY;
   if (result == GRX_ERR_LIMIT) {
     diag = GRX_DIAG_LIMIT_NODES;
@@ -121,6 +130,157 @@ static GRX_Result intern(Lowering * low, GRX_CharClass * cls,
 // Classes
 // --------------------------------------------------------------------------
 
+/** Add the code points of a property, by the name the UCD gives it. */
+static GRX_Result add_property_named(Lowering * low, const char * name,
+    GRX_CharClass * out) {
+  uint32_t property = 0;
+  GRX_Result result = grx_unicode_property_lookup(
+      name, strlen(name), NULL, 0, GRX_PROPERTY_LOOSE, &property);
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  size_t count = 0;
+  const GRX_CharRange * ranges = grx_unicode_property_ranges(property, &count);
+  return grx_charclass_add_ranges(out, ranges, count, low->limits);
+}
+
+/**
+ * Fill `out` with what `[[:name:]]` stands for.
+ *
+ * The ASCII definitions are IEEE Std 1003.1's for the C locale, which is what
+ * both references use without UCP. With UCP, PCRE2 widens most of them to
+ * Unicode properties, and the ones it widens in a way this library cannot yet
+ * state exactly are refused rather than answered with the ASCII set: a
+ * `[[:graph:]]` that quietly means "printable ASCII" under `(*UCP)` is a
+ * wrong answer wearing a right one's clothes.
+ */
+static GRX_Result posix_class_set(Lowering * low, const GRX_ClassItem * item,
+    const GRX_Node * node, GRX_CharClass * out) {
+  const char * name = grx_pattern_name(low->pattern, item->a);
+  if (!name) {
+    return fail(low, GRX_DIAG_INTERNAL, node);
+  }
+
+  // Not `low->shorthands`, which UTF alone widens. pcre2pattern is explicit
+  // that the POSIX classes use Unicode "only if PCRE2_UCP is set", so
+  // `(*UTF)[[:alpha:]]` is ASCII and `(*UTF)(*UCP)[[:alpha:]]` is not. Perl
+  // is the other case and needs no flag: its classes are Unicode by default,
+  // which its profile already says by naming the Unicode sets in *both*
+  // shorthand columns.
+  int wide = (low->options & GRX_OPT_UCP)
+      || low->profile.shorthands == GRX_SHORTHANDS_UNICODE;
+
+  struct Range { uint32_t lo; uint32_t hi; };
+  static const struct Range ascii_only[] = {{0x00, 0x7F}};
+  static const struct Range blank[] = {{0x09, 0x09}, {0x20, 0x20}};
+  static const struct Range cntrl[] = {{0x00, 0x1F}, {0x7F, 0x7F}};
+  static const struct Range digit[] = {{'0', '9'}};
+  static const struct Range graph[] = {{0x21, 0x7E}};
+  static const struct Range lower[] = {{'a', 'z'}};
+  static const struct Range print[] = {{0x20, 0x7E}};
+  static const struct Range punct[] = {{0x21, 0x2F}, {0x3A, 0x40},
+      {0x5B, 0x60}, {0x7B, 0x7E}};
+  static const struct Range space[] = {{0x09, 0x0D}, {0x20, 0x20}};
+  static const struct Range upper[] = {{'A', 'Z'}};
+  static const struct Range alpha[] = {{'A', 'Z'}, {'a', 'z'}};
+  static const struct Range alnum[] = {{'0', '9'}, {'A', 'Z'}, {'a', 'z'}};
+  static const struct Range word[] = {{'0', '9'}, {'A', 'Z'}, {'_', '_'},
+      {'a', 'z'}};
+  static const struct Range xdigit[] = {{'0', '9'}, {'A', 'F'}, {'a', 'f'}};
+
+  const struct Range * ranges = NULL;
+  size_t count = 0;
+  const char * property = NULL;      ///< The UCP widening, when there is one.
+  const char * second = NULL;        ///< A second property to union with it.
+  int refuse_wide = 0;               ///< Widened by PCRE2, not yet by this.
+
+#define POSIX_ROW(text, table, wide_name, wide_second, refuse)                  if (strcmp(name, text) == 0) {                                                 ranges = table;                                                              count = sizeof(table) / sizeof(*table);                                      property = wide_name;                                                        second = wide_second;                                                        refuse_wide = refuse;                                                      } else
+
+  POSIX_ROW("alnum", alnum, "Alphabetic", "Nd", 0)
+  POSIX_ROW("alpha", alpha, "Alphabetic", NULL, 0)
+  POSIX_ROW("ascii", ascii_only, NULL, NULL, 0)
+  POSIX_ROW("blank", blank, "Zs", NULL, 0)
+  POSIX_ROW("cntrl", cntrl, "Cc", NULL, 0)
+  POSIX_ROW("digit", digit, "Nd", NULL, 0)
+  POSIX_ROW("graph", graph, NULL, NULL, 0)
+  POSIX_ROW("lower", lower, "Lowercase", NULL, 0)
+  POSIX_ROW("print", print, NULL, NULL, 0)
+  POSIX_ROW("punct", punct, "P", "S", 0)
+  POSIX_ROW("space", space, "White_Space", NULL, 0)
+  POSIX_ROW("upper", upper, "Uppercase", NULL, 0)
+  POSIX_ROW("word", word, NULL, NULL, 0)
+  POSIX_ROW("xdigit", xdigit, NULL, NULL, 0)
+  {
+    // The parser checked the name against the same list, so a name that is
+    // unknown here is the two lists disagreeing.
+    return fail(low, GRX_DIAG_INTERNAL, node);
+  }
+#undef POSIX_ROW
+
+  if (wide && refuse_wide) {
+    return fail(low, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, node);
+  }
+
+  if (wide && strcmp(name, "word") == 0) {
+    return grx_named_set(out, GRX_SET_UNICODE_WORD, low->limits);
+  }
+
+  if (wide && (strcmp(name, "graph") == 0 || strcmp(name, "print") == 0)) {
+    // pcre2pattern under UCP: `graph` is everything that is neither a
+    // separator nor a control or unassigned code point, and `print` is that
+    // plus the space separators. Built by complement rather than by naming
+    // the categories that remain, because "everything except C and Z" is the
+    // definition and a list of the others would be a second thing to keep in
+    // step with each Unicode release.
+    GRX_CharClass excluded;
+    grx_charclass_init(&excluded, out->allocator);
+    GRX_Result result = add_property_named(low, "C", &excluded);
+    if (result == GRX_OK) {
+      result = add_property_named(low, "Z", &excluded);
+    }
+    if (result == GRX_OK) {
+      result = grx_charclass_complement(&excluded, low->limits);
+    }
+    if (result == GRX_OK) {
+      result = grx_charclass_union(out, &excluded, low->limits);
+    }
+    grx_charclass_clear(&excluded);
+    if (result != GRX_OK) {
+      return result;
+    }
+    if (strcmp(name, "print") == 0) {
+      return add_property_named(low, "Zs", out);
+    }
+    return GRX_OK;
+  }
+
+  if (wide && property) {
+    GRX_Result result = add_property_named(low, property, out);
+    if (result == GRX_OK && second) {
+      result = add_property_named(low, second, out);
+    }
+    if (result != GRX_OK) {
+      return fail(low, GRX_DIAG_INTERNAL, node);
+    }
+    if (strcmp(name, "blank") == 0) {
+      // PCRE2 keeps the tab in `blank` under UCP; `Zs` does not contain it.
+      return grx_charclass_add_range(out, 0x09, 0x09, low->limits);
+    }
+    return GRX_OK;
+  }
+
+  for (size_t i = 0; i < count; i++) {
+    GRX_Result result
+        = grx_charclass_add_range(out, ranges[i].lo, ranges[i].hi, low->limits);
+    if (result != GRX_OK) {
+      return result;
+    }
+  }
+
+  return GRX_OK;
+}
+
 /** Fill `out` with the set one class item denotes, negation not yet applied. */
 static GRX_Result item_base_set(Lowering * low, const GRX_ClassItem * item,
     const GRX_Node * node, GRX_CharClass * out) {
@@ -176,6 +336,8 @@ static GRX_Result item_base_set(Lowering * low, const GRX_ClassItem * item,
     }
 
     case GRX_CLASS_ITEM_POSIX:
+      return posix_class_set(low, item, node, out);
+
     case GRX_CLASS_ITEM_NESTED:
     case GRX_CLASS_ITEM_STRING:
     case GRX_CLASS_ITEM_COUNT:
@@ -395,7 +557,11 @@ static GRX_Result lower_literal(
 static GRX_Result lower_any(
     Lowering * low, const GRX_Node * node, uint32_t * out_node) {
   uint32_t excluded = GRX_INDEX_NONE;
-  if (!(low->options & GRX_OPT_DOTALL)) {
+  // `\N` is `.` with the dot-all option taken away from it: pcre2pattern
+  // defines it as "any character that is not a newline", full stop, and
+  // `(?s)\N` still refuses one. The flag is what tells the two apart, since
+  // by this point both are the same node kind.
+  if (!(low->options & GRX_OPT_DOTALL) || (node->flags & GRX_NODE_NEGATED)) {
     GRX_Result result = newline_class(low, &excluded);
     if (result != GRX_OK) {
       return result;
@@ -565,6 +731,24 @@ static GRX_Result lower_group(
 }
 
 /** Find the group a named backreference refers to. */
+/**
+ * Adopt a new option set, and re-derive what it decides.
+ *
+ * `fold` and `shorthands` are computed once for the whole pattern because
+ * for most dialects the options cannot change halfway through. PCRE2's can:
+ * `(?i)` and `(?-i)` mean that the same class lowers differently either side
+ * of one node, so the derived values have to move with them.
+ */
+static void adopt_options(Lowering * low, uint32_t options) {
+  low->options = options;
+  int utf = (options & GRX_OPT_UTF) != 0 || (options & GRX_OPT_UCP) != 0;
+  low->shorthands = utf ? low->profile.shorthands_utf : low->profile.shorthands;
+  low->fold = GRX_FOLD_NONE;
+  if (options & GRX_OPT_CASELESS) {
+    low->fold = utf ? low->profile.fold_utf : low->profile.fold;
+  }
+}
+
 static GRX_Result resolve_name(
     Lowering * low, const char * name, uint32_t * out_group) {
   for (size_t i = 0; i < low->pattern->nodes.count; i++) {
@@ -581,6 +765,289 @@ static GRX_Result resolve_name(
   }
 
   return GRX_ERR_SYNTAX;
+}
+
+/** Lower `(*ACCEPT)` and its kin: the verb is the node's whole meaning. */
+static GRX_Result lower_verb(
+    Lowering * low, const GRX_Node * node, uint32_t * out_node) {
+  GRX_Result result = add(low, GRX_IR_VERB, node, out_node);
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  GRX_IRNode * verb = grx_ir_node(low->ir, *out_node);
+  verb->mode = (uint8_t)node->a;
+  verb->a = 0;
+  return GRX_OK;
+}
+
+/**
+ * Lower `(?R)`, `(?1)` and `(?&name)` to a call.
+ *
+ * Group 0 is the whole pattern, which is what `(?R)` means and what a
+ * recursion with no target number lowers to.
+ */
+static GRX_Result lower_recurse(
+    Lowering * low, const GRX_Node * node, uint32_t * out_node) {
+  uint32_t group = node->a;
+  if (node->flags & GRX_NODE_NAMED) {
+    const char * name = grx_pattern_name(low->pattern, node->b);
+    if (!name || resolve_name(low, name, &group) != GRX_OK) {
+      return fail(low, GRX_DIAG_UNKNOWN_GROUP_NAME, node);
+    }
+  }
+
+  GRX_Result result = add(low, GRX_IR_RECURSE, node, out_node);
+  if (result != GRX_OK) {
+    return result;
+  }
+  grx_ir_node(low->ir, *out_node)->a = group;
+
+  if (!low->profile.recursion_is_atomic) {
+    return GRX_OK;
+  }
+
+  // PCRE2's rule, and only PCRE2's: once the call has matched, backtracking
+  // does not go back in to try a different way through it. Expressed with
+  // the atomic pair that already exists rather than with a second mechanism
+  // meaning the same thing.
+  uint32_t call = *out_node;
+  result = add(low, GRX_IR_ATOMIC, node, out_node);
+  if (result != GRX_OK) {
+    return result;
+  }
+  return attach(low, *out_node, call);
+}
+
+/** The lookaround that succeeds exactly where this one fails. */
+static GRX_LookKind opposite_look(GRX_LookKind kind) {
+  switch (kind) {
+    case GRX_LOOK_AHEAD_POSITIVE: return GRX_LOOK_AHEAD_NEGATIVE;
+    case GRX_LOOK_AHEAD_NEGATIVE: return GRX_LOOK_AHEAD_POSITIVE;
+    case GRX_LOOK_BEHIND_POSITIVE: return GRX_LOOK_BEHIND_NEGATIVE;
+    case GRX_LOOK_BEHIND_NEGATIVE:
+    default: return GRX_LOOK_BEHIND_POSITIVE;
+  }
+}
+
+/**
+ * Lower `(?(?=A)X|Y)` as `(?:(?=A)X|(?!A)Y)`.
+ *
+ * The rewrite is exact, and it is a rewrite rather than a new opcode because
+ * the two branches are mutually exclusive: no subject can take both, so the
+ * alternation cannot backtrack from one into the other, which is the one
+ * thing that would make a conditional and an alternation differ. `(?(?=a)b|c)`
+ * against "ac" fails in both readings - the condition holds, `b` does not
+ * match, and `c` is unreachable because `(?!a)` refuses the same position.
+ *
+ * The cost is that the assertion is compiled twice and, when it fails, run
+ * twice. An assertion is zero-width and the second run answers the same
+ * question at the same position, so what is paid is time and not meaning.
+ */
+static GRX_Result lower_assertion_conditional(
+    Lowering * low, const GRX_Node * node, uint32_t * out_node) {
+  uint32_t condition_index = node->first_child;
+  const GRX_Node * condition = condition_index == GRX_INDEX_NONE
+      ? NULL
+      : grx_pattern_node(low->pattern, condition_index);
+  if (!condition || condition->kind != GRX_NODE_LOOKAROUND) {
+    return fail(low, GRX_DIAG_INTERNAL, node);
+  }
+
+  uint32_t then_index = condition->next_sibling;
+  const GRX_Node * then_node = then_index == GRX_INDEX_NONE
+      ? NULL
+      : grx_pattern_node(low->pattern, then_index);
+  uint32_t else_index = then_node ? then_node->next_sibling : GRX_INDEX_NONE;
+
+  GRX_Result result = add(low, GRX_IR_ALTERNATE, node, out_node);
+  if (result != GRX_OK) {
+    return result;
+  }
+  uint32_t alternation = *out_node;
+
+  // The true branch: the assertion as written, then the yes-part.
+  uint32_t taken = GRX_INDEX_NONE;
+  result = add(low, GRX_IR_CONCAT, node, &taken);
+  if (result == GRX_OK) {
+    uint32_t look = GRX_INDEX_NONE;
+    result = lower_node(low, condition_index, &look);
+    if (result == GRX_OK) {
+      result = attach(low, taken, look);
+    }
+  }
+  if (result == GRX_OK) {
+    uint32_t body = GRX_INDEX_NONE;
+    result = then_index != GRX_INDEX_NONE
+        ? lower_node(low, then_index, &body)
+        : add(low, GRX_IR_EMPTY, node, &body);
+    if (result == GRX_OK) {
+      result = attach(low, taken, body);
+    }
+  }
+  if (result == GRX_OK) {
+    result = attach(low, alternation, taken);
+  }
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  // The false branch: the assertion inverted, then the else-part. Written
+  // even when there is no else-part, because `(?(?=a)b)` must still fail at a
+  // position where `a` follows and `b` does not.
+  uint32_t other = GRX_INDEX_NONE;
+  result = add(low, GRX_IR_CONCAT, node, &other);
+  if (result == GRX_OK) {
+    uint32_t look = GRX_INDEX_NONE;
+    result = lower_node(low, condition_index, &look);
+    if (result == GRX_OK) {
+      grx_ir_node(low->ir, look)->mode
+          = (uint8_t)opposite_look((GRX_LookKind)condition->a);
+      result = attach(low, other, look);
+    }
+  }
+  if (result == GRX_OK) {
+    uint32_t body = GRX_INDEX_NONE;
+    result = else_index != GRX_INDEX_NONE
+        ? lower_node(low, else_index, &body)
+        : add(low, GRX_IR_EMPTY, node, &body);
+    if (result == GRX_OK) {
+      result = attach(low, other, body);
+    }
+  }
+  if (result == GRX_OK) {
+    result = attach(low, alternation, other);
+  }
+
+  return result;
+}
+
+/**
+ * Lower a conditional.
+ *
+ * The condition's *kind* survives as the IR node's mode, because what it
+ * tests is only knowable while the match runs - whether a group participated,
+ * or whether this is a recursion. The two conditions that are decided before
+ * the match starts are not among them: `(?(VERSION>=...))` was answered by
+ * the parser, and `(?(DEFINE)...)` never runs at all, so both lower to
+ * something with no test in it.
+ */
+static GRX_Result lower_conditional(
+    Lowering * low, const GRX_Node * node, uint32_t * out_node) {
+  GRX_CondKind kind = (GRX_CondKind)node->a;
+
+  if (kind == GRX_COND_DEFINE) {
+    // A definition, not a branch: its body exists to be called by a
+    // subroutine reference and is never entered in sequence.
+    //
+    // The body is still lowered, and the result thrown away. That reads as a
+    // contradiction and is not: the IR is an arena as well as a tree, and a
+    // subroutine call is resolved by finding the capture node with a given
+    // number *in the arena*. Lowering the body puts those nodes there;
+    // dropping the index keeps them out of the tree, so codegen never emits
+    // them in line and `(?(DEFINE)(a))b(?1)c` matches "bac" rather than
+    // "abac".
+    if (node->first_child != GRX_INDEX_NONE) {
+      uint32_t defined = GRX_INDEX_NONE;
+      GRX_Result result = lower_node(low, node->first_child, &defined);
+      if (result != GRX_OK) {
+        return result;
+      }
+    }
+    return add(low, GRX_IR_EMPTY, node, out_node);
+  }
+
+  // For GRX_COND_ASSERTION the first child is the condition and the branches
+  // follow it; for every other kind the children are the branches alone.
+  uint32_t first = node->first_child;
+
+  if (kind == GRX_COND_STATIC) {
+    // Already decided. The branch that was not chosen is dropped rather than
+    // compiled and skipped: a version test the pattern loses should cost
+    // nothing at match time.
+    uint32_t chosen = node->b ? first : GRX_INDEX_NONE;
+    if (!node->b && first != GRX_INDEX_NONE) {
+      const GRX_Node * taken = grx_pattern_node(low->pattern, first);
+      chosen = (taken && (node->flags & GRX_NODE_HAS_ELSE))
+          ? taken->next_sibling
+          : GRX_INDEX_NONE;
+    }
+    if (chosen == GRX_INDEX_NONE) {
+      return add(low, GRX_IR_EMPTY, node, out_node);
+    }
+    return lower_node(low, chosen, out_node);
+  }
+
+  if (kind == GRX_COND_ASSERTION) {
+    return lower_assertion_conditional(low, node, out_node);
+  }
+
+  uint32_t group = node->b;
+  if (node->flags & GRX_NODE_NAMED) {
+    const char * name = grx_pattern_name(low->pattern, node->b);
+    if (!name || resolve_name(low, name, &group) != GRX_OK) {
+      return fail(low, GRX_DIAG_UNKNOWN_GROUP_NAME, node);
+    }
+  }
+
+  GRX_Result result = add(low, GRX_IR_COND, node, out_node);
+  if (result != GRX_OK) {
+    return result;
+  }
+  uint32_t conditional = *out_node;
+  GRX_IRNode * built = grx_ir_node(low->ir, conditional);
+  built->mode = (uint8_t)kind;
+  built->a = group;
+  if (node->flags & GRX_NODE_HAS_ELSE) {
+    built->flags |= GRX_IR_HAS_ELSE;
+  }
+
+  for (uint32_t child = first; child != GRX_INDEX_NONE;) {
+    const GRX_Node * part = grx_pattern_node(low->pattern, child);
+    if (!part) {
+      return fail(low, GRX_DIAG_INTERNAL, node);
+    }
+    uint32_t lowered = GRX_INDEX_NONE;
+    result = lower_node(low, child, &lowered);
+    if (result != GRX_OK) {
+      return result;
+    }
+    result = attach(low, conditional, lowered);
+    if (result != GRX_OK) {
+      return result;
+    }
+    child = part->next_sibling;
+  }
+
+  return GRX_OK;
+}
+
+/**
+ * Lower an inline option setting.
+ *
+ * `(?i:a)` applies to its body and `(?i)` to the rest of the group it is in,
+ * and neither leaves a node behind: by the time lowering is done the options
+ * have been spent on the nodes they changed. The scope is the enclosing
+ * group, which lower_node() restores - the same boundary the parser uses, and
+ * checked against pcre2test: `(a(?i)b|c)` matches "C", so the setting
+ * survives the `|` and not the `)`.
+ */
+static GRX_Result lower_options(
+    Lowering * low, const GRX_Node * node, uint32_t * out_node) {
+  uint32_t applied = (low->options | node->a) & ~node->b;
+
+  if (!(node->flags & GRX_NODE_SCOPED)) {
+    adopt_options(low, applied);
+    return add(low, GRX_IR_EMPTY, node, out_node);
+  }
+
+  uint32_t outer = low->options;
+  adopt_options(low, applied);
+  GRX_Result result = node->first_child != GRX_INDEX_NONE
+      ? lower_node(low, node->first_child, out_node)
+      : add(low, GRX_IR_EMPTY, node, out_node);
+  adopt_options(low, outer);
+  return result;
 }
 
 /** Lower a backreference, resolving a name to a number and fixing the modes. */
@@ -632,10 +1099,26 @@ static GRX_Result lower_repeat(
   GRX_IRNode * repeat = grx_ir_node(low->ir, *out_node);
   repeat->min = node->min;
   repeat->max = node->max;
-  repeat->mode = (uint8_t)node->a;
+  // A possessive repeat is a greedy one that cannot be backtracked into,
+  // which is what an atomic group is. Resolved here rather than carried down
+  // as a third mode, so that no engine has to implement "greedy, but". The
+  // two are the same thing in every reference that has both: pcre2pattern
+  // says `a*+` is "equivalent to (?>a*)" in those words.
+  int possessive = node->a == (uint32_t)GRX_REPEAT_POSSESSIVE;
+  repeat->mode = possessive ? (uint8_t)GRX_REPEAT_GREEDY : (uint8_t)node->a;
   repeat->empty_loop = (uint8_t)low->profile.empty_loop;
   repeat->capture_reset = (uint8_t)low->profile.capture_reset;
-  return attach(low, *out_node, body);
+  result = attach(low, *out_node, body);
+  if (result != GRX_OK || !possessive) {
+    return result;
+  }
+
+  uint32_t inner = *out_node;
+  result = add(low, GRX_IR_ATOMIC, node, out_node);
+  if (result != GRX_OK) {
+    return result;
+  }
+  return attach(low, *out_node, inner);
 }
 
 /** Lower a lookaround, marking a lookbehind's body to run right to left. */
@@ -1084,6 +1567,24 @@ static GRX_Result lower_run(Lowering * low, const uint32_t * points,
  */
 static GRX_Result lower_class_set(
     Lowering * low, const GRX_Node * node, uint32_t * out_node) {
+  if (node->flags & GRX_NODE_ATOMIC) {
+    // `\R`. pcre2pattern writes it as `(?>\r\n|\n|...)`, and the `(?>` is
+    // not decoration: without it `\R\n` would match "\r\n\n" by giving the
+    // LF back, which is exactly what the reference says it will not do.
+    uint32_t inner = GRX_INDEX_NONE;
+    GRX_Node bare = *node;
+    bare.flags &= ~(uint32_t)GRX_NODE_ATOMIC;
+    GRX_Result result = lower_class_set(low, &bare, &inner);
+    if (result != GRX_OK) {
+      return result;
+    }
+    result = add(low, GRX_IR_ATOMIC, node, out_node);
+    if (result != GRX_OK) {
+      return result;
+    }
+    return attach(low, *out_node, inner);
+  }
+
   ClassSet value;
   class_set_init(&value, low->ir->allocator);
   GRX_Result result = evaluate_class_set(low, node, &value);
@@ -1218,8 +1719,16 @@ static GRX_Result lower_node(
     case GRX_NODE_REPEAT:
       return lower_repeat(low, node, out_node);
 
-    case GRX_NODE_GROUP:
-      return lower_group(low, node, out_node);
+    case GRX_NODE_GROUP: {
+      // The same boundary the parser uses, for the same reason: `(a(?i)b)c`
+      // matches "aBc" and not "abC". Every construct with a body of its own
+      // is one of these scopes - a lookaround and a conditional as much as a
+      // plain group - so the restore is here rather than in lower_group().
+      uint32_t outer = low->options;
+      GRX_Result result = lower_group(low, node, out_node);
+      adopt_options(low, outer);
+      return result;
+    }
 
     case GRX_NODE_BACKREF:
       return lower_backref(low, node, out_node);
@@ -1227,22 +1736,47 @@ static GRX_Result lower_node(
     case GRX_NODE_ANCHOR:
       return lower_anchor(low, node, out_node);
 
-    case GRX_NODE_LOOKAROUND:
-      return lower_look(low, node, out_node);
+    case GRX_NODE_LOOKAROUND: {
+      uint32_t outer = low->options;
+      GRX_Result result = lower_look(low, node, out_node);
+      adopt_options(low, outer);
+      return result;
+    }
 
     case GRX_NODE_KEEP:
       return add(low, GRX_IR_KEEP, node, out_node);
 
-    // Everything the parsers of later phases will produce. Each has an IR
-    // kind waiting for it; none has a front end that emits it yet, and a
-    // pattern reaching here with one is a bug in whichever front end did.
-    case GRX_NODE_CONDITIONAL:
-    case GRX_NODE_RECURSE:
     case GRX_NODE_CONTROL:
+      return lower_verb(low, node, out_node);
+
+    case GRX_NODE_RECURSE:
+      return lower_recurse(low, node, out_node);
+
+    case GRX_NODE_CONDITIONAL: {
+      uint32_t outer = low->options;
+      GRX_Result result = lower_conditional(low, node, out_node);
+      adopt_options(low, outer);
+      return result;
+    }
+
     case GRX_NODE_OPTIONS:
-    case GRX_NODE_CLASS_OP:
+      return lower_options(low, node, out_node);
+
+    case GRX_NODE_BRANCH_RESET: {
+      uint32_t outer = low->options;
+      GRX_Result result = lower_sequence(low, node, GRX_IR_ALTERNATE, out_node);
+      adopt_options(low, outer);
+      return result;
+    }
+
     case GRX_NODE_STRING_SET:
-      // Only the `v` grammar builds these, and only inside a class - so
+      // `\q{...}` in `v` mode and `\R` in the Perl family. Both are a set of
+      // strings, which is what the node kind means, so both lower the same
+      // way - longest alternative first, then the single code points.
+      return lower_class_set(low, node, out_node);
+
+    case GRX_NODE_CLASS_OP:
+      // Only the `v` grammar builds this, and only inside a class - so
       // reaching one here without UnicodeSets is a front end producing a
       // node for a mode it was not parsing in.
       if (low->options & GRX_OPT_UNICODE_SETS) {
@@ -1250,7 +1784,6 @@ static GRX_Result lower_node(
       }
       return fail(low, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, node);
 
-    case GRX_NODE_BRANCH_RESET:
     case GRX_NODE_COUNT:
     default:
       return fail(low, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, node);
@@ -1287,14 +1820,7 @@ GRX_Result grx_lower_pattern(const GRX_Pattern * pattern,
   // The two option-dependent choices the whole run reads. Both are made once
   // here rather than at each use, so that "which folding is this pattern
   // using" has one answer.
-  int utf = (low.options & GRX_OPT_UTF) != 0
-      || (low.options & GRX_OPT_UCP) != 0;
-  low.shorthands
-      = utf ? low.profile.shorthands_utf : low.profile.shorthands;
-  low.fold = GRX_FOLD_NONE;
-  if (low.options & GRX_OPT_CASELESS) {
-    low.fold = utf ? low.profile.fold_utf : low.profile.fold;
-  }
+  adopt_options(&low, low.options);
 
   result = grx_ir_create(allocator, limits, &low.ir);
   if (result != GRX_OK) {
@@ -1302,6 +1828,12 @@ GRX_Result grx_lower_pattern(const GRX_Pattern * pattern,
         out_error, result, GRX_DIAG_OUT_OF_MEMORY, GRX_NPOS, 0);
   }
 
+  // PCRE2's default max_varlookbehind, which Perl shares. A dialect whose
+  // lookbehind is unbounded (ECMAScript) sets no cap at all, and one with no
+  // lookbehind never reaches the check because the parser refuses the
+  // construct first.
+  low.ir->max_variable_lookbehind
+      = low.profile.lookbehind == GRX_LOOKBEHIND_BOUNDED ? 255 : GRX_NPOS;
   low.ir->preference = low.profile.preference;
   low.ir->iteration = low.profile.iteration;
   low.ir->capture_count = pattern->capture_count;

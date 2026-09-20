@@ -35,6 +35,18 @@ static const GRX_CharRange ascii_space[] = {{0x09, 0x0D}, {0x20, 0x20}};
 static const GRX_CharRange ascii_hspace[] = {{0x09, 0x09}, {0x20, 0x20}};
 static const GRX_CharRange ascii_vspace[] = {{0x0A, 0x0D}};
 
+// pcre2pattern's own lists. `\h` is the horizontal whitespace, which is the
+// space separators together with the tab and the no-break space; `\v` is the
+// vertical, which adds U+0085 to the line and paragraph separators.
+static const GRX_CharRange unicode_hspace[] = {
+  {0x0009, 0x0009}, {0x0020, 0x0020}, {0x00A0, 0x00A0}, {0x1680, 0x1680},
+  {0x2000, 0x200A}, {0x202F, 0x202F}, {0x205F, 0x205F}, {0x3000, 0x3000},
+};
+
+static const GRX_CharRange unicode_vspace[] = {
+  {0x000A, 0x000D}, {0x0085, 0x0085}, {0x2028, 0x2029},
+};
+
 /**
  * ECMA-262's `\s`: WhiteSpace (table 34) united with LineTerminator.
  *
@@ -92,6 +104,10 @@ GRX_Result grx_named_set(
     [GRX_SET_ES_SPACE] = {es_space, sizeof(es_space) / sizeof(*es_space)},
     [GRX_SET_ASCII_HSPACE] = {ascii_hspace, sizeof(ascii_hspace) / sizeof(*ascii_hspace)},
     [GRX_SET_ASCII_VSPACE] = {ascii_vspace, sizeof(ascii_vspace) / sizeof(*ascii_vspace)},
+    [GRX_SET_UNICODE_HSPACE]
+        = {unicode_hspace, sizeof(unicode_hspace) / sizeof(*unicode_hspace)},
+    [GRX_SET_UNICODE_VSPACE]
+        = {unicode_vspace, sizeof(unicode_vspace) / sizeof(*unicode_vspace)},
     [GRX_SET_NEWLINES_LF] = {newlines_lf, sizeof(newlines_lf) / sizeof(*newlines_lf)},
     [GRX_SET_NEWLINES_ES] = {newlines_es, sizeof(newlines_es) / sizeof(*newlines_es)},
     [GRX_SET_NEWLINES_UNICODE]
@@ -169,13 +185,14 @@ GRX_Result grx_shorthand_set(GRX_CharClass * cls, GRX_ShorthandSet shorthands,
 
     case GRX_SHORTHAND_HSPACE:
     case GRX_SHORTHAND_NOT_HSPACE:
-      return grx_named_set(cls, GRX_SET_ASCII_HSPACE, limits);
+      return grx_named_set(cls,
+          unicode ? GRX_SET_UNICODE_HSPACE : GRX_SET_ASCII_HSPACE, limits);
 
     case GRX_SHORTHAND_VSPACE:
     case GRX_SHORTHAND_NOT_VSPACE:
-      return grx_named_set(cls, GRX_SET_ASCII_VSPACE, limits);
+      return grx_named_set(cls,
+          unicode ? GRX_SET_UNICODE_VSPACE : GRX_SET_ASCII_VSPACE, limits);
 
-    case GRX_SHORTHAND_NOT_NEWLINE:
     case GRX_SHORTHAND_COUNT:
     default:
       return GRX_ERR_UNSUPPORTED;

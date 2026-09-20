@@ -87,7 +87,15 @@ typedef enum {
   GRX_SHORTHAND_NOT_HSPACE,   ///< `\H`.
   GRX_SHORTHAND_VSPACE,       ///< `\v`.
   GRX_SHORTHAND_NOT_VSPACE,   ///< `\V`.
-  GRX_SHORTHAND_NOT_NEWLINE,  ///< `\N`, "any code point that is not a newline".
+  /**
+   * `\N` is deliberately not here.
+   *
+   * It is "any character that is not a newline", which is GRX_NODE_ANY with
+   * the dialect's newline set excluded - the node kind that already carries
+   * that set. It had a shorthand of its own for one revision, and the
+   * shorthand had no reader: nothing could turn it into a set, because the
+   * set it names is not a property of the character but of the dialect.
+   */
   GRX_SHORTHAND_COUNT         ///< Closes the enum; not a shorthand.
 } GRX_ShorthandKind;
 
@@ -380,6 +388,32 @@ typedef struct GRX_Parser {
   size_t groups_opened;            ///< Capturing groups numbered so far.
   int named_groups;                ///< Non-zero if the pattern names a group.
   int in_lookbehind;               ///< Non-zero inside a lookbehind body.
+  /**
+   * Non-zero inside a lookaround body of any direction.
+   *
+   * Separate from `in_lookbehind` because two different rules read them.
+   * Reverse execution is a property of looking *behind*; PCRE2's refusal of
+   * `\K` is a property of being inside a lookaround at all, and `(?=a\Kb)`
+   * is refused for the same reason `(?<=a\Kb)` is.
+   */
+  int in_lookaround;
+  /**
+   * While inside a quoted run: the offset at which it ends.
+   *
+   * GRX_NPOS when there is no run in progress, which is always the case for
+   * a dialect without GRX_FEATURE_QUOTING.
+   *
+   * The mechanism is here and the spelling is not, which is the usual split
+   * one level down: `\Q` and `\E` are PCRE2's and Java's spelling and
+   * belong to their front ends, but "the characters in this span are
+   * literals, whatever the shared grammar would otherwise make of them" is
+   * something only the shared grammar can act on - it is the shared grammar
+   * that decides `*` is a quantifier and `|` ends a branch. A front end
+   * opens a run by setting this; the parser closes it by clearing the field
+   * when the position reaches it, so the `\E` itself is read as an ordinary
+   * escape afterwards and a front end has one rule for it rather than two.
+   */
+  size_t quote_end;
 } GRX_Parser;
 
 /**
@@ -408,6 +442,24 @@ typedef struct GRX_GroupOpen {
   uint32_t a;        ///< Kind-specific payload; see @ref GRX_Node.
   uint32_t b;        ///< Kind-specific payload.
   int has_body;      ///< Non-zero when a body and a `)` follow.
+  /**
+   * Read a body that is not one alternation. NULL for the usual case.
+   *
+   * A conditional is the construct that needs this: `(?(1)yes|no)` has two
+   * branches separated by exactly one `|`, and reading it as an alternation
+   * would make `(?(1)a|b|c)` a conditional with three branches rather than
+   * the error PCRE2 reports. The hook is handed the node the parser has
+   * already built from the fields above and attaches the children itself.
+   *
+   * The parser still owns the depth accounting and the closing `)`, so that
+   * GRX_DIAG_UNMATCHED_OPEN_PAREN and GRX_DIAG_LIMIT_NESTING_DEPTH have one
+   * home whatever shape the body has. Only reached when `has_body` is set.
+   *
+   * @param parser The parser, positioned at the first byte of the body.
+   * @param node The node to attach children to.
+   * @return GRX_OK with the position on the closing `)`, or a failure.
+   */
+  GRX_Result (*read_body)(GRX_Parser * parser, uint32_t node);
 } GRX_GroupOpen;
 
 /**
@@ -475,6 +527,25 @@ typedef struct GRX_Frontend {
   GRX_Result (*check_quantifier_target)(GRX_Parser * parser, uint32_t node,
       size_t offset, size_t length);
 
+  /**
+   * Consume whatever stands between two atoms and means nothing. May be NULL.
+   *
+   * Extended mode is why this exists: under `(?x)` an unescaped space and
+   * everything from an unescaped `#` to the next newline are not part of the
+   * pattern at all. That cannot be done in `literal_atom`, which is only
+   * reached once a character has been read and committed to being an atom -
+   * `a +` in extended mode is `a+`, and a front end that turned the space
+   * into an empty node would make it `a` followed by a repeat of nothing,
+   * which matches a different language.
+   *
+   * Called before an atom, before a quantifier and before the `|` or `)`
+   * that ends a branch, and never inside a quoted run.
+   *
+   * @param parser The parser.
+   * @return GRX_OK, or a failure with its diagnostic set.
+   */
+  GRX_Result (*skip_ignorable)(GRX_Parser * parser);
+
   /** Check what only the finished pattern can show. May be NULL. */
   GRX_Result (*validate)(GRX_Parser * parser);
 } GRX_Frontend;
@@ -489,6 +560,12 @@ const GRX_Frontend * grx_frontend_for(GRX_Syntax syntax);
 
 /** @brief The ECMAScript front end. */
 extern const GRX_Frontend grx_frontend_ecmascript;
+
+/** @brief The PCRE2 front end. */
+extern const GRX_Frontend grx_frontend_pcre;
+
+/** @brief The Perl front end: the PCRE2 rules, less what Perl spells apart. */
+extern const GRX_Frontend grx_frontend_perl;
 
 // --------------------------------------------------------------------------
 // The services a hook uses. Declared here so that a front end is a table of
@@ -601,6 +678,21 @@ GRX_Result grx_parse_class_add(
 GRX_Result grx_parse_shorthand_node(GRX_Parser * parser,
     GRX_ShorthandKind shorthand, int negated, size_t offset, size_t length,
     uint32_t * out_node);
+
+/**
+ * @brief Parse one branch: a sequence of terms, up to `|`, `)` or the end.
+ *
+ * What a hook needs when a construct's body is made of branches it must
+ * count. A conditional has exactly two and a branch reset numbers each of
+ * its own from the same base, and both would be one alternation to
+ * grx_parse_alternation() - which is the right answer everywhere else and
+ * the wrong one there.
+ *
+ * @param parser The parser.
+ * @param out_node Receives the node index.
+ * @return GRX_OK or a failure code.
+ */
+GRX_Result grx_parse_concatenation(GRX_Parser * parser, uint32_t * out_node);
 
 /**
  * @brief Parse one alternation - the whole grammar below a group.

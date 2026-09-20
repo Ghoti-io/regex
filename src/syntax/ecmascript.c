@@ -1876,17 +1876,3 @@ const GRX_Frontend grx_frontend_ecmascript = {
   .check_quantifier_target = es_check_quantifier_target,
   .validate = es_validate,
 };
-
-const GRX_Frontend * grx_frontend_for(GRX_Syntax syntax) {
-  // One entry. The rest of tier 1 arrives in plan.md WP-18 and WP-23, and
-  // until then a dialect that is named but not built reports exactly that
-  // rather than being read as something else: a library that parsed PCRE as
-  // ECMAScript would tell a caller their pattern is valid for an engine that
-  // rejects it (design.md section 4).
-  switch (syntax) {
-    case GRX_SYNTAX_ECMASCRIPT:
-      return &grx_frontend_ecmascript;
-    default:
-      return NULL;
-  }
-}

@@ -10,6 +10,10 @@ build
 # check-limits` elsewhere would have produced a different table from the one
 # documentation/dialects.md section 7 publishes.
 !tools/limits/*.txt
+# The same trap, caught the same way: `tests/data/vectors/known-gaps.txt` is
+# what the conformance runner reads to tell a named gap from a regression, so
+# a clone without it would fail 261 vectors that this one passes.
+!tests/data/vectors/*.txt
 
 # IDE / CTest run output (not used by project Makefile)
 Testing

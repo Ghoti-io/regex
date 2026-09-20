@@ -47,7 +47,42 @@ typedef enum {
   FRAME_CAPTURE,      ///< A capture slot to put back: `index` and `value`.
   FRAME_REGISTER,     ///< A progress register to put back.
   FRAME_ATOMIC,       ///< A barrier ATOMIC_END pops through and discards.
+  /**
+   * A RESUME that a `(*THEN)` may unwind to: one arm of an alternation.
+   *
+   * Behaves exactly as FRAME_RESUME in every other respect. It is a separate
+   * kind because "the next alternative" is the one thing `(*THEN)` needs to
+   * name, and a SPLIT pushed by a quantifier is not one: in `(a(*THEN)b)*`
+   * the verb must leave the group, not take another turn of the loop.
+   */
+  FRAME_ALTERNATIVE,
+  /** A call to unwind: `pc` is the call depth to go back to. */
+  FRAME_CALL,
+  /**
+   * A control verb backtracking may return to: `pc` is the GRX_VerbKind.
+   *
+   * `(*PRUNE)` and its three relatives do nothing when they are reached and
+   * everything when the path past them fails, so what they need is a place
+   * on the undo stack rather than an action at the instruction.
+   */
+  FRAME_VERB,
 } FrameKind;
+
+/**
+ * What a control verb asked for, once the path it fired on has failed.
+ *
+ * `(*FAIL)` is not here: it fails the path and nothing more, which ordinary
+ * backtracking already does. The other four each discard backtrack points
+ * that are still on the stack, and they differ only in how far up the caller
+ * the discarding goes - which is why the verb's answer has to travel out of
+ * run() rather than being applied where it fires.
+ */
+typedef enum {
+  VERB_NONE = 0,
+  VERB_STOP_PRUNE,   ///< No more attempts from this starting position.
+  VERB_STOP_SKIP,    ///< The same, and the next start is `skip_to`.
+  VERB_STOP_COMMIT,  ///< No more attempts from any starting position.
+} VerbStop;
 
 /** One entry of the backtrack stack. */
 typedef struct {
@@ -83,6 +118,28 @@ typedef struct {
    */
   unsigned char * visited;
   size_t stride;         ///< Positions per instruction: length + 1.
+
+  /**
+   * The subroutine call stack.
+   *
+   * One entry per active call: where it returns to, which group it entered,
+   * and the capture slots as they were when it started. PCRE2 restores those
+   * on return - "any capturing parentheses set during the recursion are reset
+   * to their previous values afterwards" - so the copy is not an optimisation
+   * but the semantics.
+   *
+   * Parallel arrays rather than a struct with a pointer each, so that the
+   * saved slots are one allocation that grows with the depth instead of one
+   * malloc per call.
+   */
+  uint32_t * call_return;
+  uint32_t * call_group;
+  size_t * call_slots;
+  size_t call_depth;
+  size_t call_capacity;
+
+  VerbStop verb_stop;    ///< What a control verb asked for, or VERB_NONE.
+  size_t skip_to;        ///< Where `(*SKIP)` fired, for VERB_STOP_SKIP.
 } Backtrack;
 
 /**
@@ -117,6 +174,52 @@ static int already_tried(Backtrack * bt, uint32_t pc, size_t position) {
   }
   bt->visited[byte] |= bit;
   return 0;
+}
+
+/** Make room for `wanted` active calls, charged against max_match_memory. */
+static int call_reserve(Backtrack * bt, size_t wanted) {
+  if (wanted <= bt->call_capacity) {
+    return 1;
+  }
+
+  size_t capacity = bt->call_capacity ? bt->call_capacity * 2 : 8;
+  while (capacity < wanted) {
+    capacity *= 2;
+  }
+
+  size_t bytes = capacity * (2 * sizeof(uint32_t) + bt->captures * sizeof(size_t));
+  const GRX_Limits * limits = bt->request->limits;
+  if (limits->max_match_memory && bytes > limits->max_match_memory) {
+    bt->failure = GRX_ERR_LIMIT;
+    return 0;
+  }
+
+  uint32_t * call_return = gcu_allocator_realloc(
+      bt->allocator, bt->call_return, capacity * sizeof(uint32_t));
+  if (!call_return) {
+    bt->failure = GRX_ERR_OOM;
+    return 0;
+  }
+  bt->call_return = call_return;
+
+  uint32_t * call_group = gcu_allocator_realloc(
+      bt->allocator, bt->call_group, capacity * sizeof(uint32_t));
+  if (!call_group) {
+    bt->failure = GRX_ERR_OOM;
+    return 0;
+  }
+  bt->call_group = call_group;
+
+  size_t * call_slots = gcu_allocator_realloc(bt->allocator, bt->call_slots,
+      capacity * bt->captures * sizeof(size_t));
+  if (!call_slots) {
+    bt->failure = GRX_ERR_OOM;
+    return 0;
+  }
+  bt->call_slots = call_slots;
+
+  bt->call_capacity = capacity;
+  return 1;
 }
 
 /** The smallest stack the engine allocates, so a simple match grows nothing. */
@@ -176,6 +279,7 @@ static int backtrack(Backtrack * bt, uint32_t * out_pc, size_t * out_position,
     Frame frame = bt->stack[--bt->depth];
     switch ((FrameKind)frame.kind) {
       case FRAME_RESUME:
+      case FRAME_ALTERNATIVE:
         *out_pc = frame.pc;
         *out_position = frame.position;
         return 1;
@@ -183,6 +287,43 @@ static int backtrack(Backtrack * bt, uint32_t * out_pc, size_t * out_position,
       case FRAME_REGISTER:
         bt->slots[frame.pc] = frame.position;
         break;
+      case FRAME_CALL:
+        bt->call_depth = frame.pc;
+        break;
+      case FRAME_VERB:
+        // Backtracking has returned to a control verb. What it asks for
+        // depends on which one, and all four discard what is still on the
+        // stack: `(*THEN)` down to the next alternative of the enclosing
+        // group, the other three down to the floor.
+        if (frame.pc == (uint32_t)GRX_VERB_THEN) {
+          while (bt->depth > floor) {
+            Frame inner = bt->stack[--bt->depth];
+            if (inner.kind == FRAME_CAPTURE || inner.kind == FRAME_REGISTER) {
+              bt->slots[inner.pc] = inner.position;
+              continue;
+            }
+            if (inner.kind == FRAME_CALL) {
+              bt->call_depth = inner.pc;
+              continue;
+            }
+            if (inner.kind == FRAME_ALTERNATIVE) {
+              *out_pc = inner.pc;
+              *out_position = inner.position;
+              return 1;
+            }
+          }
+          // No alternative left. perlre: a `(*THEN)` outside any alternation
+          // behaves as `(*PRUNE)`.
+          bt->verb_stop = VERB_STOP_PRUNE;
+          return 0;
+        }
+        bt->verb_stop = frame.pc == (uint32_t)GRX_VERB_COMMIT
+            ? VERB_STOP_COMMIT
+            : frame.pc == (uint32_t)GRX_VERB_SKIP ? VERB_STOP_SKIP
+                                                  : VERB_STOP_PRUNE;
+        bt->skip_to = frame.position;
+        bt->depth = floor;
+        return 0;
       case FRAME_ATOMIC:
       default:
         break;
@@ -474,7 +615,10 @@ static int run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
         // The other continuation is an alternative to come back to. The
         // preferred one is taken now, and that is what makes the result
         // leftmost-first.
-        if (!push(bt, FRAME_RESUME, inst->y, position)) {
+        if (!push(bt,
+                (inst->flags & GRX_INST_ALTERNATION) ? FRAME_ALTERNATIVE
+                                                     : FRAME_RESUME,
+                inst->y, position)) {
           return 0;
         }
         pc = inst->x;
@@ -585,7 +729,12 @@ static int run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
           }
         }
         for (read = barrier + 1, write = barrier; read < bt->depth; read++) {
-          if (bt->stack[read].kind != FRAME_RESUME) {
+          // Both resume kinds. FRAME_ALTERNATIVE is a resume point that
+          // `(*THEN)` can name, and for one revision this line kept them -
+          // which left `\R` able to give back the LF of a CR LF pair, the
+          // one thing pcre2pattern says its `(?>` is there to prevent.
+          if (bt->stack[read].kind != FRAME_RESUME
+              && bt->stack[read].kind != FRAME_ALTERNATIVE) {
             bt->stack[write++] = bt->stack[read];
           }
         }
@@ -671,15 +820,141 @@ static int run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
         return 1;
 
       case GRX_OP_KEEP:
+        // `\K` moves the reported start of the match to here. Through the
+        // undo stack, because backtracking past it has to put the old start
+        // back - `(a\Kb|ac)` against "ac" must report from the `a`.
+        if (!save_slot(bt, 0)) {
+          return 0;
+        }
+        bt->slots[0] = position;
+        pc++;
+        continue;
+
       case GRX_OP_VERB:
-      case GRX_OP_COND:
-      case GRX_OP_CALL:
-      case GRX_OP_RET:
-        // Their opcodes exist and their semantics are plan.md WP-19. A
-        // program containing one is refused rather than run with the verb
-        // ignored, which would give a plausible wrong answer.
-        bt->failure = GRX_ERR_UNSUPPORTED;
-        return 0;
+        switch ((GRX_VerbKind)inst->mode) {
+          case GRX_VERB_ACCEPT:
+            // The match ends here, with whatever the groups hold. The
+            // closing SAVE of group 0 is skipped over, so it is written by
+            // hand: an accepted match has an end whether or not the program
+            // reached its own.
+            if (toplevel
+                && !grx_exec_accepts(bt->request, bt->slots[0], position)) {
+              ok = 0;
+              break;
+            }
+            // pcre2pattern: the match succeeds here, and "any capturing
+            // parentheses that are open are closed". Without this
+            // `(A(A|B(*ACCEPT)|C)D)(E)` against "AB" reports no groups at
+            // all, where both references report two.
+            for (size_t i = 0; i + 1 < bt->captures; i += 2) {
+              if (bt->slots[i] != GRX_NPOS && bt->slots[i + 1] == GRX_NPOS) {
+                bt->slots[i + 1] = position;
+              }
+            }
+            bt->slots[1] = position;
+            *out_end = position;
+            return 1;
+
+          case GRX_VERB_FAIL:
+            ok = 0;
+            break;
+
+          case GRX_VERB_THEN:
+          case GRX_VERB_PRUNE:
+          case GRX_VERB_SKIP:
+          case GRX_VERB_COMMIT:
+          default:
+            // None of the four does anything when it is reached. They act
+            // when backtracking *returns* to them, which is what makes
+            // `a(*PRUNE)b` match "xab": the verb is passed through, `b`
+            // succeeds, and nothing ever comes back. A verb that failed its
+            // own path on the way through would refuse every subject.
+            if (!push(bt, FRAME_VERB, (uint32_t)inst->mode, position)) {
+              return 0;
+            }
+            pc++;
+            continue;
+        }
+        break;
+
+      case GRX_OP_COND: {
+        int holds = 0;
+        switch ((GRX_CondKind)inst->mode) {
+          case GRX_COND_RECURSION_ANY:
+            holds = bt->call_depth > 0;
+            break;
+          case GRX_COND_RECURSION_GROUP:
+            holds = bt->call_depth > 0
+                && bt->call_group[bt->call_depth - 1] == inst->x;
+            break;
+          case GRX_COND_GROUP_SET:
+          default: {
+            size_t start_slot = (size_t)inst->x * 2;
+            size_t end_slot = start_slot + 1;
+            holds = end_slot < bt->captures
+                && bt->slots[start_slot] != GRX_NPOS
+                && bt->slots[end_slot] != GRX_NPOS;
+            break;
+          }
+        }
+        pc = holds ? pc + 1 : inst->y;
+        continue;
+      }
+
+      case GRX_OP_CALL: {
+        const GRX_Limits * call_limits = bt->request->limits;
+        if (call_limits->max_recursion_depth
+            && bt->call_depth + 1 > call_limits->max_recursion_depth) {
+          bt->failure = GRX_ERR_LIMIT;
+          return 0;
+        }
+        if (!call_reserve(bt, bt->call_depth + 1)) {
+          return 0;
+        }
+        // The depth to come back to, recorded before the call so that
+        // backtracking out of a call that failed leaves the stack as it was.
+        if (!push(bt, FRAME_CALL, (uint32_t)bt->call_depth, position)) {
+          return 0;
+        }
+        // The return is to the instruction after the CALL, which is the
+        // ATOMIC_END that closes it; `y` is free to carry the group number,
+        // which `(?(R1))` needs and nothing else records.
+        bt->call_return[bt->call_depth] = pc + 1;
+        bt->call_group[bt->call_depth] = inst->y;
+        memcpy(bt->call_slots + bt->call_depth * bt->captures, bt->slots,
+            bt->captures * sizeof(size_t));
+        bt->call_depth++;
+        pc = inst->x;
+        continue;
+      }
+
+      case GRX_OP_RET: {
+        if (!bt->call_depth) {
+          bt->failure = GRX_ERR_INTERNAL;
+          return 0;
+        }
+        size_t depth = bt->call_depth - 1;
+        const size_t * saved = bt->call_slots + depth * bt->captures;
+        // What the call captured is not kept: pcre2pattern says the values
+        // are reset to what they were before it. Slot by slot, so that
+        // backtracking past the whole call still puts back what *it* found.
+        for (size_t i = 0; i < bt->captures; i++) {
+          if (bt->slots[i] == saved[i]) {
+            continue;
+          }
+          size_t restored = saved[i];
+          if (!save_slot(bt, i)) {
+            return 0;
+          }
+          bt->slots[i] = restored;
+        }
+        if (!push(bt, FRAME_CALL, (uint32_t)bt->call_depth, position)) {
+          return 0;
+        }
+        pc = bt->call_return[depth];
+        bt->call_depth = depth;
+        continue;
+      }
 
       default:
         bt->failure = GRX_ERR_INTERNAL;
@@ -727,6 +1002,13 @@ GRX_Result grx_exec_backtrack(
     .failure = GRX_OK,
     .visited = NULL,
     .stride = request->length + 1,
+    .call_return = NULL,
+    .call_group = NULL,
+    .call_slots = NULL,
+    .call_depth = 0,
+    .call_capacity = 0,
+    .verb_stop = VERB_NONE,
+    .skip_to = 0,
   };
   if (!bt.allocator) {
     bt.allocator = grx_allocator_default();
@@ -766,6 +1048,8 @@ GRX_Result grx_exec_backtrack(
     bt.depth = 0;
 
     size_t end = 0;
+    bt.call_depth = 0;
+    bt.verb_stop = VERB_NONE;
     if (run(&bt, 0, start, 0, 1, &end)) {
       *out_matched = 1;
       break;
@@ -774,8 +1058,21 @@ GRX_Result grx_exec_backtrack(
       result = bt.failure;
       break;
     }
+    if (bt.verb_stop == VERB_STOP_COMMIT) {
+      // `(*COMMIT)`: no further starting position is tried at all. The four
+      // control verbs differ only here, which is why the engine's inner loop
+      // records what was asked for and this loop is what acts on it.
+      break;
+    }
     if (request->anchored || start >= request->length) {
       break;
+    }
+    if (bt.verb_stop == VERB_STOP_SKIP && bt.skip_to > start) {
+      // `(*SKIP)`: the next attempt begins where the verb was reached, not
+      // one character on. Never backwards, and never at the same place -
+      // either would make the search loop forever.
+      start = bt.skip_to;
+      continue;
     }
 
     // Leftmost: try each starting position in turn, and take the first that
@@ -812,5 +1109,8 @@ GRX_Result grx_exec_backtrack(
   gcu_allocator_free(bt.allocator, bt.visited);
   gcu_allocator_free(bt.allocator, bt.slots);
   gcu_allocator_free(bt.allocator, bt.stack);
+  gcu_allocator_free(bt.allocator, bt.call_return);
+  gcu_allocator_free(bt.allocator, bt.call_group);
+  gcu_allocator_free(bt.allocator, bt.call_slots);
   return result;
 }

@@ -3028,6 +3028,10 @@ pattern: ^(?|(abc)|(def))(?1)
 flags: 
 expect: compiles
 
+pattern: (?:a(?<quote> (?<apostrophe>')|(?<realquote>")) |b(?<quote> (?<apostrophe>')|(?<realquote>")) ) (?('quote')[a-z]+|[0-9]+)
+flags: Jx
+expect: compiles
+
 pattern: (?:(?1)|B)(A(*F)|C)
 flags: 
 expect: compiles
@@ -3768,6 +3772,18 @@ pattern: ^a*\\w{4}
 flags: i
 expect: compiles
 
+pattern: (?:(?<n>foo)|(?<n>bar))\\k<n>
+flags: J
+expect: compiles
+
+pattern: (?<n>A)(?:(?<n>foo)|(?<n>bar))\\k<n>
+flags: J
+expect: compiles
+
+pattern: ^ (?:(?<A>A)|(?'B'B)(?<A>A)) (?('A')x) (?(<B>)y)$
+flags: Jx
+expect: compiles
+
 pattern: ^A\\xBz
 flags: 
 expect: compiles
@@ -3904,6 +3920,10 @@ pattern: (?|(?'a'aaa)|(?'a'b))\\k'a'
 flags: 
 expect: compiles
 
+pattern: (?|(?'a'aaa)|(?'a'b))(?'a'cccc)\\k'a'
+flags: J
+expect: compiles
+
 pattern: (?<=a(B){0}c)X
 flags: 
 expect: compiles
@@ -4013,11 +4033,11 @@ flags:
 expect: compiles
 
 pattern: <(?x:[a b])>
-flags: x
+flags: xx
 expect: compiles
 
 pattern: <(?:[a b])>
-flags: x
+flags: xx
 expect: compiles
 
 pattern: <(?xxx:[a b])>
@@ -4025,7 +4045,7 @@ flags:
 expect: compiles
 
 pattern: <(?-x:[a b])>
-flags: x
+flags: xx
 expect: compiles
 
 pattern: [[:digit:]-]+
@@ -4501,11 +4521,11 @@ flags:
 expect: compiles
 
 pattern: [[:digit:]-   ]
-flags: x
+flags: xx
 expect: compiles
 
 pattern: [\\d-   ]
-flags: x
+flags: xx
 expect: compiles
 
 pattern: (?[\\n])
@@ -4990,6 +5010,14 @@ expect: compiles
 
 pattern: ^(?:(?:\\1|X)(a|b))+
 flags: 
+expect: compiles
+
+pattern: (?'abc'a|b)(?<abc>d|e)\\k<abc>{2}
+flags: J
+expect: compiles
+
+pattern: (?'abc'a|b)(?<abc>d|e)(?&abc){2}
+flags: J
 expect: compiles
 
 pattern: (?(<bc))
@@ -6080,6 +6108,10 @@ pattern: (a)(b)|(c)
 flags: 
 expect: compiles
 
+pattern: (?<A>a)|(?<A>b)
+flags: J
+expect: compiles
+
 pattern: a(b)c(d)
 flags: 
 expect: compiles
@@ -6199,6 +6231,14 @@ expect: error syntax
 pattern: \\V\\x85\\9*+((?2)\\3++()2)*:2
 flags: 
 expect: error syntax
+
+pattern: (((?(R)){0,2}) (?'x'((?'R')((?'R')))))
+flags: J
+expect: compiles
+
+pattern: (((?(X)){0,2}) (?'x'((?'X')((?'X')))))
+flags: J
+expect: compiles
 
 pattern: (((?(R)){0,2}) (?'x'((?'X')((?'R')))))
 flags: 
@@ -6443,6 +6483,10 @@ expect: error syntax
 pattern: (?<A>[ab])...(?<=\\k'A')z
 flags: 
 expect: compiles
+
+pattern: (?<A>[ab])...(?<=\\k'A')(?<A>)z
+flags: J
+expect: error syntax
 
 pattern: ((\\g+1X)?([ab]))+
 flags: 
@@ -7044,6 +7088,10 @@ pattern: ([a-z])([a-z]++)(#+)(*scs:(2)(ab.))
 flags: 
 expect: compiles
 
+pattern: (?:(?<YYY>[a-z]++)|(?<YYY>[0-9]++)|$)(*scan_substring:('YYY')((?<START>.).*\\k<START>$))
+flags: J
+expect: compiles
+
 pattern: ([a-zA-Z]+)(*scs:(1).*?(?<ABC>[A-Z]+)(*scan_substring:('ABC').*(.)\\3))#+
 flags: 
 expect: compiles
@@ -7092,6 +7140,10 @@ pattern: (*scs:(1)a)(a)|x
 flags: 
 expect: compiles
 
+pattern: (*scs:(<GOOD_NAME>)a)(?<GOOD_NAME>a)(?<GOOD_NAME>b)(?<GOOD_NAME>c)(?<GOOD_NAME>d)|x
+flags: J
+expect: compiles
+
 pattern: (*scs:(1)a)?(a)
 flags: 
 expect: compiles
@@ -7138,6 +7190,10 @@ expect: compiles
 
 pattern: \\b(\\w++)(*scs:(1)^)
 flags: 
+expect: compiles
+
+pattern: (?:(?'A'a)|(?<A>b))(*scs:('A')b)c
+flags: J
 expect: compiles
 
 pattern: (xyz)(abc)(*scs:(-1)abc)(*scs:(-2)\\1)
@@ -7369,11 +7425,11 @@ flags:
 expect: error syntax
 
 pattern: [[:digit:]   -Z]
-flags: x
+flags: xx
 expect: error syntax
 
 pattern: [\\d   -Z]
-flags: x
+flags: xx
 expect: error syntax
 
 pattern: [[:digit:]\\E-H]

@@ -909,7 +909,8 @@ int grx_exec_program_is_memoizable(const GRX_Regex * regex) {
   // has no per-thread history at all, which is exactly the condition the
   // memo needs.
   return !regex->facts.has_backreference && !regex->facts.has_lookaround
-      && !regex->facts.has_recursion && regex->program.register_count == 0;
+      && !regex->facts.has_recursion && regex->program.register_count == 0
+      && !(regex->program.flags & GRX_PROGRAM_NO_MEMO);
 }
 
 size_t grx_exec_bitmap_bytes(const GRX_Regex * regex, size_t length) {

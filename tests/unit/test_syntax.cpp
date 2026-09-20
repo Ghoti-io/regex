@@ -173,6 +173,13 @@ TEST(Options, ReadsTheDialectsOwnAlphabet) {
     {GRX_SYNTAX_PERL, "msix",
         GRX_OPT_MULTILINE | GRX_OPT_DOTALL | GRX_OPT_CASELESS
             | GRX_OPT_EXTENDED},
+    // The one letter in any alphabet here that means something different
+    // written twice, and the one the pcre2test importer silently folded into
+    // a single `x` until the corpus disagreed with it.
+    {GRX_SYNTAX_PCRE, "xx", GRX_OPT_EXTENDED | GRX_OPT_EXTENDED_MORE},
+    {GRX_SYNTAX_PERL, "ixx",
+        GRX_OPT_CASELESS | GRX_OPT_EXTENDED | GRX_OPT_EXTENDED_MORE},
+    {GRX_SYNTAX_PCRE, "J", GRX_OPT_DUPLICATE_NAMES},
     {GRX_SYNTAX_PYTHON, "imsx",
         GRX_OPT_CASELESS | GRX_OPT_MULTILINE | GRX_OPT_DOTALL
             | GRX_OPT_EXTENDED},
@@ -219,10 +226,14 @@ TEST(Options, RefusesWhatItCannotHonour) {
     // and the gap is here.
     {GRX_SYNTAX_PYTHON, "L", GRX_ERR_UNSUPPORTED,
         GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, 0},
-    {GRX_SYNTAX_PCRE, "J", GRX_ERR_UNSUPPORTED,
+    {GRX_SYNTAX_PERL, "a", GRX_ERR_UNSUPPORTED,
         GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, 0},
     // POSIX has no flag letters at all; its options are API arguments.
     {GRX_SYNTAX_POSIX_ERE, "i", GRX_ERR_SYNTAX, GRX_DIAG_UNKNOWN_FLAG, 0},
+    // A letter that may be written twice may not be written three times,
+    // and one that may not be repeated at all is still a duplicate.
+    {GRX_SYNTAX_PCRE, "xxx", GRX_ERR_SYNTAX, GRX_DIAG_DUPLICATE_FLAG, 2},
+    {GRX_SYNTAX_PCRE, "ii", GRX_ERR_SYNTAX, GRX_DIAG_DUPLICATE_FLAG, 1},
   };
 
   for (const auto & test : cases) {

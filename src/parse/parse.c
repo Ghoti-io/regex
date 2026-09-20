@@ -105,6 +105,37 @@ int grx_parse_eat(GRX_Parser * parser, char expected) {
   return 1;
 }
 
+/**
+ * Whether the parser is inside a quoted run, and closes one that has ended.
+ *
+ * The close is done on the way past rather than by whoever opened the run,
+ * because the run's end is a *position* and every path that moves the
+ * position would otherwise have to check for it. Once it is closed the `\E`
+ * is still there, and the front end reads it as the ordinary escape it also
+ * is when there was no `\Q` - which is what PCRE2 and Java both do with a
+ * stray `\E`.
+ */
+static int in_quote(GRX_Parser * parser) {
+  if (parser->quote_end == GRX_NPOS) {
+    return 0;
+  }
+  if (parser->position < parser->quote_end) {
+    return 1;
+  }
+
+  parser->quote_end = GRX_NPOS;
+  return 0;
+}
+
+/** Let the dialect consume what stands between atoms and means nothing. */
+static GRX_Result skip_ignorable(GRX_Parser * parser) {
+  if (!parser->frontend->skip_ignorable || in_quote(parser)) {
+    return GRX_OK;
+  }
+
+  return parser->frontend->skip_ignorable(parser);
+}
+
 // --------------------------------------------------------------------------
 // Building nodes
 // --------------------------------------------------------------------------
@@ -262,6 +293,7 @@ static GRX_Result add_child(
  */
 static void prescan(GRX_Parser * parser) {
   int in_class = 0;
+  int first_in_class = 0;
   for (size_t i = 0; i < parser->length; i++) {
     char c = parser->text[i];
     if (c == '\\') {
@@ -269,19 +301,32 @@ static void prescan(GRX_Parser * parser) {
       continue;
     }
     if (in_class) {
-      if (c == ']') {
+      if (c == ']' && !(first_in_class && !parser->spec.allow_empty_class)) {
         in_class = 0;
       }
+      first_in_class = 0;
       continue;
     }
     if (c == '[') {
       in_class = 1;
+      first_in_class = 1;
+      // `[^]` puts the caret before the first member, so the `]` that may be
+      // a literal is the one after it.
+      if (i + 1 < parser->length && parser->text[i + 1] == '^') {
+        i++;
+      }
       continue;
     }
     if (c != '(') {
       continue;
     }
 
+    if (i + 1 < parser->length && parser->text[i + 1] == '*') {
+      // `(*ACCEPT)` and the leading directives. Not a group of any kind, and
+      // counting one here would make `\1` in `(*UTF)\1` a backreference to a
+      // group that does not exist.
+      continue;
+    }
     if (i + 1 >= parser->length || parser->text[i + 1] != '?') {
       parser->group_count++;
       continue;
@@ -311,7 +356,7 @@ static void prescan(GRX_Parser * parser) {
 // The grammar
 // --------------------------------------------------------------------------
 
-static GRX_Result parse_concat(GRX_Parser * parser, uint32_t * out_node);
+// Forward declaration: parse_quantifier() and the alternation both use it.
 
 /**
  * Read `*`, `+`, `?` or `{m,n}` and the lazy or possessive suffix, and wrap
@@ -324,6 +369,15 @@ static GRX_Result parse_concat(GRX_Parser * parser, uint32_t * out_node);
 static GRX_Result parse_quantifier(
     GRX_Parser * parser, uint32_t * node, int * applied) {
   *applied = 0;
+  if (in_quote(parser)) {
+    // `\Qa*\E` is two literals. The run is still open, so the `*` is not a
+    // quantifier and must not be read as one.
+    return GRX_OK;
+  }
+  GRX_Result skipped = skip_ignorable(parser);
+  if (skipped != GRX_OK) {
+    return skipped;
+  }
   if (grx_parse_at_end(parser)) {
     return GRX_OK;
   }
@@ -387,6 +441,13 @@ static GRX_Result parse_quantifier(
     return allowed;
   }
 
+  // The suffix is part of the quantifier, and extended mode lets it be
+  // written apart from the rest: `a + +` is `a++`, and is in the corpus.
+  GRX_Result skipped_suffix = skip_ignorable(parser);
+  if (skipped_suffix != GRX_OK) {
+    return skipped_suffix;
+  }
+
   GRX_RepeatMode mode = GRX_REPEAT_GREEDY;
   if (grx_parse_eat(parser, '?')) {
     mode = (parser->spec.features & GRX_FEATURE_NON_GREEDY)
@@ -435,11 +496,31 @@ static GRX_Result parse_quantifier(
 /** Read one atom: a group, a class, a metacharacter, an escape or a literal. */
 static GRX_Result parse_atom(GRX_Parser * parser, uint32_t * out_node) {
   size_t start = parser->position;
+
+  if (in_quote(parser)) {
+    // Inside `\Q...\E` every character is a literal, including the ones
+    // that are operators everywhere else. Not through literal_atom(): that
+    // hook decides whether a character with no operator meaning is a literal
+    // at all, and here the question does not arise.
+    uint32_t quoted = 0;
+    GRX_Result result = grx_parse_take(parser, &quoted);
+    if (result != GRX_OK) {
+      return result;
+    }
+    return grx_parse_literal_node(
+        parser, quoted, start, parser->position - start, out_node);
+  }
+
   char c = parser->text[parser->position];
 
   if (c == '(') {
     parser->position++;
-    GRX_GroupOpen open = {GRX_NODE_GROUP, 0, 0, GRX_INDEX_NONE, 1};
+    // Saved before the hook runs, not after: a hook that reads `(?i:` sets
+    // the options as part of reading it, and a save taken afterwards would
+    // restore the value it had just written. `^a(?i:b)c$` matching "aBC" is
+    // what that looked like.
+    uint32_t outer_options = parser->options;
+    GRX_GroupOpen open = {GRX_NODE_GROUP, 0, 0, GRX_INDEX_NONE, 1, NULL};
     GRX_Result result = parser->frontend->group_open(parser, &open);
     if (result != GRX_OK) {
       return result;
@@ -461,20 +542,32 @@ static GRX_Result parse_atom(GRX_Parser * parser, uint32_t * out_node) {
       }
       parser->depth++;
       int outer_lookbehind = parser->in_lookbehind;
-      if (open.kind == GRX_NODE_LOOKAROUND
-          && (open.a == GRX_LOOK_BEHIND_POSITIVE
-              || open.a == GRX_LOOK_BEHIND_NEGATIVE)) {
-        parser->in_lookbehind = 1;
+      int outer_lookaround = parser->in_lookaround;
+      if (open.kind == GRX_NODE_LOOKAROUND) {
+        parser->in_lookaround = 1;
+        if (open.a == GRX_LOOK_BEHIND_POSITIVE
+            || open.a == GRX_LOOK_BEHIND_NEGATIVE) {
+          parser->in_lookbehind = 1;
+        }
       }
 
-      uint32_t body = GRX_INDEX_NONE;
-      result = grx_parse_alternation(parser, &body);
+      // The options a group sets are the group's own: `(a(?i)b)c` matches
+      // "aBc" and not "abC". Restored here rather than by whoever sets them,
+      // because it is this scope that ends at the `)`.
+      if (open.read_body) {
+        result = open.read_body(parser, *out_node);
+      }
+      else {
+        uint32_t body = GRX_INDEX_NONE;
+        result = grx_parse_alternation(parser, &body);
+        if (result == GRX_OK) {
+          result = add_child(parser, *out_node, body);
+        }
+      }
       parser->depth--;
       parser->in_lookbehind = outer_lookbehind;
-      if (result != GRX_OK) {
-        return result;
-      }
-      result = add_child(parser, *out_node, body);
+      parser->in_lookaround = outer_lookaround;
+      parser->options = outer_options;
       if (result != GRX_OK) {
         return result;
       }
@@ -522,7 +615,7 @@ static GRX_Result parse_atom(GRX_Parser * parser, uint32_t * out_node) {
   if (c == '*' || c == '+' || c == '?') {
     // A quantifier with nothing before it. Reported here rather than in
     // parse_quantifier() because at this point there is provably no atom -
-    // parse_concat() only calls this when it is about to read one.
+    // the caller only calls this when it is about to read one.
     return grx_parse_fail(parser, GRX_DIAG_NOTHING_TO_REPEAT, start, 1);
   }
 
@@ -574,16 +667,27 @@ static GRX_Result parse_term(GRX_Parser * parser, uint32_t * out_node) {
   return GRX_OK;
 }
 
-/** Read a sequence of terms, up to `|`, `)` or the end. */
-static GRX_Result parse_concat(GRX_Parser * parser, uint32_t * out_node) {
+GRX_Result grx_parse_concatenation(
+    GRX_Parser * parser, uint32_t * out_node) {
+  if (!parser || !out_node) {
+    return GRX_ERR_INVALID;
+  }
+
   size_t start = parser->position;
   uint32_t concat = GRX_INDEX_NONE;
   uint32_t first = GRX_INDEX_NONE;
   size_t count = 0;
 
-  while (!grx_parse_at_end(parser)) {
+  for (;;) {
+    GRX_Result skipped = skip_ignorable(parser);
+    if (skipped != GRX_OK) {
+      return skipped;
+    }
+    if (grx_parse_at_end(parser)) {
+      break;
+    }
     char c = parser->text[parser->position];
-    if (c == '|' || c == ')') {
+    if (!in_quote(parser) && (c == '|' || c == ')')) {
       break;
     }
 
@@ -637,12 +741,13 @@ GRX_Result grx_parse_alternation(GRX_Parser * parser, uint32_t * out_node) {
 
   size_t start = parser->position;
   uint32_t first = GRX_INDEX_NONE;
-  GRX_Result result = parse_concat(parser, &first);
+  GRX_Result result = grx_parse_concatenation(parser, &first);
   if (result != GRX_OK) {
     return result;
   }
 
-  if (grx_parse_at_end(parser) || parser->text[parser->position] != '|') {
+  if (grx_parse_at_end(parser) || parser->text[parser->position] != '|'
+      || in_quote(parser)) {
     *out_node = first;
     return GRX_OK;
   }
@@ -668,7 +773,7 @@ GRX_Result grx_parse_alternation(GRX_Parser * parser, uint32_t * out_node) {
     }
     parser->depth++;
     uint32_t branch = GRX_INDEX_NONE;
-    result = parse_concat(parser, &branch);
+    result = grx_parse_concatenation(parser, &branch);
     parser->depth--;
     if (result != GRX_OK) {
       return result;
@@ -757,6 +862,8 @@ GRX_Result grx_parse_pattern(const char * pattern, size_t length,
     .groups_opened = 0,
     .named_groups = 0,
     .in_lookbehind = 0,
+    .in_lookaround = 0,
+    .quote_end = GRX_NPOS,
   };
   GRX_Result result = grx_syntax_spec(syntax, &parser.spec);
   if (result != GRX_OK) {

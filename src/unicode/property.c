@@ -191,6 +191,17 @@ GRX_Result grx_unicode_property_lookup(const char * name, size_t name_length,
     return GRX_OK;
   }
 
+  // A lone *script* name, which the loose dialects also accept: `\p{Latin}`
+  // is `\p{Script=Latin}` in Perl and PCRE2 and a syntax error in
+  // ECMAScript, which is exactly the difference the two resolvers exist to
+  // keep apart. Tried last, so that a name which is both a binary property
+  // and a script still resolves the way it does in the strict form.
+  if (match == GRX_PROPERTY_LOOSE
+      && find_name(names, name_count, name, name_length, GRX_UPROP_SCRIPT,
+          out_property)) {
+    return GRX_OK;
+  }
+
   return GRX_ERR_SYNTAX;
 }
 

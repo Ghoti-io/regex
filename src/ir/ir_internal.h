@@ -153,6 +153,18 @@ typedef struct GRX_IR {
   GRX_ClassTable classes;          ///< Every canonical class, by index.
   GRX_Arena names;                 ///< char; NUL-terminated, by offset.
   size_t capture_count;            ///< Capturing groups, excluding group 0.
+  /**
+   * How long a *variable*-length lookbehind body the dialect allows, or
+   * GRX_NPOS when it sets no bound of its own.
+   *
+   * A dialect fact rather than a caller's limit, and separate from
+   * GRX_Limits::max_lookbehind_length for that reason: PCRE2 compiles
+   * `(?<=a{256})` because that body is one fixed length, and refuses
+   * `(?<=\d{1,256})` because that one is not - so the number bounds the
+   * *variation*, not the distance. It reaches an engine through neither:
+   * lowering resolves it into an accepted or a refused pattern.
+   */
+  size_t max_variable_lookbehind;
 } GRX_IR;
 
 /**

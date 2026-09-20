@@ -23,7 +23,7 @@ include/ghoti.io/regex/   Public headers
 src/core/                 Result strings, limits, the allocator,
                           the diagnostic catalogue, the arena, and the
                           semantic vocabulary that survives lowering
-src/syntax/               The dialect table
+src/syntax/               The dialect table and the front ends
 src/parse/                Pattern text to a syntax tree (the AST)
 src/ir/                   The AST lowered to a dialect-free IR
 src/compile/              IR to a program, and the compiled regex
@@ -193,10 +193,18 @@ A dialect is three things, in three places
   lowering turns each into an explicit IR node, flag or mode. Nothing here
   reaches an engine.
 - **A `GRX_Frontend`** - the hooks for the spellings a table cannot
-  describe. `src/syntax/ecmascript.c` is the one that exists. A hook reads
-  text and produces a node; it never decides what a construct means, because
-  that is the profile's job, and keeping the two apart is what keeps the
-  hooks small.
+  describe. `src/syntax/ecmascript.c` and `src/syntax/perl.c` are the two
+  that exist; the second serves both PCRE2 and Perl, which are one grammar
+  with a countable list of differences. A hook reads text and produces a
+  node; it never decides what a construct means, because that is the
+  profile's job, and keeping the two apart is what keeps the hooks small.
+
+  Which front ends are *built* is `src/syntax/frontend.c`, and it is its own
+  file for a reason that only shows up when the second one lands: the table
+  of what exists is not the first dialect's business. It lived inside
+  `ecmascript.c` while ECMAScript was the only entry, which was fine exactly
+  as long as adding a dialect meant editing the file of the dialect it is
+  not.
 
 Adding a dialect is therefore:
 

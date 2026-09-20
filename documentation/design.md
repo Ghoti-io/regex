@@ -501,6 +501,30 @@ the first two of them:
    construct; it never decides what the construct *means* - that is the
    profile's job, and keeping the two apart is what keeps the hooks small.
 
+   Three of the hooks were added by the Perl family and are worth naming,
+   because each is a thing the shared grammar cannot do without them and none
+   of them is a dialect decision in disguise:
+
+   - `skip_ignorable`, called before an atom, before a quantifier, and before
+     the `|` or `)` that ends a branch. Extended mode is why: under `(?x)` a
+     space is not part of the pattern at all, and a front end that turned one
+     into an empty node would make `a +` a repeat of nothing rather than
+     `a+`. `\Q...\E` and `(?#...)` are the same shape of problem - `a\Q\E*`
+     and `a(?#x)*` are both `a*`, and `(?#x)*` on its own is "nothing to
+     repeat", which only a *lexical* skip gets right.
+   - `GRX_GroupOpen::read_body`, for a body that is not one alternation. A
+     conditional is the construct that needs it: `(?(1)yes|no)` has exactly
+     two branches, and reading the body as an alternation would make
+     `(?(1)a|b|c)` a conditional with three rather than the error both
+     references report. The parser keeps the depth accounting and the closing
+     `)`, so those diagnostics still have one home.
+   - `GRX_Parser::quote_end`, the extent of a quoted run. The *mechanism* is
+     shared and the *spelling* is not: `\Q` and `\E` belong to the front ends
+     that have them, but "the characters in this span are literals whatever
+     the grammar would make of them" can only be acted on by the grammar,
+     which is what decides `*` is a quantifier and `|` ends a branch. The
+     feature table has said `GRX_FEATURE_QUOTING` since it was written.
+
 Two rules about what a dialect is not:
 
 - **Not a superset.** A dialect that accepts everything is a bug. A caller
@@ -685,9 +709,11 @@ src/unicode/     utf8.c casefold.c props.c names.c                  [unicode]
 src/unicode/tables/   generated from the UCD; never edited by hand  [unicode]
 src/charclass/   range sets: canonicalise, union, intersect,
                  subtract, negate, fold-close                       [core]
-src/syntax/      the profile table, one file per family's hooks:
-                 syntax.c perl.c posix.c ecmascript.c python.c
-                 java.c dotnet.c ruby.c re2.c tcl.c vim.c emacs.c   [front ends]
+src/syntax/      the profile table, one file per family's hooks, and
+                 frontend.c - the one place that says which are built:
+                 syntax.c frontend.c perl.c posix.c ecmascript.c
+                 python.c java.c dotnet.c ruby.c re2.c tcl.c
+                 vim.c emacs.c                                      [front ends]
 src/parse/       lexer.c parser.c class_parse.c ast.c dump.c        [core, then front ends]
 src/ir/          lower.c fold.c simplify.c analyze.c                [core]
 src/compile/     codegen.c program.c dump.c                         [core]

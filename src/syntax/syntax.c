@@ -90,6 +90,13 @@ static const GRX_SyntaxSpec spec_table[GRX_SYNTAX_COUNT] = {
     .features = ALT | REP | LAZY | POSS | NCAP | NAME | BREF | LAH | LBH
         | ATOM | COND | RECU | FLAG | CMNT | PCLS | UPRP | WORD | ANCH | QUOT
         | HEX | OCT | CTRL | SUBR,
+    // documentation/dialects.md section 5.15: Perl's subject is a Unicode
+    // string, so UTF is on unless the caller turns it off. The field had
+    // been empty since the table was written, and what it cost was visible
+    // only once there was a Perl front end to read it: `\N{U+0100}` is
+    // refused outside UTF mode, and `\400` is one code point in UTF and a
+    // byte that cannot be one without it.
+    .default_options = GRX_OPT_UTF,
   },
   [GRX_SYNTAX_PCRE] = {
     .features = ALT | REP | LAZY | POSS | NCAP | NAME | BREF | LAH | LBH
@@ -101,6 +108,11 @@ static const GRX_SyntaxSpec spec_table[GRX_SYNTAX_COUNT] = {
     // inside the pattern, so `(?i)` is a syntax error rather than a flag.
     .features = ALT | REP | LAZY | NCAP | NAME | BREF | LAH | LBH | UPRP
         | CSET | WORD | HEX | CTRL,
+    // The only tier-1 dialect where `[]` is an empty class rather than a
+    // class containing `]`. Read by the prescan as well as by the front end:
+    // `(?2)[]a()b](abc)` has one capturing group in PCRE2 and two in
+    // ECMAScript, and a prescan that guessed would refuse a valid pattern.
+    .allow_empty_class = 1,
   },
   [GRX_SYNTAX_PYTHON] = {
     .features = ALT | REP | LAZY | POSS | NCAP | NAME | BREF | LAH | LBH
@@ -250,6 +262,7 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     .property_match = GRX_PROPERTY_LOOSE,
   },
   [GRX_SYNTAX_PCRE] = {
+    .recursion_is_atomic = 1,
     .lookbehind = GRX_LOOKBEHIND_BOUNDED,
     .dollar = GRX_DOLLAR_BEFORE_FINAL_NEWLINE,
     .shorthands = GRX_SHORTHANDS_ASCII,
@@ -495,6 +508,17 @@ typedef struct {
    * when GRX_OPT_UNICODE_SETS is set" catches `vu` and misses `uv`.
    */
   uint32_t group;
+  /**
+   * What a second occurrence of this letter adds, or 0 if there may not be
+   * one.
+   *
+   * PCRE2 and Perl both spell "extended, and inside a class as well" as the
+   * letter `x` twice. It is the only letter in any alphabet here that means
+   * something different repeated, and without this field the duplicate check
+   * below reads `xx` as a mistake - which is what it did until the corpus
+   * showed `/[a-  z]/xx` compiling and `/[a-  z]/x` not.
+   */
+  uint32_t repeat_options;
 } FlagRow;
 
 /**
@@ -505,49 +529,49 @@ typedef struct {
  * same argument as the feature table above.
  */
 static const FlagRow ecmascript_flags[] = {
-  {'d', FLAG_NO_EFFECT, 0, 0}, // Match indices; always available here.
-  {'g', FLAG_SEARCH, 0, 0},
-  {'i', FLAG_OPTION, GRX_OPT_CASELESS, 0},
-  {'m', FLAG_OPTION, GRX_OPT_MULTILINE, 0},
-  {'s', FLAG_OPTION, GRX_OPT_DOTALL, 0},
-  {'u', FLAG_OPTION, GRX_OPT_UTF, 1},
-  {'v', FLAG_OPTION, GRX_OPT_UNICODE_SETS | GRX_OPT_UTF, 1},
-  {'y', FLAG_SEARCH, 0, 0},
-  {0, FLAG_OPTION, 0, 0},
+  {'d', FLAG_NO_EFFECT, 0, 0, 0}, // Match indices; always available here.
+  {'g', FLAG_SEARCH, 0, 0, 0},
+  {'i', FLAG_OPTION, GRX_OPT_CASELESS, 0, 0},
+  {'m', FLAG_OPTION, GRX_OPT_MULTILINE, 0, 0},
+  {'s', FLAG_OPTION, GRX_OPT_DOTALL, 0, 0},
+  {'u', FLAG_OPTION, GRX_OPT_UTF, 1, 0},
+  {'v', FLAG_OPTION, GRX_OPT_UNICODE_SETS | GRX_OPT_UTF, 1, 0},
+  {'y', FLAG_SEARCH, 0, 0, 0},
+  {0, FLAG_OPTION, 0, 0, 0},
 };
 
 static const FlagRow pcre_flags[] = {
-  {'i', FLAG_OPTION, GRX_OPT_CASELESS, 0},
-  {'m', FLAG_OPTION, GRX_OPT_MULTILINE, 0},
-  {'s', FLAG_OPTION, GRX_OPT_DOTALL, 0},
-  {'x', FLAG_OPTION, GRX_OPT_EXTENDED, 0},
-  {'n', FLAG_OPTION, GRX_OPT_NO_CAPTURE, 0},
-  {'U', FLAG_OPTION, GRX_OPT_UNGREEDY, 0},
-  {'J', FLAG_UNSUPPORTED, 0, 0}, // Duplicate names; WP-18.
-  {0, FLAG_OPTION, 0, 0},
+  {'i', FLAG_OPTION, GRX_OPT_CASELESS, 0, 0},
+  {'m', FLAG_OPTION, GRX_OPT_MULTILINE, 0, 0},
+  {'s', FLAG_OPTION, GRX_OPT_DOTALL, 0, 0},
+  {'x', FLAG_OPTION, GRX_OPT_EXTENDED, 0, GRX_OPT_EXTENDED_MORE},
+  {'n', FLAG_OPTION, GRX_OPT_NO_CAPTURE, 0, 0},
+  {'U', FLAG_OPTION, GRX_OPT_UNGREEDY, 0, 0},
+  {'J', FLAG_OPTION, GRX_OPT_DUPLICATE_NAMES, 0, 0},
+  {0, FLAG_OPTION, 0, 0, 0},
 };
 
 static const FlagRow perl_flags[] = {
-  {'m', FLAG_OPTION, GRX_OPT_MULTILINE, 0},
-  {'s', FLAG_OPTION, GRX_OPT_DOTALL, 0},
-  {'i', FLAG_OPTION, GRX_OPT_CASELESS, 0},
-  {'x', FLAG_OPTION, GRX_OPT_EXTENDED, 0},
-  {'n', FLAG_OPTION, GRX_OPT_NO_CAPTURE, 0},
-  {'p', FLAG_NO_EFFECT, 0, 0},   // Preserve the match; a search-API concern.
-  {'a', FLAG_UNSUPPORTED, 0, 0}, // ASCII-restrict; WP-21.
-  {'u', FLAG_OPTION, GRX_OPT_UTF, 0},
-  {0, FLAG_OPTION, 0, 0},
+  {'m', FLAG_OPTION, GRX_OPT_MULTILINE, 0, 0},
+  {'s', FLAG_OPTION, GRX_OPT_DOTALL, 0, 0},
+  {'i', FLAG_OPTION, GRX_OPT_CASELESS, 0, 0},
+  {'x', FLAG_OPTION, GRX_OPT_EXTENDED, 0, GRX_OPT_EXTENDED_MORE},
+  {'n', FLAG_OPTION, GRX_OPT_NO_CAPTURE, 0, 0},
+  {'p', FLAG_NO_EFFECT, 0, 0, 0}, // Preserve the match; a search-API concern.
+  {'a', FLAG_UNSUPPORTED, 0, 0, 0}, // ASCII-restrict; WP-21.
+  {'u', FLAG_OPTION, GRX_OPT_UTF, 0, 0},
+  {0, FLAG_OPTION, 0, 0, 0},
 };
 
 static const FlagRow python_flags[] = {
-  {'a', FLAG_UNSUPPORTED, 0, 0}, // re.ASCII; WP-30.
-  {'i', FLAG_OPTION, GRX_OPT_CASELESS, 0},
-  {'L', FLAG_UNSUPPORTED, 0, 0}, // re.LOCALE; there is no locale here.
-  {'m', FLAG_OPTION, GRX_OPT_MULTILINE, 0},
-  {'s', FLAG_OPTION, GRX_OPT_DOTALL, 0},
-  {'u', FLAG_OPTION, GRX_OPT_UTF, 0},
-  {'x', FLAG_OPTION, GRX_OPT_EXTENDED, 0},
-  {0, FLAG_OPTION, 0, 0},
+  {'a', FLAG_UNSUPPORTED, 0, 0, 0}, // re.ASCII; WP-30.
+  {'i', FLAG_OPTION, GRX_OPT_CASELESS, 0, 0},
+  {'L', FLAG_UNSUPPORTED, 0, 0, 0}, // re.LOCALE; there is no locale here.
+  {'m', FLAG_OPTION, GRX_OPT_MULTILINE, 0, 0},
+  {'s', FLAG_OPTION, GRX_OPT_DOTALL, 0, 0},
+  {'u', FLAG_OPTION, GRX_OPT_UTF, 0, 0},
+  {'x', FLAG_OPTION, GRX_OPT_EXTENDED, 0, 0},
+  {0, FLAG_OPTION, 0, 0, 0},
 };
 
 /** The alphabet of a dialect, or NULL when it has none. */
@@ -585,12 +609,6 @@ GRX_Result grx_options_parse(GRX_Syntax syntax, const char * flags,
   for (size_t i = 0; flags[i]; i++) {
     unsigned char letter = (unsigned char)flags[i];
 
-    if (seen[letter]) {
-      return grx_error_set(
-          out_error, GRX_ERR_SYNTAX, GRX_DIAG_DUPLICATE_FLAG, i, 1);
-    }
-    seen[letter] = 1;
-
     const FlagRow * row = NULL;
     for (const FlagRow * candidate = alphabet;
         candidate && candidate->letter; candidate++) {
@@ -603,6 +621,19 @@ GRX_Result grx_options_parse(GRX_Syntax syntax, const char * flags,
       return grx_error_set(
           out_error, GRX_ERR_SYNTAX, GRX_DIAG_UNKNOWN_FLAG, i, 1);
     }
+
+    if (seen[letter]) {
+      // A second occurrence is a mistake unless the row says otherwise, and
+      // a third is a mistake even then.
+      if (!row->repeat_options || seen[letter] > 1) {
+        return grx_error_set(
+            out_error, GRX_ERR_SYNTAX, GRX_DIAG_DUPLICATE_FLAG, i, 1);
+      }
+      seen[letter]++;
+      options |= row->repeat_options;
+      continue;
+    }
+    seen[letter] = 1;
 
     switch (row->kind) {
       case FLAG_SEARCH:

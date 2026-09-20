@@ -42,6 +42,35 @@ extern "C" {
 #define GRX_PROGRAM_UTF GRX_BIT(0)
 
 /**
+ * @brief The bit-state engine's memo would be unsound for this program.
+ *
+ * `(pc, position)` identifies a state only when what the program does next
+ * depends on nothing else. `\K` breaks that by writing the reported start,
+ * which the empty-match rule then reads; a conditional breaks it by reading
+ * a capture; and a control verb breaks it by deciding something about the
+ * whole *search* rather than about this path. Codegen sets the bit when it
+ * emits any of them, so that the engine chooser reads one flag instead of
+ * walking the program.
+ *
+ * An **atomic region** is on the list for a subtler reason, and it is the
+ * one that was found by a test rather than by reading. The memo's soundness
+ * rests on "a state that was visited and did not return is a state that
+ * failed". An atomic group breaks that: ATOMIC_END *abandons* the branch
+ * points of a body that succeeded, so the states on that successful path are
+ * marked as though they had failed, and a later start that reaches them is
+ * pushed onto a shorter path the atomic group should have forbidden.
+ * `(?>a{1,5})a` against "aaaaa" is the whole of the argument - no match on
+ * the backtracker, and "1-5" on the bit-state engine until this bit covered
+ * it. ECMAScript has no atomic group, which is why six differential gates
+ * and 28,559 vectors had never put one through the memo.
+ *
+ * Backreferences, lookarounds and recursion are excluded by
+ * @ref GRX_Facts instead - they were known before this bit existed, and the
+ * facts are where a caller can also see them.
+ */
+#define GRX_PROGRAM_NO_MEMO GRX_BIT(1)
+
+/**
  * @brief A zero-width assertion.
  *
  * The line and boundary kinds are parameterised by a character class - the
@@ -78,6 +107,16 @@ typedef enum {
   GRX_COND_RECURSION_GROUP,   ///< `(?(R1)...)`: inside recursion of group N?
   GRX_COND_ASSERTION,         ///< `(?(?=a)...)`: the condition is a lookaround.
   GRX_COND_DEFINE,            ///< `(?(DEFINE)...)`: never runs; defines only.
+  /**
+   * A condition already decided: `(?(VERSION>=10.0)yes|no)`.
+   *
+   * PCRE2's version test is answered when the pattern is read, not when it
+   * is run, and `a` holds the answer. It is a value here rather than the
+   * chosen branch substituted at parse time because the AST records what was
+   * written - a pattern that tests for a version this library does not claim
+   * should still dump as the conditional its author wrote.
+   */
+  GRX_COND_STATIC,
   GRX_COND_COUNT              ///< Closes the enum; not a condition.
 } GRX_CondKind;
 

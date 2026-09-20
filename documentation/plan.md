@@ -284,7 +284,8 @@ Node over 960,000 patterns per seed instead.
 ### Phase 3: PCRE2 and Perl
 
 **WP-18 The Perl-family front end and the PCRE2 profile.** *front ends,
-L.* The default hooks become the PCRE2 hooks: everything in
+L.* **Landed**, less the constructs named in
+`tests/data/vectors/known-gaps.txt`. The default hooks become the PCRE2 hooks: everything in
 [dialects.md](dialects.md) §9 "PCRE2"; the leading directives mapped to
 options and limits; `\Q..\E`; extended modes; the class syntax of §5.12;
 the numeric-escape rules of §5.7; branch reset and duplicate names;
@@ -292,7 +293,7 @@ the numeric-escape rules of §5.7; branch reset and duplicate names;
 `testinput1` and `testinput2` syntax verdicts match. *Depends on:* WP-06's
 skeleton.
 
-**WP-19 The backtracker, completed.** *engines, L.* Atomic groups and
+**WP-19 The backtracker, completed.** *engines, L.* **Landed.** Atomic groups and
 possessive quantifiers (as atomic), conditionals of every kind, recursion
 and subroutines with capture frames and `max_recursion_depth`, `\K`, the
 verbs with their exact backtracking semantics, `\G`. *Done:* `testinput1`

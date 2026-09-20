@@ -11,7 +11,9 @@ backtracker with a memo and the linear bound back.
 **Status: under construction.** ECMAScript - legacy, `u` and `v` modes -
 parses, compiles and matches on all three engines, checked against Node 22;
 `text` validates JSON Schema's `pattern` and `patternProperties` through it.
-Every other dialect is named and reports `GRX_ERR_UNSUPPORTED`. See
+PCRE2 and Perl parse, compile and match, at 90.9% and 94.7% of their
+reference corpora with every remaining gap named in a file. The other twelve
+dialects are named and report `GRX_ERR_UNSUPPORTED`. See
 [Status](#status) below for exactly what works today.
 
 (This paragraph said the compiler and the engines were stubs and that nothing
@@ -29,7 +31,7 @@ int main(void) {
   GRX_Error error;
   GRX_Regex * regex = NULL;
 
-  // ECMAScript with the `u` flag, which is the only dialect built today.
+  // ECMAScript with the `u` flag. PCRE2 and Perl are built too.
   if (grx_regex_compile_with_allocator("(\\w+)@(\\w+)", 11,
           GRX_SYNTAX_ECMASCRIPT, GRX_OPT_CASELESS | GRX_OPT_UTF, NULL, NULL,
           &error, &regex)
@@ -155,16 +157,17 @@ Nothing is allocated for the caller to free on a failing call.
 | Dialect table, semantic profile, `grx_options_parse()` | working; the rows for dialects with no oracle installed are provisional |
 | UTF-8 decode and encode | working, strict |
 | Character classes: membership, insertion, set algebra, fold closure | working |
-| Unicode tables: 454 properties, both foldings, both name resolvers | working, UCD 17.0.0 |
+| Unicode tables: 457 properties, both foldings, both name resolvers | working, UCD 17.0.0 |
 | UTF-8 reverse decode and whole-buffer validation | working |
 | Parser skeleton and hook interface | working |
 | ECMAScript front end, legacy and Unicode modes | working |
 | ECMAScript UnicodeSets (`v`) mode | working - set operations, string disjunctions, the seven properties of strings |
-| Every dialect but ECMAScript | named, `GRX_ERR_UNSUPPORTED` |
+| PCRE2 and Perl front ends | working - verbs, conditionals, recursion, branch reset, `\Q..\E`, extended modes, the leading directives |
+| Every dialect but ECMAScript, PCRE2 and Perl | named, `GRX_ERR_UNSUPPORTED` |
 | Lowering, analysis and code generation | working |
 | Pike VM | working - the regular subset, in linear time |
-| Backtracking engine | working - backreferences, lookaround, atomic groups |
-| Conditionals, recursion, the control verbs | opcodes exist; refused until WP-19 |
+| Backtracking engine | working - backreferences, lookaround, atomic and possessive |
+| Conditionals, recursion and subroutine calls, `\K`, the control verbs | working - on the backtracking engine, which is the only one that can run them |
 | Bit-state engine | working - the backtracker with a memo, and the linear bound back |
 | Search window, NOTBOL/NOTEOL/NOTEMPTY, `grx_regex_search_next()` | working |
 | `grx_regex_replace()` and `grx_regex_split()` | working - ECMAScript's template grammar and split rule |
@@ -255,18 +258,30 @@ turn a denial-of-service defence into a wrong validation result. It becomes
 `GTEXT_JSON_E_LIMIT`, which is neither valid nor invalid, and a caller can
 tell the difference.
 
-**Vectors.** **28,559 checked-in `.rxt` records** run in `make test`, with no
-oracle needed: 100% pass. Their expectations are Node's, not this library's.
-A deliberately wrong record sits beside them in a self-test corpus, and a
-test expects the runner to fail it - so that "the suite passes" cannot mean
-"the suite ran nothing".
+**Vectors.** **32,150 checked-in `.rxt` records** run in `make test`, with no
+oracle needed. Their expectations are the references' own, not this
+library's. A deliberately wrong record sits beside them in a self-test
+corpus, and a test expects the runner to fail it - so that "the suite passes"
+cannot mean "the suite ran nothing".
 
-A further **3,577 records are imported and skipped**: 1,870 from pcre2test's
-`testinput1` and `testinput2` and 1,707 from Perl's `re_tests`. They are in
-the tree before the front ends that read them, on purpose - the runner
-recognises a dialect that has no front end at all and counts them rather than
-failing them, so WP-18's and WP-21's first run has a corpus to be measured
-against on the day it exists rather than months later.
+| Corpus | Records | Agreeing |
+| --- | --- | --- |
+| ECMAScript, from Node 22 and test262 | 28,559 | **100%** |
+| PCRE2, from pcre2test 10.46's `testinput1` and `testinput2` | 1,884 | **90.92%** |
+| Perl, from `re_tests` under Perl 5.40 | 1,707 | **94.73%** |
+
+The 261 that do not agree are listed one per line in
+`tests/data/vectors/known-gaps.txt`, with the construct that is missing
+written beside each. That file is a gate in both directions: a vector that
+fails and is not listed fails the suite, and a vector that *is* listed and
+passes fails it too, with "remove the entry". So the list can only shrink by
+somebody noticing, and the percentages above are over the whole corpus - a
+known gap is counted and named, never counted as a pass.
+
+The largest groups are PCRE2 10.45's `(?[...])` extended classes (52), the
+`(*scs:` scan-substring construct (52), `(*MARK:name)` (28), and 21 patterns
+the default limits refuse where the reference answers them with an
+optimisation this library does not have.
 
 **Linear time.** `(a|aa)*b`, `(a+)+b` and `(a*)*b` - the patterns that make a
 backtracking engine hang - run against 100,000 characters in around fifty
@@ -279,7 +294,7 @@ to 173 milliseconds on an idle machine - 276 to 414 on a busy one, which is
 the number that matters - and answered by another engine in under one.
 [dialects.md](documentation/dialects.md) §7 is the report.
 
-351 tests plus the vector corpus, clean under Valgrind and under
+381 tests plus the vector corpus, clean under Valgrind and under
 ASan+UBSan. `make coverage` reports 90.8%; three of the five directories
 [testing.md](documentation/testing.md) §12 sets a 90% floor for are over it
 and two are under, with the shortfall counted there rather than explained

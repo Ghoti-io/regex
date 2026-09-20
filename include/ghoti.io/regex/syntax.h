@@ -83,7 +83,26 @@ typedef enum {
    * - which is a rule about the *flag string*, so grx_options_parse()
    * enforces it rather than this bit.
    */
-  GRX_OPT_UNICODE_SETS = GRX_BIT(10)
+  GRX_OPT_UNICODE_SETS = GRX_BIT(10),
+  /**
+   * PCRE2's and Perl's `xx`: extended mode, and inside a class as well.
+   *
+   * A separate bit rather than a second meaning for GRX_OPT_EXTENDED,
+   * because `xx` is strictly wider: it ignores unescaped space and tab
+   * *within* a bracket expression, where `x` does not. Setting it without
+   * GRX_OPT_EXTENDED is not a mode either dialect has, and the front end
+   * that reads `xx` sets both.
+   */
+  GRX_OPT_EXTENDED_MORE = GRX_BIT(11),
+  /**
+   * PCRE2's `J` and `PCRE2_DUPNAMES`: two groups may share a name.
+   *
+   * An option rather than a front-end detail because a caller can set it
+   * without writing `(?J)`, which is exactly what pcre2_compile()'s flag
+   * does. What it turns off is a check, so a pattern that is valid without
+   * it is valid with it.
+   */
+  GRX_OPT_DUPLICATE_NAMES = GRX_BIT(12)
 } GRX_Option;
 
 /**

@@ -39,12 +39,34 @@
 #include "compile_internal.h"
 
 /** What one code-generation run carries. */
+/** How many distinct groups one program may call as subroutines. */
+#define GRX_CODEGEN_MAX_CALLED 256
+
 typedef struct {
   const GRX_IR * ir;         ///< What is being compiled.
   GRX_Program * program;     ///< What is being built.
   const GRX_Limits * limits; ///< Caps to apply.
   GRX_Error * error;         ///< Where a failure is reported.
   uint32_t registers;        ///< Progress registers handed out so far.
+  int no_memo;               ///< An opcode the bit-state memo cannot survive.
+  /**
+   * Where each called group's subroutine block starts, and which groups need
+   * one.
+   *
+   * A recursion re-enters a group's code, and the group's code as it stands
+   * in the main program runs on into whatever follows it - so a call cannot
+   * jump there. Each called group gets a second copy, emitted after the main
+   * program and ending in RET, and every CALL is patched to it once the copy
+   * exists. Two copies of a group's instructions is the cost; sharing one
+   * would mean the main program's path through the group had to end in a RET
+   * it must not execute.
+   */
+  uint32_t called[GRX_CODEGEN_MAX_CALLED];   ///< Group numbers, in order.
+  uint32_t entry[GRX_CODEGEN_MAX_CALLED];    ///< Their block starts.
+  size_t called_count;
+  uint32_t fixups[GRX_CODEGEN_MAX_CALLED * 4]; ///< CALL instruction indices.
+  uint32_t fixup_group[GRX_CODEGEN_MAX_CALLED * 4];
+  size_t fixup_count;
 } Codegen;
 
 static GRX_Result gen(Codegen * codegen, uint32_t node_index);
@@ -65,6 +87,20 @@ static GRX_Result fail(
  */
 static GRX_Result emit(Codegen * codegen, GRX_Opcode op, uint8_t mode,
     uint32_t x, uint32_t y, const GRX_IRNode * node, uint32_t * out_index) {
+  switch (op) {
+    case GRX_OP_KEEP:
+    case GRX_OP_VERB:
+    case GRX_OP_COND:
+    case GRX_OP_CALL:
+    case GRX_OP_RET:
+    case GRX_OP_ATOMIC_BEGIN:
+    case GRX_OP_ATOMIC_END:
+      codegen->no_memo = 1;
+      break;
+    default:
+      break;
+  }
+
   GRX_Inst inst = {
     .op = (uint8_t)op,
     .mode = mode,
@@ -286,6 +322,11 @@ static GRX_Result gen_alternate(Codegen * codegen, const GRX_IRNode * node) {
     if (result != GRX_OK) {
       return result;
     }
+    // Marked, so that `(*THEN)` can tell this SPLIT from a quantifier's.
+    GRX_Inst * marked = grx_program_at(codegen->program, split);
+    if (marked) {
+      marked->flags |= GRX_INST_ALTERNATION;
+    }
     patch_x(codegen, split, here(codegen));
 
     result = gen(codegen, child);
@@ -473,6 +514,82 @@ static GRX_Result gen_repeat(Codegen * codegen, const GRX_IRNode * node) {
 }
 
 /** Generate a lookaround: a sub-program run without consuming input. */
+/**
+ * Lay out a conditional: the test, the true branch, the false branch.
+ *
+ *     COND  x=group  y=false     mode = what is being tested
+ *     <yes>
+ *     JMP end
+ *   false:
+ *     <no>
+ *   end:
+ *
+ * The JMP is what makes it a conditional rather than an alternation: once the
+ * test has chosen a branch, the other one is not reachable by backtracking.
+ */
+static GRX_Result gen_cond(Codegen * codegen, const GRX_IRNode * node) {
+  uint32_t test = GRX_INDEX_NONE;
+  GRX_Result result
+      = emit(codegen, GRX_OP_COND, node->mode, node->a, 0, node, &test);
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  uint32_t yes = node->first_child;
+  uint32_t no = GRX_INDEX_NONE;
+  if (yes != GRX_INDEX_NONE) {
+    const GRX_IRNode * taken = grx_ir_node(codegen->ir, yes);
+    no = taken ? taken->next_sibling : GRX_INDEX_NONE;
+    result = gen(codegen, yes);
+    if (result != GRX_OK) {
+      return result;
+    }
+  }
+
+  uint32_t skip = GRX_INDEX_NONE;
+  result = emit(codegen, GRX_OP_JMP, 0, 0, 0, node, &skip);
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  patch_y(codegen, test, here(codegen));
+  if (no != GRX_INDEX_NONE) {
+    result = gen(codegen, no);
+    if (result != GRX_OK) {
+      return result;
+    }
+  }
+
+  patch_x(codegen, skip, here(codegen));
+  return GRX_OK;
+}
+
+/**
+ * Emit a call to a group, and remember to lay that group's block out later.
+ *
+ * Whether the call is atomic is not decided here: PCRE2's is and Perl's is
+ * not, which makes it a dialect choice, and lowering has already spent it by
+ * wrapping this node in GRX_IR_ATOMIC where it applies.
+ */
+static GRX_Result gen_call(Codegen * codegen, const GRX_IRNode * node) {
+  if (codegen->fixup_count
+      >= sizeof(codegen->fixups) / sizeof(*codegen->fixups)) {
+    return fail(codegen, GRX_DIAG_LIMIT_PROGRAM_SIZE, node);
+  }
+
+  uint32_t call = GRX_INDEX_NONE;
+  GRX_Result result = emit(
+      codegen, GRX_OP_CALL, 0, GRX_INDEX_NONE, node->a, node, &call);
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  codegen->fixups[codegen->fixup_count] = call;
+  codegen->fixup_group[codegen->fixup_count] = node->a;
+  codegen->fixup_count++;
+  return GRX_OK;
+}
+
 static GRX_Result gen_look(Codegen * codegen, const GRX_IRNode * node) {
   uint32_t look = GRX_INDEX_NONE;
   GRX_Result result
@@ -585,10 +702,10 @@ static GRX_Result gen(Codegen * codegen, uint32_t node_index) {
       return emit(codegen, GRX_OP_VERB, node->mode, node->a, 0, node, NULL);
 
     case GRX_IR_COND:
+      return gen_cond(codegen, node);
+
     case GRX_IR_RECURSE:
-      // Their opcodes exist; the front end that emits them is WP-18, and the
-      // engine that runs them is WP-19.
-      return fail(codegen, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, node);
+      return gen_call(codegen, node);
 
     case GRX_IR_COUNT:
     default:
@@ -629,6 +746,84 @@ static GRX_Result copy_classes(
   return GRX_OK;
 }
 
+/**
+ * The IR node a call to group `group` re-enters.
+ *
+ * Group 0 is the whole pattern, which is what `(?R)` calls. Anything else is
+ * the capture node with that number, found by a scan rather than by an index:
+ * the numbers are the pattern's, not the arena's, and a table mapping one to
+ * the other would be a second thing to keep in step with lowering.
+ */
+static uint32_t call_target(const GRX_IR * ir, uint32_t group) {
+  if (!group) {
+    return ir->root;
+  }
+
+  for (size_t i = 0; i < ir->nodes.count; i++) {
+    const GRX_IRNode * node = grx_ir_node(ir, (uint32_t)i);
+    if (node && node->kind == GRX_IR_CAPTURE && node->a == group) {
+      return (uint32_t)i;
+    }
+  }
+
+  return GRX_INDEX_NONE;
+}
+
+/**
+ * Lay out one subroutine block per called group, and patch the calls.
+ *
+ * A block generated here may contain calls of its own - `(?R)` inside the
+ * pattern it calls is the ordinary case - so the loop runs until no new
+ * target appears rather than over a list fixed in advance.
+ */
+static GRX_Result gen_subroutines(Codegen * codegen) {
+  for (size_t next = 0; next < codegen->fixup_count;) {
+    uint32_t group = codegen->fixup_group[next];
+
+    size_t known = codegen->called_count;
+    for (size_t i = 0; i < codegen->called_count; i++) {
+      if (codegen->called[i] == group) {
+        known = i;
+        break;
+      }
+    }
+
+    if (known == codegen->called_count) {
+      if (codegen->called_count
+          >= sizeof(codegen->called) / sizeof(*codegen->called)) {
+        return fail(codegen, GRX_DIAG_LIMIT_PROGRAM_SIZE, NULL);
+      }
+      uint32_t target = call_target(codegen->ir, group);
+      if (target == GRX_INDEX_NONE) {
+        return fail(codegen, GRX_DIAG_INVALID_RECURSION, NULL);
+      }
+
+      // Reserved before the block is generated, so that a call the block
+      // makes to its own group finds the entry already recorded rather than
+      // starting a second copy of it.
+      codegen->called[codegen->called_count] = group;
+      codegen->entry[codegen->called_count] = here(codegen);
+      codegen->called_count++;
+
+      GRX_Result result = gen(codegen, target);
+      if (result == GRX_OK) {
+        result = emit(codegen, GRX_OP_RET, 0, 0, 0, NULL, NULL);
+      }
+      if (result != GRX_OK) {
+        return result;
+      }
+      // Generating the block may have appended calls of its own; they are
+      // after `next` and the loop reaches them without rescanning.
+      continue;
+    }
+
+    patch_x(codegen, codegen->fixups[next], codegen->entry[known]);
+    next++;
+  }
+
+  return GRX_OK;
+}
+
 GRX_Result grx_codegen_program(const GRX_IR * ir, const GRX_Limits * limits,
     GRX_Error * out_error, GRX_Program * out_program) {
   if (!ir || !limits || !out_program) {
@@ -641,6 +836,13 @@ GRX_Result grx_codegen_program(const GRX_IR * ir, const GRX_Limits * limits,
     .limits = limits,
     .error = out_error,
     .registers = 0,
+    .no_memo = 0,
+    .called = {0},
+    .entry = {0},
+    .called_count = 0,
+    .fixups = {0},
+    .fixup_group = {0},
+    .fixup_count = 0,
   };
 
   GRX_Result result = copy_classes(&codegen, &ir->classes);
@@ -661,11 +863,20 @@ GRX_Result grx_codegen_program(const GRX_IR * ir, const GRX_Limits * limits,
   if (result == GRX_OK) {
     result = emit(&codegen, GRX_OP_MATCH, 0, 0, 0, NULL, NULL);
   }
+  if (result == GRX_OK) {
+    // After the MATCH, where nothing falls into them: a subroutine block is
+    // reached by a CALL and left by its RET, and never by running off the
+    // end of the instruction before it.
+    result = gen_subroutines(&codegen);
+  }
   if (result != GRX_OK) {
     return result;
   }
 
   out_program->flags = ir->flags;
+  if (codegen.no_memo) {
+    out_program->flags |= GRX_PROGRAM_NO_MEMO;
+  }
   out_program->preference = ir->preference;
   out_program->iteration = ir->iteration;
   out_program->register_count = codegen.registers;

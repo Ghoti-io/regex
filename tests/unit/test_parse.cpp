@@ -573,11 +573,16 @@ TEST(EcmaScript, UnicodeSetsModeReadsADifferentClassGrammar) {
 // --------------------------------------------------------------------------
 
 TEST(Parse, AnUnbuiltDialectSaysSoRatherThanGuessing) {
-  // Reading a PCRE pattern with the ECMAScript front end would tell a caller
+  // Reading a POSIX pattern with the ECMAScript front end would tell a caller
   // their pattern is valid for an engine that rejects it. Every dialect
   // whose hooks are not written reports GRX_ERR_UNSUPPORTED instead.
+  //
+  // The exclusion list is the list of front ends that exist, and it is meant
+  // to shrink this test rather than to grow silently: a dialect added here
+  // without a front end would make the test pass by asserting nothing.
   for (int syntax = 0; syntax < GRX_SYNTAX_COUNT; syntax++) {
-    if (syntax == GRX_SYNTAX_ECMASCRIPT) {
+    if (syntax == GRX_SYNTAX_ECMASCRIPT || syntax == GRX_SYNTAX_PCRE
+        || syntax == GRX_SYNTAX_PERL) {
       continue;
     }
     GRX_Pattern * parsed = nullptr;

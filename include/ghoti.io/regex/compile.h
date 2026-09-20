@@ -124,6 +124,14 @@ typedef struct GRX_Facts {
   size_t max_length;     ///< Longest possible match, or GRX_NPOS if unbounded.
   size_t max_lookbehind; ///< Bytes a lookbehind may need before the start,
                          ///< or GRX_NPOS if unbounded.
+  /**
+   * The same, counting only lookbehinds whose body is not one fixed length.
+   *
+   * Zero when every lookbehind in the pattern matches exactly one length.
+   * Apart because that is the distinction PCRE2 bounds: a fixed body of any
+   * length is cheap to check and a variable one is not.
+   */
+  size_t max_variable_lookbehind;
   size_t capture_count;  ///< Capturing groups, excluding group 0.
   size_t program_size;   ///< Instructions in the compiled program.
   const char * literal_prefix;   ///< Bytes every match starts with, or NULL.
