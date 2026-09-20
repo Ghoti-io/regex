@@ -468,10 +468,65 @@ TEST(Perl, ABracketedPosixClassIsCheckedTheWayPcre2ChecksIt) {
   grx_regex_free(digits.regex);
 
   // Collating elements and equivalence classes need a locale, and there is
-  // none here.
+  // none here - but a *syntax* error rather than an unsupported one, because
+  // neither reference has them either: pcre2test says "POSIX collating
+  // elements are not supported" and perl says the syntax "is reserved for
+  // future extensions". The pattern is not one this library has yet to
+  // build; it is one that will never be valid in this dialect, and the two
+  // are different promises to a caller.
   Attempt collating = compile("[[.a.]]");
-  EXPECT_EQ(collating.result, GRX_ERR_UNSUPPORTED);
+  EXPECT_EQ(collating.result, GRX_ERR_SYNTAX);
+  EXPECT_EQ(collating.diag, GRX_DIAG_NOT_IN_DIALECT);
   grx_regex_free(collating.regex);
+
+  Attempt equivalence = compile("[[=a=]]");
+  EXPECT_EQ(equivalence.result, GRX_ERR_SYNTAX);
+  grx_regex_free(equivalence.regex);
+}
+
+TEST(Perl, AConditionsConditionHasToBeAnAssertion) {
+  // pcre2test: "atomic assertion expected after (?( or (?(?C)". The
+  // alphabetic spellings of the lookarounds are conditions; the other
+  // `(*name:` constructs are groups and are not, however useful they would
+  // be. Checked against pcre2test 10.46 one form at a time.
+  for (const char * pattern :
+      {"(?(*pla:a)b)", "(?(*nlb:a)b)", "(?(*positive_lookahead:a)b)",
+       "(?(?=a)b)"}) {
+    Attempt good = compile(pattern);
+    EXPECT_EQ(good.result, GRX_OK) << pattern;
+    grx_regex_free(good.regex);
+  }
+
+  for (const char * pattern :
+      {"(?(*atomic:a)b)", "(?(*script_run:a)b)", "(?(*sr:a)b)",
+       "(?(*scs:(1)a)b)"}) {
+    Attempt bad = compile(pattern);
+    EXPECT_EQ(bad.result, GRX_ERR_SYNTAX) << pattern;
+    EXPECT_EQ(bad.diag, GRX_DIAG_INVALID_CONDITION) << pattern;
+    grx_regex_free(bad.regex);
+  }
+
+  // Outside a conditional the same construct is honestly unbuilt rather than
+  // invalid: pcre2test compiles it and this library does not.
+  Attempt alone = compile("(*script_run:abc)");
+  EXPECT_EQ(alone.result, GRX_ERR_UNSUPPORTED);
+  EXPECT_EQ(alone.diag, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED);
+  grx_regex_free(alone.regex);
+}
+
+TEST(Perl, ADuplicatedNameCannotBoundALookbehind) {
+  // `(?J)` lets one name belong to several groups, and a reference written
+  // with it means all of them - so its length is several lengths and a
+  // dialect that bounds its lookbehind cannot take it. pcre2test refuses
+  // this and compiles the same lookbehind over a name written once.
+  Attempt ambiguous
+      = compile("(?J)(?<A>[ab])...(?<=\\k'A')(?<A>)z");
+  EXPECT_EQ(ambiguous.result, GRX_ERR_SYNTAX);
+  grx_regex_free(ambiguous.regex);
+
+  Attempt single = compile("(?<A>[ab])...(?<=\\k'A')z");
+  EXPECT_EQ(single.result, GRX_OK);
+  grx_regex_free(single.regex);
 }
 
 TEST(Perl, ALeadingCloseBracketIsAMemberAndNotTheEndOfTheClass) {

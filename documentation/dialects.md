@@ -636,13 +636,13 @@ to be complete for every shipped tier.
 | Perl | `(?[ ])` is PCRE2's grammar only | Perl's nests and takes different operands; a shared reader would accept neither exactly | `GRX_ERR_SYNTAX` |
 | Perl | A capture set inside a *failed* negative lookahead is discarded | PCRE2 discards it and ECMA-262 22.2.2.4 says to; Perl keeps it | - |
 | PCRE2 | Callouts `(?C...)` are read and have no effect | no callback API; a callout with no function registered changes no match, so accepting it answers the same question | - |
-| PCRE2 | `(*script_run:`, `(*sr:`, `(*asr:` | each constrains what its body may match and an ordinary group does not | `GRX_ERR_UNSUPPORTED` |
+| PCRE2 | `(*script_run:`, `(*sr:`, `(*asr:` | each constrains what its body may match and an ordinary group does not | `GRX_ERR_UNSUPPORTED` — except as a conditional's *condition*, where pcre2test refuses every one of them too ("atomic assertion expected after `(?(`"), so `(?(*script_run:x)y)` is `GRX_ERR_SYNTAX` |
 | PCRE2, Perl | `\C`, one code unit | the subject here is code points, and a construct that can land inside a character has no honest approximation | `GRX_ERR_UNSUPPORTED` |
 | PCRE2 | `(*LIMIT_MATCH=n)` and kin are accepted and not applied | the limits are the caller's and this front end has no writable copy; lowering one from inside a pattern is later work | - |
 | PCRE2, Perl | `(?(VERSION>=n.n))` is answered against 10.46 | this library emulates that version rather than being it | - |
 | Perl | `/l` asks for the locale's semantics and gets the C locale's | there is no other locale here (section 6), and the C locale's word characters are the ASCII ones | - |
 | POSIX | Submatch rules approximated in the first POSIX release | [design.md](design.md) §2 | - |
-| POSIX | `[[.ch.]]` multi-character collating elements, `[[=e=]]` | no collation | `GRX_ERR_UNSUPPORTED` |
+| POSIX | `[[.ch.]]` multi-character collating elements, `[[=e=]]` | no collation | `GRX_ERR_UNSUPPORTED` when a dialect has them; **`GRX_ERR_SYNTAX`** in Perl and PCRE2, which do not — pcre2test raises error 113 and perl calls the syntax "reserved for future extensions", so a pattern using one there is not valid rather than not built |
 | .NET | Culture-sensitive folding is invariant; balancing groups deferred | §5.8; [design.md](design.md) §2 | `GRX_ERR_UNSUPPORTED` for balancing groups |
 | Emacs | Syntax classes (`\s-`, `\w`) use fixed Unicode definitions, not a syntax table | no syntax table | - |
 | Vim | `\%[...]`, `\%d123`, `\z(`, `\=` in replacements | later tier | `GRX_ERR_UNSUPPORTED` |

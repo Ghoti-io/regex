@@ -1426,10 +1426,16 @@ static GRX_Result read_posix_class(
   char terminator = byte_at(parser, 1);
   if (terminator != ':') {
     // `[[.a.]]` and `[[=a=]]`: collating elements and equivalence classes.
-    // Both need a locale's collation table, which this library does not
-    // have and will not invent.
+    // Both need a locale's collation table, which this library does not have
+    // and will not invent - but that is not why they are refused here.
+    // Neither reference has them either: pcre2test says "POSIX collating
+    // elements are not supported" (error 113) and perl says the syntax "is
+    // reserved for future extensions". So this is the dialect not having the
+    // construct rather than this library not having built it yet, and the
+    // difference is visible to a caller: one is a syntax error in a pattern
+    // that will never be valid, the other is a promise.
     return grx_parse_fail(
-        parser, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, start, end + 2);
+        parser, GRX_DIAG_NOT_IN_DIALECT, start, end + 2);
   }
 
   size_t scan = 2;
@@ -2080,6 +2086,37 @@ static GRX_Result apply_directive(GRX_Parser * parser, const char * name,
 
 /** Read a `(*...)` construct, the `(` consumed and the `*` next. */
 static GRX_Result read_scan_body(GRX_Parser * parser, uint32_t node);
+
+/**
+ * Whether `(*name:` at `offset` names one of the lookarounds.
+ *
+ * A conditional's condition has to be an assertion: pcre2test takes
+ * `(?(*pla:a)b)` and refuses `(?(*atomic:a)b)` and `(?(*script_run:a)b)`
+ * with "atomic assertion expected after (?( or (?(?C)". Reading rather than
+ * consuming, because the caller has not decided what it is looking at yet.
+ */
+static int star_names_assertion(const GRX_Parser * parser, size_t offset) {
+  size_t first = offset;
+  size_t scan = offset;
+  while (scan < parser->length && parser->text[scan] != ')'
+      && parser->text[scan] != ':') {
+    scan++;
+  }
+  if (scan >= parser->length || parser->text[scan] != ':') {
+    return 0;
+  }
+
+  size_t length = scan - first;
+  const char * name = parser->text + first;
+  for (size_t i = 0; alt_group_table[i].name; i++) {
+    if (alt_group_table[i].kind == GRX_NODE_LOOKAROUND
+        && strlen(alt_group_table[i].name) == length
+        && memcmp(alt_group_table[i].name, name, length) == 0) {
+      return 1;
+    }
+  }
+  return 0;
+}
 
 static GRX_Result read_star_construct(GRX_Parser * parser, size_t start,
     GRX_GroupOpen * out) {
@@ -3264,6 +3301,16 @@ static GRX_Result pcre_group_open(GRX_Parser * parser, GRX_GroupOpen * out) {
     // assertion: the `(` this hook is looking at opens both. It is left
     // where it is when the condition is an assertion, so that
     // read_conditional_body() reads the whole `(?=a)` as the group it is.
+    if (byte_at(parser, 1) == '*'
+        && !star_names_assertion(parser, parser->position + 2)) {
+      // `(*script_run:` and `(*atomic:` are groups, not assertions, and a
+      // condition has to be one. Refused here rather than where the
+      // construct itself is read, so that the answer is "that is not a
+      // condition" and not "this library has not built script runs" - which
+      // is what pcre2test says, and it says it for every build.
+      return grx_parse_fail(parser, GRX_DIAG_INVALID_CONDITION, start,
+          parser->position - start + 1);
+    }
     if (byte_at(parser, 1) == '?' || byte_at(parser, 1) == '*') {
       out->a = (uint32_t)GRX_COND_ASSERTION;
       return GRX_OK;

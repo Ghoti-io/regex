@@ -514,6 +514,12 @@ static Span walk(Analysis * analysis, uint32_t node_index) {
       // that group's - measured here rather than given up on, because that
       // is the difference between the lookbehind pcre2test accepts and the
       // one it refuses.
+      if (node->flags & GRX_IR_AMBIGUOUS_REF) {
+        // Unless the name it was written with belongs to several groups, in
+        // which case it is several lengths and so not one.
+        span = (Span) {0, GRX_NPOS, 0, 0, 1, 0};
+        break;
+      }
       span = group_span(analysis, node->a);
       break;
 

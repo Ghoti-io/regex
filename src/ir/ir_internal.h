@@ -184,6 +184,22 @@ typedef enum {
 #define GRX_IR_LOOK_KEEP_CAPTURES GRX_BIT(5)
 
 /**
+ * @brief BACKREF: the name it was written with belongs to several groups.
+ *
+ * `(?J)(?<A>[ab])...\k'A'(?<A>)` - two groups, one name, and which of them
+ * the reference means is not decided until the match runs. The number on the
+ * node is the first of them, which is what this library matches against; the
+ * flag is the part that must not be forgotten, because a length nobody can
+ * compute is not a length. Without it pcre2test refuses
+ * `(?<A>[ab])...(?<=\k'A')(?<A>)z` and this library measures the lookbehind
+ * from the first `A` and takes it.
+ *
+ * The same thing GRX_IR_BRANCH_RESET says about a number several groups
+ * share, said about a name.
+ */
+#define GRX_IR_AMBIGUOUS_REF GRX_BIT(6)
+
+/**
  * @brief One node of the intermediate representation.
  *
  * `a`, `b`, `mode`, `min` and `max` are the kind-specific payload:
@@ -197,7 +213,7 @@ typedef enum {
  * | CONCAT, ALTERNATE | - | - | - | children |
  * | REPEAT | - | - | GRX_RepeatMode | `min`, `max`, `empty_loop`, `capture_reset`; one child |
  * | CAPTURE | group number | name offset, or GRX_INDEX_NONE | - | one child |
- * | BACKREF | group number | - | - | `backref_unset`, CASELESS |
+ * | BACKREF | group number | - | - | `backref_unset`, CASELESS, AMBIGUOUS_REF |
  * | ASSERT | class index for the line or word set, else GRX_INDEX_NONE | - | GRX_AssertKind | - |
  * | LOOK | length-span offset, when LOOK_FORWARD | - | GRX_LookKind | LOOK_FORWARD, LOOK_KEEP_CAPTURES; one child |
  * | ATOMIC | - | - | - | one child |

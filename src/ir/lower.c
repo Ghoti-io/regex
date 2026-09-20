@@ -1585,15 +1585,36 @@ static GRX_Result lower_options(
   return result;
 }
 
+/** How many groups were written with this name. */
+static size_t name_definitions(Lowering * low, const char * name) {
+  size_t count = 0;
+  for (size_t i = 0; i < low->pattern->nodes.count; i++) {
+    const GRX_Node * node = grx_pattern_node(low->pattern, (uint32_t)i);
+    if (!node || node->kind != GRX_NODE_GROUP
+        || !(node->flags & GRX_NODE_NAMED)) {
+      continue;
+    }
+    const char * candidate = grx_pattern_name(low->pattern, node->b);
+    if (candidate && strcmp(candidate, name) == 0) {
+      count++;
+    }
+  }
+  return count;
+}
+
 /** Lower a backreference, resolving a name to a number and fixing the modes. */
 static GRX_Result lower_backref(
     Lowering * low, const GRX_Node * node, uint32_t * out_node) {
   uint32_t group = node->a;
+  int ambiguous = 0;
   if (node->flags & GRX_NODE_NAMED) {
     const char * name = grx_pattern_name(low->pattern, node->b);
     if (!name || resolve_name(low, name, &group, NULL) != GRX_OK) {
       return fail(low, GRX_DIAG_UNKNOWN_GROUP_NAME, node);
     }
+    // `(?J)` lets one name belong to several groups, and then the reference
+    // names all of them. See GRX_IR_AMBIGUOUS_REF.
+    ambiguous = name_definitions(low, name) > 1;
   }
 
   GRX_Result result = add(low, GRX_IR_BACKREF, node, out_node);
@@ -1603,6 +1624,9 @@ static GRX_Result lower_backref(
 
   GRX_IRNode * backref = grx_ir_node(low->ir, *out_node);
   backref->a = group;
+  if (ambiguous) {
+    backref->flags |= GRX_IR_AMBIGUOUS_REF;
+  }
   backref->backref_unset = (uint8_t)low->profile.backref_unset;
   if (low->fold != GRX_FOLD_NONE) {
     // The engine compares folded code points rather than bytes. It is the one
