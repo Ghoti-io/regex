@@ -99,9 +99,14 @@ static const GRX_SyntaxSpec spec_table[GRX_SYNTAX_COUNT] = {
     .default_options = GRX_OPT_UTF,
   },
   [GRX_SYNTAX_PCRE] = {
+    // CSET is `(?[...])` here, not `&&` inside brackets: PCRE2 10.45 added
+    // the extended class and did not add the Java spelling. Perl's row does
+    // not have it - Perl's `(?[...])` is a different grammar, it nests and
+    // PCRE2's does not, and a row claiming the feature would be claiming
+    // this front end reads Perl's.
     .features = ALT | REP | LAZY | POSS | NCAP | NAME | BREF | LAH | LBH
-        | ATOM | COND | RECU | FLAG | CMNT | PCLS | UPRP | WORD | ANCH | QUOT
-        | HEX | OCT | CTRL | SUBR | VERB,
+        | ATOM | COND | RECU | FLAG | CMNT | PCLS | UPRP | CSET | WORD | ANCH
+        | QUOT | HEX | OCT | CTRL | SUBR | VERB,
   },
   [GRX_SYNTAX_ECMASCRIPT] = {
     // No inline flags: ECMAScript puts them after the closing delimiter, not

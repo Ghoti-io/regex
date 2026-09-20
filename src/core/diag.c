@@ -93,6 +93,8 @@ static const DiagRow diag_table[GRX_DIAG_COUNT] = {
       = {"malformed Unicode property escape", GRX_ERR_SYNTAX},
   [GRX_DIAG_INVALID_CLASS_SET_OP]
       = {"invalid character class set operation", GRX_ERR_SYNTAX},
+  [GRX_DIAG_CLASS_NESTING_TOO_DEEP]
+      = {"character class nesting is too deep", GRX_ERR_SYNTAX},
 
   [GRX_DIAG_INVALID_GROUP_NAME]
       = {"invalid group name", GRX_ERR_SYNTAX},

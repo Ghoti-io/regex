@@ -132,7 +132,15 @@ typedef enum {
   GRX_FEATURE_COMMENT_GROUP = GRX_BIT(13), ///< `(?#...)`.
   GRX_FEATURE_POSIX_CLASS = GRX_BIT(14),   ///< `[[:alpha:]]`.
   GRX_FEATURE_UNICODE_PROPERTY = GRX_BIT(15), ///< `\p{L}`.
-  GRX_FEATURE_CLASS_SET_OPS = GRX_BIT(16), ///< `[a-z&&[^aeiou]]`.
+  /**
+   * @brief Set operations between classes, however the dialect spells them.
+   *
+   * `[a-z&&[^aeiou]]` in Java and in ECMAScript's `v` mode, `(?[ ... ])` in
+   * PCRE2 and Perl. One bit rather than two: what it says is that the
+   * dialect can intersect and subtract sets at all, and the spelling is the
+   * front end's business.
+   */
+  GRX_FEATURE_CLASS_SET_OPS = GRX_BIT(16),
   GRX_FEATURE_WORD_BOUNDARY = GRX_BIT(17), ///< `\b`, `\B`.
   GRX_FEATURE_ANCHOR_ESCAPES = GRX_BIT(18), ///< `\A`, `\z`, `\Z`.
   GRX_FEATURE_QUOTING = GRX_BIT(19),       ///< `\Q...\E`.

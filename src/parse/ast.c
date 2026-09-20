@@ -155,7 +155,7 @@ static const char * cond_name(uint32_t kind) {
 /** The name of a class set operation, for the dump. */
 static const char * class_op_name(uint32_t kind) {
   static const char * const names[GRX_CLASS_OP_COUNT] = {
-    "union", "intersect", "subtract", "symdiff",
+    "union", "intersect", "subtract", "symdiff", "complement",
   };
   return kind < GRX_CLASS_OP_COUNT ? names[kind] : "?";
 }

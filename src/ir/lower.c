@@ -404,6 +404,93 @@ static GRX_Result evaluate_class(
   return GRX_OK;
 }
 
+/**
+ * Evaluate an extended class expression: PCRE2's `(?[ ... ])`.
+ *
+ * Code points only, which is what separates this from evaluate_class_set():
+ * that one is ECMAScript's `v` grammar, whose operands may be *strings*, and
+ * whose folding rule is MaybeSimpleCaseFolding rather than the one every
+ * other mode uses. Sharing the evaluator would have imported ECMAScript's
+ * answer to `[^\P{Lu}]` into a dialect that gives a different one.
+ *
+ * Each operand is canonicalised before it is combined, because a `[^...]`
+ * operand carries its negation as a flag and an intersection with a flag
+ * still set would intersect with the set's complement's complement.
+ */
+static GRX_Result evaluate_class_expression(
+    Lowering * low, const GRX_Node * node, GRX_CharClass * out) {
+  if (node->kind == GRX_NODE_CLASS) {
+    return evaluate_class(low, node, out);
+  }
+  if (node->kind != GRX_NODE_CLASS_OP) {
+    return fail(low, GRX_DIAG_INTERNAL, node);
+  }
+
+  GRX_ClassOpKind op = (GRX_ClassOpKind)node->a;
+  uint32_t child = node->first_child;
+  int first = 1;
+
+  while (child != GRX_INDEX_NONE) {
+    const GRX_Node * operand = grx_pattern_node(low->pattern, child);
+    if (!operand) {
+      return fail(low, GRX_DIAG_INTERNAL, node);
+    }
+
+    GRX_CharClass piece;
+    grx_charclass_init(&piece, out->allocator);
+    GRX_Result result = evaluate_class_expression(low, operand, &piece);
+    if (result == GRX_OK) {
+      result = grx_charclass_canonicalize(&piece, low->limits);
+    }
+    if (result == GRX_OK) {
+      if (first) {
+        result = grx_charclass_union(out, &piece, low->limits);
+      }
+      else {
+        switch (op) {
+          case GRX_CLASS_OP_INTERSECT:
+            result = grx_charclass_intersect(out, &piece, low->limits);
+            break;
+          case GRX_CLASS_OP_SUBTRACT:
+            result = grx_charclass_subtract(out, &piece, low->limits);
+            break;
+          case GRX_CLASS_OP_SYMDIFF:
+            result = grx_charclass_symdiff(out, &piece, low->limits);
+            break;
+          case GRX_CLASS_OP_UNION:
+          case GRX_CLASS_OP_COMPLEMENT:
+          case GRX_CLASS_OP_COUNT:
+          default:
+            result = grx_charclass_union(out, &piece, low->limits);
+            break;
+        }
+      }
+    }
+    grx_charclass_clear(&piece);
+    if (result != GRX_OK) {
+      return storage_failed(low, result, node);
+    }
+
+    first = 0;
+    child = operand->next_sibling;
+  }
+
+  if (op == GRX_CLASS_OP_COMPLEMENT) {
+    // One operand, and what it complements is whatever the operand
+    // evaluated to - not the members of a bracket expression, which is the
+    // reason this is an operation and not a flag.
+    GRX_Result result = grx_charclass_canonicalize(out, low->limits);
+    if (result == GRX_OK) {
+      result = grx_charclass_complement(out, low->limits);
+    }
+    if (result != GRX_OK) {
+      return storage_failed(low, result, node);
+    }
+  }
+
+  return GRX_OK;
+}
+
 // --------------------------------------------------------------------------
 // The shared classes: the newline set and the word set
 // --------------------------------------------------------------------------
@@ -1776,14 +1863,32 @@ static GRX_Result lower_node(
       // way - longest alternative first, then the single code points.
       return lower_class_set(low, node, out_node);
 
-    case GRX_NODE_CLASS_OP:
-      // Only the `v` grammar builds this, and only inside a class - so
-      // reaching one here without UnicodeSets is a front end producing a
-      // node for a mode it was not parsing in.
+    case GRX_NODE_CLASS_OP: {
+      // Two grammars build this: ECMAScript's `v` mode, where an operand may
+      // be a string, and PCRE2's `(?[...])`, where it may not. The first is
+      // a set of strings and lowers to an alternation; the second is a set
+      // of code points and lowers to a class.
       if (low->options & GRX_OPT_UNICODE_SETS) {
         return lower_class_set(low, node, out_node);
       }
-      return fail(low, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, node);
+      GRX_CharClass cls;
+      grx_charclass_init(&cls, low->ir->allocator);
+      GRX_Result result = evaluate_class_expression(low, node, &cls);
+      uint32_t class_index = GRX_INDEX_NONE;
+      if (result == GRX_OK) {
+        result = intern(low, &cls, node, &class_index);
+      }
+      grx_charclass_clear(&cls);
+      if (result != GRX_OK) {
+        return result;
+      }
+      result = add(low, GRX_IR_CLASS, node, out_node);
+      if (result != GRX_OK) {
+        return result;
+      }
+      grx_ir_node(low->ir, *out_node)->a = class_index;
+      return GRX_OK;
+    }
 
     case GRX_NODE_COUNT:
     default:

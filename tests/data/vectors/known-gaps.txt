@@ -57,56 +57,6 @@ pcre		(?<=b(?1))xyz(b+)pqrstuvew		lookbehind length: the reference computes a bo
 pcre		(?>a(*:1))(?>b(*:1))(*SKIP:1)x|.*		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
 pcre		(?>a(*:1))(?>b)(*SKIP:1)x|.*		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
 pcre		(?>this line\\s*((?R)|)(*MARK:A))		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
-pcre		(?[ !!\\n ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[ !(\\n) ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[ ![:alpha:] ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[ ![\\n] ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[ !\\d ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[ !\\n & [^\\n\\t] ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[ !\\n ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[ ( [()] ) ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[ ( \\x02 + [:graph:] ) | [ \\x02 [:graph:] ] ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[ (!\\n) ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[ (( [\\n\\t] )) ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[ ((\\n)) ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[ ([:alpha:]) ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[ ([\\n]) ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[ (\\d) ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[ (\\n + \\t) ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[ (\\n) & [\\n\\t] ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[ (\\n) ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[ [()] ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[ [:alpha:] & [a-z\\t] ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[ [:graph:] ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[ [AC] ^ [BC] ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[ [[:graph:]\\x02] ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[ [[:graph:]] ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[ [\\d\\t] & \\d ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[ [\\d] + \\n & [\\n\\t] ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[ [\\d] + \\n + [\\t] ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[ [\\n\\t] & (\\n) ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[ [\\n\\t] & [\\n] ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[ [\\n\\t] & \\n ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[ [\\n] & [\\n\\t] ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[ [\\t] + [\\n] ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[ [^\\n\\t] & !\\n ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[ [a-z\\t] & [:alpha:] ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[ \\d & [\\d\\t] ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[ \\d + \\n ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[ \\d - [2] ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[ \\d ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[ \\d | \\n ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[ \\n & [\\n\\t] + [\\d] ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[ \\n & [\\n\\t] ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[ \\t + \\n ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[[1]])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[[a-c]])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[[a]])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[\\E\\n])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[\\n \\Q\\E])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n+[a]&\\n+(\\n&\\n))))))))))))))])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[\\n])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		(?[\t(\t[\t^\tz\t]\t) ])		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
 pcre		(?|(?<a>A)|(?<b>B))		branch reset: the numbering is shared, and the names and references inside one are not checked against it yet
 pcre		(?|([ab]))...(?<=\\1)z		branch reset: the numbering is shared, and the names and references inside one are not checked against it yet
 pcre		(X{65535})(?<=\\1{32770})		a repeat count the reference folds and this library expands
@@ -147,8 +97,6 @@ pcre		\\b(\\w++)(*scs:(1)^)		`(*scs:` scan substring: refused, it constrains the
 pcre		\\d{0,3}(*:abc)(?C1)xxx		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
 pcre		^(([a-z]([a-z]*+))(*scs:(2).(?=(?1)|$)\\3)|#){5}		`(*scs:` scan substring: refused, it constrains the body and a group does not
 pcre		^(?:(.){20,30}#|([a-z]++)(*scs:(1)(a+)(*THEN)b){20,30}#|(.){20,30}!)		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		^(?[\\x61])+b		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
-pcre		^(?[\\x61])b		PCRE2 10.45's `(?[...])` extended class: this front end does not read it
 pcre		^(?|(\\*)(*napla:\\S*_(\\2?+.+))|(\\w)(?=\\S*_(\\2?+\\1)))+_\\2$		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
 pcre		^(?|(\\*)(*napla:\\S*_(\\3?+.+))|(\\w)(?=\\S*_((\\2?+\\1))))+_\\2$		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
 pcre		^([a-z]++)#(*scs:(1)a|ab|abc|abcd|abcde|abcdef|(abcdefg))\\2		`(*scs:` scan substring: refused, it constrains the body and a group does not

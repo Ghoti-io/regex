@@ -105,6 +105,17 @@ typedef enum {
   GRX_CLASS_OP_INTERSECT,   ///< `&&`.
   GRX_CLASS_OP_SUBTRACT,    ///< `--`, and .NET's `[a-z-[aeiou]]`.
   GRX_CLASS_OP_SYMDIFF,     ///< Rust's `~~`.
+  /**
+   * Unary complement: PCRE2's `(?[ ! [a] ])`.
+   *
+   * The one operation with a single operand, and the only one that needs to
+   * know how wide "everything" is - which is why it is an operation here
+   * rather than a negation flag on the operand. A flag would have to mean
+   * two different things on `[^a]`, where the complement is of the class's
+   * own members, and on `!(...)`, where it is of whatever the expression
+   * evaluated to.
+   */
+  GRX_CLASS_OP_COMPLEMENT,
   GRX_CLASS_OP_COUNT        ///< Closes the enum; not an operation.
 } GRX_ClassOpKind;
 

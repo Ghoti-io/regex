@@ -50,6 +50,19 @@ Attempt compile(const std::string & pattern, GRX_Syntax syntax = GRX_SYNTAX_PCRE
   return attempt;
 }
 
+/**
+ * Compile, discard, and report the result alone.
+ *
+ * compile() hands back the regex, which a test that only wants the verdict
+ * then has to free; forgetting is a leak ASan finds and a reader does not.
+ */
+GRX_Result compile_result(const std::string & pattern,
+    GRX_Syntax syntax = GRX_SYNTAX_PCRE, const char * flags = "") {
+  Attempt attempt = compile(pattern, syntax, flags);
+  grx_regex_free(attempt.regex);
+  return attempt.result;
+}
+
 /** Whether a pattern matches a subject, and where. */
 struct Found {
   bool matched;
@@ -751,9 +764,7 @@ TEST(Perl, ABraceAfterBackslashNIsTheQuantifierOnlyWhenItCouldBeOne) {
       GRX_DIAG_INVALID_ESCAPE);
   EXPECT_EQ(compile("\\N(?#c){SPACE}", GRX_SYNTAX_PERL).diag,
       GRX_DIAG_INVALID_ESCAPE);
-  Attempt detached = compile("a\\N {SPACE}", GRX_SYNTAX_PCRE, "x");
-  EXPECT_EQ(detached.result, GRX_OK);
-  grx_regex_free(detached.regex);
+  EXPECT_EQ(compile_result("a\\N {SPACE}", GRX_SYNTAX_PCRE, "x"), GRX_OK);
 }
 
 TEST(Perl, BackslashNInAClassIsOnlyTheCodePointForm) {
@@ -800,6 +811,92 @@ TEST(Perl, TheCasedLetterAliasesAreSpeltThreeWays) {
            "\\p{Cased_Letter}"}) {
     EXPECT_TRUE(search(spelling, "a", GRX_SYNTAX_PERL).matched) << spelling;
   }
+}
+
+TEST(Perl, AnExtendedClassIsAnExpressionOverSets) {
+  // PCRE2 10.45's `(?[...])`. Every answer here is pcre2test's.
+  EXPECT_TRUE(search("(?[ [a] | [b] & [b] ])", "b").matched);
+  EXPECT_FALSE(search("(?[ [abc] - [b] ])", "b").matched);
+  EXPECT_FALSE(search("(?[ [ab] ^ [bc] ])", "b").matched);
+  EXPECT_TRUE(search("(?[ [ab] ^ [bc] ])", "c").matched);
+  EXPECT_TRUE(search("(?[ \\d ])", "5").matched);
+  EXPECT_TRUE(search("(?[ [:alpha:] & [a-z\\t] ])", "q").matched);
+  EXPECT_TRUE(search("(?[ (\\n + \\t) ])", "\t").matched);
+
+  // `+` is union, the same operator as `|`, and not a synonym invented here.
+  EXPECT_TRUE(search("(?[ [\\t] + [\\n] ])", "\n").matched);
+}
+
+TEST(Perl, AnExtendedClassHasTwoPrecedenceLevels) {
+  // `&` binds tighter than the rest: `[a] | [b] & [b]` is `a | (b & b)` and
+  // so still matches "a".
+  EXPECT_TRUE(search("(?[ [a] | [b] & [b] ])", "a").matched);
+
+  // Everything else is one level and associates to the left, which is what
+  // these two patterns differ by: `((abc - a) | a)` has "a" and
+  // `((a | abc) - a)` does not.
+  EXPECT_TRUE(search("(?[ [abc] - [a] | [a] ])", "a").matched);
+  EXPECT_FALSE(search("(?[ [a] | [abc] - [a] ])", "a").matched);
+
+  // `!` binds tighter than `&`: `(!a) & ab` is "b" alone.
+  EXPECT_FALSE(search("(?[ ! [a] & [ab] ])", "a").matched);
+  EXPECT_TRUE(search("(?[ ! [a] & [ab] ])", "b").matched);
+
+  // Two complements are none. pcre2test compiles a hundred of them, so they
+  // are counted rather than recursed on, and an even count wraps nothing.
+  EXPECT_TRUE(search("(?[ !![a] ])", "a").matched);
+  EXPECT_TRUE(search("(?[ " + std::string(100, '!') + "[a] ])", "a").matched);
+}
+
+TEST(Perl, AnExtendedClassOperandIsASetAndNotACharacter) {
+  // pcre2test: "unexpected character in (?[...]) extended character class".
+  // `a` is a character; `[a]` is how the set containing it is written.
+  EXPECT_EQ(compile("(?[a])").diag, GRX_DIAG_INVALID_CLASS_ITEM);
+  EXPECT_EQ(compile("(?[])").diag, GRX_DIAG_EMPTY_CLASS);
+  EXPECT_EQ(compile("(?[ \\d \\n ])").diag, GRX_DIAG_INVALID_CLASS_SET_OP);
+  EXPECT_EQ(compile("(?[ - [a] ])").diag, GRX_DIAG_INVALID_CLASS_SET_OP);
+
+  // A quoted run is a sequence of characters, and a sequence is not a set -
+  // but an empty one is invisible, and so is a `\E` with no run open.
+  EXPECT_EQ(compile("(?[ \\Qab\\E ])").diag, GRX_DIAG_INVALID_CLASS_ITEM);
+  EXPECT_TRUE(search("(?[\\n \\Q\\E])", "\n").matched);
+  EXPECT_TRUE(search("(?[\\E\\n])", "\n").matched);
+
+  // Perl has `(?[...])` too, with a grammar of its own that nests where
+  // PCRE2's does not. Claiming it here would be claiming to read Perl's, so
+  // the feature bit is PCRE's alone and `(?[` reaches Perl's option-letter
+  // reader, which reports the `[` as a flag it does not have.
+  EXPECT_EQ(compile("(?[ [a] ])", GRX_SYNTAX_PERL).diag,
+      GRX_DIAG_UNKNOWN_FLAG);
+}
+
+TEST(Perl, AnExtendedClassNestsFifteenDeepAndNoFurther) {
+  // pcre2test's number, and a bracket expression counts as a level: `(?[`
+  // with fourteen nested parentheses compiles, and the same pattern with one
+  // `[a]` at the bottom does not.
+  const std::string opens(14, '(');
+  const std::string closes(14, ')');
+  EXPECT_EQ(compile_result("(?[" + opens + "\\n&\\n" + closes + "])"), GRX_OK);
+  EXPECT_EQ(compile("(?[" + opens + "[a]" + closes + "])").diag,
+      GRX_DIAG_CLASS_NESTING_TOO_DEEP);
+
+  // The cap is the dialect's and not a resource limit, so it is a syntax
+  // error: no caller can raise it, which is exactly what separates the two.
+  EXPECT_EQ(compile_result("(?[" + opens + "[a]" + closes + "])"),
+      GRX_ERR_SYNTAX);
+}
+
+TEST(Perl, AnExtendedClassIgnoresSpacesAndTabsOnly) {
+  // Inside the brackets too: `(?[ [ a ] ])` does not match a space in
+  // pcre2test, which is the rule `xx` gives an ordinary class.
+  EXPECT_TRUE(search("(?[ [ a ] ])", "a").matched);
+  EXPECT_FALSE(search("(?[ [ a ] ])", " ").matched);
+
+  // A literal newline is not ignorable: pcre2test reports it as an
+  // unexpected character rather than skipping it. Here it is the operand
+  // with no operator before it, which is the same refusal reached from the
+  // other side - what matters is that the pattern does not compile.
+  EXPECT_EQ(compile_result("(?[ [a]\n| [b] ])"), GRX_ERR_SYNTAX);
 }
 
 int main(int argc, char ** argv) {

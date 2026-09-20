@@ -119,6 +119,16 @@ typedef enum {
   GRX_DIAG_UNKNOWN_PROPERTY,       ///< `\p{Nosuch}`.
   GRX_DIAG_INVALID_PROPERTY_SYNTAX, ///< `\p` malformed.
   GRX_DIAG_INVALID_CLASS_SET_OP,   ///< A set operation mixed with union.
+  /**
+   * @brief A class expression nested deeper than the dialect allows.
+   *
+   * PCRE2 caps `(?[...])` at fourteen levels and calls it a compile error
+   * rather than a resource limit, which is why this is GRX_ERR_SYNTAX and
+   * not GRX_DIAG_LIMIT_NESTING_DEPTH: the cap belongs to the dialect and no
+   * caller can raise it. GRX_Limits::max_nesting_depth still applies on top,
+   * for a caller who wants a tighter one.
+   */
+  GRX_DIAG_CLASS_NESTING_TOO_DEEP,
 
   // Groups, names and references.
   GRX_DIAG_INVALID_GROUP_NAME,     ///< A name the dialect's grammar rejects.

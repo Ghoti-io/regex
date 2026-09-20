@@ -102,7 +102,7 @@ New bits, in addition to the scaffold's:
 | COMMENT_GROUP | - | - | - | - | yes | yes | - |
 | POSIX_CLASS | yes | yes | yes | yes | yes (in brackets) | yes | - |
 | UNICODE_PROPERTY | - | - | - | - | yes | yes | `u`/`v` only |
-| CLASS_SET_OPS | - | - | - | - | `(?[ ])` extended classes | - | `v` only |
+| CLASS_SET_OPS | - | - | - | - | - | `(?[ ])` extended classes | `v` only |
 | WORD_BOUNDARY | - | - | `\b \B \< \>` | same | `\b \B`, `\b{wb}` | `\b \B` | `\b \B` |
 | ANCHOR_ESCAPES | - | - | `` \` `` `\'` | same | `\A \z \Z` | `\A \z \Z` | - |
 | ANCHOR_G | - | - | - | - | yes | yes | - |
@@ -347,7 +347,7 @@ the dialect's rule for a reference to a group that does not exist.
 | `-` literal at the ends | yes | yes | yes (legacy); `u`: yes; `v`: must be escaped | yes | yes | yes | yes |
 | Class escape as a range endpoint, `[\d-z]` | n/a | PCRE2: error; Perl: `-` literal, with a warning | legacy: union; `u`: error | error (probed: Python 3.13 raises) | error | **probe** | error |
 | `[[:alpha:]]` | yes | yes | no | no | no | yes | yes |
-| Set operations | no | Perl: `(?[ ])` | `v`: `&&`, `--`, nesting, `\q{}` | no | `&&`, nesting | `&&`, nesting | Rust: `&&`, `--`, `~~`, nesting; RE2: no |
+| Set operations | no | `(?[ ])`: `\|` `+` `&` `-` `^` `!`, nesting to 15 | `v`: `&&`, `--`, nesting, `\q{}` | no | `&&`, nesting | `&&`, nesting | Rust: `&&`, `--`, `~~`, nesting; RE2: no |
 | Reserved double punctuators | - | - | `v`: `&&`, `!!`, `##`, ... must be escaped | - | - | - | - |
 
 ### 5.13 Quantifier syntax
@@ -454,7 +454,8 @@ to be complete for every shipped tier.
 | ECMAScript | **The subject is code points, not UTF-16 code units, in *both* modes** | see below | - |
 | ECMAScript | A match cannot begin or end between the halves of a surrogate pair | as above | - |
 | Perl | Full case folding is simple folding | [design.md](design.md) §5.2 | - |
-| Perl | `(?{ })`, `(??{ })`, `\N{name}` by name, `(?[ ])` in 1.0 | code execution; name table size; later tier | `GRX_ERR_UNSUPPORTED` |
+| Perl | `(?{ })`, `(??{ })`, `\N{name}` by name | code execution; name table size | `GRX_ERR_UNSUPPORTED` |
+| Perl | `(?[ ])` is PCRE2's grammar only | Perl's nests and takes different operands; a shared reader would accept neither exactly | `GRX_ERR_SYNTAX` |
 | Perl | A capture set inside a *failed* negative lookahead is discarded | PCRE2 discards it and ECMA-262 22.2.2.4 says to; Perl keeps it | - |
 | PCRE2 | Callouts `(?C...)` are read and have no effect | no callback API; a callout with no function registered changes no match, so accepting it answers the same question | - |
 | PCRE2, Perl | `\X`, the extended grapheme cluster | the break rules are [plan.md](plan.md) WP-12's and are not generated yet; "any character" is not a grapheme cluster | `GRX_ERR_UNSUPPORTED` |

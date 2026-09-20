@@ -1927,6 +1927,356 @@ static GRX_Result read_star_construct(GRX_Parser * parser, size_t start,
 }
 
 // --------------------------------------------------------------------------
+// Extended character classes: `(?[ ... ])`
+// --------------------------------------------------------------------------
+
+/**
+ * Skip what an extended class ignores.
+ *
+ * Space and tab - a literal newline inside `(?[...])` is error 216 in
+ * pcre2test, which is the same set `xx` ignores inside an ordinary bracket
+ * expression, so the two rules agree. Plus a `\E` with no run open and an
+ * empty `\Q\E`, both of which pcre2test lets stand between an operand and
+ * an operator: `(?[\n \Q\E])` compiles. A `\Q` run with anything in it is
+ * not ignorable and is left for read_extended_term() to refuse.
+ */
+static void skip_extended_ignorable(GRX_Parser * parser) {
+  for (;;) {
+    if (byte_at(parser, 0) == ' ' || byte_at(parser, 0) == '\t') {
+      parser->position++;
+      continue;
+    }
+    if (byte_at(parser, 0) == '\\' && byte_at(parser, 1) == 'E') {
+      parser->position += 2;
+      continue;
+    }
+    if (byte_at(parser, 0) == '\\' && byte_at(parser, 1) == 'Q'
+        && byte_at(parser, 2) == '\\' && byte_at(parser, 3) == 'E') {
+      parser->position += 4;
+      continue;
+    }
+    return;
+  }
+}
+
+/**
+ * How deep `(?[...])` may nest, the `(?[` itself counting as the first.
+ *
+ * A bracket expression counts as a level too, which is how the corpus
+ * settles the number: `(?[` with fourteen nested parentheses compiles, and
+ * the same pattern with one `[\n]` at the bottom does not. Transcribed
+ * rather than chosen, the way the 65535 repeat bound is, because a cap this
+ * library picked for itself would refuse patterns the reference accepts.
+ */
+#define GRX_PCRE_ECLASS_NEST_MAX 15
+
+static GRX_Result read_extended_expression(
+    GRX_Parser * parser, unsigned depth, uint32_t * out_node);
+
+/**
+ * Build a class-operation node over one operand already read.
+ *
+ * The node takes the span from `start` so that a diagnostic underlines the
+ * operator and both of its operands rather than the second alone.
+ */
+static GRX_Result class_op_node(GRX_Parser * parser, GRX_ClassOpKind op,
+    size_t start, uint32_t first, uint32_t * out_node) {
+  GRX_Result result = plain_node(
+      parser, GRX_NODE_CLASS_OP, start, parser->position - start, out_node);
+  if (result != GRX_OK) {
+    return result;
+  }
+  grx_pattern_node(parser->pattern, *out_node)->a = (uint32_t)op;
+  if (grx_pattern_add_child(parser->pattern, *out_node, first) != GRX_OK) {
+    return grx_parse_fail(parser, GRX_DIAG_INTERNAL, start, 0);
+  }
+
+  return GRX_OK;
+}
+
+/**
+ * Wrap a term in a complement, if an odd number of `!` asked for one.
+ *
+ * An even number asks for none: complementing a set twice over a fixed
+ * universe gives the set back, so `!![a]` is `[a]`. Collapsing them here
+ * rather than building one node per `!` keeps a pattern of a thousand from
+ * becoming a tree a thousand deep, which lowering would have to walk.
+ */
+static GRX_Result complement_wrap(GRX_Parser * parser, unsigned complements,
+    size_t start, uint32_t * out_node) {
+  if (!(complements & 1)) {
+    return GRX_OK;
+  }
+
+  uint32_t operand = *out_node;
+  return class_op_node(
+      parser, GRX_CLASS_OP_COMPLEMENT, start, operand, out_node);
+}
+
+/**
+ * Read one operand of an extended class.
+ *
+ * Five things can stand here, and a bare character is not one of them:
+ * pcre2test reports `(?[a])` as "unexpected character in (?[...]) extended
+ * character class", because an operand has to be a *set* and `a` is a
+ * character. `[a]` is how that set is written.
+ */
+static GRX_Result read_extended_term(
+    GRX_Parser * parser, unsigned depth, uint32_t * out_node) {
+  skip_extended_ignorable(parser);
+  size_t start = parser->position;
+
+  // Unary complement, and it binds tighter than every binary operator:
+  // `! [a] & [ab]` is `(!a) & ab` and matches "b". Counted rather than
+  // recursed on, and *not* against the nesting cap: pcre2test compiles a
+  // hundred of them, so a reader that recursed once per `!` would be a
+  // reader a pattern can overflow.
+  unsigned complements = 0;
+  for (;;) {
+    skip_extended_ignorable(parser);
+    if (byte_at(parser, 0) != '!') {
+      break;
+    }
+    parser->position++;
+    complements++;
+  }
+
+  if (grx_parse_at_end(parser)) {
+    return grx_parse_fail(parser, GRX_DIAG_UNMATCHED_OPEN_BRACKET, start, 1);
+  }
+
+  char c = byte_at(parser, 0);
+
+  if (c == '(') {
+    parser->position++;
+    if (depth + 1 > GRX_PCRE_ECLASS_NEST_MAX) {
+      return grx_parse_fail(
+          parser, GRX_DIAG_CLASS_NESTING_TOO_DEEP, start, 1);
+    }
+    GRX_Result result = read_extended_expression(parser, depth + 1, out_node);
+    if (result != GRX_OK) {
+      return result;
+    }
+    skip_extended_ignorable(parser);
+    if (!grx_parse_eat(parser, ')')) {
+      return grx_parse_fail(parser, GRX_DIAG_UNMATCHED_OPEN_PAREN, start, 1);
+    }
+    return complement_wrap(parser, complements, start, out_node);
+  }
+
+  if (c == '[') {
+    if (depth + 1 > GRX_PCRE_ECLASS_NEST_MAX) {
+      return grx_parse_fail(
+          parser, GRX_DIAG_CLASS_NESTING_TOO_DEEP, start, 1);
+    }
+    GRX_ClassItem item;
+    int matched = 0;
+    GRX_Result result = read_posix_class(parser, &item, &matched);
+    if (result != GRX_OK) {
+      return result;
+    }
+    if (matched) {
+      // `[:alpha:]` stands alone here, where inside brackets it would need a
+      // second pair around it.
+      result = item_as_node(parser, &item, out_node);
+      if (result != GRX_OK) {
+        return result;
+      }
+      return complement_wrap(parser, complements, start, out_node);
+    }
+
+    // An ordinary bracket expression, read by the ordinary reader - with the
+    // whitespace rule `xx` gives it, because `(?[ [ a ] ])` does not match a
+    // space in pcre2test. The flag is restored afterwards: what is inside
+    // the brackets is the only place it applies.
+    uint32_t outer = parser->options;
+    parser->options |= GRX_OPT_EXTENDED_MORE;
+    parser->position++;
+    result = pcre_char_class(parser, out_node);
+    parser->options = outer;
+    if (result != GRX_OK) {
+      return result;
+    }
+    return complement_wrap(parser, complements, start, out_node);
+  }
+
+  if (c == '\\') {
+    if (byte_at(parser, 1) == 'Q') {
+      // The empty run is ignorable and never arrives here. A run with
+      // anything in it is a sequence of characters, and a sequence is not a
+      // set: pcre2test refuses `(?[ \Qab\E ])`.
+      return grx_parse_fail(parser, GRX_DIAG_INVALID_CLASS_ITEM, start, 2);
+    }
+
+    parser->position++;
+    GRX_ClassItem item;
+    GRX_Result result = pcre_class_escape(parser, &item);
+    if (result != GRX_OK) {
+      return result;
+    }
+    result = item_as_node(parser, &item, out_node);
+    if (result != GRX_OK) {
+      return result;
+    }
+    return complement_wrap(parser, complements, start, out_node);
+  }
+
+  return grx_parse_fail(parser, GRX_DIAG_INVALID_CLASS_ITEM, start, 1);
+}
+
+/**
+ * The operator a character spells, or zero when it is not one.
+ *
+ * `|` and `+` are both union, which is PCRE2's spelling and not a synonym
+ * this library invented.
+ */
+static int extended_operator(char c, GRX_ClassOpKind * out_op) {
+  switch (c) {
+    case '|': case '+': *out_op = GRX_CLASS_OP_UNION; return 1;
+    case '&': *out_op = GRX_CLASS_OP_INTERSECT; return 1;
+    case '-': *out_op = GRX_CLASS_OP_SUBTRACT; return 1;
+    case '^': *out_op = GRX_CLASS_OP_SYMDIFF; return 1;
+    default: return 0;
+  }
+}
+
+/**
+ * Read a run of terms joined by `&`, which binds tighter than the rest.
+ *
+ * `[a] | [b] & [b]` matches "a" and "b" in pcre2test, so the intersection
+ * happens first. Everything else is one level below this and left to
+ * read_extended_expression().
+ */
+static GRX_Result read_extended_intersection(
+    GRX_Parser * parser, unsigned depth, uint32_t * out_node) {
+  size_t start = parser->position;
+  GRX_Result result = read_extended_term(parser, depth, out_node);
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  for (;;) {
+    skip_extended_ignorable(parser);
+    if (byte_at(parser, 0) != '&') {
+      return GRX_OK;
+    }
+    parser->position++;
+
+    uint32_t right = GRX_INDEX_NONE;
+    result = read_extended_term(parser, depth, &right);
+    if (result != GRX_OK) {
+      return result;
+    }
+
+    uint32_t combined = GRX_INDEX_NONE;
+    result = class_op_node(
+        parser, GRX_CLASS_OP_INTERSECT, start, *out_node, &combined);
+    if (result != GRX_OK) {
+      return result;
+    }
+    if (grx_pattern_add_child(parser->pattern, combined, right) != GRX_OK) {
+      return grx_parse_fail(parser, GRX_DIAG_INTERNAL, start, 0);
+    }
+    *out_node = combined;
+  }
+}
+
+/**
+ * Read a whole extended-class expression.
+ *
+ * `|`, `+`, `-` and `^` are one precedence level and associate to the left:
+ * `[abc] - [a] | [a]` is `((abc - a) | a)` and `[a] | [abc] - [a]` is
+ * `((a | abc) - a)`, which is why the two answer differently for "a".
+ */
+static GRX_Result read_extended_expression(
+    GRX_Parser * parser, unsigned depth, uint32_t * out_node) {
+  size_t start = parser->position;
+
+  skip_extended_ignorable(parser);
+  GRX_ClassOpKind leading = GRX_CLASS_OP_UNION;
+  if (extended_operator(byte_at(parser, 0), &leading)) {
+    // pcre2test: "unexpected operator in extended character class (no
+    // preceding operand)".
+    return grx_parse_fail(parser, GRX_DIAG_INVALID_CLASS_SET_OP,
+        parser->position, 1);
+  }
+
+  GRX_Result result = read_extended_intersection(parser, depth, out_node);
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  for (;;) {
+    skip_extended_ignorable(parser);
+    GRX_ClassOpKind op = GRX_CLASS_OP_UNION;
+    if (!extended_operator(byte_at(parser, 0), &op)) {
+      if (byte_at(parser, 0) == ']' || byte_at(parser, 0) == ')'
+          || grx_parse_at_end(parser)) {
+        return GRX_OK;
+      }
+      // Two operands with nothing between them. pcre2test: "unexpected
+      // expression in extended character class (no preceding operator)".
+      return grx_parse_fail(parser, GRX_DIAG_INVALID_CLASS_SET_OP,
+          parser->position, 1);
+    }
+    parser->position++;
+
+    uint32_t right = GRX_INDEX_NONE;
+    result = read_extended_intersection(parser, depth, &right);
+    if (result != GRX_OK) {
+      return result;
+    }
+
+    uint32_t combined = GRX_INDEX_NONE;
+    result = class_op_node(parser, op, start, *out_node, &combined);
+    if (result != GRX_OK) {
+      return result;
+    }
+    if (grx_pattern_add_child(parser->pattern, combined, right) != GRX_OK) {
+      return grx_parse_fail(parser, GRX_DIAG_INTERNAL, start, 0);
+    }
+    *out_node = combined;
+  }
+}
+
+/**
+ * Read the body of `(?[...])`, the `(?[` already consumed.
+ *
+ * Reached through GRX_GroupOpen::read_body, so the parser owns the closing
+ * `)` and the nesting depth; this owns everything up to and including the
+ * `]`. The node it attaches to is a union of one operand, which is the
+ * expression - a wrapper rather than the expression itself, because the
+ * parser creates the node before the operator is known.
+ */
+static GRX_Result read_extended_class_body(
+    GRX_Parser * parser, uint32_t node) {
+  size_t start = parser->position;
+
+  skip_extended_ignorable(parser);
+  if (byte_at(parser, 0) == ']') {
+    // pcre2test: "empty expression in extended character class".
+    return grx_parse_fail(parser, GRX_DIAG_EMPTY_CLASS, start, 1);
+  }
+
+  uint32_t expression = GRX_INDEX_NONE;
+  GRX_Result result = read_extended_expression(parser, 1, &expression);
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  skip_extended_ignorable(parser);
+  if (!grx_parse_eat(parser, ']')) {
+    return grx_parse_fail(
+        parser, GRX_DIAG_UNMATCHED_OPEN_BRACKET, start - 1, 1);
+  }
+  if (grx_pattern_add_child(parser->pattern, node, expression) != GRX_OK) {
+    return grx_parse_fail(parser, GRX_DIAG_INTERNAL, start, 0);
+  }
+
+  return GRX_OK;
+}
+
+// --------------------------------------------------------------------------
 // Conditionals and branch resets: bodies that are not one alternation
 // --------------------------------------------------------------------------
 
@@ -2381,6 +2731,19 @@ static GRX_Result pcre_group_open(GRX_Parser * parser, GRX_GroupOpen * out) {
   if (c == '>') {
     parser->position++;
     out->flags = GRX_NODE_ATOMIC;
+    return GRX_OK;
+  }
+
+  if (c == '[' && (parser->spec.features & GRX_FEATURE_CLASS_SET_OPS)) {
+    // An extended class is an atom, not a group, and the node the parser is
+    // about to build is a union of the one expression inside it - the
+    // operator is not known until the expression has been read, and the node
+    // exists before that.
+    parser->position++;
+    out->kind = GRX_NODE_CLASS_OP;
+    out->a = (uint32_t)GRX_CLASS_OP_UNION;
+    out->b = 0;
+    out->read_body = read_extended_class_body;
     return GRX_OK;
   }
 
