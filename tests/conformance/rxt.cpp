@@ -254,6 +254,53 @@ bool parse_engines(
   return true;
 }
 
+/**
+ * Parse an `options:` field of space-separated option names.
+ *
+ * `flags:` is the dialect's own alphabet, which is the right way to write an
+ * option a *pattern author* can write. POSIX and GNU have no such alphabet -
+ * their options are arguments to `regcomp`, `REG_ICASE` and `REG_NEWLINE` -
+ * so a vector for those dialects has no letter to put in `flags:` and needs
+ * to name the option directly. The two combine, in whichever order they
+ * appear.
+ */
+bool parse_options(
+    const std::string & value, Record * record, std::string * out_error) {
+  static const struct {
+    const char * name;
+    uint32_t option;
+  } known[] = {
+    {"caseless", GRX_OPT_CASELESS},
+    {"multiline", GRX_OPT_MULTILINE},
+    {"dotall", GRX_OPT_DOTALL},
+    {"extended", GRX_OPT_EXTENDED},
+    {"ungreedy", GRX_OPT_UNGREEDY},
+    {"anchored", GRX_OPT_ANCHORED},
+    {"utf", GRX_OPT_UTF},
+    {"ucp", GRX_OPT_UCP},
+    {"no-capture", GRX_OPT_NO_CAPTURE},
+    {"literal", GRX_OPT_LITERAL},
+  };
+
+  std::istringstream fields(value);
+  std::string field;
+  while (fields >> field) {
+    bool found = false;
+    for (const auto & row : known) {
+      if (field == row.name) {
+        record->options |= row.option;
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      *out_error = "unknown option: " + field;
+      return false;
+    }
+  }
+  return true;
+}
+
 /** Parse a `limits:` field of `name=value` pairs. */
 bool parse_limits(
     const std::string & value, Record * record, std::string * out_error) {
@@ -412,11 +459,16 @@ bool read_vector_file(
     // (documentation/testing.md section 3). A vector whose flags it rejects
     // is a failure of one or the other, and either way it must be said.
     std::string failure;
+    uint32_t from_flags = 0;
     if (!options_for_flags(
-            file_syntax, record.flags, &record.options, &failure)) {
+            file_syntax, record.flags, &from_flags, &failure)) {
       *out_error = path + ":" + std::to_string(record_line) + ": " + failure;
       return false;
     }
+    // OR rather than assign: an `options:` line has already written into
+    // `record.options`, and the two must combine whichever order they were
+    // written in.
+    record.options |= from_flags;
     out_file->records.push_back(record);
 
     record = Record();
@@ -519,6 +571,12 @@ bool read_vector_file(
     }
     else if (key == "expect") {
       if (!parse_expectation(value, &record, &failure)) {
+        *out_error = path + ":" + std::to_string(line_number) + ": " + failure;
+        return false;
+      }
+    }
+    else if (key == "options") {
+      if (!parse_options(value, &record, &failure)) {
         *out_error = path + ":" + std::to_string(line_number) + ": " + failure;
         return false;
       }

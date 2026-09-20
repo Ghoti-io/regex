@@ -58,3 +58,21 @@ pcre2 pcre2-10.46
 # say to re-check when this pin moves. Searched the tracker rather than
 # reporting anything; #24577 was already there and already fixed.
 perl v5.40.1
+
+# bminor/glibc (the git mirror of sourceware's glibc). posix/rxspencer/tests,
+# Henry Spencer's regular expression test set, which is what plan.md's WP-25
+# names. The ref matches the glibc on this machine - Debian 13 ships 2.41 -
+# because glibc is also the *oracle* for these vectors, and a corpus imported
+# from one version and answered by another measures the difference between
+# them rather than the library.
+#
+#   ldd --version   # ldd (Debian GLIBC 2.41-12+deb13u4) 2.41
+#
+# Two things about POSIX make the oracle matter more here than elsewhere.
+# There is no reference *binary* to compare against the way pcre2test and
+# perl are compared: glibc's regcomp/regexec is reached through C, which is
+# what tools/oracle/posix_match.c exists to do. And POSIX leaves more to the
+# implementation than either of the other two standards - the submatch rules
+# in particular - so "what POSIX says" and "what glibc does" are not always
+# the same sentence, and the vectors record the second.
+glibc glibc-2.41

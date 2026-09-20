@@ -513,7 +513,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 	check-oracle-properties check-oracle-numeric-properties \
 	check-oracle-string-properties check-oracles \
 	check-limits check-json-schema-suite vectors vectors-ecmascript \
-	vectors-pcre vectors-perl
+	vectors-pcre vectors-perl vectors-gnu
 # Release build commands
 .PHONY: all install test test-quiet test-asan test-valgrind test-valgrind-quiet test-watch uninstall watch
 # Debug build commands
@@ -580,7 +580,7 @@ check-oracle-string-properties: $(TOOLS)
 	python3 tools/oracle/string_property_diff.py
 
 vectors: ## Regenerate every dialect's conformance vectors
-vectors: vectors-ecmascript vectors-pcre vectors-perl
+vectors: vectors-ecmascript vectors-pcre vectors-perl vectors-gnu
 
 vectors-ecmascript: ## Regenerate the ECMAScript vectors (needs node)
 	@if ! command -v node >/dev/null 2>&1; then \
@@ -603,6 +603,15 @@ vectors-pcre: ## Re-import PCRE2's testinput corpus (needs pcre2test)
 		exit 0; \
 	fi; \
 	python3 tools/corpus/import_pcre2test.py
+
+vectors-gnu: ## Re-import Spencer's test set, answered by glibc
+vectors-gnu: $(TOOLS)
+	@if [ ! -d third_party/glibc ]; then \
+		printf "vectors-gnu: skipped (run tools/corpus/fetch.sh glibc)\n"; \
+		exit 0; \
+	fi; \
+	python3 tools/corpus/import_rxspencer.py \
+		--driver $(APP_DIR)/tools/posix_match
 
 vectors-perl: ## Re-import Perl's re_tests corpus (needs perl)
 	@if ! command -v perl >/dev/null 2>&1; then \

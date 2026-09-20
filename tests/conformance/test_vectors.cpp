@@ -631,6 +631,44 @@ TEST(Rxt, ReadsARecordAndItsOptionalFields) {
   EXPECT_EQ(file.records[3].engines[0], GRX_ENGINE_BACKTRACK);
   EXPECT_TRUE(file.records[3].has_limits);
   EXPECT_EQ(file.records[3].limits.max_steps, 1000u);
+
+  // `options:` exists for POSIX and GNU, whose options are arguments to
+  // regcomp rather than letters a pattern author writes, so there is no
+  // alphabet for `flags:` to spell them in. It has to *combine* with
+  // `flags:` rather than replace it, and neither order may win - the flags
+  // are turned into options when the record closes, which is after both
+  // lines have been read whichever way round they came.
+  ASSERT_GE(file.records.size(), 6u);
+  EXPECT_EQ(file.records[4].flags, "i");
+  EXPECT_NE(file.records[4].options & GRX_OPT_CASELESS, 0u);
+  EXPECT_NE(file.records[4].options & GRX_OPT_DOTALL, 0u);
+  EXPECT_NE(file.records[4].options & GRX_OPT_MULTILINE, 0u);
+
+  EXPECT_NE(file.records[5].options & GRX_OPT_CASELESS, 0u);
+  EXPECT_NE(file.records[5].options & GRX_OPT_DOTALL, 0u);
+}
+
+TEST(Rxt, RejectsAnOptionItDoesNotKnow) {
+  // The same rule the engine and limit fields follow: a name the reader does
+  // not know is a failure rather than a silently ignored line, because a
+  // vector that quietly lost its option is a vector asserting the wrong
+  // thing and passing.
+  const std::string path = grxtest::data("vectors_selftest/reader.rxt");
+  grxtest::VectorFile file;
+  std::string error;
+  ASSERT_TRUE(grxtest::read_vector_file(path, &file, &error)) << error;
+
+  const std::string bad = grxtest::data("vectors_selftest/bad-option.rxt");
+  std::ofstream out(bad);
+  ASSERT_TRUE(out.good());
+  out << "dialect: ecmascript\n\npattern: a\noptions: nosuchoption\n"
+      << "subject: a\nexpect: 0-1\n";
+  out.close();
+
+  grxtest::VectorFile broken;
+  EXPECT_FALSE(grxtest::read_vector_file(bad, &broken, &error));
+  EXPECT_NE(error.find("unknown option"), std::string::npos) << error;
+  std::remove(bad.c_str());
 }
 
 TEST(Rxt, RejectsAFileItCannotRead) {

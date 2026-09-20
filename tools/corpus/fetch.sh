@@ -11,7 +11,7 @@
 #
 # Everything lands in third_party/<name>/<ref>/, which .gitignore excludes.
 #
-# Usage:  tools/corpus/fetch.sh [test262|pcre2|perl|all]
+# Usage:  tools/corpus/fetch.sh [test262|pcre2|perl|glibc|all]
 #
 # Copyright 2026 by Corey Pennycuff
 
@@ -85,13 +85,27 @@ fetch_perl() {
   fetch_file "$dest/re_tests" "$base/t/re/re_tests"
 }
 
+fetch_glibc() {
+  ref=$(ref_for glibc)
+  base="https://raw.githubusercontent.com/bminor/glibc/$ref"
+  dest="$root/third_party/glibc/$ref"
+  # Henry Spencer's test set, which glibc carries and runs as tst-rxspencer.
+  fetch_file "$dest/rxspencer-tests" "$base/posix/rxspencer/tests"
+  # glibc's own two, in the same format, kept for the same reason the pcre2
+  # expected-output files are: not as expectations - the importer asks glibc
+  # itself - but because they are cases somebody thought worth writing down.
+  fetch_file "$dest/BOOST.tests" "$base/posix/BOOST.tests"
+  fetch_file "$dest/PCRE.tests" "$base/posix/PCRE.tests"
+}
+
 case "$what" in
   test262) fetch_test262 ;;
   pcre2)   fetch_pcre2 ;;
   perl)    fetch_perl ;;
-  all)     fetch_test262; fetch_pcre2; fetch_perl ;;
+  glibc)   fetch_glibc ;;
+  all)     fetch_test262; fetch_pcre2; fetch_perl; fetch_glibc ;;
   *)
-    printf 'usage: %s [test262|pcre2|perl|all]\n' "$0" >&2
+    printf 'usage: %s [test262|pcre2|perl|glibc|all]\n' "$0" >&2
     exit 2
     ;;
 esac

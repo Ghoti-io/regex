@@ -95,6 +95,15 @@ expect: 0-$
   `error` record.
 - `flags`: the dialect's alphabet, parsed by `grx_options_parse()`; the
   test of that function is that every vector's flags parse.
+- `options:` names an option directly - `caseless`, `multiline`, `dotall`,
+  `extended`, `ungreedy`, `anchored`, `utf`, `ucp`, `no-capture`, `literal` -
+  and combines with `flags:` in whichever order the two are written. It
+  exists because POSIX and GNU have no flag alphabet at all: their options
+  are arguments to `regcomp`, `REG_ICASE` and `REG_NEWLINE`, not letters a
+  pattern author writes, so a vector for those dialects has no letter to put
+  in `flags:`. A name the reader does not know is a failure rather than a
+  silently dropped line - a vector that quietly lost its option is a vector
+  asserting the wrong thing and passing.
 - `expect`: `<start>-<end>` per group, `-` for a group that did not
   participate; `nomatch`; `error <syntax|unsupported|limit|invalid>`;
   `limit` for a search that must hit a limit; or `compiles`, which asserts
@@ -539,9 +548,39 @@ absent.
 
 - **CPython `re_tests.py`**: the same format as Perl's, in Python. Not yet
   imported; WP-30.
-- **Spencer's tests** (glibc `posix/rxspencer/tests`): the classic
-  `pattern flags subject expected` lines with the `-` conventions; the
-  glibc driver supplies the answers. Not yet imported; WP-23.
+- **Spencer's tests** (`tools/corpus/import_rxspencer.py`): the classic
+  `pattern flags subject expected` lines with the `-` conventions, from the
+  copy glibc carries and runs as `tst-rxspencer`, so the test set and the
+  implementation answering it are versioned together. The answers come from
+  `tools/oracle/posix_match.c`, which is glibc's `regcomp`/`regexec` behind
+  the same line protocol the other drivers use. It asks through
+  `REG_STARTEND`, because a subject may contain NUL and a NUL-terminated API
+  cannot be asked about one; a *pattern* containing NUL has no such escape
+  and is declined.
+
+  **These are GNU vectors, not POSIX ones.** glibc's `regcomp` accepts `\|`,
+  `\+`, `\?`, `\w`, `\b` and `\<` in a BRE and `\w`/`\b` in an ERE -
+  POSIX leaves a backslash before an ordinary character undefined and GNU
+  defines it - so every row is written as `gnu-bre` or `gnu-ere`, which is
+  the question glibc was actually asked. Pure POSIX BRE and ERE need an
+  oracle that refuses those constructs, which this machine does not have.
+
+  The cross-check is the strongest of any importer here, because Spencer's
+  file states the expected *group* spans and not only the overall match: 429
+  of 463 cases agreed with glibc on every span and were written down. Of the
+  34 that did not, 24 are `[[:<:]]` and `[[:>:]]`, Spencer's own word-boundary
+  classes that glibc does not have, and 8 are empty alternatives - `|`,
+  `a||b`, `(a|)b` - which Spencer expects `regcomp` to reject and GNU
+  accepts. Both are real divergences rather than misread rows, which is why
+  they are dropped rather than recorded. A further 28 rows use flags no
+  vector can carry: `REG_NOSPEC` and `REG_PEND` are BSD extensions glibc does
+  not have, `REG_NOSUB` the corpus itself calls "not really testable",
+  `REG_STARTEND` as a *flag* re-uses the subject's parentheses to mean an
+  extent, and `REG_NOTBOL`/`REG_NOTEOL` say the subject's ends are not line
+  boundaries, which no option here means.
+
+  Nothing in these files runs yet: the POSIX and GNU front end is WP-23, and
+  until it exists the runner counts all 429 as skipped and names the dialect.
 - **JSON-Schema-Test-Suite** (`tools/jsonschema/`): not a vector import -
   these are run *through* `text`, with this library plugged into its
   regular-expression provider vtable, because what they measure is the pair.

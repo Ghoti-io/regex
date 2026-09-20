@@ -22,3 +22,18 @@ subject: xaay
 engines: backtrack
 limits: max_steps=1000
 expect: 1-3 1-2
+
+# `options:` names an option directly, for a dialect with no flag alphabet to
+# spell it in. It combines with `flags:` rather than replacing it, and the
+# two may be written in either order.
+pattern: a
+flags: i
+options: dotall multiline
+subject: a
+expect: 0-1
+
+pattern: b
+options: caseless
+flags: s
+subject: b
+expect: 0-1

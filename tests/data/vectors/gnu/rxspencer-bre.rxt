@@ -1,0 +1,613 @@
+# imported by tools/corpus/import_rxspencer.py
+# corpus: third_party/glibc/glibc-2.41/rxspencer-tests
+# oracle: glibc 2.41, through tools/oracle/posix_match.c
+#
+# The cases are Spencer's and every span is glibc's. A row whose own
+# expectation disagreed with what glibc does was dropped rather than
+# written down, because the likeliest explanation is that the
+# importer misread the row.
+#
+# These are GNU vectors, not POSIX ones: glibc's regcomp defines the
+# constructs POSIX leaves undefined - `\|`, `\+`, `\?`, `\w`,
+# `\b` and `\<` - so what it answered is the GNU dialect.
+#
+# Nothing here runs until the POSIX and GNU front end exists; the
+# runner counts them as skipped until then.
+dialect: gnu-bre
+
+pattern: a
+subject: a
+expect: 0-1
+
+pattern: abc
+subject: abc
+expect: 0-3
+
+pattern: a\\(b\\)c
+subject: abc
+expect: 0-3 1-2
+
+pattern: a(
+subject: a(
+expect: 0-2
+
+pattern: a\\(
+expect: error syntax
+
+pattern: a\\(b
+expect: error syntax
+
+pattern: a(b
+subject: a(b
+expect: 0-3
+
+pattern: a)
+subject: a)
+expect: 0-2
+
+pattern: a\\)
+expect: error syntax
+
+pattern: \\)
+expect: error syntax
+
+pattern: a\\(\\)b
+subject: ab
+expect: 0-2 1-1
+
+pattern: ^abc$
+subject: abc
+expect: 0-3
+
+pattern: a^b
+subject: a^b
+expect: 0-3
+
+pattern: a$b
+subject: a$b
+expect: 0-3
+
+pattern: ^
+subject: abc
+expect: 0-0
+
+pattern: $
+subject: abc
+expect: 3-3
+
+pattern: ^$
+subject: 
+expect: 0-0
+
+pattern: \\($\\)\\(^\\)
+subject: 
+expect: 0-0 0-0 0-0
+
+pattern: b$
+subject: ab\nc
+expect: nomatch
+
+pattern: b$
+options: multiline
+subject: ab\nc
+expect: 1-2
+
+pattern: ^b$
+subject: a\nb\nc
+expect: nomatch
+
+pattern: ^b$
+options: multiline
+subject: a\nb\nc
+expect: 2-3
+
+pattern: ^$
+options: multiline
+subject: a\n\nb
+expect: 2-2
+
+pattern: \\($\\)\\(^\\)
+options: multiline
+subject: a\n\nb
+expect: 2-2 2-2 2-2
+
+pattern: a*\\(^b$\\)c*
+subject: b
+expect: 0-1 0-1
+
+pattern: |
+subject: |
+expect: 0-1
+
+pattern: *
+subject: *
+expect: 0-1
+
+pattern: \\(\\)
+subject: abc
+expect: 0-0 0-0
+
+pattern: \\(\\{1\\}a\\)
+expect: error syntax
+
+pattern: ^*
+subject: *
+expect: 0-1
+
+pattern: ^\\{1\\}
+expect: error syntax
+
+pattern: a.c
+subject: abc
+expect: 0-3
+
+pattern: a[bc]d
+subject: abd
+expect: 0-3
+
+pattern: a\\*c
+subject: a*c
+expect: 0-3
+
+pattern: a\\\\b
+subject: a\\b
+expect: 0-3
+
+pattern: a\\\\\\*b
+subject: a\\*b
+expect: 0-4
+
+pattern: a\\
+expect: error syntax
+
+pattern: a\\\\bc
+subject: a\\bc
+expect: 0-4
+
+pattern: \\{
+expect: error syntax
+
+pattern: a\\[b
+subject: a[b
+expect: 0-3
+
+pattern: a[b
+expect: error syntax
+
+pattern: a$
+subject: a
+expect: 0-1
+
+pattern: a$
+subject: a$
+expect: nomatch
+
+pattern: a\\$
+subject: a
+expect: nomatch
+
+pattern: a\\$
+subject: a$
+expect: 0-2
+
+pattern: a\\\\$
+subject: a
+expect: nomatch
+
+pattern: a\\\\$
+subject: a$
+expect: nomatch
+
+pattern: a\\\\$
+subject: a\\$
+expect: nomatch
+
+pattern: a\\\\$
+subject: a\\
+expect: 0-2
+
+pattern: a\\(b\\)\\2c
+expect: error syntax
+
+pattern: a\\(b\\1\\)c
+expect: error syntax
+
+pattern: a\\(b*\\)c\\1d
+subject: abbcbbd
+expect: 0-7 1-3
+
+pattern: a\\(b*\\)c\\1d
+subject: abbcbd
+expect: nomatch
+
+pattern: a\\(b*\\)c\\1d
+subject: abbcbbbd
+expect: nomatch
+
+pattern: ^\\(.\\)\\1
+subject: abc
+expect: nomatch
+
+pattern: a\\([bc]\\)\\1d
+subject: abcdabbd
+expect: 4-8 5-6
+
+pattern: a\\(\\([bc]\\)\\2\\)*d
+subject: abbccd
+expect: 0-6 3-5 3-4
+
+pattern: a\\(\\([bc]\\)\\2\\)*d
+subject: abbcbd
+expect: nomatch
+
+pattern: a\\(\\(b\\)*\\2\\)*d
+subject: abbbd
+expect: 0-5 1-4 2-3
+
+pattern: \\(ab*\\)[ab]*\\1
+subject: ababaaa
+expect: 0-7 0-1
+
+pattern: \\(a\\)\\1bcd
+subject: aabcd
+expect: 0-5 0-1
+
+pattern: \\(a\\)\\1bc*d
+subject: aabcd
+expect: 0-5 0-1
+
+pattern: \\(a\\)\\1bc*d
+subject: aabd
+expect: 0-4 0-1
+
+pattern: \\(a\\)\\1bc*d
+subject: aabcccd
+expect: 0-7 0-1
+
+pattern: \\(a\\)\\1bc*[ce]d
+subject: aabcccd
+expect: 0-7 0-1
+
+pattern: ^\\(a\\)\\1b\\(c\\)*cd$
+subject: aabcccd
+expect: 0-7 0-1 4-5
+
+pattern: ab*c
+subject: abc
+expect: 0-3
+
+pattern: a\\(*\\)b
+subject: a*b
+expect: 0-3 1-2
+
+pattern: a\\(**\\)b
+subject: ab
+expect: 0-2 1-1
+
+pattern: a\\(***\\)b
+expect: error syntax
+
+pattern: *a
+subject: *a
+expect: 0-2
+
+pattern: **a
+subject: a
+expect: 0-1
+
+pattern: ***a
+expect: error syntax
+
+pattern: {
+subject: {
+expect: 0-1
+
+pattern: {abc
+subject: {abc
+expect: 0-4
+
+pattern: a{b
+subject: a{b
+expect: 0-3
+
+pattern: a\\{1\\}b
+subject: ab
+expect: 0-2
+
+pattern: a\\{1,\\}b
+subject: ab
+expect: 0-2
+
+pattern: a\\{1,2\\}b
+subject: aab
+expect: 0-3
+
+pattern: a\\{1
+expect: error syntax
+
+pattern: a\\{1a
+expect: error syntax
+
+pattern: a\\{1a\\}
+expect: error syntax
+
+pattern: a\\{1,x\\}
+expect: error syntax
+
+pattern: a\\{1,x
+expect: error syntax
+
+pattern: a\\{1,0\\}
+expect: error syntax
+
+pattern: ab\\{0,0\\}c
+subject: abcac
+expect: 3-5
+
+pattern: ab\\{0,1\\}c
+subject: abcac
+expect: 0-3
+
+pattern: ab\\{0,3\\}c
+subject: abbcac
+expect: 0-4
+
+pattern: ab\\{1,1\\}c
+subject: acabc
+expect: 2-5
+
+pattern: ab\\{1,3\\}c
+subject: acabc
+expect: 2-5
+
+pattern: ab\\{2,2\\}c
+subject: abcabbc
+expect: 3-7
+
+pattern: ab\\{2,4\\}c
+subject: abcabbc
+expect: 3-7
+
+pattern: a**
+expect: error syntax
+
+pattern: a\\{1\\}\\{1\\}
+expect: error syntax
+
+pattern: a*\\{1\\}
+expect: error syntax
+
+pattern: a\\{1\\}*
+expect: error syntax
+
+pattern: a[b]c
+subject: abc
+expect: 0-3
+
+pattern: a[ab]c
+subject: abc
+expect: 0-3
+
+pattern: a[^ab]c
+subject: adc
+expect: 0-3
+
+pattern: a[]b]c
+subject: a]c
+expect: 0-3
+
+pattern: a[[b]c
+subject: a[c
+expect: 0-3
+
+pattern: a[-b]c
+subject: a-c
+expect: 0-3
+
+pattern: a[^]b]c
+subject: adc
+expect: 0-3
+
+pattern: a[^-b]c
+subject: adc
+expect: 0-3
+
+pattern: a[b-]c
+subject: a-c
+expect: 0-3
+
+pattern: a[b
+expect: error syntax
+
+pattern: a[]
+expect: error syntax
+
+pattern: a[1-3]c
+subject: a2c
+expect: 0-3
+
+pattern: a[3-1]c
+expect: error syntax
+
+pattern: a[1-3-5]c
+expect: error syntax
+
+pattern: a[[.-.]--]c
+subject: a-c
+expect: 0-3
+
+pattern: a[1-
+expect: error syntax
+
+pattern: a[[.
+expect: error syntax
+
+pattern: a[[.x
+expect: error syntax
+
+pattern: a[[.x.
+expect: error syntax
+
+pattern: a[[.x.]
+expect: error syntax
+
+pattern: a[[.x.]]
+subject: ax
+expect: 0-2
+
+pattern: a[[.x,.]]
+expect: error syntax
+
+pattern: a[[.notdef.]]b
+expect: error syntax
+
+pattern: a[[.].]]b
+subject: a]b
+expect: 0-3
+
+pattern: a[[:alpha:]]c
+subject: abc
+expect: 0-3
+
+pattern: a[[:notdef:]]c
+expect: error syntax
+
+pattern: a[[:
+expect: error syntax
+
+pattern: a[[:alpha
+expect: error syntax
+
+pattern: a[[:alpha:]
+expect: error syntax
+
+pattern: a[[:alpha,:]
+expect: error syntax
+
+pattern: a[[:]:]]b
+expect: error syntax
+
+pattern: a[[:-:]]b
+expect: error syntax
+
+pattern: a[[:alph:]]
+expect: error syntax
+
+pattern: a[[:alphabet:]]
+expect: error syntax
+
+pattern: a[[=b=]]c
+subject: abc
+expect: 0-3
+
+pattern: a[[=
+expect: error syntax
+
+pattern: a[[=b
+expect: error syntax
+
+pattern: a[[=b=
+expect: error syntax
+
+pattern: a[[=b=]
+expect: error syntax
+
+pattern: a[[=b,=]]
+expect: error syntax
+
+pattern: abc
+subject: xabcy
+expect: 1-4
+
+pattern: a\\(b\\)?c\\1d
+subject: acd
+expect: nomatch
+
+pattern: 0[[:upper:]]1
+options: caseless
+subject: 0a1
+expect: 0-3
+
+pattern: 0[[:lower:]]1
+options: caseless
+subject: 0A1
+expect: 0-3
+
+pattern: a[^b]c
+options: caseless
+subject: abc
+expect: nomatch
+
+pattern: a[^b]c
+options: caseless
+subject: aBc
+expect: nomatch
+
+pattern: a[^b]c
+options: caseless
+subject: adc
+expect: 0-3
+
+pattern: a*
+subject: b
+expect: 0-0
+
+pattern: Char \\([a-z0-9_]*\\)\\[.*
+subject: Char xyz[k
+expect: 0-10 5-8
+
+pattern: -\\{0,1\\}[0-9]*$
+subject: -5
+expect: 0-2
+
+pattern: a*a*a*a*a*a*a*
+subject: aaaaaa
+expect: 0-6
+
+pattern: \\(\\b\\)\\{0,0\\}
+subject: abc
+expect: 0-0 -
+
+pattern: a\\(\\(b*\\)\\)c\\1d
+subject: abbcbbd
+expect: 0-7 1-3 1-3
+
+pattern: a\\(\\([bc]\\)\\)\\2d
+subject: abcdabbd
+expect: 4-8 5-6 5-6
+
+pattern: a\\(\\(\\(\\([bc]\\)\\)\\3\\)\\)*d
+subject: abbccd
+expect: 0-6 3-5 3-5 3-4 3-4
+
+pattern: \\b
+subject: \x20a\t
+expect: 1-1
+
+pattern: \\b
+subject: a\t
+expect: 0-0
+
+pattern: a.*\\b
+subject: ab\t
+expect: 0-2
+
+pattern: \\b
+subject: \x20\t \x20
+expect: nomatch
+
+pattern: \\B
+subject: abc
+expect: 1-1
+
+pattern: \\B
+subject: a b\tc
+expect: nomatch
+
+pattern: \\B
+subject: \x20a\t
+expect: 0-0
+
+pattern: \\B
+subject: a \t b
+expect: 2-2
