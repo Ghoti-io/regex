@@ -35,4 +35,26 @@ pcre2 pcre2-10.46
 #     for it. An oracle *ahead* of them would disagree across the whole
 #     corpus, which is what documentation/unicode.md section 1 warns about.
 #     So if this moves, UCD_VERSION moves with it or before it, never after.
+#
+# A second reason, found 2026-09-20 and unrelated to Unicode: 5.40.1 carries a
+# known branch reset defect. Perl/perl5#24577, "Regex branch reset (?|...)
+# fails with backrefs" - a regression introduced in 5.38, present through
+# 5.44, closed 2026-07-22. Its own reproducer on this machine gives the wrong
+# answer:
+#
+#   perl -e 'print "abb" =~ s{^(?|(a)|(b)) (?|(a)|(b)) ((\2)*)}{${&}z}xr'
+#   # abzb here; abbz on 5.36 and earlier
+#
+# The same family shows up in the conditional, where perl contradicts its own
+# capture report:
+#
+#   perl -e 'print "b" =~ /(?|(a)|(b))/ ? "g1=$1" : "no"'   # g1=b
+#   perl -e 'print "bx" =~ /(?|(a)|(b))(?(1)x|y)/ ? 1 : 0'  # 0
+#   perl -e 'print "by" =~ /(?|(a)|(b))(?(1)x|y)/ ? 1 : 0'  # 1
+#
+# Group 1 is "b", and the conditional testing it takes the false arm.
+# pcre2test 10.46 takes "bx", and so does this library. Two rows of
+# tests/data/vectors/known-gaps.txt are the named form of that question and
+# say to re-check when this pin moves. Searched the tracker rather than
+# reporting anything; #24577 was already there and already fixed.
 perl v5.40.1
