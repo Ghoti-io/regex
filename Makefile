@@ -50,6 +50,11 @@ SO_NAME := $(BASE_NAME).$(MAJOR_VERSION)
 STATIC_TARGET := $(BASE_NAME_PREFIX).a
 ENV_VARS :=
 
+# PKG_CONFIG_PATH names where this project's own .pc file is installed, and the
+# platform block below overwrites it to say so. Remember what the environment
+# asked for first, so dependency lookup can still honour it further down.
+PKG_CONFIG_PATH_ENV := $(PKG_CONFIG_PATH)
+
 # Detect OS
 UNAME_S := $(shell uname -s)
 
@@ -155,6 +160,12 @@ endif
 LDCONF_INSTALL_PATH :=
 endif
 
+# Dependencies are looked up along the inherited PKG_CONFIG_PATH as well as the
+# install location chosen above, so that exporting PKG_CONFIG_PATH works as the
+# errors below say it does. The inherited value comes first: it is an explicit
+# request for this build, where the install location may be only a default.
+PKG_CONFIG_LOOKUP_PATH := $(if $(PKG_CONFIG_PATH_ENV),$(PKG_CONFIG_PATH_ENV):)$(PKG_CONFIG_PATH)
+
 
 CXX := g++
 CXXFLAGS := -pedantic-errors -Wall -Wextra -Werror -Wno-error=unused-function -Wfatal-errors -std=c++20 -O1 -g $(EXTRA_CXXFLAGS)
@@ -213,8 +224,8 @@ endif
 # checkout. The name must carry $(BRANCH): cutil installs its .pc as
 # ghoti.io-cutil-dev.pc, so asking for "ghoti.io-cutil" never matches.
 CUTIL_PC ?= ghoti.io-cutil$(BRANCH)
-CUTIL_CFLAGS := $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --cflags $(CUTIL_PC) 2>/dev/null)
-CUTIL_LIBS := $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs $(CUTIL_PC) 2>/dev/null)
+CUTIL_CFLAGS := $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_LOOKUP_PATH) pkg-config --cflags $(CUTIL_PC) 2>/dev/null)
+CUTIL_LIBS := $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_LOOKUP_PATH) pkg-config --libs $(CUTIL_PC) 2>/dev/null)
 # Use the sibling path when pkg-config failed (empty) or returned an
 # unsubstituted placeholder from the .pc template.
 ifeq ($(strip $(CUTIL_CFLAGS)),)
@@ -232,8 +243,8 @@ INCLUDE += $(CUTIL_CFLAGS)
 # than failing - the opposite of the cutil rule above, because cutil is a
 # dependency of the library and this is a dependency of two demonstrations.
 TEXT_PC ?= ghoti.io-text$(BRANCH)
-TEXT_CFLAGS := $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --cflags $(TEXT_PC) 2>/dev/null)
-TEXT_LIBS := $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs $(TEXT_PC) 2>/dev/null)
+TEXT_CFLAGS := $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_LOOKUP_PATH) pkg-config --cflags $(TEXT_PC) 2>/dev/null)
+TEXT_LIBS := $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_LOOKUP_PATH) pkg-config --libs $(TEXT_PC) 2>/dev/null)
 HAVE_TEXT := $(if $(strip $(TEXT_LIBS)),1,)
 
 # Automatically collect all .c source files under the src directory.
@@ -242,7 +253,7 @@ SOURCES := $(shell find src -type f -name '*.c')
 # Convert each source file path to an object file path.
 LIBOBJECTS := $(patsubst src/%.c,$(OBJ_DIR)/%.o,$(SOURCES))
 
-TESTFLAGS := `PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs --cflags gtest`
+TESTFLAGS := `PKG_CONFIG_PATH=$(PKG_CONFIG_LOOKUP_PATH) pkg-config --libs --cflags gtest`
 
 # The checks `make test` runs besides the tests themselves. Named in a
 # variable so that a build which cannot satisfy them can clear it: the
