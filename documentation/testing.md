@@ -31,7 +31,8 @@ and built by the conformance lane ([plan.md](plan.md)).
 | Perl 5.40 | Perl | `tools/oracle/perl.pl`: `@-`/`@+`, `%+` | `GRX_ORACLE_PERL` |
 | pcre2test 10.46 | PCRE2 | `tools/oracle/pcre2.py` writing pcre2test input and reading its output; `grep -P` is not enough (line-oriented, no spans) | `GRX_ORACLE_PCRE2TEST` |
 | Python 3.13 | Python | `tools/oracle/python.py`: `re.search`, `m.regs` | `GRX_ORACLE_PYTHON` |
-| glibc 2.41 `regcomp` | POSIX BRE/ERE, GNU | `tools/oracle/posix.c`, built by the Makefile when present | `GRX_ORACLE_POSIX` |
+| glibc 2.41 `regcomp` | GNU BRE/ERE | `tools/oracle/posix_match.c`, built by the Makefile when present | `GRX_ORACLE_POSIX` |
+| musl 1.2.6 `regcomp` | POSIX BRE/ERE, with glibc | `tools/oracle/musl_match.c`: musl's own regex sources, fetched by `tools/corpus/fetch.sh musl` and compiled into the driver. Hosted on glibc, so it declines a NUL (musl has no `REG_STARTEND`) and any byte >= 0x80 (the host's `mbtowc`). Never decides alone - see below | `GRX_ORACLE_MUSL` |
 | GNU grep 3.11, sed 4.9 | GNU BRE/ERE (single-line subjects) | `tools/oracle/gnu.sh` | `GRX_ORACLE_GNU` |
 | Vim 9.1 | Vim | `tools/oracle/vim.sh`: `vim -es` with `matchlist()` and `match()` | `GRX_ORACLE_VIM` |
 | OpenJDK 21, .NET 8, Ruby 3.3, Go 1.22, Rust `regex` 1.10, Tcl 8.6, Emacs 29 | tiers 2-4 | one driver each, same output form | one gate each |
@@ -325,8 +326,17 @@ values and 111 code points that perl's older UCD does not carry.
 `make check-oracle-posix` does for the POSIX and GNU front ends what the
 match check does for ECMAScript: builds patterns by combination - one entry
 per construct the dialect has, one to three of them per pattern - and asks
-both glibc and this library where each matches. About 9,000 cases a run,
-across both grammars.
+the references and this library where each matches. About 17,000 cases a
+run, across all four grammars.
+
+Which reference decides depends on the dialect, and the difference is the
+point. `gnu-bre` and `gnu-ere` *are* glibc, so glibc alone decides them.
+`posix-bre` and `posix-ere` are nobody's: glibc's `regcomp` is GNU, and
+musl's basic RE takes the same GNU operators while refusing the `[[.x.]]`
+POSIX requires. For those two the standard is the *agreement* of glibc and
+musl, and a case they answer differently is counted as unsettled and judged
+by neither. The atom sets are chosen so a construct these dialects do not
+have never arises.
 
 It exists because the imported vectors are 429 cases somebody chose, and the
 pairs nobody thought to write down are where a front end goes wrong. It
@@ -336,7 +346,19 @@ imported vector reaches. Without `REG_NEWLINE` glibc answers `^b` against
 against the same subject with a match at 0-3. Those two cannot both be the
 rule, and [dialects.md](dialects.md) §6 records which one is implemented
 here. That family is counted and excluded by name; everything else fails the
-gate. Four seeds over about 44,000 cases find nothing else.
+gate. Four seeds over about 44,000 cases found nothing else.
+
+It then earned its place a second time, and the way it did is worth keeping.
+Adding the second reference meant looking at how answers are compared, and
+`normalise_ours()` turned out not to map `compile <diag>` to the drivers'
+bare `compile`. That should have produced a flood of disagreements and
+produced none - because every atom was a well-formed construct, so no
+generated pattern was ever rejected by anybody, and the whole accept-or-
+reject half of the check had never once been exercised. A gate reporting zero
+on a question it never asked is worse than no gate. Ill-formed atoms now sit
+beside the well-formed ones, and together with the mapping they found the
+anchor-quantifier rules in `src/syntax/posix.c`, written for `^` and `$` and
+never extended to `\<`, `\>`, `\b` and `\B`.
 
 Flags are not varied, because POSIX's options are arguments to `regcomp` and
 the driver spells options as a dialect's flag letters, of which these

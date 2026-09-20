@@ -139,6 +139,46 @@ TEST(Posix, AnAsteriskWithNothingToRepeatIsAnAsterisk) {
   EXPECT_EQ(compile_result("*a", kEre), GRX_ERR_SYNTAX);
 }
 
+TEST(Posix, NoAnchorIsAQuantifiersTarget) {
+  // The rule `*a` and `^*a` state is not about `^`, it is about anchors. An
+  // asterisk after any of them is an ordinary character in a basic RE, which
+  // is how glibc reads it: `\>*` against "a*" matches 1-2, and `\>**`
+  // against "a**" matches 1-3 - a literal asterisk, then a quantifier over
+  // it. Read as a repeat of the anchor, both would be nomatch.
+  EXPECT_EQ(span("\\>*", "a*", kBre), "1-2");
+  EXPECT_EQ(span("\\>**", "a**", kBre), "1-3");
+  EXPECT_EQ(span("\\b*", "a*", kBre), "1-2");
+  EXPECT_EQ(span("\\<*", "*a", kBre), "nomatch");
+
+  // An extended RE refuses instead, for every anchor and not only for the
+  // two that POSIX spells with a punctuation mark.
+  EXPECT_EQ(compile_result("\\<*", kEre), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("\\>*", kEre), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("\\b*", kEre), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("\\B*", kEre), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("\\<{1}", kEre), GRX_ERR_SYNTAX);
+
+  // An interval is not made ordinary the way an asterisk is, in either
+  // grammar, so a basic RE refuses it too.
+  EXPECT_EQ(compile_result("^\\{1\\}", kBre), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("\\<\\{1\\}", kBre), GRX_ERR_SYNTAX);
+
+  // A *group* holding an anchor is an ordinary target, and stays one.
+  EXPECT_EQ(span("\\(\\<\\)*", "ab", kBre), "0-0");
+  EXPECT_EQ(span("(\\<)*", "ab", kEre), "0-0");
+}
+
+TEST(Posix, AnOptionalAnchorIsRefusedRatherThanMadeUnmatchable) {
+  // documentation/dialects.md section 6. glibc compiles `\<\?` and then
+  // never matches with it - against "" it answers nomatch, and an optional
+  // assertion that declines to match the empty string cannot be a rule.
+  // musl compiles the same pattern and matches, so the two references
+  // disagree and there is nothing here to reproduce. Refusing says what is
+  // true: the construct means nothing.
+  EXPECT_EQ(compile_result("\\<\\?", kBre), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("\\>\\+", kBre), GRX_ERR_SYNTAX);
+}
+
 TEST(Posix, WhichSecondQuantifierEachGrammarAccepts) {
   // An extended RE stacks them freely: `a**` is `(a*)*` and `a{2}{3}` is
   // thirty-six a's. A basic one accepts only `\+` and `\?` as the second,

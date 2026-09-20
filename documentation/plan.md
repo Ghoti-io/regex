@@ -350,14 +350,16 @@ the backtracker's exhaustive mode for BRE backreferences (exponential, and
 bounded); the documented submatch approximation. *Depends on:* WP-07,
 WP-08.
 
-**Next**, and now measured: one vector of the 429 imported turns on it -
-`\(ab*\)[ab]*\1` against "ababaaa", where glibc reports the whole string
-and both engines here report the first four characters. The profile has said
-`GRX_PREFER_LEFTMOST_LONGEST` for the POSIX and GNU rows since the table was
-written and no engine reads it, which is the same shape of unread constant
-`escaped_specials` was. The other five gaps in those corpora are WP-26's,
-not this one's: they agree about the extent and differ about which iteration
-a group kept.
+**Next**, and now measured twice: one pattern of Spencer's set turns on it -
+`\(ab*\)[ab]*\1` against "ababaaa", where both engines here report the
+first four characters. glibc reports the whole string, and so does musl,
+which shares no code with it, so this is a rule rather than one
+implementation's habit. It is two vectors now, `gnu-bre` and `posix-bre`, and
+one question. The profile has said `GRX_PREFER_LEFTMOST_LONGEST` for the
+POSIX and GNU rows since the table was written and no engine reads it, which
+is the same shape of unread constant `escaped_specials` was. The other ten
+gaps in those corpora are WP-26's, not this one's: they agree about the
+extent and differ about which iteration a group kept.
 
 **WP-25 POSIX and GNU conformance.** *conformance, M.* **Landed** for GNU.
 Spencer's test suite converted, with glibc as the oracle through
@@ -365,13 +367,33 @@ Spencer's test suite converted, with glibc as the oracle through
 at 99.37%. grep and sed were not needed - both read glibc's regex, so they
 are the same oracle behind another command. *Depends on:* WP-04.
 
-What is *not* landed is POSIX proper. glibc's `regcomp` defines what POSIX
-leaves undefined and so answers as GNU, which means the two `posix-*` rows
-have no reference on this machine to be measured against; they are built
-from the standard and differ from the GNU rows only where the feature table
-says. A strict-POSIX oracle - musl, or glibc's own
-`RE_SYNTAX_POSIX_MINIMAL_BASIC` through the GNU entry points - would close
-that, and is the obvious next piece of this package.
+**Landed** for POSIX too, as far as it can be. musl's regex sources are
+fetched and compiled into `tools/oracle/musl_match.c`, giving a second
+implementation that shares no code with glibc's - it descends from
+Laurikari's TRE. The calibration said what it is worth: musl is *not* strict
+POSIX either. Its basic RE takes `\|`, `\+` and `\?` exactly as glibc's
+does, and it refuses the `[[.x.]]` and `[[=x=]]` POSIX requires. So neither
+reference can decide alone, and the method is their agreement: 380 `posix-*`
+vectors from the 420 of Spencer's 463 cases the two answer identically,
+`posix-ere` at 97.96% and `posix-bre` at 99.26%. The 41 they answer
+differently are recorded as open questions rather than settled by picking a
+side, and the 8 using a construct these dialects do not have are left out
+because there the *dialect* differs and neither oracle speaks for it.
+
+What is still not measured is what makes a POSIX row a POSIX row: refusing
+the GNU operators. No implementation here does that, so the feature table's
+`posix-*` entries remain built from the standard, and
+[dialects.md](dialects.md) §6 says so rather than implying a rate covers it.
+
+The second oracle paid for itself twice over. It made
+`tools/oracle/posix_diff.py` a three-way check, and in making it one exposed
+that the differential had never compared a *rejection*: `normalise_ours()`
+did not map `compile <diag>` to `compile`, and no generated pattern was
+ill-formed enough for anybody to reject, so half of what the tool exists to
+ask had never been asked. Ill-formed atoms and the mapping together found the
+anchor-quantifier rules in `src/syntax/posix.c`, which had been written for
+`^` and `$` and left `\<`, `\>`, `\b` and `\B` alone - the third instance
+of a rule stated in a comment and implemented for a subset.
 
 **WP-26 Exact POSIX submatches.** *engines, L, deferred.* Okui-Suzuki or
 Laurikari TNFA disambiguation in the Pike VM's longest mode. Scheduled

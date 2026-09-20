@@ -627,14 +627,19 @@ static GRX_Result px_literal_atom(GRX_Parser * parser, uint32_t codepoint,
  *
  * Only in a basic RE. An extended one refuses `^*` outright, which it
  * reaches through check_quantifier_target() below.
+ *
+ * Every anchor, not only `^`. POSIX states the rule for the start of an RE
+ * and for a `*` after `^`, and glibc applies it after `\<`, `\>`, `\b` and
+ * `\B` too - `\>*` against "a*" matches 1-2, and `\>**` against "a**"
+ * matches 1-3, which is a literal asterisk and then a quantifier over it.
+ * Reading it as a repeat of the anchor would make both of those nomatch.
  */
 static int px_quantifier_applies(GRX_Parser * parser, uint32_t node) {
   if (!is_basic(parser) || parser->text[parser->position] != '*') {
     return 1;
   }
   const GRX_Node * atom = grx_pattern_node(parser->pattern, node);
-  return !(atom && atom->kind == GRX_NODE_ANCHOR
-      && atom->a == (uint32_t)GRX_ANCHOR_CARET);
+  return !(atom && atom->kind == GRX_NODE_ANCHOR);
 }
 
 /**
@@ -651,13 +656,20 @@ static GRX_Result px_check_quantifier_target(GRX_Parser * parser,
     return GRX_OK;
   }
 
-  // Neither grammar repeats an anchor. In a basic RE a `*` after `^` never
-  // arrives here at all - px_quantifier_applies() has already said it is a
-  // character - so what this refuses there is `^\{1\}`, which glibc
-  // refuses too.
-  if (atom->kind == GRX_NODE_ANCHOR
-      && (atom->a == (uint32_t)GRX_ANCHOR_CARET
-          || atom->a == (uint32_t)GRX_ANCHOR_DOLLAR)) {
+  // Neither grammar repeats an anchor - any anchor, not just the two that
+  // were listed here when this was written. In a basic RE a `*` after one
+  // never arrives at all, px_quantifier_applies() having already said it is
+  // a character, so what this refuses there is `^\{1\}` and `\<\{1\}`,
+  // which glibc refuses too.
+  //
+  // It also refuses the basic RE's `\<\?` and `\<\+`, where glibc instead
+  // compiles a pattern that cannot match anything: `\<\?` against "" is
+  // nomatch there, and an optional assertion that declines to match the
+  // empty string is not a rule, it is an artifact. musl matches it, so the
+  // two references disagree and there is nothing to reproduce. Refusing says
+  // what is true - the construct means nothing - and documentation/dialects.md
+  // section 6 records the deviation.
+  if (atom->kind == GRX_NODE_ANCHOR) {
     return grx_parse_fail(parser, GRX_DIAG_NOTHING_TO_REPEAT, offset, length);
   }
 

@@ -8,14 +8,25 @@ tools/oracle/posix_match.c.
 The corpus is the copy glibc carries and runs as `tst-rxspencer`, so the test
 set and the implementation answering it are versioned together.
 
-**These are GNU vectors, not POSIX ones.** glibc's `regcomp` accepts `\\|`,
-`\\+`, `\\?`, `\\w`, `\\b` and `\\<` in a BRE and `\\w`/`\\b` in an ERE, which
-is the GNU dialect rather than the POSIX one - POSIX leaves a backslash
-before an ordinary character undefined, and GNU defines it. So every row
-imported here is written as `gnu-bre` or `gnu-ere`, because that is the
-question glibc was actually asked. Pure POSIX BRE and ERE need an oracle that
-refuses those constructs, which this machine does not have; the spec table
-already distinguishes the four dialects, and their vectors are separate work.
+**What glibc answers is the GNU dialect.** Its `regcomp` accepts `\\|`,
+`\\+`, `\\?`, `\\w`, `\\b` and `\\<` in a BRE and `\\w`/`\\b` in an ERE - POSIX
+leaves a backslash before an ordinary character undefined, and GNU defines
+it. So every row glibc answers is written as `gnu-bre` or `gnu-ere`, because
+that is the question glibc was actually asked.
+
+**The POSIX rows need a second implementation, and even then only where the
+two agree.** musl's regex, descended from Laurikari's TRE, is asked the same
+questions through tools/oracle/musl_match.c. It is not strict POSIX either -
+its BRE takes `\\|`, `\\+` and `\\?` just as glibc's does, and it refuses the
+`[[.x.]]` and `[[=x=]]` that POSIX requires - so it is not a POSIX oracle on
+its own. What it can do is disagree. A case the two answer identically is one
+where two independent implementations found the same behaviour, which is the
+strongest evidence this machine can offer for what POSIX means in practice;
+a case they answer differently is a question POSIX left open, and is left out
+rather than settled by picking a side. Cases using a construct the POSIX
+dialects do not have - the GNU escapes above, and a backreference in an ERE -
+are left out too, because there the *dialect* differs and the oracles cannot
+speak for it.
 
 The format is documented in the corpus's own header. Fields are separated by
 runs of tabs, `""` is an empty field, and in a pattern or a subject `N` is
@@ -38,7 +49,11 @@ up here.
 
 Usage:
     tools/corpus/import_rxspencer.py [--corpus FILE] [--driver PATH]
-                                     [--out DIR] [--report N]
+                                     [--musl-driver PATH] [--out DIR]
+                                     [--posix-out DIR] [--report N]
+
+Without a musl driver the POSIX half is skipped and said to be skipped; the
+GNU half does not depend on it.
 
 Copyright 2026 by Corey Pennycuff
 """
@@ -250,6 +265,75 @@ def corpus_expects(fields, subject, spans):
     return (True, "")
 
 
+# The escapes GNU adds and POSIX does not have, in either syntax. `\\`` and
+# `\\'` are GNU's buffer anchors; the rest are its word and class escapes.
+GNU_ESCAPES = set("wWsSbB<>`'")
+
+# In a BRE these three are operators to GNU and to musl, and are nothing at
+# all to POSIX - POSIX BRE has no alternation and no `+` or `?` quantifier.
+GNU_BRE_OPERATORS = set("|+?")
+
+
+def skip_bracket(pattern, at):
+    """The index just past the bracket expression starting at `pattern[at]`.
+
+    POSIX brackets are not the rest of the language: a backslash inside one
+    is an ordinary character, a `]` first is a literal, and `[: :]`, `[. .]`
+    and `[= =]` may contain anything including a `]`. Getting this wrong
+    would make the scan below see escapes that are not there.
+
+    @return The index after the closing `]`, or len(pattern) if it is
+      unterminated - which is a pattern the oracles reject anyway.
+    """
+    index = at + 1
+    if index < len(pattern) and pattern[index] == "^":
+        index += 1
+    if index < len(pattern) and pattern[index] == "]":
+        index += 1
+    while index < len(pattern):
+        if (pattern[index] == "[" and index + 1 < len(pattern)
+                and pattern[index + 1] in ":.="):
+            kind = pattern[index + 1]
+            end = pattern.find(kind + "]", index + 2)
+            if end < 0:
+                return len(pattern)
+            index = end + 2
+            continue
+        if pattern[index] == "]":
+            return index + 1
+        index += 1
+    return len(pattern)
+
+
+def uses_non_posix(pattern, is_basic):
+    """The constructs in `pattern` that the POSIX dialects do not have.
+
+    Returned rather than counted, so that the caller can print the list and a
+    reader can check it by eye: on Spencer's corpus it is four patterns.
+    """
+    text = pattern.decode("latin-1")
+    found = set()
+    index = 0
+    while index < len(text):
+        character = text[index]
+        if character == "[":
+            index = skip_bracket(text, index)
+            continue
+        if character != "\\" or index + 1 >= len(text):
+            index += 1
+            continue
+        escaped = text[index + 1]
+        if escaped in GNU_ESCAPES:
+            found.add("\\" + escaped)
+        elif is_basic and escaped in GNU_BRE_OPERATORS:
+            found.add("\\" + escaped)
+        elif not is_basic and escaped.isdigit() and escaped != "0":
+            # A backreference, which POSIX has in a BRE and not in an ERE.
+            found.add("\\" + escaped)
+        index += 2
+    return sorted(found)
+
+
 def record_for(pattern, options, subject, answer):
     """One `.rxt` record, with the oracle's answer as the expectation."""
     lines = ["pattern: " + escape(pattern)]
@@ -269,24 +353,40 @@ def record_for(pattern, options, subject, answer):
     return "\n".join(lines) + "\n"
 
 
-def write_file(path, dialect, corpus, version, records):
+GNU_NOTE = [
+    "# The cases are Spencer's and every span is glibc's. A row whose own",
+    "# expectation disagreed with what glibc does was dropped rather than",
+    "# written down, because the likeliest explanation is that the",
+    "# importer misread the row.",
+    "#",
+    "# These are GNU vectors, not POSIX ones: glibc's regcomp defines the",
+    "# constructs POSIX leaves undefined - `\\|`, `\\+`, `\\?`, `\\w`,",
+    "# `\\b` and `\\<` - so what it answered is the GNU dialect.",
+]
+
+POSIX_NOTE = [
+    "# The cases are Spencer's and every span is one that glibc and musl",
+    "# *both* gave. Neither is a POSIX oracle on its own - glibc's regcomp is",
+    "# GNU, and musl's BRE takes `\\|`, `\\+` and `\\?` while refusing the",
+    "# `[[.x.]]` POSIX requires - so what is written here is only their",
+    "# agreement. Where two implementations that share no code answer the",
+    "# same way, that is the strongest evidence this machine can offer for",
+    "# what POSIX means in practice.",
+    "#",
+    "# Left out, and counted as left out by the importer: the cases they",
+    "# answer differently, and the cases using a construct these dialects do",
+    "# not have - the GNU escapes, and a backreference in an ERE.",
+]
+
+
+def write_file(path, dialect, corpus, oracle_line, note, records):
     """Write one dialect's vectors, with where they came from at the top."""
     header = [
         "# imported by tools/corpus/import_rxspencer.py",
         "# corpus: %s" % os.path.relpath(corpus, ROOT),
-        "# oracle: %s, through tools/oracle/posix_match.c" % version,
+        "# oracle: %s" % oracle_line,
         "#",
-        "# The cases are Spencer's and every span is glibc's. A row whose own",
-        "# expectation disagreed with what glibc does was dropped rather than",
-        "# written down, because the likeliest explanation is that the",
-        "# importer misread the row.",
-        "#",
-        "# These are GNU vectors, not POSIX ones: glibc's regcomp defines the",
-        "# constructs POSIX leaves undefined - `\\|`, `\\+`, `\\?`, `\\w`,",
-        "# `\\b` and `\\<` - so what it answered is the GNU dialect.",
-        "#",
-        "# Nothing here runs until the POSIX and GNU front end exists; the",
-        "# runner counts them as skipped until then.",
+    ] + note + [
         "dialect: %s" % dialect,
         "",
         "",
@@ -296,13 +396,13 @@ def write_file(path, dialect, corpus, version, records):
         handle.write("\n".join(records))
 
 
-def find_driver(explicit):
+def find_driver(explicit, name="posix_match"):
     if explicit:
         return explicit
     for platform in ("linux", "mac", "win64", "win32"):
         for build in ("release", "debug"):
             path = os.path.join(ROOT, "build", platform, build, "apps",
-                "tools", "posix_match")
+                "tools", name)
             if os.path.exists(path):
                 return path
     return None
@@ -322,7 +422,10 @@ def main(argv):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--corpus", default=None)
     parser.add_argument("--driver", default=None)
+    parser.add_argument("--musl-driver", default=None,
+        help="tools/oracle/musl_match; without it the POSIX half is skipped")
     parser.add_argument("--out", default=None)
+    parser.add_argument("--posix-out", default=None)
     parser.add_argument("--report", type=int, default=12,
         help="how many corpus disagreements to print")
     args = parser.parse_args(argv[1:])
@@ -355,6 +458,7 @@ def main(argv):
         subject = b"" if compile_error else decode(fields[2])
         for kind, flags in wanted:
             cases.append({
+                "index": len(cases),
                 "line": number,
                 "fields": fields,
                 "kind": kind,
@@ -364,13 +468,45 @@ def main(argv):
                 "compile_error": compile_error,
             })
 
-    answers, version = ask(driver,
-        [(case["flags"], case["pattern"], case["subject"]) for case in cases])
+    requests = [(case["flags"], case["pattern"], case["subject"])
+                for case in cases]
+    answers, version = ask(driver, requests)
+
+    # The second implementation, asked the identical questions. Its answers
+    # are never written down on their own - only the cases where it and glibc
+    # agree become POSIX vectors - so a machine without it loses the POSIX
+    # half and nothing else.
+    musl_driver = find_driver(args.musl_driver, "musl_match")
+    musl_answers = None
+    musl_version = None
+    if musl_driver and os.path.exists(musl_driver):
+        musl_answers, musl_version = ask(musl_driver, requests)
 
     written = collections.Counter()
     dropped = collections.Counter()
     disagreements = []
     records = {"": [], "b": []}
+    posix_records = {"": [], "b": []}
+    posix_dropped = collections.Counter()
+    non_posix_seen = collections.Counter()
+
+    def keep_posix(case, answer, record):
+        """Write this case as a POSIX vector too, if both oracles allow it."""
+        if musl_answers is None:
+            return
+        theirs = musl_answers[case["index"]]
+        if theirs.startswith("skip"):
+            posix_dropped["musl declined the question"] += 1
+            return
+        if theirs != answer:
+            posix_dropped["the two oracles disagree"] += 1
+            return
+        outside = uses_non_posix(case["pattern"], case["kind"] == "b")
+        if outside:
+            posix_dropped["a construct these dialects do not have"] += 1
+            non_posix_seen[" ".join(outside)] += 1
+            return
+        posix_records[case["kind"]].append(record)
 
     for case, answer in zip(cases, answers):
         if answer.startswith("skip"):
@@ -381,10 +517,11 @@ def main(argv):
         # *and* about glibc, so both have to agree before it is written down.
         if case["compile_error"]:
             if answer == "compile":
-                records[case["kind"]].append(record_for(
-                    case["pattern"], options_for(case["flags"]),
-                    case["subject"], "compile"))
+                record = record_for(case["pattern"],
+                    options_for(case["flags"]), case["subject"], "compile")
+                records[case["kind"]].append(record)
                 written[case["kind"]] += 1
+                keep_posix(case, answer, record)
             else:
                 dropped["corpus expects a compile error"] += 1
                 disagreements.append((case, answer,
@@ -403,18 +540,33 @@ def main(argv):
             disagreements.append((case, answer, why))
             continue
 
-        records[case["kind"]].append(record_for(
-            case["pattern"], options_for(case["flags"]), case["subject"],
-            answer))
+        record = record_for(case["pattern"], options_for(case["flags"]),
+            case["subject"], answer)
+        records[case["kind"]].append(record)
         written[case["kind"]] += 1
+        keep_posix(case, answer, record)
 
     out_dir = args.out or os.path.join(ROOT, "tests", "data", "vectors", "gnu")
     os.makedirs(out_dir, exist_ok=True)
+    gnu_oracle = "%s, through tools/oracle/posix_match.c" % version
     for kind, dialect, name in (
             ("", "gnu-ere", "rxspencer-ere.rxt"),
             ("b", "gnu-bre", "rxspencer-bre.rxt")):
-        write_file(os.path.join(out_dir, name), dialect, corpus, version,
-            records[kind])
+        write_file(os.path.join(out_dir, name), dialect, corpus, gnu_oracle,
+            GNU_NOTE, records[kind])
+
+    if musl_answers is not None:
+        posix_dir = args.posix_out or os.path.join(
+            ROOT, "tests", "data", "vectors", "posix")
+        os.makedirs(posix_dir, exist_ok=True)
+        posix_oracle = ("%s and %s agreeing, through "
+            "tools/oracle/posix_match.c and tools/oracle/musl_match.c"
+            % (version, musl_version))
+        for kind, dialect, name in (
+                ("", "posix-ere", "rxspencer-ere.rxt"),
+                ("b", "posix-bre", "rxspencer-bre.rxt")):
+            write_file(os.path.join(posix_dir, name), dialect, corpus,
+                posix_oracle, POSIX_NOTE, posix_records[kind])
 
     for case, answer, why in disagreements[:args.report]:
         print("%s:%d  %r  flags=%r" % (os.path.basename(corpus), case["line"],
@@ -428,6 +580,22 @@ def main(argv):
              sum(dropped.values()), skipped_flags))
     for reason, count in sorted(dropped.items()):
         print("   %-46s %d" % (reason, count))
+
+    if musl_answers is None:
+        print("\nPOSIX vectors: skipped (no musl_match; "
+              "run tools/corpus/fetch.sh musl and `make tools`)")
+    else:
+        print("\n%d POSIX vectors written (%d ere, %d bre), %d left out"
+              % (sum(len(rows) for rows in posix_records.values()),
+                 len(posix_records[""]), len(posix_records["b"]),
+                 sum(posix_dropped.values())))
+        for reason, count in sorted(posix_dropped.items()):
+            print("   %-46s %d" % (reason, count))
+        # Printed in full rather than counted: the list is short enough to
+        # check by eye, and a construct appearing here that should not is
+        # exactly the mistake this filter could make silently.
+        for construct, count in sorted(non_posix_seen.items()):
+            print("      %-20s %d" % (construct, count))
     return 0
 
 

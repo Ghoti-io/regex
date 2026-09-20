@@ -305,14 +305,46 @@ ifdef HAVE_TEXT
 EXAMPLES += $(patsubst examples/%.c,$(APP_DIR)/examples/%$(EXE_EXTENSION),$(TEXT_EXAMPLE_SOURCES))
 endif
 
+# The musl oracle. Its two translation units are fetched rather than
+# committed, so it is not in TOOL_SOURCES and is built only when they are
+# there - `tools/corpus/fetch.sh musl`. tools/corpus/VERSIONS says what a
+# second POSIX implementation is for and what this hosted build of it can be
+# asked; the ref is read from the same file so there is one place to raise.
+MUSL_REF := $(shell awk '$$1 == "musl" { print $$2; exit }' tools/corpus/VERSIONS)
+MUSL_SRC := third_party/musl/$(MUSL_REF)/src/regex
+MUSL_UNITS := $(MUSL_SRC)/regcomp.c $(MUSL_SRC)/regexec.c $(MUSL_SRC)/tre-mem.c
+MUSL_MATCH := $(APP_DIR)/tools/musl_match$(EXE_EXTENSION)
+
+# Joined to the tool list only when the fetch has happened, so that `make
+# tools` on a fresh clone builds what it can rather than failing on what it
+# has not got. The checks that want it say so and skip when it is absent.
+ifneq ($(wildcard $(MUSL_SRC)/regcomp.c),)
+MUSL_AVAILABLE := 1
+endif
+
+# Strict ISO C, because under a GNU dialect glibc's <limits.h> would define
+# RE_DUP_MAX as 0x7fff over musl's 255; tools/oracle/musl-include/regex.h
+# refuses to compile without it rather than let that pass silently. -w
+# because this is somebody else's code and its warnings are not ours to fix.
+# The renames keep musl's entry points from colliding with glibc's, and the
+# two limits are musl's own, from its include/limits.h.
+MUSL_CFLAGS := -std=c11 -O2 -w -Itools/oracle/musl-include \
+	-Dhidden='__attribute__((__visibility__("hidden")))' \
+	-DCHARCLASS_NAME_MAX=14 -DRE_DUP_MAX=255 \
+	-Dregcomp=musl_regcomp -Dregexec=musl_regexec -Dregfree=musl_regfree
+
 # The oracle drivers: this library wrapped so that a conformance harness can
 # ask it the same question it asks a reference implementation. Built on
 # demand rather than by `all`, because they are development tools and are not
 # installed.
-TOOL_SOURCES := $(shell find tools -type f -name '*.c' -not -path 'tools/jsonschema/*' 2>/dev/null)
+TOOL_SOURCES := $(shell find tools -type f -name '*.c' -not -path 'tools/jsonschema/*' \
+	-not -name 'musl_match.c' 2>/dev/null)
 TOOLS := $(patsubst tools/%.c,$(APP_DIR)/tools/%$(EXE_EXTENSION),$(notdir $(TOOL_SOURCES)))
 TOOLS := $(patsubst tools/oracle/%.c,$(APP_DIR)/tools/%$(EXE_EXTENSION),$(TOOL_SOURCES))
 TOOLS := $(patsubst tools/limits/%.c,$(APP_DIR)/tools/%$(EXE_EXTENSION),$(TOOLS))
+ifdef MUSL_AVAILABLE
+TOOLS += $(MUSL_MATCH)
+endif
 
 # The JSON Schema suite runner links `text`, so it joins the list only when
 # pkg-config found it.
@@ -481,6 +513,16 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/oracle/%.c $(APP_DIR)/$(STATIC_TARGET)
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(INCLUDE) -o $@ $< $(LDFLAGS) $(REGEXLIBRARY) $(CUTIL_LIBS)
 
+# musl's regex compiled straight into the driver: three of its translation
+# units and ours, no library of ours linked, because an oracle answers for
+# somebody else's implementation and must not be able to reach this one.
+$(MUSL_MATCH): tools/oracle/musl_match.c tools/oracle/musl-include/regex.h \
+		$(MUSL_UNITS)
+	@printf "\n### Compiling Tool: musl_match ###\n"
+	@mkdir -p $(@D)
+	$(CC) $(MUSL_CFLAGS) -DGRX_MUSL_REF='"$(MUSL_REF)"' -o $@ \
+		tools/oracle/musl_match.c $(MUSL_UNITS)
+
 $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/limits/%.c $(APP_DIR)/$(STATIC_TARGET) \
 		| $(APP_DIR)/$(TARGET)
 	@printf "\n### Compiling Tool: $* ###\n"
@@ -513,7 +555,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 	check-oracle-properties check-oracle-numeric-properties \
 	check-oracle-string-properties check-oracle-posix check-oracles \
 	check-limits check-json-schema-suite vectors vectors-ecmascript \
-	vectors-pcre vectors-perl vectors-gnu
+	vectors-pcre vectors-perl vectors-posix
 # Release build commands
 .PHONY: all install test test-quiet test-asan test-valgrind test-valgrind-quiet test-watch uninstall watch
 # Debug build commands
@@ -588,7 +630,7 @@ check-oracle-string-properties: $(TOOLS)
 	python3 tools/oracle/string_property_diff.py
 
 vectors: ## Regenerate every dialect's conformance vectors
-vectors: vectors-ecmascript vectors-pcre vectors-perl vectors-gnu
+vectors: vectors-ecmascript vectors-pcre vectors-perl vectors-posix
 
 vectors-ecmascript: ## Regenerate the ECMAScript vectors (needs node)
 	@if ! command -v node >/dev/null 2>&1; then \
@@ -612,10 +654,10 @@ vectors-pcre: ## Re-import PCRE2's testinput corpus (needs pcre2test)
 	fi; \
 	python3 tools/corpus/import_pcre2test.py
 
-vectors-gnu: ## Re-import Spencer's test set, answered by glibc
-vectors-gnu: $(TOOLS)
+vectors-posix: ## Re-import Spencer's test set, answered by glibc and by musl
+vectors-posix: $(TOOLS)
 	@if [ ! -d third_party/glibc ]; then \
-		printf "vectors-gnu: skipped (run tools/corpus/fetch.sh glibc)\n"; \
+		printf "vectors-posix: skipped (run tools/corpus/fetch.sh glibc)\n"; \
 		exit 0; \
 	fi; \
 	python3 tools/corpus/import_rxspencer.py \

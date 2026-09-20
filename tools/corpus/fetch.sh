@@ -11,7 +11,7 @@
 #
 # Everything lands in third_party/<name>/<ref>/, which .gitignore excludes.
 #
-# Usage:  tools/corpus/fetch.sh [test262|pcre2|perl|glibc|all]
+# Usage:  tools/corpus/fetch.sh [test262|pcre2|perl|glibc|musl|all]
 #
 # Copyright 2026 by Corey Pennycuff
 
@@ -98,14 +98,29 @@ fetch_glibc() {
   fetch_file "$dest/PCRE.tests" "$base/posix/PCRE.tests"
 }
 
+# musl's regex sources, which are compiled into an oracle rather than read as
+# a corpus - the only entry here that is code. tools/corpus/VERSIONS says why
+# a second POSIX implementation is wanted and what the hosted build of it can
+# and cannot be asked. Four files: the two translation units, the arena
+# allocator they share, and their private header.
+fetch_musl() {
+  ref=$(ref_for musl)
+  base="https://git.musl-libc.org/cgit/musl/plain"
+  dest="$root/third_party/musl/$ref"
+  for file in regcomp.c regexec.c tre-mem.c tre.h; do
+    fetch_file "$dest/src/regex/$file" "$base/src/regex/$file?h=$ref"
+  done
+}
+
 case "$what" in
   test262) fetch_test262 ;;
   pcre2)   fetch_pcre2 ;;
   perl)    fetch_perl ;;
   glibc)   fetch_glibc ;;
-  all)     fetch_test262; fetch_pcre2; fetch_perl; fetch_glibc ;;
+  musl)    fetch_musl ;;
+  all)     fetch_test262; fetch_pcre2; fetch_perl; fetch_glibc; fetch_musl ;;
   *)
-    printf 'usage: %s [test262|pcre2|perl|glibc|all]\n' "$0" >&2
+    printf 'usage: %s [test262|pcre2|perl|glibc|musl|all]\n' "$0" >&2
     exit 2
     ;;
 esac

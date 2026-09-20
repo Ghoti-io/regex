@@ -642,10 +642,16 @@ which feature bits are set.
 extended one. POSIX leaves a backslash before an ordinary character undefined
 and GNU defines it, so that is a conforming extension rather than a
 disagreement - but it is why the vectors imported from glibc say `gnu-bre`
-and `gnu-ere`, and why the two POSIX rows are built from the standard rather
-than from a reference anything here can ask.
+and `gnu-ere`. The two POSIX rows have a second reference now, and only a
+partial one: musl's regex, which shares no code with glibc's, agrees with it
+on 420 of Spencer's 463 cases, and those agreements are the `posix-*`
+vectors. musl is not strict POSIX either - its basic RE takes the same GNU
+operators, and it refuses the collating and equivalence classes POSIX
+requires - so what actually *defines* these two rows, refusing `\|` and `\+`
+in a basic RE and `\1` in an extended one, is still built from the standard
+alone.
 
-Five rules are worth stating, because none of them is what a reader coming
+Six rules are worth stating, because none of them is what a reader coming
 from Perl would guess, and each was asked of glibc rather than reasoned out:
 
 **`.` matches a newline.** POSIX has no dot-all option because dot-all is
@@ -668,6 +674,17 @@ instead, `[]a]`, and a `-` first or last is itself.
 RE or in a subexpression, after an initial `^` if there is one. `^*a` matches
 `"*a"`. An *extended* RE refuses the same three characters outright, which is
 the one place the two grammars disagree about what `^*` even is.
+
+**No anchor is a quantifier's target**, and the rule above is about anchors
+rather than about `^`. In a basic RE an `*` after any of them is an ordinary
+character too: `\>*` against `"a*"` matches 1-2 and `\>**` against `"a**"`
+matches 1-3, which is a literal asterisk and then a quantifier over it. An
+extended RE refuses a quantifier on any anchor, `\<*` and `\b*` exactly as
+`^*`, and an interval is refused in both grammars because an interval is
+never made ordinary. A *group* holding an anchor is an ordinary target and
+stays one, so `\(\<\)*` is fine. The one place this departs from glibc is
+the basic RE's `\<\?` and `\>\+`, which it compiles into a pattern that
+can never match; section 6 says why that is not followed.
 
 **A quantifier may be quantified**, and the two grammars differ about which.
 An extended RE stacks them freely - `a**` is `(a*)*`, `a{2}{3}` is thirty-six
@@ -710,7 +727,9 @@ to be complete for every shipped tier.
 | PCRE2, Perl | `(?(VERSION>=n.n))` is answered against 10.46 | this library emulates that version rather than being it | - |
 | POSIX, GNU | Without `REG_NEWLINE`, `^` is the start of the subject and `$` its end, wherever in the pattern they stand | glibc answers the same question two ways. `^b` against "a\nb" is **nomatch** there, so `^` is not a line anchor for a search - but `.*^b` against the same subject **matches 0-3**, and `.^` matches 1-2, so a `^` reached after something consumed the newline *does* succeed. `a*^b`, `()^b`, `(^)b` and `(a\|)^b` are all nomatch again, which is the same position reached without consuming. Five of 7,033 differential cases turn on it and no imported vector does; the rule here is the consistent reading of the two | - |
 | POSIX, GNU | `REG_NEWLINE` makes `^` and `$` line anchors and does not take the newline out of `.` or out of `[^a]` | the option is two rules and `GRX_OPT_MULTILINE` is one of them; the other needs a second option nothing else in the library wants. Eleven vectors exercise the first half and none the second | - |
-| POSIX BRE, POSIX ERE | Built from the standard, not measured against a reference | glibc's `regcomp` defines what POSIX leaves undefined, so it answers as GNU and cannot be asked what strict POSIX does. The 429 imported vectors are `gnu-bre` and `gnu-ere`; the two POSIX rows differ from them only where the feature table says, and no oracle on this machine can check that | - |
+| POSIX BRE, POSIX ERE | Measured only where two references agree, and not at all where the dialects differ from both | glibc's `regcomp` defines what POSIX leaves undefined and so answers as GNU; musl's regex, from Laurikari's TRE, shares no code with it but is not strict POSIX either - its basic RE takes `\|`, `\+` and `\?`, and it refuses the `[[.x.]]` POSIX requires. Neither decides alone. The 380 `posix-*` vectors are Spencer's rows the two answer *identically*; 41 they answer differently are left out as open questions and 8 use a construct these dialects do not have. What defines these rows - refusing the GNU operators - has no reference on this machine and is still built from the standard alone | - |
+| GNU BRE | `\<\?` and `\>\+`: a quantifier on an anchor is refused rather than compiled | glibc compiles it and then cannot match with it - `\<\?` against "" is **nomatch** there, and an optional assertion that declines to match the empty string is an artifact rather than a rule. musl compiles the same pattern and matches, so the two references disagree and there is nothing to reproduce. An `*` after an anchor is a different question and is followed exactly: it is an ordinary character, as it is after `^`, which is why `\>*` against "a*" matches 1-2 | `GRX_ERR_SYNTAX` |
+| POSIX, GNU | `(\<)*` reports the group as having matched empty where glibc reports it unset | whether a zero-width iteration counts as an iteration at all. glibc says no; musl says yes and so does this library, and musl's regex is the tagged-transition algorithm WP-26 names. The same question as the ten submatch gaps in `known-gaps.txt` - which iteration a group kept - reached through a loop that ran zero-width instead of through a loop that ran twice | - |
 | Perl | `\p{nv=1/1}` and its kin resolve; perl refuses a fraction that reduces to an integer | UAX #44 §5.9.2 says numeric values match by "numeric equivalencies", and `1/1` is `1`. Perl keys its table by the *spelling* instead, so `1/1`, `2/2` and `0/3` are errors there while `2/4` and `9/12` resolve. Following the stated rule accepts a spelling perl rejects and never changes a match set | - |
 | Perl | `/l` asks for the locale's semantics and gets the C locale's | there is no other locale here (section 6), and the C locale's word characters are the ASCII ones | - |
 | POSIX | Submatch rules approximated in the first POSIX release | [design.md](design.md) §2 | - |

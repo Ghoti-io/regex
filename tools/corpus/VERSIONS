@@ -76,3 +76,45 @@ perl v5.40.1
 # in particular - so "what POSIX says" and "what glibc does" are not always
 # the same sentence, and the vectors record the second.
 glibc glibc-2.41
+
+# musl. src/regex only - regcomp.c, regexec.c, tre-mem.c and tre.h - which
+# tools/oracle/musl_match.c compiles into an oracle binary. v1.2.6 is the
+# current release; there is no musl on this machine to match, which is the
+# point of fetching it.
+#
+# Why a second POSIX oracle at all. glibc's regcomp is GNU: it accepts `\|`,
+# `\+`, `\w` and `\<` in a BRE and defines a great deal that POSIX leaves
+# undefined, so it can be asked what GNU does and cannot be asked what POSIX
+# does. The two posix-* rows of the spec table were built from the standard
+# and have never been compared against anything. musl's regex is descended
+# from Ville Laurikari's TRE, a different implementation lineage entirely,
+# which is what makes it a second *opinion* rather than a second spelling of
+# the first - and TRE is also the tagged-transition algorithm plan.md's
+# WP-26 names, so the same fetch is a working reference for that package.
+#
+# What this oracle is *not*. It is musl's regex hosted on glibc, not musl.
+# The two translation units are compiled against glibc's headers and linked
+# against glibc's mbtowc, iswctype and towlower, so three limits follow, all
+# of them enforced or declared rather than hoped for:
+#
+#   - Comparisons are ASCII. In the C locale glibc's mbtowc refuses bytes
+#     >= 0x80 where musl's would decode them as UTF-8, so a non-ASCII
+#     subject would measure the host libc and not the regex. The driver
+#     declines one rather than answering it.
+#   - There is no REG_STARTEND, which is a glibc extension, so a subject
+#     containing NUL cannot be expressed and is declined too. glibc's
+#     driver can ask that question and this one cannot.
+#   - Two limits come from musl's own include/limits.h on the command line,
+#     because glibc's header does not define them: CHARCLASS_NAME_MAX 14 and
+#     RE_DUP_MAX 255. Using glibc's RE_DUP_MAX (0x7fff) would have made this
+#     oracle accept `a{1000}`, which musl refuses.
+#
+# And it is not the standard. musl is one more implementation with its own
+# reading; where it and glibc disagree, that disagreement is the finding.
+#
+# Licence. musl is MIT, and this is the only entry here whose contents are
+# compiled rather than read. Nothing of musl's is committed, nothing of it is
+# installed, and musl_match is a development tool that `all` does not build -
+# so no part of it reaches the shipped library or its package. If that ever
+# stops being true, the MIT notice has to travel with it.
+musl v1.2.6
