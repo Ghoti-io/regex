@@ -69,6 +69,7 @@ GRX_Result grx_match_create(const GRX_Regex * regex,
   match->engine = GRX_ENGINE_COUNT;
   match->matched = 0;
   match->steps = 0;
+  match->mark = GRX_INDEX_NONE;
   for (size_t i = 0; i < count; i++) {
     match->captures[i] = (GRX_Capture) {GRX_NPOS, GRX_NPOS};
   }
@@ -186,6 +187,7 @@ static GRX_Result exec(const GRX_Regex * regex, const char * subject,
     match->engine = engine;
     match->matched = 0;
     match->steps = 0;
+    match->mark = GRX_INDEX_NONE;
   }
 
   GRX_ExecRequest request = {
@@ -458,6 +460,16 @@ GRX_Result grx_match_group_named(
   }
 
   return grx_match_group(match, index, out_capture);
+}
+
+const char * grx_match_mark(const GRX_Match * match) {
+  if (!match || match->mark == GRX_INDEX_NONE || !match->regex
+      || !match->regex->mark_names
+      || match->mark >= match->regex->mark_count) {
+    return NULL;
+  }
+
+  return match->regex->mark_names[match->mark];
 }
 
 GRX_Result grx_match_dump(const GRX_Match * match, FILE * out) {

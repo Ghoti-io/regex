@@ -1651,8 +1651,9 @@ static GRX_Result read_option_letters(GRX_Parser * parser, size_t start,
 /** One `(*NAME)` the parser knows. */
 typedef struct {
   const char * name;
-  int verb;            ///< A GRX_VerbKind, or -1 when this is not a verb.
+  int verb;            ///< A GRX_VerbKind.
   int takes_argument;  ///< Whether `(*NAME:arg)` is allowed.
+  int needs_argument;  ///< Whether `(*NAME)` without one is an error.
 } VerbRow;
 
 // Every row takes an argument. pcre2test 10.46 accepts `(*ACCEPT:X)` and
@@ -1660,15 +1661,18 @@ typedef struct {
 // table did not: it had the three verbs perlre describes as argument-less
 // refusing one, and three corpus records said otherwise.
 static const VerbRow verb_table[] = {
-  {"ACCEPT", GRX_VERB_ACCEPT, 1},
-  {"FAIL", GRX_VERB_FAIL, 1},
-  {"F", GRX_VERB_FAIL, 1},
-  {"COMMIT", GRX_VERB_COMMIT, 1},
-  {"PRUNE", GRX_VERB_PRUNE, 1},
-  {"SKIP", GRX_VERB_SKIP, 1},
-  {"THEN", GRX_VERB_THEN, 1},
-  {"MARK", -1, 1},
-  {NULL, -1, 0},
+  {"ACCEPT", GRX_VERB_ACCEPT, 1, 0},
+  {"FAIL", GRX_VERB_FAIL, 1, 0},
+  {"F", GRX_VERB_FAIL, 1, 0},
+  {"COMMIT", GRX_VERB_COMMIT, 1, 0},
+  {"PRUNE", GRX_VERB_PRUNE, 1, 0},
+  {"SKIP", GRX_VERB_SKIP, 1, 0},
+  {"THEN", GRX_VERB_THEN, 1, 0},
+  // The one verb whose argument is the whole point: pcre2test reports
+  // `(*MARK)`, `(*MARK:)` and `(*:)` alike as "(*MARK) must have an
+  // argument".
+  {"MARK", GRX_VERB_MARK, 1, 1},
+  {NULL, 0, 0, 0},
 };
 
 /** One `(*name:` that is another spelling of a group this library has. */
@@ -1874,6 +1878,7 @@ static GRX_Result read_star_construct(GRX_Parser * parser, size_t start,
     }
 
     uint32_t argument = GRX_INDEX_NONE;
+    size_t argument_length = 0;
     if (has_argument) {
       if (!verb_table[i].takes_argument) {
         return grx_parse_fail(parser, GRX_DIAG_INVALID_GROUP_SYNTAX, start,
@@ -1884,8 +1889,9 @@ static GRX_Result read_star_construct(GRX_Parser * parser, size_t start,
       while (!grx_parse_at_end(parser) && byte_at(parser, 0) != ')') {
         parser->position++;
       }
-      GRX_Result result = grx_pattern_add_name(parser->pattern,
-          parser->text + argument_first, parser->position - argument_first,
+      argument_length = parser->position - argument_first;
+      GRX_Result result = grx_pattern_add_name(
+          parser->pattern, parser->text + argument_first, argument_length,
           &argument);
       if (result != GRX_OK) {
         return grx_parse_fail(parser, GRX_DIAG_OUT_OF_MEMORY, start, 0);
@@ -1895,13 +1901,13 @@ static GRX_Result read_star_construct(GRX_Parser * parser, size_t start,
       return grx_parse_fail(parser, GRX_DIAG_UNMATCHED_OPEN_PAREN, start, 1);
     }
 
-    if (verb_table[i].verb < 0) {
-      // `(*MARK:name)` names a position for `(*SKIP:name)` to return to and
-      // for the caller to read back. Neither is expressible yet, and a mark
-      // that is silently dropped would make `(*SKIP:x)` mean `(*SKIP)`.
-      return grx_parse_fail(parser, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, start,
+    if (verb_table[i].needs_argument && !argument_length) {
+      // An empty name is no name: `(*MARK:)` and `(*:)` are the same error
+      // as `(*MARK)`, because a mark nothing can refer to marks nothing.
+      return grx_parse_fail(parser, GRX_DIAG_INVALID_GROUP_SYNTAX, start,
           parser->position - start);
     }
+
     out->kind = GRX_NODE_CONTROL;
     out->a = (uint32_t)verb_table[i].verb;
     out->b = argument;
@@ -3195,10 +3201,13 @@ static GRX_Result pcre_check_quantifier_target(
           parser, GRX_DIAG_NOTHING_TO_REPEAT, offset, length);
 
     case GRX_NODE_CONTROL:
-      // `(*ACCEPT)*` compiles and `(*FAIL)*` does not, which is not an
-      // inconsistency: `(*FAIL)` is `(?!)` written short, and a negative
-      // lookahead is the one verb with no extent of its own.
-      if (atom->a == (uint32_t)GRX_VERB_FAIL) {
+      // `(*ACCEPT)*` compiles and every other verb repeated does not, which
+      // is not an inconsistency: `(*ACCEPT)` is the one verb that ends the
+      // match where it stands, so a quantifier on it is unreachable rather
+      // than meaningless. pcre2test reports error 109 for the other six,
+      // `(*MARK:x)*` and `(*:x)*` among them. Only FAIL was refused here
+      // until a corpus record asked about a repeated mark.
+      if (atom->a != (uint32_t)GRX_VERB_ACCEPT) {
         return grx_parse_fail(
             parser, GRX_DIAG_NOTHING_TO_REPEAT, offset, length);
       }

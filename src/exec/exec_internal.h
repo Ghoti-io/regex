@@ -39,6 +39,15 @@ struct GRX_Match {
   GRX_Engine engine;               ///< Which engine ran the last attempt.
   int matched;                     ///< Whether the last attempt matched.
   size_t steps;                    ///< Instructions the last attempt ran.
+  /**
+   * The `(*MARK:NAME)` the last attempt passed, as an index, or
+   * GRX_INDEX_NONE.
+   *
+   * An index rather than a name, because the engines compare marks and never
+   * read them; grx_match_mark() is where it becomes text, and it has the
+   * regex to look the index up in.
+   */
+  uint32_t mark;
 };
 
 /**

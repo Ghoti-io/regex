@@ -856,17 +856,77 @@ static GRX_Result resolve_name(
 }
 
 /** Lower `(*ACCEPT)` and its kin: the verb is the node's whole meaning. */
-static GRX_Result lower_verb(
-    Lowering * low, const GRX_Node * node, uint32_t * out_node) {
+/** Emit one verb node, with the mark index it names or none. */
+static GRX_Result verb_node(Lowering * low, const GRX_Node * node,
+    GRX_VerbKind kind, uint32_t mark, uint32_t * out_node) {
   GRX_Result result = add(low, GRX_IR_VERB, node, out_node);
   if (result != GRX_OK) {
     return result;
   }
 
   GRX_IRNode * verb = grx_ir_node(low->ir, *out_node);
-  verb->mode = (uint8_t)node->a;
-  verb->a = 0;
+  verb->mode = (uint8_t)kind;
+  verb->a = mark;
   return GRX_OK;
+}
+
+/**
+ * Lower a control verb, resolving the name it carries to a mark index.
+ *
+ * `(*MARK:A)` sets the mark and `(*SKIP:A)` looks for it. Every other verb
+ * that takes a name - `(*PRUNE:A)`, `(*THEN:A)`, `(*COMMIT:A)`, and
+ * `(*ACCEPT:A)` and `(*FAIL:A)` which pcre2test also accepts - means the
+ * name as a mark *and* the verb, so they lower to exactly that: a MARK
+ * followed by the bare verb. Written here rather than giving each verb a
+ * name field, because two spellings that mean the same thing should reach an
+ * engine as the same instructions.
+ */
+static GRX_Result lower_verb(
+    Lowering * low, const GRX_Node * node, uint32_t * out_node) {
+  GRX_VerbKind kind = (GRX_VerbKind)node->a;
+  uint32_t mark = GRX_INDEX_NONE;
+
+  if (node->b != GRX_INDEX_NONE) {
+    const char * name = grx_pattern_name(low->pattern, node->b);
+    if (!name) {
+      return fail(low, GRX_DIAG_INTERNAL, node);
+    }
+    GRX_Result result = grx_ir_add_mark(low->ir, name, strlen(name), &mark);
+    if (result != GRX_OK) {
+      return storage_failed(low, result, node);
+    }
+  }
+
+  // `(*SKIP:A)` is the exception: its name is what it *looks for*, not what
+  // it sets. pcre2test settles it - `/a(*SKIP:X)b|a+c/` against "aac"
+  // reports the whole string, where a SKIP that had marked its own position
+  // would have resumed at offset one and reported "ac".
+  if (mark == GRX_INDEX_NONE || kind == GRX_VERB_MARK
+      || kind == GRX_VERB_SKIP) {
+    return verb_node(low, node, kind, mark, out_node);
+  }
+
+  GRX_Result result = add(low, GRX_IR_CONCAT, node, out_node);
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  uint32_t set_mark = GRX_INDEX_NONE;
+  result = verb_node(low, node, GRX_VERB_MARK, mark, &set_mark);
+  if (result == GRX_OK) {
+    result = attach(low, *out_node, set_mark);
+  }
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  uint32_t acted = GRX_INDEX_NONE;
+  result = verb_node(low, node, kind, GRX_INDEX_NONE, &acted);
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  return attach(low, *out_node, acted);
 }
 
 /**

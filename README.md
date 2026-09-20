@@ -267,10 +267,10 @@ cannot mean "the suite ran nothing".
 | Corpus | Records | Agreeing |
 | --- | --- | --- |
 | ECMAScript, from Node 22 and test262 | 28,559 | **100%** |
-| PCRE2, from pcre2test 10.46's `testinput1` and `testinput2` | 1,884 | **94.00%** |
+| PCRE2, from pcre2test 10.46's `testinput1` and `testinput2` | 1,884 | **95.49%** |
 | Perl, from `re_tests` under Perl 5.40 | 1,707 | **95.08%** |
 
-The 197 that do not agree are listed one per line in
+The 169 that do not agree are listed one per line in
 `tests/data/vectors/known-gaps.txt`, with the construct that is missing
 written beside each. That file is a gate in both directions: a vector that
 fails and is not listed fails the suite, and a vector that *is* listed and
@@ -278,9 +278,11 @@ passes fails it too, with "remove the entry". So the list can only shrink by
 somebody noticing, and the percentages above are over the whole corpus - a
 known gap is counted and named, never counted as a pass.
 
-The largest groups are the `(*scs:` scan-substring construct (52),
-`(*MARK:name)` (28), and 21 patterns the default limits refuse where the
-reference answers them with an optimisation this library does not have.
+The largest groups are the `(*scs:` scan-substring construct (52), 21
+patterns the default limits refuse where the reference answers them with an
+optimisation this library does not have, 16 lookbehinds whose length the
+reference bounds from a backreference or a call, and 13 non-atomic
+lookarounds.
 
 **Linear time.** `(a|aa)*b`, `(a+)+b` and `(a*)*b` - the patterns that make a
 backtracking engine hang - run against 100,000 characters in around fifty

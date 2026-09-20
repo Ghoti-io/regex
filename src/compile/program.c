@@ -70,7 +70,7 @@ static const char * cond_name(uint8_t kind) {
 /** The name of a verb, for the disassembly. */
 static const char * verb_name(uint8_t kind) {
   static const char * const names[GRX_VERB_COUNT] = {
-    "ACCEPT", "FAIL", "COMMIT", "PRUNE", "SKIP", "THEN",
+    "ACCEPT", "FAIL", "COMMIT", "PRUNE", "SKIP", "THEN", "MARK",
   };
   return kind < GRX_VERB_COUNT ? names[kind] : "?";
 }

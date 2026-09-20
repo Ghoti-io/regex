@@ -65,6 +65,7 @@
 #define grx_match_engine GHOTIIO_REGEX(grx_match_engine)
 #define grx_match_group GHOTIIO_REGEX(grx_match_group)
 #define grx_match_group_named GHOTIIO_REGEX(grx_match_group_named)
+#define grx_match_mark GHOTIIO_REGEX(grx_match_mark)
 #define grx_match_span GHOTIIO_REGEX(grx_match_span)
 #define grx_match_steps GHOTIIO_REGEX(grx_match_steps)
 #define grx_node_kind_name GHOTIIO_REGEX(grx_node_kind_name)

@@ -184,6 +184,8 @@ struct GRX_Regex {
   GRX_Facts facts;                 ///< What analysis discovered.
   size_t capture_count;            ///< Capturing groups, excluding group 0.
   char ** capture_names;           ///< One per group, NULL where unnamed.
+  size_t mark_count;               ///< Distinct `(*MARK:NAME)` names.
+  char ** mark_names;              ///< One per mark, indexed as the program.
 };
 
 /**

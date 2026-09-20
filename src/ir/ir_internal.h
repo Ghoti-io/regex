@@ -152,6 +152,16 @@ typedef struct GRX_IR {
   GRX_Arena nodes;                 ///< GRX_IRNode.
   GRX_ClassTable classes;          ///< Every canonical class, by index.
   GRX_Arena names;                 ///< char; NUL-terminated, by offset.
+  /**
+   * The `(*MARK:NAME)` names, as offsets into `names`, one per distinct name.
+   *
+   * A verb reaches an engine holding an *index* into this rather than a
+   * name, because what an engine does with a mark is compare it - the SKIP
+   * that looks for it, and nothing else - and comparing an index is what
+   * keeps a string out of the matcher. The name itself is needed once, by
+   * grx_match_mark(), which has the regex to look it up in.
+   */
+  GRX_Arena marks;
   size_t capture_count;            ///< Capturing groups, excluding group 0.
   /**
    * How long a *variable*-length lookbehind body the dialect allows, or
@@ -231,6 +241,38 @@ GRX_Result grx_ir_add_name(
  * @return The NUL-terminated name, or NULL when the offset is out of range.
  */
 const char * grx_ir_name(const GRX_IR * ir, uint32_t offset);
+
+/**
+ * @brief Find or add a mark name, and report its index.
+ *
+ * Deduplicated: two `(*MARK:A)` in one pattern are one mark, so that
+ * `(*SKIP:A)` can ask "is this the mark I want" with an integer comparison.
+ *
+ * @param ir The IR.
+ * @param name The name. Need not be NUL-terminated.
+ * @param length Its length in bytes.
+ * @param out_index Receives the mark's index.
+ * @return GRX_OK, GRX_ERR_OOM, or GRX_ERR_INVALID.
+ */
+GRX_Result grx_ir_add_mark(
+    GRX_IR * ir, const char * name, size_t length, uint32_t * out_index);
+
+/**
+ * @brief How many distinct mark names the pattern has.
+ *
+ * @param ir The IR.
+ * @return The count, or 0 for a NULL IR.
+ */
+size_t grx_ir_mark_count(const GRX_IR * ir);
+
+/**
+ * @brief The name of one mark.
+ *
+ * @param ir The IR.
+ * @param index The mark index, as grx_ir_add_mark() reported it.
+ * @return The NUL-terminated name, or NULL when the index is out of range.
+ */
+const char * grx_ir_mark_name(const GRX_IR * ir, uint32_t index);
 
 /**
  * @brief Write a human-readable form of the IR.

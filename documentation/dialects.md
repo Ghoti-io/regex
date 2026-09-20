@@ -462,7 +462,6 @@ to be complete for every shipped tier.
 | PCRE2, Perl | `\X`, the extended grapheme cluster | the break rules are [plan.md](plan.md) WP-12's and are not generated yet; "any character" is not a grapheme cluster | `GRX_ERR_UNSUPPORTED` |
 | PCRE2 | `(*script_run:`, `(*sr:`, `(*asr:`, `(*scs:` | each constrains what its body may match and an ordinary group does not | `GRX_ERR_UNSUPPORTED` |
 | PCRE2, Perl | `(*napla:`, `(*naplb:`, `(?*`, `(?<*` - the non-atomic lookarounds | they differ from the ordinary ones only in what a verb inside them may do, and reading one as an ordinary lookaround would answer a different question silently | `GRX_ERR_UNSUPPORTED` |
-| PCRE2, Perl | `(*MARK:name)` and a name on `(*PRUNE)`, `(*SKIP)`, `(*THEN)` | no API reads a mark back, and a dropped name would make `(*SKIP:x)` mean `(*SKIP)` | `GRX_ERR_UNSUPPORTED` |
 | PCRE2, Perl | `\C`, one code unit | the subject here is code points, and a construct that can land inside a character has no honest approximation | `GRX_ERR_UNSUPPORTED` |
 | PCRE2 | `(*LIMIT_MATCH=n)` and kin are accepted and not applied | the limits are the caller's and this front end has no writable copy; lowering one from inside a pattern is later work | - |
 | PCRE2, Perl | `(?(VERSION>=n.n))` is answered against 10.46 | this library emulates that version rather than being it | - |

@@ -66,6 +66,25 @@ typedef enum {
    * on the undo stack rather than an action at the instruction.
    */
   FRAME_VERB,
+  /**
+   * A mark to unwind: `pc` is the mark-stack depth to go back to.
+   *
+   * The mark itself lives on a stack of its own rather than in this frame,
+   * because two different readers want two different things from it - a
+   * `(*SKIP:NAME)` wants the position of the most recent mark of one name,
+   * and restoring on backtrack wants the previous mark whatever its name -
+   * and one `uint32_t` cannot answer both without a scan.
+   */
+  FRAME_MARK,
+  /**
+   * A `(*SKIP:NAME)` to resume from: `pc` is the mark index it wants.
+   *
+   * Separate from FRAME_VERB because the position it resumes at is not its
+   * own - it is wherever the named mark was set, which is only known when
+   * backtracking arrives and the mark stack has been cut back to what is
+   * still live.
+   */
+  FRAME_SKIP_MARK,
 } FrameKind;
 
 /**
@@ -83,6 +102,12 @@ typedef enum {
   VERB_STOP_SKIP,    ///< The same, and the next start is `skip_to`.
   VERB_STOP_COMMIT,  ///< No more attempts from any starting position.
 } VerbStop;
+
+/** One mark that has been passed: which name, and where. */
+typedef struct {
+  uint32_t index;   ///< Index into the regex's mark-name table.
+  size_t position;  ///< Where the `(*MARK:NAME)` was reached.
+} MarkEntry;
 
 /** One entry of the backtrack stack. */
 typedef struct {
@@ -140,6 +165,20 @@ typedef struct {
 
   VerbStop verb_stop;    ///< What a control verb asked for, or VERB_NONE.
   size_t skip_to;        ///< Where `(*SKIP)` fired, for VERB_STOP_SKIP.
+
+  /**
+   * The marks passed on the path being explored, innermost last.
+   *
+   * `(*SKIP:NAME)` searches this from the top down for the name it wants, so
+   * the entries have to be the *live* ones - a mark on a path that has since
+   * been abandoned is not a place to resume from. FRAME_MARK is what makes
+   * them live: it records the depth to cut back to.
+   */
+  MarkEntry * marks;
+  size_t mark_depth;
+  size_t mark_capacity;
+  uint32_t mark;          ///< The last mark still on this path, or NONE.
+  uint32_t nomatch_mark;  ///< The last mark reached at all, or NONE.
 } Backtrack;
 
 /**
@@ -258,6 +297,58 @@ static int push(Backtrack * bt, FrameKind kind, uint32_t pc, size_t position) {
   return 1;
 }
 
+/**
+ * Record a mark, and the point backtracking should forget it at.
+ *
+ * Two pushes, and the order matters: the frame records the depth *before*
+ * the entry goes on, so unwinding to it removes exactly this mark.
+ */
+static int push_mark(Backtrack * bt, uint32_t index, size_t position) {
+  if (!push(bt, FRAME_MARK, (uint32_t)bt->mark_depth, position)) {
+    return 0;
+  }
+
+  const GRX_Limits * limits = bt->request->limits;
+  if (bt->mark_depth == bt->mark_capacity) {
+    size_t capacity
+        = bt->mark_capacity ? bt->mark_capacity * 2 : GRX_BACKTRACK_MIN_STACK;
+    if (limits->max_backtrack && capacity > limits->max_backtrack) {
+      capacity = limits->max_backtrack;
+    }
+    if (bt->mark_depth == capacity) {
+      bt->failure = GRX_ERR_LIMIT;
+      return 0;
+    }
+    MarkEntry * grown = gcu_allocator_realloc(
+        bt->allocator, bt->marks, capacity * sizeof(MarkEntry));
+    if (!grown) {
+      bt->failure = GRX_ERR_OOM;
+      return 0;
+    }
+    bt->marks = grown;
+    bt->mark_capacity = capacity;
+  }
+
+  bt->marks[bt->mark_depth].index = index;
+  bt->marks[bt->mark_depth].position = position;
+  bt->mark_depth++;
+  bt->mark = index;
+  bt->nomatch_mark = index;
+  return 1;
+}
+
+/** Where the most recent live `(*MARK:NAME)` of one name was reached. */
+static int find_mark(const Backtrack * bt, uint32_t index, size_t * out_position) {
+  for (size_t i = bt->mark_depth; i > 0; i--) {
+    if (bt->marks[i - 1].index == index) {
+      *out_position = bt->marks[i - 1].position;
+      return 1;
+    }
+  }
+
+  return 0;
+}
+
 /** Record a slot's old value so that backtracking past this point restores it. */
 static int save_slot(Backtrack * bt, size_t index) {
   if (index >= bt->captures + bt->registers) {
@@ -290,6 +381,15 @@ static int backtrack(Backtrack * bt, uint32_t * out_pc, size_t * out_position,
       case FRAME_CALL:
         bt->call_depth = frame.pc;
         break;
+      case FRAME_MARK:
+        // The mark is no longer on the path. `nomatch_mark` is deliberately
+        // not restored: what a failed match reports is the last mark it
+        // reached, not the last one it was still standing on.
+        bt->mark_depth = frame.pc;
+        bt->mark = bt->mark_depth
+            ? bt->marks[bt->mark_depth - 1].index
+            : GRX_INDEX_NONE;
+        break;
       case FRAME_VERB:
         // Backtracking has returned to a control verb. What it asks for
         // depends on which one, and all four discard what is still on the
@@ -304,6 +404,13 @@ static int backtrack(Backtrack * bt, uint32_t * out_pc, size_t * out_position,
             }
             if (inner.kind == FRAME_CALL) {
               bt->call_depth = inner.pc;
+              continue;
+            }
+            if (inner.kind == FRAME_MARK) {
+              bt->mark_depth = inner.pc;
+              bt->mark = bt->mark_depth
+                  ? bt->marks[bt->mark_depth - 1].index
+                  : GRX_INDEX_NONE;
               continue;
             }
             if (inner.kind == FRAME_ALTERNATIVE) {
@@ -324,6 +431,19 @@ static int backtrack(Backtrack * bt, uint32_t * out_pc, size_t * out_position,
         bt->skip_to = frame.position;
         bt->depth = floor;
         return 0;
+      case FRAME_SKIP_MARK: {
+        size_t where = 0;
+        if (!find_mark(bt, frame.pc, &where)) {
+          // pcre2pattern: a `(*SKIP:NAME)` with no `(*MARK:NAME)` set is
+          // ignored. Not treated as a bare `(*SKIP)`, which would resume at
+          // the verb's own position and report a different match.
+          break;
+        }
+        bt->verb_stop = VERB_STOP_SKIP;
+        bt->skip_to = where;
+        bt->depth = floor;
+        return 0;
+      }
       case FRAME_ATOMIC:
       default:
         break;
@@ -866,9 +986,35 @@ static int run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
             ok = 0;
             break;
 
+          case GRX_VERB_MARK:
+            // The one verb that acts on the way through. Everything it does
+            // is leave a name behind, and the frame is what takes it away
+            // again when this path is abandoned.
+            if (!push_mark(bt, inst->x, position)) {
+              return 0;
+            }
+            pc++;
+            continue;
+
+          case GRX_VERB_SKIP:
+            // A named SKIP resumes where its mark was set, not where it
+            // stands, so it needs a frame of its own. An unnamed one is one
+            // of the four below.
+            if (inst->x != GRX_INDEX_NONE) {
+              if (!push(bt, FRAME_SKIP_MARK, inst->x, position)) {
+                return 0;
+              }
+              pc++;
+              continue;
+            }
+            if (!push(bt, FRAME_VERB, (uint32_t)inst->mode, position)) {
+              return 0;
+            }
+            pc++;
+            continue;
+
           case GRX_VERB_THEN:
           case GRX_VERB_PRUNE:
-          case GRX_VERB_SKIP:
           case GRX_VERB_COMMIT:
           default:
             // None of the four does anything when it is reached. They act
@@ -1016,6 +1162,11 @@ GRX_Result grx_exec_backtrack(
     .call_capacity = 0,
     .verb_stop = VERB_NONE,
     .skip_to = 0,
+    .marks = NULL,
+    .mark_depth = 0,
+    .mark_capacity = 0,
+    .mark = GRX_INDEX_NONE,
+    .nomatch_mark = GRX_INDEX_NONE,
   };
   if (!bt.allocator) {
     bt.allocator = grx_allocator_default();
@@ -1057,6 +1208,11 @@ GRX_Result grx_exec_backtrack(
     size_t end = 0;
     bt.call_depth = 0;
     bt.verb_stop = VERB_NONE;
+    // The mark stack is the path's, and each attempt is a new path.
+    // `nomatch_mark` is not reset: what a failed search reports is the last
+    // mark it reached anywhere, which is pcre2_get_mark()'s answer too.
+    bt.mark_depth = 0;
+    bt.mark = GRX_INDEX_NONE;
     if (run(&bt, 0, start, 0, 1, &end)) {
       *out_matched = 1;
       break;
@@ -1094,6 +1250,12 @@ GRX_Result grx_exec_backtrack(
     start += width;
   }
 
+  if (result == GRX_OK && request->match) {
+    // pcre2_get_mark(): the last mark still standing on the path that
+    // matched, or - when nothing matched - the last one reached at all.
+    request->match->mark = *out_matched ? bt.mark : bt.nomatch_mark;
+  }
+
   if (result == GRX_OK && *out_matched && request->match) {
     GRX_Match * match = request->match;
     for (size_t i = 0; i < match->count; i++) {
@@ -1119,5 +1281,6 @@ GRX_Result grx_exec_backtrack(
   gcu_allocator_free(bt.allocator, bt.call_return);
   gcu_allocator_free(bt.allocator, bt.call_group);
   gcu_allocator_free(bt.allocator, bt.call_slots);
+  gcu_allocator_free(bt.allocator, bt.marks);
   return result;
 }

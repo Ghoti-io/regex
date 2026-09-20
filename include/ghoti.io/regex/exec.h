@@ -348,6 +348,23 @@ GRX_API GRX_Result grx_match_group_named(
     const GRX_Match * match, const char * name, GRX_Capture * out_capture);
 
 /**
+ * @brief The `(*MARK:NAME)` the last attempt passed through.
+ *
+ * PCRE2's pcre2_get_mark(). After a match, this is the last mark still
+ * standing on the path that matched - a mark passed on a branch that was
+ * then abandoned is not one. After a failure it is the last mark reached at
+ * all, which is what makes `(*MARK)` useful for saying *why* a pattern did
+ * not match.
+ *
+ * The pointer belongs to the regex the match was created for and is valid
+ * for as long as it is.
+ *
+ * @param match The match object. NULL is invalid.
+ * @return The mark name, or NULL when the attempt passed none.
+ */
+GRX_API const char * grx_match_mark(const GRX_Match * match);
+
+/**
  * @brief Write a human-readable form of a match.
  *
  * For debugging and for tests; the format is not stable across versions.

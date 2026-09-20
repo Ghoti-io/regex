@@ -70,6 +70,42 @@ static GRX_Result copy_capture_names(GRX_Regex * regex, const GRX_IR * ir) {
   return GRX_OK;
 }
 
+/**
+ * Copy the mark names out of the IR, so a match can be asked which it passed.
+ *
+ * One `char *` per distinct `(*MARK:NAME)`, in the order lowering numbered
+ * them, because what an instruction carries is that number.
+ */
+static GRX_Result copy_mark_names(GRX_Regex * regex, const GRX_IR * ir) {
+  regex->mark_count = grx_ir_mark_count(ir);
+  if (!regex->mark_count) {
+    return GRX_OK;
+  }
+
+  regex->mark_names = gcu_allocator_calloc(
+      regex->allocator, regex->mark_count, sizeof(char *));
+  if (!regex->mark_names) {
+    regex->mark_count = 0;
+    return GRX_ERR_OOM;
+  }
+
+  for (size_t i = 0; i < regex->mark_count; i++) {
+    const char * name = grx_ir_mark_name(ir, (uint32_t)i);
+    if (!name) {
+      continue;
+    }
+    size_t length = strlen(name);
+    char * copy = gcu_allocator_malloc(regex->allocator, length + 1);
+    if (!copy) {
+      return GRX_ERR_OOM;
+    }
+    memcpy(copy, name, length + 1);
+    regex->mark_names[i] = copy;
+  }
+
+  return GRX_OK;
+}
+
 GRX_Result grx_compile_program(const GRX_Pattern * pattern,
     const GRX_Limits * limits, const GRX_Allocator * allocator,
     GRX_Error * out_error, GRX_Regex ** out_regex) {
@@ -97,6 +133,8 @@ GRX_Result grx_compile_program(const GRX_Pattern * pattern,
   regex->options = pattern->options;
   regex->capture_count = pattern->capture_count;
   regex->capture_names = NULL;
+  regex->mark_count = 0;
+  regex->mark_names = NULL;
   grx_program_init(&regex->program, allocator, limits);
   grx_facts_init(&regex->facts);
 
@@ -129,6 +167,9 @@ GRX_Result grx_compile_program(const GRX_Pattern * pattern,
   }
   if (result == GRX_OK) {
     result = copy_capture_names(regex, ir);
+    if (result == GRX_OK) {
+      result = copy_mark_names(regex, ir);
+    }
     if (result != GRX_OK) {
       result = grx_error_set(
           out_error, result, GRX_DIAG_OUT_OF_MEMORY, GRX_NPOS, 0);
@@ -321,6 +362,12 @@ void grx_regex_free(GRX_Regex * regex) {
       gcu_allocator_free(allocator, regex->capture_names[i]);
     }
     gcu_allocator_free(allocator, regex->capture_names);
+  }
+  if (regex->mark_names) {
+    for (size_t i = 0; i < regex->mark_count; i++) {
+      gcu_allocator_free(allocator, regex->mark_names[i]);
+    }
+    gcu_allocator_free(allocator, regex->mark_names);
   }
   grx_program_clear(&regex->program);
   gcu_allocator_free(allocator, regex);

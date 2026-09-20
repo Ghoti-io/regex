@@ -17,8 +17,6 @@
 # that begins "not yet classified" is one nobody has looked at, and is meant
 # to be read as the admission it is.
 pcre		( {32742} {42})(?<!\\1{65481})		a repeat count the reference folds and this library expands
-pcre		((*MARK:A))++a(*SKIP:B)b		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
-pcre		((?x)(*:0))#(?'		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
 pcre		()()()(?<=ab(*ACCEPT)(*scs:(1,2,3))cd|efg)xyz		`(*scs:` scan substring: refused, it constrains the body and a group does not
 pcre		()()()(?<=ab(*scs:(1,2,3))cd)xyz		`(*scs:` scan substring: refused, it constrains the body and a group does not
 pcre		()()(*scs:(1,2,1,2,1,2,2,'XYZ'))		`(*scs:` scan substring: refused, it constrains the body and a group does not
@@ -26,10 +24,6 @@ pcre		()(*scs:(1)+a)		`(*scs:` scan substring: refused, it constrains the body a
 pcre		()(*scs:(1,1,1,1,1,1,1,1,2))		`(*scs:` scan substring: refused, it constrains the body and a group does not
 pcre		()(?<=(?0))		lookbehind length: the reference computes a bound from a backreference or a call and this library does not
 pcre		()(\\w++)=(*scs:(2)(?=abc))(\\w++)		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		(*:\\)?		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
-pcre		(*:ab)*		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
-pcre		(*:ab\\t(d\\)c)xxx		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
-pcre		(*:pear)apple		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
 pcre		(*napla:)+		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
 pcre		(*napla:a(*ACCEPT)zz|(.))\\1..		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
 pcre		(*napla:a|(*COMMIT)(.))\\1\\1		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
@@ -50,13 +44,9 @@ pcre		(*scs:(1)a|b)		`(*scs:` scan substring: refused, it constrains the body an
 pcre		(*scs:(<name>)a|b)		`(*scs:` scan substring: refused, it constrains the body and a group does not
 pcre		(?(*napla:xx)bc)		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
 pcre		(?(*script_run:xxx)zzz)		`(*script_run:`: refused, it constrains the body and a group does not
-pcre		(?:(a(*MARK:X)a+(*SKIP:X)b)){0}(?:(?1)|aac)		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
 pcre		(?<*(.)..|(.)...)(\\1|\\2)		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
 pcre		(?<=(abc))(def)(*scs:(2)(*scs:(1)(*SKIP)x)).+|(ef.+)		`(*scs:` scan substring: refused, it constrains the body and a group does not
 pcre		(?<=b(?1))xyz(b+)pqrstuvew		lookbehind length: the reference computes a bound from a backreference or a call and this library does not
-pcre		(?>a(*:1))(?>b(*:1))(*SKIP:1)x|.*		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
-pcre		(?>a(*:1))(?>b)(*SKIP:1)x|.*		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
-pcre		(?>this line\\s*((?R)|)(*MARK:A))		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
 pcre		(?|(?<a>A)|(?<b>B))		branch reset: the numbering is shared, and the names and references inside one are not checked against it yet
 pcre		(?|([ab]))...(?<=\\1)z		branch reset: the numbering is shared, and the names and references inside one are not checked against it yet
 pcre		(X{65535})(?<=\\1{32770})		a repeat count the reference folds and this library expands
@@ -94,7 +84,6 @@ pcre		\\A(?*.*\\b(\\w++))(?>.*?\\b\\1\\b){3}		non-atomic lookaround: refused unt
 pcre		\\[()]{65535}()		a repeat count the reference folds and this library expands
 pcre		\\[()]{65535}(?<A>)		a repeat count the reference folds and this library expands
 pcre		\\b(\\w++)(*scs:(1)^)		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		\\d{0,3}(*:abc)(?C1)xxx		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
 pcre		^(([a-z]([a-z]*+))(*scs:(2).(?=(?1)|$)\\3)|#){5}		`(*scs:` scan substring: refused, it constrains the body and a group does not
 pcre		^(?:(.){20,30}#|([a-z]++)(*scs:(1)(a+)(*THEN)b){20,30}#|(.){20,30}!)		`(*scs:` scan substring: refused, it constrains the body and a group does not
 pcre		^(?|(\\*)(*napla:\\S*_(\\2?+.+))|(\\w)(?=\\S*_(\\2?+\\1)))+_\\2$		non-atomic lookaround: refused until a verb inside one can tell it from the ordinary kind
@@ -105,23 +94,6 @@ pcre		^([a-z]++)(*scs:(1)((a+)(*THEN)b)|(a+)(*THEN)c|(aa))		`(*scs:` scan substr
 pcre		^([a-z]++)(*scs:(1)(a+)(*THEN)b|(a+)(*THEN)c|(aa))		`(*scs:` scan substring: refused, it constrains the body and a group does not
 pcre		^([a-z]++)(*scs:(1)(abc|(a+)(*THEN)b))?		`(*scs:` scan substring: refused, it constrains the body and a group does not
 pcre		^([a-z]++)(?:((?6))|((?7))|((?8))|(#))(?(DEFINE)((*scs:(1)abc(*PRUNE)d))((*scs:(1)abc(*COMMIT)e))((*scs:(1)abc(*SKIP)f)))		`(*scs:` scan substring: refused, it constrains the body and a group does not
-pcre		^(a(*:A)(d|e(*:B))z|aeq)		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
-pcre		a(*MARK)b		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
-pcre		a(*MARK:A)aa(*MARK:A)a(*SKIP:A)b|a+c		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
-pcre		a(*MARK:A)aa(*PRUNE:A)a(*SKIP:A)b|a+c		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
-pcre		a(?:(*:X))(*SKIP:X)(*F)|(.)		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
-pcre		a(?=.(*:X))(*SKIP:X)(*F)|(.)		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
-pcre		a(?>(*:X))(*SKIP:X)(*F)|(.)		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
-pcre		a+(*:Z)b(*COMMIT:X)(*SKIP:X)c|.*		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
-pcre		a+(*:Z)b(*COMMIT:X)(*SKIP:Z)c|.*		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
-pcre		aaa(*MARK:A)a(*SKIP:A)b|a+c		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
-pcre		aaaa(*:N)a(*SKIP:N)(*PRUNE)b|a+c		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
-pcre		aaaaa(*:m)(*MARK:m)(*PRUNE)(*SKIP:m)m|a+		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
-pcre		aaaaa(*:m)(*PRUNE:m)(*SKIP:m)m|a+		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
-pcre		aaaaa(*:n)(*MARK:m)(*PRUNE)(*SKIP:m)m|a+		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
-pcre		aaaaa(*:n)(*PRUNE:m)(*SKIP:m)m|a+		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
-pcre		abc(*:)pqr		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
-pcre		abc(*MARK:)pqr		`(*MARK:name)`: no API reads a mark back, so the name would be dropped
 pcre		f(?:(*scs:(+1,+2)(?<=(.)))|()){16}		`(*scs:` scan substring: refused, it constrains the body and a group does not
 pcre		x(?|(*scs:(1)(?<=(.)))|()){8}		`(*scs:` scan substring: refused, it constrains the body and a group does not
 pcre		z{65536}		refused by the default limits; the reference answers it with an optimisation this library does not have

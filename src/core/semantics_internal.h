@@ -144,6 +144,16 @@ typedef enum {
   GRX_VERB_PRUNE,      ///< `(*PRUNE)`: no further attempt at this position.
   GRX_VERB_SKIP,       ///< `(*SKIP)`: resume searching past here.
   GRX_VERB_THEN,       ///< `(*THEN)`: advance to the next alternative.
+  /**
+   * `(*MARK:NAME)`: name this position.
+   *
+   * The only verb that changes nothing about where the match goes. What it
+   * does is leave a name behind, for two readers: `(*SKIP:NAME)`, which
+   * resumes the search at the position the most recent mark of that name was
+   * set, and grx_match_mark(), which reports the last one the answer passed
+   * through.
+   */
+  GRX_VERB_MARK,
   GRX_VERB_COUNT       ///< Closes the enum; not a verb.
 } GRX_VerbKind;
 

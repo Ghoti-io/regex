@@ -13,6 +13,7 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "ir_internal.h"
 
@@ -90,7 +91,7 @@ static const char * cond_name(uint8_t kind) {
 /** The name of a verb, for the dump. */
 static const char * verb_name(uint8_t kind) {
   static const char * const names[GRX_VERB_COUNT] = {
-    "ACCEPT", "FAIL", "COMMIT", "PRUNE", "SKIP", "THEN",
+    "ACCEPT", "FAIL", "COMMIT", "PRUNE", "SKIP", "THEN", "MARK",
   };
   return kind < GRX_VERB_COUNT ? names[kind] : "?";
 }
@@ -149,6 +150,7 @@ GRX_Result grx_ir_create(const GRX_Allocator * allocator,
       GRX_DIAG_LIMIT_NODES);
   grx_class_table_init(&ir->classes, allocator, limits->max_class_ranges);
   grx_arena_init(&ir->names, allocator, sizeof(char), 0, GRX_DIAG_NONE);
+  grx_arena_init(&ir->marks, allocator, sizeof(uint32_t), 0, GRX_DIAG_NONE);
 
   *out_ir = ir;
   return GRX_OK;
@@ -246,6 +248,45 @@ const char * grx_ir_name(const GRX_IR * ir, uint32_t offset) {
   }
 
   return GRX_ARENA_AT(const char, &ir->names, offset);
+}
+
+GRX_Result grx_ir_add_mark(
+    GRX_IR * ir, const char * name, size_t length, uint32_t * out_index) {
+  if (!ir || (!name && length) || !out_index) {
+    return GRX_ERR_INVALID;
+  }
+
+  for (size_t i = 0; i < ir->marks.count; i++) {
+    const uint32_t * offset = GRX_ARENA_AT(const uint32_t, &ir->marks, i);
+    const char * existing = offset ? grx_ir_name(ir, *offset) : NULL;
+    if (existing && strlen(existing) == length
+        && memcmp(existing, name, length) == 0) {
+      *out_index = (uint32_t)i;
+      return GRX_OK;
+    }
+  }
+
+  uint32_t offset = GRX_INDEX_NONE;
+  GRX_Result result = grx_ir_add_name(ir, name, length, &offset);
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  *out_index = (uint32_t)ir->marks.count;
+  return grx_arena_append(&ir->marks, &offset, NULL);
+}
+
+size_t grx_ir_mark_count(const GRX_IR * ir) {
+  return ir ? ir->marks.count : 0;
+}
+
+const char * grx_ir_mark_name(const GRX_IR * ir, uint32_t index) {
+  if (!ir || index >= ir->marks.count) {
+    return NULL;
+  }
+
+  const uint32_t * offset = GRX_ARENA_AT(const uint32_t, &ir->marks, index);
+  return offset ? grx_ir_name(ir, *offset) : NULL;
 }
 
 /** Write the payload that belongs to this node's kind. */
@@ -397,5 +438,6 @@ void grx_ir_free(GRX_IR * ir) {
   grx_arena_clear(&ir->nodes);
   grx_class_table_clear(&ir->classes);
   grx_arena_clear(&ir->names);
+  grx_arena_clear(&ir->marks);
   gcu_allocator_free(allocator, ir);
 }

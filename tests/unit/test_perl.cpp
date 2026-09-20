@@ -97,6 +97,38 @@ Found search(const std::string & pattern, const std::string & subject,
   return found;
 }
 
+/** The mark the attempt passed, or "" when it passed none. */
+std::string mark_of(const std::string & pattern, const std::string & subject,
+    GRX_Syntax syntax = GRX_SYNTAX_PCRE) {
+  Attempt attempt = compile(pattern, syntax);
+  if (attempt.result != GRX_OK) {
+    return "compile failed";
+  }
+
+  GRX_Match * match = nullptr;
+  grx_match_create(attempt.regex, nullptr, &match);
+  int matched = 0;
+  grx_regex_search(attempt.regex, subject.data(), subject.size(), 0,
+      GRX_ENGINE_AUTO, nullptr, match, &matched);
+  const char * mark = grx_match_mark(match);
+  std::string answer = mark ? mark : "";
+  grx_match_destroy(match);
+  grx_regex_free(attempt.regex);
+  return answer;
+}
+
+/** Where the whole match landed, as "start-end", or "nomatch". */
+std::string span_of(const std::string & pattern, const std::string & subject,
+    GRX_Syntax syntax = GRX_SYNTAX_PCRE) {
+  Found found = search(pattern, subject, syntax);
+  if (found.result != GRX_OK) {
+    return "error";
+  }
+  return found.matched
+      ? std::to_string(found.start) + "-" + std::to_string(found.end)
+      : "nomatch";
+}
+
 /** The span of one capturing group, or "-" when it did not participate. */
 std::string group_of(const std::string & pattern, const std::string & subject,
     size_t group, GRX_Syntax syntax = GRX_SYNTAX_PCRE) {
@@ -597,7 +629,6 @@ TEST(Perl, TheConstructsThisLibraryRefusesSayWhyAndNotSomethingElse) {
     "\\C",                     // one code unit
     "(*script_run:abc)",       // constrains the body
     "(*napla:a)",              // a non-atomic lookahead
-    "(*MARK:name)",            // no API reads a mark back
   };
 
   for (const char * pattern : refused) {
@@ -911,6 +942,72 @@ TEST(Perl, EmbeddedCodeIsPerlsAndPcre2HasNoneAtAll) {
   EXPECT_EQ(compile("a(??{ 1 })b", GRX_SYNTAX_PERL).result,
       GRX_ERR_UNSUPPORTED);
   EXPECT_EQ(compile("a(?{)b", GRX_SYNTAX_PCRE).result, GRX_ERR_SYNTAX);
+}
+
+TEST(Perl, AMarkNamesAPositionAndTheMatchReportsIt) {
+  // pcre2_get_mark(), and every answer here is pcre2test's with `mark`.
+  EXPECT_EQ(mark_of("a(*MARK:A)b|a(*MARK:B)c", "ab"), "A");
+  EXPECT_EQ(mark_of("a(*MARK:A)b|a(*MARK:B)c", "ac"), "B");
+
+  // A mark on a branch that was abandoned is not on the path that matched,
+  // so it is not reported: `X(*MARK:m)Y|.*` matches "XZ" through the second
+  // branch, and pcre2test prints no MK line for it.
+  EXPECT_EQ(mark_of("X(*MARK:m)Y|.*", "XZ"), "");
+
+  // After a failure it is the last mark *reached*, which is what makes a
+  // mark useful for saying why a pattern did not match.
+  EXPECT_EQ(mark_of("a(*MARK:A)b|a(*MARK:B)c", "ad"), "B");
+
+  // Every verb that takes a name sets it, except the one whose name is a
+  // question rather than an answer.
+  EXPECT_EQ(mark_of("a(*PRUNE:X)b", "ab"), "X");
+  EXPECT_EQ(mark_of("a(*THEN:X)b", "ab"), "X");
+  EXPECT_EQ(mark_of("a(*COMMIT:X)b", "ab"), "X");
+  EXPECT_EQ(mark_of("a(*ACCEPT:X)b", "ab"), "X");
+  EXPECT_EQ(mark_of("a(*SKIP:X)b", "ab"), "");
+}
+
+TEST(Perl, ANamedSkipResumesWhereItsMarkWasSet) {
+  // `(*SKIP:NAME)` restarts the search at the position the most recent
+  // `(*MARK:NAME)` was reached, not at its own position. pcre2test reports
+  // "aaac" for the first of these and "ac" for the second, and the
+  // difference is entirely which mark the name picks out.
+  EXPECT_EQ(span_of("a(*MARK:A)aa(*MARK:B)a(*SKIP:A)b|a+c", "aaaac"), "1-5");
+  EXPECT_EQ(span_of("aaa(*MARK:A)a(*SKIP:A)b|a+c", "aaaac"), "3-5");
+
+  // A name no mark has is *ignored*, not treated as a bare `(*SKIP)`. The
+  // two differ here: pcre2test reports the whole subject for the first and
+  // no match at all for the second, because a bare `(*SKIP)` forbids every
+  // attempt that starts before it as well as the one it fired on.
+  EXPECT_EQ(span_of("a(*SKIP:X)b|a+c", "aac"), "0-3");
+  EXPECT_EQ(span_of("a(*SKIP)b|a+c", "aac"), "nomatch");
+}
+
+TEST(Perl, AMarkMustHaveAName) {
+  // pcre2test reports all three as "(*MARK) must have an argument": a mark
+  // nothing can refer to marks nothing.
+  EXPECT_EQ(compile_result("a(*MARK)b"), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("abc(*MARK:)pqr"), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("abc(*:)pqr"), GRX_ERR_SYNTAX);
+
+  // `(*:NAME)` is `(*MARK:NAME)` written short, and works the same way.
+  EXPECT_EQ(mark_of("a(*:A)b", "ab"), "A");
+}
+
+TEST(Perl, OnlyAcceptMayBeQuantified) {
+  // `(*ACCEPT)` is the one verb that ends the match where it stands, so a
+  // quantifier on it is unreachable rather than meaningless. pcre2test
+  // reports "quantifier does not follow a repeatable item" for the other
+  // six, and only `(*FAIL)` was refused here until a corpus record asked
+  // about a repeated mark.
+  EXPECT_EQ(compile_result("a(*ACCEPT)*b"), GRX_OK);
+  for (const char * verb : {"FAIL", "COMMIT", "PRUNE", "SKIP", "THEN",
+           "MARK:x"}) {
+    EXPECT_EQ(compile_result(std::string("a(*") + verb + ")*b"),
+        GRX_ERR_SYNTAX)
+        << verb;
+  }
+  EXPECT_EQ(compile_result("a(*:x)*b"), GRX_ERR_SYNTAX);
 }
 
 int main(int argc, char ** argv) {

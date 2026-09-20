@@ -139,7 +139,7 @@ static const char * repeat_mode_name(uint32_t mode) {
 /** The name of a verb, for the dump. */
 static const char * verb_name(uint32_t kind) {
   static const char * const names[GRX_VERB_COUNT] = {
-    "ACCEPT", "FAIL", "COMMIT", "PRUNE", "SKIP", "THEN",
+    "ACCEPT", "FAIL", "COMMIT", "PRUNE", "SKIP", "THEN", "MARK",
   };
   return kind < GRX_VERB_COUNT ? names[kind] : "?";
 }
