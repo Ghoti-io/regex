@@ -270,10 +270,10 @@ cannot mean "the suite ran nothing".
 | ECMAScript, from Node 22 and test262 | 28,559 | **100%** |
 | PCRE2, from pcre2test 10.46's `testinput1` and `testinput2` | 1,869 | **100%** |
 | Perl, from `re_tests` under Perl 5.40, and generated boundary vectors | 2,600 | **99.69%** |
-| GNU ERE, from Spencer's test set answered by glibc 2.41 | 270 | **98.15%** |
-| GNU BRE, the same set read as a basic RE | 159 | **99.37%** |
-| POSIX ERE, the same set where glibc 2.41 and musl 1.2.6 agree | 245 | **97.96%** |
-| POSIX BRE, the same set read as a basic RE | 135 | **99.26%** |
+| GNU ERE, from Spencer's test set answered by glibc 2.41 | 270 | **100%** |
+| GNU BRE, the same set read as a basic RE | 159 | **100%** |
+| POSIX ERE, the same set where glibc 2.41 and musl 1.2.6 agree | 245 | **100%** |
+| POSIX BRE, the same set read as a basic RE | 135 | **100%** |
 
 The POSIX rows are measured differently, and the difference is the point.
 glibc's `regcomp` is GNU - it accepts `\|`, `\+`, `\w` and `\<` in a basic
@@ -288,7 +288,7 @@ sharing no code agree, that is the strongest evidence this machine can offer
 for what POSIX means in practice; where they differ, the question is recorded
 as open rather than settled by picking a side.
 
-The 20 that do not agree are listed one per line in
+The 8 that do not agree are listed one per line in
 `tests/data/vectors/known-gaps.txt`, with the reason written beside each. That file is a gate in both directions: a vector that
 fails and is not listed fails the suite; a vector that *is* listed and passes
 fails it too, with "remove the entry"; and an entry naming a record the
@@ -296,24 +296,20 @@ corpus no longer has fails it as well. So the list can only shrink by
 somebody noticing, and the percentages above are over the whole corpus - a
 known gap is counted and named, never counted as a pass.
 
-None of them is a construct that is missing. Eight are Perl's: six turn on
-what a *failed* attempt leaves in the capture slots, which is a fact about
-where Perl's own engine restores an offset rather than a rule a second engine
-can follow, and two are a branch reset defect this Perl has and
+None of them is a construct that is missing, and all eight are Perl's: six
+turn on what a *failed* attempt leaves in the capture slots, which is a fact
+about where Perl's own engine restores an offset rather than a rule a second
+engine can follow, and two are a branch reset defect this Perl has and
 [#24577](https://github.com/Perl/perl5/issues/24577) already records.
 
-The other twelve are the POSIX submatch rules - the same six questions asked
-twice, once through the GNU rows and once through the POSIX ones - and they
-are scheduled rather than unexplained. Ten differ only in *which* iteration
-of a repeat each group ends up holding; the overall match agrees. That needs
-the tagged-transition machinery WP-26 names and defers past M4, and the
-second oracle is what raised its standing: musl's regex *is* that machinery,
-so where it and glibc agree the expectation is the algorithm's own rather
-than one implementation's habit. The other two are the one question that
-changes an extent: POSIX wants the leftmost-**longest** match and both
-engines here find the leftmost-first, which is WP-24. glibc and musl agree
-about that too. The profile already says `GRX_PREFER_LEFTMOST_LONGEST`; no
-engine reads it yet.
+The POSIX and GNU rows have no gaps left. Twelve of them closed in one
+session and eleven were mislabelled: one was leftmost-longest, which the
+profile had asked for since the table was written and no engine read
+(WP-24), and ten were read as needing the tagged-transition machinery WP-26
+defers and turned out to be a single empty-iteration rule that glibc and musl
+both state plainly - an empty iteration runs while the repeat has consumed
+nothing and not after. `(a*)*` against "b" and `(a|)*` against "aaaa" are the
+two halves of it.
 
 **Linear time.** `(a|aa)*b`, `(a+)+b` and `(a*)*b` - the patterns that make a
 backtracking engine hang - run against 100,000 characters in around fifty

@@ -345,21 +345,29 @@ parser - is the group opener here, the closer, the alternation, the interval
 `REG_NEWLINE` is only half done, and section 6 of [dialects.md](dialects.md)
 says which half.
 
-**WP-24 Leftmost-longest.** *engines, M.* The Pike VM's longest mode;
-the backtracker's exhaustive mode for BRE backreferences (exponential, and
-bounded); the documented submatch approximation. *Depends on:* WP-07,
-WP-08.
+**WP-24 Leftmost-longest.** *engines, M.* **Landed.** The Pike VM's
+longest mode; the backtracker's exhaustive mode for BRE backreferences
+(exponential, and bounded); the documented submatch approximation.
+*Depends on:* WP-07, WP-08.
 
-**Next**, and now measured twice: one pattern of Spencer's set turns on it -
-`\(ab*\)[ab]*\1` against "ababaaa", where both engines here report the
-first four characters. glibc reports the whole string, and so does musl,
-which shares no code with it, so this is a rule rather than one
-implementation's habit. It is two vectors now, `gnu-bre` and `posix-bre`, and
-one question. The profile has said `GRX_PREFER_LEFTMOST_LONGEST` for the
-POSIX and GNU rows since the table was written and no engine reads it, which
-is the same shape of unread constant `escaped_specials` was. The other ten
-gaps in those corpora are WP-26's, not this one's: they agree about the
-extent and differ about which iteration a group kept.
+The profile had said `GRX_PREFER_LEFTMOST_LONGEST` for these four rows since
+the table was written and no engine read it - the same unread-constant shape
+`escaped_specials` was - and the cost of that was larger than the one vector
+that had found it. `a|ab` against "ab" is the smallest case: no
+backreference, so it runs on the Pike VM, and it was answering 0-1 where both
+references answer 0-2. Neither the imported corpus nor
+`tools/oracle/posix_diff.py` contained it, because every alternation in the
+differential's atom list had branches of the same length and Spencer's file
+happens not to ask. Adding atoms that tell the two preferences apart is part
+of this package for that reason.
+
+The Pike VM stops cutting lower-priority threads at the first match and keeps
+the leftmost-start, greatest-end one; it stays linear. The backtracker
+searches *past* each match by reporting failure from `MATCH`, which is
+exhaustive and exponential and bounded by `max_steps`, with one
+short-circuit: a match that reaches the end of the subject ends the search.
+The bit-state engine cannot do it at all and says so
+([dialects.md](dialects.md) §5.1).
 
 **WP-25 POSIX and GNU conformance.** *conformance, M.* **Landed** for GNU.
 Spencer's test suite converted, with glibc as the oracle through
@@ -398,6 +406,16 @@ of a rule stated in a comment and implemented for a subset.
 **WP-26 Exact POSIX submatches.** *engines, L, deferred.* Okui-Suzuki or
 Laurikari TNFA disambiguation in the Pike VM's longest mode. Scheduled
 after M4 unless a consumer needs it.
+
+**Still unbuilt, and no longer the reason for anything.** The ten
+`known-gaps.txt` rows filed under "POSIX subexpression disambiguation" were
+read as this package's work and were not: they were one empty-iteration rule
+([dialects.md](dialects.md) §5.5), which glibc and musl agree on and which
+`GRX_EMPTY_LOOP_BREAK_FIRST` now implements. All ten pass, the four POSIX and
+GNU rows are at 100%, and no case reached by either corpus or the
+differential needs a tagged transition. That does not prove none exists - it
+says the ones that were being pointed at were something else, and that this
+package is now speculative rather than owed.
 
 **M4 - tier 1 complete.** Every tier-1 dialect at its published
 conformance rate with every deviation listed; the invariants of

@@ -75,9 +75,9 @@ namespace {
 /** A compiled regex that frees itself. */
 class Regex {
 public:
-  Regex(const char * pattern, uint32_t options = 0) {
-    result_ = grx_regex_compile(pattern, GRX_SYNTAX_ECMASCRIPT, options,
-        &regex_);
+  Regex(const char * pattern, uint32_t options = 0,
+      GRX_Syntax syntax = GRX_SYNTAX_ECMASCRIPT) {
+    result_ = grx_regex_compile(pattern, syntax, options, &regex_);
   }
   Regex(const Regex &) = delete;
   Regex & operator=(const Regex &) = delete;
@@ -463,6 +463,83 @@ TEST(Backtrack, ABitmapThatWillNotFitLeavesTheRunUnmemoisedRatherThanRefused) {
                 GRX_ENGINE_BACKTRACK, &limits, nullptr, &matched),
       GRX_OK);
   EXPECT_FALSE(matched);
+}
+
+TEST(Backtrack, TheLongestSearchStopsWhenTheMatchReachesTheEnd) {
+  // The exhaustive mode is exponential, and this is what keeps it usable on
+  // the shape that matters. `\(a*\)*\1` reaches the end of the subject on
+  // its first path; without the short-circuit the engine then walks the rest
+  // of the tree to prove no longer match exists, and spends max_steps doing
+  // it. Nothing can be longer than the whole subject, so there is nothing to
+  // prove. Both references answer this shape at once too.
+  Regex regex("\\(a*\\)*\\1", 0, GRX_SYNTAX_GNU_BRE);
+  ASSERT_TRUE(regex.ok());
+
+  const std::string subject(40, 'a');
+  GRX_Limits limits;
+  grx_limits_default(&limits);
+  limits.max_steps = 20000;
+
+  GRX_Match * match = nullptr;
+  ASSERT_EQ(grx_match_create(regex.get(), nullptr, &match), GRX_OK);
+  int matched = 0;
+  EXPECT_EQ(grx_regex_search(regex.get(), subject.data(), subject.size(), 0,
+                GRX_ENGINE_BACKTRACK, &limits, match, &matched),
+      GRX_OK);
+  EXPECT_TRUE(matched);
+  GRX_Capture whole;
+  grx_match_group(match, 0, &whole);
+  EXPECT_EQ(whole.start, 0u);
+  EXPECT_EQ(whole.end, subject.size());
+  grx_match_destroy(match);
+}
+
+TEST(Backtrack, TheMemoIsRefusedWhereTheDialectWantsTheLongestMatch) {
+  // A bitmap bit means "this state failed before and will fail again". The
+  // leftmost-longest mode reports failure from a *match*, on purpose, so
+  // that the search carries on looking for a longer one - and a bitmap would
+  // then prune exactly the paths the mode exists to reach.
+  //
+  // Refused rather than run without the bitmap, which is the rule
+  // GRX_ENGINE_PIKE already follows for a program it cannot run: naming an
+  // engine is asking for that engine's guarantee, and quietly answering with
+  // a different one is worse than saying it cannot be done. AUTO never lands
+  // here - a POSIX program that needs backtracking has a backreference, and
+  // a backreference is not memoisable - so this is the explicitly named
+  // engine only.
+  Regex posix("a|ab", 0, GRX_SYNTAX_GNU_ERE);
+  ASSERT_TRUE(posix.ok());
+
+  int matched = 1;
+  EXPECT_EQ(grx_regex_search(posix.get(), "ab", 2, 0, GRX_ENGINE_BITSTATE,
+                nullptr, nullptr, &matched),
+      GRX_ERR_UNSUPPORTED);
+
+  // Every other engine answers, and answers with the longest match.
+  for (GRX_Engine engine :
+      {GRX_ENGINE_AUTO, GRX_ENGINE_PIKE, GRX_ENGINE_BACKTRACK}) {
+    GRX_Match * match = nullptr;
+    ASSERT_EQ(grx_match_create(posix.get(), nullptr, &match), GRX_OK);
+    matched = 0;
+    EXPECT_EQ(grx_regex_search(posix.get(), "ab", 2, 0, engine, nullptr,
+                  match, &matched),
+        GRX_OK);
+    EXPECT_TRUE(matched);
+    GRX_Capture whole;
+    grx_match_group(match, 0, &whole);
+    EXPECT_EQ(whole.end, 2u) << "engine " << (int)engine;
+    grx_match_destroy(match);
+  }
+
+  // The bit-state engine is untouched for a dialect that wants the first
+  // match, which is every other dialect here.
+  Regex ecma("a|ab");
+  ASSERT_TRUE(ecma.ok());
+  matched = 0;
+  EXPECT_EQ(grx_regex_search(ecma.get(), "ab", 2, 0, GRX_ENGINE_BITSTATE,
+                nullptr, nullptr, &matched),
+      GRX_OK);
+  EXPECT_TRUE(matched);
 }
 
 TEST(Backtrack, ExponentialPatternsTheMemoCannotHelpHitTheLimitRatherThanHanging) {

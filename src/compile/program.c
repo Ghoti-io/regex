@@ -53,7 +53,7 @@ static const char * look_name(uint8_t kind) {
 /** The name of an empty-iteration rule, for the disassembly. */
 static const char * empty_loop_name(uint8_t mode) {
   static const char * const names[GRX_EMPTY_LOOP_COUNT] = {
-    "fail", "break", "allow",
+    "fail", "break", "allow", "break-first",
   };
   return mode < GRX_EMPTY_LOOP_COUNT ? names[mode] : "?";
 }

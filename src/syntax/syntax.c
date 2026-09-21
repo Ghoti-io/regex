@@ -243,7 +243,7 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     // iteration until it runs out of budget, and `(a*)*` against "bc"
     // answered with a limit rather than with a match. BREAK is what
     // reproduces glibc for both that and `a(b|c?)+d` against "ad".
-    .empty_loop = GRX_EMPTY_LOOP_BREAK,
+    .empty_loop = GRX_EMPTY_LOOP_BREAK_FIRST,
     .backref_unset = GRX_BACKREF_UNSET_FAILS,
     .lookbehind = GRX_LOOKBEHIND_NONE,
     .dollar = GRX_DOLLAR_END_ONLY,
@@ -268,7 +268,7 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     // iteration until it runs out of budget, and `(a*)*` against "bc"
     // answered with a limit rather than with a match. BREAK is what
     // reproduces glibc for both that and `a(b|c?)+d` against "ad".
-    .empty_loop = GRX_EMPTY_LOOP_BREAK,
+    .empty_loop = GRX_EMPTY_LOOP_BREAK_FIRST,
     .backref_unset = GRX_BACKREF_UNSET_FAILS,
     .lookbehind = GRX_LOOKBEHIND_NONE,
     .dollar = GRX_DOLLAR_END_ONLY,
@@ -293,7 +293,7 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     // iteration until it runs out of budget, and `(a*)*` against "bc"
     // answered with a limit rather than with a match. BREAK is what
     // reproduces glibc for both that and `a(b|c?)+d` against "ad".
-    .empty_loop = GRX_EMPTY_LOOP_BREAK,
+    .empty_loop = GRX_EMPTY_LOOP_BREAK_FIRST,
     .backref_unset = GRX_BACKREF_UNSET_FAILS,
     .lookbehind = GRX_LOOKBEHIND_NONE,
     .dollar = GRX_DOLLAR_END_ONLY,
@@ -318,7 +318,7 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     // iteration until it runs out of budget, and `(a*)*` against "bc"
     // answered with a limit rather than with a match. BREAK is what
     // reproduces glibc for both that and `a(b|c?)+d` against "ad".
-    .empty_loop = GRX_EMPTY_LOOP_BREAK,
+    .empty_loop = GRX_EMPTY_LOOP_BREAK_FIRST,
     .backref_unset = GRX_BACKREF_UNSET_FAILS,
     .lookbehind = GRX_LOOKBEHIND_NONE,
     .dollar = GRX_DOLLAR_END_ONLY,

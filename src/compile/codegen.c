@@ -687,8 +687,8 @@ static GRX_Result gen_fold_run(Codegen * codegen, const GRX_IRNode * node) {
  * VM; with them, ECMAScript's "an iteration that consumed nothing fails" and
  * Perl's "it succeeds and the loop stops" are one instruction with two modes.
  */
-static GRX_Result gen_star(
-    Codegen * codegen, const GRX_IRNode * node, uint32_t body_index) {
+static GRX_Result gen_star(Codegen * codegen, const GRX_IRNode * node,
+    uint32_t body_index, uint32_t given_reg, int have_given) {
   int lazy = node->mode == GRX_REPEAT_LAZY;
 
   // A body that cannot match the empty string cannot stall, so it needs no
@@ -701,7 +701,11 @@ static GRX_Result gen_star(
   // this iteration began - so one register serves both, and a loop that
   // needs only the reset still gets one.
   int late = resets_captures_late(codegen, node);
-  uint32_t reg = (guard || late) ? codegen->registers++ : 0;
+  // The caller hands the register down when it had to allocate the pair
+  // itself; see gen_repeat_body(), and GRX_EMPTY_LOOP_BREAK_FIRST below.
+  uint32_t reg = have_given ? given_reg
+      : (guard || late)     ? codegen->registers++
+                            : 0;
 
   uint32_t top = here(codegen);
   uint32_t split = GRX_INDEX_NONE;
@@ -795,6 +799,36 @@ static GRX_Result gen_repeat_body(Codegen * codegen, const GRX_IRNode * node,
   int late = resets_captures_late(codegen, node);
   uint32_t late_reg = late ? codegen->registers++ : 0;
 
+  /*
+   * GRX_EMPTY_LOOP_BREAK_FIRST needs a second number: the position the whole
+   * repeat began at, as against the position this iteration began at.
+   *
+   * "The whole repeat" and not "the optional tail", which is the distinction
+   * `(b+|(c)*)+` against "b" turns on. Its mandatory copy consumes the `b`,
+   * and if the tail counted as the loop then its first iteration would be
+   * the loop's first and would take the empty alternative - reporting group
+   * 1 as 1-1 where glibc and musl both say 0-1. So the register is set here,
+   * before the mandatory copies run, and the empty iteration is allowed only
+   * while the repeat as a whole has consumed nothing.
+   *
+   * The pair is allocated together and used as `reg` and `reg - 1`, because
+   * GRX_Inst has two operands and the check has spent both. Allocating them
+   * here is what makes them adjacent: a nested loop inside a mandatory copy
+   * would otherwise take a number between them.
+   */
+  int empty_first = node->empty_loop == GRX_EMPTY_LOOP_BREAK_FIRST
+      && grx_ir_can_match_empty(codegen->ir, body);
+  uint32_t pair_reg = 0;
+  if (empty_first) {
+    codegen->registers++;             // the entry register, at pair_reg - 1
+    pair_reg = codegen->registers++;  // the per-iteration register
+    GRX_Result entry = emit(
+        codegen, GRX_OP_PROGRESS_SET, 0, pair_reg - 1, 0, node, NULL);
+    if (entry != GRX_OK) {
+      return entry;
+    }
+  }
+
   for (uint32_t i = 0; i < node->min; i++) {
     GRX_Result result = GRX_OK;
     if (late) {
@@ -815,7 +849,7 @@ static GRX_Result gen_repeat_body(Codegen * codegen, const GRX_IRNode * node,
   }
 
   if (node->max == GRX_REPEAT_INF) {
-    return gen_star(codegen, node, body);
+    return gen_star(codegen, node, body, pair_reg, empty_first);
   }
 
   uint32_t optional = node->max - node->min;
@@ -834,7 +868,9 @@ static GRX_Result gen_repeat_body(Codegen * codegen, const GRX_IRNode * node,
   // in that order, so the copies cannot tread on each other. A body that
   // cannot match empty needs none of it; see gen_star().
   int guard = grx_ir_can_match_empty(codegen->ir, body);
-  uint32_t reg = guard ? codegen->registers++ : late_reg;
+  uint32_t reg = empty_first  ? pair_reg
+      : guard                 ? codegen->registers++
+                              : late_reg;
 
   for (uint32_t i = 0; i < optional; i++) {
     uint32_t split = GRX_INDEX_NONE;

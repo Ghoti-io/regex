@@ -78,6 +78,32 @@ std::string span(const std::string & pattern, const std::string & subject,
   return answer;
 }
 
+/** One group's span, as `start-end`, or "unset"/"nomatch"/"error". */
+std::string group(const std::string & pattern, const std::string & subject,
+    GRX_Syntax syntax, size_t index, uint32_t options = 0) {
+  Attempt attempt = compile(pattern, syntax, options);
+  if (attempt.result != GRX_OK) {
+    grx_regex_free(attempt.regex);
+    return "error";
+  }
+  GRX_Match * match = nullptr;
+  grx_match_create(attempt.regex, nullptr, &match);
+  int matched = 0;
+  std::string answer = "nomatch";
+  if (grx_regex_search(attempt.regex, subject.data(), subject.size(), 0,
+          GRX_ENGINE_AUTO, nullptr, match, &matched) == GRX_OK
+      && matched) {
+    GRX_Capture capture;
+    grx_match_group(match, index, &capture);
+    answer = capture.start == GRX_NPOS
+        ? "unset"
+        : std::to_string(capture.start) + "-" + std::to_string(capture.end);
+  }
+  grx_match_destroy(match);
+  grx_regex_free(attempt.regex);
+  return answer;
+}
+
 const GRX_Syntax kBre = GRX_SYNTAX_GNU_BRE;
 const GRX_Syntax kEre = GRX_SYNTAX_GNU_ERE;
 
@@ -177,6 +203,64 @@ TEST(Posix, AnOptionalAnchorIsRefusedRatherThanMadeUnmatchable) {
   // true: the construct means nothing.
   EXPECT_EQ(compile_result("\\<\\?", kBre), GRX_ERR_SYNTAX);
   EXPECT_EQ(compile_result("\\>\\+", kBre), GRX_ERR_SYNTAX);
+}
+
+TEST(Posix, TheLongestMatchAtTheLeftmostStart) {
+  // plan.md's WP-24. POSIX takes the longest match at the leftmost start
+  // where every other dialect here takes the one the alternation reaches
+  // first, and the profile has said GRX_PREFER_LEFTMOST_LONGEST for these
+  // four rows since the table was written. glibc and musl agree on every
+  // case below, which is what makes it a rule rather than glibc's habit.
+  EXPECT_EQ(span("a|ab", "ab", kEre), "0-2");
+  EXPECT_EQ(span("a|ab|abc", "abc", kEre), "0-3");
+  EXPECT_EQ(span("x(a|ab)", "xab", kEre), "0-3");
+  EXPECT_EQ(span("a\\|ab", "ab", kBre), "0-2");
+
+  // On the backtracker, which is where a pattern with a backreference goes.
+  // It gets there by searching *past* each match rather than stopping at
+  // one, so this is the case that says the exhaustive mode runs.
+  EXPECT_EQ(span("\\(ab*\\)[ab]*\\1", "ababaaa", kBre), "0-7");
+
+  // And the first-match dialects are untouched: the preference is the
+  // profile's, not the engine's.
+  EXPECT_EQ(span("a|ab", "ab", GRX_SYNTAX_ECMASCRIPT), "0-1");
+  EXPECT_EQ(span("a|ab", "ab", GRX_SYNTAX_PERL), "0-1");
+}
+
+TEST(Posix, AnEmptyIterationRunsOnlyWhileTheRepeatHasNotMoved) {
+  // Neither "the iteration fails" nor "it succeeds and the loop stops", but
+  // the two of them divided by whether the repeat has consumed anything yet.
+  // Both references agree on both halves.
+  //
+  // Nothing consumed, so the empty iteration runs and the group takes part:
+  EXPECT_EQ(group("(a*)*", "bc", kEre, 1), "0-0");
+  EXPECT_EQ(group("(a*)+", "bc", kEre, 1), "0-0");
+
+  // Something consumed, so a trailing empty iteration does not run and the
+  // group keeps the last iteration that did something:
+  EXPECT_EQ(group("(a|)*", "aaaa", kEre, 1), "3-4");
+  EXPECT_EQ(group("(a|)+", "aaaa", kEre, 1), "3-4");
+  EXPECT_EQ(group("(a*)*", "aaa", kEre, 1), "0-3");
+  EXPECT_EQ(group("a(b|c?)+d", "abcd", kEre, 1), "2-3");
+
+  // The boundary between those two is the *repeat*, not its optional tail.
+  // `(b+|(c)*)+` has one mandatory copy, which consumes the "b"; if the tail
+  // counted as the loop, its first iteration would be the loop's first and
+  // would take the empty alternative, reporting 1-1.
+  EXPECT_EQ(group("(b+|(c)*)+", "b", kEre, 1), "0-1");
+
+  // Nested, which is what says the two registers this rule needs belong to
+  // the loop that allocated them. They are used as a pair at `x` and `x - 1`
+  // and are only adjacent because codegen.c takes both before generating any
+  // body; an inner loop allocating between them would silently make the
+  // outer loop read the inner one's position.
+  EXPECT_EQ(group("((a*)*b*)+", "ab", kEre, 2), "0-1");
+  EXPECT_EQ(group("(x(a*)*)+", "xx", kEre, 2), "2-2");
+  EXPECT_EQ(group("(a(b*)*)+", "ab", kEre, 2), "1-2");
+  EXPECT_EQ(group("((a*)+)*", "aa", kEre, 2), "0-2");
+
+  // ECMAScript's rule is its own and does not move.
+  EXPECT_EQ(group("(a*)*", "bc", GRX_SYNTAX_ECMASCRIPT, 1), "unset");
 }
 
 TEST(Posix, WhichSecondQuantifierEachGrammarAccepts) {

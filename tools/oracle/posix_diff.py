@@ -57,17 +57,20 @@ ROOT = os.path.dirname(os.path.dirname(HERE))
 ATOMS = {
     "gnu-ere": ["a", "b", ".", "[ab]", "[^a]", "[a-c]", "(a)", "(a|b)", "a*",
                 "a+", "a?", "a{2}", "a{1,2}", "^", "$", "\\.", "[[:alpha:]]",
-                "()", "(a)\\1", "\\w", "[]a]", "(a|)", "\\<", "\\>"],
+                "()", "(a)\\1", "\\w", "[]a]", "(a|)", "\\<", "\\>",
+                "a|ab", "ab|a", "(a|ab)", "(ab|a)", "a|aa"],
     "gnu-bre": ["a", "b", ".", "[ab]", "[^a]", "[a-c]", "\\(a\\)",
                 "\\(a\\|b\\)", "a*", "a\\+", "a\\?", "a\\{2\\}", "^", "$",
                 "\\.", "[[:alpha:]]", "\\(a\\)\\1", "\\w", "[]a]", "\\<",
-                "\\>"],
+                "\\>", "a\\|ab", "ab\\|a", "\\(a\\|ab\\)",
+                "\\(ab\\|a\\)\\1"],
     "posix-ere": ["a", "b", ".", "[ab]", "[^a]", "[a-c]", "(a)", "(a|b)",
                   "a*", "a+", "a?", "a{2}", "a{1,2}", "^", "$", "\\.",
-                  "[[:alpha:]]", "()", "(a|)", "[]a]"],
+                  "[[:alpha:]]", "()", "(a|)", "[]a]",
+                  "a|ab", "ab|a", "(a|ab)", "(ab|a)", "a|aa"],
     "posix-bre": ["a", "b", ".", "[ab]", "[^a]", "[a-c]", "\\(a\\)", "a*",
                   "a\\{2\\}", "^", "$", "\\.", "[[:alpha:]]",
-                  "\\(a\\)\\1", "[]a]"],
+                  "\\(a\\)\\1", "[]a]", "\\(ab*\\)\\1", "\\(a*\\)\\1"],
 }
 
 # Which oracles decide for which dialect, and whether one of them is the
@@ -100,7 +103,7 @@ ILL_FORMED = {
 }
 
 SUBJECTS = ["", "a", "b", "ab", "aab", "abc", "aaa", "a.b", "[a]", "()",
-            "\n", "a\nb", "AB", "abab", "a)b"]
+            "\n", "a\nb", "AB", "abab", "a)b", "ababaaa", "aaaa"]
 
 # The flag letter posix_match wants for a basic RE; grx_match takes the
 # dialect by name instead.

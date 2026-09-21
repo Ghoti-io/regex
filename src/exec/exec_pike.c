@@ -116,6 +116,9 @@ typedef struct {
   PikeThread * stack;    ///< The epsilon-closure walk's own stack.
   size_t stack_capacity;
   PikeState * matched;   ///< The best match so far, or NULL.
+  size_t best_start;     ///< Its start, and
+  size_t best_end;       ///< its end, for the longest-match comparison.
+  int longest;           ///< Whether the dialect wants leftmost-longest.
   size_t steps;          ///< Instructions executed, against max_steps.
   size_t memory;         ///< Bytes handed out, against max_match_memory.
   int utf;               ///< Whether a step is a code point or a byte.
@@ -693,6 +696,23 @@ static void add_thread(
             pike->stack[depth].state = current;
             depth++;
             break;
+          case GRX_EMPTY_LOOP_BREAK_FIRST: {
+            // BREAK while the loop still stands where it was entered, FAIL
+            // once it has moved. The entry register is `x - 1`; codegen.c
+            // allocates the pair adjacently and says why.
+            size_t entry = pike->captures + inst->x - 1;
+            int unmoved = entry < pike->slots
+                && current->slots[entry] == position;
+            if (unmoved) {
+              pike->stack[depth].pc = inst->y;
+              pike->stack[depth].state = current;
+              depth++;
+            }
+            else {
+              state_release(pike, current);
+            }
+            break;
+          }
           case GRX_EMPTY_LOOP_ALLOW:
           case GRX_EMPTY_LOOP_COUNT:
           default:
@@ -790,6 +810,9 @@ GRX_Result grx_exec_pike(const GRX_ExecRequest * request, int * out_matched) {
     .allocator = request->regex->allocator,
     .captures = 2 * (request->regex->capture_count + 1),
     .matched = NULL,
+    .best_start = GRX_NPOS,
+    .best_end = GRX_NPOS,
+    .longest = program->preference == GRX_PREFER_LEFTMOST_LONGEST,
     .steps = 0,
     .memory = 0,
     .utf = (program->flags & GRX_PROGRAM_UTF) != 0,
@@ -893,11 +916,36 @@ GRX_Result grx_exec_pike(const GRX_ExecRequest * request, int * out_matched) {
             state = NULL;
             break;
           }
+          if (pike.longest) {
+            // POSIX: the leftmost start, and among those the longest match.
+            // Priority does not decide it, so no thread is dropped and the
+            // list is not cut short - a thread that is lower priority than
+            // this one may yet run further and end later. The comparison is
+            // explicit rather than implied by arrival order, because a
+            // thread seeded at a later start is still alive here and must
+            // lose to an earlier one no matter when it arrives.
+            size_t start = state->slots[0];
+            int better = !pike.matched || start < pike.best_start
+                || (start == pike.best_start && position > pike.best_end);
+            if (better) {
+              state_release(&pike, pike.matched);
+              pike.matched = state;
+              pike.best_start = start;
+              pike.best_end = position;
+            }
+            else {
+              state_release(&pike, state);
+            }
+            state = NULL;
+            break;
+          }
           // Every thread after this one in the list is lower priority, so
           // this match beats all of them and they are dropped. Threads
           // before it have already produced successors and may still win.
           state_release(&pike, pike.matched);
           pike.matched = state;
+          pike.best_start = state->slots[0];
+          pike.best_end = position;
           state = NULL;
           for (size_t j = i + 1; j < pike.current.count; j++) {
             state_release(&pike, pike.current.threads[j].state);

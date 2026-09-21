@@ -360,6 +360,14 @@ beside the well-formed ones, and together with the mapping they found the
 anchor-quantifier rules in `src/syntax/posix.c`, written for `^` and `$` and
 never extended to `\<`, `\>`, `\b` and `\B`.
 
+A third lesson, and the same one a third time: every alternation in the atom
+lists had branches of the same length, so `a|ab` could not be built and
+leftmost-longest could not show up. Four dialects were answering the wrong
+extent for basic alternation and 17,000 generated cases a run said nothing,
+because the generator could not spell the question. The atom lists now carry
+`a|ab`, `ab|a` and their kin, and the subjects carry the strings that tell
+them apart.
+
 Flags are not varied, because POSIX's options are arguments to `regcomp` and
 the driver spells options as a dialect's flag letters, of which these
 dialects have none. `REG_ICASE` and `REG_NEWLINE` are covered by the
@@ -624,11 +632,14 @@ absent.
   extent, and `REG_NOTBOL`/`REG_NOTEOL` say the subject's ends are not line
   boundaries, which no option here means.
 
-  The front end that reads them is WP-23, which landed with them:
-  `gnu-ere` answers 265 of 270 and `gnu-bre` 158 of 159. The six that remain
-  are POSIX's submatch rules - five about which iteration of a repeat a group
-  kept, and one about leftmost-longest - and are listed in
-  `known-gaps.txt` against WP-24 and WP-26.
+  The front end that reads them is WP-23, which landed with them, and all
+  four dialects now answer every row: `gnu-ere` 270 of 270, `gnu-bre` 159 of
+  159, `posix-ere` 245 of 245 and `posix-bre` 135 of 135. The six that used
+  to remain were POSIX's submatch rules, and were two things rather than one:
+  leftmost-longest, which the profile had asked for and no engine read
+  (WP-24), and an empty-iteration rule that had been filed against WP-26's
+  tagged transitions and was nothing of the sort
+  ([dialects.md](dialects.md) §5.5).
 - **JSON-Schema-Test-Suite** (`tools/jsonschema/`): not a vector import -
   these are run *through* `text`, with this library plugged into its
   regular-expression provider vtable, because what they measure is the pair.

@@ -153,6 +153,33 @@ typedef struct {
   GRX_Result failure;    ///< Set when a limit stopped the run.
 
   /**
+   * Leftmost-longest: keep searching past a match and report the longest.
+   *
+   * POSIX asks for the longest match at the leftmost start, and a
+   * backtracker finds the one its alternation order reaches first. The only
+   * way to know that no longer one exists is to look, so in this mode
+   * GRX_OP_MATCH records what it found and then reports *failure*, which
+   * sends the engine back into the search it would otherwise have stopped.
+   * The run ends when the alternatives are exhausted rather than when one
+   * succeeds, and `best_slots` is what is reported.
+   *
+   * That is exponential, and it is bounded the only way this engine bounds
+   * anything: `max_steps`. The memo cannot rescue it. A visited bit means
+   * "this state failed before and will fail again", which is exactly the
+   * claim this mode breaks - a state that reported failure here may have
+   * been the longest match - so `memo_after` stays unarmed, and a caller who
+   * names the bit-state engine for a dialect that wants the longest match is
+   * refused rather than quietly given the first one.
+   *
+   * Only a program that needs backtracking arrives here, which under these
+   * dialects means one with a backreference; everything else is regular and
+   * the Pike VM does the same job in linear time.
+   */
+  int longest;
+  size_t best_end;       ///< End of the best match at this start, or NPOS.
+  size_t * best_slots;   ///< Its captures; `slot_count` of them.
+
+  /**
    * The visited set: one bit per (instruction, position), or NULL while the
    * run has no memo.
    *
@@ -1268,6 +1295,19 @@ static int run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
           case GRX_EMPTY_LOOP_BREAK:
             pc = inst->y;
             continue;
+          case GRX_EMPTY_LOOP_BREAK_FIRST: {
+            // See exec_pike.c: BREAK while the loop stands where it was
+            // entered, FAIL once it has moved. The entry register is the
+            // one after `x`.
+            size_t entry = bt->captures + inst->x - 1;
+            if (entry < bt->captures + bt->registers
+                && bt->slots[entry] == position) {
+              pc = inst->y;
+              continue;
+            }
+            ok = 0;
+            break;
+          }
           case GRX_EMPTY_LOOP_ALLOW:
           case GRX_EMPTY_LOOP_COUNT:
           default:
@@ -1529,6 +1569,29 @@ static int run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
           ok = 0;
           break;
         }
+        if (toplevel && bt->longest) {
+          // Strictly longer only: the first path to reach a given end is the
+          // one whose captures the documented approximation reports, and a
+          // later path of the same length must not displace it.
+          if (bt->best_end == GRX_NPOS || position > bt->best_end) {
+            bt->best_end = position;
+            for (size_t i = 0; i < bt->slot_count; i++) {
+              bt->best_slots[i] = bt->slots[i];
+            }
+            if (position >= bt->window_end) {
+              // Nothing can be longer than everything. Worth the branch:
+              // without it `\(a*\)*\1` against twenty characters walks the
+              // whole tree to prove there is no longer match than the one
+              // that already reached the end, and hits max_steps doing it.
+              // With it the answer comes back at once, and both references
+              // answer this shape at once too.
+              *out_end = position;
+              return 1;
+            }
+          }
+          ok = 0;
+          break;
+        }
         *out_end = position;
         return 1;
 
@@ -1742,6 +1805,9 @@ GRX_Result grx_exec_backtrack(
     .steps = 0,
     .utf = (program->flags & GRX_PROGRAM_UTF) != 0,
     .failure = GRX_OK,
+    .longest = program->preference == GRX_PREFER_LEFTMOST_LONGEST,
+    .best_end = GRX_NPOS,
+    .best_slots = NULL,
     .visited = NULL,
     .stride = request->length + 1,
     .memo_after = 0,
@@ -1779,7 +1845,28 @@ GRX_Result grx_exec_backtrack(
   if (!bt.slots) {
     return GRX_ERR_OOM;
   }
+  if (bt.longest) {
+    bt.best_slots = gcu_allocator_malloc(
+        bt.allocator, bt.slot_count * sizeof(size_t));
+    if (!bt.best_slots) {
+      gcu_allocator_free(bt.allocator, bt.slots);
+      return GRX_ERR_OOM;
+    }
+  }
 
+  if (request->memoize && bt.longest) {
+    // The bit-state engine, named explicitly, for a dialect that wants the
+    // longest match. Its bitmap records that a state failed so that the
+    // state is never tried again, and this mode reports failure from a
+    // *match* - so the bitmap would prune the very paths it exists to find.
+    // Refused rather than run without it, for the reason GRX_ENGINE_PIKE is
+    // refused a program it cannot run: a caller who named an engine asked
+    // for that engine's guarantee, and quietly giving them a different
+    // answer is worse than telling them it cannot be done.
+    gcu_allocator_free(bt.allocator, bt.best_slots);
+    gcu_allocator_free(bt.allocator, bt.slots);
+    return GRX_ERR_UNSUPPORTED;
+  }
   if (request->memoize) {
     size_t bytes = grx_exec_bitmap_bytes(request->regex, request->length);
     if (bytes == GRX_NPOS
@@ -1798,7 +1885,7 @@ GRX_Result grx_exec_backtrack(
       return GRX_ERR_OOM;
     }
   }
-  else if (grx_exec_program_is_memoizable(request->regex)) {
+  else if (!bt.longest && grx_exec_program_is_memoizable(request->regex)) {
     // The plain backtracker, on a program the memo would be sound for: arm
     // the late cache rather than allocating a bitmap a run that never needs
     // one would pay for. The threshold is the state count; anything past it
@@ -1822,6 +1909,7 @@ GRX_Result grx_exec_backtrack(
     bt.depth = 0;
 
     size_t end = 0;
+    bt.best_end = GRX_NPOS;
     bt.call_depth = 0;
     bt.verb_stop = VERB_NONE;
     // The mark stack is the path's, and each attempt is a new path.
@@ -1835,6 +1923,17 @@ GRX_Result grx_exec_backtrack(
     }
     if (bt.failure != GRX_OK) {
       result = bt.failure;
+      break;
+    }
+    if (bt.longest && bt.best_end != GRX_NPOS) {
+      // Exhausted, and something matched along the way. The run reported
+      // failure at every one of them on purpose; this is where the longest
+      // is taken, and taking it here rather than inside run() is what keeps
+      // "leftmost" intact - no later start is tried once this one matched.
+      for (size_t i = 0; i < bt.slot_count; i++) {
+        bt.slots[i] = bt.best_slots[i];
+      }
+      *out_matched = 1;
       break;
     }
     // A `(*THEN)` that reached the top with no alternative left is a
@@ -1897,6 +1996,7 @@ GRX_Result grx_exec_backtrack(
     *request->out_steps = bt.steps;
   }
   gcu_allocator_free(bt.allocator, bt.visited);
+  gcu_allocator_free(bt.allocator, bt.best_slots);
   gcu_allocator_free(bt.allocator, bt.slots);
   gcu_allocator_free(bt.allocator, bt.stack);
   gcu_allocator_free(bt.allocator, bt.call_return);

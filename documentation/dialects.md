@@ -169,11 +169,30 @@ Each subsection is one axis of `GRX_SyntaxSpec`. The engines implement the
 | Value | Meaning |
 | --- | --- |
 | `LEFTMOST_FIRST` | the first match in backtracking priority order: alternatives left to right, greedy quantifiers longest first, lazy ones shortest first |
-| `LEFTMOST_LONGEST` | among matches starting at the leftmost position, the longest; submatches per POSIX's rule, approximated in 1.0 ([design.md](design.md) §2) |
+| `LEFTMOST_LONGEST` | among matches starting at the leftmost position, the longest |
 | `TCL_ARE` | Tcl's rule: leftmost, then the whole RE is greedy or non-greedy according to its first quantifier, and length is preferred accordingly (`re_syntax(n)`, "Matching") |
 
 POSIX BRE/ERE, GNU BRE/ERE: `LEFTMOST_LONGEST`. Tcl: `TCL_ARE`. Every
 other dialect: `LEFTMOST_FIRST`.
+
+**What each engine does with it** (plan.md's WP-24). The Pike VM runs every
+thread to the end instead of cutting the lower-priority ones at the first
+match, and keeps the match with the leftmost start and the greatest end -
+still linear, because the thread list is still bounded by the program. The
+backtracker cannot do that: it has no thread list, so it *searches past*
+each match, reporting failure from `MATCH` on purpose so that the search it
+would have stopped carries on. That is exhaustive and exponential, and it is
+bounded by `max_steps` like everything else here, with one short-circuit
+that matters more than it looks - a match reaching the end of the subject
+ends the search, because nothing can be longer than everything.
+
+Only a program that needs backtracking takes the second path, which under
+these dialects means one with a backreference; everything else is regular
+and goes to the Pike VM. The bit-state engine cannot do it at all - its
+bitmap records that a state failed, and this mode reports failure from a
+match - so naming `GRX_ENGINE_BITSTATE` for one of these dialects is
+`GRX_ERR_UNSUPPORTED` rather than a quiet answer from the wrong rule.
+`GRX_ENGINE_AUTO` never selects it there.
 
 ### 5.2 Newlines and `.`
 
@@ -246,10 +265,34 @@ The two rules that make `(a*)*` against `b` report different things:
 | --- | --- | --- |
 | Empty iteration | `FAIL_IF_EMPTY_AFTER_MIN`: an iteration that consumes nothing, once `min` is satisfied, fails (22.2.2.3.1 RepeatMatcher step 2.b) | ECMAScript |
 | | `BREAK_ON_EMPTY`: the iteration succeeds and the loop stops | Perl, PCRE2, Python, Java (**probe**), .NET (**probe**), Ruby (**probe**), RE2, Rust |
-| | `LONGEST`: irrelevant; the match is the longest, and an empty iteration adds nothing | POSIX, GNU, Tcl |
+| | `BREAK_IF_UNMOVED`: the iteration succeeds and the loop stops, but only while the *repeat* has consumed nothing; once it has, the empty iteration does not run at all | POSIX, GNU |
+| | `LONGEST`: irrelevant; the match is the longest, and an empty iteration adds nothing | Tcl |
 | Capture reset | `RESET_EACH_ITERATION`: captures inside the group are cleared at the **start** of every iteration (RepeatMatcher step 4) | ECMAScript |
 | | `RESET_AFTER_EACH_ITERATION`: an iteration clears, on the way **out**, the ones it did not itself set | **Perl** (probed) |
 | | `KEEP_LAST_SET`: a capture set in an earlier iteration survives if a later one does not set it | PCRE2, Python, Java (**probe**), .NET, Ruby (**probe**), RE2 (**probe**), Rust (**probe**) |
+
+`BREAK_IF_UNMOVED` is neither of the two above it, and it took both
+references to see that. `(a*)*` against `"b"` reports group 1 as 0-0 in glibc
+and in musl, so an empty iteration *does* run when nothing else has - the
+subexpression takes part rather than going unset, which `FAIL_IF_EMPTY` would
+give. And `(a|)*` against `"aaaa"` reports group 1 as 3-4 in both, not 4-4,
+so once an iteration has consumed, a trailing empty one does *not* run -
+which is what plain `BREAK_ON_EMPTY` gives, the empty body having written its
+captures before the loop exited. Both halves are the same rule seen from two
+sides, and the thing that divides them is where the repeat began.
+
+"The repeat", not "its optional tail", is the whole of the distinction.
+`(b+|(c)*)+` against `"b"` has one mandatory copy, which consumes the `b`; if
+the tail counted as the loop then its first iteration would be the loop's
+first and would take the empty alternative, reporting group 1 as 1-1 where
+both references say 0-1. So the position is taken before the mandatory copies
+run.
+
+This is what the ten `known-gaps.txt` rows filed under "POSIX subexpression
+disambiguation" actually were. They were read as needing WP-26's
+tagged-transition machinery - Okui-Suzuki or Laurikari - and they needed an
+empty-iteration rule instead. Every one of them passes now, and WP-26 is
+still unbuilt.
 
 The first two report the same spans. After the last iteration, a capture it
 did not set is gone either way, which is why one value stood for both until
@@ -729,11 +772,11 @@ to be complete for every shipped tier.
 | POSIX, GNU | `REG_NEWLINE` makes `^` and `$` line anchors and does not take the newline out of `.` or out of `[^a]` | the option is two rules and `GRX_OPT_MULTILINE` is one of them; the other needs a second option nothing else in the library wants. Eleven vectors exercise the first half and none the second | - |
 | POSIX BRE, POSIX ERE | Measured only where two references agree, and not at all where the dialects differ from both | glibc's `regcomp` defines what POSIX leaves undefined and so answers as GNU; musl's regex, from Laurikari's TRE, shares no code with it but is not strict POSIX either - its basic RE takes `\|`, `\+` and `\?`, and it refuses the `[[.x.]]` POSIX requires. Neither decides alone. The 380 `posix-*` vectors are Spencer's rows the two answer *identically*; 41 they answer differently are left out as open questions and 8 use a construct these dialects do not have. What defines these rows - refusing the GNU operators - has no reference on this machine and is still built from the standard alone | - |
 | GNU BRE | `\<\?` and `\>\+`: a quantifier on an anchor is refused rather than compiled | glibc compiles it and then cannot match with it - `\<\?` against "" is **nomatch** there, and an optional assertion that declines to match the empty string is an artifact rather than a rule. musl compiles the same pattern and matches, so the two references disagree and there is nothing to reproduce. An `*` after an anchor is a different question and is followed exactly: it is an ordinary character, as it is after `^`, which is why `\>*` against "a*" matches 1-2 | `GRX_ERR_SYNTAX` |
-| POSIX, GNU | `(\<)*` reports the group as having matched empty where glibc reports it unset | whether a zero-width iteration counts as an iteration at all. glibc says no; musl says yes and so does this library, and musl's regex is the tagged-transition algorithm WP-26 names. The same question as the ten submatch gaps in `known-gaps.txt` - which iteration a group kept - reached through a loop that ran zero-width instead of through a loop that ran twice | - |
 | Perl | `\p{nv=1/1}` and its kin resolve; perl refuses a fraction that reduces to an integer | UAX #44 §5.9.2 says numeric values match by "numeric equivalencies", and `1/1` is `1`. Perl keys its table by the *spelling* instead, so `1/1`, `2/2` and `0/3` are errors there while `2/4` and `9/12` resolve. Following the stated rule accepts a spelling perl rejects and never changes a match set | - |
 | Perl | `/l` asks for the locale's semantics and gets the C locale's | there is no other locale here (section 6), and the C locale's word characters are the ASCII ones | - |
-| POSIX | Submatch rules approximated in the first POSIX release | [design.md](design.md) §2 | - |
 | POSIX | `[[.ch.]]` multi-character collating elements, `[[=e=]]` | no collation | `GRX_ERR_UNSUPPORTED` when a dialect has them; **`GRX_ERR_SYNTAX`** in Perl and PCRE2, which do not — pcre2test raises error 113 and perl calls the syntax "reserved for future extensions", so a pattern using one there is not valid rather than not built |
+| POSIX, GNU | POSIX's "every subexpression takes the longest match consistent with the whole" is not implemented as a rule | the engines implement leftmost-longest for the *whole* match (§5.1) and their own capture rules for the parts, and those agree with glibc and musl on every case either corpus or `tools/oracle/posix_diff.py` reaches - the ten rows once filed under this heading were an empty-iteration question (§5.5) and all pass now. What is not claimed is the general rule: no tagged-transition machinery exists here, so a case that needs one to be decided has not been ruled out, only not found | - |
+| POSIX, GNU | `(\<)*` reports the group as having matched empty where glibc reports it unset | the references disagree, so there is no rule to follow: glibc says a zero-width iteration did not happen, musl says it did, and this library says it did. Left where musl is, because the alternative is to special-case an iteration that consumed nothing *and* wrote nothing, which neither reference describes and only glibc does | - |
 | .NET | Culture-sensitive folding is invariant; balancing groups deferred | §5.8; [design.md](design.md) §2 | `GRX_ERR_UNSUPPORTED` for balancing groups |
 | Emacs | Syntax classes (`\s-`, `\w`) use fixed Unicode definitions, not a syntax table | no syntax table | - |
 | Vim | `\%[...]`, `\%d123`, `\z(`, `\=` in replacements | later tier | `GRX_ERR_UNSUPPORTED` |

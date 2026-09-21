@@ -260,6 +260,24 @@ typedef enum {
   GRX_EMPTY_LOOP_FAIL = 0, ///< The iteration fails. ECMA-262 RepeatMatcher.
   GRX_EMPTY_LOOP_BREAK,    ///< The iteration succeeds and the loop stops.
   GRX_EMPTY_LOOP_ALLOW,    ///< Nothing special; the longest match decides.
+  /**
+   * BREAK, but only for an iteration that is the loop's first.
+   *
+   * POSIX, and neither of the two above on its own. glibc and musl agree on
+   * both halves of it: `(a*)*` against "b" reports group 1 as 0-0, so an
+   * empty iteration *does* run when nothing else has - the subexpression
+   * participates rather than going unset, which FAIL would give. And
+   * `(a|)*` against "aaaa" reports group 1 as 3-4, not 4-4, so once an
+   * iteration has consumed, a trailing empty one does *not* run - which is
+   * what BREAK would give, the empty body having written its captures
+   * before the loop exited.
+   *
+   * The two questions are told apart by where the loop began. The check
+   * carries a second progress register holding the position the loop was
+   * entered at, and an empty iteration is taken only while the loop still
+   * stands there.
+   */
+  GRX_EMPTY_LOOP_BREAK_FIRST,
   GRX_EMPTY_LOOP_COUNT     ///< Closes the enum; not a mode.
 } GRX_EmptyLoopMode;
 
