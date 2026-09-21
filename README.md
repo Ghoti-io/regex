@@ -163,7 +163,8 @@ Nothing is allocated for the caller to free on a failing call.
 | ECMAScript front end, legacy and Unicode modes | working |
 | ECMAScript UnicodeSets (`v`) mode | working - set operations, string disjunctions, the seven properties of strings |
 | PCRE2 and Perl front ends | working - verbs, conditionals, recursion, branch reset, `\Q..\E`, extended modes, the leading directives |
-| Every dialect but ECMAScript, PCRE2 and Perl | named, `GRX_ERR_UNSUPPORTED` |
+| POSIX and GNU front ends | working - one reader for `posix-bre`, `posix-ere`, `gnu-bre` and `gnu-ere` |
+| Every dialect but those seven | named, `GRX_ERR_UNSUPPORTED` |
 | Lowering, analysis and code generation | working |
 | Pike VM | working - the regular subset, in linear time |
 | Backtracking engine | working - backreferences, lookaround, atomic and possessive |
