@@ -696,6 +696,15 @@ integer-indexed tables; the instruction array and the ranges are their own
 growable buffers because their element types are structs. Group names go in
 a `gcu_hash64` keyed by the string hash.
 
+The library opens no files and builds no paths. A pattern and a subject
+arrive as a pointer and a length, and everything the library reports goes
+back the same way, so `cutil`'s file and path modules are used only by the
+things *around* it - the examples, the development tools and the test
+helpers. That is worth stating because it is load-bearing: a caller can hand
+this library bytes that came from a socket, a memory map or a database column
+without the library having an opinion, and there is no platform branch inside
+it to be wrong about.
+
 Nothing is allocated for the caller to free on a failing call, and the
 `CountingAllocator` in `tests/test_helpers.h` is how every failure path
 proves it.

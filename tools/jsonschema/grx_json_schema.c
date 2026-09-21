@@ -26,10 +26,11 @@
  * Copyright 2026 by Corey Pennycuff
  */
 
+#include <ghoti.io/cutil/file.h>
+#include <ghoti.io/cutil/path.h>
 #include <ghoti.io/regex/regex.h>
 #include <ghoti.io/text/json.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 // ===========================================================================
@@ -84,38 +85,25 @@ static size_t passed = 0;
 static size_t failed = 0;
 static size_t skipped_groups = 0;
 
+/**
+ * Read a whole file; the caller frees with gcu_file_free().
+ *
+ * cutil's, rather than a loop of its own. What was here read `fread`
+ * returning 0 as end-of-file without asking `ferror()`, so a failed read
+ * looked like a complete-but-shorter file - and a suite file that stops early
+ * is a suite that quietly runs fewer cases and still says it passed. That is
+ * the failure this runner exists to make impossible.
+ */
 static char * read_file(const char * path, size_t * out_len) {
-  FILE * file = fopen(path, "rb");
-  if (!file) {
+  void * data = NULL;
+  GCU_File_Result result =
+      gcu_file_read(path, GCU_FILE_UNLIMITED, NULL, &data, out_len);
+  if (result != GCU_FILE_OK) {
+    fprintf(stderr, "cannot read %s: %s\n", path,
+        gcu_file_result_string(result));
     return NULL;
   }
-  size_t capacity = 65536;
-  size_t length = 0;
-  char * data = (char *)malloc(capacity);
-  if (!data) {
-    fclose(file);
-    return NULL;
-  }
-  for (;;) {
-    if (length == capacity) {
-      char * grown = (char *)realloc(data, capacity * 2);
-      if (!grown) {
-        free(data);
-        fclose(file);
-        return NULL;
-      }
-      data = grown;
-      capacity *= 2;
-    }
-    size_t got = fread(data + length, 1, capacity - length, file);
-    length += got;
-    if (got == 0) {
-      break;
-    }
-  }
-  fclose(file);
-  *out_len = length;
-  return data;
+  return (char *)data;
 }
 
 /** A group or case description, or a placeholder; the value is borrowed. */
@@ -229,7 +217,7 @@ int main(int argc, char ** argv) {
     size_t length = 0;
     char * text = read_file(argv[i], &length);
     if (!text) {
-      fprintf(stderr, "cannot read %s\n", argv[i]);
+      /* read_file has already said which file and why. */
       return 2;
     }
     GTEXT_JSON_Error error;
@@ -239,14 +227,15 @@ int main(int argc, char ** argv) {
     if (!doc || gtext_json_typeof(doc) != GTEXT_JSON_ARRAY) {
       fprintf(stderr, "%s is not a JSON-Schema-Test-Suite file\n", argv[i]);
       gtext_json_free(doc);
-      free(text);
+      gcu_file_free(NULL, text);
       return 2;
     }
 
     /* Only the basename is printed, so that a failure line does not carry
-     * whatever directory the suite happens to be checked out into. */
-    const char * name = strrchr(argv[i], '/');
-    name = name ? name + 1 : argv[i];
+     * whatever directory the suite happens to be checked out into. cutil's,
+     * because a `strrchr(path, '/')` finds nothing in `tests\\draft2020-12`
+     * and would print the whole Windows path instead of the file's name. */
+    const char * name = gcu_path_basename(GCU_PATH_NATIVE, argv[i]);
 
     size_t groups = gtext_json_array_size(doc);
     for (size_t g = 0; g < groups; g++) {
@@ -254,7 +243,7 @@ int main(int argc, char ** argv) {
     }
 
     gtext_json_free(doc);
-    free(text);
+    gcu_file_free(NULL, text);
   }
 
   printf("\n%zu passed, %zu failed, %zu groups skipped\n", passed, failed,

@@ -17,6 +17,8 @@
 
 #include <gtest/gtest.h>
 
+#include <ghoti.io/cutil/file.h>
+#include <ghoti.io/cutil/path.h>
 #include <ghoti.io/regex/regex.h>
 
 namespace grxtest {
@@ -39,9 +41,32 @@ inline std::string data_dir() {
 #endif
 }
 
+/**
+ * Join two path components with the host's separator.
+ *
+ * cutil's, rather than `a + "/" + b`. A forward slash does reach the right
+ * file on Windows, so this is not a bug being fixed - but these paths are
+ * printed in failure messages, and a path that is half `\\` and half `/` is a
+ * path a reader stops to look at instead of reading past.
+ */
+inline std::string path_join(const std::string & base,
+    const std::string & relative) {
+  size_t length = 0;
+  if (gcu_path_join(GCU_PATH_NATIVE, base.c_str(), relative.c_str(), nullptr,
+          0, &length) != GCU_PATH_OK) {
+    return relative;
+  }
+  std::string out(length, '\0');
+  if (gcu_path_join(GCU_PATH_NATIVE, base.c_str(), relative.c_str(), &out[0],
+          length + 1, nullptr) != GCU_PATH_OK) {
+    return relative;
+  }
+  return out;
+}
+
 /** Path to a checked-in fixture. */
 inline std::string data(const std::string & relative) {
-  return data_dir() + "/" + relative;
+  return path_join(data_dir(), relative);
 }
 
 /**
@@ -54,25 +79,32 @@ inline std::string data(const std::string & relative) {
  */
 inline std::string repo(const std::string & relative) {
 #ifdef GRX_REPO_ROOT
-  return std::string(GRX_REPO_ROOT) + "/" + relative;
+  return path_join(std::string(GRX_REPO_ROOT), relative);
 #else
   return relative;
 #endif
 }
 
-/** The whole of a text file, or an empty string when it cannot be read. */
+/**
+ * The whole of a text file, or an empty string when it cannot be read.
+ *
+ * cutil's reader rather than a loop here, which is what the other two copies
+ * in this repository now call too. The loop this replaced stopped when
+ * `fread` returned 0 and never asked `ferror()`, so a fixture that failed to
+ * read halfway through came back as a *shorter fixture* - and a shorter
+ * fixture is a test that checks less and still passes. A vector file read
+ * short is the same failure the conformance runner's own self-test exists to
+ * rule out.
+ */
 inline std::string read_file(const std::string & path) {
-  FILE * file = std::fopen(path.c_str(), "rb");
-  if (!file) {
+  void * data = nullptr;
+  size_t length = 0;
+  if (gcu_file_read(path.c_str(), GCU_FILE_UNLIMITED, nullptr, &data, &length)
+      != GCU_FILE_OK) {
     return std::string();
   }
-  std::string out;
-  char buffer[4096];
-  size_t read;
-  while ((read = std::fread(buffer, 1, sizeof(buffer), file)) > 0) {
-    out.append(buffer, read);
-  }
-  std::fclose(file);
+  std::string out(static_cast<const char *>(data), length);
+  gcu_file_free(nullptr, data);
   return out;
 }
 

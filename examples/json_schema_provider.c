@@ -47,10 +47,10 @@
  * Copyright 2026 by Corey Pennycuff
  */
 
+#include <ghoti.io/cutil/file.h>
 #include <ghoti.io/regex/regex.h>
 #include <ghoti.io/text/json.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 // ===========================================================================
@@ -149,40 +149,27 @@ static GTEXT_JSON_Regex_Provider schema_regex_provider(SchemaRegex * self) {
 // The demonstration
 // ===========================================================================
 
-/** Read a whole file; the caller frees. Returns NULL and complains on error. */
+/**
+ * Read a whole file; the caller frees with gcu_file_free(). Returns NULL and
+ * complains on error.
+ *
+ * cutil's, rather than a loop of its own. The loop that used to be here was
+ * one of two copies in this repository and both got the same thing wrong:
+ * `fread` returning 0 was read as end-of-file without asking `ferror()`, so a
+ * read that failed halfway through produced a short buffer that looked like a
+ * complete file - and a *truncated schema* validates differently rather than
+ * failing to load. gcu_file_read() answers GCU_FILE_ERR_IO for that case.
+ */
 static char * read_file(const char * path, size_t * out_len) {
-  FILE * file = fopen(path, "rb");
-  if (!file) {
-    fprintf(stderr, "cannot open %s\n", path);
+  void * data = NULL;
+  GCU_File_Result result =
+      gcu_file_read(path, GCU_FILE_UNLIMITED, NULL, &data, out_len);
+  if (result != GCU_FILE_OK) {
+    fprintf(stderr, "cannot read %s: %s\n", path,
+        gcu_file_result_string(result));
     return NULL;
   }
-  size_t capacity = 4096;
-  size_t length = 0;
-  char * data = (char *)malloc(capacity);
-  if (!data) {
-    fclose(file);
-    return NULL;
-  }
-  for (;;) {
-    if (length == capacity) {
-      char * grown = (char *)realloc(data, capacity * 2);
-      if (!grown) {
-        free(data);
-        fclose(file);
-        return NULL;
-      }
-      data = grown;
-      capacity *= 2;
-    }
-    size_t got = fread(data + length, 1, capacity - length, file);
-    length += got;
-    if (got == 0) {
-      break;
-    }
-  }
-  fclose(file);
-  *out_len = length;
-  return data;
+  return (char *)data;
 }
 
 /** Report a compile failure the way a schema's author needs to read it. */
@@ -308,7 +295,7 @@ int main(int argc, char ** argv) {
   }
   char * instance_text = read_file(argv[argi + 1], &instance_len);
   if (!instance_text) {
-    free(schema_text);
+    gcu_file_free(NULL, schema_text);
     return 1;
   }
 
@@ -369,7 +356,7 @@ done:
   gtext_json_schema_free(schema);
   gtext_json_free(instance);
   gtext_json_free(schema_doc);
-  free(schema_text);
-  free(instance_text);
+  gcu_file_free(NULL, schema_text);
+  gcu_file_free(NULL, instance_text);
   return exit_code;
 }
