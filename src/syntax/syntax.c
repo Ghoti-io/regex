@@ -122,7 +122,14 @@ static const GRX_SyntaxSpec spec_table[GRX_SYNTAX_COUNT] = {
     // only once there was a Perl front end to read it: `\N{U+0100}` is
     // refused outside UTF mode, and `\400` is one code point in UTF and a
     // byte that cannot be one without it.
-    .default_options = GRX_OPT_UTF,
+    //
+    // DUPLICATE_NAMES because perl has no switch for it: `(?<a>x)(?<a>y)`
+    // compiles in 5.40.1 with no pragma and no warning, where pcre2test
+    // refuses it as error 143 "(PCRE2_DUPNAMES not set)" and wants `(?J)`,
+    // and Node 22 refuses it outright. The option existed for `(?J)` and
+    // this row simply has it on - which is the whole of the difference, so
+    // there is no second mechanism.
+    .default_options = GRX_OPT_UTF | GRX_OPT_DUPLICATE_NAMES,
   },
   [GRX_SYNTAX_PCRE] = {
     // CSET is `(?[...])` here, not `&&` inside brackets: PCRE2 10.45 added

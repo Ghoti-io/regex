@@ -155,11 +155,75 @@ std::string group_of(const std::string & pattern, const std::string & subject,
   return answer;
 }
 
-} // namespace
 
 // --------------------------------------------------------------------------
 // Quoting, comments and extended mode: the three lexical skips
 // --------------------------------------------------------------------------
+
+/** The text one *named* group matched, or "-"/"unknown". */
+std::string named_of(const std::string & pattern, const std::string & subject,
+    const char * name, GRX_Syntax syntax = GRX_SYNTAX_PCRE) {
+  Attempt attempt = compile(pattern, syntax);
+  if (attempt.result != GRX_OK) {
+    return "compile failed";
+  }
+  GRX_Match * match = nullptr;
+  grx_match_create(attempt.regex, nullptr, &match);
+  int matched = 0;
+  std::string answer = "nomatch";
+  if (grx_regex_search(attempt.regex, subject.data(), subject.size(), 0,
+          GRX_ENGINE_AUTO, nullptr, match, &matched) == GRX_OK
+      && matched) {
+    GRX_Capture capture;
+    if (grx_match_group_named(match, name, &capture) != GRX_OK) {
+      answer = "unknown";
+    }
+    else if (capture.start == GRX_NPOS) {
+      answer = "-";
+    }
+    else {
+      answer = subject.substr(capture.start, capture.end - capture.start);
+    }
+  }
+  grx_match_destroy(match);
+  grx_regex_free(attempt.regex);
+  return answer;
+}
+
+} // namespace
+
+TEST(Perl, DuplicateGroupNamesAreOnlyPerlsByDefault) {
+  // Probed rather than reasoned: perl 5.40.1 compiles `(?<a>x)(?<a>y)` with
+  // no pragma and no warning; pcre2test 10.46 refuses it as error 143,
+  // "two named subpatterns have the same name (PCRE2_DUPNAMES not set)", and
+  // wants `(?J)`; Node 22 refuses it as "Duplicate capture group name". The
+  // three answers are three rows, and the option `(?J)` already set is the
+  // whole of the mechanism - Perl's row simply has it on.
+  EXPECT_EQ(span_of("(?<a>x)(?<a>y)", "xy", GRX_SYNTAX_PERL), "0-2");
+  EXPECT_EQ(compile_result("(?<a>x)(?<a>y)", GRX_SYNTAX_PCRE),
+      GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("(?<a>x)(?<a>y)", GRX_SYNTAX_ECMASCRIPT),
+      GRX_ERR_SYNTAX);
+  EXPECT_EQ(span_of("(?J)(?<a>x)(?<a>y)", "xy", GRX_SYNTAX_PCRE), "0-2");
+}
+
+TEST(Perl, ANamedLookupTakesTheFirstDuplicateThatTookPart) {
+  // Not the first duplicate. `(?<a>x)|(?<a>y)` against "y" leaves the first
+  // group unset and the second holding "y", and perl reports "y" for
+  // `$+{a}`; pcre2_substring_get_byname() documents the same rule, "the
+  // first one that is set". Reporting the first *group* instead gives
+  // "unset" for a name that plainly matched something.
+  EXPECT_EQ(named_of("(?<a>x)|(?<a>y)", "y", "a", GRX_SYNTAX_PERL), "y");
+  EXPECT_EQ(named_of("(?J)(?<a>x)|(?<a>y)", "y", "a", GRX_SYNTAX_PCRE), "y");
+
+  // With both set it is the leftmost, which perl also reports.
+  EXPECT_EQ(named_of("(?<a>x)(?<a>y)", "xy", "a", GRX_SYNTAX_PERL), "x");
+
+  // A name that matched nothing anywhere is still unset rather than an
+  // error, which is what a single-group name would have given.
+  EXPECT_EQ(named_of("(?<a>x)(?<a>y)|z", "z", "a", GRX_SYNTAX_PERL), "-");
+  EXPECT_EQ(named_of("(?<a>x)", "x", "b", GRX_SYNTAX_PERL), "unknown");
+}
 
 TEST(Perl, AQuotedRunIsLiteralAndNotAnAtom) {
   // `\Q...\E` suspends every operator meaning, which is the easy half. The

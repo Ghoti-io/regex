@@ -99,7 +99,7 @@ New bits, in addition to the scaffold's:
 | ATOMIC_GROUP | - | - | - | - | yes | yes | - |
 | CONDITIONAL | - | - | - | - | yes | yes | - |
 | RECURSION / SUBROUTINE | - | - | - | - | yes | yes | - |
-| INLINE_FLAGS / SCOPED_FLAGS | - | - | - | - | both | both | scoped only (ES2025; **probe** Node 22 support) |
+| INLINE_FLAGS / SCOPED_FLAGS | - | - | - | - | both | both | scoped only (ES2025), and not in Node 22 (probed: `(?i:X)` is "Invalid group"), so refused here |
 | COMMENT_GROUP | - | - | - | - | yes | yes | - |
 | POSIX_CLASS | yes | yes | yes | yes | yes (in brackets) | yes | - |
 | UNICODE_PROPERTY | - | - | - | - | yes | yes | `u`/`v` only |
@@ -114,7 +114,7 @@ New bits, in addition to the scaffold's:
 | BACKTRACK_CONTROL | - | - | - | - | `(*PRUNE)` etc. | yes | - |
 | BRANCH_RESET | - | - | - | - | yes | yes | - |
 | KEEP | - | - | - | - | yes | yes | - |
-| DUPLICATE_NAMES | - | - | - | - | with `(?\|)` or `(?P<n>)` twice under `use re 'eval'`? no: **probe** | `(?J)` | yes (ES2025; **probe** Node 22) |
+| DUPLICATE_NAMES | - | - | - | - | yes, with no pragma and no warning (probed: perl 5.40.1) | `(?J)` | ES2025, and not in Node 22 (probed), so refused here |
 | NEWLINE_R, GRAPHEME_X, NOT_NEWLINE_N, HV_SPACE | - | - | - | - | all | all | - |
 | NAMED_CHAR | - | - | - | - | `\N{U+..}`, `\N{name}` | `\N{U+..}` only | - |
 | EMPTY_CLASS / NEGATED_EMPTY_CLASS | - | - | - | - | - | - | both |
@@ -385,7 +385,7 @@ already see changed. See `GRX_PROGRAM_SHADOW_CAPTURES`.
 
 | Dialect | `\1`..`\9` | `\10` and up | `\0` | Octal | `\x` |
 | --- | --- | --- | --- | --- | --- |
-| POSIX, GNU | backreference | `\1` then `0` | undefined; GNU: literal? **probe** | none | none |
+| POSIX, GNU | backreference | `\1` then `0` | literal `0` (probed: glibc 2.41 and musl 1.2.6 both match `\0` against "0" and neither against a NUL) | none | none |
 | Perl, PCRE2 | backreference | backreference if that many groups exist, else octal if the digits are octal, else literal | `\0` then up to two octal digits | `\0oo`, `\o{...}` | `\xHH` (0-2 digits), `\x{...}` |
 | ECMAScript legacy | backreference if the pattern has that many groups, else legacy octal (up to `\377`), else identity (`\8`, `\9`) | same rule on the whole number, then the prefix | NUL, or legacy octal if followed by a digit | legacy only | `\xHH`; `\x` alone is identity |
 | ECMAScript `u`/`v` | backreference; error if no such group | same | NUL; error if followed by a digit | error | `\xHH` (exactly 2) or error; `\u{...}` |
@@ -559,7 +559,7 @@ never reaches it. Here the backslash is dropped.
 | `{,n}` | BRE: literal; ERE: undefined (glibc: literal) | `{0,n}` (Perl 5.34+, PCRE2 10.43+) | legacy: literal; `u`: error | `{0,n}` | error | `{0,n}` | RE2: literal; Rust: **probe** |
 | `{` not starting a valid quantifier | literal | literal | legacy: literal; `u`: error | literal | error | literal | literal (RE2); error (Rust) |
 | `a**`, `a+*` | GNU: allowed | error | error | error | **probe** | allowed with warning | error |
-| Quantifier on an assertion | n/a | error (`(?=a)*`) | legacy: lookahead is quantifiable; `u`: error | error | **probe** | error | n/a |
+| Quantifier on an assertion | ERE: error, for every anchor; BRE: a `*` after one is a literal asterisk (§5.18) | error (`(?=a)*`) | legacy: lookahead is quantifiable; `u`: error | error | **probe** | error | n/a |
 | Possessive spelling | - | `*+ ++ ?+ {m,n}+` | - | same (3.11+) | same | same | - |
 | Lazy spelling | - | `*? +? ?? {m,n}?` | same | same | same | same | same |
 | Nothing to repeat: `*a`, `(*a)` | BRE: literal `*` at start; ERE: undefined (glibc: error) | error | error | error | error | error | error |
@@ -1306,7 +1306,7 @@ start of an RE or after `\(` or `^` is literal; `^` is an anchor only at
 the start and `$` only at the end; `\+`, `\?`, `\|` are undefined in POSIX
 and are the GNU extensions. ERE: `+`, `?`, `|`, `{`, `()` are operators
 everywhere; `{` not starting a valid interval is undefined (glibc: literal,
-and the profile says so with a **probe**); backreferences are undefined
+probed and implemented as such - §5.18); backreferences are undefined
 (glibc: accepted, and `GRX_SYNTAX_POSIX_ERE` refuses them since a
 "portable" ERE must not use them; `GRX_SYNTAX_GNU_ERE` accepts). Bracket
 expressions: no escapes inside; `]` first is literal; `[:class:]`,

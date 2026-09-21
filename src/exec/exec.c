@@ -19,6 +19,7 @@
 #include <ghoti.io/regex/exec.h>
 #include <ghoti.io/regex/unicode.h>
 #include <stddef.h>
+#include <string.h>
 #include <stdio.h>
 
 #include "../unicode/unicode_internal.h"
@@ -464,6 +465,28 @@ GRX_Result grx_match_group_named(
   GRX_Result result = grx_regex_capture_index(match->regex, name, &index);
   if (result != GRX_OK) {
     return result;
+  }
+
+  // With duplicate names - Perl always, PCRE2 under `(?J)` - one name stands
+  // for several groups and the answer is the first of them that *took part*,
+  // not the first of them. `(?<a>x)|(?<a>y)` against "y" has only the second
+  // set, and perl reports "y" for it; pcre2_substring_get_byname() says the
+  // same, "the first one that is set". Falling back to the first when none
+  // is set keeps an unset answer rather than an error, which is what a
+  // single-group name would have given.
+  if (grx_regex_capture_name(match->regex, index)) {
+    for (size_t i = index; i <= grx_regex_capture_count(match->regex); i++) {
+      const char * candidate = grx_regex_capture_name(match->regex, i);
+      if (!candidate || strcmp(candidate, name) != 0) {
+        continue;
+      }
+      GRX_Capture capture;
+      if (grx_match_group(match, i, &capture) == GRX_OK
+          && capture.start != GRX_NPOS) {
+        *out_capture = capture;
+        return GRX_OK;
+      }
+    }
   }
 
   return grx_match_group(match, index, out_capture);
