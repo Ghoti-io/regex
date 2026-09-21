@@ -260,7 +260,7 @@ TESTFLAGS := `PKG_CONFIG_PATH=$(PKG_CONFIG_LOOKUP_PATH) pkg-config --libs --cfla
 # coverage target does, because --coverage links the gcov runtime, whose
 # mangle_path check-symbols is right to reject in a shipping library and
 # wrong to reject in an instrumented one. Spelled as text's TEST_GATES is.
-TEST_GATES ?= check-symbols check-layering check-unicode-tables
+TEST_GATES ?= check-symbols check-layering check-unicode-tables check-diagnostics
 
 # How much of the pattern space `make check-oracle-syntax` walks. The default
 # is a few seconds; a soak before a milestone raises the count and varies the
@@ -562,7 +562,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 ####################################################################
 
 # General commands
-.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-unicode-tables check-oracle-syntax check-oracle-match check-engine-equivalence \
+.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-diagnostics check-unicode-tables check-oracle-syntax check-oracle-match check-engine-equivalence \
 	check-oracle-properties check-oracle-numeric-properties \
 	check-oracle-string-properties check-oracle-posix check-oracle-sed \
 	check-oracles \
@@ -820,6 +820,13 @@ TEST_LD_PATH := $(APP_DIR):$(LIB_INSTALL_PATH)/$(SUITE)
 #   is its whole job.
 BELOW_THE_IR := src/exec/*.c src/exec/*.h src/compile/codegen.c \
 	src/compile/program.c
+
+check-diagnostics: ## Fail if a diagnostic exists that no code path produces
+	@if ! command -v python3 >/dev/null 2>&1; then \
+		printf "check-diagnostics: skipped (no python3)\n"; \
+		exit 0; \
+	fi; \
+	python3 tools/check_diagnostics.py
 
 check-layering: ## Fail if an engine knows which dialect it is running
 	@leaked=$$(grep -lnE 'GRX_SYNTAX_|GRX_Syntax|grx_syntax_|->syntax|regex/syntax\.h|syntax_internal\.h' \

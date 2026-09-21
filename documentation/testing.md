@@ -490,11 +490,25 @@ Run by `make test` alongside `check-symbols`:
   reads, and `lower.c` is where the dialect is spent.
   **To check the gate itself:** put `GRX_Syntax x;` in `codegen.c`, or
   `regex->syntax` in `exec_pike.c`. Both must fail the build.
-- **Every `GRX_Diag` has a string** and every string is used by some test
-  (the catalogue is not allowed to accumulate dead entries). **Half built:**
-  the completeness half is `DiagnosticCatalogueIsComplete`; the reachability
-  half waits for the front ends that emit the remaining diagnostics, which is
-  WP-18 and WP-23.
+- **Every `GRX_Diag` has a string** and **some code path raises it**. The
+  first half is `DiagnosticCatalogueIsComplete`, which is a statement about
+  the table. The second is `make check-diagnostics`
+  (`tools/check_diagnostics.py`), which is a statement about the library: a
+  diagnostic nothing raises is a promise in a public header that is never
+  kept. It waited for the front ends that emit most of them, which is WP-18
+  and WP-23, and both have landed.
+
+  Ten remain unraised and the script lists each with a reason, as a gate in
+  both directions: one that is unraised and unlisted fails, and a listed one
+  that becomes raised fails with "remove the entry". Six are one decision
+  rather than six - the match-time entry points take no `GRX_Error`, so a run
+  that stops at a limit or at a subject that is not valid UTF-8 has nowhere
+  to put a diagnostic, and either those entry points gain an error parameter
+  or the rows come out of the header. Two are constructs that turned out not
+  to be errors anywhere: a forward backreference compiles in perl and in
+  pcre2test, and an unterminated `\Q` runs to the end of the pattern.
+  **To check the gate itself:** delete a line from `UNPRODUCED` and it must
+  fail; add a diagnostic that *is* raised and it must fail the other way.
 - **Every `GRX_Feature` bit is set in at least one profile row** and
   **every profile row is complete** (no zero enum where zero is not a
   value). **Not built.**
