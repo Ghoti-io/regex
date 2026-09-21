@@ -1004,6 +1004,26 @@ an attack would be happening. Both are *answered* by the Pike VM in under a
 millisecond at the same limits, which is the point: a limit is a defence only
 because there is another engine that does not need it.
 
+**The POSIX and GNU rows reach the ceiling from a shorter pattern**, and it
+is worth knowing before one of them is pointed at an untrusted pattern -
+which, being the grep-shaped dialects, is what they are for. Those two
+grammars stack quantifiers, so `a*+*+*+*+` is legal there and nothing else
+here accepts it; ECMAScript answers `GRX_DIAG_NOTHING_TO_REPEAT` at the
+second one. Nine characters against a three-byte subject then spend the whole
+step budget - about 2.2 seconds on an idle machine - before `GRX_ERR_LIMIT`
+comes back. Nothing is unbounded and nothing is wrong: the limit is doing
+exactly what it is for, and the observation is only that these dialects can
+get there from a pattern a reader would not look twice at. A caller taking
+patterns from outside should say so with `max_steps` rather than with the
+default, and the same advice applies to `a*+*+*+` under any dialect that
+would take it.
+
+That shape is *not* the nested one. `((((a*)*)*)*)*` answers in four
+milliseconds here and in two under ECMAScript, because the Pike VM's thread
+list is keyed on the instruction and a nested loop revisits instructions
+rather than multiplying them. It is the stacked spelling that costs, and only
+where the grammar allows it.
+
 `max_steps` stays at 10,000,000, and the numbers above are why rather than a
 preference. Lowering it to a million would refuse a still-pathological pair
 in about 15 ms instead of 130 - but would also cap a legitimate scan at 333 KB,

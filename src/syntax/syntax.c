@@ -222,10 +222,19 @@ static const char * const spec_names[GRX_SYNTAX_COUNT] = {
  * Status: ECMAScript's row is filled from ECMA-262 and checked against Node
  * 22; every other row holds the value documentation/dialects.md section 5
  * states, and the cells that page marks **probe** are resolved by
- * documentation/plan.md WP-03 before code depends on them. A zeroed field is
- * the first value of its enum, and for every enum here that is the value the
- * Perl family takes - so a dialect whose row is not yet written behaves as
- * Perl rather than as nothing, which is the failure a reader can see.
+ * documentation/plan.md WP-03 before code depends on them.
+ *
+ * A zeroed field is the first value of its enum, and it is worth knowing
+ * exactly which value that is before leaving one out. It is *not* the Perl
+ * family's: `GRX_CAPTURE_KEEP_LAST_SET`, `GRX_NEGATIVE_LOOK_CLEAR` and
+ * `GRX_SHORTHANDS_ASCII` are all zero, and Perl takes none of the three -
+ * its row states twelve fields explicitly for that reason. What zero gives
+ * is the plainest reading of each axis, which is what a dialect with no row
+ * written should behave as: ASCII shorthands rather than Unicode ones, a
+ * subject of bytes rather than of text, captures kept rather than cleared.
+ * A new row inherits that and overrides what its dialect actually differs
+ * about - which for the POSIX and GNU rows is why six of these fields are
+ * absent from them and right anyway.
  *
  * Reading a row: the second fold and shorthand columns are the values under
  * UTF or UCP. A dialect where the two differ is one where the same pattern

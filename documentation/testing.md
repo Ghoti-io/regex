@@ -697,8 +697,15 @@ at its own use and repeated here because the three differ and a reader
 comparing them should not have to open three files.
 
 - `fuzz_pattern`: bits 0-2 choose whether to pick an arbitrary dialect, which
-  one input in eight does; the rest get ECMAScript, because a dialect with no
-  front end is refused at the first call and the run is spent. Bits 3-5
+  one input in eight does, because a dialect with no front end is refused at
+  the first call and the run is spent. The other seven-eighths are shared
+  among the dialects that *do* have one, and the list of those is named in
+  the harness rather than derived: it said "ECMAScript" for as long as
+  ECMAScript was the only one, and went on saying it through WP-18 and
+  WP-23, so each of the six built dialects was getting a thirty-second of
+  the campaign instead of an eighth. `GRX_FUZZ_SYNTAX=<dialect>` pins one,
+  which is what plan.md §4's fourth condition - eight hours clean *with the
+  dialect selected* - needs in order to be something anyone can run. Bits 3-5
   choose the option set, which is the thing that matters: ECMAScript is three
   grammars, not one, and `v` reads `--` as an operator where `u` reads two
   dashes. Bits 6 and 7 tighten two disjoint sets of limits, covering every
