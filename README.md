@@ -80,9 +80,10 @@ The only dependency is [`ghoti.io-cutil`](../cutil), found through pkg-config
 and nothing else. Build the suite into a local prefix first:
 
 ```bash
-cd .. && ./bootstrap.sh
+# from the workspace root, which holds bootstrap.sh and libs/
+./bootstrap.sh
 export PKG_CONFIG_PATH="$PWD/.local/share/pkgconfig"
-make -C regex test PREFIX="$PWD/.local"
+make -C libs/regex test PREFIX="$PWD/.local"
 ```
 
 ## The API
