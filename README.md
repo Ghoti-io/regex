@@ -65,9 +65,16 @@ int main(void) {
 ```bash
 make            # the shared and static libraries
 make test       # build and run every test, and check-symbols
-make examples   # examples/*.c
+make examples   # examples/*.c - see below
 make help       # every target
 ```
+
+`examples/` is one program per thing worth showing rather than one per API
+call: `regex_info` prints what a dialect has and tries a pattern in it,
+`posix_stream` is a grep and a sed over the four POSIX and GNU rows,
+`perl_extract` puts one named-group pattern to both PCRE2 and Perl to show
+where their templates part, and the two `json_schema_*` programs are the
+`text` seam.
 
 The only dependency is [`ghoti.io-cutil`](../cutil), found through pkg-config
 and nothing else. Build the suite into a local prefix first:

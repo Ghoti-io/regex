@@ -477,7 +477,11 @@ hold:
 4. The pattern fuzzer has run eight hours clean with the dialect selected.
 5. `grx_options_parse()` accepts its alphabet and its replacement template
    grammar is implemented.
-6. `examples/` has one example in the dialect.
+6. `examples/` has one example in the dialect. Five of them so far:
+   `regex_info` and the two JSON Schema programs are ECMAScript's,
+   `posix_stream` is a grep and a sed across the four POSIX and GNU rows,
+   and `perl_extract` is PCRE2's and Perl's - the same pattern under both,
+   because the place they part is the template rather than the pattern.
 
 ## 5. What "done" means for the first stable release
 
