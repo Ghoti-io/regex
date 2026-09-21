@@ -78,6 +78,31 @@ std::string span(const std::string & pattern, const std::string & subject,
   return answer;
 }
 
+/** Every match replaced, or "template" when the template is refused. */
+std::string replace_all(const std::string & pattern,
+    const std::string & subject, const std::string & tmpl, GRX_Syntax syntax) {
+  Attempt attempt = compile(pattern, syntax);
+  if (attempt.result != GRX_OK) {
+    grx_regex_free(attempt.regex);
+    return "error";
+  }
+  GRX_Text out;
+  std::memset(&out, 0, sizeof(out));
+  GRX_Error error;
+  grx_error_clear(&error);
+  GRX_Result result = grx_regex_replace(attempt.regex, subject.data(),
+      subject.size(), tmpl.data(), tmpl.size(), GRX_REPLACE_GLOBAL, nullptr,
+      nullptr, &error, &out);
+  std::string answer = result == GRX_OK
+      ? std::string(out.data, out.length)
+      : (result == GRX_ERR_SYNTAX ? "template" : "error");
+  if (result == GRX_OK) {
+    grx_text_free(&out);
+  }
+  grx_regex_free(attempt.regex);
+  return answer;
+}
+
 /** One group's span, as `start-end`, or "unset"/"nomatch"/"error". */
 std::string group(const std::string & pattern, const std::string & subject,
     GRX_Syntax syntax, size_t index, uint32_t options = 0) {
@@ -261,6 +286,47 @@ TEST(Posix, AnEmptyIterationRunsOnlyWhileTheRepeatHasNotMoved) {
 
   // ECMAScript's rule is its own and does not move.
   EXPECT_EQ(group("(a*)*", "bc", GRX_SYNTAX_ECMASCRIPT, 1), "unset");
+}
+
+TEST(Posix, TheReplacementTemplateIsSedsBecausePosixHasNone) {
+  // POSIX's regular expressions say nothing about substitution, so the
+  // reference for these four rows is sed's `s` command rather than a regex
+  // standard. Every expectation here was asked of sed 4.9 first, and
+  // tools/oracle/sed_diff.py asks it again on every `make check-oracles`.
+  EXPECT_EQ(replace_all("(a)(b)", "ab", "[&]", kEre), "[ab]");
+  EXPECT_EQ(replace_all("(a)(b)", "ab", "[\\1]", kEre), "[a]");
+  EXPECT_EQ(replace_all("(a)(b)", "ab", "\\1\\2", kEre), "ab");
+  EXPECT_EQ(replace_all("(a)(b)", "ab", "&&", kEre), "abab");
+
+  // A bare `&` is the whole match and the *escaped* one is the literal,
+  // which is the reverse of every other dialect here - ECMAScript's `$&` is
+  // the whole match and a bare `&` is an ampersand.
+  EXPECT_EQ(replace_all("(a)(b)", "ab", "\\&", kEre), "&");
+  EXPECT_EQ(replace_all("(a)(b)", "ab", "$&", GRX_SYNTAX_ECMASCRIPT), "ab");
+  EXPECT_EQ(replace_all("(a)(b)", "ab", "&", GRX_SYNTAX_ECMASCRIPT), "&");
+
+  // One digit, never two: `\10` is group one and a zero, which sed answers
+  // that way even for a pattern that has ten groups.
+  EXPECT_EQ(replace_all("(a)(b)", "ab", "\\10", kEre), "a0");
+
+  // The escape is total rather than a list, so `\q` is a `q`.
+  EXPECT_EQ(replace_all("(a)(b)", "ab", "[\\q]", kEre), "[q]");
+  EXPECT_EQ(replace_all("(a)(b)", "ab", "[\\\\]", kEre), "[\\]");
+
+  // A group the pattern has not got is refused, which is sed's answer too -
+  // it reports "invalid reference \\3 on `s' command's RHS" and compiles
+  // nothing.
+  EXPECT_EQ(replace_all("(a)(b)", "ab", "\\3", kEre), "template");
+
+  // `\0` is GNU's, not POSIX's.
+  EXPECT_EQ(replace_all("(a)(b)", "ab", "[\\0]", kEre), "[ab]");
+  EXPECT_EQ(replace_all("(a)(b)", "ab", "[\\0]", GRX_SYNTAX_POSIX_ERE),
+      "[0]");
+
+  // And a basic RE spells its groups with backslashes on the pattern side
+  // while the template side is identical.
+  EXPECT_EQ(replace_all("\\(a\\)\\(b\\)", "ab", "[\\2\\1]", kBre),
+      "[ba]");
 }
 
 TEST(Posix, WhichSecondQuantifierEachGrammarAccepts) {

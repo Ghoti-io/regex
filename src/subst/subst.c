@@ -319,6 +319,23 @@ GRX_Result grx_template_parse(const GRX_TemplateSpec * spec,
       literal_from = i;
       continue;
     }
+    if (text[i] == '&' && (spec->features & GRX_TMPL_WHOLE_BARE)) {
+      // sed's whole match. Not introduced by the sigil - `\&` is the
+      // *literal* `&` here, which is GRX_TMPL_ESCAPE_ANY's job - so it is
+      // caught before the sigil test rather than inside it.
+      GRX_Result result
+          = emit_literal(out_template, literal_from, i - literal_from);
+      if (result == GRX_OK) {
+        result = emit(out_template, GRX_TPL_WHOLE, 0, 0, 0);
+      }
+      if (result != GRX_OK) {
+        grx_template_clear(out_template);
+        return fail(out_error, GRX_DIAG_OUT_OF_MEMORY, i, 1);
+      }
+      i++;
+      literal_from = i;
+      continue;
+    }
     if (text[i] != sigil) {
       i++;
       continue;
@@ -386,6 +403,23 @@ GRX_Result grx_template_parse(const GRX_TemplateSpec * spec,
           consumed += 1;
         }
       }
+      else if (c == '0' && (spec->features & GRX_TMPL_WHOLE_ZERO)) {
+        kind = GRX_TPL_WHOLE;
+        consumed = 1;
+      }
+      else if (c >= '1' && c <= '9'
+          && (spec->features & GRX_TMPL_NUMBER_SINGLE)) {
+        uint32_t value = (uint32_t)(c - '0');
+        if (value <= captures) {
+          group = value;
+          kind = GRX_TPL_GROUP;
+          consumed = 1;
+        }
+        else if (spec->missing == GRX_TMPL_MISSING_ERROR) {
+          grx_template_clear(out_template);
+          return fail(out_error, GRX_DIAG_TEMPLATE_UNKNOWN_GROUP, start, 2);
+        }
+      }
       else if (c >= '0' && c <= '9' && (spec->features & GRX_TMPL_NUMBER)) {
         consumed
             = digits_naming_a_group(text, length, after, captures, &group);
@@ -418,6 +452,40 @@ GRX_Result grx_template_parse(const GRX_TemplateSpec * spec,
           return fail(out_error, GRX_DIAG_TEMPLATE_UNKNOWN_GROUP, start, 2);
         }
       }
+      else if (spec->features & GRX_TMPL_ESCAPE_ANY) {
+        // Last, so that every rule above claims its character first. What is
+        // left is sed's total escape: `\&` is an `&`, `\\` is a backslash,
+        // and `\q` is a `q`.
+        GRX_Result result = emit_literal(out_template, literal_from,
+            start - literal_from);
+        if (result == GRX_OK) {
+          result = emit_literal(out_template, after, 1);
+        }
+        if (result != GRX_OK) {
+          grx_template_clear(out_template);
+          return fail(out_error, GRX_DIAG_OUT_OF_MEMORY, start, 2);
+        }
+        i = after + 1;
+        literal_from = i;
+        continue;
+      }
+    }
+    else if (spec->features & GRX_TMPL_ESCAPE_ANY) {
+      // A sigil with nothing after it, which is this library's decision and
+      // not an oracle's: sed cannot be asked, because the closing delimiter
+      // of its `s` command is exactly what a trailing backslash escapes, so
+      // a template ending in one never reaches it. Dropped rather than kept,
+      // because the alternative is a template whose last character means
+      // "escape" and has nothing to escape.
+      GRX_Result result = emit_literal(out_template, literal_from,
+          start - literal_from);
+      if (result != GRX_OK) {
+        grx_template_clear(out_template);
+        return fail(out_error, GRX_DIAG_OUT_OF_MEMORY, start, 1);
+      }
+      i = after;
+      literal_from = i;
+      continue;
     }
 
     if (!consumed || kind == GRX_TPL_COUNT) {

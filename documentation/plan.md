@@ -329,6 +329,15 @@ library invented. *Depends on:* WP-16.
 PCRE2 and Perl parse, compile, match and substitute; the engine feature set
 is complete.
 
+**The POSIX and GNU templates are here too**, which no package named and §4's
+fifth condition wanted: `grx_regex_replace()` answered `GRX_ERR_UNSUPPORTED`
+for four shipped dialects. POSIX defines no replacement syntax at all, so the
+grammar is sed's `s` command - `&` for the whole match, `\&` for the literal
+one, `\1` to `\9` a single digit at a time, and a total backslash escape -
+with `\0` on the GNU rows only. `tools/oracle/sed_diff.py` and
+`tools/oracle/grx_replace.c` measure it the way every other rule here is
+measured; 396 cases, no disagreements.
+
 ### Phase 4: POSIX and GNU
 
 **WP-23 The POSIX and GNU front end.** *front ends, M.* **Landed.**

@@ -506,10 +506,39 @@ the dialect's rule for a reference to a group that does not exist.
 | .NET | `$n`, `${n}` | `${name}` | `$&`, `` $` ``, `$'`, `$+`, `$_` | `$$` | literal | empty | none |
 | Ruby (`sub`) | `\n` | `\k<name>` | `\0`, `\&`, `` \` ``, `\'` | `\\` | empty | empty | none |
 | Go, Rust | `$n`, `${n}` | `$name`, `${name}` - the name is parsed greedily, so `$1x` is the group named `1x` | none | `$$` | empty | empty | none |
-| GNU sed | `\n` | none | `&` | `\&`, `\\` | error | empty | GNU: `\U \L \E \u \l` |
+| POSIX BRE/ERE | `\1`-`\9`, one digit | none | `&` | `\&`, `\\`, and `\c` for any other `c` | error | empty | none |
+| GNU BRE/ERE | as POSIX, plus `\0` for the whole match | none | `&`, `\0` | as POSIX | error | empty | none - see below |
 | Vim (`:s`) | `\n` | none | `&`, `\0` | `\&`, `\\` | empty | empty | `\u \U \l \L \e \E` |
 | Tcl (`regsub`) | `\n` | none | `&`, `\0` | `\\`, `\&` | empty | empty | none |
 | Emacs (`replace-match`) | `\n` | none | `\&` | `\\` | error | empty | none |
+
+**The POSIX and GNU rows are sed's**, because POSIX's regular expressions say
+nothing about substitution and sed's `s` command is what defines one. That
+makes sed the oracle here for the same reason glibc is the oracle for the
+front end, and with the same division: `posix-bre` and `posix-ere` take only
+what POSIX's sed states - `&`, `\&`, `\\` and `\1` to `\9` - and the two GNU
+rows add `\0`. `tools/oracle/sed_diff.py` puts both sets to sed on every
+`make check-oracles`.
+
+Three details are worth stating because none of them is what a reader coming
+from the `$` dialects would guess. A **bare** `&` is the whole match and
+`\&` is the literal one, which is the reverse of ECMAScript's `$&`. A group
+number is **one digit and never two**, so `\10` is group 1 followed by a `0`
+even in a pattern with ten groups - sed answers that way and it is what the
+`s` command has always meant. And the escape is **total** rather than a list:
+`\q` is a `q`, so a backslash before anything the grammar does not claim is
+that character, where ECMAScript's `$q` stays two characters.
+
+**Case operators are not implemented for any dialect.** GNU sed has
+`\U \L \l \u \E` and so does PCRE2 under `PCRE2_SUBSTITUTE_EXTENDED`, and
+this library implements neither; they are one feature and it is a single
+omission rather than two. A template using one gets the letter as a literal
+under the GNU rows, because the escape is total.
+
+A template ending in a **trailing backslash** is this library's own decision
+rather than an oracle's: sed cannot be asked, since the closing delimiter of
+its `s` command is exactly what such a backslash escapes, so the template
+never reaches it. Here the backslash is dropped.
 
 ### 5.12 Character-class syntax
 

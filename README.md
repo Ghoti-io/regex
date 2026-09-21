@@ -171,7 +171,7 @@ Nothing is allocated for the caller to free on a failing call.
 | Conditionals, recursion and subroutine calls, `\K`, the control verbs | working - on the backtracking engine, which is the only one that can run them |
 | Bit-state engine | working - the backtracker with a memo, and the linear bound back |
 | Search window, NOTBOL/NOTEOL/NOTEMPTY, `grx_regex_search_next()` | working |
-| `grx_regex_replace()` and `grx_regex_split()` | working - ECMAScript's, PCRE2's and Perl's template grammars, and the split rule |
+| `grx_regex_replace()` and `grx_regex_split()` | working - ECMAScript's, PCRE2's, Perl's and sed's template grammars, and the split rule |
 | `grx_pattern_lint()`, the JSON Schema subset check | working |
 | Limits | measured, not guessed; dialects.md section 7 |
 | The `text` seam for JSON Schema | working - `pattern` and `patternProperties` validate through this library |

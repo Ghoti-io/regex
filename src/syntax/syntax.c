@@ -259,6 +259,20 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     // empty run after a final newline *is* a line here, where PCRE2 and Perl
     // say it is not.
     .caret_after_final_newline = 1,
+    // sed's `s` command right-hand side, which is what POSIX defines for
+    // replacement and the only replacement grammar these dialects have -
+    // POSIX's regular expressions say nothing about substitution, so the
+    // reference is sed rather than a regex standard. Probed against GNU sed
+    // 4.9: `&` is the whole match, `\&` is a literal one, `\1` to `\9` name
+    // groups one digit at a time (`\10` is group 1 and a `0`, even with ten
+    // groups), `\q` is a `q`, and a reference to a group the pattern has not
+    // got is refused rather than substituted.
+    .template_spec = {
+      .sigil = '\\',
+      .features = GRX_TMPL_NUMBER_SINGLE | GRX_TMPL_WHOLE_BARE
+          | GRX_TMPL_ESCAPE_ANY,
+      .missing = GRX_TMPL_MISSING_ERROR,
+    },
   },
   [GRX_SYNTAX_POSIX_ERE] = {
     .preference = GRX_PREFER_LEFTMOST_LONGEST,
@@ -284,6 +298,20 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     // empty run after a final newline *is* a line here, where PCRE2 and Perl
     // say it is not.
     .caret_after_final_newline = 1,
+    // sed's `s` command right-hand side, which is what POSIX defines for
+    // replacement and the only replacement grammar these dialects have -
+    // POSIX's regular expressions say nothing about substitution, so the
+    // reference is sed rather than a regex standard. Probed against GNU sed
+    // 4.9: `&` is the whole match, `\&` is a literal one, `\1` to `\9` name
+    // groups one digit at a time (`\10` is group 1 and a `0`, even with ten
+    // groups), `\q` is a `q`, and a reference to a group the pattern has not
+    // got is refused rather than substituted.
+    .template_spec = {
+      .sigil = '\\',
+      .features = GRX_TMPL_NUMBER_SINGLE | GRX_TMPL_WHOLE_BARE
+          | GRX_TMPL_ESCAPE_ANY,
+      .missing = GRX_TMPL_MISSING_ERROR,
+    },
   },
   [GRX_SYNTAX_GNU_BRE] = {
     .preference = GRX_PREFER_LEFTMOST_LONGEST,
@@ -309,6 +337,21 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     // empty run after a final newline *is* a line here, where PCRE2 and Perl
     // say it is not.
     .caret_after_final_newline = 1,
+    // sed's `s` command right-hand side, which is what POSIX defines for
+    // replacement and the only replacement grammar these dialects have -
+    // POSIX's regular expressions say nothing about substitution, so the
+    // reference is sed rather than a regex standard. Probed against GNU sed
+    // 4.9: `&` is the whole match, `\&` is a literal one, `\1` to `\9` name
+    // groups one digit at a time (`\10` is group 1 and a `0`, even with ten
+    // groups), `\q` is a `q`, and a reference to a group the pattern has not
+    // got is refused rather than substituted. GNU adds `\0` for the whole
+    // match, which POSIX does not have.
+    .template_spec = {
+      .sigil = '\\',
+      .features = GRX_TMPL_NUMBER_SINGLE | GRX_TMPL_WHOLE_BARE
+          | GRX_TMPL_WHOLE_ZERO | GRX_TMPL_ESCAPE_ANY,
+      .missing = GRX_TMPL_MISSING_ERROR,
+    },
   },
   [GRX_SYNTAX_GNU_ERE] = {
     .preference = GRX_PREFER_LEFTMOST_LONGEST,
@@ -334,6 +377,21 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     // empty run after a final newline *is* a line here, where PCRE2 and Perl
     // say it is not.
     .caret_after_final_newline = 1,
+    // sed's `s` command right-hand side, which is what POSIX defines for
+    // replacement and the only replacement grammar these dialects have -
+    // POSIX's regular expressions say nothing about substitution, so the
+    // reference is sed rather than a regex standard. Probed against GNU sed
+    // 4.9: `&` is the whole match, `\&` is a literal one, `\1` to `\9` name
+    // groups one digit at a time (`\10` is group 1 and a `0`, even with ten
+    // groups), `\q` is a `q`, and a reference to a group the pattern has not
+    // got is refused rather than substituted. GNU adds `\0` for the whole
+    // match, which POSIX does not have.
+    .template_spec = {
+      .sigil = '\\',
+      .features = GRX_TMPL_NUMBER_SINGLE | GRX_TMPL_WHOLE_BARE
+          | GRX_TMPL_WHOLE_ZERO | GRX_TMPL_ESCAPE_ANY,
+      .missing = GRX_TMPL_MISSING_ERROR,
+    },
   },
 
   // The Perl family. Full folding is implemented as simple folding and

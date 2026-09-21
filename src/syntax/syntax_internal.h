@@ -152,6 +152,43 @@ typedef enum {
  * `$$` is the process id. The two rules are mutually exclusive, and a
  * dialect that had both would be one whose templates cannot be written.
  */
+/**
+ * A bare `&` is the whole match, and `<sigil>&` is a literal `&`.
+ *
+ * sed's, and the reverse of GRX_TMPL_WHOLE's `$&`. POSIX defines exactly
+ * this for the `s` command's right-hand side, and it is the only sigil the
+ * POSIX and GNU rows have besides the backslash.
+ */
+#define GRX_TMPL_WHOLE_BARE GRX_BIT(12)
+
+/**
+ * One digit names a group, never two.
+ *
+ * `\1` through `\9`, so `\10` is group 1 followed by a `0` even where ten
+ * groups exist - probed against sed 4.9, which answers "a0" for a pattern
+ * with ten of them. GRX_TMPL_NUMBER takes one *or* two and is the other
+ * dialects' rule.
+ */
+#define GRX_TMPL_NUMBER_SINGLE GRX_BIT(13)
+
+/**
+ * `<sigil>0` is the whole match.
+ *
+ * GNU sed's, not POSIX's, which is why it is a bit rather than part of
+ * GRX_TMPL_NUMBER_SINGLE.
+ */
+#define GRX_TMPL_WHOLE_ZERO GRX_BIT(14)
+
+/**
+ * `<sigil>c`, for any `c` the rules above do not claim, is a literal `c`.
+ *
+ * sed again: `\q` is `q` and `\\` is a backslash, so the escape is total
+ * rather than a list. The other dialects have no such rule - ECMAScript's
+ * `$q` is `$q`, two characters, because there the sigil is only special
+ * before something it recognises.
+ */
+#define GRX_TMPL_ESCAPE_ANY GRX_BIT(15)
+
 #define GRX_TMPL_BACKSLASH_ESCAPE GRX_BIT(11)
 
 /** @brief What a reference to a group the pattern does not have does. */
