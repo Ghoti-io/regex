@@ -1,3 +1,23 @@
+/*
+ * SPDX-License-Identifier: LGPL-3.0-only
+ *
+ * Copyright (C) 2026 Corey Pennycuff
+ *
+ * This file is part of Ghoti.io Regex.
+ *
+ * Ghoti.io Regex is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU Lesser General Public License version 3 as
+ * published by the Free Software Foundation.
+ *
+ * Ghoti.io Regex is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+ * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
+ * License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 /**
  * @file
  *
@@ -22,8 +42,6 @@
  * conditionals, recursion and the backtracking control verbs - compile and
  * are then refused, rather than being ignored: a plausible wrong answer is
  * worse than no answer.
- *
- * Copyright 2026 by Corey Pennycuff
  */
 
 #ifndef GHOTI_IO_GRX_EXEC_H

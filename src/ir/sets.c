@@ -1,3 +1,23 @@
+/*
+ * SPDX-License-Identifier: LGPL-3.0-only
+ *
+ * Copyright (C) 2026 Corey Pennycuff
+ *
+ * This file is part of Ghoti.io Regex.
+ *
+ * Ghoti.io Regex is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU Lesser General Public License version 3 as
+ * published by the Free Software Foundation.
+ *
+ * Ghoti.io Regex is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+ * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
+ * License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 /**
  * @file
  *
@@ -9,8 +29,6 @@
  * Unicode tables because they are not facts about the UCD: ECMA-262 says its
  * `\s` includes U+FEFF, which has not been White_Space since Unicode 4.0.1,
  * and that is a statement about ECMA-262.
- *
- * Copyright 2026 by Corey Pennycuff
  */
 
 #include <ghoti.io/regex/macros.h>

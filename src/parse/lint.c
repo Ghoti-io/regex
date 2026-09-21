@@ -1,3 +1,23 @@
+/*
+ * SPDX-License-Identifier: LGPL-3.0-only
+ *
+ * Copyright (C) 2026 Corey Pennycuff
+ *
+ * This file is part of Ghoti.io Regex.
+ *
+ * Ghoti.io Regex is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU Lesser General Public License version 3 as
+ * published by the Free Software Foundation.
+ *
+ * Ghoti.io Regex is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+ * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
+ * License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 /**
  * @file
  *
@@ -14,8 +34,6 @@
  * The walk is over the AST rather than the IR, deliberately. By the time a
  * pattern has been lowered, `\d` and `[0-9]` are the same class and `(?:a)`
  * and `a` are the same node - which is exactly the information this needs.
- *
- * Copyright 2026 by Corey Pennycuff
  */
 
 #include <ghoti.io/regex/macros.h>

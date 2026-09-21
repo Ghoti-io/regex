@@ -1,3 +1,23 @@
+/*
+ * SPDX-License-Identifier: LGPL-3.0-only
+ *
+ * Copyright (C) 2026 Corey Pennycuff
+ *
+ * This file is part of Ghoti.io Regex.
+ *
+ * Ghoti.io Regex is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU Lesser General Public License version 3 as
+ * published by the Free Software Foundation.
+ *
+ * Ghoti.io Regex is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+ * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
+ * License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 /**
  * @file
  *
@@ -8,8 +28,6 @@
  * tables are these arrays. Putting the type in either one would make the
  * other include it, and the dependency that matters - a caseless class is
  * closed over the Unicode fold orbits - only runs one way.
- *
- * Copyright 2026 by Corey Pennycuff
  */
 
 #ifndef GHOTI_IO_GRX_SRC_CORE_RANGE_INTERNAL_H
