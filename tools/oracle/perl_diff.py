@@ -76,6 +76,33 @@ ATOMS = [
     # the first branch wins even when a later one is longer, and an engine
     # that quietly took the longest would pass a corpus without these.
     "a|ab", "ab|a", "(a|ab)", "(ab|a)", "a|aa", "(a|ab)*",
+    # Escapes with their own grammar inside the braces.
+    "\\x{61}", "\\o{141}", "\\x61", "\\N{U+0061}", "\\p{L}", "\\P{L}",
+    "\\p{Latin}", "\\p{^L}", "[\\p{L}]",
+    # The single-letter classes that are not \d, \w or \s.
+    "\\h", "\\v", "\\H", "\\V", "\\R", "\\N",
+    # Conditionals. Each carries its own group, so that a generated pattern
+    # is a whole question rather than a reference to something that may not
+    # be there.
+    "(a)(?(1)b|c)", "(a)?(?(1)b|c)", "(?<n>a)?(?(<n>)b|c)", "(a)(?(?=a)b|c)",
+    "(a)(?(1)b)",
+    # Branch reset, which gives two groups one number.
+    "(?|(a)|(b))", "(?|(a)|(b))\\1",
+    # Duplicate names, which perl allows with no modifier - `(?J)` is
+    # PCRE2's spelling of a thing perl does not need and does not accept, so
+    # it belongs in the pcre vocabulary that does not exist rather than here.
+    "(?<n>a)|(?<n>b)", "(?<n>a)|(?<n>b)\\k<n>",
+    # `\K`, which moves where the match is reported to start.
+    "a\\Kb", "(a)\\Kb",
+    # The control verbs. `(*FAIL)` is `(?!)` written short; the rest steer
+    # the backtracker, and what they do is visible only in where a match
+    # ends up - exactly the kind of thing a compiles-only test cannot see.
+    "(*FAIL)", "a(*FAIL)|a", "(*ACCEPT)", "a(*ACCEPT)b",
+    "a(*PRUNE)b", "a(*SKIP)b", "a(*COMMIT)b", "(*MARK:x)a", "a+(*PRUNE)b",
+    # Recursion and subroutine calls, each with something to call. A bare
+    # `(?R)` is deliberately absent: it recurses with nothing to stop it and
+    # the question it asks is about a limit rather than about a grammar.
+    "(a)(?1)", "(?<n>a)(?&n)", "(a|b(?1))", "(?(DEFINE)(?<n>a))(?&n)",
 ]
 
 # Atoms that are not well formed on their own, so that some generated pattern
@@ -117,8 +144,15 @@ def ask(command, cases):
         lines.append("%s\t%s\t%s" % (flags,
             binascii.hexlify(pattern.encode()).decode(),
             binascii.hexlify(subject.encode()).decode()))
-    finished = subprocess.run(command, input="\n".join(lines) + "\n",
-        capture_output=True, text=True)
+    # A timeout, because the vocabulary now contains recursion and control
+    # verbs: a generated pattern that makes perl or this library run for ever
+    # should stop the tool and say so, not look like a hang in the build.
+    try:
+        finished = subprocess.run(command, input="\n".join(lines) + "\n",
+            capture_output=True, text=True, timeout=600)
+    except subprocess.TimeoutExpired:
+        sys.stderr.write("%s did not finish within 600s\n" % command[0])
+        return []
     return finished.stdout.splitlines()
 
 

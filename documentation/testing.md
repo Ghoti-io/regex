@@ -448,6 +448,25 @@ ever *refused*, and the accept-versus-reject half of the comparison reports
 zero having never been asked. Roughly a third of generated patterns are
 rejected by perl, and the two agree on every one.
 
+It also reaches past the constructs a front end is obviously about.
+Conditionals, recursion and subroutine calls, branch reset, `\K`, duplicate
+names, the control verbs, `\p{}`, `\x{}`, `\o{}`, `\N{U+}` and `\h\v\R\N`
+are all in it, each carrying whatever it needs to be a whole question - a
+conditional brings its own group rather than referring to one that may not
+be there. Every family generates patterns that perl refuses *and* patterns
+that match, which is what says the rows are being compared rather than
+skipped. A bare `(?R)` is the one deliberate absence: it recurses with
+nothing to stop it, so what it asks about is a limit rather than a grammar.
+
+`(?J)` is absent for a different reason - it is PCRE2's spelling for
+something perl does not need and does not accept, duplicate names being
+ordinary there. It belongs to the pcre vocabulary that does not exist.
+
+Both drivers run under a timeout, because a vocabulary containing recursion
+and control verbs can generate a pattern that runs for a very long time, and
+that should stop the tool with a message rather than look like a hung
+build.
+
 Two things the transport cannot carry, both recorded in the file rather than
 left as silence. `\Q...\E` is double-quotish processing that happens when
 perl tokenises its *source*, so a pattern arriving in a variable - the only
