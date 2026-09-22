@@ -827,6 +827,40 @@ TEST(Perl, TheLeadingDirectivesArePcre2sAndPerlRefusesEveryOne) {
   grx_regex_free(skip.regex);
 }
 
+TEST(Perl, ACalloutIsPcre2sAndItsNumberIsBounded) {
+  // A callout reports a position to a caller that registered a function;
+  // there is no such API here, so accepting one changes no answer. That is
+  // a reason to accept the construct and not a reason to accept anything
+  // spelled like it.
+  //
+  // The number is one byte wide in PCRE2 - `(?C256)` is its error 138,
+  // "number after (?C is greater than 255" - and a number this library
+  // hands to nobody is still a number the reference refuses.
+  for (const char * pattern : {"(?C)abc", "(?C0)abc", "(?C255)abc",
+           "(?C{x})abc", "(?C\"x\")abc"}) {
+    Attempt ok = compile(pattern, GRX_SYNTAX_PCRE);
+    EXPECT_EQ(ok.result, GRX_OK) << pattern;
+    grx_regex_free(ok.regex);
+  }
+  for (const char * pattern : {"(?C256)abc", "(?C1000)abc",
+           "(?C99999999999999999999)abc"}) {
+    Attempt over = compile(pattern, GRX_SYNTAX_PCRE);
+    EXPECT_EQ(over.result, GRX_ERR_SYNTAX) << pattern;
+    EXPECT_EQ(over.diag, GRX_DIAG_INVALID_GROUP_SYNTAX) << pattern;
+    grx_regex_free(over.regex);
+  }
+
+  // Perl has no callouts at all: every spelling is "Sequence (?C...) not
+  // recognized in regex" there, `(?C)` included.
+  for (const char * pattern : {"(?C)abc", "(?C0)abc", "(?C255)abc",
+           "(?C{x})abc", "(?C\"x\")abc"}) {
+    Attempt perl = compile(pattern, GRX_SYNTAX_PERL);
+    EXPECT_EQ(perl.result, GRX_ERR_SYNTAX) << pattern << " under Perl";
+    EXPECT_EQ(perl.diag, GRX_DIAG_INVALID_GROUP_SYNTAX) << pattern;
+    grx_regex_free(perl.regex);
+  }
+}
+
 TEST(Perl, TheConstructsThisLibraryRefusesSayWhyAndNotSomethingElse) {
   // Each of these is real syntax the reference compiles. Refusing them is a
   // decision; refusing them as *syntax errors* would be a lie about the

@@ -68,6 +68,9 @@ static Flavour flavour(const GRX_Parser * parser) {
 /** The longest group name this front end will accept, in bytes. */
 #define GRX_PCRE_NAME_MAX 128
 
+/** The largest callout number PCRE2 takes: `(?C256)` is its error 138. */
+#define GRX_PCRE_CALLOUT_MAX 255
+
 static GRX_Result pcre_skip_ignorable(GRX_Parser * parser);
 
 /** The byte at an offset from the current position, or 0 past the end. */
@@ -3511,6 +3514,12 @@ static GRX_Result pcre_group_open(GRX_Parser * parser, GRX_GroupOpen * out) {
     // function, and this library has no such API - so it matches the same
     // subjects with the callout as without, and accepting it changes no
     // answer. Recorded in documentation/dialects.md section 6.
+    //
+    // PCRE2's, and only PCRE2's: perl answers "Sequence (?C...) not
+    // recognized in regex" for every spelling of it, `(?C)` included.
+    if (flavour(parser) != FLAVOUR_PCRE) {
+      return grx_parse_fail(parser, GRX_DIAG_INVALID_GROUP_SYNTAX, start, 3);
+    }
     parser->position++;
     if (byte_at(parser, 0) == '`' || byte_at(parser, 0) == '\''
         || byte_at(parser, 0) == '"' || byte_at(parser, 0) == '^'
@@ -3532,8 +3541,27 @@ static GRX_Result pcre_group_open(GRX_Parser * parser, GRX_GroupOpen * out) {
       parser->position++;
     }
     else {
+      // The number identifies the callout to the caller's function and is
+      // one byte wide in PCRE2: `(?C256)` is error 138 there, "number after
+      // (?C is greater than 255". A number this library does not pass to
+      // anybody is still a number the reference refuses, and the digits are
+      // where a pattern written for PCRE2 would find out.
+      size_t number = 0;
+      int overflowed = 0;
       while (is_decimal(byte_at(parser, 0))) {
+        if (number > (GRX_PCRE_CALLOUT_MAX - (size_t)(byte_at(parser, 0)
+                         - '0'))
+                / 10) {
+          overflowed = 1;
+        }
+        else {
+          number = number * 10 + (size_t)(byte_at(parser, 0) - '0');
+        }
         parser->position++;
+      }
+      if (overflowed || number > GRX_PCRE_CALLOUT_MAX) {
+        return grx_parse_fail(parser, GRX_DIAG_INVALID_GROUP_SYNTAX, start,
+            parser->position - start);
       }
     }
     if (!grx_parse_eat(parser, ')')) {
