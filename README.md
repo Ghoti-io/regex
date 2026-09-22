@@ -8,18 +8,24 @@ that is linear in the subject length, a backtracking engine for the constructs
 no lockstep simulation can express, and a bit-state engine that is the
 backtracker with a memo and the linear bound back.
 
-**Status: under construction.** ECMAScript - legacy, `u` and `v` modes -
-parses, compiles and matches on all three engines, checked against Node 22;
-`text` validates JSON Schema's `pattern` and `patternProperties` through it.
-PCRE2 and Perl parse, compile and match, at 90.9% and 94.7% of their
-reference corpora with every remaining gap named in a file. The other twelve
-dialects are named and report `GRX_ERR_UNSUPPORTED`. See
-[Status](#status) below for exactly what works today.
+**Status: under construction.** Seven dialects parse, compile and match on
+all three engines: ECMAScript in its legacy, `u` and `v` modes, checked
+against Node 22; PCRE2 and Perl against pcre2 10.46 and perl 5.40.1; and
+`posix-bre`, `posix-ere`, `gnu-bre` and `gnu-ere` against glibc and musl.
+`text` validates JSON Schema's `pattern` and `patternProperties` through
+this library. Of 33,829 conformance vectors, every dialect passes 100% but
+Perl, which is at 99.69% with each of its eight remaining gaps named in
+`tests/data/vectors/known-gaps.txt`. The other nine dialects are named and
+report `GRX_ERR_UNSUPPORTED`. See [Status](#status) below for exactly what
+works today.
 
-(This paragraph said the compiler and the engines were stubs and that nothing
-matched, for some time after they stopped being stubs. A status line that is
+(This paragraph has been wrong twice, both times by lagging: first it said
+the compiler and the engines were stubs, after they had stopped being stubs;
+then it quoted 90.9% and 94.7% for PCRE2 and Perl, and named twelve
+unsupported dialects, after four more had front ends. A status line that is
 wrong in the *safe* direction is still wrong, and it sits above a table that
-contradicts it.)
+contradicts it. It is checked against a fresh `make test` when it changes,
+which is the only thing that has ever kept it honest.)
 
 ## Example
 
@@ -154,7 +160,7 @@ Nothing is allocated for the caller to free on a failing call.
 | --- | --- |
 | Build, install, Doxygen | working |
 | Gates: `check-symbols`, `check-layering`, `check-unicode-tables` | working, in `TEST_GATES` |
-| Gates: `check-oracles` - syntax, match, properties, properties of strings, cross-engine | working; not in `TEST_GATES`, because they need Node |
+| Gates: `check-oracles` - twelve differential checks: syntax, match, iteration, the search window, properties, numeric properties, properties of strings, POSIX, the Perl family, and three replacement and split grammars | working; not in `TEST_GATES`, because they need Node, perl or pcre2 |
 | Gate: `check-limits` - what real patterns cost against the defaults | working; the report behind dialects.md section 7 |
 | Result codes, limits, allocator, version | working |
 | Diagnostics and error reporting | working |
@@ -178,14 +184,19 @@ Nothing is allocated for the caller to free on a failing call.
 | Backtracking engine | working - backreferences, lookaround, atomic and possessive |
 | Conditionals, recursion and subroutine calls, `\K`, the control verbs | working - on the backtracking engine, which is the only one that can run them |
 | Bit-state engine | working - the backtracker with a memo, and the linear bound back |
-| Search window, NOTBOL/NOTEOL/NOTEMPTY, `grx_regex_search_next()` | working |
-| `grx_regex_replace()` and `grx_regex_split()` | working - ECMAScript's, PCRE2's, Perl's and sed's template grammars, and the split rule |
+| Search window, NOTBOL/NOTEOL/NOTEMPTY, `grx_regex_search_next()` | working - generated against pcre2 and against perl's own loop |
+| `grx_regex_replace()` and `grx_regex_split()` | working - ECMAScript's, PCRE2's, Perl's and sed's template grammars, and ECMAScript's split rule for every dialect (dialects.md section 5.16) |
 | `grx_pattern_lint()`, the JSON Schema subset check | working |
 | Limits | measured, not guessed; dialects.md section 7 |
 | The `text` seam for JSON Schema | working - `pattern` and `patternProperties` validate through this library |
 
-**Conformance.** Five differential checks against Node 22, which is the
-pinned ECMAScript oracle. `make check-oracles` runs all five.
+**Conformance.** Twelve differential checks, each against whichever
+implementation *defines* the thing it asks about: Node 22 for ECMAScript,
+pcre2 10.46 and perl 5.40.1 for the Perl family, glibc and musl for POSIX and
+GNU, and GNU sed for the POSIX replacement grammar. `make check-oracles` runs
+all twelve. A few are described below; [testing.md](documentation/testing.md)
+§5 has every one, and says for each what was broken on purpose to prove the
+check can fail.
 
 `make check-oracle-syntax` compares accept and reject over 960,000 patterns
 per seed - an exhaustive corpus of every string up to three characters over
@@ -205,6 +216,22 @@ of *strings*, which have no code-point space to walk: the universe is every
 emoji sequence UTS #51 knows about, qualified and not, so a table that is too
 large fails on one half and one that is too small fails on the other. 36,575
 cases, no disagreement.
+
+`make check-oracle-window` varies the six fields of `GRX_SearchOptions` that
+decide an answer - `begin`, `end` and the four subject-side flags - against
+`pcre2_match()`, whose `startoffset`, `length` and `NOT*` options map onto
+them exactly. Every other check in this list searches the whole subject with
+no flags, so all six sat at one value across the whole suite until this
+existed; the first run found that `NOTBOL` and `NOTEOL` were suppressing
+`\A`, `\Z` and `\z` as well as `^` and `$`, which neither pcre2 nor glibc
+does.
+
+`make check-oracle-iterate` asks for *every* match rather than the first,
+against `String.prototype.matchAll` and perl's `while ($s =~ /$re/g)` - both
+of them loops the reference itself provides, which is why not pcre2, whose
+find-all loop its caller writes. It found that what `\G` asserts is a second
+axis: Perl and PCRE2 share the empty-match rule and disagree about whether
+`\G` follows the loop when it advances past a failure.
 
 `make check-engine-equivalence` requires every engine that can run a program
 to give the same answer for it, which is the invariant of
