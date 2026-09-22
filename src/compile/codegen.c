@@ -1562,6 +1562,7 @@ GRX_Result grx_codegen_program(const GRX_IR * ir, const GRX_Limits * limits,
   }
   out_program->preference = ir->preference;
   out_program->iteration = ir->iteration;
+  out_program->search_start = ir->search_start;
   out_program->register_count = codegen.registers;
   return GRX_OK;
 }

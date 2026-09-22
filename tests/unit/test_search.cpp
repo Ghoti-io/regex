@@ -18,6 +18,7 @@
  * Copyright 2026 by Corey Pennycuff
  */
 
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -790,6 +791,73 @@ TEST(SearchNext, PerlRetriesBeforeAdvancing) {
       "0..1 1..1 2..2");
   EXPECT_EQ(iterate("a*", "aab", GRX_ITERATE_RETRY_THEN_ADVANCE),
       "0..2 2..2 3..3");
+}
+
+TEST(SearchNext, PerlPinsBackslashGToThePreviousMatchAndPcre2DoesNot) {
+  // Both dialects retry before advancing, and they still disagree, because
+  // the iteration rule and what `\G` means are two axes rather than one.
+  //
+  // `\Ga*` against "baac": both find the empty match at 0, both fail to
+  // find a non-empty one there, and both step to 1. PCRE2's `\G` is where
+  // the current attempt begins, so it holds at 1 and "aa" matches; perl's is
+  // `pos()`, which the failed attempt did not move, so it still holds only
+  // at 0 and the loop is over. pcre2test 10.46 reports four matches,
+  // `while ("baac" =~ /\Ga*/g)` reports one.
+  //
+  // Neither is a quirk: PCRE2 does not provide the loop, so its `\G` can
+  // only mean the attempt its caller asked for.
+  struct Row {
+    GRX_Syntax syntax;
+    const char * pattern;
+    const char * subject;
+    const char * expected;
+  };
+  static const Row rows[] = {
+    {GRX_SYNTAX_PERL, "\\Ga*", "baac", "0..0"},
+    {GRX_SYNTAX_PCRE, "\\Ga*", "baac", "0..0 1..3 3..3 4..4"},
+    {GRX_SYNTAX_PERL, "\\Ga*", "aab", "0..2 2..2"},
+    {GRX_SYNTAX_PCRE, "\\Ga*", "aab", "0..2 2..2 3..3"},
+    // A `\G` in only one branch anchors nothing, and the two agree again.
+    {GRX_SYNTAX_PERL, "(?:\\Ga|b)", "cba", "1..2 2..3"},
+    {GRX_SYNTAX_PCRE, "(?:\\Ga|b)", "cba", "1..2 2..3"},
+    // And without `\G` the axis has nothing to say.
+    {GRX_SYNTAX_PERL, "a*", "baac", "0..0 1..3 3..3 4..4"},
+    {GRX_SYNTAX_PCRE, "a*", "baac", "0..0 1..3 3..3 4..4"},
+  };
+
+  for (const Row & row : rows) {
+    for (GRX_Engine engine : {GRX_ENGINE_PIKE, GRX_ENGINE_BACKTRACK}) {
+      GRX_Regex * regex = nullptr;
+      ASSERT_EQ(grx_regex_compile(row.pattern, row.syntax, 0, &regex), GRX_OK)
+          << row.pattern;
+      GRX_Match * match = nullptr;
+      ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+
+      GRX_SearchOptions options;
+      grx_search_options_default(&options);
+      options.engine = engine;
+
+      std::string out;
+      int matched = 0;
+      GRX_Result result = grx_regex_search_ex(regex, row.subject,
+          strlen(row.subject), &options, match, &matched);
+      for (int guard = 0; result == GRX_OK && matched && guard < 64; guard++) {
+        if (!out.empty()) {
+          out += " ";
+        }
+        out += span_of(match, matched);
+        result = grx_regex_search_next(regex, row.subject,
+            strlen(row.subject), &options, match, &matched);
+      }
+      EXPECT_EQ(result, GRX_OK);
+      EXPECT_EQ(out, row.expected)
+          << "/" << row.pattern << "/ on \"" << row.subject
+          << "\" engine " << (int)engine;
+
+      grx_match_destroy(match);
+      grx_regex_free(regex);
+    }
+  }
 }
 
 TEST(SearchNext, GoDropsAnEmptyMatchThatAbutsThePreviousOne) {

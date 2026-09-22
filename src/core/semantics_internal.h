@@ -356,6 +356,34 @@ typedef enum {
 } GRX_IterationRule;
 
 /**
+ * @brief What `\G` asserts during a search-all loop.
+ *
+ * documentation/dialects.md section 5.10. The iteration rule above says what
+ * position the *next attempt* starts at; this says what `\G` means once it
+ * has. They are independent, and Perl and PCRE2 share the first and differ
+ * on this one - which nothing noticed until
+ * `tools/oracle/iterate_diff.py` asked both of them for every match rather
+ * than for the first.
+ *
+ * The difference only shows after a *failure* forces the loop to advance.
+ * `\Ga*` against "baac": both find the empty match at 0, both then fail to
+ * find a non-empty one there, and both step to 1. PCRE2's `\G` is where the
+ * current attempt begins, so it now holds at 1 and "aa" matches; perl's is
+ * where the previous match *ended*, so it still holds only at 0 and the loop
+ * is over. pcre2test reports four matches and perl reports one.
+ *
+ * Neither is a quirk. PCRE2 does not provide the loop - its caller writes it
+ * and bumps the start offset - so `\G` can only mean the attempt. perl does
+ * provide it, and `pos()` is a property of the string that a failed attempt
+ * does not move.
+ */
+typedef enum {
+  GRX_SEARCH_START_ATTEMPT = 0,  ///< PCRE2: where this attempt began.
+  GRX_SEARCH_START_PREVIOUS_END, ///< Perl: where the previous match ended.
+  GRX_SEARCH_START_RULE_COUNT    ///< Closes the enum; not a rule.
+} GRX_SearchStartRule;
+
+/**
  * @brief Which match a search reports when more than one is possible.
  *
  * Program-wide rather than per-node: it is a property of the dialect, and

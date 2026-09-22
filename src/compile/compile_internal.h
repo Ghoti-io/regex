@@ -285,6 +285,7 @@ typedef struct GRX_Program {
   uint32_t register_count;        ///< Progress registers a thread needs.
   GRX_MatchPreference preference; ///< Which match a search reports.
   GRX_IterationRule iteration;    ///< Search-all after an empty match.
+  GRX_SearchStartRule search_start; ///< What `\G` asserts while iterating.
 } GRX_Program;
 
 /**

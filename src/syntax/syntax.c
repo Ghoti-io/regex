@@ -449,6 +449,14 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     // unset in pcre2test and in Node: the body captured it before failing,
     // and Perl does not take it back. ECMA-262 22.2.2.4 says the other two.
     .negative_look = GRX_NEGATIVE_LOOK_KEEP,
+    // Perl alone again, and for a reason that is about who writes the loop.
+    // `\G` is `pos()`, a property of the string that a *failed* match does
+    // not move; PCRE2 has no loop of its own, so its `\G` can only mean the
+    // start offset its caller passed this time. `\Ga*` against "baac" is
+    // four matches in pcre2test and one in perl. Found by
+    // tools/oracle/iterate_diff.py, which is the first thing here to ask
+    // either reference for every match rather than for the first.
+    .search_start = GRX_SEARCH_START_PREVIOUS_END,
     .dollar = GRX_DOLLAR_BEFORE_FINAL_NEWLINE,
     .shorthands = GRX_SHORTHANDS_UNICODE,
     .shorthands_utf = GRX_SHORTHANDS_UNICODE,

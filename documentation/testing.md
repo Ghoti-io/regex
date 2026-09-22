@@ -568,6 +568,51 @@ for `u` under `pcre`, which that row rightly refuses because PCRE2's UTF mode
 is an option and not a pattern flag, and counted 1,283 refusals as
 disagreements.
 
+### The iteration differential
+
+`make check-oracle-iterate` runs `tools/oracle/iterate_diff.py`, which asks
+for **every** match rather than the first, against node's
+`String.prototype.matchAll` for ECMAScript and `while ($s =~ /$re/g)` for
+Perl.
+
+`grx_regex_search_next()` is the one entry point whose answer is a sequence,
+and nothing generated had asked it anything. `match_diff.py` and
+`perl_diff.py` ask for the first match and stop - 58,254 perl cases at zero
+disagreements, none of which is a question about the loop. Replacement and
+splitting sit *on* the loop but report text and pieces, so a different set of
+matches that happens to produce the same output is a disagreement neither can
+see, and with a template of `$&` that is every disagreement about spans.
+
+**Both oracles run their own loop**, which is the reason those two references
+and not pcre2: `pcre2_match()` does not iterate, so a pcre2 column would be
+this harness's loop compared against this library's - two copies of one idea.
+The `pcre` dialect shares Perl's empty-match rule and is covered through the
+perl column; where it does *not* share Perl's answer is the finding below.
+
+**It found that `\G` is a second axis.** dialects.md section 5.10 put Perl
+and PCRE2 in the same row, which is right about what follows an empty match
+and silent about what `\G` means once the loop has moved. `\Ga*` against
+"baac" is four matches in pcre2test and one in perl: PCRE2's `\G` is where
+the current attempt began and follows the advance, perl's is `pos()`, which
+the failed attempt did not move. `GRX_SearchStartRule` carries the two
+values.
+
+Each rule was then broken to see the gate bite:
+
+| Change | ecmascript | perl |
+| --- | --- | --- |
+| every dialect given `RETRY_THEN_ADVANCE` | 182 | 0 |
+| every dialect given `ADVANCE_ONE` | 0 | 492 |
+| `\G` unpinned, so perl follows PCRE2 | 0 | 766 |
+
+That last row is worth a note about the generator rather than the library.
+With `\G` mixed one-in-twenty into the shared atom list, unpinning it gave
+**one** disagreement out of 5,700 - a gate a change of seed could switch off.
+The two axes fail differently: the empty-match rule shows up on nearly every
+atom that can match empty, and this one shows up only where the loop is
+forced to advance past a failure. `\G` therefore has a vocabulary of its
+own, and the finding is 766 rows rather than one.
+
 ### The window differential
 
 `make check-oracle-window` runs `tools/oracle/window_diff.py`, which varies

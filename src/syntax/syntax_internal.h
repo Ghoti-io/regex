@@ -317,6 +317,7 @@ typedef struct GRX_Profile {
   GRX_LookbehindLimit lookbehind;   ///< How long a lookbehind may be.
   GRX_NegativeLookCaptures negative_look; ///< Captures a failed body made.
   GRX_IterationRule iteration;      ///< Search-all after an empty match.
+  GRX_SearchStartRule search_start; ///< What `\G` asserts while iterating.
   GRX_DollarRule dollar;            ///< `$` without multiline.
   GRX_NewlineSet newlines;          ///< The line-terminator set.
   GRX_ShorthandSet shorthands;      ///< `\w`, `\d`, `\s` without UTF.

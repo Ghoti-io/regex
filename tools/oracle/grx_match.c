@@ -27,6 +27,18 @@
  * Offsets are byte offsets into the subject. A reference implementation that
  * counts UTF-16 code units has to convert; tools/oracle/node_match.mjs does.
  *
+ * With `all` as the third argument it runs the search-all loop instead - the
+ * one grx_regex_search_next() writes for the caller - and answers
+ *
+ *   `all <count>` then one field per match, groups separated by commas
+ *   `all-overflow`                       more matches than the cap below
+ *
+ * so that `a*` against `"baac"` is `all 4 0:0 1:3 3:3 4:4` rather than four
+ * separate questions. The loop is the thing being asked about: which match
+ * follows an empty one is the dialect's iteration rule
+ * (documentation/dialects.md section 5.10), and it is a rule no single
+ * search can be asked about.
+ *
  * Copyright 2026 by Corey Pennycuff
  */
 
@@ -50,6 +62,16 @@
  */
 #define MAX_PATTERN 65536
 #define MAX_SUBJECT (1 << 20)
+
+/**
+ * The most matches the find-all loop will report before giving up.
+ *
+ * A loop that does not terminate is a defect worth catching, and a driver
+ * that hangs reports it as a harness that hangs. Every subject the harnesses
+ * here generate is under a few dozen bytes, so any run that reaches this has
+ * found something.
+ */
+#define MAX_MATCHES 100000
 
 static int unhex(int c) {
   if (c >= '0' && c <= '9') {
@@ -100,12 +122,30 @@ static const char * engine_name(GRX_Engine engine) {
   }
 }
 
+/** One match's spans, in the shape both find-all drivers print. */
+static void print_spans(const GRX_Match * match, char separator) {
+  for (size_t i = 0; i < grx_match_count(match); i++) {
+    if (i) {
+      putchar(separator);
+    }
+    GRX_Capture capture;
+    grx_match_group(match, i, &capture);
+    if (capture.start == GRX_NPOS) {
+      putchar('-');
+    }
+    else {
+      printf("%zu:%zu", capture.start, capture.end);
+    }
+  }
+}
+
 int main(int argc, char ** argv) {
   GRX_Syntax syntax = GRX_SYNTAX_ECMASCRIPT;
   if (argc > 1 && grx_syntax_from_name(argv[1], &syntax) != GRX_OK) {
     fprintf(stderr, "unknown dialect: %s\n", argv[1]);
     return 2;
   }
+  int find_all = argc > 3 && strcmp(argv[3], "all") == 0;
   GRX_Engine engine = GRX_ENGINE_AUTO;
   if (argc > 2) {
     if (strcmp(argv[2], "pike") == 0) {
@@ -247,6 +287,66 @@ int main(int argc, char ** argv) {
       continue;
     }
 
+    if (find_all) {
+      // Written exactly as exec.h documents it, because the documented loop
+      // is what is being compared: a harness that drove the engine some
+      // other way would be measuring a loop no caller writes.
+      int matched = 0;
+      GRX_Result result = grx_regex_search_ex(
+          regex, subject, subject_length, &search, match, &matched);
+      size_t count = 0;
+      // Collected into one buffer rather than printed as they come, because
+      // the count belongs at the front and a limit reached half-way through
+      // must not leave a partial answer on the wire.
+      static char collected[1 << 16];
+      size_t used = 0;
+      int overflow = 0;
+      // Terminated before the loop, not only written inside it: the buffer
+      // is static, and a row with no matches at all would otherwise print
+      // the *previous* row's matches beside its own count of zero.
+      collected[0] = '\0';
+      while (result == GRX_OK && matched) {
+        if (count >= MAX_MATCHES || used + 64 >= sizeof(collected)) {
+          overflow = 1;
+          break;
+        }
+        used += (size_t)snprintf(collected + used, sizeof(collected) - used,
+            "%s", count ? " " : "");
+        for (size_t i = 0; i < grx_match_count(match); i++) {
+          GRX_Capture capture;
+          grx_match_group(match, i, &capture);
+          if (used + 48 >= sizeof(collected)) {
+            overflow = 1;
+            break;
+          }
+          used += (size_t)snprintf(collected + used, sizeof(collected) - used,
+              capture.start == GRX_NPOS ? "%s-" : "%s%zu:%zu",
+              i ? "," : "", capture.start, capture.end);
+        }
+        if (overflow) {
+          break;
+        }
+        count++;
+        result = grx_regex_search_next(
+            regex, subject, subject_length, &search, match, &matched);
+      }
+      if (overflow) {
+        printf("all-overflow\n");
+      }
+      else if (result == GRX_ERR_UNSUPPORTED) {
+        printf("unsupported\n");
+      }
+      else if (result != GRX_OK) {
+        printf("error %s\n", grx_result_string(result));
+      }
+      else {
+        printf("all %zu%s%s\n", count, count ? " " : "", collected);
+      }
+      fflush(stdout);
+      grx_match_destroy(match);
+      continue;
+    }
+
     int matched = 0;
     GRX_Result result = grx_regex_search_ex(
         regex, subject, subject_length, &search, match, &matched);
@@ -261,17 +361,8 @@ int main(int argc, char ** argv) {
       printf("nomatch\n");
     }
     else {
-      printf("match %s", engine_name(grx_match_engine(match)));
-      for (size_t i = 0; i < grx_match_count(match); i++) {
-        GRX_Capture capture;
-        grx_match_group(match, i, &capture);
-        if (capture.start == GRX_NPOS) {
-          printf(" -");
-        }
-        else {
-          printf(" %zu:%zu", capture.start, capture.end);
-        }
-      }
+      printf("match %s ", engine_name(grx_match_engine(match)));
+      print_spans(match, ' ');
       printf("\n");
     }
 

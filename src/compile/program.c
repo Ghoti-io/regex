@@ -125,6 +125,7 @@ void grx_program_init(GRX_Program * program, const GRX_Allocator * allocator,
   program->register_count = 0;
   program->preference = GRX_PREFER_LEFTMOST_FIRST;
   program->iteration = GRX_ITERATE_RETRY_THEN_ADVANCE;
+  program->search_start = GRX_SEARCH_START_ATTEMPT;
 }
 
 GRX_Result grx_program_add(

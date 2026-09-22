@@ -292,6 +292,7 @@ typedef struct GRX_IR {
   uint32_t flags;                  ///< GRX_PROGRAM_* bits.
   GRX_MatchPreference preference;  ///< Which match a search reports.
   GRX_IterationRule iteration;     ///< Search-all after an empty match.
+  GRX_SearchStartRule search_start; ///< What `\G` asserts while iterating.
   GRX_Arena nodes;                 ///< GRX_IRNode.
   GRX_ClassTable classes;          ///< Every canonical class, by index.
   GRX_Arena names;                 ///< char; NUL-terminated, by offset.

@@ -875,7 +875,7 @@ static int assertion_holds(
       return (which % 2) ? !boundary : boundary;
     }
     case GRX_ASSERT_SEARCH_START:
-      return position == request->start;
+      return position == request->search_start;
     case GRX_ASSERT_COUNT:
     default:
       return 0;

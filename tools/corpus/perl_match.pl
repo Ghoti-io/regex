@@ -9,6 +9,18 @@
 #   nomatch
 #   compile                   the pattern was refused
 #
+# With `all` as the first argument it runs perl's own search-all loop instead
+# and answers
+#
+#   all <count> <spans> ...   one field per match, groups separated by commas
+#   all-overflow              more matches than the cap below
+#   compile                   the pattern was refused
+#
+# `while ($subject =~ /$regex/g)` and not a loop written here, because the
+# thing being compared *is* the loop: which match follows an empty one is
+# perl's iteration rule, and reimplementing it in this file would compare two
+# copies of one idea rather than two implementations.
+#
 # Hex for the same reason tools/oracle/grx_match.c uses it: a pattern or a
 # subject may contain a newline, a NUL, or bytes that are not valid UTF-8, and
 # the transport should not need an escape of its own.
@@ -26,6 +38,30 @@ use warnings;
 use Encode qw(decode_utf8 encode_utf8);
 
 print STDERR "perl $]\n";
+
+# The most matches the find-all loop will report before giving up. A loop
+# that does not terminate is a defect worth catching, and a driver that hangs
+# reports it as a harness that hangs.
+my $MAX_MATCHES = 100000;
+
+my $find_all = @ARGV && $ARGV[0] eq "all";
+
+# A character offset becomes a byte offset by measuring the UTF-8 length of
+# everything before it.
+sub spans_of {
+  my ($subject, $starts, $ends, $separator) = @_;
+  my @spans;
+  for my $group (0 .. $#$starts) {
+    if (!defined $starts->[$group] || !defined $ends->[$group]) {
+      push @spans, "-";
+      next;
+    }
+    my $start = length(encode_utf8(substr($subject, 0, $starts->[$group])));
+    my $end = length(encode_utf8(substr($subject, 0, $ends->[$group])));
+    push @spans, "$start:$end";
+  }
+  return join($separator, @spans);
+}
 
 while (my $line = <STDIN>) {
   chomp $line;
@@ -57,6 +93,23 @@ while (my $line = <STDIN>) {
     next;
   }
 
+  if ($find_all) {
+    my @found;
+    my $overflow = 0;
+    my $ok = eval {
+      while ($subject =~ /$regex/g) {
+        if (@found >= $MAX_MATCHES) { $overflow = 1; last; }
+        push @found, spans_of($subject, [@-], [@+], ",");
+      }
+      1;
+    };
+    if (!defined $ok) { print "compile\n"; next; }
+    if ($overflow) { print "all-overflow\n"; next; }
+    print "all " . scalar(@found)
+        . (@found ? " " . join(" ", @found) : "") . "\n";
+    next;
+  }
+
   my @starts;
   my @ends;
   my $matched = eval {
@@ -76,17 +129,5 @@ while (my $line = <STDIN>) {
     next;
   }
 
-  # A character offset becomes a byte offset by measuring the UTF-8 length of
-  # everything before it.
-  my @spans;
-  for my $group (0 .. $#starts) {
-    if (!defined $starts[$group] || !defined $ends[$group]) {
-      push @spans, "-";
-      next;
-    }
-    my $start = length(encode_utf8(substr($subject, 0, $starts[$group])));
-    my $end = length(encode_utf8(substr($subject, 0, $ends[$group])));
-    push @spans, "$start:$end";
-  }
-  print "match " . join(" ", @spans) . "\n";
+  print "match " . spans_of($subject, \@starts, \@ends, " ") . "\n";
 }

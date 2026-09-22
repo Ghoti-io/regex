@@ -164,6 +164,7 @@ GRX_Result grx_ir_create(const GRX_Allocator * allocator,
   ir->flags = 0;
   ir->preference = GRX_PREFER_LEFTMOST_FIRST;
   ir->iteration = GRX_ITERATE_RETRY_THEN_ADVANCE;
+  ir->search_start = GRX_SEARCH_START_ATTEMPT;
   ir->capture_count = 0;
 
   // The IR's node count is capped by max_nodes like the AST's: lowering can

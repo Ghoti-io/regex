@@ -95,9 +95,18 @@ typedef struct GRX_ExecRequest {
   const char * subject;     ///< The bytes to search.
   size_t length;            ///< Length of `subject` in bytes.
   size_t start;             ///< Byte offset to begin at.
+  /**
+   * @brief The position `\G` asserts.
+   *
+   * `start` for every dialect but Perl, and for Perl too except on the one
+   * step of a search-all loop that advances past a failure: `\G` is
+   * `pos()` there, which a failed attempt does not move. See
+   * @ref GRX_SearchStartRule.
+   */
+  size_t search_start;
   int anchored;             ///< Non-zero to match only at `start`.
-  int not_bol;              ///< `^` and `\A` do not hold at offset 0.
-  int not_eol;              ///< `$`, `\Z` and `\z` do not hold at `length`.
+  int not_bol;              ///< `^` does not hold at offset 0.
+  int not_eol;              ///< `$` does not hold at `length`.
   uint8_t empty_rule;       ///< A @ref GRX_EmptyMatchRule.
   const GRX_Limits * limits; ///< Caps to apply. Never NULL.
   GRX_Match * match;        ///< Receives the spans. May be NULL.

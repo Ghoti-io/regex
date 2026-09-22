@@ -108,7 +108,8 @@ GRX_Result grx_match_create(const GRX_Regex * regex,
  */
 static GRX_Result exec(const GRX_Regex * regex, const char * subject,
     size_t length, const GRX_SearchOptions * options, int anchored,
-    GRX_EmptyMatchRule empty_rule, GRX_Match * match, int * out_matched) {
+    GRX_EmptyMatchRule empty_rule, size_t search_start, GRX_Match * match,
+    int * out_matched) {
   GRX_SearchOptions defaults;
   if (!options) {
     grx_search_options_default(&defaults);
@@ -221,6 +222,8 @@ static GRX_Result exec(const GRX_Regex * regex, const char * subject,
     .subject = subject,
     .length = end,
     .start = options->begin,
+    .search_start
+        = search_start == GRX_NPOS ? options->begin : search_start,
     .anchored = anchored,
     .not_bol = (options->flags & GRX_SEARCH_NOTBOL) != 0,
     .not_eol = (options->flags & GRX_SEARCH_NOTEOL) != 0,
@@ -247,15 +250,15 @@ static GRX_Result exec(const GRX_Regex * regex, const char * subject,
 GRX_Result grx_regex_search_ex(const GRX_Regex * regex, const char * subject,
     size_t length, const GRX_SearchOptions * options, GRX_Match * match,
     int * out_matched) {
-  return exec(regex, subject, length, options, 0, GRX_EMPTY_OK, match,
-      out_matched);
+  return exec(regex, subject, length, options, 0, GRX_EMPTY_OK, GRX_NPOS,
+      match, out_matched);
 }
 
 GRX_Result grx_regex_match_ex(const GRX_Regex * regex, const char * subject,
     size_t length, const GRX_SearchOptions * options, GRX_Match * match,
     int * out_matched) {
-  return exec(regex, subject, length, options, 1, GRX_EMPTY_OK, match,
-      out_matched);
+  return exec(regex, subject, length, options, 1, GRX_EMPTY_OK, GRX_NPOS,
+      match, out_matched);
 }
 
 GRX_Result grx_regex_search(const GRX_Regex * regex, const char * subject,
@@ -375,7 +378,7 @@ GRX_Result grx_regex_search_next(const GRX_Regex * regex,
       // on this position entirely.
       resolved.begin = previous.end;
       GRX_Result result = exec(regex, subject, length, &resolved, 1,
-          GRX_EMPTY_REJECT_AT_START, match, out_matched);
+          GRX_EMPTY_REJECT_AT_START, GRX_NPOS, match, out_matched);
       if (result != GRX_OK || *out_matched) {
         return result;
       }
@@ -383,8 +386,21 @@ GRX_Result grx_regex_search_next(const GRX_Regex * regex,
         return no_further_match(match, out_matched);
       }
       resolved.begin = advance_one(regex, subject, end, previous.end);
-      return grx_regex_search_ex(regex, subject, length, &resolved, match,
-          out_matched);
+      // The one step in this file where `\G` and the start offset part
+      // company. Under GRX_SEARCH_START_PREVIOUS_END - Perl's - `pos()` did
+      // not move, because the attempt that would have moved it failed, so
+      // `\G` stays where the previous match ended while the search itself
+      // goes on from one character later. A `\G`-anchored pattern therefore
+      // finds nothing more, which is where perl's loop stops; under PCRE2's
+      // rule `\G` follows the advance and the loop continues.
+      //
+      // Only this branch. The two ADVANCE rules below belong to dialects
+      // that have no `\G` at all, and pinning it there would be a guess
+      // rather than something a reference answered.
+      return exec(regex, subject, length, &resolved, 0, GRX_EMPTY_OK,
+          regex->program.search_start == GRX_SEARCH_START_PREVIOUS_END
+              ? previous.end : GRX_NPOS,
+          match, out_matched);
     }
 
     case GRX_ITERATE_ADVANCE_ONE:

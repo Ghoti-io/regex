@@ -6,6 +6,13 @@
  * the pattern was rejected, or an array of spans - `[start, end]` per group,
  * `null` for a group that did not participate.
  *
+ * With `all` as the first argument it answers with *every* match instead: an
+ * array of those span arrays, in the order `String.prototype.matchAll`
+ * yields them. The loop is the point - which match follows an empty one is
+ * ECMAScript's iteration rule (22.2.6.8), and no single `exec` can be asked
+ * about it - and it is ECMAScript's own loop rather than one written here,
+ * which is what makes it an oracle rather than a second opinion.
+ *
  * The spans are **byte offsets into the UTF-8 subject**, not the UTF-16 code
  * unit indices JavaScript works in. Converting here rather than on the other
  * side keeps the comparison honest: the two implementations disagree about
@@ -53,29 +60,53 @@ function byteOffsets(subject) {
   return {offsets, midPair};
 }
 
+const findAll = process.argv[2] === "all";
+
+/** One match's `indices` as byte spans, or the string "surrogate". */
+function spansOf(indices, offsets, midPair) {
+  for (const pair of indices) {
+    if (pair !== undefined && (midPair[pair[0]] || midPair[pair[1]])) {
+      return "surrogate";
+    }
+  }
+  return indices.map(
+    (pair) => (pair === undefined ? null : [offsets[pair[0]], offsets[pair[1]]]));
+}
+
 const rows = JSON.parse(readFileSync(0, "utf8"));
 const results = rows.map(([flags, pattern, subject]) => {
   let regex;
   try {
-    regex = new RegExp(pattern, flags + "d");
+    // `g` only if it is not already there: a duplicated flag letter is a
+    // SyntaxError, which would have been reported as "the pattern was
+    // rejected" for every row of a flag set that happened to carry one.
+    const wanted = (findAll && !flags.includes("g") ? "g" : "")
+      + (flags.includes("d") ? "" : "d");
+    regex = new RegExp(pattern, flags + wanted);
   }
   catch {
     return "syntax";
+  }
+
+  const {offsets, midPair} = byteOffsets(subject);
+
+  if (findAll) {
+    const out = [];
+    for (const found of subject.matchAll(regex)) {
+      const spans = spansOf(found.indices, offsets, midPair);
+      if (spans === "surrogate") {
+        return "surrogate";
+      }
+      out.push(spans);
+    }
+    return out;
   }
 
   const found = regex.exec(subject);
   if (!found) {
     return null;
   }
-
-  const {offsets, midPair} = byteOffsets(subject);
-  for (const pair of found.indices) {
-    if (pair !== undefined && (midPair[pair[0]] || midPair[pair[1]])) {
-      return "surrogate";
-    }
-  }
-  return found.indices.map(
-    (pair) => (pair === undefined ? null : [offsets[pair[0]], offsets[pair[1]]]));
+  return spansOf(found.indices, offsets, midPair);
 });
 
 process.stdout.write(JSON.stringify(results));

@@ -2640,6 +2640,7 @@ GRX_Result grx_lower_pattern(const GRX_Pattern * pattern,
       = low.profile.lookbehind == GRX_LOOKBEHIND_BOUNDED ? 255 : GRX_NPOS;
   low.ir->preference = low.profile.preference;
   low.ir->iteration = low.profile.iteration;
+  low.ir->search_start = low.profile.search_start;
   low.ir->capture_count = pattern->capture_count;
   if ((low.options & GRX_OPT_UTF) || low.profile.subject_is_text) {
     low.ir->flags |= GRX_PROGRAM_UTF;

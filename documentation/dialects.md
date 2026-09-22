@@ -488,6 +488,29 @@ from.
 | `ADVANCE_ONE` | advance one code point (one code unit without `u`) and search again; an empty match immediately after a non-empty one is reported | ECMAScript (`RegExpBuiltinExec` / `AdvanceStringIndex`), Java (**probe**), .NET (**probe**), Ruby (**probe**) |
 | `ADVANCE_ONE_SKIP_ABUTTING` | as above, but an empty match abutting the previous match is not reported | Go (`regexp` documentation: "empty matches abutting a preceding match are ignored"); Rust (**probe**) |
 
+**What `\G` asserts is a second axis**, independent of the rule above, and
+Perl and PCRE2 share the first row and differ on this one:
+
+| Value | Rule | Dialects |
+| --- | --- | --- |
+| `SEARCH_START_ATTEMPT` | where the current attempt began | PCRE2 |
+| `SEARCH_START_PREVIOUS_END` | where the previous match ended - `pos()`, which a failed attempt does not move | Perl |
+
+It shows only after a *failure* forces the loop to advance. `\Ga*` against
+`"baac"`: both find the empty match at 0, both fail to find a non-empty one
+there, and both step to 1. PCRE2's `\G` follows the step and "aa" matches;
+perl's does not, and the loop is over. pcre2test 10.46 reports four matches
+and `while ("baac" =~ /\Ga*/g)` reports one.
+
+Neither is a quirk of its implementation. PCRE2 does not provide the loop -
+its caller writes it and bumps the start offset - so `\G` can only mean the
+attempt. Perl does provide it, and `pos()` is a property of the string.
+`grx_regex_search_next()` provides it too, which is why this library has to
+choose per dialect rather than inherit one answer. Found by
+`tools/oracle/iterate_diff.py`, the first thing here to ask either reference
+for *every* match rather than for the first; 58,254 cases of `perl_diff.py`
+could not reach it, because every one of them asks for one match and stops.
+
 ### 5.11 Replacement templates
 
 The template is parsed by a per-dialect grammar into a small sequence
