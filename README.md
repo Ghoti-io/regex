@@ -13,8 +13,8 @@ all three engines: ECMAScript in its legacy, `u` and `v` modes, checked
 against Node 22; PCRE2 and Perl against pcre2 10.46 and perl 5.40.1; and
 `posix-bre`, `posix-ere`, `gnu-bre` and `gnu-ere` against glibc and musl.
 `text` validates JSON Schema's `pattern` and `patternProperties` through
-this library. Of 33,829 conformance vectors, every dialect passes 100%,
-Perl over the 2,592 of its 2,600 whose expectation is sound: the other
+this library. Of 35,753 conformance vectors, every dialect passes 100%,
+Perl over the 4,516 of its 4,524 whose expectation is sound: the other
 eight are defects in Perl itself, excluded from the denominator and each
 named in `tests/data/vectors/known-gaps.txt` with the reproduction that
 demonstrates it. The other nine dialects are named and
@@ -311,7 +311,7 @@ cannot mean "the suite ran nothing".
 | --- | --- | --- |
 | ECMAScript, from Node 22 and test262 | 28,559 | **100%** |
 | PCRE2, from pcre2test 10.46's `testinput1` and `testinput2` | 1,869 | **100%** |
-| Perl, from `re_tests` under Perl 5.40, and generated boundary vectors | 2,600 | **100%** of 2,592; 8 excluded |
+| Perl, from `re_tests` under Perl 5.40, and generated boundary and case-folding vectors | 4,524 | **100%** of 4,516; 8 excluded |
 | GNU ERE, from Spencer's test set answered by glibc 2.41 | 270 | **100%** |
 | GNU BRE, the same set read as a basic RE | 159 | **100%** |
 | POSIX ERE, the same set where glibc 2.41 and musl 1.2.6 agree | 245 | **100%** |
@@ -346,7 +346,7 @@ be scored against. That second category is a lever that raises the published
 rate, so it carries two rules: the entry must *demonstrate* the defect with a
 reproduction someone else can run rather than argue for it, and the excluded
 count is printed beside the rate everywhere the rate appears - which is why
-the table above says "100% of 2,592; 8 excluded" and not "100%". A rate that
+the table above says "100% of 4,516; 8 excluded" and not "100%". A rate that
 rose because rows left the denominator has to say so.
 
 All eight are reference defects, and all eight are Perl's. **Six** turn on
