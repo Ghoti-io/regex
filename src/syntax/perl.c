@@ -2140,11 +2140,25 @@ static GRX_Result apply_directive(GRX_Parser * parser, const char * name,
   // `(*LIMIT_MATCH=d)` and kin. PCRE2 lets a pattern lower a limit and never
   // raise one, and that rule is the whole reason a pattern may set a limit
   // at all: a caller's cap is a policy and a pattern may not overrule it.
-  static const char * const limit_names[]
-      = {"LIMIT_MATCH", "LIMIT_DEPTH", "LIMIT_HEAP", NULL};
-  for (size_t i = 0; limit_names[i]; i++) {
-    size_t name_length = strlen(limit_names[i]);
-    if (length <= name_length || memcmp(limit_names[i], name, name_length) != 0
+  //
+  // Which GRX_Limits field each lands on, and why the units are not
+  // pcre2's, is documentation/dialects.md section 6. The request is written
+  // onto the *pattern*; narrowing the caller's limits by it is
+  // grx_pattern_limits_apply(), at the one place a search resolves them.
+  static const struct {
+    const char * name;
+    int field;     ///< 0 max_steps, 1 max_backtrack, 2 max_match_memory.
+    size_t scale;  ///< Units of the directive's number, in ours.
+  } limit_names[] = {
+    {"LIMIT_MATCH", 0, 1},
+    {"LIMIT_DEPTH", 1, 1},
+    {"LIMIT_HEAP", 2, 1024}, // pcre2 counts kibibytes; max_match_memory bytes.
+    {NULL, 0, 0},
+  };
+  for (size_t i = 0; limit_names[i].name; i++) {
+    size_t name_length = strlen(limit_names[i].name);
+    if (length <= name_length
+        || memcmp(limit_names[i].name, name, name_length) != 0
         || name[name_length] != '=') {
       continue;
     }
@@ -2152,19 +2166,47 @@ static GRX_Result apply_directive(GRX_Parser * parser, const char * name,
       return grx_parse_fail(parser, GRX_DIAG_INVALID_GROUP_SYNTAX, start,
           parser->position - start);
     }
+    if (length == name_length + 1) {
+      return grx_parse_fail(parser, GRX_DIAG_INVALID_GROUP_SYNTAX, start,
+          parser->position - start);
+    }
+    // A number too large to hold is malformed rather than clamped, which is
+    // what pcre2test answers too - `(*LIMIT_MATCH=4294967294)` is error 160,
+    // "(*VERB) not recognized or malformed", because its counter is 32 bits
+    // wide. The ceiling here is this library's own and is far higher; what
+    // is shared is that an unrepresentable request is refused rather than
+    // quietly turned into some other number. One below GRX_NPOS, because
+    // GRX_NPOS is how GRX_PatternLimits spells "the pattern did not ask".
+    size_t value = 0;
     for (size_t j = name_length + 1; j < length; j++) {
       if (!is_decimal(name[j])) {
         return grx_parse_fail(parser, GRX_DIAG_INVALID_GROUP_SYNTAX, start,
             parser->position - start);
       }
+      size_t digit = (size_t)(name[j] - '0');
+      if (value > ((GRX_NPOS - 1) - digit) / 10) {
+        return grx_parse_fail(parser, GRX_DIAG_INVALID_GROUP_SYNTAX, start,
+            parser->position - start);
+      }
+      value = value * 10 + digit;
     }
-    if (length == name_length + 1) {
-      return grx_parse_fail(parser, GRX_DIAG_INVALID_GROUP_SYNTAX, start,
-          parser->position - start);
+    if (limit_names[i].scale != 1) {
+      if (value > (GRX_NPOS - 1) / limit_names[i].scale) {
+        return grx_parse_fail(parser, GRX_DIAG_INVALID_GROUP_SYNTAX, start,
+            parser->position - start);
+      }
+      value *= limit_names[i].scale;
     }
-    // Accepted and not applied: `limits` is the caller's, and this front end
-    // has no writable copy of it. Lowering a limit from inside the pattern
-    // is documentation/plan.md WP-19's, where the limits are read.
+    // The last one written wins rather than the smallest, which is
+    // pcre2test's answer both ways round: `(*LIMIT_MATCH=1)` followed by
+    // `(*LIMIT_MATCH=10)` matches "abc" and the other order does not. The
+    // "may only lower" rule is about the *caller's* limit, not about an
+    // earlier directive.
+    GRX_PatternLimits * asked = &parser->pattern->limits;
+    size_t * target = limit_names[i].field == 0 ? &asked->max_steps
+        : limit_names[i].field == 1              ? &asked->max_backtrack
+                                                 : &asked->max_match_memory;
+    *target = value;
     return GRX_OK;
   }
 

@@ -244,6 +244,7 @@ GRX_Result grx_pattern_create(const GRX_Allocator * allocator,
   pattern->options = options;
   pattern->root = GRX_INDEX_NONE;
   pattern->capture_count = 0;
+  grx_pattern_limits_init(&pattern->limits);
 
   // Each arena carries the limit it is subject to and the diagnostic that
   // limit reports, so that every append is checked without the parser

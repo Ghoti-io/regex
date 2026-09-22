@@ -981,7 +981,8 @@ to be complete for every shipped tier.
 | PCRE2 | Callouts `(?C...)` are read and have no effect | no callback API; a callout with no function registered changes no match, so accepting it answers the same question | - |
 | PCRE2 | `(*script_run:`, `(*sr:`, `(*asr:` | each constrains what its body may match and an ordinary group does not | `GRX_ERR_UNSUPPORTED` — except as a conditional's *condition*, where pcre2test refuses every one of them too ("atomic assertion expected after `(?(`"), so `(?(*script_run:x)y)` is `GRX_ERR_SYNTAX` |
 | PCRE2, Perl | `\C`, one code unit | the subject here is code points, and a construct that can land inside a character has no honest approximation | `GRX_ERR_UNSUPPORTED` |
-| PCRE2 | `(*LIMIT_MATCH=n)` and kin are accepted and not applied | the limits are the caller's and this front end has no writable copy; lowering one from inside a pattern is later work | - |
+| PCRE2 | `(*LIMIT_MATCH=n)` and kin are applied in this library's units, not PCRE2's | the directive is honoured - §7.1 below - but `(*LIMIT_MATCH=n)` lands on `max_steps` and PCRE2's match limit counts calls to its internal match function, so the same `n` buys a different amount of work in each. A pattern that asks for a limit gets one, and the *number* is not portable | `GRX_ERR_LIMIT` |
+| PCRE2 | A limit directive whose number does not fit a `size_t` is refused | pcre2test answers error 160, "(*VERB) not recognized or malformed", for `(*LIMIT_MATCH=4294967294)`, because its counter is 32 bits wide. This library's ceiling is its own and far higher, so the two disagree only between 2^32 and 2^64; what they share is refusing an unrepresentable request rather than turning it into another number | `GRX_ERR_SYNTAX` |
 | PCRE2, Perl | `(?(VERSION>=n.n))` is answered against 10.46 | this library emulates that version rather than being it | - |
 | POSIX, GNU | Without `REG_NEWLINE`, `^` is the start of the subject and `$` its end, wherever in the pattern they stand | glibc answers the same question two ways. `^b` against "a\nb" is **nomatch** there, so `^` is not a line anchor for a search - but `.*^b` against the same subject **matches 0-3**, and `.^` matches 1-2, so a `^` reached after something consumed the newline *does* succeed. `a*^b`, `()^b`, `(^)b` and `(a\|)^b` are all nomatch again, which is the same position reached without consuming. Five of 7,033 differential cases turn on it and no imported vector does; the rule here is the consistent reading of the two | - |
 | POSIX, GNU | `REG_NEWLINE` makes `^` and `$` line anchors and does not take the newline out of `.` or out of `[^a]` | the option is two rules and `GRX_OPT_MULTILINE` is one of them; the other needs a second option nothing else in the library wants. Eleven vectors exercise the first half and none the second | - |
@@ -1028,6 +1029,40 @@ that must be refused. `tools/limits/measure.py` produces the whole report;
 what follows is its output, and `tests/unit/test_limits.cpp` and
 `tests/conformance/test_redos.cpp` are the parts of it that keep being
 checked.
+
+### 7.1 The limits a pattern may ask for
+
+PCRE2 lets a pattern set three of them from inside itself, and this library
+honours all three:
+
+| Directive | `GRX_Limits` field | Units |
+| --- | --- | --- |
+| `(*LIMIT_MATCH=n)` | `max_steps` | engine steps, not PCRE2's match count |
+| `(*LIMIT_DEPTH=n)` | `max_backtrack` | backtrack stack entries |
+| `(*LIMIT_HEAP=n)` | `max_match_memory` | *kibibytes*, scaled to bytes |
+
+Three rules, each read off pcre2test 10.46 rather than argued from the
+manual:
+
+- **A pattern may lower a limit and may never raise one.** A caller's cap
+  is a policy and a pattern that arrived from outside must not lift it, so
+  the two are resolved by taking the smaller. Since `GRX_Limits` reads 0 as
+  "no limit", a request always narrows a caller who set none.
+- **The last directive wins, not the smallest.** `(*LIMIT_MATCH=1)`
+  followed by `(*LIMIT_MATCH=1000000)` matches "abc" in pcre2test and the
+  other order does not. The "may only lower" rule is about the caller's
+  limit, not about an earlier directive.
+- **Zero is a request, not an absence.** `(*LIMIT_MATCH=0)abc` fails every
+  match in pcre2test with "match limit exceeded". That is the one value
+  where the two encodings disagree and they disagree *backwards* - a
+  `GRX_Limits` field of 0 means no limit at all - so a requested zero is
+  answered as `GRX_ERR_LIMIT` at the top of the search rather than stored.
+
+What is not portable is the number. `max_steps` counts steps this library
+takes and PCRE2's match limit counts calls into its own matcher, so the
+same `n` buys a different amount of work in each. A pattern that asks to be
+bounded is bounded; a pattern tuned against PCRE2's counter is not tuned
+against this one.
 
 ### What real patterns cost
 

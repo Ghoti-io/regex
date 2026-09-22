@@ -153,6 +153,12 @@ GRX_Result grx_compile_program(const GRX_Pattern * pattern,
   regex->capture_names = NULL;
   regex->mark_count = 0;
   regex->mark_names = NULL;
+  // The pattern's own request travels with the compiled program, because
+  // the limits it narrows are chosen at *search* time and the pattern is
+  // gone by then. grx_regex_compile_pattern() is public, so a caller may
+  // also compile one pattern more than once - the request belongs to the
+  // pattern and each regex gets its own copy of it.
+  regex->limits = pattern->limits;
   grx_program_init(&regex->program, allocator, limits);
   grx_facts_init(&regex->facts);
 

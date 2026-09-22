@@ -51,6 +51,7 @@
 #include "../charclass/charclass_internal.h"
 #include "../core/arena_internal.h"
 #include "../core/semantics_internal.h"
+#include "../core/core_internal.h"
 
 /** Declared, not included: codegen takes an IR and the IR does not take a program. */
 struct GRX_IR;
@@ -306,6 +307,7 @@ struct GRX_Regex {
   char ** capture_names;           ///< One per group, NULL where unnamed.
   size_t mark_count;               ///< Distinct `(*MARK:NAME)` names.
   char ** mark_names;              ///< One per mark, indexed as the program.
+  GRX_PatternLimits limits;        ///< What `(*LIMIT_MATCH=d)` and kin asked.
 };
 
 /**

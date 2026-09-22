@@ -142,6 +142,28 @@ static GRX_Result exec(const GRX_Regex * regex, const char * subject,
     grx_limits_default(&limit_defaults);
     limits = &limit_defaults;
   }
+  // `(*LIMIT_MATCH=d)` and kin, resolved here because this is the one place
+  // a search decides what its budget is. The pattern may lower what the
+  // caller allowed and may never raise it: a caller's cap is a policy, and
+  // a pattern arriving from outside must not be able to lift it.
+  //
+  // A budget of zero is not representable in GRX_Limits, where 0 means "no
+  // limit", so grx_pattern_limits_apply() answers it rather than storing it
+  // - `(*LIMIT_MATCH=0)abc` fails every match, which is pcre2test's answer
+  // too.
+  GRX_Limits limit_capped;
+  if (regex->limits.max_steps != GRX_NPOS
+      || regex->limits.max_backtrack != GRX_NPOS
+      || regex->limits.max_match_memory != GRX_NPOS) {
+    limit_capped = *limits;
+    GRX_Diag refused = GRX_DIAG_NONE;
+    if (grx_pattern_limits_apply(&regex->limits, &limit_capped, &refused)
+        != GRX_OK) {
+      return grx_error_set(match ? &match->error : NULL, GRX_ERR_LIMIT,
+          refused, GRX_NPOS, 0);
+    }
+    limits = &limit_capped;
+  }
   if (limits->max_subject_length && end > limits->max_subject_length) {
     return grx_error_set(match ? &match->error : NULL, GRX_ERR_LIMIT,
         GRX_DIAG_LIMIT_SUBJECT_LENGTH, GRX_NPOS, 0);

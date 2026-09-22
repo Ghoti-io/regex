@@ -560,3 +560,148 @@ TEST(Limits, RecursionDepthIsEnforcedNowThatADialectHasRecursion) {
     grx_regex_free(regex);
   }
 }
+
+// --------------------------------------------------------------------------
+// The limits a pattern asks for: `(*LIMIT_MATCH=d)` and kin
+// --------------------------------------------------------------------------
+
+namespace {
+
+/** Compile under PCRE2 with the defaults, search, report what happened. */
+struct Asked {
+  GRX_Result compile_result;
+  GRX_Diag compile_diag;
+  GRX_Result result;
+  GRX_Diag diag;
+  int matched;
+};
+
+Asked ask(const std::string & pattern, const std::string & subject,
+    size_t caller_steps = 0) {
+  GRX_Limits limits;
+  grx_limits_default(&limits);
+  if (caller_steps) {
+    limits.max_steps = caller_steps;
+  }
+
+  Asked asked = {GRX_OK, GRX_DIAG_NONE, GRX_OK, GRX_DIAG_NONE, 0};
+  GRX_Regex * regex = nullptr;
+  GRX_Error error;
+  grx_error_clear(&error);
+  asked.compile_result = grx_regex_compile_with_allocator(pattern.c_str(),
+      pattern.size(), GRX_SYNTAX_PCRE, 0, &limits, nullptr, &error, &regex);
+  if (asked.compile_result != GRX_OK) {
+    asked.compile_diag = error.diag;
+    return asked;
+  }
+
+  GRX_Match * match = nullptr;
+  grx_match_create(regex, nullptr, &match);
+  asked.result = grx_regex_search(regex, subject.data(), subject.size(), 0,
+      GRX_ENGINE_AUTO, &limits, match, &asked.matched);
+  const GRX_Error * match_error = grx_match_error(match);
+  asked.diag = match_error ? match_error->diag : GRX_DIAG_NONE;
+  grx_match_destroy(match);
+  grx_regex_free(regex);
+  return asked;
+}
+
+} // namespace
+
+TEST(Limits, APatternsOwnLimitIsAppliedAndNotMerelyParsed) {
+  // All three directives, because each lands on a different GRX_Limits
+  // field and a table with one row checked is a table with two holes. Each
+  // pair is the same pattern with and without the directive, so that what
+  // is being measured is the directive and not the pattern.
+  //
+  // Every expectation here was read off pcre2test 10.46 first.
+
+  // `(*LIMIT_MATCH=d)` -> max_steps.
+  EXPECT_EQ(ask("abc", "abc").matched, 1);
+  Asked steps = ask("(*LIMIT_MATCH=1)abc", "abc");
+  EXPECT_EQ(steps.result, GRX_ERR_LIMIT);
+  EXPECT_EQ(steps.diag, GRX_DIAG_LIMIT_STEPS);
+
+  // `(*LIMIT_DEPTH=d)` -> max_backtrack, on a program that backtracks.
+  EXPECT_EQ(ask("(\\w+)\\1", "aaaaaaaaaaaaaaaaaaaab").matched, 1);
+  Asked depth = ask("(*LIMIT_DEPTH=2)(\\w+)\\1", "aaaaaaaaaaaaaaaaaaaab");
+  EXPECT_EQ(depth.result, GRX_ERR_LIMIT);
+  EXPECT_EQ(depth.diag, GRX_DIAG_LIMIT_BACKTRACK);
+
+  // `(*LIMIT_HEAP=d)` -> max_match_memory, and the number is *kibibytes*
+  // where max_match_memory counts bytes. A subject long enough that the
+  // thread lists cost more than one kibibyte is what makes the scale
+  // visible: with the directive read as bytes this row would pass anyway.
+  std::string big(4000, 'a');
+  EXPECT_EQ(ask("(a|b)*c", big).result, GRX_OK);
+  Asked heap = ask("(*LIMIT_HEAP=1)(a|b)*c", big);
+  EXPECT_EQ(heap.result, GRX_ERR_LIMIT);
+  EXPECT_EQ(heap.diag, GRX_DIAG_LIMIT_MATCH_MEMORY);
+}
+
+TEST(Limits, APatternMayLowerACallersLimitAndMayNotRaiseIt) {
+  // The rule that makes the directive safe to honour at all: a caller's cap
+  // is a policy, and a pattern that arrived from outside must not be able
+  // to lift it. Both directions, because "the smaller wins" is only a rule
+  // if it holds when the pattern is the larger of the two.
+  EXPECT_EQ(ask("abc", "abc", 1000000).matched, 1);
+
+  // The caller is the tighter of the two.
+  Asked caller_wins = ask("(*LIMIT_MATCH=1000000)abc", "abc", 1);
+  EXPECT_EQ(caller_wins.result, GRX_ERR_LIMIT);
+  EXPECT_EQ(caller_wins.diag, GRX_DIAG_LIMIT_STEPS);
+
+  // The pattern is the tighter of the two.
+  Asked pattern_wins = ask("(*LIMIT_MATCH=1)abc", "abc", 1000000);
+  EXPECT_EQ(pattern_wins.result, GRX_ERR_LIMIT);
+  EXPECT_EQ(pattern_wins.diag, GRX_DIAG_LIMIT_STEPS);
+
+  // Neither is: the pattern asks for less than the default and more than
+  // this pattern needs, and the search runs.
+  EXPECT_EQ(ask("(*LIMIT_MATCH=1000)abc", "abc").matched, 1);
+
+  // A *later* directive replaces an earlier one rather than joining it.
+  // pcre2test answers both orders that way: `=1` then `=1000000` matches
+  // "abc" there and `=1000000` then `=1` does not.
+  EXPECT_EQ(ask("(*LIMIT_MATCH=1)(*LIMIT_MATCH=1000000)abc", "abc").matched, 1);
+  EXPECT_EQ(ask("(*LIMIT_MATCH=1000000)(*LIMIT_MATCH=1)abc", "abc").result,
+      GRX_ERR_LIMIT);
+}
+
+TEST(Limits, APatternAskingForNothingIsRefusedRatherThanUnbounded) {
+  // Zero is where the directive's encoding and GRX_Limits' disagree, and
+  // they disagree backwards: GRX_Limits reads 0 as "no limit at all", and
+  // `(*LIMIT_MATCH=0)` is a budget of nothing. pcre2test answers "match
+  // limit exceeded" for `(*LIMIT_MATCH=0)abc` against "abc", so writing the
+  // request straight through would turn the tightest limit a pattern can
+  // ask for into the loosest there is - and silently.
+  for (const char * pattern : {"(*LIMIT_MATCH=0)abc", "(*LIMIT_DEPTH=0)abc",
+           "(*LIMIT_HEAP=0)abc"}) {
+    Asked asked = ask(pattern, "abc");
+    EXPECT_EQ(asked.compile_result, GRX_OK) << pattern;
+    EXPECT_EQ(asked.result, GRX_ERR_LIMIT) << pattern;
+    EXPECT_EQ(asked.matched, 0) << pattern;
+  }
+}
+
+TEST(Limits, ALimitDirectiveTooLargeToHoldIsMalformedRatherThanClamped) {
+  // pcre2test answers error 160, "(*VERB) not recognized or malformed", for
+  // `(*LIMIT_MATCH=4294967294)`, because its counter is 32 bits wide. The
+  // ceiling here is this library's own and far higher; what is shared is
+  // that an unrepresentable request is refused rather than quietly turned
+  // into some other number.
+  for (const char * pattern : {
+           "(*LIMIT_MATCH=99999999999999999999999999)abc",
+           "(*LIMIT_HEAP=99999999999999999999999999)abc",
+           "(*LIMIT_MATCH=)abc",
+           "(*LIMIT_MATCH=1x)abc",
+       }) {
+    Asked asked = ask(pattern, "abc");
+    EXPECT_EQ(asked.compile_result, GRX_ERR_SYNTAX) << pattern;
+    EXPECT_EQ(asked.compile_diag, GRX_DIAG_INVALID_GROUP_SYNTAX) << pattern;
+  }
+
+  // A value this library *can* hold is accepted, so the row above is a
+  // ceiling and not a refusal of every large number.
+  EXPECT_EQ(ask("(*LIMIT_MATCH=4294967296)abc", "abc").matched, 1);
+}

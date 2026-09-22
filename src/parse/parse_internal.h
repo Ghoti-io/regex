@@ -55,6 +55,7 @@
 #include <stdint.h>
 
 #include "../core/arena_internal.h"
+#include "../core/core_internal.h"
 #include "../core/semantics_internal.h"
 #include "../syntax/syntax_internal.h"
 
@@ -285,6 +286,7 @@ struct GRX_Pattern {
   GRX_Arena names;                 ///< char; NUL-terminated, by offset.
   GRX_Arena strings;               ///< uint32_t; length-prefixed runs.
   size_t capture_count;            ///< Capturing groups, excluding group 0.
+  GRX_PatternLimits limits;        ///< What `(*LIMIT_MATCH=d)` and kin asked.
 };
 
 /**

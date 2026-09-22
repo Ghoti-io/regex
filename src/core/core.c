@@ -21,13 +21,16 @@
 /**
  * @file
  *
- * Result strings, the error structure, and the default limits.
+ * Result strings, the error structure, the default limits, and the limits a
+ * pattern may ask for on top of them.
  */
 
 #include <ghoti.io/regex/macros.h>
 
 #include <ghoti.io/regex/core.h>
 #include <string.h>
+
+#include "core_internal.h"
 
 const char * grx_result_string(GRX_Result result) {
   switch (result) {
@@ -153,3 +156,67 @@ void grx_limits_unlimited(GRX_Limits * limits) {
   };
 }
 
+
+void grx_pattern_limits_init(GRX_PatternLimits * limits) {
+  if (!limits) {
+    return;
+  }
+
+  // By name, for the reason grx_limits_unlimited() gives: a field added
+  // without deciding what "the pattern did not ask" means for it should be
+  // a compiler warning, and here a memset would also be *wrong* - the
+  // sentinel is GRX_NPOS and not zero.
+  *limits = (GRX_PatternLimits) {
+    .max_steps = GRX_NPOS,
+    .max_backtrack = GRX_NPOS,
+    .max_match_memory = GRX_NPOS,
+  };
+}
+
+/**
+ * Narrow one field, or refuse the search outright.
+ *
+ * Zero is where the two encodings disagree, and they disagree backwards:
+ * GRX_Limits reads 0 as "no limit", and `(*LIMIT_MATCH=0)` is a budget of
+ * nothing - pcre2test answers "match limit exceeded" for it on a pattern as
+ * small as `abc`. Writing the request straight through would turn the
+ * tightest limit a pattern can ask for into the loosest one there is, so a
+ * requested zero is answered here instead of stored.
+ */
+static GRX_Result lower_one(
+    size_t requested, size_t * target, GRX_Diag diag, GRX_Diag * out_diag) {
+  if (requested == GRX_NPOS) {
+    return GRX_OK;
+  }
+  if (requested == 0) {
+    if (out_diag) {
+      *out_diag = diag;
+    }
+    return GRX_ERR_LIMIT;
+  }
+  // The caller's 0 is "no limit", so the pattern's request narrows that too.
+  // This is the whole of the "may lower, may not raise" rule.
+  if (*target == 0 || requested < *target) {
+    *target = requested;
+  }
+  return GRX_OK;
+}
+
+GRX_Result grx_pattern_limits_apply(const GRX_PatternLimits * requested,
+    GRX_Limits * target, GRX_Diag * out_diag) {
+  if (!requested || !target) {
+    return GRX_ERR_INVALID;
+  }
+
+  GRX_Result result = lower_one(requested->max_steps, &target->max_steps,
+      GRX_DIAG_LIMIT_STEPS, out_diag);
+  if (result == GRX_OK) {
+    result = lower_one(requested->max_backtrack, &target->max_backtrack,
+        GRX_DIAG_LIMIT_BACKTRACK, out_diag);
+  }
+  if (result == GRX_OK) {
+    result = lower_one(requested->max_match_memory,
+        &target->max_match_memory, GRX_DIAG_LIMIT_MATCH_MEMORY, out_diag);
+  }
+  return result;
+}
