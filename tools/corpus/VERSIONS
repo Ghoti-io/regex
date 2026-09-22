@@ -79,11 +79,31 @@ pcre2 pcre2-10.46
 #   perl -e 'print "bx" =~ /(?|(a)|(b))(?(1)x|y)/ ? 1 : 0'  # 0
 #   perl -e 'print "by" =~ /(?|(a)|(b))(?(1)x|y)/ ? 1 : 0'  # 1
 #
-# Group 1 is "b", and the conditional testing it takes the false arm.
+# Group 1 is "b", and the conditional testing it takes the false arm. One
+# interpreter calls the same group set and unset in two lines.
+#
 # pcre2test 10.46 takes "bx", and so does this library. Two rows of
-# tests/data/vectors/known-gaps.txt are the named form of that question and
-# say to re-check when this pin moves. Searched the tracker rather than
-# reporting anything; #24577 was already there and already fixed.
+# tests/data/vectors/known-gaps.txt are the named form of that question, are
+# categorised there as `reference-defect` rather than as gaps, and say to
+# re-check when this pin moves. Searched the tracker rather than reporting
+# anything; #24577 was already there and already fixed.
+#
+# The upstream record, confirmed 2026-09-22:
+#   issue  Perl/perl5#24577 "Regex 'branch reset' (?|...) fails with backrefs"
+#          present 5.38 through 5.44, bisected to commit fe5492d, closed
+#   fix    Perl/perl5#24588 "regexec.c - remove unnecessary logical_to_parno[]
+#          mapping", merged to blead 2026-07-22 as
+#          8f0cfc33fc3fabc0d491f71b765b0937d245239c
+#
+# The fix names the cause, which is why the conditional and the backreference
+# are one bug: a branch reset group's logical number was mapped to its real
+# one twice, in regcomp.c and again in regexec.c, so everything that reads
+# such a group *by number* reads the wrong one. The issue's own case
+# reproduces on the pinned perl here:
+#
+#   perl -e 'print "abb" =~ s{^(?|(a)|(b)) (?|(a)|(b)) ((\2)*)}{${&}z}xr'
+#
+# prints abzb on 5.40.1 and printed abbz on 5.36.
 perl v5.40.1
 
 # bminor/glibc (the git mirror of sourceware's glibc). posix/rxspencer/tests,

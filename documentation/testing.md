@@ -172,8 +172,8 @@ the day it existed rather than months later.
 A dialect arrives one construct at a time, and between a front end's first
 commit and its last there are patterns the reference compiles and this
 library does not. `tests/data/vectors/known-gaps.txt` is where those live:
-one line per record - dialect, flags, pattern, subject, and **why** - and the
-runner reads it.
+one line per record - dialect, flags, pattern, subject, **category** and
+**why** - and the runner reads it.
 
 Two ways of holding this were rejected. Letting the suite be red makes a gate
 nobody reads, and one nobody reads is one that stops catching the regression
@@ -185,11 +185,47 @@ directions:
 - a record that *is* listed and passes fails the suite too, with "remove the
   entry" - so an entry cannot outlive the gap it names.
 
+- an entry whose category is not one of the two below, or which carries no
+  reason at all, fails the suite rather than being guessed at.
+
 The list can therefore only shrink by somebody noticing, and never grows by
 accident. The key includes the subject, because one pattern appears with
 several and an entry naming only the pattern excuses the subjects that were
 already right: `^(a\1?){4}$` answers three of its four and the fourth is the
 gap.
+
+#### The two categories, and why one of them is dangerous
+
+A **gap** is this library answering differently from a reference that is
+right. It stays in the denominator and counts as a failure.
+
+A **reference defect** is the reference being wrong. It leaves the
+denominator, because a wrong expectation is not a question this library can
+be scored against - agreeing with it would be the defect.
+
+That second category is a lever that raises the published rate, which is
+exactly the move that should not be available on an implementer's own say-so.
+Three things hold it down. The reason must **demonstrate** the defect - a
+reproduction another person can run, or an upstream issue with its fix commit
+- and never merely argue for it; the eight entries there today carry perl
+one-liners, the spans three implementations return, and in two cases the
+upstream PR and the commit that fixed it. The excluded count is printed
+beside the rate everywhere the rate appears, so a reader who sees 100% sees
+on the same line what it is 100% of. And an unreadable category is a hard
+failure rather than a default: defaulting to `gap` would silently demote a
+row, and defaulting to `reference-defect` would silently raise the score.
+
+All four of those checks were proven by planting a violation and watching the
+suite go red - a mistyped category, an entry with its reason removed, a
+reference defect named for a vector that passes, and an entry naming a record
+the corpus does not hold.
+
+The asymmetry this fixed had been there a while: `tools/oracle/perl_diff.py`
+had a reference-defect concept from the day it was written, excluding one
+defect in each of perl and pcre2 by name, while the vector corpus recorded an
+oracle's defect and a library's gap identically and counted both against this
+library. Two gates asking one question, and only one of them able to express
+the answer.
 
 A reason beginning "not yet classified" is one nobody has looked at, and is
 meant to read as the admission it is. There are none of them today: the

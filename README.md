@@ -13,9 +13,11 @@ all three engines: ECMAScript in its legacy, `u` and `v` modes, checked
 against Node 22; PCRE2 and Perl against pcre2 10.46 and perl 5.40.1; and
 `posix-bre`, `posix-ere`, `gnu-bre` and `gnu-ere` against glibc and musl.
 `text` validates JSON Schema's `pattern` and `patternProperties` through
-this library. Of 33,829 conformance vectors, every dialect passes 100% but
-Perl, which is at 99.69% with each of its eight remaining gaps named in
-`tests/data/vectors/known-gaps.txt`. The other nine dialects are named and
+this library. Of 33,829 conformance vectors, every dialect passes 100%,
+Perl over the 2,592 of its 2,600 whose expectation is sound: the other
+eight are defects in Perl itself, excluded from the denominator and each
+named in `tests/data/vectors/known-gaps.txt` with the reproduction that
+demonstrates it. The other nine dialects are named and
 report `GRX_ERR_UNSUPPORTED`. See [Status](#status) below for exactly what
 works today.
 
@@ -307,7 +309,7 @@ cannot mean "the suite ran nothing".
 | --- | --- | --- |
 | ECMAScript, from Node 22 and test262 | 28,559 | **100%** |
 | PCRE2, from pcre2test 10.46's `testinput1` and `testinput2` | 1,869 | **100%** |
-| Perl, from `re_tests` under Perl 5.40, and generated boundary vectors | 2,600 | **99.69%** |
+| Perl, from `re_tests` under Perl 5.40, and generated boundary vectors | 2,600 | **100%** of 2,592; 8 excluded |
 | GNU ERE, from Spencer's test set answered by glibc 2.41 | 270 | **100%** |
 | GNU BRE, the same set read as a basic RE | 159 | **100%** |
 | POSIX ERE, the same set where glibc 2.41 and musl 1.2.6 agree | 245 | **100%** |
@@ -331,14 +333,35 @@ The 8 that do not agree are listed one per line in
 fails and is not listed fails the suite; a vector that *is* listed and passes
 fails it too, with "remove the entry"; and an entry naming a record the
 corpus no longer has fails it as well. So the list can only shrink by
-somebody noticing, and the percentages above are over the whole corpus - a
-known gap is counted and named, never counted as a pass.
+somebody noticing.
 
-None of them is a construct that is missing, and all eight are Perl's: six
-turn on what a *failed* attempt leaves in the capture slots, which is a fact
-about where Perl's own engine restores an offset rather than a rule a second
-engine can follow, and two are a branch reset defect this Perl has and
-[#24577](https://github.com/Perl/perl5/issues/24577) already records.
+Entries come in two categories, and they are counted differently. A **gap**
+is this library answering differently from a reference that is right; it
+stays in the denominator and counts as a failure, never as a pass. A
+**reference defect** is the reference being wrong, and it leaves the
+denominator, because a wrong expectation is not a question this library can
+be scored against. That second category is a lever that raises the published
+rate, so it carries two rules: the entry must *demonstrate* the defect with a
+reproduction someone else can run rather than argue for it, and the excluded
+count is printed beside the rate everywhere the rate appears - which is why
+the table above says "100% of 2,592; 8 excluded" and not "100%". A rate that
+rose because rows left the denominator has to say so.
+
+All eight are reference defects, and all eight are Perl's. **Six** turn on
+what a *failed* attempt leaves in the capture slots, and a minimal pair shows
+that Perl has no rule there: `((a){2})+` against "aaa" gives group 2 as 1-2
+in Perl, in pcre2 10.46 and here, but widen the repeated body by one
+character and only Perl moves - `((aa){2})+` against ten a's is 8-10 in Perl
+and 6-8 in both others, `((aaa){2})+` is 6-9 against 3-6. Identical shape,
+one operand wider, opposite answers, because the width is what Perl's
+compiler uses to choose among its repeat opcodes and those differ in whether
+they restore a capture offset on failure. **Two** are a branch reset defect,
+[#24577](https://github.com/Perl/perl5/issues/24577), a regression in 5.38
+through 5.44 fixed upstream on 2026-07-22 by
+[#24588](https://github.com/Perl/perl5/pull/24588); the pinned 5.40.1 reports
+group 1 of `(?|(a)|(b))` against "b" as `"b"` and then its own `(?(1)x|y)`
+reads that same group as unset, so one interpreter calls it set and unset in
+two lines. Both are re-checked when the pinned reference versions move.
 
 The POSIX and GNU rows have no gaps left. Twelve of them closed in one
 session and eleven were mislabelled: one was leftmost-longest, which the

@@ -345,6 +345,7 @@ struct Tally {
   size_t failed = 0;
   size_t skipped = 0;
   size_t gaps = 0;
+  size_t reference_defects = 0;
 };
 
 /**
@@ -362,10 +363,28 @@ struct Tally {
  * and a *listed* record that starts passing fails it too: the entry has to be
  * deleted, so the list can only shrink by someone noticing.
  *
- * The value is "was it seen", so that an entry naming a pattern the corpus no
- * longer holds is reported rather than left to rot.
+ * Two kinds of entry, because two different things were being recorded
+ * identically. A `gap` is this library answering differently from a reference
+ * that is *right*, and it counts as a failure in the published rate. A
+ * `reference-defect` is the reference being wrong - demonstrably, by an
+ * argument written into the entry - and it leaves the denominator, because a
+ * wrong expectation is not a question this library can be scored against.
+ *
+ * That second category is dangerous in one specific way: it is a lever that
+ * raises the score, and the check on it is that the reason must *demonstrate*
+ * the defect rather than assert it. The rule adopted with it is that the
+ * excluded count is published on the same line as the rate, never silently
+ * dropped, so a rate that rose because rows left the denominator says so.
+ *
+ * `seen` exists so that an entry naming a pattern the corpus no longer holds
+ * is reported rather than left to rot.
  */
-using KnownGaps = std::map<std::string, bool>;
+struct GapEntry {
+  bool reference_defect = false;
+  bool seen = false;
+};
+
+using KnownGaps = std::map<std::string, GapEntry>;
 
 /** Escape a field so that it cannot split a tab-separated line. */
 std::string escape_field(const std::string & value) {
@@ -400,16 +419,20 @@ std::string gap_key(const grxtest::Record & record) {
       + escape_field(record.subject);
 }
 
-KnownGaps read_known_gaps(const std::string & directory) {
+KnownGaps read_known_gaps(
+    const std::string & directory, std::vector<std::string> * out_failures) {
   KnownGaps gaps;
   std::ifstream file(directory + "/known-gaps.txt");
   std::string line;
+  size_t number = 0;
   while (std::getline(file, line)) {
+    number++;
     if (line.empty() || line[0] == '#') {
       continue;
     }
-    // dialect TAB flags TAB pattern TAB subject TAB reason. The reason is for
-    // the reader and is not part of the key.
+    // dialect TAB flags TAB pattern TAB subject TAB category TAB reason. The
+    // first four are the key; the category decides which denominator the
+    // record lands in, and the reason is for the reader.
     size_t cut = 0;
     int fields = 0;
     for (; fields < 4 && cut != std::string::npos; fields++) {
@@ -418,7 +441,42 @@ KnownGaps read_known_gaps(const std::string & directory) {
     if (cut == std::string::npos) {
       continue;
     }
-    gaps[line.substr(0, cut)] = false;
+
+    const std::string where
+        = "known-gaps.txt:" + std::to_string(number) + ": ";
+    const size_t category_end = line.find('\t', cut + 1);
+    const std::string category = line.substr(cut + 1,
+        category_end == std::string::npos ? std::string::npos
+                                          : category_end - (cut + 1));
+
+    GapEntry entry;
+    if (category == "gap") {
+      entry.reference_defect = false;
+    }
+    else if (category == "reference-defect") {
+      entry.reference_defect = true;
+    }
+    else {
+      // Never guessed at. An unreadable category that defaulted to `gap`
+      // would be a silent demotion, and one that defaulted to
+      // `reference-defect` would quietly raise the published rate - which is
+      // the whole reason this field is not simply a prefix on the reason.
+      out_failures->push_back(where + "unknown category \"" + category
+          + "\"; it must be `gap` or `reference-defect`");
+      continue;
+    }
+
+    // A category with no argument behind it is the rot this file exists to
+    // prevent, and it matters most for the category that removes a row from
+    // the denominator.
+    if (category_end == std::string::npos
+        || line.find_first_not_of(" \t", category_end) == std::string::npos) {
+      out_failures->push_back(where + "a `" + category
+          + "` entry with no reason; the reason is what makes it checkable");
+      continue;
+    }
+
+    gaps[line.substr(0, cut)] = entry;
   }
   return gaps;
 }
@@ -433,7 +491,7 @@ Tally run_directory(const std::string & directory,
     std::vector<std::string> * out_failures,
     std::map<std::string, Tally> * out_by_dialect) {
   Tally total;
-  KnownGaps gaps = read_known_gaps(directory);
+  KnownGaps gaps = read_known_gaps(directory, out_failures);
 
   for (const std::string & path : grxtest::find_vector_files(directory)) {
     grxtest::VectorFile file;
@@ -454,15 +512,28 @@ Tally run_directory(const std::string & directory,
         tally.skipped++;
       }
       else if (outcome.passed) {
-        if (gaps.count(gap_key(record))) {
+        auto listed = gaps.find(gap_key(record));
+        if (listed != gaps.end()) {
           // It passes now. The entry has to go, or the file stops being a
           // list of what is missing and becomes a list of what once was.
+          //
+          // For a reference defect "passes" means this library and the
+          // reference now agree, which has two very different causes: the
+          // reference was fixed and the vectors regenerated, or this library
+          // started reproducing the defect. Both need a person, so both stop
+          // the suite.
           total.failed++;
           tally.failed++;
           out_failures->push_back(record.source + ":"
               + std::to_string(record.line) + "\n" + record.text
-              + "  -> listed in known-gaps.txt and passes; remove the entry");
-          gaps[gap_key(record)] = true;
+              + (listed->second.reference_defect
+                     ? "  -> listed in known-gaps.txt as a reference defect "
+                       "and now agrees with the reference; either the "
+                       "reference was fixed (remove the entry) or this "
+                       "library now reproduces the defect (fix that)"
+                     : "  -> listed in known-gaps.txt and passes; remove the "
+                       "entry"));
+          listed->second.seen = true;
           continue;
         }
         total.passed++;
@@ -470,12 +541,25 @@ Tally run_directory(const std::string & directory,
       }
       else if (gaps.count(gap_key(record))) {
         // A record this library is known not to answer the way the oracle
-        // does, listed by hand in `known-gaps.txt` with the construct that
-        // is missing. Counted, never silent, and never a pass: the rate the
-        // README publishes is the rate without these.
-        total.gaps++;
-        tally.gaps++;
-        gaps[gap_key(record)] = true;
+        // does, listed by hand in `known-gaps.txt`. Counted, never silent,
+        // and never a pass.
+        //
+        // A `gap` stays in the denominator: the reference is right and this
+        // library is not, so it is a question this library got wrong. A
+        // `reference-defect` leaves it: the reference's answer is
+        // demonstrably wrong, so agreeing with it would be the defect and
+        // scoring against it measures nothing. The excluded count travels
+        // with the rate so the exclusion is never invisible.
+        GapEntry & entry = gaps[gap_key(record)];
+        if (entry.reference_defect) {
+          total.reference_defects++;
+          tally.reference_defects++;
+        }
+        else {
+          total.gaps++;
+          tally.gaps++;
+        }
+        entry.seen = true;
       }
       else {
         total.failed++;
@@ -495,7 +579,7 @@ Tally run_directory(const std::string & directory,
   // those cases left behind would otherwise sit in the file for ever,
   // counted in no denominator and excusing nothing.
   for (const auto & entry : gaps) {
-    if (!entry.second) {
+    if (!entry.second.seen) {
       out_failures->push_back("known-gaps.txt names a record the corpus does "
           "not have; remove the entry:\n" + entry.first);
     }
@@ -516,12 +600,21 @@ TEST(Conformance, EveryVectorAgreesWithItsOracle) {
     ADD_FAILURE() << failure;
   }
 
-  printf("\nconformance: %zu passed, %zu failed, %zu skipped, %zu known gaps\n",
-      total.passed, total.failed, total.skipped, total.gaps);
+  printf("\nconformance: %zu passed, %zu failed, %zu skipped, %zu known gaps, "
+         "%zu excluded (reference defects)\n",
+      total.passed, total.failed, total.skipped, total.gaps,
+      total.reference_defects);
   for (const auto & entry : by_dialect) {
     // The known gaps are in the denominator. A rate that left them out would
     // be a rate over the vectors this library already answers, which is a
     // number that can only go up and means nothing.
+    //
+    // Reference defects are the one exception, and the reason they are safe
+    // to exclude is the reason they are dangerous: the expectation itself is
+    // wrong, so the row asks a question with no right answer. The protection
+    // is that the count is printed here beside the rate whenever it is not
+    // zero - a reader who sees 100% also sees what it is 100% of, on the
+    // same line, and can go read the argument for each excluded row.
     size_t run = entry.second.passed + entry.second.failed + entry.second.gaps;
     printf("  %-14s %zu/%zu", entry.first.c_str(), entry.second.passed, run);
     if (run) {
@@ -532,6 +625,10 @@ TEST(Conformance, EveryVectorAgreesWithItsOracle) {
     }
     if (entry.second.gaps) {
       printf("  %zu known gaps", entry.second.gaps);
+    }
+    if (entry.second.reference_defects) {
+      printf("  %zu excluded (reference defects)",
+          entry.second.reference_defects);
     }
     printf("\n");
   }

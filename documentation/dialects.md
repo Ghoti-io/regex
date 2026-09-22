@@ -352,9 +352,11 @@ it is not simply "a failed attempt clears what it touched".
 
 No single rule this page could write covers all four, and a rule nobody can
 state is a rule this library will not implement. The two records in
-`tests/data/vectors/known-gaps.txt` that turn on it are named for the
-question rather than for an answer, and the minimal pair in §5.17 is
-why they stay that way.
+`tests/data/vectors/known-gaps.txt` that turn on it are categorised there as
+`reference-defect` rather than as gaps, and the minimal pair is why: perl
+answers `((a){2})+` and `((aa){2})+` differently, so its answer is a fact
+about which repeat opcode its compiler picked and not a rule a second engine
+could follow.
 
 ### 5.6 Backreferences to unset groups; forward and nested references
 
@@ -770,7 +772,8 @@ whole assertion puts them back; what the value changes is whether the
 assertion itself does. What it does *not* settle is what the last write was
 when the body's failing part is a loop — see
 `tests/data/vectors/known-gaps.txt`, where four records turn on where Perl's
-own engine happens to restore an offset rather than on any rule. The minimal
+own engine happens to restore an offset rather than on any rule, and are
+categorised there as `reference-defect` for that reason. The minimal
 pair is `(?!(a){2}$)` and `(?!(aa){2}$)` against "aaa": perl discards the
 write for the first and keeps it for the second, which is the width of the
 repeated body selecting between repeat opcodes and not a rule a second engine
