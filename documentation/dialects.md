@@ -662,22 +662,19 @@ Default options per dialect: Ruby `MULTILINE`; Rust and Perl and Python
 
 ### 5.16 Splitting
 
-`grx_regex_split()` divides a subject at every match. The dialects disagree
-on three things, and a caller who reimplements the loop themselves will get
-at least one of them wrong.
+`grx_regex_split()` divides a subject at every match. **It implements
+ECMAScript's rule, for every dialect**, and the table below is what the
+languages that have a split of their own do instead - a caller porting code
+needs it, and a caller who reimplements the loop themselves will get at least
+one row of it wrong.
 
 | Rule | ECMAScript | Perl | Python | Java | Go, Rust |
 | --- | --- | --- | --- | --- | --- |
 | Capturing groups appear in the output | yes | yes | yes (`re.split` since 3.7) | no | no |
-| An empty match where a piece begins | not a separator | **probe** | **probe** | **probe** | **probe** |
-| An empty subject | one empty piece, or none if the pattern matches empty | **probe** | **probe** | **probe** | **probe** |
-| Trailing empty pieces | kept | dropped unless a negative limit is given | kept | dropped unless a negative limit | kept |
-| `limit` counts | pieces, captures included; 0 yields none | fields | splits, not fields | fields | splits, not fields |
-
-ECMAScript's row is ECMA-262 22.2.6.14 and is implemented; every **probe**
-is resolved by the work package that gives that dialect a front end, in the
-same way §5.5's capture-reset cell was. Until then `grx_regex_split()` can
-only be reached with an ECMAScript regex, because no other dialect compiles.
+| An empty match where a piece begins | not a separator | not a separator | a separator | **probe** | **probe** |
+| An empty subject | one empty piece, or none if the pattern matches empty | none, whatever the pattern | one empty piece, or two if the pattern matches empty | **probe** | **probe** |
+| Trailing empty pieces | kept | dropped unless the limit is negative | kept | dropped unless a negative limit | kept |
+| `limit` counts | pieces, captures included; 0 yields none | fields, captures not counted; 0 means no limit | splits, not fields; 0 means no limit | fields | splits, not fields |
 
 The ECMAScript rule in full, because the second row above is the one that
 surprises people: the walk keeps a `piece_start`, and a match whose *end*
@@ -686,6 +683,46 @@ makes `x*` split `"abc"` into three pieces rather than seven, and it is a
 rule about the piece boundary rather than about the match - `a*` splitting
 `"baac"` yields `b` and `c`, with the `aa` consumed as a separator and the
 empty matches at either end of it ignored.
+
+Perl's and Python's cells were **probe** and are now measured, by
+`tools/oracle/split_probe.py` against perl 5.40.1 and CPython 3.13; the
+twenty-four cases and their answers are in
+[tests/data/probe/split.md](../tests/data/probe/split.md). Two things came
+out of it that reading the documentation would not have given:
+
+- **Perl and ECMAScript agree on the hard row exactly**, not approximately.
+  perlfunc states the rule as one about a zero-width match at the *start of
+  the string*, which reads like the weaker rule; it is the same rule.
+  `(?=b)` on `"abc"`, `(?=,)` on `",a,"`, `,|` on `"a,b"` and `/^/m` on
+  `"a\nb\n"` are the same in both. Ask perl for a *negative* limit, which
+  turns off its trailing-empty drop, and every case in the report agrees with
+  ECMAScript except the empty subject. Two rules, not five.
+- **What looked like a third disagreement was the trailing-empty rule wearing
+  the empty-match rule's clothes.** `split /b*/, "abb"` yields `a` in perl
+  and `a`, `""` in ECMAScript, which reads as a difference about where the
+  walk stops; with `-1` perl yields `a`, `""` too. A table built from that
+  one example would have recorded the wrong axis, which is exactly what
+  section 5.5's capture-reset cell did before it was probed.
+
+Two smaller things the report settles: perl's trailing-empty drop removes
+trailing *fields* and leaves a trailing capture standing, so
+`split /(,)/, "a,b,,"` keeps its final `","`; and perl's `LIMIT` of 0 means
+*no limit* where ECMAScript's `limit` of 0 means no pieces at all - two
+functions whose zero means opposite things.
+
+Java's and Go's cells stay **probe** because neither toolchain is on the
+machine this was measured on, and a cell copied out of their documentation is
+what the first two rows of this table used to be.
+
+Splitting is reachable from every dialect that compiles - ECMAScript, Perl,
+PCRE2, and the POSIX and GNU rows - and an earlier version of this section
+said it was not, which was true when only ECMAScript had a front end. What it
+does with a Perl regex today is ECMAScript's split, not perl's. Whether that
+should become a profile axis the way section 5.5's capture-reset cell did, or
+stay one documented rule because most dialects here have no split of their
+own - PCRE2, POSIX and GNU define no such function, and the languages that do
+disagree as a matter of their *library* rather than of their regex grammar -
+is an open decision recorded in the working notes.
 
 ### 5.17 Captures a failed negative lookaround made
 

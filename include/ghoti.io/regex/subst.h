@@ -156,7 +156,11 @@ GRX_API GRX_Result grx_regex_replace(const GRX_Regex * regex,
 /**
  * @brief Divide a subject at every match.
  *
- * ECMAScript's rule (22.2.6.14), which is more particular than it looks:
+ * ECMAScript's rule (22.2.6.14) - for every dialect, not only for an
+ * ECMAScript regex, because the dialects that have a split of their own
+ * disagree as a matter of their library rather than of their grammar
+ * (documentation/dialects.md section 5.16). It is more particular than it
+ * looks:
  *
  * - Capturing groups appear in the output between the pieces around them, so
  *   `(\d)` splitting `"a1b"` yields `a`, `1`, `b`.

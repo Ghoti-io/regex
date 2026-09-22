@@ -253,6 +253,23 @@ Any later disagreement between an oracle and its profile row is added here
 as a case, so that the suite is the record of every semantic question the
 project has had to ask.
 
+§5.16's cells have a probe of their own, `tools/oracle/split_probe.py`,
+writing `tests/data/probe/split.md`. Splitting could not join the table
+above: its answer is a list of pieces rather than a span, it takes a `limit`
+whose meaning is one of the things being measured, and only three of this
+machine's references have a split at all. It has a column for this library
+as well as for the references, because `grx_regex_split()` implements
+ECMAScript's rule for every dialect and a row where it differs from node is
+a defect rather than an entry in the table.
+
+Its twenty-four cases are chosen so that no two rules ride on one example.
+That is not a stylistic preference: `split /b*/, "abb"` differs between perl
+and ECMAScript, and the difference is perl dropping a trailing empty field
+rather than anything about the empty-match rule the case looks like it is
+about. Asking perl the same split with a negative limit makes the two agree.
+Section 5.5's capture-reset cell was wrong for exactly that reason before
+WP-03 probed it.
+
 ### The vector corpus, and proving it can fail
 
 `tests/data/vectors/` holds checked-in `.rxt` records, and `testVectors` runs
@@ -550,6 +567,56 @@ The flag alphabets are each dialect's own. A shared list asked this library
 for `u` under `pcre`, which that row rightly refuses because PCRE2's UTF mode
 is an option and not a pattern flag, and counted 1,283 refusals as
 disagreements.
+
+### The split differential
+
+`make check-oracle-split` runs `tools/oracle/split_diff.py`, which builds
+patterns, subjects *and limits* and puts them through node's
+`String.prototype.split` beside `grx_regex_split()`. It was the last
+documented surface of this library with no generator behind it: matching had
+`match_diff.py`, replacement had `replace_diff.py` and `sed_diff.py`, syntax
+had `syntax_diff.py`, and splitting had six hand-written tests every one of
+which asserts a rule the author had already decided was right.
+
+That gap mattered more than six tests suggests, because ECMA-262 22.2.6.14 is
+not a loop over matches. It walks the subject, keeps a `p` for where the
+current piece began, and discards a match whose *end* equals `p` - and three
+rules fall out of that walk which a loop over matches gets wrong. The
+generator's contribution is the interactions between them: a limit that runs
+out between a piece and the captures spliced after it, an empty match
+immediately following a non-empty one, a capture that participates on one
+branch of an alternation and not the other.
+
+**It agreed from the first run**, which is worth as little as any green gate
+until the gate is shown to bite. Each of the four rules was deleted from
+`src/subst/subst.c` in turn and the run repeated:
+
+| Rule removed | Disagreements in 8,176 compared rows |
+| --- | --- |
+| an empty match where a piece begins is skipped | 3,025 |
+| the empty subject yields one piece, or none | 580 |
+| the limit is checked between a piece and its captures | 384 |
+| a match at or past the end is not a separator | 1,690 |
+
+None of the six hand-written tests fails for any of those four.
+
+The one exclusion is the surrogate-pair one, for the reason the replacement
+differential gives and detected the same way: without `u`, ECMAScript splits
+a string of UTF-16 code units, so the empty pattern cuts an astral character
+in half and the pieces are lone surrogates. Encoding those as UTF-8 would
+substitute U+FFFD and make two different answers compare equal, so node
+refuses the row and the harness prints how many it refused.
+
+Patterns only one side compiles are counted apart from patterns neither
+compiles. Folding the two together is how a generator ends up measuring
+itself: `syntax_diff.py` is the tool for a syntax disagreement, and a
+one-sided refusal here means this generator is asking fewer questions than
+its row count claims.
+
+The pieces cross the wire as spans and not as strings, `-` for a capturing
+group that did not participate. A driver that printed an unset group and an
+empty one the same way would have made the whole `(a)|(b)` family agree by
+construction.
 
 ### The properties of strings
 

@@ -415,6 +415,39 @@ TEST(Split, TheLimitCountsPiecesIncludingCaptures) {
   EXPECT_EQ(split_into("(,)", "a,b,c", 2), "[\"a\",\",\"]");
 }
 
+TEST(Split, TheRulesInteract) {
+  // Every case here came out of tools/oracle/split_diff.py's vocabulary
+  // rather than out of a reading of ECMA-262, and each is an *interaction*
+  // between two of the four rules - which is what the six tests above do not
+  // reach, because each of those states one rule on its own.
+
+  // The limit runs out between a piece and the captures spliced after it, so
+  // the separator is reported half-way through.
+  EXPECT_EQ(split_into("(,)(;)?", "a,b", 2), "[\"a\",\",\"]");
+  EXPECT_EQ(split_into("(,)(;)?", "a,b", 3), "[\"a\",\",\",null]");
+
+  // An empty match immediately after a non-empty one. `b*` matches empty at
+  // 0 where the piece begins, then "b" at 1, then empty at 2 where the next
+  // piece begins - the skip rule fires twice, on either side of a separator.
+  EXPECT_EQ(split_into("b*", "abc"), "[\"a\",\"c\"]");
+  EXPECT_EQ(split_into("b*", "abb"), "[\"a\",\"\"]");
+  EXPECT_EQ(split_into("x?", "ax"), "[\"a\",\"\"]");
+
+  // A zero-width assertion is a separator wherever it is not at a piece
+  // boundary, which puts the whole of the subject in the pieces.
+  EXPECT_EQ(split_into("(?=b)", "abc"), "[\"a\",\"bc\"]");
+  EXPECT_EQ(split_into("(?=,)", ",a,"), "[\",a\",\",\"]");
+
+  // An alternation with an empty branch: the empty branch is preferred and
+  // skipped at every piece boundary, so the non-empty one still separates.
+  EXPECT_EQ(split_into(",|", "a,b"), "[\"a\",\"b\"]");
+
+  // A group that participates on one branch and not the other, with the
+  // trailing empty piece the end-of-subject rule adds.
+  EXPECT_EQ(split_into("(a)|(b)", "xayb"),
+      "[\"x\",\"a\",null,\"y\",null,\"b\",\"\"]");
+}
+
 TEST(Split, BothEnginesAgree) {
   const char * const patterns[] = {",", "", "x*", "(a)|(b)", "a*", "(,)"};
   const char * const subjects[] = {"a,b,c", "", "abc", "xaybz", ",a,"};

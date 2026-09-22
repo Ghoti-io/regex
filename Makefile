@@ -629,7 +629,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 ####################################################################
 
 # General commands
-.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-diagnostics check-unicode-tables check-oracle-syntax check-oracle-match check-engine-equivalence check-oracle-perl check-oracle-replace \
+.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-diagnostics check-unicode-tables check-oracle-syntax check-oracle-match check-engine-equivalence check-oracle-perl check-oracle-replace check-oracle-split \
 	check-oracle-properties check-oracle-numeric-properties \
 	check-oracle-string-properties check-oracle-posix check-oracle-sed \
 	check-oracles \
@@ -673,7 +673,7 @@ check-oracles: ## Run every differential check against the reference implementat
 check-oracles: check-oracle-syntax check-oracle-match check-oracle-properties \
 	check-oracle-numeric-properties check-oracle-string-properties \
 	check-oracle-posix check-oracle-perl check-oracle-sed \
-	check-oracle-replace check-engine-equivalence
+	check-oracle-replace check-oracle-split check-engine-equivalence
 
 check-oracle-properties: ## Compare every Unicode property table against the reference
 check-oracle-properties: $(TOOLS)
@@ -725,6 +725,19 @@ check-oracle-replace: $(TOOLS)
 		exit 0; \
 	fi; \
 	python3 tools/oracle/replace_diff.py --seed $(ORACLE_SEED)
+
+check-oracle-split: ## Compare grx_regex_split() against ECMAScript's
+# The last documented surface of the substitution API with no generator
+# behind it. Its six hand-written tests each assert a rule the author had
+# already decided was right; deleting any one of ECMA-262 22.2.6.14's four
+# rules from src/subst/subst.c makes this report hundreds of disagreements
+# and makes none of those six fail.
+check-oracle-split: $(TOOLS)
+	@if ! command -v node >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then \
+		printf "check-oracle-split: skipped (no node or no python3)\n"; \
+		exit 0; \
+	fi; \
+	python3 tools/oracle/split_diff.py --seed $(ORACLE_SEED)
 
 check-oracle-sed: ## Compare the POSIX and GNU replacement templates against sed
 check-oracle-sed: $(TOOLS)
