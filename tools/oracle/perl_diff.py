@@ -64,6 +64,12 @@ SHARED_ATOMS = [
     "(?=a)", "(?!a)", "(?<=a)", "(?<!a)",
     # Atomic grouping and inline modifiers.
     "(?>a)", "(?i)a", "(?i:a)", "(?-i:a)", "(?^i:a)",
+    # The extended class. It was PCRE2-only here on the belief that perl's
+    # grammar differs; over 13,440 generated rows the operands, operators
+    # and precedence all agree, and what differs is which characters are
+    # ignorable - which is the next list.
+    "(?[ [a-z] & [b-d] ])", "(?[ [ab] | [cd] ])", "(?[ ! [a] ])",
+    "(?[ ( [a] | [b] ) - [b] ])", "(?[ \\w - [a] ])", "(?[ [a] ^ [ab] ])",
     # Script runs. Both dialects have them, and what this vocabulary adds
     # over tools/oracle/script_run_diff.py is the *interaction*: a script
     # run beside a quantifier, inside a group, next to an anchor. The
@@ -133,6 +139,13 @@ SHARED_ILL_FORMED = [
 PERL_ONLY = [
     # Duplicate names, ordinary in perl and needing `(?J)` in PCRE2.
     "(?<n>a)|(?<n>b)", "(?<n>a)|(?<n>b)\\k<n>",
+    # What an extended class ignores, which is the one place the two
+    # dialects' `(?[...])` differ: perl skips all of Pattern_White_Space
+    # and takes `#` comments to the next line feed, and pcre2test refuses
+    # a literal newline there with error 216 and refuses `#` outright.
+    "(?[ [a]\n])", "(?[ [a] # c\n | [b] ])", "(?[\n[a]\n])",
+    "(?[ [a]\x0b])", "(?[ [a]\x0c])", "(?[ [a]\r])",
+    "(?[ [a] # c\r ])", "(?[ [a] # no line feed ])",
     # The charset modifiers, which pick which alphabet `\\w` and friends
     # mean. PCRE2 has no such letter.
     "(?a:\\w)", "(?u:\\w)", "(?aa:\\w)", "(?d:\\w)",
@@ -151,9 +164,6 @@ PCRE_ONLY = [
     "(*napla:a|(.))\\1", "(*naplb:(.)|x)\\1", "(?*a|(.))\\1",
     # Scan-substring, which re-runs an assertion over what a group captured.
     "(a)(*scs:(1)a)", "(?<n>a)(*scs:(<n>)a)",
-    # The extended class, added in 10.45. Perl's `(?[...])` is a different
-    # grammar and this library's perl row does not claim it.
-    "(?[ [a-z] & [b-d] ])", "(?[ [ab] | [cd] ])", "(?[ ! [a] ])",
     # PCRE2's own `\\g` spelling, and the callouts.
     "(a)\\g{1}", "(?C)a", "(?C1)a",
 ]

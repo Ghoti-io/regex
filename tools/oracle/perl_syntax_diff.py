@@ -113,21 +113,18 @@ CONSTRUCTS = [
 # disagreement does. That is the same two-way rule
 # `tests/data/vectors/known-gaps.txt` carries, for the same reason.
 KNOWN = {
-    "(*script_run:abc)": "section 6: a script run constrains what its body "
-        "may match and an ordinary group does not; GRX_ERR_UNSUPPORTED",
-    "(*sr:abc)": "as (*script_run:",
-    "(*asr:abc)": "as (*script_run:",
-    "(*atomic_script_run:abc)": "as (*script_run:",
-    "(?[ \\p{L} ])": "section 6: `(?[ ])` is read with PCRE2's grammar "
-        "only; Perl's nests and takes different operands, and a shared "
-        "reader would accept neither exactly",
-    "(?[ [a] + [b] ])": "as `(?[ \\p{L} ])`",
     "\\p{nv=1/1}": "section 6: UAX #44 5.9.2 matches numeric values by "
         "numeric equivalence and 1/1 is 1. Perl keys its table by the "
         "spelling, so 1/1 and 2/2 are errors there while 2/4 resolves. "
         "Following the stated rule accepts a spelling perl rejects and "
         "never changes a match set",
 }
+
+# Six entries left this table on 2026-09-22, and the two-way rule is what
+# said so: the four script-run spellings and the two `(?[ ])` rows all
+# started agreeing with perl, and the run failed with "remove the KNOWN
+# entry" until they were taken out. A list of exceptions that can only be
+# added to is a list that stops describing anything.
 
 
 def find(name):

@@ -608,12 +608,13 @@ in [dialects.md](dialects.md) section 3 had given `NON_ATOMIC_LOOKAROUND` to
 Perl, which is where the code's belief came from - a wrong spec table
 becomes wrong code that review cannot catch, because review reads the table.
 
-The seven remaining disagreements are decisions and are listed in the file
-with the reason dialects.md section 6 gives for each: the script runs and
-`(?[ ])`, which perl has and this library refuses, and `\p{nv=1/1}`, which
-this library resolves and perl does not. The list is a two-way gate like
-`known-gaps.txt`: an entry that *stops* disagreeing fails the run with
-"remove the KNOWN entry", so it can only shrink by somebody noticing.
+One disagreement remains and it is a decision: `\p{nv=1/1}`, which this
+library resolves and perl does not, for the reason dialects.md section 6
+gives. There were seven. The other six - the four script-run spellings and
+the two `(?[ ])` rows - left when those constructs were built, and the list
+is a two-way gate like `known-gaps.txt`, so the run failed with "remove the
+KNOWN entry" until somebody did. A list of exceptions that can only be
+added to is a list that stops describing anything.
 
 ### The script-run differential
 

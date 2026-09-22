@@ -2524,10 +2524,79 @@ static GRX_Result read_star_construct(GRX_Parser * parser, size_t start,
  * an operator: `(?[\n \Q\E])` compiles. A `\Q` run with anything in it is
  * not ignorable and is left for read_extended_term() to refuse.
  */
+/**
+ * Whether a code point is Pattern_White_Space, which Perl's `(?[ ])` skips.
+ *
+ * Read off the UCD rather than listed here, because it is a *property* and
+ * a list would be a copy of one. All eleven were probed against perl
+ * 5.40.1 - U+0009 to U+000D, U+0020, U+0085, U+200E, U+200F, U+2028 and
+ * U+2029 are ignored inside `(?[ ])` there, and U+00A0 is not, which is
+ * exactly the property and not "whitespace".
+ */
+static int pattern_white_space(uint32_t code) {
+  static const char name[] = "Pattern_White_Space";
+  uint32_t property = 0;
+  if (grx_unicode_property_lookup(name, sizeof name - 1, NULL, 0,
+          GRX_PROPERTY_STRICT, &property)
+      != GRX_OK) {
+    return 0;
+  }
+  size_t count = 0;
+  const GRX_CharRange * ranges = grx_unicode_property_ranges(property, &count);
+  for (size_t i = 0; ranges && i < count; i++) {
+    if (code >= ranges[i].low && code <= ranges[i].high) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+/**
+ * Perl's extra ignorables: all of Pattern_White_Space, and `#` comments.
+ *
+ * The one place the two dialects' `(?[ ])` grammars differ, and the whole
+ * of it. Everything else - the operands, the operators, their precedence,
+ * that neither nests textually - was compared over 13,440 generated rows
+ * and agrees. pcre2test refuses a literal newline inside `(?[ ])` with
+ * error 216 and refuses `#` entirely; perl ignores both, which is what
+ * makes a multi-line extended class a thing people write there.
+ *
+ * A comment runs to the next **line feed** and nothing else: probed, and
+ * CR, VT and U+2028 all leave it open, so `(?[ [a] # c\r ])` is an error
+ * in perl where `(?[ [a] # c\n ])` is not. A `#` with no line feed after
+ * it is left where it is, so the expression reader refuses it - which is
+ * perl's answer too.
+ *
+ * @return Non-zero when something was skipped.
+ */
+static int skip_perl_ignorable(GRX_Parser * parser) {
+  uint32_t code = 0;
+  size_t width = 0;
+  if (grx_parse_peek(parser, &code, &width) == GRX_OK
+      && pattern_white_space(code)) {
+    parser->position += width;
+    return 1;
+  }
+  if (byte_at(parser, 0) != '#') {
+    return 0;
+  }
+  for (size_t scan = parser->position + 1; scan < parser->length; scan++) {
+    if (parser->text[scan] == '\n') {
+      parser->position = scan + 1;
+      return 1;
+    }
+  }
+  return 0;
+}
+
 static void skip_extended_ignorable(GRX_Parser * parser) {
+  int perl = flavour(parser) == FLAVOUR_PERL;
   for (;;) {
     if (byte_at(parser, 0) == ' ' || byte_at(parser, 0) == '\t') {
       parser->position++;
+      continue;
+    }
+    if (perl && skip_perl_ignorable(parser)) {
       continue;
     }
     if (byte_at(parser, 0) == '\\' && byte_at(parser, 1) == 'E') {

@@ -103,7 +103,7 @@ New bits, in addition to the scaffold's:
 | COMMENT_GROUP | - | - | - | - | yes | yes | - |
 | POSIX_CLASS | yes | yes | yes | yes | yes (in brackets) | yes | - |
 | UNICODE_PROPERTY | - | - | - | - | yes | yes | `u`/`v` only |
-| CLASS_SET_OPS | - | - | - | - | - | `(?[ ])` extended classes | `v` only |
+| CLASS_SET_OPS | - | - | - | - | `(?[ ])` extended classes | same, less what each ignores | `v` only |
 | WORD_BOUNDARY | - | - | `\b \B \< \>` | same | `\b \B`, `\b{wb}` | `\b \B` | `\b \B` |
 | ANCHOR_ESCAPES | - | - | `` \` `` `\'` | same | `\A \z \Z` | `\A \z \Z` | - |
 | ANCHOR_G | - | - | - | - | yes | yes | - |
@@ -654,7 +654,7 @@ never reaches it. Here the backslash is dropped.
 | `-` literal at the ends | yes | yes | yes (legacy); `u`: yes; `v`: must be escaped | yes | yes | yes | yes |
 | Class escape as a range endpoint, `[\d-z]` | n/a | PCRE2: error; Perl: `-` literal, with a warning | legacy: union; `u`: error | error (probed: Python 3.13 raises) | error | **probe** | error |
 | `[[:alpha:]]` | yes | yes | no | no | no | yes | yes |
-| Set operations | no | `(?[ ])`: `\|` `+` `&` `-` `^` `!`, nesting to 15 | `v`: `&&`, `--`, nesting, `\q{}` | no | `&&`, nesting | `&&`, nesting | Rust: `&&`, `--`, `~~`, nesting; RE2: no |
+| Set operations | no | `(?[ ])`: `\|` `+` `&` `-` `^` `!`, nesting to 15 - Perl and PCRE2 alike, differing only in what they ignore (§6) | `v`: `&&`, `--`, nesting, `\q{}` | no | `&&`, nesting | `&&`, nesting | Rust: `&&`, `--`, `~~`, nesting; RE2: no |
 | Reserved double punctuators | - | - | `v`: `&&`, `!!`, `##`, ... must be escaped | - | - | - | - |
 
 ### 5.13 Quantifier syntax
@@ -987,7 +987,8 @@ to be complete for every shipped tier.
 | Perl | `(?{ })`, `(??{ })` | code execution | `GRX_ERR_UNSUPPORTED` |
 | Perl | `\N{name}` resolves against UCD 17.0.0, so a name Perl's UCD 15.0.0 does not carry works here and not there | version skew, the same as [unicode.md](unicode.md) §1's. Over a 2,531-name differential the two agree everywhere they share a Unicode version: of 204 disagreements, 196 name characters perl has not been told about and 8 are `NameAliases.txt` corrections newer than its tables, and **none** is a name perl resolves and this library does not | - |
 | PCRE2 | `(?{ })` is not a construct it has at all | pcre2test: "unrecognized character after (? or (?-" | `GRX_ERR_SYNTAX` |
-| Perl | `(?[ ])` is PCRE2's grammar only | Perl's nests and takes different operands; a shared reader would accept neither exactly | `GRX_ERR_SYNTAX` |
+| Perl | `(?[ ])` accepts one unmatched `)` after a complete operand; this does not | `(?[ [a]) ])` compiles in perl 5.40.1 and is an error in pcre2test. Perl refuses two of them, a leading one, and an unmatched `(` - so it is one stray close parenthesis and no more, which is an off-by-one in its accounting rather than a rule to follow. Everything else about the two grammars is the same, which is not what this row used to say: it claimed Perl's "nests and takes different operands", and perl refuses a textual `(?[ (?[ [a] ]) ])` - what it nests is an *interpolated* `qr//`, which a pattern arriving as text cannot be. Compared over 13,440 generated rows | `GRX_ERR_SYNTAX` |
+| Perl, PCRE2 | What an extended class **ignores** differs, and is followed | Perl skips all of `Pattern_White_Space` - all eleven code points probed - and takes `#` comments to the next **line feed**, which CR, VT and U+2028 do not end; pcre2test refuses a literal newline inside `(?[ ])` with error 216 and refuses `#` outright. U+00A0 is ignored by neither, which is the case that says the rule is the property and not a notion of "space" | - |
 | Perl | Where a failed negative lookaround's body stopped *part way through an iteration*, the group reports the last value an iteration **finished** | §5.17 is followed as written - Perl keeps, ECMAScript and PCRE2 discard - but "what the body last wrote" is only well defined if the body failed between iterations, and Perl states no rule for the rest: it decides on the width of the repeated body, answering `(?!(a){2}$)` and `(?!(aa){2}$)` against "aaa" as unset and 0-2. The rule here answers them 1-2 and 0-2, so the two agree wherever Perl is self-consistent and differ on the narrow case where it is not | - |
 | PCRE2 | Callouts `(?C...)` are read and have no effect | no callback API; a callout with no function registered changes no match in PCRE2 either, so accepting it answers the same question. The *syntax* is followed exactly: the number is bounded at 255 as PCRE2 bounds it, and Perl - which answers "Sequence (?C...) not recognized" for every spelling - refuses them here too | - |
 | PCRE2 | A script run may mix Han with **two** of Hiragana/Katakana, Hangul and Bopomofo | pcre2 10.46 accepts the mixture its own manual denies. pcre2unicode says a run may hold "a mixture of Hiragana, Katakana, and Han, or a mixture of Hangul and Han, or a mixture of Bopomofo and Han, but not, for example, a mixture of Hangul and Bopomofo and Han", and pcre2test matches that last one. All twenty two- and three-way combinations of U+6F22, U+304B, U+30AB, U+D55C and U+3105 were put to both references: they agree on fourteen - including `Hiragana+Hangul`, which both refuse, so it is not that Han lets anything through - and differ on exactly the six that mix two families. perl 5.40.1 refuses all six, which is UTS #39 section 5.1, and so does this library | - |

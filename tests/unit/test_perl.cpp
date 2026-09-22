@@ -1415,12 +1415,73 @@ TEST(Perl, AnExtendedClassOperandIsASetAndNotACharacter) {
   EXPECT_TRUE(search("(?[\\n \\Q\\E])", "\n").matched);
   EXPECT_TRUE(search("(?[\\E\\n])", "\n").matched);
 
-  // Perl has `(?[...])` too, with a grammar of its own that nests where
-  // PCRE2's does not. Claiming it here would be claiming to read Perl's, so
-  // the feature bit is PCRE's alone and `(?[` reaches Perl's option-letter
-  // reader, which reports the `[` as a flag it does not have.
-  EXPECT_EQ(compile("(?[ [a] ])", GRX_SYNTAX_PERL).diag,
-      GRX_DIAG_UNKNOWN_FLAG);
+  // Perl reads the same grammar, and answers the same way here.
+  EXPECT_EQ(compile("(?[a])", GRX_SYNTAX_PERL).diag,
+      GRX_DIAG_INVALID_CLASS_ITEM);
+  EXPECT_EQ(compile("(?[ - [a] ])", GRX_SYNTAX_PERL).diag,
+      GRX_DIAG_INVALID_CLASS_SET_OP);
+}
+
+TEST(Perl, PerlsExtendedClassIsPcre2sExceptForWhatItIgnores) {
+  // The `(?[...])` grammar was PCRE2's alone here, on the belief that
+  // Perl's "nests where PCRE2's does not". Perl refuses a textual
+  // `(?[ (?[ [a] ]) ])` - what it nests is an *interpolated* `qr//`, which
+  // a pattern arriving as text cannot be. Compared over 13,440 generated
+  // rows the operands, the operators and their precedence all agree.
+  for (const char * pattern : {"(?[ [a] ])", "(?[ [a] | [b] ])",
+           "(?[ [a] + [b] ])", "(?[ [ab] & [b] ])", "(?[ [ab] - [b] ])",
+           "(?[ [ab] ^ [bc] ])", "(?[ ! [a] ])", "(?[ ( [a] | [b] ) & [b] ])",
+           "(?[ \\d ])", "(?[ \\p{L} ])", "(?[ [:alpha:] ])",
+           "(?[ \\N{U+0041} ])"}) {
+    Attempt perl = compile(pattern, GRX_SYNTAX_PERL);
+    EXPECT_EQ(perl.result, GRX_OK) << pattern << " under Perl";
+    grx_regex_free(perl.regex);
+    // `(*UTF)` on the PCRE2 side and not on Perl's, because `\N{U+...}`
+    // needs UTF mode in pcre2 and Perl's subject is a Unicode string
+    // already. That asymmetry is section 5.15 and not this test's subject.
+    Attempt pcre = compile(std::string("(*UTF)") + pattern, GRX_SYNTAX_PCRE);
+    EXPECT_EQ(pcre.result, GRX_OK) << pattern << " under PCRE2";
+    grx_regex_free(pcre.regex);
+  }
+
+  // Neither nests textually.
+  EXPECT_EQ(compile("(?[ (?[ [a] ]) ])", GRX_SYNTAX_PERL).result,
+      GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile("(?[ (?[ [a] ]) ])", GRX_SYNTAX_PCRE).result,
+      GRX_ERR_SYNTAX);
+
+  // What differs is which characters are ignorable. Perl skips all of
+  // Pattern_White_Space - probed, all eleven - and takes `#` comments to
+  // the next line feed; pcre2test refuses a literal newline there with
+  // error 216 and refuses `#` outright.
+  for (const char * pattern : {"(?[ [a]\n])", "(?[ [a]\x0b])",
+           "(?[ [a]\x0c])", "(?[ [a]\r])", "(?[ [a]\xc2\x85])",
+           "(?[ [a]\xe2\x80\x8e])", "(?[ [a]\xe2\x80\xa8])",
+           "(?[ [a]\xe2\x80\xa9])", "(?[ [a] # c\n | [b] ])",
+           "(?[ # c\n [a] ])"}) {
+    Attempt perl = compile(pattern, GRX_SYNTAX_PERL);
+    EXPECT_EQ(perl.result, GRX_OK) << pattern << " under Perl";
+    grx_regex_free(perl.regex);
+    Attempt pcre = compile(std::string("(*UTF)") + pattern, GRX_SYNTAX_PCRE);
+    EXPECT_NE(pcre.result, GRX_OK) << pattern << " under PCRE2";
+    grx_regex_free(pcre.regex);
+  }
+
+  // U+00A0 is whitespace and is *not* Pattern_White_Space, which is the
+  // case that says this is the property and not a notion of "space".
+  EXPECT_NE(compile("(?[ [a]\xc2\xa0])", GRX_SYNTAX_PERL).result, GRX_OK);
+
+  // A comment ends at a line feed and at nothing else - CR, VT and U+2028
+  // all leave it open, so the `]` is swallowed and the pattern is an error
+  // in perl too. So is a `#` with no line feed after it.
+  EXPECT_NE(compile("(?[ [a] # c\r ])", GRX_SYNTAX_PERL).result, GRX_OK);
+  EXPECT_NE(compile("(?[ [a] # no line feed ])", GRX_SYNTAX_PERL).result,
+      GRX_OK);
+
+  // And the semantics are the same set: `[a]` holds "a" and not "b".
+  EXPECT_TRUE(search("(?[ [a] | [b] ])", "b", GRX_SYNTAX_PERL).matched);
+  EXPECT_FALSE(search("(?[ [a] - [a] ])", "a", GRX_SYNTAX_PERL).matched);
+  EXPECT_TRUE(search("(?[ [a]\n| [b] ])", "b", GRX_SYNTAX_PERL).matched);
 }
 
 TEST(Perl, AnExtendedClassNestsFifteenDeepAndNoFurther) {

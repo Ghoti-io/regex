@@ -180,7 +180,7 @@ Nothing is allocated for the caller to free on a failing call.
 | Parser skeleton and hook interface | working |
 | ECMAScript front end, legacy and Unicode modes | working |
 | ECMAScript UnicodeSets (`v`) mode | working - set operations, string disjunctions, the seven properties of strings |
-| PCRE2 and Perl front ends | working - verbs, conditionals, recursion, branch reset, `\Q..\E`, extended modes, the leading directives (PCRE2's alone; Perl has none of them), Perl's `\N{NAME}` against the full character-name table, `(*LIMIT_MATCH=n)` applied rather than parsed and dropped, and script runs `(*sr:`/`(*asr:` against UTS #39's augmented script sets. The newline conventions `(*CR)` and kin are refused, `(*BSR_ANYCRLF)` is built |
+| PCRE2 and Perl front ends | working - verbs, conditionals, recursion, branch reset, `\Q..\E`, extended modes, the leading directives (PCRE2's alone; Perl has none of them), Perl's `\N{NAME}` against the full character-name table, `(*LIMIT_MATCH=n)` applied rather than parsed and dropped, script runs `(*sr:`/`(*asr:` against UTS #39's augmented script sets, and `(?[ ])` extended classes in **both** dialects. The newline conventions `(*CR)` and kin are refused, `(*BSR_ANYCRLF)` is built |
 | POSIX and GNU front ends | working - one reader for `posix-bre`, `posix-ere`, `gnu-bre` and `gnu-ere`; both halves of `REG_NEWLINE`, as `GRX_OPT_MULTILINE` and `GRX_OPT_NEWLINE_TERMINATES` |
 | Every dialect but those seven | named, `GRX_ERR_UNSUPPORTED` |
 | Lowering, analysis and code generation | working |

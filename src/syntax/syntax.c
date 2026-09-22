@@ -127,9 +127,17 @@ static const GRX_SyntaxSpec spec_table[GRX_SYNTAX_COUNT] = {
     .unmatched_close_is_literal = 1,
   },
   [GRX_SYNTAX_PERL] = {
+    // CSET is `(?[...])`, and it is here as well as on PCRE2's row because
+    // the two grammars turned out to be one. This row said otherwise -
+    // "Perl's nests and PCRE2's does not" - and perl refuses a textual
+    // `(?[ (?[ [a] ]) ])`: what perl nests is an *interpolated* qr//,
+    // which a pattern arriving as text cannot do. Compared over 13,440
+    // generated rows, the operands, the operators and their precedence all
+    // agree; what differs is only which characters are ignorable, and
+    // skip_extended_ignorable() is where that lives.
     .features = ALT | REP | LAZY | POSS | NCAP | NAME | BREF | LAH | LBH
-        | ATOM | COND | RECU | FLAG | CMNT | PCLS | UPRP | WORD | ANCH | QUOT
-        | HEX | OCT | CTRL | SUBR,
+        | ATOM | COND | RECU | FLAG | CMNT | PCLS | UPRP | CSET | WORD
+        | ANCH | QUOT | HEX | OCT | CTRL | SUBR,
     // perl warns "Quantifier {n,m} with n > m can't match" and compiles it
     // anyway, as a group that never matches. pcre2test refuses the same
     // pattern outright.
@@ -151,10 +159,7 @@ static const GRX_SyntaxSpec spec_table[GRX_SYNTAX_COUNT] = {
   },
   [GRX_SYNTAX_PCRE] = {
     // CSET is `(?[...])` here, not `&&` inside brackets: PCRE2 10.45 added
-    // the extended class and did not add the Java spelling. Perl's row does
-    // not have it - Perl's `(?[...])` is a different grammar, it nests and
-    // PCRE2's does not, and a row claiming the feature would be claiming
-    // this front end reads Perl's.
+    // the extended class and did not add the Java spelling.
     .features = ALT | REP | LAZY | POSS | NCAP | NAME | BREF | LAH | LBH
         | ATOM | COND | RECU | FLAG | CMNT | PCLS | UPRP | CSET | WORD | ANCH
         | QUOT | HEX | OCT | CTRL | SUBR | VERB,
