@@ -576,6 +576,45 @@ offsets and omits a trailing unset group, and this machine has libpcre2-8
 without its header, so the driver shape the other oracles use is not
 available. The foot of `perl_diff.py` says so.
 
+### The Perl-family syntax split
+
+`make check-oracle-perl-syntax` runs
+[perl_syntax_diff.py](../tools/oracle/perl_syntax_diff.py), which asks perl
+and this library the same question about each of 183 constructs: does it
+compile at all. It is a **list**, not a generator, and that is the whole of
+why it exists.
+
+The differential above generates patterns from an atom vocabulary, and that
+vocabulary is this library's own grammar. A construct this library has and
+perl has not is therefore never generated as a disagreement - the generator
+has no reason to think the question exists. Nothing else asked it either: a
+pattern that compiles here and would be refused there matches perfectly
+well, so every match-shaped check agrees.
+
+Five construct families were accepted under `GRX_SYNTAX_PERL` and "not
+recognized" in perl 5.40.1 until this existed, all of them PCRE2's: the
+nineteen leading directives, callouts `(?C...)`, the `\g<1>` and `\g'name'`
+subroutine spellings, `(?(VERSION>=n))`, `(?J)` and `(?U)`, and the
+non-atomic lookarounds in all four spellings. They arrived the way this
+whole class arrives: one front end reads both dialects from one set of
+tables - which is the right design, and is why the list of differences is
+something a reader can count - and a row added for PCRE2 belongs to both
+until something says otherwise.
+
+Two things are worth taking from it beyond the fix. The section above this
+one already said "`(?J)` is PCRE2's and perl refuses it", written while the
+code accepted it: a page that is right is not a check. And the feature table
+in [dialects.md](dialects.md) section 3 had given `NON_ATOMIC_LOOKAROUND` to
+Perl, which is where the code's belief came from - a wrong spec table
+becomes wrong code that review cannot catch, because review reads the table.
+
+The seven remaining disagreements are decisions and are listed in the file
+with the reason dialects.md section 6 gives for each: the script runs and
+`(?[ ])`, which perl has and this library refuses, and `\p{nv=1/1}`, which
+this library resolves and perl does not. The list is a two-way gate like
+`known-gaps.txt`: an entry that *stops* disagreeing fails the run with
+"remove the KNOWN entry", so it can only shrink by somebody noticing.
+
 ### The replacement differential
 
 `make check-oracle-replace` runs `tools/oracle/replace_diff.py`, which builds

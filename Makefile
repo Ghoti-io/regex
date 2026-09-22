@@ -660,7 +660,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 ####################################################################
 
 # General commands
-.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-diagnostics check-unicode-tables check-oracle-syntax check-oracle-match check-engine-equivalence check-oracle-perl check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
+.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-diagnostics check-unicode-tables check-oracle-syntax check-oracle-match check-engine-equivalence check-oracle-perl check-oracle-perl-syntax check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
 	check-oracle-properties check-oracle-numeric-properties \
 	check-oracle-string-properties check-oracle-posix check-oracle-sed \
 	check-oracles \
@@ -703,7 +703,8 @@ tools: $(APP_DIR)/$(TARGET) $(TOOLS)
 check-oracles: ## Run every differential check against the reference implementation
 check-oracles: check-oracle-syntax check-oracle-match check-oracle-properties \
 	check-oracle-numeric-properties check-oracle-string-properties \
-	check-oracle-posix check-oracle-perl check-oracle-sed \
+	check-oracle-posix check-oracle-perl check-oracle-perl-syntax \
+	check-oracle-sed \
 	check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
 	check-engine-equivalence
 
@@ -738,6 +739,19 @@ check-oracle-perl: $(TOOLS)
 	fi; \
 	python3 tools/oracle/perl_diff.py --seed $(ORACLE_SEED) \
 		--patterns $(ORACLE_PATTERNS)
+
+check-oracle-perl-syntax: ## Ask perl and this library whether each Perl-family construct compiles
+# A list rather than a generator, and that is the point: perl_diff.py
+# generates from the grammar *this library* implements, so a construct this
+# library has and perl has not is never generated as a disagreement. Four
+# families were accepted here and "not recognized" in perl until this
+# existed, each of them silently.
+check-oracle-perl-syntax: $(TOOLS)
+	@if ! command -v perl >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then \
+		printf "check-oracle-perl-syntax: skipped (no perl or no python3)\n"; \
+		exit 0; \
+	fi; \
+	python3 tools/oracle/perl_syntax_diff.py
 
 check-oracle-posix: ## Compare the POSIX and GNU front ends against glibc
 check-oracle-posix: $(TOOLS)

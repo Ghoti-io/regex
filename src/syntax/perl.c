@@ -1813,7 +1813,6 @@ static uint32_t option_for_letter(char c) {
     case 's': return GRX_OPT_DOTALL;
     case 'x': return GRX_OPT_EXTENDED;
     case 'n': return GRX_OPT_NO_CAPTURE;
-    case 'U': return GRX_OPT_UNGREEDY;
     default: return 0;
   }
 }
@@ -1821,16 +1820,22 @@ static uint32_t option_for_letter(char c) {
 /**
  * The option a letter sets in one flavour only.
  *
- * `J` is PCRE2's: perl answers "Sequence (?J...) not recognized in regex"
- * for `(?J)`, `(?J:...)`, `(?-J)` and `(?iJ)` alike. Perl does allow two
- * groups to share a name inside `(?|...)`, which is a rule about branch
- * reset rather than a flag a pattern may set.
+ * Both of these are PCRE2's. Perl answers "Sequence (?J...) not recognized
+ * in regex" for `(?J)`, `(?J:...)`, `(?-J)` and `(?iJ)` alike, and the same
+ * for every position of `U`. Perl does allow two groups to share a name
+ * inside `(?|...)`, which is a rule about branch reset rather than a flag a
+ * pattern may set; what it has no spelling for at all is inverting the
+ * greediness of every quantifier.
  */
 static uint32_t flavour_option_for_letter(const GRX_Parser * parser, char c) {
-  if (c == 'J' && flavour(parser) == FLAVOUR_PCRE) {
-    return GRX_OPT_DUPLICATE_NAMES;
+  if (flavour(parser) != FLAVOUR_PCRE) {
+    return 0;
   }
-  return 0;
+  switch (c) {
+    case 'J': return GRX_OPT_DUPLICATE_NAMES;
+    case 'U': return GRX_OPT_UNGREEDY;
+    default: return 0;
+  }
 }
 
 /**

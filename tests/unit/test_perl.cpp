@@ -841,7 +841,7 @@ TEST(Perl, TheLeadingDirectivesArePcre2sAndPerlRefusesEveryOne) {
   grx_regex_free(skip.regex);
 }
 
-TEST(Perl, FourConstructFamiliesArePcre2sAndPerlHasNoneOfThem) {
+TEST(Perl, FiveConstructFamiliesArePcre2sAndPerlHasNoneOfThem) {
   // Found by sweeping the Perl-family grammar against perl 5.40.1 rather
   // than by reading perlre, after the leading directives and the callouts
   // turned out to be two instances of the same shape: one front end, one
@@ -849,6 +849,11 @@ TEST(Perl, FourConstructFamiliesArePcre2sAndPerlHasNoneOfThem) {
   //
   // Each row is `pattern`, and each is "accept under PCRE2, refuse under
   // Perl". Perl's own message is in the comment above the group.
+  //
+  // `tools/oracle/perl_syntax_diff.py` is the durable half of the same
+  // sweep - one entry per construct the front end reads, run by
+  // `make check-oracle-perl-syntax` - and is what found the fifth family
+  // after these four were fixed.
   struct { const char * pattern; } pcre_only[] = {
     // "Unterminated \g... pattern": perl's `\g` takes `\g1`, `\g-1` and
     // `\g{...}` and not the angle or quote spellings, which are PCRE2's
@@ -870,6 +875,12 @@ TEST(Perl, FourConstructFamiliesArePcre2sAndPerlHasNoneOfThem) {
     {"(?J:(?<n>a)(?<n>b))"},
     {"(?-J)a"},
     {"(?iJ)a"},
+    // "Sequence (?U...) not recognized": inverting the greediness of every
+    // quantifier is something perl has no spelling for at all.
+    {"(?U)a"},
+    {"(?-U)a"},
+    {"(?U:a)"},
+    {"(?iU)a"},
     // "Unknown '(*...)' construct 'napla'" and "Sequence (?*...) not
     // recognized": perl has no non-atomic lookaround in any spelling.
     {"(*napla:a)"},
