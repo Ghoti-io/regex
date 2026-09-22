@@ -767,6 +767,15 @@ strings can be improved without breaking anything. Every `GRX_ERR_SYNTAX`,
 match-time limit carries the exhausted count in the match object instead;
 there is no meaningful pattern offset for "ran out of steps".
 
+That "in the match object instead" is `grx_match_error()`, which returns a
+`GRX_Error` describing the last attempt: the result code, the diagnostic
+naming which limit or check stopped it, and - for a subject that is not
+valid UTF-8 - an offset into the *subject* rather than into the pattern.
+`GRX_NPOS` is the offset when there is nothing to point at. It sits beside
+`grx_match_steps()` because both are facts about an attempt rather than
+about the pattern, which is why closing this gap needed no new parameter on
+any of the seven entry points, and left all 193 existing call sites alone.
+
 The result vocabulary stays as scaffolded. Three of the codes carry a
 precise meaning here that is worth restating: `GRX_ERR_SYNTAX` is "this
 dialect rejects this text"; `GRX_ERR_UNSUPPORTED` is "this dialect accepts
@@ -784,7 +793,7 @@ now and will not be later.
 | `syntax.h` | `GRX_SyntaxSpec` gains the profile fields ([dialects.md](dialects.md) §5). `GRX_Feature` gains bits for branch reset, `\K`, string classes, duplicate names, `\G`, `\R`, `\X`, `\N`, `\h`/`\v`, callouts-rejected. `GRX_Option` gains `UNICODE_SETS` (ECMAScript `v`), `DOLLAR_ENDONLY`, `NO_UTF_CHECK`, `DUPNAMES`. `grx_options_parse()`. |
 | `core.h` | `GRX_Error` gains `length` and `diag`; `GRX_Diag` enum; `grx_diag_string()`. `GRX_Limits` gains the three fields in §6.2. |
 | `compile.h` | `GRX_Facts` and `grx_regex_facts()`: the analysis results of §3.3, so a caller can ask "is this regular" before deciding to run it. |
-| `exec.h` | `GRX_SearchOptions` (window, flags, engine, limits) and `grx_regex_search_ex()` / `grx_regex_match_ex()`; `grx_regex_search_next()`; `grx_match_steps()`; `grx_match_mark()`; `grx_match_span()` convenience for group 0. |
+| `exec.h` | `GRX_SearchOptions` (window, flags, engine, limits) and `grx_regex_search_ex()` / `grx_regex_match_ex()`; `grx_regex_search_next()`; `grx_match_steps()`; `grx_match_mark()`; `grx_match_error()` (§6.4); `grx_match_span()` convenience for group 0. |
 | `subst.h` *(new)* | `grx_regex_replace()` with the dialect's template grammar, `grx_regex_split()`. See [dialects.md](dialects.md) §5.11 for the template decisions. |
 | `unicode.h` *(new, small)* | `grx_utf8_validate()`, so a caller can find the offset of a bad sequence after `GRX_ERR_INVALID`. Nothing else from the Unicode module is public. |
 | `pattern.h` | unchanged; `grx_pattern_lint()` reserved for the JSON Schema subset check, a later package. |
