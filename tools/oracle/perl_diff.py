@@ -64,6 +64,12 @@ SHARED_ATOMS = [
     "(?=a)", "(?!a)", "(?<=a)", "(?<!a)",
     # Atomic grouping and inline modifiers.
     "(?>a)", "(?i)a", "(?i:a)", "(?-i:a)", "(?^i:a)",
+    # Script runs. Both dialects have them, and what this vocabulary adds
+    # over tools/oracle/script_run_diff.py is the *interaction*: a script
+    # run beside a quantifier, inside a group, next to an anchor. The
+    # subjects here are Latin and Common, so the rule itself is never the
+    # question - whether backtracking into one behaves is.
+    "(*sr:a+)", "(*asr:a+)", "(*sr:\\w+)", "(*sr:a)*",
     # A comment, which changes how the rest is read.
     "(?#c)",
     # `\Q...\E` is deliberately absent. perl cannot be asked about it

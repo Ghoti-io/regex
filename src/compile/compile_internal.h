@@ -109,7 +109,17 @@ typedef enum {
   GRX_OP_JMP,          ///< Continue at another instruction.
   GRX_OP_SAVE,         ///< Record a capture boundary.
   GRX_OP_ASSERT,       ///< A zero-width assertion.
-  GRX_OP_PROGRESS_SET, ///< Record the position at the head of a loop.
+  /**
+   * Record the current position in register `x`.
+   *
+   * Two readers, and neither owns it. `GRX_OP_PROGRESS_CHECK` reads it at a
+   * loop's end to apply the empty-iteration rule, which is what the name
+   * comes from; `GRX_OP_SCRIPT_RUN` reads it to know where the run it is
+   * checking began. Both want the same thing - "where were we" - and a
+   * second opcode that recorded a position would be this one with another
+   * name, including the undo frame that puts it back on a backtrack.
+   */
+  GRX_OP_PROGRESS_SET,
   /**
    * @brief Clear a span of capture slots.
    *
@@ -177,6 +187,18 @@ typedef enum {
   GRX_OP_RET,          ///< Return from a CALL.
   GRX_OP_KEEP,         ///< Reset the reported start of the match.
   GRX_OP_VERB,         ///< A backtracking control verb.
+  /**
+   * Fail unless the text from register `x` to here is a script run.
+   *
+   * PCRE2's and Perl's `(*script_run:...)`. The only instruction whose
+   * condition is on text already consumed, which is why no engine but the
+   * backtracker runs it: a thread set that merged two paths reaching this
+   * instruction has thrown away the one thing it needs to ask.
+   *
+   * Inside a lookbehind the body runs backwards and the register holds the
+   * *later* offset, so the span is taken in whichever order the two come.
+   */
+  GRX_OP_SCRIPT_RUN,
   GRX_OP_COUNT         ///< Closes the enum; not an opcode.
 } GRX_Opcode;
 

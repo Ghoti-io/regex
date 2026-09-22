@@ -105,6 +105,7 @@ typedef struct {
   int has_backreference;
   int has_lookaround;
   int has_recursion;
+  int has_script_run;
   size_t max_lookbehind;
   size_t max_variable_lookbehind;
   size_t depth;
@@ -450,9 +451,18 @@ static Span walk(Analysis * analysis, uint32_t node_index) {
     }
 
     case GRX_IR_CAPTURE:
-    case GRX_IR_ATOMIC: {
-      if (node->kind == GRX_IR_ATOMIC) {
+    case GRX_IR_ATOMIC:
+    case GRX_IR_SCRIPT_RUN: {
+      if (node->kind != GRX_IR_CAPTURE) {
+        // A script run is not regular for the same reason an atomic group
+        // is not: it can refuse a path the automaton already took, and a
+        // thread set that merged two paths at one instruction cannot tell
+        // them apart afterwards. The check reads the *text* consumed, which
+        // is exactly what a Pike VM does not keep.
         analysis->is_regular = 0;
+      }
+      if (node->kind == GRX_IR_SCRIPT_RUN) {
+        analysis->has_script_run = 1;
       }
       span = walk(analysis, node->first_child);
       break;
@@ -613,6 +623,7 @@ GRX_Result grx_analyze_ir(GRX_IR * ir, GRX_Facts * out_facts) {
     .has_backreference = 0,
     .has_lookaround = 0,
     .has_recursion = 0,
+    .has_script_run = 0,
     .max_lookbehind = 0,
     .max_variable_lookbehind = 0,
     .depth = 0,
@@ -630,6 +641,7 @@ GRX_Result grx_analyze_ir(GRX_IR * ir, GRX_Facts * out_facts) {
   out_facts->has_backreference = analysis.has_backreference;
   out_facts->has_lookaround = analysis.has_lookaround;
   out_facts->has_recursion = analysis.has_recursion;
+  out_facts->has_script_run = analysis.has_script_run;
   out_facts->anchored_start = span.anchored_start;
   out_facts->anchored_end = span.anchored_end;
   out_facts->can_match_empty = span.min_length == 0;

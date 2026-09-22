@@ -660,7 +660,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 ####################################################################
 
 # General commands
-.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-diagnostics check-unicode-tables check-oracle-syntax check-oracle-match check-engine-equivalence check-oracle-perl check-oracle-perl-syntax check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
+.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-diagnostics check-unicode-tables check-oracle-syntax check-oracle-match check-engine-equivalence check-oracle-perl check-oracle-perl-syntax check-oracle-script-runs check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
 	check-oracle-properties check-oracle-numeric-properties \
 	check-oracle-string-properties check-oracle-posix check-oracle-sed \
 	check-oracles \
@@ -704,7 +704,7 @@ check-oracles: ## Run every differential check against the reference implementat
 check-oracles: check-oracle-syntax check-oracle-match check-oracle-properties \
 	check-oracle-numeric-properties check-oracle-string-properties \
 	check-oracle-posix check-oracle-perl check-oracle-perl-syntax \
-	check-oracle-sed \
+	check-oracle-script-runs check-oracle-sed \
 	check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
 	check-engine-equivalence
 
@@ -752,6 +752,20 @@ check-oracle-perl-syntax: $(TOOLS)
 		exit 0; \
 	fi; \
 	python3 tools/oracle/perl_syntax_diff.py
+
+check-oracle-script-runs: ## Compare `(*script_run:...)` against pcre2 and perl
+# A table rule needs a table of cases: every pair and triple over an
+# alphabet chosen to hit each clause of UTS #39 section 5.1, plus random
+# longer strings. Both references must agree before either decides, which
+# is what turned pcre2 10.46's Han defect from a disagreement into a
+# finding - pcre2 accepts the three-way mixture its own manual names as
+# not a script run, and perl refuses it.
+check-oracle-script-runs: $(TOOLS)
+	@if ! command -v perl >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then \
+		printf "check-oracle-script-runs: skipped (no perl or no python3)\n"; \
+		exit 0; \
+	fi; \
+	python3 tools/oracle/script_run_diff.py --seed $(ORACLE_SEED)
 
 check-oracle-posix: ## Compare the POSIX and GNU front ends against glibc
 check-oracle-posix: $(TOOLS)

@@ -107,6 +107,19 @@ typedef enum {
   GRX_IR_VERB,       ///< A backtracking control verb; `mode` says which.
   GRX_IR_SCAN,       ///< Match the one child against the substring `a` names.
   /**
+   * Its one child, whose matched text must be a script run.
+   *
+   * PCRE2's and Perl's `(*script_run:...)`. The only construct here whose
+   * condition is on the *text a body consumed* rather than on the text
+   * ahead of a position, which is why it is a node kind rather than an
+   * assertion: nothing it could lower to already exists.
+   *
+   * `(*asr:...)` is this with a GRX_IR_ATOMIC as its child, which is the
+   * nesting pcre2pattern specifies - an atomic group outside the run would
+   * not stop backtracking into it.
+   */
+  GRX_IR_SCRIPT_RUN,
+  /**
    * A run of literal text matched under *full* case folding.
    *
    * Every other caseless construct is a class, because simple folding maps

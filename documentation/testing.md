@@ -615,6 +615,52 @@ this library resolves and perl does not. The list is a two-way gate like
 `known-gaps.txt`: an entry that *stops* disagreeing fails the run with
 "remove the KNOWN entry", so it can only shrink by somebody noticing.
 
+### The script-run differential
+
+`make check-oracle-script-runs` runs
+[script_run_diff.py](../tools/oracle/script_run_diff.py). `(*script_run:...)`
+is a *table* rule - UTS #39 section 5.1 - and a table rule is not tested by
+a handful of cases, because its whole difficulty is which combinations are
+allowed. So the corpus is built: every pair and every triple over an
+alphabet of 28 characters chosen to hit each clause at least once, plus
+3,000 longer random strings, each asked as `^(*sr:.+)$`. 25,764 subjects.
+
+**Both references must agree before either decides.** PCRE2 and Perl
+implement this independently, so a rule they answer identically over
+thousands of cases is a rule rather than an implementation - and where they
+differ there is nothing to hold this library to. 25,037 subjects are decided
+that way, with no disagreement.
+
+The other 727 are the useful part, because "the references disagree" is
+where a blind spot would go if it were left there. Each is classified by
+which reference this library sides with:
+
+- **719 side with pcre2**, which carries Unicode 16.0.0 against perl's
+  15.0.0 while these tables are 17.0.0. U+0301's Script_Extensions is the
+  bulk of it: eight named scripts in UCD 17, and something wider in UCD 15.
+  Siding with the *older* UCD would mean these tables are not the ones being
+  read, so the tool fails if any row does.
+- **8 side with perl**, and all eight are one pcre2 defect - it accepts a
+  script run mixing Han with two of its companion scripts, which
+  pcre2unicode says is not one. The tool carries the shape of that defect
+  and fails on a row that sides with perl and is not it.
+
+Proven by planting, twice. Removing the Common early-out - so that a run
+beginning with a full stop constrains every later character to Common -
+gives 2,859 disagreements and exit 1. Accepting an unassigned code point in
+a run of two or more gives 96 disagreements, 6 of them landing in the
+"sides with perl and is not the Han defect" bucket that exists for exactly
+that. Both were checked by reading the *exit status*, not the output: the
+first time round the status was read through a pipe to `tail` and came back
+0 from `tail`, which is the hazard this page records elsewhere and which
+found its way in here while writing this paragraph.
+
+`tools/oracle/perl_diff.py` carries four script-run atoms as well, which is
+a different question: not whether the rule is right but whether
+backtracking into a run behaves, next to a quantifier or an anchor. Its
+subjects are Latin and Common, so the rule itself is never what is being
+asked there.
+
 ### The replacement differential
 
 `make check-oracle-replace` runs `tools/oracle/replace_diff.py`, which builds

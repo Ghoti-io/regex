@@ -172,6 +172,13 @@ static GRX_Result emit(Codegen * codegen, GRX_Opcode op, uint8_t mode,
     case GRX_OP_RET:
     case GRX_OP_ATOMIC_BEGIN:
     case GRX_OP_ATOMIC_END:
+    // The memo skips an (instruction, position) pair already tried, which
+    // assumes two arrivals there have the same future. A script run's
+    // answer depends on where the *run* began, and two arrivals at its end
+    // instruction at the same position can have begun in different places.
+    // This is the same unsoundness the atomic group had, found once
+    // already, and it is on this list for the same reason.
+    case GRX_OP_SCRIPT_RUN:
       codegen->no_memo = 1;
       break;
     default:
@@ -1335,6 +1342,23 @@ static GRX_Result gen(Codegen * codegen, uint32_t node_index) {
 
     case GRX_IR_SCAN:
       return gen_scan(codegen, node);
+
+    case GRX_IR_SCRIPT_RUN: {
+      // A register to hold where the body began, and a check at the end
+      // over what it consumed. GRX_OP_PROGRESS_SET is the write, because
+      // "record the position" is exactly what it does and its undo frame
+      // is what makes a backtrack out of the body put the mark back.
+      uint32_t reg = codegen->registers++;
+      GRX_Result result
+          = emit(codegen, GRX_OP_PROGRESS_SET, 0, reg, 0, node, NULL);
+      if (result == GRX_OK) {
+        result = gen(codegen, node->first_child);
+      }
+      if (result == GRX_OK) {
+        result = emit(codegen, GRX_OP_SCRIPT_RUN, 0, reg, 0, node, NULL);
+      }
+      return result;
+    }
 
     case GRX_IR_FOLD_RUN:
       return gen_fold_run(codegen, node);

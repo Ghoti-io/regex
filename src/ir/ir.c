@@ -43,7 +43,7 @@ static const char * ir_kind_name(GRX_IRKind kind) {
   static const char * const names[GRX_IR_COUNT] = {
     "empty", "char", "class", "any", "concat", "alternate", "repeat",
     "capture", "backref", "assert", "look", "atomic", "cond", "recurse",
-    "keep", "verb", "scan", "fold-run",
+    "keep", "verb", "scan", "script-run", "fold-run",
   };
   return (unsigned)kind < GRX_IR_COUNT ? names[kind] : "?";
 }

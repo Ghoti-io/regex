@@ -40,6 +40,27 @@ test262 35d566604512cba908054eec49f85e64a59f3091
 # patterns and matches them, so the differential counts them as a known pcre2
 # defect and prints the count. Searched the tracker rather than reporting
 # anything, the way the perl entry below was handled.
+#
+# A second defect in 10.46, found by tools/oracle/script_run_diff.py: a
+# script run may mix Han with *two* of its companion scripts, which
+# pcre2's own manual says it may not. pcre2unicode's "Script Runs":
+#
+#   a script run may contain a mixture of Hiragana, Katakana, and Han, or a
+#   mixture of Hangul and Han, or a mixture of Bopomofo and Han, but not,
+#   for example, a mixture of Hangul and Bopomofo and Han
+#
+# and pcre2test matches that last one:
+#
+#   pcre2test <<< $'/(*UTF)^(*sr:.+)$/\n    \xe6\xbc\xa2\xed\x95\x9c\xe3\x84\x85'
+#   #  0: (the whole subject)
+#
+# All twenty two- and three-way combinations of U+6F22 (Han), U+304B
+# (Hiragana), U+30AB (Katakana), U+D55C (Hangul) and U+3105 (Bopomofo) were
+# put to pcre2_match and to perl_match.pl. The two agree on fourteen -
+# including Hiragana with Hangul, which both refuse, so it is not that the
+# presence of Han lets anything through - and differ on exactly the six
+# that mix two families. perl 5.40.1 refuses all six, which is UTS #39
+# section 5.1 and what this library implements.
 pcre2 pcre2-10.46
 
 # Perl/perl5. t/re/re_tests, from the release matching the perl on this

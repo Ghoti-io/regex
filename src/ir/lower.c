@@ -1166,7 +1166,28 @@ static GRX_Result lower_group(
   }
 
   if (node->flags & GRX_NODE_ATOMIC) {
-    result = add(low, GRX_IR_ATOMIC, node, out_node);
+    uint32_t atomic = GRX_INDEX_NONE;
+    result = add(low, GRX_IR_ATOMIC, node, &atomic);
+    if (result != GRX_OK) {
+      return result;
+    }
+    result = attach(low, atomic, body);
+    if (result != GRX_OK) {
+      return result;
+    }
+    body = atomic;
+    if (!(node->flags & GRX_NODE_SCRIPT_RUN)) {
+      *out_node = atomic;
+      return GRX_OK;
+    }
+  }
+
+  if (node->flags & GRX_NODE_SCRIPT_RUN) {
+    // The atomic group is *inside*, which is what `(*asr:...)` means:
+    // pcre2pattern spells it `(*sr:(?>...))` and says so explicitly, because
+    // an atomic group outside would leave the run's own backtrack points in
+    // place. The order above builds it that way.
+    result = add(low, GRX_IR_SCRIPT_RUN, node, out_node);
     if (result != GRX_OK) {
       return result;
     }

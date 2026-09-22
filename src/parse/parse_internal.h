@@ -207,6 +207,20 @@ typedef struct GRX_ClassItem {
 #define GRX_NODE_RELATIVE GRX_BIT(4)    ///< BACKREF, RECURSE: `\g{-1}`, `(?-1)`.
 #define GRX_NODE_SCOPED GRX_BIT(5)      ///< OPTIONS: `(?i:a)` rather than `(?i)`.
 #define GRX_NODE_HAS_ELSE GRX_BIT(6)    ///< CONDITIONAL: a second branch exists.
+/**
+ * @brief GROUP: `(*script_run:a)`, whose body must match one script.
+ *
+ * A flag rather than a kind, because everything else about it is an
+ * ordinary non-capturing group: it groups, it can be quantified, and its
+ * body is a plain alternation. What it adds is a check on the *text* the
+ * body matched, which no other construct here has and which is why it
+ * cannot be expressed by lowering to something that already exists.
+ *
+ * `(*asr:a)` is this flag and GRX_NODE_ATOMIC together, in that nesting:
+ * pcre2pattern says `(*asr:...)` is `(*sr:(?>...))` and that putting the
+ * atomic group outside instead would not stop backtracking into the run.
+ */
+#define GRX_NODE_SCRIPT_RUN GRX_BIT(7)
 
 /**
  * @brief One node of a parsed pattern.

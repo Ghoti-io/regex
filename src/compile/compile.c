@@ -233,6 +233,7 @@ void grx_facts_init(GRX_Facts * facts) {
     .has_backreference = 0,
     .has_lookaround = 0,
     .has_recursion = 0,
+    .has_script_run = 0,
     .has_duplicate_names = 0,
     .min_length = 0,
     .max_length = GRX_NPOS,

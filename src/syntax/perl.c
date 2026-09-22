@@ -35,10 +35,12 @@
  * What this front end does *not* read is as much a decision as what it does.
  * A construct PCRE2 has and this library does not implement is
  * GRX_ERR_UNSUPPORTED with its own diagnostic, never a silent approximation:
- * `\X` is a grapheme cluster and not "any character", `(*script_run:...)`
- * constrains what its body may match and an ordinary group does not, and
- * accepting either as something close would tell a caller their pattern means
- * what it does not.
+ * `\X` is a grapheme cluster and not "any character", and accepting it as
+ * something close would tell a caller their pattern means what it does not.
+ * `(*script_run:...)` was on that list until it was built; what replaced it
+ * is a node flag and a check on the text the body matched, because reading
+ * it as an ordinary group is exactly the silent approximation this
+ * paragraph refuses.
  */
 
 #include <ghoti.io/regex/macros.h>
@@ -2086,19 +2088,16 @@ static int alt_group_available(const GRX_Parser * parser, size_t row) {
   return !alt_group_table[row].pcre_only || flavour(parser) == FLAVOUR_PCRE;
 }
 
-/**
- * The `(*...)` spellings this library refuses on purpose.
- *
- * Each constrains what its body may match in a way an ordinary group does
- * not, so reading one as a group would accept the pattern and answer a
- * different question. `napla` and `naplb` are the non-atomic lookarounds,
- * which differ from the ordinary ones only in what a `(*SKIP)` inside them
- * may do - a difference this engine cannot express until WP-19's verbs are
- * in, and one an ordinary lookaround would silently get wrong.
- */
-static const char * const unsupported_star[] = {
-  "script_run", "sr", "atomic_script_run", "asr",
-  NULL
+/** The four spellings of a script run, and whether each is atomic. */
+static const struct {
+  const char * name;
+  int atomic;
+} script_run_names[] = {
+  {"script_run", 0},
+  {"sr", 0},
+  {"atomic_script_run", 1},
+  {"asr", 1},
+  {NULL, 0},
 };
 
 /** The two spellings of PCRE2's scan substring. */
@@ -2390,12 +2389,25 @@ static GRX_Result read_star_construct(GRX_Parser * parser, size_t start,
     length = 4;
   }
 
-  for (size_t i = 0; unsupported_star[i]; i++) {
-    if (strlen(unsupported_star[i]) == length
-        && memcmp(unsupported_star[i], name, length) == 0) {
-      return grx_parse_fail(parser, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, start,
+  for (size_t i = 0; script_run_names[i].name; i++) {
+    if (strlen(script_run_names[i].name) != length
+        || memcmp(script_run_names[i].name, name, length) != 0) {
+      continue;
+    }
+    if (!has_argument) {
+      return grx_parse_fail(parser, GRX_DIAG_INVALID_GROUP_SYNTAX, start,
           parser->position - start + 1);
     }
+    parser->position++; // The `:`.
+    out->kind = GRX_NODE_GROUP;
+    // The atomic group goes *inside* the script run, which is what
+    // pcre2pattern says `(*asr:...)` means: `(*sr:(?>...))`. Both flags on
+    // one node, and lowering nests them in that order - outside, it would
+    // not stop backtracking into the run.
+    out->flags = GRX_NODE_SCRIPT_RUN
+        | (script_run_names[i].atomic ? GRX_NODE_ATOMIC : 0u);
+    out->has_body = 1;
+    return GRX_OK;
   }
 
   for (size_t i = 0; scan_substring_names[i]; i++) {
@@ -3569,8 +3581,9 @@ static GRX_Result pcre_group_open(GRX_Parser * parser, GRX_GroupOpen * out) {
       // `(*script_run:` and `(*atomic:` are groups, not assertions, and a
       // condition has to be one. Refused here rather than where the
       // construct itself is read, so that the answer is "that is not a
-      // condition" and not "this library has not built script runs" - which
-      // is what pcre2test says, and it says it for every build.
+      // condition" rather than anything about the construct - which is
+      // what pcre2test says, and it says it whether or not the build has
+      // script runs.
       return grx_parse_fail(parser, GRX_DIAG_INVALID_CONDITION, start,
           parser->position - start + 1);
     }

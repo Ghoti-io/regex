@@ -164,7 +164,7 @@ Nothing is allocated for the caller to free on a failing call.
 | --- | --- |
 | Build, install, Doxygen | working |
 | Gates: `check-symbols`, `check-layering`, `check-unicode-tables`, `check-diagnostics`, `check-engine-equivalence`, `check-json-schema-suite` | working, in `TEST_GATES` |
-| Gates: `check-oracles` - thirteen differential checks: syntax, match, iteration, the search window, properties, numeric properties, properties of strings, POSIX, the Perl family, the Perl/PCRE2 syntax split, and three replacement and split grammars | working; not in `TEST_GATES`, because they need Node, perl or pcre2 |
+| Gates: `check-oracles` - fourteen differential checks: syntax, match, iteration, the search window, properties, numeric properties, properties of strings, POSIX, the Perl family, the Perl/PCRE2 syntax split, script runs, and three replacement and split grammars | working; not in `TEST_GATES`, because they need Node, perl or pcre2 |
 | Gate: `check-limits` - what real patterns cost against the defaults | working; the report behind dialects.md section 7 |
 | Result codes, limits, allocator, version | working |
 | Diagnostics and error reporting | working |
@@ -175,12 +175,12 @@ Nothing is allocated for the caller to free on a failing call.
 | Dialect table, semantic profile, `grx_options_parse()` | working; the rows for dialects with no oracle installed are provisional |
 | UTF-8 decode and encode | working, strict |
 | Character classes: membership, insertion, set algebra, fold closure | working |
-| Unicode tables: 457 properties, both foldings, both property-name resolvers, 40,951 character names | working, UCD 17.0.0 |
+| Unicode tables: 457 properties, both foldings, both property-name resolvers, 40,951 character names, and the script sets a script run is checked against | working, UCD 17.0.0 |
 | UTF-8 reverse decode and whole-buffer validation | working |
 | Parser skeleton and hook interface | working |
 | ECMAScript front end, legacy and Unicode modes | working |
 | ECMAScript UnicodeSets (`v`) mode | working - set operations, string disjunctions, the seven properties of strings |
-| PCRE2 and Perl front ends | working - verbs, conditionals, recursion, branch reset, `\Q..\E`, extended modes, the leading directives (PCRE2's alone; Perl has none of them), Perl's `\N{NAME}` against the full character-name table, and `(*LIMIT_MATCH=n)` applied rather than parsed and dropped. The newline conventions `(*CR)` and kin are refused, `(*BSR_ANYCRLF)` is built |
+| PCRE2 and Perl front ends | working - verbs, conditionals, recursion, branch reset, `\Q..\E`, extended modes, the leading directives (PCRE2's alone; Perl has none of them), Perl's `\N{NAME}` against the full character-name table, `(*LIMIT_MATCH=n)` applied rather than parsed and dropped, and script runs `(*sr:`/`(*asr:` against UTS #39's augmented script sets. The newline conventions `(*CR)` and kin are refused, `(*BSR_ANYCRLF)` is built |
 | POSIX and GNU front ends | working - one reader for `posix-bre`, `posix-ere`, `gnu-bre` and `gnu-ere`; both halves of `REG_NEWLINE`, as `GRX_OPT_MULTILINE` and `GRX_OPT_NEWLINE_TERMINATES` |
 | Every dialect but those seven | named, `GRX_ERR_UNSUPPORTED` |
 | Lowering, analysis and code generation | working |
@@ -194,11 +194,11 @@ Nothing is allocated for the caller to free on a failing call.
 | Limits | measured, not guessed; dialects.md section 7 |
 | The `text` seam for JSON Schema | working - `pattern` and `patternProperties` validate through this library |
 
-**Conformance.** Thirteen differential checks, each against whichever
+**Conformance.** Fourteen differential checks, each against whichever
 implementation *defines* the thing it asks about: Node 22 for ECMAScript,
 pcre2 10.46 and perl 5.40.1 for the Perl family, glibc and musl for POSIX and
 GNU, and GNU sed for the POSIX replacement grammar. `make check-oracles` runs
-all thirteen. A few are described below; [testing.md](documentation/testing.md)
+all fourteen. A few are described below; [testing.md](documentation/testing.md)
 §5 has every one, and says for each what was broken on purpose to prove the
 check can fail.
 

@@ -762,6 +762,52 @@ static int read_backward(const Backtrack * bt, size_t position,
 }
 
 /**
+ * Whether the subject from `from` to `to` is a script run.
+ *
+ * One pass, because the rule cannot be decomposed: a sequence can fail
+ * while every adjacent pair passes, so a window-at-a-time check over a long
+ * span would answer a different question. `GRX_ScriptRunState` is what
+ * makes one pass enough - three words carried across the span rather than
+ * the span carried in a buffer.
+ *
+ * The code points examined are charged to `max_steps`. A script run inside
+ * a loop is re-checked on every backtrack into it, so a span the engine
+ * walks is work the engine did, and a caller who bounded the match has
+ * bounded this too. Without it `(*sr:.*)x` against a large subject would
+ * spend time no limit could see.
+ *
+ * Non-UTF mode reads bytes, which is what every other consuming
+ * instruction does there.
+ */
+static int span_is_script_run(Backtrack * bt, size_t from, size_t to) {
+  GRX_ScriptRunState state;
+  grx_unicode_script_run_begin(&state);
+
+  int ok = 1;
+  size_t position = from;
+  while (position < to) {
+    uint32_t codepoint = 0;
+    size_t width = 0;
+    if (!read_forward(bt, position, &codepoint, &width)) {
+      // The span was matched by this same engine, so it decodes. A failure
+      // here would be a defect rather than an input, and refusing is the
+      // answer that cannot invent a match.
+      ok = 0;
+      break;
+    }
+    position += width;
+    bt->steps++;
+    if (!grx_unicode_script_run_add(&state, codepoint)) {
+      // Charged in full before stopping, so that the cost of finding out is
+      // counted whether the answer is yes or no.
+      ok = 0;
+      break;
+    }
+  }
+  return ok;
+}
+
+/**
  * Whether the caller said the start of the subject is not a start of line.
  *
  * A flag about the *caller's* subject, so it says nothing about the start of
@@ -1794,6 +1840,26 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
         bt->slots[0] = position;
         pc++;
         continue;
+
+      case GRX_OP_SCRIPT_RUN: {
+        // The register holds where the body began. Inside a lookbehind the
+        // body ran backwards, so it holds the *later* offset and the span
+        // is taken in whichever order the two come - the text is the same
+        // text and a script run is not a directional property.
+        size_t index = bt->captures + inst->x;
+        size_t mark = index < bt->captures + bt->registers ? bt->slots[index]
+                                                           : GRX_NPOS;
+        if (mark == GRX_NPOS) {
+          // No PROGRESS_SET reached this register, which codegen never
+          // emits: the pair is written together or not at all.
+          bt->failure_diag = GRX_DIAG_INTERNAL;
+          return 0;
+        }
+        size_t from = mark < position ? mark : position;
+        size_t to = mark < position ? position : mark;
+        ok = span_is_script_run(bt, from, to);
+        break;
+      }
 
       case GRX_OP_VERB:
         switch ((GRX_VerbKind)inst->mode) {

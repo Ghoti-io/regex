@@ -40,7 +40,7 @@ const char * grx_opcode_name(GRX_Opcode op) {
     "assert", "progress-set", "reset", "reset-stale", "progress-check",
     "backref", "look",
     "scan", "rewind", "atomic-begin", "atomic-end", "cond", "call", "ret",
-    "keep", "verb",
+    "keep", "verb", "script-run",
   };
   return (unsigned)op < GRX_OP_COUNT ? names[op] : "?";
 }
@@ -228,6 +228,9 @@ static void dump_operands(
       break;
     case GRX_OP_VERB:
       fputs(verb_name(inst->mode), out);
+      break;
+    case GRX_OP_SCRIPT_RUN:
+      fprintf(out, "from=r%u", inst->x);
       break;
     default:
       break;

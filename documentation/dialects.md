@@ -979,7 +979,7 @@ to be complete for every shipped tier.
 | Perl | `(?[ ])` is PCRE2's grammar only | Perl's nests and takes different operands; a shared reader would accept neither exactly | `GRX_ERR_SYNTAX` |
 | Perl | Where a failed negative lookaround's body stopped *part way through an iteration*, the group reports the last value an iteration **finished** | §5.17 is followed as written - Perl keeps, ECMAScript and PCRE2 discard - but "what the body last wrote" is only well defined if the body failed between iterations, and Perl states no rule for the rest: it decides on the width of the repeated body, answering `(?!(a){2}$)` and `(?!(aa){2}$)` against "aaa" as unset and 0-2. The rule here answers them 1-2 and 0-2, so the two agree wherever Perl is self-consistent and differ on the narrow case where it is not | - |
 | PCRE2 | Callouts `(?C...)` are read and have no effect | no callback API; a callout with no function registered changes no match in PCRE2 either, so accepting it answers the same question. The *syntax* is followed exactly: the number is bounded at 255 as PCRE2 bounds it, and Perl - which answers "Sequence (?C...) not recognized" for every spelling - refuses them here too | - |
-| PCRE2, Perl | `(*script_run:`, `(*sr:`, `(*asr:`, `(*atomic_script_run:` | each constrains what its body may match and an ordinary group does not | `GRX_ERR_UNSUPPORTED` — except as a conditional's *condition*, where pcre2test refuses every one of them too ("atomic assertion expected after `(?(`"), so `(?(*script_run:x)y)` is `GRX_ERR_SYNTAX` |
+| PCRE2 | A script run may mix Han with **two** of Hiragana/Katakana, Hangul and Bopomofo | pcre2 10.46 accepts the mixture its own manual denies. pcre2unicode says a run may hold "a mixture of Hiragana, Katakana, and Han, or a mixture of Hangul and Han, or a mixture of Bopomofo and Han, but not, for example, a mixture of Hangul and Bopomofo and Han", and pcre2test matches that last one. All twenty two- and three-way combinations of U+6F22, U+304B, U+30AB, U+D55C and U+3105 were put to both references: they agree on fourteen - including `Hiragana+Hangul`, which both refuse, so it is not that Han lets anything through - and differ on exactly the six that mix two families. perl 5.40.1 refuses all six, which is UTS #39 section 5.1, and so does this library | - |
 | PCRE2, Perl | `\C`, one code unit | the subject here is code points, and a construct that can land inside a character has no honest approximation | `GRX_ERR_UNSUPPORTED` |
 | PCRE2 | `(*CR)`, `(*CRLF)`, `(*ANYCRLF)`, `(*ANY)`, `(*NUL)` - the newline conventions other than `(*LF)` | each decides what `.` refuses and where `^` and `$` hold, so a pattern naming one and read with another answers a different question. Measured against pcre2test 10.46: `(*CR)` refuses CR from `.`; `(*CRLF)` refuses **nothing**, its terminator being two characters where `.` excludes one; `(*ANYCRLF)` refuses CR and LF; `(*ANY)` refuses LF VT FF CR NEL LS PS; `(*NUL)` refuses NUL. Three of the five need a line terminator two characters long, which `GRX_ASSERT_START_LINE` cannot express - it asks a class about one code point - and pcre2 is not self-consistent about it either: under `(*ANY)` a `^` does not hold between CR and LF and a `$` does. They were accepted and silently ignored until 2026-09-22, which is the answer this table exists to prevent. `(*LF)` is accepted, because it names the convention both sides already use | `GRX_ERR_UNSUPPORTED` |
 | PCRE2 | `(*BSR_ANYCRLF)`, `(*BSR_UNICODE)` | built: `\R` is an alternation the parser writes and a directive may only lead the pattern, so the flag is set before the `\R` it governs. `(*BSR_ANYCRLF)\R` refuses a vertical tab and plain `\R` takes one, in pcre2test and here | - |
@@ -1522,6 +1522,15 @@ short; `(*ACCEPT:X)` takes an argument that perlre describes as
 argument-less; `xx` ignores space inside a bracket expression and `x` does
 not; and `(?^-i)` is "invalid hyphen in option setting" because `^` has
 already cleared everything.
+
+Script runs `(*script_run:`, `(*sr:`, `(*atomic_script_run:`, `(*asr:`,
+each checking that the text its body matched could have been written in one
+script - UTS #39 section 5.1's rule, with the augmented script sets applied
+in the generated table so that Han's three combinations fall out of an
+ordinary intersection. `(*asr:...)` is `(*sr:(?>...))`, the atomic group
+*inside*. A conditional's condition may not be one: pcre2test answers
+"atomic assertion expected after `(?(`" for `(?(*script_run:x)y)` and so
+does this, which is a statement about conditions and not about script runs.
 
 Verbs `(*ACCEPT)`, `(*FAIL)`, `(*COMMIT)`, `(*PRUNE)`,
 `(*SKIP)`, `(*THEN)`, with and without names; leading directives

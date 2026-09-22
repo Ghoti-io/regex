@@ -345,6 +345,133 @@ def read_script_extensions(path, script_value_to_long):
     return {name: normalize(ranges) for name, ranges in sets.items()}
 
 
+# UTS #39 section 5.1's augmented script sets. Han is commonly written with
+# other scripts, so the standard treats three combinations as scripts of
+# their own - "virtual scripts", in pcre2unicode's word - and a run may mix
+# within one of them and not across them. Hangul and Bopomofo and Han
+# together is *not* a script run, which is the case that says an augmented
+# set is needed rather than simply letting Han intersect with everything.
+SCRIPT_AUGMENTATIONS = {
+    "Han": ("Japanese", "Korean", "HanBopomofo"),
+    "Hiragana": ("Japanese",),
+    "Katakana": ("Japanese",),
+    "Hangul": ("Korean",),
+    "Bopomofo": ("HanBopomofo",),
+}
+
+#: The augmented values, which exist nowhere in the UCD and are appended
+#: after every real script so that a script id keeps meaning what it meant.
+VIRTUAL_SCRIPTS = ("Japanese", "Korean", "HanBopomofo")
+
+
+def build_script_runs(scx, categories, numeric_values):
+    """The per-code-point script set, augmented, plus the digit blocks.
+
+    `scx` maps a script name to the ranges whose Script_Extensions contain
+    it, and covers every code point - the caller has already folded in the
+    code points whose scx is just their sc. This inverts that into one
+    sorted table of (low, high, set index), which is what a script-run check
+    reads one character at a time.
+
+    The augmentation is applied here rather than at match time because it is
+    a property of the character and not of the run: doing it per character
+    at generation turns the whole rule into one set intersection.
+    """
+    names = sorted(scx) + list(VIRTUAL_SCRIPTS)
+    index_of = {name: i for i, name in enumerate(names)}
+
+    # Every boundary any script's ranges introduce. Between two adjacent
+    # boundaries the set is constant, which is what makes the inversion a
+    # sweep rather than a per-code-point loop over 1.1 million values.
+    edges = {0, 0x110000}
+    for ranges in scx.values():
+        for low, high in ranges:
+            edges.add(low)
+            edges.add(high + 1)
+    edges = sorted(edges)
+
+    # A flat list per script for a linear sweep: at each edge, which scripts
+    # are in force.
+    cursor = {name: 0 for name in scx}
+    sets = []
+    set_index = {}
+    rows = []
+    for low, limit in zip(edges, edges[1:]):
+        members = set()
+        for name, ranges in scx.items():
+            i = cursor[name]
+            while i < len(ranges) and ranges[i][1] < low:
+                i += 1
+            cursor[name] = i
+            if i < len(ranges) and ranges[i][0] <= low:
+                members.add(name)
+        for name in list(members):
+            for extra in SCRIPT_AUGMENTATIONS.get(name, ()):
+                members.add(extra)
+        key = frozenset(members)
+        if key not in set_index:
+            set_index[key] = len(sets)
+            sets.append(sorted(index_of[name] for name in key))
+        rows.append((low, limit - 1, set_index[key]))
+
+    # Merge neighbours that ended up with the same set, which most of the
+    # table is: the edges come from every script at once.
+    merged = []
+    for low, high, index in rows:
+        if merged and merged[-1][2] == index and merged[-1][1] + 1 == low:
+            merged[-1] = (merged[-1][0], high, index)
+        else:
+            merged.append((low, high, index))
+
+    def singleton(name):
+        key = frozenset({name})
+        if key not in set_index:
+            raise ValueError("no code point has scx exactly {%s}" % name)
+        return set_index[key]
+
+    # The decimal digits. UTS #39 and pcre2unicode both require that a run's
+    # digits all come from one set of ten adjacent characters, so what a
+    # check needs is the *zero* of each set. Every Nd character is asserted
+    # to sit in a block of exactly ten with numeric values 0 to 9 - the
+    # assertion is the point, because a UCD that stopped being true here
+    # would otherwise produce a table that silently mis-groups digits.
+    digit_value = {}
+    for (numerator, denominator), ranges in numeric_values.items():
+        if denominator != 1 or not 0 <= numerator <= 9:
+            continue
+        for low, high in ranges:
+            for code in range(low, high + 1):
+                digit_value[code] = numerator
+
+    nd = set()
+    for low, high in categories.get("Nd", []):
+        nd.update(range(low, high + 1))
+
+    zeros = sorted(code for code in nd if digit_value.get(code) == 0)
+    covered = set()
+    for zero in zeros:
+        block = range(zero, zero + 10)
+        for offset, code in enumerate(block):
+            if code not in nd or digit_value.get(code) != offset:
+                raise ValueError(
+                    "U+%04X does not begin a block of ten decimal digits"
+                    % zero)
+        covered.update(block)
+    if covered != nd:
+        raise ValueError("%d Nd code points are in no block of ten"
+                         % len(nd - covered))
+
+    return {
+        "script_names": names,
+        "sets": sets,
+        "ranges": merged,
+        "common": singleton("Common"),
+        "inherited": singleton("Inherited"),
+        "unknown": singleton("Unknown"),
+        "digit_zeros": zeros,
+    }
+
+
 def read_case_folding(path):
     """CaseFolding.txt: the C and S statuses, which are the simple folding.
 
@@ -1186,6 +1313,7 @@ def build_tables(ucd, version):
         "simple_lower": simple_lower,
         "names": build_name_table(read_names(ucd)),
         "name_ranges": read_name_ranges(ucd),
+        "script_runs": build_script_runs(scx, categories, numeric_values),
     }
 
 
@@ -1476,12 +1604,56 @@ extern const uint32_t grx_unicode_name_offset[];
 extern const uint32_t grx_unicode_name_codepoint[];
 extern const size_t grx_unicode_name_count;
 
+/**
+ * @brief The Script_Extensions set of every code point, as a bitmap.
+ *
+ * One row per distinct set, `grx_unicode_script_set_words` words of 64 bits
+ * each, and `grx_unicode_script_ranges` says which row a code point takes -
+ * sorted and non-overlapping, so the lookup is a binary search and the
+ * `value` field is the row index rather than a property value.
+ *
+ * The sets carry UTS #39 section 5.1's **augmentation** already applied:
+ * Han also names Japanese, Korean and HanBopomofo; Hiragana and Katakana
+ * also name Japanese; Hangul also names Korean; Bopomofo also names
+ * HanBopomofo. Those three are virtual scripts that exist nowhere in the
+ * UCD and are appended after every real one, so a script's id still means
+ * what it meant. With them applied per character, the whole of the script
+ * run rule is one set intersection.
+ *
+ * Three set indices are named because the rule names them: a character
+ * whose set is exactly Inherited is always accepted, one whose set is
+ * exactly Common is accepted subject to the digit rule, and one whose set
+ * is exactly Unknown can only appear in a run shorter than two characters.
+ */
+#define GRX_UNICODE_SCRIPT_WORDS %d
+extern const uint64_t grx_unicode_script_sets[][GRX_UNICODE_SCRIPT_WORDS];
+extern const size_t grx_unicode_script_set_count;
+extern const size_t grx_unicode_script_set_words;
+extern const GRX_UnicodeBreakRange grx_unicode_script_ranges[];
+extern const size_t grx_unicode_script_range_count;
+extern const size_t grx_unicode_script_set_common;
+extern const size_t grx_unicode_script_set_inherited;
+extern const size_t grx_unicode_script_set_unknown;
+
+/**
+ * @brief The first code point of each block of ten decimal digits.
+ *
+ * A script run's digits must all come from one set of ten adjacent
+ * characters, so what the check needs is each set's zero. The generator
+ * asserts that every Nd code point sits in a block of exactly ten whose
+ * numeric values run 0 to 9, which is what makes a single sorted array
+ * enough.
+ */
+extern const uint32_t grx_unicode_digit_zeros[];
+extern const size_t grx_unicode_digit_zero_count;
+
 #ifdef __cplusplus
 }
 #endif
 
 #endif // GHOTI_IO_GRX_SRC_UNICODE_TABLES_TABLES_INTERNAL_H
-""" % c_string(tables["version"]))
+""" % (c_string(tables["version"]),
+       (len(tables["script_runs"]["script_names"]) + 63) // 64))
 
 
 def write_ranges(out_dir, tables):
@@ -1799,6 +1971,64 @@ def emit_u32_array(out, values, per_line=8):
         out.write("  " + " ".join("%d," % v for v in chunk) + "\n")
 
 
+def write_script_runs(out_dir, tables):
+    """The per-code-point script set and the decimal-digit blocks.
+
+    Two tables and three constants. The ranges are sorted and
+    non-overlapping, so a lookup is a binary search; each names a *set*, and
+    the sets are bitmaps because the whole of the rule is an intersection.
+    """
+    path = os.path.join(out_dir, "tables_scripts.c")
+    table = tables["script_runs"]
+    words = (len(table["script_names"]) + 63) // 64
+
+    for earlier, later in zip(table["ranges"], table["ranges"][1:]):
+        if earlier[1] >= later[0]:
+            raise ValueError("overlapping script runs at U+%04X" % later[0])
+    if table["ranges"][0][0] != 0 or table["ranges"][-1][1] != 0x10FFFF:
+        raise ValueError("the script table does not cover every code point")
+
+    with open(path, "w", encoding="utf-8") as out:
+        out.write(HEADER_NOTICE % tables["version"])
+        out.write('\n#include "tables_internal.h"\n\n')
+
+        out.write("const uint64_t grx_unicode_script_sets[][%d] = {\n" % words)
+        for members in table["sets"]:
+            bits = [0] * words
+            for member in members:
+                bits[member // 64] |= 1 << (member % 64)
+            out.write("  {" + ",".join("0x%016XULL" % word for word in bits)
+                      + "},\n")
+        out.write("};\n")
+        out.write("const size_t grx_unicode_script_set_count = %d;\n"
+                  % len(table["sets"]))
+        out.write("const size_t grx_unicode_script_set_words = %d;\n\n"
+                  % words)
+
+        out.write("const GRX_UnicodeBreakRange grx_unicode_script_ranges[] "
+                  "= {\n")
+        for start in range(0, len(table["ranges"]), 3):
+            chunk = table["ranges"][start:start + 3]
+            out.write("  " + " ".join(
+                "{0x%04X,0x%04X,%d}," % row for row in chunk) + "\n")
+        out.write("};\n")
+        out.write("const size_t grx_unicode_script_range_count = %d;\n\n"
+                  % len(table["ranges"]))
+
+        out.write("const size_t grx_unicode_script_set_common = %d;\n"
+                  % table["common"])
+        out.write("const size_t grx_unicode_script_set_inherited = %d;\n"
+                  % table["inherited"])
+        out.write("const size_t grx_unicode_script_set_unknown = %d;\n\n"
+                  % table["unknown"])
+
+        out.write("const uint32_t grx_unicode_digit_zeros[] = {\n")
+        emit_u32_array(out, table["digit_zeros"])
+        out.write("};\n")
+        out.write("const size_t grx_unicode_digit_zero_count = %d;\n"
+                  % len(table["digit_zeros"]))
+
+
 def write_strings(out_dir, tables):
     """The properties of strings, as one flat code-point array and an index.
 
@@ -1877,6 +2107,7 @@ def main(argv):
     write_breaks(out_dir, tables)
     write_strings(out_dir, tables)
     write_names(out_dir, tables)
+    write_script_runs(out_dir, tables)
 
     total_ranges = sum(len(prop["ranges"]) for prop in tables["properties"])
     sys.stderr.write(
@@ -1885,6 +2116,13 @@ def main(argv):
             args.version, len(tables["properties"]), total_ranges,
             len(tables["folds"]), len(tables["fold_orbits"]),
             len(tables["string_sets"]), len(tables["string_sequences"])))
+    sys.stderr.write(
+        "script runs: %d scripts (%d of them UTS #39's augmented ones), "
+        "%d distinct sets over %d ranges, %d blocks of ten digits\n" % (
+            len(tables["script_runs"]["script_names"]), len(VIRTUAL_SCRIPTS),
+            len(tables["script_runs"]["sets"]),
+            len(tables["script_runs"]["ranges"]),
+            len(tables["script_runs"]["digit_zeros"])))
     return 0
 
 

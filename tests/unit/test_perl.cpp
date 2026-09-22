@@ -621,11 +621,11 @@ TEST(Perl, AConditionsConditionHasToBeAnAssertion) {
     grx_regex_free(bad.regex);
   }
 
-  // Outside a conditional the same construct is honestly unbuilt rather than
-  // invalid: pcre2test compiles it and this library does not.
+  // Outside a conditional the same construct compiles, which is the point
+  // of the pair: what a conditional refuses is an assertion it cannot use,
+  // not a construct this library lacks.
   Attempt alone = compile("(*script_run:abc)");
-  EXPECT_EQ(alone.result, GRX_ERR_UNSUPPORTED);
-  EXPECT_EQ(alone.diag, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED);
+  EXPECT_EQ(alone.result, GRX_OK);
   grx_regex_free(alone.regex);
 }
 
@@ -997,13 +997,118 @@ TEST(Perl, ACalloutIsPcre2sAndItsNumberIsBounded) {
   }
 }
 
+TEST(Perl, AScriptRunIsCheckedAgainstTheTextItsBodyMatched) {
+  // UTS #39 section 5.1, as pcre2unicode's "Script Runs" states it. Every
+  // expectation here is one perl 5.40.1 and pcre2test 10.46 both give,
+  // except where noted; tools/oracle/script_run_diff.py is the sweep -
+  // 25,764 subjects over an alphabet chosen to hit each clause.
+  //
+  // `(*UTF)` throughout, because PCRE2's subject is bytes until it is said.
+  const char * utf = "(*UTF)";
+
+  struct { const char * subject; int expected; const char * why; } rows[] = {
+    // The example the construct exists for. "google.com" is Latin plus a
+    // Common full stop; the same string with a Cyrillic "o" is not.
+    {"google.com", 1, "all Latin, and the dot is Common"},
+    {"goog\xd0\xbele.com", 0, "U+043E is Cyrillic and the rest is Latin"},
+
+    // Common and Inherited on their own constrain nothing.
+    {"...", 1, "nothing but Common"},
+    {" - .", 1, "nothing but Common"},
+    {".a", 1, "a Common *first* character must not constrain the rest"},
+
+    // The decimal-digit rule is separate from the script rule, and the
+    // ASCII digits are Common - so this is not something the intersection
+    // would have caught.
+    {"abc123", 1, "one set of ten"},
+    {"abc\xd9\xa1", 0, "Arabic-Indic digit one, with Latin letters"},
+    {"1\xd9\xa1", 0, "two sets of ten, both otherwise acceptable"},
+
+    // The three Han combinations, and the pairs that are none of them.
+    {"\xe6\xbc\xa2\xe3\x81\x8b", 1, "Han and Hiragana: Japanese"},
+    {"\xe6\xbc\xa2\xe3\x82\xab", 1, "Han and Katakana: Japanese"},
+    {"\xe6\xbc\xa2\xed\x95\x9c", 1, "Han and Hangul: Korean"},
+    {"\xe6\xbc\xa2\xe3\x84\x85", 1, "Han and Bopomofo: HanBopomofo"},
+    {"\xe3\x81\x8b\xed\x95\x9c", 0, "Hiragana and Hangul: no virtual script"},
+    {"\xe3\x81\x8b\xe3\x84\x85", 0, "Hiragana and Bopomofo"},
+    {"\xed\x95\x9c\xe3\x84\x85", 0, "Hangul and Bopomofo"},
+    // Two families at once. pcre2test 10.46 *matches* these, against its
+    // own manual, which names "a mixture of Hangul and Bopomofo and Han"
+    // as not a script run; perl refuses all six. dialects.md section 6.
+    {"\xe6\xbc\xa2\xe3\x81\x8b\xed\x95\x9c", 0, "Han, Hiragana and Hangul"},
+    {"\xe6\xbc\xa2\xed\x95\x9c\xe3\x84\x85", 0, "Han, Hangul and Bopomofo"},
+
+    // Fewer than two characters is always a script run, and that is the
+    // only way an unassigned code point can be in one.
+    {"\xf3\xa0\x80\x80", 1, "U+E0000 alone is unassigned and still a run"},
+    {"a\xf3\xa0\x80\x80", 0, "two characters, one of them unassigned"},
+    {"\xf3\xa0\x80\x80.", 0, "and a Common second character does not save it"},
+  };
+
+  for (const auto & row : rows) {
+    std::string pattern = std::string(utf) + "^(*sr:.+)$";
+    EXPECT_EQ(search(pattern, row.subject).matched ? 1 : 0, row.expected)
+        << row.why;
+  }
+
+  // All four spellings, because they are four table rows and a table row
+  // is where a hole goes unnoticed.
+  for (const char * spelling :
+      {"script_run", "sr", "atomic_script_run", "asr"}) {
+    std::string good = std::string(utf) + "^(*" + spelling + ":.+)$";
+    EXPECT_TRUE(search(good, "google.com").matched) << spelling;
+    EXPECT_FALSE(search(good, "goog\xd0\xbele.com").matched) << spelling;
+  }
+
+  // Backtracking into a script run shortens it until it is one. Unanchored,
+  // `\S+` gives back characters until the run holds: "goog" before the
+  // Cyrillic letter.
+  EXPECT_EQ(search("(*UTF)(*sr:\\S+)", "goog\xd0\xbele.com").end, 4u);
+
+  // `(*asr:...)` is `(*sr:(?>...))` - the atomic group *inside* - so the
+  // body cannot give anything back at the start it began from. The search
+  // moves on instead and finds the run after the Cyrillic letter: 6-12,
+  // which is what pcre2test and perl both answer, and not the nomatch a
+  // reading of "atomic" alone would predict.
+  EXPECT_EQ(span_of("(*UTF)(*asr:\\S+)", "goog\xd0\xbele.com"), "6-12");
+
+  // Anchored at both ends there is nowhere to move to, and both spellings
+  // fail - the check is on the run and not on the greediness.
+  EXPECT_EQ(span_of("(*UTF)^(*asr:\\S+)$", "goog\xd0\xbele.com"), "nomatch");
+  EXPECT_EQ(span_of("(*UTF)^(*sr:\\S+)$", "goog\xd0\xbele.com"), "nomatch");
+
+  // Perl has the construct too, in every spelling.
+  EXPECT_TRUE(
+      search("^(*sr:.+)$", "google.com", GRX_SYNTAX_PERL).matched);
+  EXPECT_FALSE(
+      search("^(*sr:.+)$", "goog\xd0\xbele.com", GRX_SYNTAX_PERL).matched);
+
+  // It is an ordinary group otherwise: quantifiable, and not capturing.
+  Attempt quantified = compile("(*UTF)(*sr:a)+");
+  EXPECT_EQ(quantified.result, GRX_OK);
+  grx_regex_free(quantified.regex);
+  Attempt plain = compile("(*UTF)(*sr:abc)");
+  ASSERT_EQ(plain.result, GRX_OK);
+  GRX_Facts facts;
+  grx_regex_facts(plain.regex, &facts);
+  EXPECT_EQ(facts.capture_count, 0u)
+      << "a script run groups without capturing";
+  EXPECT_NE(facts.has_script_run, 0);
+  EXPECT_EQ(facts.is_regular, 0)
+      << "it reads the text consumed, which a thread set has merged away";
+  grx_regex_free(plain.regex);
+}
+
 TEST(Perl, TheConstructsThisLibraryRefusesSayWhyAndNotSomethingElse) {
   // Each of these is real syntax the reference compiles. Refusing them is a
   // decision; refusing them as *syntax errors* would be a lie about the
   // pattern, so each reports GRX_ERR_UNSUPPORTED instead.
+  //
+  // `(*script_run:` was on this list until the construct was built and is
+  // the reason the list is worth keeping short: an entry here is a promise
+  // that stays true only until somebody does the work.
   const char * refused[] = {
     "\\C",                     // one code unit
-    "(*script_run:abc)",       // constrains the body
   };
 
   for (const char * pattern : refused) {

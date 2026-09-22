@@ -791,6 +791,10 @@ static int program_is_runnable(const GRX_Program * program) {
       case GRX_OP_VERB:
       case GRX_OP_SCAN:
       case GRX_OP_REWIND:
+      // A script run asks about the text a path consumed, and a thread set
+      // exists precisely to stop keeping that: two threads at one
+      // instruction are one thread here.
+      case GRX_OP_SCRIPT_RUN:
         return 0;
       default:
         break;

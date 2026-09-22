@@ -137,6 +137,16 @@ typedef struct GRX_Facts {
   int has_backreference; ///< The program contains a backreference.
   int has_lookaround;    ///< The program contains a lookahead or lookbehind.
   int has_recursion;     ///< The program recurses or calls a subroutine.
+  /**
+   * @brief The program contains `(*script_run:...)` or a synonym.
+   *
+   * Reported for the same reason the three above it are: it is one of the
+   * constructs only the backtracking engine can run, so a caller choosing
+   * an engine by name needs to know before it asks for one that will
+   * refuse. Every construct here reads something a thread set has merged
+   * away - a script run reads the text the body consumed.
+   */
+  int has_script_run;
   int has_duplicate_names; ///< Two capturing groups share a name.
   size_t min_length;     ///< Shortest possible match, in bytes.
   size_t max_length;     ///< Longest possible match, or GRX_NPOS if unbounded.
