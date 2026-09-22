@@ -216,6 +216,14 @@ int main(int argc, char ** argv) {
         case 's': options |= GRX_OPT_DOTALL; break;
         case 'u': options |= GRX_OPT_UTF; break;
         case 'v': options |= GRX_OPT_UNICODE_SETS | GRX_OPT_UTF; break;
+        // `n` is REG_NEWLINE, spelled the way posix_match.c and
+        // musl_match.c spell it, so that a differential can hand the same
+        // flag string to all three. It is *both* of this library's bits,
+        // because regcomp has one flag for the two rules: `^` and `$`
+        // become line anchors, and a newline stops being "any character".
+        case 'n':
+          options |= GRX_OPT_MULTILINE | GRX_OPT_NEWLINE_TERMINATES;
+          break;
         default: break;
       }
     }

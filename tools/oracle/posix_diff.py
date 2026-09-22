@@ -28,10 +28,14 @@ difference is the point:
     recorded as unsettled and nobody is judged by it. The atoms below are
     chosen so that the constructs these dialects do not have never arise.
 
-Only patterns with no flags: POSIX's options are arguments to regcomp and
-grx_match spells its options as a dialect's flag letters, of which these
-dialects have none. Caseless and newline behaviour is covered by the
-imported vectors, which carry `options:` instead.
+Every pattern is asked twice, once without `REG_NEWLINE` and once with it.
+That flag is two rules - `^` and `$` become line anchors, and a newline is
+matched by neither `.` nor a negated bracket expression - and it is the one
+compile option these dialects have that changes what a *pattern* means.
+Leaving it out made this tool blind to half of what the front end does:
+the imported vectors carry eleven cases for the anchor half and none at all
+for the other, so the second rule had no check anywhere until this axis
+existed. `REG_ICASE` is still left to the vectors, which carry `options:`.
 
 Usage:
     tools/oracle/posix_diff.py [--seed N] [--patterns N] [--examples N]
@@ -110,6 +114,9 @@ SUBJECTS = ["", "a", "b", "ab", "aab", "abc", "aaa", "a.b", "[a]", "()",
 BASIC_FLAG = {"gnu-ere": "", "gnu-bre": "b",
               "posix-ere": "", "posix-bre": "b"}
 
+# The compile options to sweep. All three drivers spell REG_NEWLINE `n`.
+NEWLINE_MODES = ["", "n"]
+
 
 def ask(command, cases):
     lines = []
@@ -147,7 +154,7 @@ def normalise_ours(line):
     return line
 
 
-def is_known_deviation(pattern, subject):
+def is_known_deviation(pattern, subject, newline):
     """The one place these dialects knowingly differ from glibc.
 
     documentation/dialects.md section 6: without REG_NEWLINE a `^` is the
@@ -155,6 +162,11 @@ def is_known_deviation(pattern, subject):
     stand. glibc answers that question two ways - `^b` against "a\nb" is
     nomatch, and `.*^b` against the same subject matches - and the
     consistent reading is the one implemented here.
+
+    It is a deviation *without* REG_NEWLINE only. With it, `^` and `$` are
+    line anchors in both, there is nothing for glibc to be inconsistent
+    about, and excluding these cases there would hide real disagreements
+    behind a filter written for the other mode.
 
     Excluded rather than left to fail, because a gate that always fails is a
     gate nobody reads. The shape is an anchor evaluated at a position next to
@@ -165,6 +177,8 @@ def is_known_deviation(pattern, subject):
     anchor is still compared, and so is every pattern against a subject with
     no newline in it.
     """
+    if newline:
+        return False
     return ("\n" in subject and len(pattern) > 1
         and ("^" in pattern or "$" in pattern))
 
@@ -199,7 +213,8 @@ def compare(dialect, seed, patterns, examples):
             rng.choice(atoms) for _ in range(rng.randint(1, 3))))
 
     flag = BASIC_FLAG[dialect]
-    cases = [(flag, pattern, subject)
+    cases = [(flag + newline, pattern, subject)
+             for newline in NEWLINE_MODES
              for pattern in sorted(built) for subject in SUBJECTS]
     answers = {name: ask([drivers[name]], cases) for name in wanted}
     mine = ask([ours, dialect], cases)
@@ -213,7 +228,8 @@ def compare(dialect, seed, patterns, examples):
     declined = 0
     unsettled = 0
     known = 0
-    for index, ((_, pattern, subject), us) in enumerate(zip(cases, mine)):
+    for index, ((flags, pattern, subject), us) in enumerate(zip(cases, mine)):
+        newline = "n" in flags
         theirs = [answers[name][index] for name in wanted]
         if any(answer.startswith("skip") for answer in theirs):
             declined += 1
@@ -228,19 +244,22 @@ def compare(dialect, seed, patterns, examples):
         compared += 1
         if expected == normalise_ours(us):
             continue
-        if is_known_deviation(pattern, subject):
+        if is_known_deviation(pattern, subject, newline):
             known += 1
             continue
-        disagreements.append((pattern, subject, expected, normalise_ours(us)))
+        disagreements.append(
+            (pattern, subject, newline, expected, normalise_ours(us)))
 
-    for pattern, subject, them, us in disagreements[:examples]:
-        print("  %-24s on %-8s oracle=%-20s ours=%s"
-              % (repr(pattern), repr(subject), them, us))
-    print("%s: %d patterns x %d subjects = %d cases, %d compared against %s, "
-          "%d the oracles left unsettled, %d the anchor deviation, "
-          "%d disagreements"
-          % (dialect, len(built), len(SUBJECTS), len(cases), compared,
-             " and ".join(wanted), unsettled, known, len(disagreements)))
+    for pattern, subject, newline, them, us in disagreements[:examples]:
+        print("  %-24s on %-8s %-12s oracle=%-20s ours=%s"
+              % (repr(pattern), repr(subject),
+                 "REG_NEWLINE" if newline else "", them, us))
+    print("%s: %d patterns x %d subjects x %d newline modes = %d cases, "
+          "%d compared against %s, %d the oracles left unsettled, "
+          "%d the anchor deviation, %d disagreements"
+          % (dialect, len(built), len(SUBJECTS), len(NEWLINE_MODES),
+             len(cases), compared, " and ".join(wanted), unsettled, known,
+             len(disagreements)))
     return len(disagreements)
 
 

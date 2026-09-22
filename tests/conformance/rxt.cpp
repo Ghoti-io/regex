@@ -280,6 +280,10 @@ bool parse_options(
     {"ucp", GRX_OPT_UCP},
     {"no-capture", GRX_OPT_NO_CAPTURE},
     {"literal", GRX_OPT_LITERAL},
+    // The other half of POSIX's REG_NEWLINE. A vector for these dialects
+    // names both halves, because `regcomp` has one flag for the two and
+    // this library has a bit for each.
+    {"newline-terminates", GRX_OPT_NEWLINE_TERMINATES},
   };
 
   std::istringstream fields(value);

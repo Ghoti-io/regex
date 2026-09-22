@@ -366,6 +366,40 @@ static GRX_Result item_base_set(Lowering * low, const GRX_ClassItem * item,
 }
 
 /**
+ * Add the dialect's line terminators to a set that is about to be negated.
+ *
+ * POSIX `REG_NEWLINE`'s second rule, and the only way to spell it: a
+ * negated bracket expression carries its negation as a flag, so "this class
+ * must not match a newline" is written by putting the newline *into* the
+ * set the flag complements. `[^a]` becomes `[^a\n]`.
+ *
+ * "Does not contain a newline" in the standard's wording costs nothing to
+ * check: a list that already contains one is unchanged by adding it again.
+ *
+ * GRX_OPT_NEWLINE_TERMINATES off is every dialect's default and the whole
+ * of this function's cost then is one bit test.
+ */
+static GRX_Result exclude_line_terminators(
+    Lowering * low, const GRX_Node * node, GRX_CharClass * out) {
+  if (!(low->options & GRX_OPT_NEWLINE_TERMINATES)) {
+    return GRX_OK;
+  }
+
+  GRX_CharClass terminators;
+  grx_charclass_init(&terminators, out->allocator);
+  GRX_Result result
+      = grx_newline_set(&terminators, low->profile.newlines, low->limits);
+  if (result == GRX_OK) {
+    result = grx_charclass_union(out, &terminators, low->limits);
+  }
+  grx_charclass_clear(&terminators);
+  if (result != GRX_OK) {
+    return storage_failed(low, result, node);
+  }
+  return GRX_OK;
+}
+
+/**
  * Evaluate one class node into a set of code points.
  *
  * The order is the whole of the rule: each item's base set, then that item's
@@ -417,6 +451,12 @@ static GRX_Result evaluate_class(
     return storage_failed(low, result, node);
   }
   if (node->flags & GRX_NODE_NEGATED) {
+    // After folding and before negating: a line terminator is excluded
+    // whatever case-folding did, and the folding of `\n` is `\n`.
+    result = exclude_line_terminators(low, node, out);
+    if (result != GRX_OK) {
+      return result;
+    }
     out->negated = 1;
   }
 
@@ -944,7 +984,13 @@ static GRX_Result lower_any(
   // defines it as "any character that is not a newline", full stop, and
   // `(?s)\N` still refuses one. The flag is what tells the two apart, since
   // by this point both are the same node kind.
-  if (!(low->options & GRX_OPT_DOTALL) || (node->flags & GRX_NODE_NEGATED)) {
+  // GRX_OPT_NEWLINE_TERMINATES overrides dot-all rather than joining it:
+  // POSIX has no dot-all option because dot-all is what it does, so a POSIX
+  // dialect carries GRX_OPT_DOTALL in its `default_options` and
+  // `REG_NEWLINE` is the only thing that takes it away.
+  if (!(low->options & GRX_OPT_DOTALL)
+      || (low->options & GRX_OPT_NEWLINE_TERMINATES)
+      || (node->flags & GRX_NODE_NEGATED)) {
     GRX_Result result = newline_class(low, &excluded);
     if (result != GRX_OK) {
       return result;

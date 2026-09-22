@@ -1264,8 +1264,16 @@ static GRX_Result plain_node(GRX_Parser * parser, GRX_NodeKind kind,
 static GRX_Result newline_set_node(GRX_Parser * parser, size_t start,
     uint32_t * out_node) {
   static const uint32_t crlf[2] = {0x0D, 0x0A};
-  static const uint32_t singles[]
+  static const uint32_t unicode[]
       = {0x0A, 0x0B, 0x0C, 0x0D, 0x85, 0x2028, 0x2029};
+  // `(*BSR_ANYCRLF)` cuts it to the three ASCII line endings. pcre2test:
+  // `(*BSR_ANYCRLF)\R` does not match a vertical tab, and `\R` does.
+  static const uint32_t anycrlf[] = {0x0A, 0x0D};
+
+  const uint32_t * singles = parser->bsr_anycrlf ? anycrlf : unicode;
+  size_t single_count = parser->bsr_anycrlf
+      ? sizeof(anycrlf) / sizeof(*anycrlf)
+      : sizeof(unicode) / sizeof(*unicode);
 
   GRX_Result result = plain_node(
       parser, GRX_NODE_STRING_SET, start, parser->position - start, out_node);
@@ -1275,8 +1283,7 @@ static GRX_Result newline_set_node(GRX_Parser * parser, size_t start,
 
   uint32_t first = GRX_INDEX_NONE;
   result = grx_pattern_add_string(parser->pattern, crlf, 2, &first);
-  for (size_t i = 0; result == GRX_OK && i < sizeof(singles) / sizeof(*singles);
-      i++) {
+  for (size_t i = 0; result == GRX_OK && i < single_count; i++) {
     uint32_t ignored = GRX_INDEX_NONE;
     result = grx_pattern_add_string(parser->pattern, &singles[i], 1, &ignored);
   }
@@ -1286,7 +1293,7 @@ static GRX_Result newline_set_node(GRX_Parser * parser, size_t start,
 
   GRX_Node * node = grx_pattern_node(parser->pattern, *out_node);
   node->a = first;
-  node->b = 1 + (uint32_t)(sizeof(singles) / sizeof(*singles));
+  node->b = 1 + (uint32_t)single_count;
   node->flags |= GRX_NODE_ATOMIC;
   return GRX_OK;
 }
@@ -2105,11 +2112,40 @@ static GRX_Result apply_directive(GRX_Parser * parser, const char * name,
   // about an optimisation. Neither changes which subjects a pattern
   // matches, so both are accepted and have no effect here - and saying so
   // is not the same as ignoring a construct that does change the answer.
+  //
+  // `(*LF)` is in this list and the other five newline conventions are
+  // not, which is the whole of the distinction: LF is the convention this
+  // library and PCRE2 both already use, so naming it asks for what is
+  // already true. `(*CR)`, `(*CRLF)`, `(*ANYCRLF)`, `(*ANY)` and `(*NUL)`
+  // each change which subjects a pattern matches and are refused below.
   static const char * const inert_directives[] = {
     "NO_AUTO_POSSESS", "NO_START_OPT", "NO_DOTSTAR_ANCHOR", "NO_JIT",
-    "NOTEMPTY", "NOTEMPTY_ATSTART", "CR", "LF", "CRLF", "ANYCRLF", "ANY",
-    "NUL", "BSR_ANYCRLF", "BSR_UNICODE", NULL
+    "NOTEMPTY", "NOTEMPTY_ATSTART", "LF", NULL
   };
+
+  // The newline convention decides what `.` refuses and where `^` and `$`
+  // hold, so a pattern that names one and is read with another answers a
+  // different question. Measured against pcre2test 10.46 rather than read
+  // off pcre2pattern, and recorded in documentation/dialects.md section 6
+  // so that whoever builds it has the table:
+  //
+  //   convention  `.` refuses                  line terminator
+  //   ----------  ---------------------------  ------------------------
+  //   (*CR)       CR                           CR
+  //   (*LF)       LF (the default here)        LF
+  //   (*CRLF)     *nothing*                    the two-character CR LF
+  //   (*ANYCRLF)  CR, LF                       CR, LF, or CR LF
+  //   (*ANY)      LF VT FF CR NEL LS PS        those, and CR LF
+  //   (*NUL)      NUL                          NUL
+  //
+  // Three of the five need a terminator that is two characters long, which
+  // no assertion here can express yet - GRX_ASSERT_START_LINE asks a class
+  // about one code point. The other two could be built from a per-pattern
+  // newline set alone, and are refused with them rather than shipped as a
+  // partial convention: a caller told `(*CR)` works and `(*CRLF)` does not
+  // has to know which of two nearly identical directives they wrote.
+  static const char * const unbuilt_newline_conventions[]
+      = {"CR", "CRLF", "ANYCRLF", "ANY", "NUL", NULL};
 
   for (size_t i = 0; option_directives[i].name; i++) {
     if (strlen(option_directives[i].name) == length
@@ -2137,6 +2173,43 @@ static GRX_Result apply_directive(GRX_Parser * parser, const char * name,
             parser->position - start);
       }
       return GRX_OK;
+    }
+  }
+
+  // `(*BSR_ANYCRLF)` and `(*BSR_UNICODE)`: what `\R` matches. This one is
+  // built, because `\R` is an alternation the *parser* writes and a
+  // directive that may only lead the pattern is therefore always read
+  // before the `\R` it governs. `(*BSR_ANYCRLF)\R` does not match a
+  // vertical tab in pcre2test and plain `\R` does.
+  static const struct {
+    const char * name;
+    int anycrlf;
+  } bsr_directives[] = {
+    {"BSR_ANYCRLF", 1},
+    {"BSR_UNICODE", 0},
+    {NULL, 0},
+  };
+  for (size_t i = 0; bsr_directives[i].name; i++) {
+    if (strlen(bsr_directives[i].name) == length
+        && memcmp(bsr_directives[i].name, name, length) == 0) {
+      if (!only_directives_before(parser, start)) {
+        return grx_parse_fail(parser, GRX_DIAG_INVALID_GROUP_SYNTAX, start,
+            parser->position - start);
+      }
+      parser->bsr_anycrlf = bsr_directives[i].anycrlf;
+      return GRX_OK;
+    }
+  }
+
+  for (size_t i = 0; unbuilt_newline_conventions[i]; i++) {
+    if (strlen(unbuilt_newline_conventions[i]) == length
+        && memcmp(unbuilt_newline_conventions[i], name, length) == 0) {
+      if (!only_directives_before(parser, start)) {
+        return grx_parse_fail(parser, GRX_DIAG_INVALID_GROUP_SYNTAX, start,
+            parser->position - start);
+      }
+      return grx_parse_fail(parser, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED,
+          start, parser->position - start + 1);
     }
   }
 

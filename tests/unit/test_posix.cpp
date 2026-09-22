@@ -466,6 +466,42 @@ TEST(Posix, DotMatchesANewlineBecauseThereIsNoOptionSayingSo) {
   EXPECT_EQ(span("^$", "abc\n", kEre, GRX_OPT_MULTILINE), "4-4");
 }
 
+TEST(Posix, RegNewlineTakesTheNewlineOutOfDotAndOutOfANegatedList) {
+  // REG_NEWLINE's *other* rule, which this library spelled nowhere until
+  // GRX_OPT_NEWLINE_TERMINATES existed: "a <newline> shall not be matched
+  // by a period outside a bracket expression or by any form of a
+  // non-matching list". Every expectation below is what glibc 2.41 and
+  // musl 1.2.6 both answer; they agree on all of it.
+  const uint32_t newline = GRX_OPT_MULTILINE | GRX_OPT_NEWLINE_TERMINATES;
+
+  for (GRX_Syntax dialect : {kBre, kEre}) {
+    // `.` stops reaching across a line.
+    EXPECT_EQ(span(".", "\n", dialect), "0-1");
+    EXPECT_EQ(span(".", "\n", dialect, newline), "nomatch");
+    EXPECT_EQ(span("a.b", "a\nb", dialect), "0-3");
+    EXPECT_EQ(span("a.b", "a\nb", dialect, newline), "nomatch");
+
+    // So does a negated bracket expression, which is the half with no
+    // vector of its own: the corpus has eleven cases for the anchors and
+    // none for this.
+    EXPECT_EQ(span("[^a]", "\n", dialect), "0-1");
+    EXPECT_EQ(span("[^a]", "\n", dialect, newline), "nomatch");
+    EXPECT_EQ(span("[^a-z]", "\n", dialect, newline), "nomatch");
+
+    // A *positive* list is untouched. The standard's rule is about a
+    // non-matching list, and glibc and musl both still match here - so
+    // "subtract the newline from every class" would be the wrong fix.
+    EXPECT_EQ(span("[\n]", "\n", dialect, newline), "0-1");
+  }
+
+  // The two bits are independent, which is why there are two of them: the
+  // anchor half alone leaves `.` as it was, and this half alone leaves the
+  // anchors as they were.
+  EXPECT_EQ(span(".", "\n", kEre, GRX_OPT_MULTILINE), "0-1");
+  EXPECT_EQ(span("b$", "ab\nc", kEre, GRX_OPT_NEWLINE_TERMINATES), "nomatch");
+  EXPECT_EQ(span("[^a]", "\n", kEre, GRX_OPT_NEWLINE_TERMINATES), "nomatch");
+}
+
 TEST(Posix, TheseDialectsHaveNoFlagLetters) {
   // Their options are arguments to regcomp - REG_ICASE, REG_NEWLINE - and
   // not letters a pattern author writes, so the alphabet is empty and any

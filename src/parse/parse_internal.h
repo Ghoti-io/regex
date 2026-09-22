@@ -489,6 +489,19 @@ typedef struct GRX_Parser {
    * escape afterwards and a front end has one rule for it rather than two.
    */
   size_t quote_end;
+  /**
+   * Non-zero once `(*BSR_ANYCRLF)` has narrowed what `\R` matches.
+   *
+   * PCRE2's, and the one newline directive whose whole effect is on a
+   * construct the *parser* builds: `\R` becomes the literal alternation
+   * `(?>\r\n|\n|\r)` rather than the Unicode one. `(*BSR_UNICODE)`
+   * clears it again, because both spellings exist and a pattern may name
+   * either.
+   *
+   * A directive may only appear before anything else, so this is set before
+   * the first `\R` can be read and there is no ordering question to answer.
+   */
+  int bsr_anycrlf;
 } GRX_Parser;
 
 /**

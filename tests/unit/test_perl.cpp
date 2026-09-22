@@ -803,14 +803,28 @@ TEST(Perl, TheLeadingDirectivesArePcre2sAndPerlRefusesEveryOne) {
     "(*ANY)", "(*NUL)", "(*BSR_ANYCRLF)", "(*BSR_UNICODE)",
     "(*LIMIT_MATCH=5)", "(*LIMIT_DEPTH=5)", "(*LIMIT_HEAP=5)",
   };
+  // Five of the nineteen are refused under PCRE2 as well, because the
+  // newline convention is not built - a separate question from which
+  // dialect the spelling belongs to, and the one this test is not about.
+  const char * unbuilt[]
+      = {"(*CR)", "(*CRLF)", "(*ANYCRLF)", "(*ANY)", "(*NUL)"};
 
   for (const char * directive : directives) {
     std::string pattern = std::string(directive) + "abc";
+    bool built = true;
+    for (const char * name : unbuilt) {
+      built = built && std::string(directive) != name;
+    }
 
     Attempt pcre = compile(pattern, GRX_SYNTAX_PCRE);
-    EXPECT_EQ(pcre.result, GRX_OK) << pattern << " under PCRE2";
+    EXPECT_EQ(pcre.result, built ? GRX_OK : GRX_ERR_UNSUPPORTED)
+        << pattern << " under PCRE2";
     grx_regex_free(pcre.regex);
 
+    // Under Perl it is a syntax error either way, and that is the point:
+    // "this dialect does not have the construct" is a different answer
+    // from "this library has not built it", and the Perl row must be the
+    // first one even for a directive PCRE2 has and this library lacks.
     Attempt perl = compile(pattern, GRX_SYNTAX_PERL);
     EXPECT_EQ(perl.result, GRX_ERR_SYNTAX) << pattern << " under Perl";
     EXPECT_EQ(perl.diag, GRX_DIAG_INVALID_GROUP_SYNTAX) << pattern;
@@ -825,6 +839,52 @@ TEST(Perl, TheLeadingDirectivesArePcre2sAndPerlRefusesEveryOne) {
   Attempt skip = compile("a(*SKIP)b", GRX_SYNTAX_PERL);
   EXPECT_EQ(skip.result, GRX_OK);
   grx_regex_free(skip.regex);
+}
+
+TEST(Perl, TheNewlineDirectivesAreBuiltOrRefusedAndNeverIgnored) {
+  // `(*BSR_ANYCRLF)` cuts `\R` to the three ASCII line endings and
+  // `(*BSR_UNICODE)` restores it. Both are built, because `\R` is an
+  // alternation the parser writes and a directive may only lead the
+  // pattern, so the flag is always set before the `\R` it governs.
+  EXPECT_TRUE(search("\\R", "\x0b").matched) << "plain \\R takes a VT";
+  EXPECT_FALSE(search("(*BSR_ANYCRLF)\\R", "\x0b").matched);
+  EXPECT_TRUE(search("(*BSR_UNICODE)\\R", "\x0b").matched);
+  EXPECT_TRUE(search("(*BSR_ANYCRLF)\\R", "\r\n").matched);
+  EXPECT_EQ(search("(*BSR_ANYCRLF)\\R", "\r\n").end, 2u)
+      << "CR LF is still one unit under ANYCRLF";
+  EXPECT_TRUE(search("(*BSR_ANYCRLF)\\R", "\n").matched);
+  // The last one written wins, as the directives are read in order.
+  EXPECT_TRUE(search("(*BSR_ANYCRLF)(*BSR_UNICODE)\\R", "\x0b").matched);
+
+  // The newline *conventions* are refused rather than ignored. Each of
+  // these changes which subjects a pattern matches - `(*CR)a.b` matches
+  // "a\nb" in pcre2test and `a.b` does not - and three of the five need a
+  // line terminator two characters long, which no assertion here can
+  // express. Accepting one silently would read a pattern with a convention
+  // other than the one it named.
+  for (const char * pattern : {"(*CR)a.b", "(*CRLF)a.b", "(*ANYCRLF)a.b",
+           "(*ANY)a.b", "(*NUL)^.*"}) {
+    Attempt refused = compile(pattern, GRX_SYNTAX_PCRE);
+    EXPECT_EQ(refused.result, GRX_ERR_UNSUPPORTED) << pattern;
+    EXPECT_EQ(refused.diag, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED) << pattern;
+    grx_regex_free(refused.regex);
+  }
+
+  // `(*LF)` names the convention this library and PCRE2 both already use,
+  // so it asks for what is already true and is accepted.
+  Attempt lf = compile("(*LF)a.b", GRX_SYNTAX_PCRE);
+  EXPECT_EQ(lf.result, GRX_OK);
+  grx_regex_free(lf.regex);
+  EXPECT_FALSE(search("(*LF)a.b", "a\nb").matched);
+  EXPECT_TRUE(search("(*LF)a.b", "a\rb").matched);
+
+  // Mid-pattern it is not a directive at all, in either spelling.
+  Attempt late = compile("a(*CR)b", GRX_SYNTAX_PCRE);
+  EXPECT_EQ(late.result, GRX_ERR_SYNTAX);
+  grx_regex_free(late.regex);
+  Attempt late_bsr = compile("a(*BSR_ANYCRLF)b", GRX_SYNTAX_PCRE);
+  EXPECT_EQ(late_bsr.result, GRX_ERR_SYNTAX);
+  grx_regex_free(late_bsr.regex);
 }
 
 TEST(Perl, ACalloutIsPcre2sAndItsNumberIsBounded) {

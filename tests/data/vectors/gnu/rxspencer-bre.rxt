@@ -85,7 +85,7 @@ subject: ab\nc
 expect: nomatch
 
 pattern: b$
-options: multiline
+options: multiline newline-terminates
 subject: ab\nc
 expect: 1-2
 
@@ -94,17 +94,17 @@ subject: a\nb\nc
 expect: nomatch
 
 pattern: ^b$
-options: multiline
+options: multiline newline-terminates
 subject: a\nb\nc
 expect: 2-3
 
 pattern: ^$
-options: multiline
+options: multiline newline-terminates
 subject: a\n\nb
 expect: 2-2
 
 pattern: \\($\\)\\(^\\)
-options: multiline
+options: multiline newline-terminates
 subject: a\n\nb
 expect: 2-2 2-2 2-2
 

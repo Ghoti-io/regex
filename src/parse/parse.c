@@ -991,6 +991,7 @@ GRX_Result grx_parse_pattern(const char * pattern, size_t length,
     .in_lookbehind = 0,
     .in_lookaround = 0,
     .quote_end = GRX_NPOS,
+    .bsr_anycrlf = 0,
   };
   GRX_Result result = grx_syntax_spec(syntax, &parser.spec);
   if (result != GRX_OK) {

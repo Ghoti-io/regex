@@ -168,14 +168,20 @@ def options_for(flags):
 
     Named rather than spelled as flag letters because POSIX and GNU have no
     flag alphabet: `REG_ICASE` and `REG_NEWLINE` are arguments to `regcomp`,
-    not something a pattern author writes. WP-23 states the second of these -
-    "REG_NEWLINE as GRX_OPT_MULTILINE".
+    not something a pattern author writes.
+
+    `REG_NEWLINE` is *two* rules and this library has a bit for each:
+    `multiline` makes `^` and `$` line anchors, and `newline-terminates`
+    takes the newline out of `.` and out of a negated bracket expression.
+    WP-23 wrote only the first, which was accurate while only the first was
+    built and was a vector claiming to carry REG_NEWLINE while carrying half
+    of it.
     """
     names = []
     if "i" in flags:
         names.append("caseless")
     if "n" in flags:
-        names.append("multiline")
+        names.append("multiline newline-terminates")
     return " ".join(names)
 
 

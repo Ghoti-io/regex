@@ -140,7 +140,27 @@ typedef enum {
    * therefore not "fold ASCII only", which would stop the second pair as
    * well.
    */
-  GRX_OPT_ASCII_FOLD_SEPARATE = GRX_BIT(14)
+  GRX_OPT_ASCII_FOLD_SEPARATE = GRX_BIT(14),
+  /**
+   * @brief A line terminator is not "any character".
+   *
+   * The half of POSIX's `REG_NEWLINE` that GRX_OPT_MULTILINE is not.
+   * `REG_NEWLINE` is two rules: `^` and `$` become line anchors, *and* a
+   * newline is matched by neither `.` nor a non-matching list that does not
+   * contain one. A caller emulating `regcomp(..., REG_NEWLINE)` sets both
+   * bits; they are separate because the two rules are independent and
+   * nothing else in the library wants them welded.
+   *
+   * What it names is the dialect's line-terminator set and not the byte
+   * `\n`, so under a dialect whose terminators are ECMAScript's it takes
+   * all four out. In the POSIX and GNU dialects, where it is what
+   * `REG_NEWLINE` means, that set is `\n` alone.
+   *
+   * It reaches `.` and an ordinary bracket expression, which is what
+   * POSIX's rule names. A *positive* list is untouched: `[\n]` under
+   * `REG_NEWLINE` still matches a newline in glibc and in musl both.
+   */
+  GRX_OPT_NEWLINE_TERMINATES = GRX_BIT(15)
 } GRX_Option;
 
 /**
