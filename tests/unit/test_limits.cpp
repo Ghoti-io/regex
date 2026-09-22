@@ -264,14 +264,16 @@ const Tunable kTunables[] = {
   {"max_lookbehind_length", LIMIT_FIELD(max_lookbehind_length), 1,
       "(?<=abcd)x", "abcdx", GRX_ENGINE_BACKTRACK,
       GRX_DIAG_LIMIT_LOOKBEHIND_LENGTH},
+  // The four match-time rows read GRX_DIAG_NONE until there was somewhere
+  // for a match-time diagnostic to go; grx_match_error() is that place.
   {"max_steps", LIMIT_FIELD(max_steps), 1, "^a+$", "aaaaaaaa",
-      GRX_ENGINE_AUTO, GRX_DIAG_NONE},
+      GRX_ENGINE_AUTO, GRX_DIAG_LIMIT_STEPS},
   {"max_backtrack", LIMIT_FIELD(max_backtrack), 1, "^a+$", "aaaaaaaa",
-      GRX_ENGINE_BACKTRACK, GRX_DIAG_NONE},
+      GRX_ENGINE_BACKTRACK, GRX_DIAG_LIMIT_BACKTRACK},
   {"max_match_memory", LIMIT_FIELD(max_match_memory), 1, "^a+$", "aaaaaaaa",
-      GRX_ENGINE_AUTO, GRX_DIAG_NONE},
+      GRX_ENGINE_AUTO, GRX_DIAG_LIMIT_MATCH_MEMORY},
   {"max_subject_length", LIMIT_FIELD(max_subject_length), 1, "^a+$",
-      "aaaaaaaa", GRX_ENGINE_AUTO, GRX_DIAG_NONE},
+      "aaaaaaaa", GRX_ENGINE_AUTO, GRX_DIAG_LIMIT_SUBJECT_LENGTH},
 };
 
 /** What one row does at one value of its field. */
@@ -303,6 +305,12 @@ Attempt run_with(const Tunable & row, size_t value) {
   attempt.result = grx_regex_search(regex, row.subject,
       std::strlen(row.subject), 0, row.engine, &limits, match,
       &attempt.matched);
+  // A match-time failure has no offset into the pattern, so it travels on
+  // the match rather than in a GRX_Error the caller passed in.
+  const GRX_Error * match_error = grx_match_error(match);
+  if (attempt.result != GRX_OK && match_error) {
+    attempt.diag = match_error->diag;
+  }
   grx_match_destroy(match);
   grx_regex_free(regex);
   return attempt;

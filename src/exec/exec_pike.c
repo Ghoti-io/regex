@@ -141,6 +141,8 @@ typedef struct {
   size_t memory;         ///< Bytes handed out, against max_match_memory.
   int utf;               ///< Whether a step is a code point or a byte.
   GRX_Result failure;    ///< Set when a limit stopped the run.
+  /** Which limit, so the caller is told more than "a limit". */
+  GRX_Diag failure_diag;
 } Pike;
 
 // --------------------------------------------------------------------------
@@ -152,6 +154,7 @@ static PikeState * state_create(Pike * pike) {
   if (pike->request->limits->max_match_memory
       && pike->memory + bytes > pike->request->limits->max_match_memory) {
     pike->failure = GRX_ERR_LIMIT;
+    pike->failure_diag = GRX_DIAG_LIMIT_MATCH_MEMORY;
     return NULL;
   }
 
@@ -255,6 +258,7 @@ static int list_reserve(Pike * pike, PikeList * list) {
   if (pike->request->limits->max_match_memory
       && pike->memory + added > pike->request->limits->max_match_memory) {
     pike->failure = GRX_ERR_LIMIT;
+    pike->failure_diag = GRX_DIAG_LIMIT_MATCH_MEMORY;
     return 0;
   }
   PikeThread * grown
@@ -499,6 +503,7 @@ static int stack_reserve(Pike * pike, size_t needed) {
   if (pike->request->limits->max_match_memory
       && pike->memory + added > pike->request->limits->max_match_memory) {
     pike->failure = GRX_ERR_LIMIT;
+    pike->failure_diag = GRX_DIAG_LIMIT_MATCH_MEMORY;
     return 0;
   }
   PikeThread * grown = gcu_allocator_realloc(
@@ -843,6 +848,7 @@ GRX_Result grx_exec_pike(const GRX_ExecRequest * request, int * out_matched) {
     .memory = 0,
     .utf = (program->flags & GRX_PROGRAM_UTF) != 0,
     .failure = GRX_OK,
+    .failure_diag = GRX_DIAG_NONE,
   };
   pike.slots = pike.captures + program->register_count;
   if (!pike.allocator) {
@@ -913,6 +919,7 @@ GRX_Result grx_exec_pike(const GRX_ExecRequest * request, int * out_matched) {
           pike.current.threads[j].state = NULL;
         }
         result = GRX_ERR_LIMIT;
+        pike.failure_diag = GRX_DIAG_LIMIT_STEPS;
         goto done;
       }
 
@@ -1017,6 +1024,9 @@ GRX_Result grx_exec_pike(const GRX_ExecRequest * request, int * out_matched) {
   }
 
 done:
+  if (request->out_diag) {
+    *request->out_diag = pike.failure_diag;
+  }
   if (request->out_steps) {
     *request->out_steps = pike.steps;
   }

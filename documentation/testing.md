@@ -899,15 +899,24 @@ Run by `make test` alongside `check-symbols`:
   kept. It waited for the front ends that emit most of them, which is WP-18
   and WP-23, and both have landed.
 
-  Ten remain unraised and the script lists each with a reason, as a gate in
+  Three remain unraised and the script lists each with a reason, as a gate in
   both directions: one that is unraised and unlisted fails, and a listed one
-  that becomes raised fails with "remove the entry". Six are one decision
-  rather than six - the match-time entry points take no `GRX_Error`, so a run
-  that stops at a limit or at a subject that is not valid UTF-8 has nowhere
-  to put a diagnostic, and either those entry points gain an error parameter
-  or the rows come out of the header. Two are constructs that turned out not
-  to be errors anywhere: a forward backreference compiles in perl and in
-  pcre2test, and an unterminated `\Q` runs to the end of the pattern.
+  that becomes raised fails with "remove the entry". It fired on exactly that
+  second direction when the match-time channel landed, naming all six rows
+  that had just become reachable.
+
+  Six used to sit there as one decision rather than six: the match-time entry
+  points took no `GRX_Error`, so a run that stopped at a limit or at a
+  subject that is not valid UTF-8 had nowhere to put a diagnostic, and
+  `GRX_ERR_LIMIT` alone does not say which knob a caller has to raise. They
+  are raised now, through `grx_match_error()` on the match object rather than
+  through a parameter added to seven entry points - a match-time failure has
+  no offset into the pattern, so it belongs beside `grx_match_steps()` and
+  `grx_match_engine()` with the other facts about an attempt. Of the three
+  left, two are constructs that turned out not to be errors anywhere - a
+  forward backreference compiles in perl and in pcre2test, and an
+  unterminated `\Q` runs to the end of the pattern - and one is reached
+  through a result code rather than a diagnostic.
   **To check the gate itself:** delete a line from `UNPRODUCED` and it must
   fail; add a diagnostic that *is* raised and it must fail the other way.
 - **Every `GRX_Feature` bit is set in at least one profile row** and

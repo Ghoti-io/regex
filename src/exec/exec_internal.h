@@ -66,6 +66,15 @@ struct GRX_Match {
    * regex to look the index up in.
    */
   uint32_t mark;
+
+  /**
+   * Why the last attempt stopped, when it stopped at a limit.
+   *
+   * Cleared at the start of every attempt, so it describes the last one
+   * and never an older one. GRX_OK with GRX_DIAG_NONE when nothing went
+   * wrong, which is what a caller reading it after a plain non-match sees.
+   */
+  GRX_Error error;
 };
 
 /**
@@ -111,6 +120,14 @@ typedef struct GRX_ExecRequest {
   const GRX_Limits * limits; ///< Caps to apply. Never NULL.
   GRX_Match * match;        ///< Receives the spans. May be NULL.
   size_t * out_steps;       ///< Receives the step count. May be NULL.
+  /**
+   * Receives which limit stopped the run, or GRX_DIAG_NONE. May be NULL.
+   *
+   * A match-time failure has no offset into the pattern - "ran out of
+   * steps" is not a place - so it travels as a diagnostic rather than as
+   * a GRX_Error, and exec.c turns it into one on the match object.
+   */
+  GRX_Diag * out_diag;
   int memoize;              ///< Run the backtracker with a visited bitmap.
 } GRX_ExecRequest;
 

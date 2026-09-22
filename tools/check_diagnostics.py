@@ -33,19 +33,12 @@ CATALOGUE = os.path.join("src", "core", "diag.c")
 # Diagnostics nothing raises today, and why. Each line is a commitment to
 # either raise it or remove it; none of them is "not got round to".
 UNPRODUCED = {
-    # No match-time error channel. grx_regex_search_ex() and its kin return a
-    # result code and take no GRX_Error, so a run that stops at a limit or at
-    # a subject that is not valid UTF-8 has nowhere to put a diagnostic. The
-    # five limits and the subject check are one decision, not six: either the
-    # match-time entry points gain an error parameter - an API change, and
-    # the API is meant to be frozen at M4 - or these rows come out of the
-    # header. documentation/plan.md's M4 is where that is decided.
-    "GRX_DIAG_LIMIT_STEPS": "no match-time error channel",
-    "GRX_DIAG_LIMIT_BACKTRACK": "no match-time error channel",
-    "GRX_DIAG_LIMIT_MATCH_MEMORY": "no match-time error channel",
-    "GRX_DIAG_LIMIT_RECURSION_DEPTH": "no match-time error channel",
-    "GRX_DIAG_LIMIT_SUBJECT_LENGTH": "no match-time error channel",
-    "GRX_DIAG_INVALID_SUBJECT_UTF8": "no match-time error channel",
+    # The six that used to sit here - the five match-time limits and the
+    # subject's UTF-8 check - were unproduced because there was no match-time
+    # error channel to put them in. There is one now: grx_match_error(), on
+    # the match object beside grx_match_steps(), because a match-time failure
+    # has no offset into the pattern and belongs with the other facts about
+    # an attempt rather than in an out-parameter on seven entry points.
     # Constructs that turned out not to be errors anywhere this library
     # implements. A forward backreference is legal in every Perl-family
     # dialect - `(\2two|(one))+` compiles in perl and in pcre2test - and an

@@ -169,6 +169,8 @@ typedef struct {
   size_t steps;          ///< Instructions executed, against max_steps.
   int utf;               ///< Whether a step is a code point or a byte.
   GRX_Result failure;    ///< Set when a limit stopped the run.
+  /** Which limit, so the caller is told more than "a limit". */
+  GRX_Diag failure_diag;
 
   /**
    * Leftmost-longest: keep searching past a match and report the longest.
@@ -413,6 +415,7 @@ static int call_reserve(Backtrack * bt, size_t wanted) {
   const GRX_Limits * limits = bt->request->limits;
   if (limits->max_match_memory && bytes > limits->max_match_memory) {
     bt->failure = GRX_ERR_LIMIT;
+    bt->failure_diag = GRX_DIAG_LIMIT_MATCH_MEMORY;
     return 0;
   }
 
@@ -455,6 +458,7 @@ static int push(Backtrack * bt, FrameKind kind, uint32_t pc, size_t position) {
   const GRX_Limits * limits = bt->request->limits;
   if (limits->max_backtrack && bt->depth + 1 > limits->max_backtrack) {
     bt->failure = GRX_ERR_LIMIT;
+    bt->failure_diag = GRX_DIAG_LIMIT_BACKTRACK;
     return 0;
   }
 
@@ -525,6 +529,7 @@ static int push_mark(Backtrack * bt, uint32_t index, size_t position) {
     }
     if (bt->mark_depth == capacity) {
       bt->failure = GRX_ERR_LIMIT;
+      bt->failure_diag = GRX_DIAG_LIMIT_BACKTRACK;
       return 0;
     }
     MarkEntry * grown = gcu_allocator_realloc(
@@ -1113,6 +1118,7 @@ static int run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
     int toplevel, size_t * out_end) {
   if (bt->run_depth >= GRX_BACKTRACK_MAX_C_DEPTH) {
     bt->failure = GRX_ERR_LIMIT;
+    bt->failure_diag = GRX_DIAG_LIMIT_RECURSION_DEPTH;
     return 0;
   }
   bt->run_depth++;
@@ -1266,6 +1272,7 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
     bt->steps++;
     if (limits->max_steps && bt->steps > limits->max_steps) {
       bt->failure = GRX_ERR_LIMIT;
+      bt->failure_diag = GRX_DIAG_LIMIT_STEPS;
       return 0;
     }
 
@@ -1913,6 +1920,7 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
         if (call_limits->max_recursion_depth
             && bt->call_depth + 1 > call_limits->max_recursion_depth) {
           bt->failure = GRX_ERR_LIMIT;
+          bt->failure_diag = GRX_DIAG_LIMIT_RECURSION_DEPTH;
           return 0;
         }
         if (!call_reserve(bt, bt->call_depth + 1)) {
@@ -1987,6 +1995,7 @@ GRX_Result grx_exec_backtrack(
     .steps = 0,
     .utf = (program->flags & GRX_PROGRAM_UTF) != 0,
     .failure = GRX_OK,
+    .failure_diag = GRX_DIAG_NONE,
     .longest = program->preference == GRX_PREFER_LEFTMOST_LONGEST,
     .best_end = GRX_NPOS,
     .best_slots = NULL,
@@ -2059,6 +2068,9 @@ GRX_Result grx_exec_backtrack(
       // the exponential one is the substitution GRX_ENGINE_PIKE already
       // refuses to make.
       gcu_allocator_free(bt.allocator, bt.slots);
+      if (request->out_diag) {
+        *request->out_diag = GRX_DIAG_LIMIT_MATCH_MEMORY;
+      }
       return GRX_ERR_LIMIT;
     }
     bt.visited = gcu_allocator_calloc(bt.allocator, bytes, 1);
@@ -2174,6 +2186,9 @@ GRX_Result grx_exec_backtrack(
     }
   }
 
+  if (request->out_diag) {
+    *request->out_diag = bt.failure_diag;
+  }
   if (request->out_steps) {
     *request->out_steps = bt.steps;
   }

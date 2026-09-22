@@ -783,3 +783,85 @@ int main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
+
+/**
+ * The match-time error channel says which limit, and is cleared each attempt.
+ *
+ * A match-time failure returns a result code, and GRX_ERR_LIMIT alone does
+ * not say *which* limit was reached - which knob a caller has to raise, or
+ * whether the subject was the problem rather than the pattern. Six
+ * diagnostics existed in the catalogue for exactly these cases and nothing
+ * raised any of them, because grx_regex_search() and its kin take no
+ * GRX_Error and there was nowhere to put one.
+ *
+ * They travel on the match object instead of in an out-parameter, because a
+ * match-time failure has no offset into the pattern - "ran out of steps" is
+ * not a position - so it belongs beside grx_match_steps() and
+ * grx_match_engine() with the other facts about an attempt. The subject's
+ * UTF-8 check is the one exception and carries an offset into the *subject*.
+ */
+TEST(Exec, TheMatchTimeErrorChannelNamesWhatStopped) {
+  GRX_Regex * regex = nullptr;
+  ASSERT_EQ(
+      grx_regex_compile("^a+$", GRX_SYNTAX_ECMASCRIPT, GRX_OPT_UTF, &regex),
+      GRX_OK);
+
+  GRX_Match * match = nullptr;
+  ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+
+  // A successful attempt leaves the channel empty, so a caller reading it
+  // after a match is not handed an older failure.
+  int matched = 0;
+  EXPECT_EQ(grx_regex_search(regex, "aaa", 3, 0, GRX_ENGINE_AUTO, nullptr,
+                match, &matched),
+      GRX_OK);
+  EXPECT_TRUE(matched);
+  ASSERT_NE(grx_match_error(match), nullptr);
+  EXPECT_EQ(grx_match_error(match)->code, GRX_OK);
+  EXPECT_EQ(grx_match_error(match)->diag, GRX_DIAG_NONE);
+
+  // A step limit names itself rather than leaving the caller to guess.
+  GRX_Limits limits;
+  grx_limits_default(&limits);
+  limits.max_steps = 1;
+  EXPECT_EQ(grx_regex_search(regex, "aaaaaaaa", 8, 0, GRX_ENGINE_AUTO, &limits,
+                match, &matched),
+      GRX_ERR_LIMIT);
+  EXPECT_EQ(grx_match_error(match)->code, GRX_ERR_LIMIT);
+  EXPECT_EQ(grx_match_error(match)->diag, GRX_DIAG_LIMIT_STEPS);
+  EXPECT_NE(grx_match_error(match)->message[0], '\0');
+
+  // And the next attempt clears it again, so the channel describes the last
+  // attempt and never an older one.
+  EXPECT_EQ(grx_regex_search(regex, "aaa", 3, 0, GRX_ENGINE_AUTO, nullptr,
+                match, &matched),
+      GRX_OK);
+  EXPECT_EQ(grx_match_error(match)->diag, GRX_DIAG_NONE);
+
+  grx_match_destroy(match);
+  grx_regex_free(regex);
+
+  // A subject that is not valid UTF-8 is the one match-time diagnostic with
+  // a position, and the position is into the subject.
+  GRX_Regex * dot = nullptr;
+  ASSERT_EQ(
+      grx_regex_compile(".", GRX_SYNTAX_ECMASCRIPT, GRX_OPT_UTF, &dot),
+      GRX_OK);
+  GRX_Match * dot_match = nullptr;
+  ASSERT_EQ(grx_match_create(dot, nullptr, &dot_match), GRX_OK);
+  EXPECT_NE(grx_regex_search(dot, "ab\xFF", 3, 0, GRX_ENGINE_AUTO, nullptr,
+                dot_match, &matched),
+      GRX_OK);
+  EXPECT_EQ(grx_match_error(dot_match)->diag, GRX_DIAG_INVALID_SUBJECT_UTF8);
+  EXPECT_EQ(grx_match_error(dot_match)->offset, 2u);
+
+  // Passing no match object asks only whether the subject matched, and still
+  // gets the result code; the accessor is NULL-safe for that caller.
+  EXPECT_NE(grx_regex_search(dot, "ab\xFF", 3, 0, GRX_ENGINE_AUTO, nullptr,
+                nullptr, &matched),
+      GRX_OK);
+  EXPECT_EQ(grx_match_error(nullptr), nullptr);
+
+  grx_match_destroy(dot_match);
+  grx_regex_free(dot);
+}

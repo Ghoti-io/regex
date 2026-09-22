@@ -332,6 +332,31 @@ GRX_API GRX_Result grx_match_span(
 GRX_API size_t grx_match_steps(const GRX_Match * match);
 
 /**
+ * @brief Why the last attempt stopped, when it stopped at a limit.
+ *
+ * The match-time error channel. A run that ends at a limit, or against a
+ * subject that is not valid UTF-8, returns a result code from
+ * grx_regex_search() and its kin, and that code alone does not say *which*
+ * limit: this is where the diagnostic lives.
+ *
+ * It is on the match object rather than an out-parameter because a
+ * match-time failure has no offset into the pattern - "ran out of steps"
+ * is not a position - so it belongs with the other facts about an attempt,
+ * beside grx_match_steps() and grx_match_engine(). A caller who passes no
+ * GRX_Match has asked only whether the subject matched, and gets the result
+ * code.
+ *
+ * Cleared at the start of every attempt, so it describes the most recent
+ * one. After a match, or an ordinary non-match, @ref GRX_Error::code is
+ * GRX_OK and @ref GRX_Error::diag is GRX_DIAG_NONE.
+ *
+ * @param match The match object. NULL returns NULL.
+ * @return The error, owned by the match and valid until the next attempt
+ *   or grx_match_destroy().
+ */
+GRX_API const GRX_Error * grx_match_error(const GRX_Match * match);
+
+/**
  * @brief Which engine actually ran the last match.
  *
  * Meaningful after a successful grx_regex_search() or grx_regex_match() with

@@ -40,6 +40,7 @@
 #include <string.h>
 #include <stdio.h>
 
+#include "../core/core_internal.h"
 #include "../unicode/unicode_internal.h"
 #include "exec_internal.h"
 
@@ -89,6 +90,7 @@ GRX_Result grx_match_create(const GRX_Regex * regex,
   match->matched = 0;
   match->steps = 0;
   match->mark = GRX_INDEX_NONE;
+  grx_error_clear(&match->error);
   for (size_t i = 0; i < count; i++) {
     match->captures[i] = (GRX_Capture) {GRX_NPOS, GRX_NPOS};
   }
@@ -141,7 +143,8 @@ static GRX_Result exec(const GRX_Regex * regex, const char * subject,
     limits = &limit_defaults;
   }
   if (limits->max_subject_length && end > limits->max_subject_length) {
-    return GRX_ERR_LIMIT;
+    return grx_error_set(match ? &match->error : NULL, GRX_ERR_LIMIT,
+        GRX_DIAG_LIMIT_SUBJECT_LENGTH, GRX_NPOS, 0);
   }
 
   // The subject is checked once here rather than discovered mid-match by
@@ -150,9 +153,13 @@ static GRX_Result exec(const GRX_Regex * regex, const char * subject,
   // because a lookbehind reads before `begin`.
   if ((regex->program.flags & GRX_PROGRAM_UTF)
       && !(options->flags & GRX_SEARCH_NO_UTF_CHECK)) {
-    GRX_Result valid = grx_utf8_validate(subject, end, NULL);
+    size_t at = 0;
+    GRX_Result valid = grx_utf8_validate(subject, end, &at);
     if (valid != GRX_OK) {
-      return valid;
+      // The offset is into the *subject*, which is the one match-time
+      // diagnostic that has a position at all.
+      return grx_error_set(match ? &match->error : NULL, valid,
+          GRX_DIAG_INVALID_SUBJECT_UTF8, at, 0);
     }
   }
 
@@ -207,6 +214,7 @@ static GRX_Result exec(const GRX_Regex * regex, const char * subject,
   }
 
   size_t steps = 0;
+  GRX_Diag diag = GRX_DIAG_NONE;
   if (match) {
     for (size_t i = 0; i < match->count; i++) {
       match->captures[i] = (GRX_Capture) {GRX_NPOS, GRX_NPOS};
@@ -215,6 +223,7 @@ static GRX_Result exec(const GRX_Regex * regex, const char * subject,
     match->matched = 0;
     match->steps = 0;
     match->mark = GRX_INDEX_NONE;
+    grx_error_clear(&match->error);
   }
 
   GRX_ExecRequest request = {
@@ -231,6 +240,7 @@ static GRX_Result exec(const GRX_Regex * regex, const char * subject,
     .limits = limits,
     .match = match,
     .out_steps = &steps,
+    .out_diag = &diag,
     .memoize = engine == GRX_ENGINE_BITSTATE,
   };
 
@@ -242,6 +252,11 @@ static GRX_Result exec(const GRX_Regex * regex, const char * subject,
     match->steps = steps;
     if (result == GRX_OK) {
       match->matched = *out_matched;
+    }
+    else {
+      // A result code alone does not say *which* limit was reached, which is
+      // the whole reason this channel exists.
+      grx_error_set(&match->error, result, diag, GRX_NPOS, 0);
     }
   }
   return result;
@@ -468,6 +483,10 @@ GRX_Engine grx_match_engine(const GRX_Match * match) {
 
 size_t grx_match_steps(const GRX_Match * match) {
   return match ? match->steps : 0;
+}
+
+const GRX_Error * grx_match_error(const GRX_Match * match) {
+  return match ? &match->error : NULL;
 }
 
 GRX_Result grx_match_span(
