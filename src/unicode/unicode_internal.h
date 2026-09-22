@@ -233,6 +233,23 @@ typedef enum {
    * GRX_IR_FOLD_RUN.
    */
   GRX_FOLD_FULL,
+  /**
+   * Full folding with the ASCII range held apart: Perl's `/aai`.
+   *
+   * GRX_FOLD_SIMPLE_ASCII_APART's rule for the orbits, and Perl's rule for
+   * the full folds on top of it: a full fold survives `/aa` exactly when
+   * **no code point of the fold is ASCII**.
+   *
+   * This used to be spelled as SIMPLE_ASCII_APART, on the stated ground that
+   * every full fold has an ASCII character somewhere in it and so none could
+   * survive. That is false for **87 of the 104** `F` lines of
+   * CaseFolding.txt: `U+0390` folds to `U+03B9 U+0308 U+0301` and `U+1FB3`
+   * to `U+03B1 U+03B9`, neither of which touches ASCII, and Perl keeps both
+   * under `/aa`. The 17 it does drop - `ß` to "ss", the `ﬀ` ligature to
+   * "ff", `U+01F0` to `j` and a combining caron - are the ones with an ASCII
+   * character in the fold.
+   */
+  GRX_FOLD_FULL_ASCII_APART,
   GRX_FOLD_COUNT       ///< Closes the enum; not a folding.
 } GRX_FoldKind;
 

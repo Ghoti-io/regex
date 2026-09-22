@@ -404,7 +404,8 @@ GRX_Result grx_charclass_fold_closure(GRX_CharClass * cls, GRX_FoldKind kind,
     // U+0080: a class holding `s` gains `S` and not U+017F, and a class
     // holding U+00C0 still gains U+00E0. For every other folding the two
     // halves are asked the same question and answer it together.
-    int apart = kind == GRX_FOLD_SIMPLE_ASCII_APART;
+    int apart = kind == GRX_FOLD_SIMPLE_ASCII_APART
+        || kind == GRX_FOLD_FULL_ASCII_APART;
     int touched_ascii = 0;
     int touched_wide = 0;
     for (size_t j = 0; j < count; j++) {

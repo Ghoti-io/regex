@@ -69,6 +69,20 @@ def rows(pairs):
             out.append((pattern, fold.upper()))
             out.append((pattern, cp))
 
+    # `/aa` over every code point too, and not over a sample, because which
+    # folds it drops is a property of each fold's own code points: Perl keeps
+    # a full fold under `/aa` exactly when none of the fold is ASCII, which
+    # is 87 of these 104. Sampling this axis is what under-measured it when
+    # this file was first written - of the seven code points the shape list
+    # below happens to use, only U+0390 has an all-non-ASCII fold, so four
+    # rows stood for eighty-seven. The third pattern is the reverse
+    # direction: `(?aa)ff` must stop being matched by the ff ligature.
+    for cp, fold in pairs:
+        for pattern in ("^(?:(?aa)%s)$" % cp, "^(?:(?aa)[%s])$" % cp,
+                        "^(?:(?aa)%s)$" % fold):
+            out.append((pattern, fold))
+            out.append((pattern, cp))
+
     # The shapes, on a few code points that differ in what they fold to: two
     # characters, three characters, a fold that is itself cased, and the two
     # that share one fold. One row per shape per code point rather than a

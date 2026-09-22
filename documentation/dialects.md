@@ -415,10 +415,24 @@ match one. The two meet in the middle, which is why the run is what is
 folded: `sß` and `ßs` both fold to "sss", and Perl matches either against
 the other.
 
-It stops at two boundaries. `/aa` drops it, because a fold that crosses the
-ASCII line is what that flag exists to prevent - though *which* folds it drops
-is narrower than it looks, and §6 carries the part this library still has
-wrong. And PCRE2 does not have it at all, which is one of the reasons
+It stops at two boundaries. **`/aa` drops a full fold exactly when a code
+point of the fold is ASCII** - a fold that crosses the ASCII line is what
+that flag exists to prevent, and the same cut it makes in an orbit, where
+`s` stops matching `ſ`. So `ß` stops matching "ss" and the `ﬀ` ligature
+stops matching "ff", while `U+0390` goes on matching `U+03B9 U+0308 U+0301`
+and `U+1FB3` matching `U+03B1 U+03B9`, because neither of those touches
+ASCII. That is **87 of the 104**, so it is the majority that survives rather
+than the exception.
+
+This page and the code both used to say `/aa` dropped full folding whole, on
+the ground that "every code point with a full fold is outside ASCII and every
+one of those folds is at least partly inside it". The first half is true and
+the second is false; the two were written as one sentence and read as one
+fact. It held in both directions - `(?aa)ff` was not matched by the ligature
+either - and was found by `tools/corpus/make_fold_vectors.py` on the day it
+was written.
+
+And PCRE2 does not have full folding at all, which is one of the reasons
 `GRX_SYNTAX_PERL` and `GRX_SYNTAX_PCRE` are separate dialects.
 
 **A character class is not the third boundary, though this page said it was.**
@@ -959,7 +973,6 @@ to be complete for every shipped tier.
 | ECMAScript | Repeat counts are limited (the grammar admits 2^53 - 1) | as above | `GRX_ERR_LIMIT` |
 | ECMAScript | **The subject is code points, not UTF-16 code units, in *both* modes** | see below | - |
 | ECMAScript | A match cannot begin or end between the halves of a surrogate pair | as above | - |
-| Perl | **`/aa` drops more full folds than Perl drops.** Perl keeps a full fold under `/aa` exactly when no code point of the fold is ASCII; this library drops every one. The premise was that "every code point with a full fold is outside ASCII and every one of those folds is at least partly inside it", and the second half is false for **87 of the 104** `F` lines - `U+0390` folds to `U+03B9 U+0308 U+0301`, none of it ASCII. Four rows in `known-gaps.txt`, counted as failures | a rule held backwards rather than a missing construct; found by `tools/corpus/make_fold_vectors.py` | - |
 | Perl | `(?{ })`, `(??{ })`, `\N{name}` by name | code execution; name table size | `GRX_ERR_UNSUPPORTED` |
 | PCRE2 | `(?{ })` is not a construct it has at all | pcre2test: "unrecognized character after (? or (?-" | `GRX_ERR_SYNTAX` |
 | Perl | `(?[ ])` is PCRE2's grammar only | Perl's nests and takes different operands; a shared reader would accept neither exactly | `GRX_ERR_SYNTAX` |

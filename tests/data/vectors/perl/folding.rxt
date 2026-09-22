@@ -4695,6 +4695,3126 @@ flags: i
 subject: \uFB17
 expect: nomatch
 
+pattern: ^(?:(?aa)\u00DF)$
+flags: i
+subject: ss
+expect: nomatch
+
+pattern: ^(?:(?aa)\u00DF)$
+flags: i
+subject: \u00DF
+expect: 0-2
+
+pattern: ^(?:(?aa)[\u00DF])$
+flags: i
+subject: ss
+expect: nomatch
+
+pattern: ^(?:(?aa)[\u00DF])$
+flags: i
+subject: \u00DF
+expect: 0-2
+
+pattern: ^(?:(?aa)ss)$
+flags: i
+subject: ss
+expect: 0-2
+
+pattern: ^(?:(?aa)ss)$
+flags: i
+subject: \u00DF
+expect: nomatch
+
+pattern: ^(?:(?aa)\u0130)$
+flags: i
+subject: i\u0307
+expect: nomatch
+
+pattern: ^(?:(?aa)\u0130)$
+flags: i
+subject: \u0130
+expect: 0-2
+
+pattern: ^(?:(?aa)[\u0130])$
+flags: i
+subject: i\u0307
+expect: nomatch
+
+pattern: ^(?:(?aa)[\u0130])$
+flags: i
+subject: \u0130
+expect: 0-2
+
+pattern: ^(?:(?aa)i\u0307)$
+flags: i
+subject: i\u0307
+expect: 0-3
+
+pattern: ^(?:(?aa)i\u0307)$
+flags: i
+subject: \u0130
+expect: nomatch
+
+pattern: ^(?:(?aa)\u0149)$
+flags: i
+subject: \u02BCn
+expect: nomatch
+
+pattern: ^(?:(?aa)\u0149)$
+flags: i
+subject: \u0149
+expect: 0-2
+
+pattern: ^(?:(?aa)[\u0149])$
+flags: i
+subject: \u02BCn
+expect: nomatch
+
+pattern: ^(?:(?aa)[\u0149])$
+flags: i
+subject: \u0149
+expect: 0-2
+
+pattern: ^(?:(?aa)\u02BCn)$
+flags: i
+subject: \u02BCn
+expect: 0-3
+
+pattern: ^(?:(?aa)\u02BCn)$
+flags: i
+subject: \u0149
+expect: nomatch
+
+pattern: ^(?:(?aa)\u01F0)$
+flags: i
+subject: j\u030C
+expect: nomatch
+
+pattern: ^(?:(?aa)\u01F0)$
+flags: i
+subject: \u01F0
+expect: 0-2
+
+pattern: ^(?:(?aa)[\u01F0])$
+flags: i
+subject: j\u030C
+expect: nomatch
+
+pattern: ^(?:(?aa)[\u01F0])$
+flags: i
+subject: \u01F0
+expect: 0-2
+
+pattern: ^(?:(?aa)j\u030C)$
+flags: i
+subject: j\u030C
+expect: 0-3
+
+pattern: ^(?:(?aa)j\u030C)$
+flags: i
+subject: \u01F0
+expect: nomatch
+
+pattern: ^(?:(?aa)\u0390)$
+flags: i
+subject: \u03B9\u0308\u0301
+expect: 0-6
+
+pattern: ^(?:(?aa)\u0390)$
+flags: i
+subject: \u0390
+expect: 0-2
+
+pattern: ^(?:(?aa)[\u0390])$
+flags: i
+subject: \u03B9\u0308\u0301
+expect: 0-6
+
+pattern: ^(?:(?aa)[\u0390])$
+flags: i
+subject: \u0390
+expect: 0-2
+
+pattern: ^(?:(?aa)\u03B9\u0308\u0301)$
+flags: i
+subject: \u03B9\u0308\u0301
+expect: 0-6
+
+pattern: ^(?:(?aa)\u03B9\u0308\u0301)$
+flags: i
+subject: \u0390
+expect: 0-2
+
+pattern: ^(?:(?aa)\u03B0)$
+flags: i
+subject: \u03C5\u0308\u0301
+expect: 0-6
+
+pattern: ^(?:(?aa)\u03B0)$
+flags: i
+subject: \u03B0
+expect: 0-2
+
+pattern: ^(?:(?aa)[\u03B0])$
+flags: i
+subject: \u03C5\u0308\u0301
+expect: 0-6
+
+pattern: ^(?:(?aa)[\u03B0])$
+flags: i
+subject: \u03B0
+expect: 0-2
+
+pattern: ^(?:(?aa)\u03C5\u0308\u0301)$
+flags: i
+subject: \u03C5\u0308\u0301
+expect: 0-6
+
+pattern: ^(?:(?aa)\u03C5\u0308\u0301)$
+flags: i
+subject: \u03B0
+expect: 0-2
+
+pattern: ^(?:(?aa)\u0587)$
+flags: i
+subject: \u0565\u0582
+expect: 0-4
+
+pattern: ^(?:(?aa)\u0587)$
+flags: i
+subject: \u0587
+expect: 0-2
+
+pattern: ^(?:(?aa)[\u0587])$
+flags: i
+subject: \u0565\u0582
+expect: 0-4
+
+pattern: ^(?:(?aa)[\u0587])$
+flags: i
+subject: \u0587
+expect: 0-2
+
+pattern: ^(?:(?aa)\u0565\u0582)$
+flags: i
+subject: \u0565\u0582
+expect: 0-4
+
+pattern: ^(?:(?aa)\u0565\u0582)$
+flags: i
+subject: \u0587
+expect: 0-2
+
+pattern: ^(?:(?aa)\u1E96)$
+flags: i
+subject: h\u0331
+expect: nomatch
+
+pattern: ^(?:(?aa)\u1E96)$
+flags: i
+subject: \u1E96
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1E96])$
+flags: i
+subject: h\u0331
+expect: nomatch
+
+pattern: ^(?:(?aa)[\u1E96])$
+flags: i
+subject: \u1E96
+expect: 0-3
+
+pattern: ^(?:(?aa)h\u0331)$
+flags: i
+subject: h\u0331
+expect: 0-3
+
+pattern: ^(?:(?aa)h\u0331)$
+flags: i
+subject: \u1E96
+expect: nomatch
+
+pattern: ^(?:(?aa)\u1E97)$
+flags: i
+subject: t\u0308
+expect: nomatch
+
+pattern: ^(?:(?aa)\u1E97)$
+flags: i
+subject: \u1E97
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1E97])$
+flags: i
+subject: t\u0308
+expect: nomatch
+
+pattern: ^(?:(?aa)[\u1E97])$
+flags: i
+subject: \u1E97
+expect: 0-3
+
+pattern: ^(?:(?aa)t\u0308)$
+flags: i
+subject: t\u0308
+expect: 0-3
+
+pattern: ^(?:(?aa)t\u0308)$
+flags: i
+subject: \u1E97
+expect: nomatch
+
+pattern: ^(?:(?aa)\u1E98)$
+flags: i
+subject: w\u030A
+expect: nomatch
+
+pattern: ^(?:(?aa)\u1E98)$
+flags: i
+subject: \u1E98
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1E98])$
+flags: i
+subject: w\u030A
+expect: nomatch
+
+pattern: ^(?:(?aa)[\u1E98])$
+flags: i
+subject: \u1E98
+expect: 0-3
+
+pattern: ^(?:(?aa)w\u030A)$
+flags: i
+subject: w\u030A
+expect: 0-3
+
+pattern: ^(?:(?aa)w\u030A)$
+flags: i
+subject: \u1E98
+expect: nomatch
+
+pattern: ^(?:(?aa)\u1E99)$
+flags: i
+subject: y\u030A
+expect: nomatch
+
+pattern: ^(?:(?aa)\u1E99)$
+flags: i
+subject: \u1E99
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1E99])$
+flags: i
+subject: y\u030A
+expect: nomatch
+
+pattern: ^(?:(?aa)[\u1E99])$
+flags: i
+subject: \u1E99
+expect: 0-3
+
+pattern: ^(?:(?aa)y\u030A)$
+flags: i
+subject: y\u030A
+expect: 0-3
+
+pattern: ^(?:(?aa)y\u030A)$
+flags: i
+subject: \u1E99
+expect: nomatch
+
+pattern: ^(?:(?aa)\u1E9A)$
+flags: i
+subject: a\u02BE
+expect: nomatch
+
+pattern: ^(?:(?aa)\u1E9A)$
+flags: i
+subject: \u1E9A
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1E9A])$
+flags: i
+subject: a\u02BE
+expect: nomatch
+
+pattern: ^(?:(?aa)[\u1E9A])$
+flags: i
+subject: \u1E9A
+expect: 0-3
+
+pattern: ^(?:(?aa)a\u02BE)$
+flags: i
+subject: a\u02BE
+expect: 0-3
+
+pattern: ^(?:(?aa)a\u02BE)$
+flags: i
+subject: \u1E9A
+expect: nomatch
+
+pattern: ^(?:(?aa)\u1E9E)$
+flags: i
+subject: ss
+expect: nomatch
+
+pattern: ^(?:(?aa)\u1E9E)$
+flags: i
+subject: \u1E9E
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1E9E])$
+flags: i
+subject: ss
+expect: nomatch
+
+pattern: ^(?:(?aa)[\u1E9E])$
+flags: i
+subject: \u1E9E
+expect: 0-3
+
+pattern: ^(?:(?aa)ss)$
+flags: i
+subject: ss
+expect: 0-2
+
+pattern: ^(?:(?aa)ss)$
+flags: i
+subject: \u1E9E
+expect: nomatch
+
+pattern: ^(?:(?aa)\u1F50)$
+flags: i
+subject: \u03C5\u0313
+expect: 0-4
+
+pattern: ^(?:(?aa)\u1F50)$
+flags: i
+subject: \u1F50
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1F50])$
+flags: i
+subject: \u03C5\u0313
+expect: 0-4
+
+pattern: ^(?:(?aa)[\u1F50])$
+flags: i
+subject: \u1F50
+expect: 0-3
+
+pattern: ^(?:(?aa)\u03C5\u0313)$
+flags: i
+subject: \u03C5\u0313
+expect: 0-4
+
+pattern: ^(?:(?aa)\u03C5\u0313)$
+flags: i
+subject: \u1F50
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F52)$
+flags: i
+subject: \u03C5\u0313\u0300
+expect: 0-6
+
+pattern: ^(?:(?aa)\u1F52)$
+flags: i
+subject: \u1F52
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1F52])$
+flags: i
+subject: \u03C5\u0313\u0300
+expect: 0-6
+
+pattern: ^(?:(?aa)[\u1F52])$
+flags: i
+subject: \u1F52
+expect: 0-3
+
+pattern: ^(?:(?aa)\u03C5\u0313\u0300)$
+flags: i
+subject: \u03C5\u0313\u0300
+expect: 0-6
+
+pattern: ^(?:(?aa)\u03C5\u0313\u0300)$
+flags: i
+subject: \u1F52
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F54)$
+flags: i
+subject: \u03C5\u0313\u0301
+expect: 0-6
+
+pattern: ^(?:(?aa)\u1F54)$
+flags: i
+subject: \u1F54
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1F54])$
+flags: i
+subject: \u03C5\u0313\u0301
+expect: 0-6
+
+pattern: ^(?:(?aa)[\u1F54])$
+flags: i
+subject: \u1F54
+expect: 0-3
+
+pattern: ^(?:(?aa)\u03C5\u0313\u0301)$
+flags: i
+subject: \u03C5\u0313\u0301
+expect: 0-6
+
+pattern: ^(?:(?aa)\u03C5\u0313\u0301)$
+flags: i
+subject: \u1F54
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F56)$
+flags: i
+subject: \u03C5\u0313\u0342
+expect: 0-6
+
+pattern: ^(?:(?aa)\u1F56)$
+flags: i
+subject: \u1F56
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1F56])$
+flags: i
+subject: \u03C5\u0313\u0342
+expect: 0-6
+
+pattern: ^(?:(?aa)[\u1F56])$
+flags: i
+subject: \u1F56
+expect: 0-3
+
+pattern: ^(?:(?aa)\u03C5\u0313\u0342)$
+flags: i
+subject: \u03C5\u0313\u0342
+expect: 0-6
+
+pattern: ^(?:(?aa)\u03C5\u0313\u0342)$
+flags: i
+subject: \u1F56
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F80)$
+flags: i
+subject: \u1F00\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F80)$
+flags: i
+subject: \u1F80
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1F80])$
+flags: i
+subject: \u1F00\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1F80])$
+flags: i
+subject: \u1F80
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F00\u03B9)$
+flags: i
+subject: \u1F00\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F00\u03B9)$
+flags: i
+subject: \u1F80
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F81)$
+flags: i
+subject: \u1F01\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F81)$
+flags: i
+subject: \u1F81
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1F81])$
+flags: i
+subject: \u1F01\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1F81])$
+flags: i
+subject: \u1F81
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F01\u03B9)$
+flags: i
+subject: \u1F01\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F01\u03B9)$
+flags: i
+subject: \u1F81
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F82)$
+flags: i
+subject: \u1F02\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F82)$
+flags: i
+subject: \u1F82
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1F82])$
+flags: i
+subject: \u1F02\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1F82])$
+flags: i
+subject: \u1F82
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F02\u03B9)$
+flags: i
+subject: \u1F02\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F02\u03B9)$
+flags: i
+subject: \u1F82
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F83)$
+flags: i
+subject: \u1F03\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F83)$
+flags: i
+subject: \u1F83
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1F83])$
+flags: i
+subject: \u1F03\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1F83])$
+flags: i
+subject: \u1F83
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F03\u03B9)$
+flags: i
+subject: \u1F03\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F03\u03B9)$
+flags: i
+subject: \u1F83
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F84)$
+flags: i
+subject: \u1F04\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F84)$
+flags: i
+subject: \u1F84
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1F84])$
+flags: i
+subject: \u1F04\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1F84])$
+flags: i
+subject: \u1F84
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F04\u03B9)$
+flags: i
+subject: \u1F04\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F04\u03B9)$
+flags: i
+subject: \u1F84
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F85)$
+flags: i
+subject: \u1F05\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F85)$
+flags: i
+subject: \u1F85
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1F85])$
+flags: i
+subject: \u1F05\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1F85])$
+flags: i
+subject: \u1F85
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F05\u03B9)$
+flags: i
+subject: \u1F05\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F05\u03B9)$
+flags: i
+subject: \u1F85
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F86)$
+flags: i
+subject: \u1F06\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F86)$
+flags: i
+subject: \u1F86
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1F86])$
+flags: i
+subject: \u1F06\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1F86])$
+flags: i
+subject: \u1F86
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F06\u03B9)$
+flags: i
+subject: \u1F06\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F06\u03B9)$
+flags: i
+subject: \u1F86
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F87)$
+flags: i
+subject: \u1F07\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F87)$
+flags: i
+subject: \u1F87
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1F87])$
+flags: i
+subject: \u1F07\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1F87])$
+flags: i
+subject: \u1F87
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F07\u03B9)$
+flags: i
+subject: \u1F07\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F07\u03B9)$
+flags: i
+subject: \u1F87
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F88)$
+flags: i
+subject: \u1F00\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F88)$
+flags: i
+subject: \u1F88
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1F88])$
+flags: i
+subject: \u1F00\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1F88])$
+flags: i
+subject: \u1F88
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F00\u03B9)$
+flags: i
+subject: \u1F00\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F00\u03B9)$
+flags: i
+subject: \u1F88
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F89)$
+flags: i
+subject: \u1F01\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F89)$
+flags: i
+subject: \u1F89
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1F89])$
+flags: i
+subject: \u1F01\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1F89])$
+flags: i
+subject: \u1F89
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F01\u03B9)$
+flags: i
+subject: \u1F01\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F01\u03B9)$
+flags: i
+subject: \u1F89
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F8A)$
+flags: i
+subject: \u1F02\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F8A)$
+flags: i
+subject: \u1F8A
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1F8A])$
+flags: i
+subject: \u1F02\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1F8A])$
+flags: i
+subject: \u1F8A
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F02\u03B9)$
+flags: i
+subject: \u1F02\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F02\u03B9)$
+flags: i
+subject: \u1F8A
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F8B)$
+flags: i
+subject: \u1F03\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F8B)$
+flags: i
+subject: \u1F8B
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1F8B])$
+flags: i
+subject: \u1F03\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1F8B])$
+flags: i
+subject: \u1F8B
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F03\u03B9)$
+flags: i
+subject: \u1F03\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F03\u03B9)$
+flags: i
+subject: \u1F8B
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F8C)$
+flags: i
+subject: \u1F04\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F8C)$
+flags: i
+subject: \u1F8C
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1F8C])$
+flags: i
+subject: \u1F04\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1F8C])$
+flags: i
+subject: \u1F8C
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F04\u03B9)$
+flags: i
+subject: \u1F04\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F04\u03B9)$
+flags: i
+subject: \u1F8C
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F8D)$
+flags: i
+subject: \u1F05\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F8D)$
+flags: i
+subject: \u1F8D
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1F8D])$
+flags: i
+subject: \u1F05\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1F8D])$
+flags: i
+subject: \u1F8D
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F05\u03B9)$
+flags: i
+subject: \u1F05\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F05\u03B9)$
+flags: i
+subject: \u1F8D
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F8E)$
+flags: i
+subject: \u1F06\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F8E)$
+flags: i
+subject: \u1F8E
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1F8E])$
+flags: i
+subject: \u1F06\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1F8E])$
+flags: i
+subject: \u1F8E
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F06\u03B9)$
+flags: i
+subject: \u1F06\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F06\u03B9)$
+flags: i
+subject: \u1F8E
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F8F)$
+flags: i
+subject: \u1F07\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F8F)$
+flags: i
+subject: \u1F8F
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1F8F])$
+flags: i
+subject: \u1F07\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1F8F])$
+flags: i
+subject: \u1F8F
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F07\u03B9)$
+flags: i
+subject: \u1F07\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F07\u03B9)$
+flags: i
+subject: \u1F8F
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F90)$
+flags: i
+subject: \u1F20\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F90)$
+flags: i
+subject: \u1F90
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1F90])$
+flags: i
+subject: \u1F20\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1F90])$
+flags: i
+subject: \u1F90
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F20\u03B9)$
+flags: i
+subject: \u1F20\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F20\u03B9)$
+flags: i
+subject: \u1F90
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F91)$
+flags: i
+subject: \u1F21\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F91)$
+flags: i
+subject: \u1F91
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1F91])$
+flags: i
+subject: \u1F21\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1F91])$
+flags: i
+subject: \u1F91
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F21\u03B9)$
+flags: i
+subject: \u1F21\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F21\u03B9)$
+flags: i
+subject: \u1F91
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F92)$
+flags: i
+subject: \u1F22\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F92)$
+flags: i
+subject: \u1F92
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1F92])$
+flags: i
+subject: \u1F22\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1F92])$
+flags: i
+subject: \u1F92
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F22\u03B9)$
+flags: i
+subject: \u1F22\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F22\u03B9)$
+flags: i
+subject: \u1F92
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F93)$
+flags: i
+subject: \u1F23\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F93)$
+flags: i
+subject: \u1F93
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1F93])$
+flags: i
+subject: \u1F23\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1F93])$
+flags: i
+subject: \u1F93
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F23\u03B9)$
+flags: i
+subject: \u1F23\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F23\u03B9)$
+flags: i
+subject: \u1F93
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F94)$
+flags: i
+subject: \u1F24\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F94)$
+flags: i
+subject: \u1F94
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1F94])$
+flags: i
+subject: \u1F24\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1F94])$
+flags: i
+subject: \u1F94
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F24\u03B9)$
+flags: i
+subject: \u1F24\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F24\u03B9)$
+flags: i
+subject: \u1F94
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F95)$
+flags: i
+subject: \u1F25\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F95)$
+flags: i
+subject: \u1F95
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1F95])$
+flags: i
+subject: \u1F25\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1F95])$
+flags: i
+subject: \u1F95
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F25\u03B9)$
+flags: i
+subject: \u1F25\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F25\u03B9)$
+flags: i
+subject: \u1F95
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F96)$
+flags: i
+subject: \u1F26\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F96)$
+flags: i
+subject: \u1F96
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1F96])$
+flags: i
+subject: \u1F26\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1F96])$
+flags: i
+subject: \u1F96
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F26\u03B9)$
+flags: i
+subject: \u1F26\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F26\u03B9)$
+flags: i
+subject: \u1F96
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F97)$
+flags: i
+subject: \u1F27\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F97)$
+flags: i
+subject: \u1F97
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1F97])$
+flags: i
+subject: \u1F27\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1F97])$
+flags: i
+subject: \u1F97
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F27\u03B9)$
+flags: i
+subject: \u1F27\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F27\u03B9)$
+flags: i
+subject: \u1F97
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F98)$
+flags: i
+subject: \u1F20\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F98)$
+flags: i
+subject: \u1F98
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1F98])$
+flags: i
+subject: \u1F20\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1F98])$
+flags: i
+subject: \u1F98
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F20\u03B9)$
+flags: i
+subject: \u1F20\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F20\u03B9)$
+flags: i
+subject: \u1F98
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F99)$
+flags: i
+subject: \u1F21\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F99)$
+flags: i
+subject: \u1F99
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1F99])$
+flags: i
+subject: \u1F21\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1F99])$
+flags: i
+subject: \u1F99
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F21\u03B9)$
+flags: i
+subject: \u1F21\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F21\u03B9)$
+flags: i
+subject: \u1F99
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F9A)$
+flags: i
+subject: \u1F22\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F9A)$
+flags: i
+subject: \u1F9A
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1F9A])$
+flags: i
+subject: \u1F22\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1F9A])$
+flags: i
+subject: \u1F9A
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F22\u03B9)$
+flags: i
+subject: \u1F22\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F22\u03B9)$
+flags: i
+subject: \u1F9A
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F9B)$
+flags: i
+subject: \u1F23\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F9B)$
+flags: i
+subject: \u1F9B
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1F9B])$
+flags: i
+subject: \u1F23\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1F9B])$
+flags: i
+subject: \u1F9B
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F23\u03B9)$
+flags: i
+subject: \u1F23\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F23\u03B9)$
+flags: i
+subject: \u1F9B
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F9C)$
+flags: i
+subject: \u1F24\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F9C)$
+flags: i
+subject: \u1F9C
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1F9C])$
+flags: i
+subject: \u1F24\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1F9C])$
+flags: i
+subject: \u1F9C
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F24\u03B9)$
+flags: i
+subject: \u1F24\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F24\u03B9)$
+flags: i
+subject: \u1F9C
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F9D)$
+flags: i
+subject: \u1F25\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F9D)$
+flags: i
+subject: \u1F9D
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1F9D])$
+flags: i
+subject: \u1F25\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1F9D])$
+flags: i
+subject: \u1F9D
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F25\u03B9)$
+flags: i
+subject: \u1F25\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F25\u03B9)$
+flags: i
+subject: \u1F9D
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F9E)$
+flags: i
+subject: \u1F26\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F9E)$
+flags: i
+subject: \u1F9E
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1F9E])$
+flags: i
+subject: \u1F26\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1F9E])$
+flags: i
+subject: \u1F9E
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F26\u03B9)$
+flags: i
+subject: \u1F26\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F26\u03B9)$
+flags: i
+subject: \u1F9E
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F9F)$
+flags: i
+subject: \u1F27\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F9F)$
+flags: i
+subject: \u1F9F
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1F9F])$
+flags: i
+subject: \u1F27\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1F9F])$
+flags: i
+subject: \u1F9F
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F27\u03B9)$
+flags: i
+subject: \u1F27\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F27\u03B9)$
+flags: i
+subject: \u1F9F
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FA0)$
+flags: i
+subject: \u1F60\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1FA0)$
+flags: i
+subject: \u1FA0
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FA0])$
+flags: i
+subject: \u1F60\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1FA0])$
+flags: i
+subject: \u1FA0
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F60\u03B9)$
+flags: i
+subject: \u1F60\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F60\u03B9)$
+flags: i
+subject: \u1FA0
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FA1)$
+flags: i
+subject: \u1F61\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1FA1)$
+flags: i
+subject: \u1FA1
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FA1])$
+flags: i
+subject: \u1F61\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1FA1])$
+flags: i
+subject: \u1FA1
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F61\u03B9)$
+flags: i
+subject: \u1F61\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F61\u03B9)$
+flags: i
+subject: \u1FA1
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FA2)$
+flags: i
+subject: \u1F62\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1FA2)$
+flags: i
+subject: \u1FA2
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FA2])$
+flags: i
+subject: \u1F62\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1FA2])$
+flags: i
+subject: \u1FA2
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F62\u03B9)$
+flags: i
+subject: \u1F62\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F62\u03B9)$
+flags: i
+subject: \u1FA2
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FA3)$
+flags: i
+subject: \u1F63\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1FA3)$
+flags: i
+subject: \u1FA3
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FA3])$
+flags: i
+subject: \u1F63\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1FA3])$
+flags: i
+subject: \u1FA3
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F63\u03B9)$
+flags: i
+subject: \u1F63\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F63\u03B9)$
+flags: i
+subject: \u1FA3
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FA4)$
+flags: i
+subject: \u1F64\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1FA4)$
+flags: i
+subject: \u1FA4
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FA4])$
+flags: i
+subject: \u1F64\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1FA4])$
+flags: i
+subject: \u1FA4
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F64\u03B9)$
+flags: i
+subject: \u1F64\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F64\u03B9)$
+flags: i
+subject: \u1FA4
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FA5)$
+flags: i
+subject: \u1F65\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1FA5)$
+flags: i
+subject: \u1FA5
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FA5])$
+flags: i
+subject: \u1F65\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1FA5])$
+flags: i
+subject: \u1FA5
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F65\u03B9)$
+flags: i
+subject: \u1F65\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F65\u03B9)$
+flags: i
+subject: \u1FA5
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FA6)$
+flags: i
+subject: \u1F66\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1FA6)$
+flags: i
+subject: \u1FA6
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FA6])$
+flags: i
+subject: \u1F66\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1FA6])$
+flags: i
+subject: \u1FA6
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F66\u03B9)$
+flags: i
+subject: \u1F66\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F66\u03B9)$
+flags: i
+subject: \u1FA6
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FA7)$
+flags: i
+subject: \u1F67\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1FA7)$
+flags: i
+subject: \u1FA7
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FA7])$
+flags: i
+subject: \u1F67\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1FA7])$
+flags: i
+subject: \u1FA7
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F67\u03B9)$
+flags: i
+subject: \u1F67\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F67\u03B9)$
+flags: i
+subject: \u1FA7
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FA8)$
+flags: i
+subject: \u1F60\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1FA8)$
+flags: i
+subject: \u1FA8
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FA8])$
+flags: i
+subject: \u1F60\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1FA8])$
+flags: i
+subject: \u1FA8
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F60\u03B9)$
+flags: i
+subject: \u1F60\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F60\u03B9)$
+flags: i
+subject: \u1FA8
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FA9)$
+flags: i
+subject: \u1F61\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1FA9)$
+flags: i
+subject: \u1FA9
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FA9])$
+flags: i
+subject: \u1F61\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1FA9])$
+flags: i
+subject: \u1FA9
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F61\u03B9)$
+flags: i
+subject: \u1F61\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F61\u03B9)$
+flags: i
+subject: \u1FA9
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FAA)$
+flags: i
+subject: \u1F62\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1FAA)$
+flags: i
+subject: \u1FAA
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FAA])$
+flags: i
+subject: \u1F62\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1FAA])$
+flags: i
+subject: \u1FAA
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F62\u03B9)$
+flags: i
+subject: \u1F62\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F62\u03B9)$
+flags: i
+subject: \u1FAA
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FAB)$
+flags: i
+subject: \u1F63\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1FAB)$
+flags: i
+subject: \u1FAB
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FAB])$
+flags: i
+subject: \u1F63\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1FAB])$
+flags: i
+subject: \u1FAB
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F63\u03B9)$
+flags: i
+subject: \u1F63\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F63\u03B9)$
+flags: i
+subject: \u1FAB
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FAC)$
+flags: i
+subject: \u1F64\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1FAC)$
+flags: i
+subject: \u1FAC
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FAC])$
+flags: i
+subject: \u1F64\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1FAC])$
+flags: i
+subject: \u1FAC
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F64\u03B9)$
+flags: i
+subject: \u1F64\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F64\u03B9)$
+flags: i
+subject: \u1FAC
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FAD)$
+flags: i
+subject: \u1F65\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1FAD)$
+flags: i
+subject: \u1FAD
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FAD])$
+flags: i
+subject: \u1F65\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1FAD])$
+flags: i
+subject: \u1FAD
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F65\u03B9)$
+flags: i
+subject: \u1F65\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F65\u03B9)$
+flags: i
+subject: \u1FAD
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FAE)$
+flags: i
+subject: \u1F66\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1FAE)$
+flags: i
+subject: \u1FAE
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FAE])$
+flags: i
+subject: \u1F66\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1FAE])$
+flags: i
+subject: \u1FAE
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F66\u03B9)$
+flags: i
+subject: \u1F66\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F66\u03B9)$
+flags: i
+subject: \u1FAE
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FAF)$
+flags: i
+subject: \u1F67\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1FAF)$
+flags: i
+subject: \u1FAF
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FAF])$
+flags: i
+subject: \u1F67\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1FAF])$
+flags: i
+subject: \u1FAF
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F67\u03B9)$
+flags: i
+subject: \u1F67\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F67\u03B9)$
+flags: i
+subject: \u1FAF
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FB2)$
+flags: i
+subject: \u1F70\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1FB2)$
+flags: i
+subject: \u1FB2
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FB2])$
+flags: i
+subject: \u1F70\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1FB2])$
+flags: i
+subject: \u1FB2
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F70\u03B9)$
+flags: i
+subject: \u1F70\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F70\u03B9)$
+flags: i
+subject: \u1FB2
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FB3)$
+flags: i
+subject: \u03B1\u03B9
+expect: 0-4
+
+pattern: ^(?:(?aa)\u1FB3)$
+flags: i
+subject: \u1FB3
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FB3])$
+flags: i
+subject: \u03B1\u03B9
+expect: 0-4
+
+pattern: ^(?:(?aa)[\u1FB3])$
+flags: i
+subject: \u1FB3
+expect: 0-3
+
+pattern: ^(?:(?aa)\u03B1\u03B9)$
+flags: i
+subject: \u03B1\u03B9
+expect: 0-4
+
+pattern: ^(?:(?aa)\u03B1\u03B9)$
+flags: i
+subject: \u1FB3
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FB4)$
+flags: i
+subject: \u03AC\u03B9
+expect: 0-4
+
+pattern: ^(?:(?aa)\u1FB4)$
+flags: i
+subject: \u1FB4
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FB4])$
+flags: i
+subject: \u03AC\u03B9
+expect: 0-4
+
+pattern: ^(?:(?aa)[\u1FB4])$
+flags: i
+subject: \u1FB4
+expect: 0-3
+
+pattern: ^(?:(?aa)\u03AC\u03B9)$
+flags: i
+subject: \u03AC\u03B9
+expect: 0-4
+
+pattern: ^(?:(?aa)\u03AC\u03B9)$
+flags: i
+subject: \u1FB4
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FB6)$
+flags: i
+subject: \u03B1\u0342
+expect: 0-4
+
+pattern: ^(?:(?aa)\u1FB6)$
+flags: i
+subject: \u1FB6
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FB6])$
+flags: i
+subject: \u03B1\u0342
+expect: 0-4
+
+pattern: ^(?:(?aa)[\u1FB6])$
+flags: i
+subject: \u1FB6
+expect: 0-3
+
+pattern: ^(?:(?aa)\u03B1\u0342)$
+flags: i
+subject: \u03B1\u0342
+expect: 0-4
+
+pattern: ^(?:(?aa)\u03B1\u0342)$
+flags: i
+subject: \u1FB6
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FB7)$
+flags: i
+subject: \u03B1\u0342\u03B9
+expect: 0-6
+
+pattern: ^(?:(?aa)\u1FB7)$
+flags: i
+subject: \u1FB7
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FB7])$
+flags: i
+subject: \u03B1\u0342\u03B9
+expect: 0-6
+
+pattern: ^(?:(?aa)[\u1FB7])$
+flags: i
+subject: \u1FB7
+expect: 0-3
+
+pattern: ^(?:(?aa)\u03B1\u0342\u03B9)$
+flags: i
+subject: \u03B1\u0342\u03B9
+expect: 0-6
+
+pattern: ^(?:(?aa)\u03B1\u0342\u03B9)$
+flags: i
+subject: \u1FB7
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FBC)$
+flags: i
+subject: \u03B1\u03B9
+expect: 0-4
+
+pattern: ^(?:(?aa)\u1FBC)$
+flags: i
+subject: \u1FBC
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FBC])$
+flags: i
+subject: \u03B1\u03B9
+expect: 0-4
+
+pattern: ^(?:(?aa)[\u1FBC])$
+flags: i
+subject: \u1FBC
+expect: 0-3
+
+pattern: ^(?:(?aa)\u03B1\u03B9)$
+flags: i
+subject: \u03B1\u03B9
+expect: 0-4
+
+pattern: ^(?:(?aa)\u03B1\u03B9)$
+flags: i
+subject: \u1FBC
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FC2)$
+flags: i
+subject: \u1F74\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1FC2)$
+flags: i
+subject: \u1FC2
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FC2])$
+flags: i
+subject: \u1F74\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1FC2])$
+flags: i
+subject: \u1FC2
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F74\u03B9)$
+flags: i
+subject: \u1F74\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F74\u03B9)$
+flags: i
+subject: \u1FC2
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FC3)$
+flags: i
+subject: \u03B7\u03B9
+expect: 0-4
+
+pattern: ^(?:(?aa)\u1FC3)$
+flags: i
+subject: \u1FC3
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FC3])$
+flags: i
+subject: \u03B7\u03B9
+expect: 0-4
+
+pattern: ^(?:(?aa)[\u1FC3])$
+flags: i
+subject: \u1FC3
+expect: 0-3
+
+pattern: ^(?:(?aa)\u03B7\u03B9)$
+flags: i
+subject: \u03B7\u03B9
+expect: 0-4
+
+pattern: ^(?:(?aa)\u03B7\u03B9)$
+flags: i
+subject: \u1FC3
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FC4)$
+flags: i
+subject: \u03AE\u03B9
+expect: 0-4
+
+pattern: ^(?:(?aa)\u1FC4)$
+flags: i
+subject: \u1FC4
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FC4])$
+flags: i
+subject: \u03AE\u03B9
+expect: 0-4
+
+pattern: ^(?:(?aa)[\u1FC4])$
+flags: i
+subject: \u1FC4
+expect: 0-3
+
+pattern: ^(?:(?aa)\u03AE\u03B9)$
+flags: i
+subject: \u03AE\u03B9
+expect: 0-4
+
+pattern: ^(?:(?aa)\u03AE\u03B9)$
+flags: i
+subject: \u1FC4
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FC6)$
+flags: i
+subject: \u03B7\u0342
+expect: 0-4
+
+pattern: ^(?:(?aa)\u1FC6)$
+flags: i
+subject: \u1FC6
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FC6])$
+flags: i
+subject: \u03B7\u0342
+expect: 0-4
+
+pattern: ^(?:(?aa)[\u1FC6])$
+flags: i
+subject: \u1FC6
+expect: 0-3
+
+pattern: ^(?:(?aa)\u03B7\u0342)$
+flags: i
+subject: \u03B7\u0342
+expect: 0-4
+
+pattern: ^(?:(?aa)\u03B7\u0342)$
+flags: i
+subject: \u1FC6
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FC7)$
+flags: i
+subject: \u03B7\u0342\u03B9
+expect: 0-6
+
+pattern: ^(?:(?aa)\u1FC7)$
+flags: i
+subject: \u1FC7
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FC7])$
+flags: i
+subject: \u03B7\u0342\u03B9
+expect: 0-6
+
+pattern: ^(?:(?aa)[\u1FC7])$
+flags: i
+subject: \u1FC7
+expect: 0-3
+
+pattern: ^(?:(?aa)\u03B7\u0342\u03B9)$
+flags: i
+subject: \u03B7\u0342\u03B9
+expect: 0-6
+
+pattern: ^(?:(?aa)\u03B7\u0342\u03B9)$
+flags: i
+subject: \u1FC7
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FCC)$
+flags: i
+subject: \u03B7\u03B9
+expect: 0-4
+
+pattern: ^(?:(?aa)\u1FCC)$
+flags: i
+subject: \u1FCC
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FCC])$
+flags: i
+subject: \u03B7\u03B9
+expect: 0-4
+
+pattern: ^(?:(?aa)[\u1FCC])$
+flags: i
+subject: \u1FCC
+expect: 0-3
+
+pattern: ^(?:(?aa)\u03B7\u03B9)$
+flags: i
+subject: \u03B7\u03B9
+expect: 0-4
+
+pattern: ^(?:(?aa)\u03B7\u03B9)$
+flags: i
+subject: \u1FCC
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FD2)$
+flags: i
+subject: \u03B9\u0308\u0300
+expect: 0-6
+
+pattern: ^(?:(?aa)\u1FD2)$
+flags: i
+subject: \u1FD2
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FD2])$
+flags: i
+subject: \u03B9\u0308\u0300
+expect: 0-6
+
+pattern: ^(?:(?aa)[\u1FD2])$
+flags: i
+subject: \u1FD2
+expect: 0-3
+
+pattern: ^(?:(?aa)\u03B9\u0308\u0300)$
+flags: i
+subject: \u03B9\u0308\u0300
+expect: 0-6
+
+pattern: ^(?:(?aa)\u03B9\u0308\u0300)$
+flags: i
+subject: \u1FD2
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FD3)$
+flags: i
+subject: \u03B9\u0308\u0301
+expect: 0-6
+
+pattern: ^(?:(?aa)\u1FD3)$
+flags: i
+subject: \u1FD3
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FD3])$
+flags: i
+subject: \u03B9\u0308\u0301
+expect: 0-6
+
+pattern: ^(?:(?aa)[\u1FD3])$
+flags: i
+subject: \u1FD3
+expect: 0-3
+
+pattern: ^(?:(?aa)\u03B9\u0308\u0301)$
+flags: i
+subject: \u03B9\u0308\u0301
+expect: 0-6
+
+pattern: ^(?:(?aa)\u03B9\u0308\u0301)$
+flags: i
+subject: \u1FD3
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FD6)$
+flags: i
+subject: \u03B9\u0342
+expect: 0-4
+
+pattern: ^(?:(?aa)\u1FD6)$
+flags: i
+subject: \u1FD6
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FD6])$
+flags: i
+subject: \u03B9\u0342
+expect: 0-4
+
+pattern: ^(?:(?aa)[\u1FD6])$
+flags: i
+subject: \u1FD6
+expect: 0-3
+
+pattern: ^(?:(?aa)\u03B9\u0342)$
+flags: i
+subject: \u03B9\u0342
+expect: 0-4
+
+pattern: ^(?:(?aa)\u03B9\u0342)$
+flags: i
+subject: \u1FD6
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FD7)$
+flags: i
+subject: \u03B9\u0308\u0342
+expect: 0-6
+
+pattern: ^(?:(?aa)\u1FD7)$
+flags: i
+subject: \u1FD7
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FD7])$
+flags: i
+subject: \u03B9\u0308\u0342
+expect: 0-6
+
+pattern: ^(?:(?aa)[\u1FD7])$
+flags: i
+subject: \u1FD7
+expect: 0-3
+
+pattern: ^(?:(?aa)\u03B9\u0308\u0342)$
+flags: i
+subject: \u03B9\u0308\u0342
+expect: 0-6
+
+pattern: ^(?:(?aa)\u03B9\u0308\u0342)$
+flags: i
+subject: \u1FD7
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FE2)$
+flags: i
+subject: \u03C5\u0308\u0300
+expect: 0-6
+
+pattern: ^(?:(?aa)\u1FE2)$
+flags: i
+subject: \u1FE2
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FE2])$
+flags: i
+subject: \u03C5\u0308\u0300
+expect: 0-6
+
+pattern: ^(?:(?aa)[\u1FE2])$
+flags: i
+subject: \u1FE2
+expect: 0-3
+
+pattern: ^(?:(?aa)\u03C5\u0308\u0300)$
+flags: i
+subject: \u03C5\u0308\u0300
+expect: 0-6
+
+pattern: ^(?:(?aa)\u03C5\u0308\u0300)$
+flags: i
+subject: \u1FE2
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FE3)$
+flags: i
+subject: \u03C5\u0308\u0301
+expect: 0-6
+
+pattern: ^(?:(?aa)\u1FE3)$
+flags: i
+subject: \u1FE3
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FE3])$
+flags: i
+subject: \u03C5\u0308\u0301
+expect: 0-6
+
+pattern: ^(?:(?aa)[\u1FE3])$
+flags: i
+subject: \u1FE3
+expect: 0-3
+
+pattern: ^(?:(?aa)\u03C5\u0308\u0301)$
+flags: i
+subject: \u03C5\u0308\u0301
+expect: 0-6
+
+pattern: ^(?:(?aa)\u03C5\u0308\u0301)$
+flags: i
+subject: \u1FE3
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FE4)$
+flags: i
+subject: \u03C1\u0313
+expect: 0-4
+
+pattern: ^(?:(?aa)\u1FE4)$
+flags: i
+subject: \u1FE4
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FE4])$
+flags: i
+subject: \u03C1\u0313
+expect: 0-4
+
+pattern: ^(?:(?aa)[\u1FE4])$
+flags: i
+subject: \u1FE4
+expect: 0-3
+
+pattern: ^(?:(?aa)\u03C1\u0313)$
+flags: i
+subject: \u03C1\u0313
+expect: 0-4
+
+pattern: ^(?:(?aa)\u03C1\u0313)$
+flags: i
+subject: \u1FE4
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FE6)$
+flags: i
+subject: \u03C5\u0342
+expect: 0-4
+
+pattern: ^(?:(?aa)\u1FE6)$
+flags: i
+subject: \u1FE6
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FE6])$
+flags: i
+subject: \u03C5\u0342
+expect: 0-4
+
+pattern: ^(?:(?aa)[\u1FE6])$
+flags: i
+subject: \u1FE6
+expect: 0-3
+
+pattern: ^(?:(?aa)\u03C5\u0342)$
+flags: i
+subject: \u03C5\u0342
+expect: 0-4
+
+pattern: ^(?:(?aa)\u03C5\u0342)$
+flags: i
+subject: \u1FE6
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FE7)$
+flags: i
+subject: \u03C5\u0308\u0342
+expect: 0-6
+
+pattern: ^(?:(?aa)\u1FE7)$
+flags: i
+subject: \u1FE7
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FE7])$
+flags: i
+subject: \u03C5\u0308\u0342
+expect: 0-6
+
+pattern: ^(?:(?aa)[\u1FE7])$
+flags: i
+subject: \u1FE7
+expect: 0-3
+
+pattern: ^(?:(?aa)\u03C5\u0308\u0342)$
+flags: i
+subject: \u03C5\u0308\u0342
+expect: 0-6
+
+pattern: ^(?:(?aa)\u03C5\u0308\u0342)$
+flags: i
+subject: \u1FE7
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FF2)$
+flags: i
+subject: \u1F7C\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1FF2)$
+flags: i
+subject: \u1FF2
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FF2])$
+flags: i
+subject: \u1F7C\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)[\u1FF2])$
+flags: i
+subject: \u1FF2
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1F7C\u03B9)$
+flags: i
+subject: \u1F7C\u03B9
+expect: 0-5
+
+pattern: ^(?:(?aa)\u1F7C\u03B9)$
+flags: i
+subject: \u1FF2
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FF3)$
+flags: i
+subject: \u03C9\u03B9
+expect: 0-4
+
+pattern: ^(?:(?aa)\u1FF3)$
+flags: i
+subject: \u1FF3
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FF3])$
+flags: i
+subject: \u03C9\u03B9
+expect: 0-4
+
+pattern: ^(?:(?aa)[\u1FF3])$
+flags: i
+subject: \u1FF3
+expect: 0-3
+
+pattern: ^(?:(?aa)\u03C9\u03B9)$
+flags: i
+subject: \u03C9\u03B9
+expect: 0-4
+
+pattern: ^(?:(?aa)\u03C9\u03B9)$
+flags: i
+subject: \u1FF3
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FF4)$
+flags: i
+subject: \u03CE\u03B9
+expect: 0-4
+
+pattern: ^(?:(?aa)\u1FF4)$
+flags: i
+subject: \u1FF4
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FF4])$
+flags: i
+subject: \u03CE\u03B9
+expect: 0-4
+
+pattern: ^(?:(?aa)[\u1FF4])$
+flags: i
+subject: \u1FF4
+expect: 0-3
+
+pattern: ^(?:(?aa)\u03CE\u03B9)$
+flags: i
+subject: \u03CE\u03B9
+expect: 0-4
+
+pattern: ^(?:(?aa)\u03CE\u03B9)$
+flags: i
+subject: \u1FF4
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FF6)$
+flags: i
+subject: \u03C9\u0342
+expect: 0-4
+
+pattern: ^(?:(?aa)\u1FF6)$
+flags: i
+subject: \u1FF6
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FF6])$
+flags: i
+subject: \u03C9\u0342
+expect: 0-4
+
+pattern: ^(?:(?aa)[\u1FF6])$
+flags: i
+subject: \u1FF6
+expect: 0-3
+
+pattern: ^(?:(?aa)\u03C9\u0342)$
+flags: i
+subject: \u03C9\u0342
+expect: 0-4
+
+pattern: ^(?:(?aa)\u03C9\u0342)$
+flags: i
+subject: \u1FF6
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FF7)$
+flags: i
+subject: \u03C9\u0342\u03B9
+expect: 0-6
+
+pattern: ^(?:(?aa)\u1FF7)$
+flags: i
+subject: \u1FF7
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FF7])$
+flags: i
+subject: \u03C9\u0342\u03B9
+expect: 0-6
+
+pattern: ^(?:(?aa)[\u1FF7])$
+flags: i
+subject: \u1FF7
+expect: 0-3
+
+pattern: ^(?:(?aa)\u03C9\u0342\u03B9)$
+flags: i
+subject: \u03C9\u0342\u03B9
+expect: 0-6
+
+pattern: ^(?:(?aa)\u03C9\u0342\u03B9)$
+flags: i
+subject: \u1FF7
+expect: 0-3
+
+pattern: ^(?:(?aa)\u1FFC)$
+flags: i
+subject: \u03C9\u03B9
+expect: 0-4
+
+pattern: ^(?:(?aa)\u1FFC)$
+flags: i
+subject: \u1FFC
+expect: 0-3
+
+pattern: ^(?:(?aa)[\u1FFC])$
+flags: i
+subject: \u03C9\u03B9
+expect: 0-4
+
+pattern: ^(?:(?aa)[\u1FFC])$
+flags: i
+subject: \u1FFC
+expect: 0-3
+
+pattern: ^(?:(?aa)\u03C9\u03B9)$
+flags: i
+subject: \u03C9\u03B9
+expect: 0-4
+
+pattern: ^(?:(?aa)\u03C9\u03B9)$
+flags: i
+subject: \u1FFC
+expect: 0-3
+
+pattern: ^(?:(?aa)\uFB00)$
+flags: i
+subject: ff
+expect: nomatch
+
+pattern: ^(?:(?aa)\uFB00)$
+flags: i
+subject: \uFB00
+expect: 0-3
+
+pattern: ^(?:(?aa)[\uFB00])$
+flags: i
+subject: ff
+expect: nomatch
+
+pattern: ^(?:(?aa)[\uFB00])$
+flags: i
+subject: \uFB00
+expect: 0-3
+
+pattern: ^(?:(?aa)ff)$
+flags: i
+subject: ff
+expect: 0-2
+
+pattern: ^(?:(?aa)ff)$
+flags: i
+subject: \uFB00
+expect: nomatch
+
+pattern: ^(?:(?aa)\uFB01)$
+flags: i
+subject: fi
+expect: nomatch
+
+pattern: ^(?:(?aa)\uFB01)$
+flags: i
+subject: \uFB01
+expect: 0-3
+
+pattern: ^(?:(?aa)[\uFB01])$
+flags: i
+subject: fi
+expect: nomatch
+
+pattern: ^(?:(?aa)[\uFB01])$
+flags: i
+subject: \uFB01
+expect: 0-3
+
+pattern: ^(?:(?aa)fi)$
+flags: i
+subject: fi
+expect: 0-2
+
+pattern: ^(?:(?aa)fi)$
+flags: i
+subject: \uFB01
+expect: nomatch
+
+pattern: ^(?:(?aa)\uFB02)$
+flags: i
+subject: fl
+expect: nomatch
+
+pattern: ^(?:(?aa)\uFB02)$
+flags: i
+subject: \uFB02
+expect: 0-3
+
+pattern: ^(?:(?aa)[\uFB02])$
+flags: i
+subject: fl
+expect: nomatch
+
+pattern: ^(?:(?aa)[\uFB02])$
+flags: i
+subject: \uFB02
+expect: 0-3
+
+pattern: ^(?:(?aa)fl)$
+flags: i
+subject: fl
+expect: 0-2
+
+pattern: ^(?:(?aa)fl)$
+flags: i
+subject: \uFB02
+expect: nomatch
+
+pattern: ^(?:(?aa)\uFB03)$
+flags: i
+subject: ffi
+expect: nomatch
+
+pattern: ^(?:(?aa)\uFB03)$
+flags: i
+subject: \uFB03
+expect: 0-3
+
+pattern: ^(?:(?aa)[\uFB03])$
+flags: i
+subject: ffi
+expect: nomatch
+
+pattern: ^(?:(?aa)[\uFB03])$
+flags: i
+subject: \uFB03
+expect: 0-3
+
+pattern: ^(?:(?aa)ffi)$
+flags: i
+subject: ffi
+expect: 0-3
+
+pattern: ^(?:(?aa)ffi)$
+flags: i
+subject: \uFB03
+expect: nomatch
+
+pattern: ^(?:(?aa)\uFB04)$
+flags: i
+subject: ffl
+expect: nomatch
+
+pattern: ^(?:(?aa)\uFB04)$
+flags: i
+subject: \uFB04
+expect: 0-3
+
+pattern: ^(?:(?aa)[\uFB04])$
+flags: i
+subject: ffl
+expect: nomatch
+
+pattern: ^(?:(?aa)[\uFB04])$
+flags: i
+subject: \uFB04
+expect: 0-3
+
+pattern: ^(?:(?aa)ffl)$
+flags: i
+subject: ffl
+expect: 0-3
+
+pattern: ^(?:(?aa)ffl)$
+flags: i
+subject: \uFB04
+expect: nomatch
+
+pattern: ^(?:(?aa)\uFB05)$
+flags: i
+subject: st
+expect: nomatch
+
+pattern: ^(?:(?aa)\uFB05)$
+flags: i
+subject: \uFB05
+expect: 0-3
+
+pattern: ^(?:(?aa)[\uFB05])$
+flags: i
+subject: st
+expect: nomatch
+
+pattern: ^(?:(?aa)[\uFB05])$
+flags: i
+subject: \uFB05
+expect: 0-3
+
+pattern: ^(?:(?aa)st)$
+flags: i
+subject: st
+expect: 0-2
+
+pattern: ^(?:(?aa)st)$
+flags: i
+subject: \uFB05
+expect: nomatch
+
+pattern: ^(?:(?aa)\uFB06)$
+flags: i
+subject: st
+expect: nomatch
+
+pattern: ^(?:(?aa)\uFB06)$
+flags: i
+subject: \uFB06
+expect: 0-3
+
+pattern: ^(?:(?aa)[\uFB06])$
+flags: i
+subject: st
+expect: nomatch
+
+pattern: ^(?:(?aa)[\uFB06])$
+flags: i
+subject: \uFB06
+expect: 0-3
+
+pattern: ^(?:(?aa)st)$
+flags: i
+subject: st
+expect: 0-2
+
+pattern: ^(?:(?aa)st)$
+flags: i
+subject: \uFB06
+expect: nomatch
+
+pattern: ^(?:(?aa)\uFB13)$
+flags: i
+subject: \u0574\u0576
+expect: 0-4
+
+pattern: ^(?:(?aa)\uFB13)$
+flags: i
+subject: \uFB13
+expect: 0-3
+
+pattern: ^(?:(?aa)[\uFB13])$
+flags: i
+subject: \u0574\u0576
+expect: 0-4
+
+pattern: ^(?:(?aa)[\uFB13])$
+flags: i
+subject: \uFB13
+expect: 0-3
+
+pattern: ^(?:(?aa)\u0574\u0576)$
+flags: i
+subject: \u0574\u0576
+expect: 0-4
+
+pattern: ^(?:(?aa)\u0574\u0576)$
+flags: i
+subject: \uFB13
+expect: 0-3
+
+pattern: ^(?:(?aa)\uFB14)$
+flags: i
+subject: \u0574\u0565
+expect: 0-4
+
+pattern: ^(?:(?aa)\uFB14)$
+flags: i
+subject: \uFB14
+expect: 0-3
+
+pattern: ^(?:(?aa)[\uFB14])$
+flags: i
+subject: \u0574\u0565
+expect: 0-4
+
+pattern: ^(?:(?aa)[\uFB14])$
+flags: i
+subject: \uFB14
+expect: 0-3
+
+pattern: ^(?:(?aa)\u0574\u0565)$
+flags: i
+subject: \u0574\u0565
+expect: 0-4
+
+pattern: ^(?:(?aa)\u0574\u0565)$
+flags: i
+subject: \uFB14
+expect: 0-3
+
+pattern: ^(?:(?aa)\uFB15)$
+flags: i
+subject: \u0574\u056B
+expect: 0-4
+
+pattern: ^(?:(?aa)\uFB15)$
+flags: i
+subject: \uFB15
+expect: 0-3
+
+pattern: ^(?:(?aa)[\uFB15])$
+flags: i
+subject: \u0574\u056B
+expect: 0-4
+
+pattern: ^(?:(?aa)[\uFB15])$
+flags: i
+subject: \uFB15
+expect: 0-3
+
+pattern: ^(?:(?aa)\u0574\u056B)$
+flags: i
+subject: \u0574\u056B
+expect: 0-4
+
+pattern: ^(?:(?aa)\u0574\u056B)$
+flags: i
+subject: \uFB15
+expect: 0-3
+
+pattern: ^(?:(?aa)\uFB16)$
+flags: i
+subject: \u057E\u0576
+expect: 0-4
+
+pattern: ^(?:(?aa)\uFB16)$
+flags: i
+subject: \uFB16
+expect: 0-3
+
+pattern: ^(?:(?aa)[\uFB16])$
+flags: i
+subject: \u057E\u0576
+expect: 0-4
+
+pattern: ^(?:(?aa)[\uFB16])$
+flags: i
+subject: \uFB16
+expect: 0-3
+
+pattern: ^(?:(?aa)\u057E\u0576)$
+flags: i
+subject: \u057E\u0576
+expect: 0-4
+
+pattern: ^(?:(?aa)\u057E\u0576)$
+flags: i
+subject: \uFB16
+expect: 0-3
+
+pattern: ^(?:(?aa)\uFB17)$
+flags: i
+subject: \u0574\u056D
+expect: 0-4
+
+pattern: ^(?:(?aa)\uFB17)$
+flags: i
+subject: \uFB17
+expect: 0-3
+
+pattern: ^(?:(?aa)[\uFB17])$
+flags: i
+subject: \u0574\u056D
+expect: 0-4
+
+pattern: ^(?:(?aa)[\uFB17])$
+flags: i
+subject: \uFB17
+expect: 0-3
+
+pattern: ^(?:(?aa)\u0574\u056D)$
+flags: i
+subject: \u0574\u056D
+expect: 0-4
+
+pattern: ^(?:(?aa)\u0574\u056D)$
+flags: i
+subject: \uFB17
+expect: 0-3
+
 pattern: ^(?:[\u00DFq])$
 flags: i
 subject: ss

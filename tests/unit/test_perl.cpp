@@ -1490,6 +1490,43 @@ TEST(Perl, TheSecondAOfSlashAaCutsEveryFoldOrbitAtAscii) {
   EXPECT_TRUE(search("(?aia:s)", "S", GRX_SYNTAX_PERL).matched);
   EXPECT_TRUE(search("(?aai:\xC3\x80)", "\xC3\xA0", GRX_SYNTAX_PERL).matched);
 
+  // And `/aa` does not take *full* folding with it, though this library and
+  // its documentation both said it did. The claim was that every full fold
+  // has an ASCII character somewhere in it, so none could survive the cut.
+  // That is false for 87 of the 104 code points with a full fold: Perl keeps
+  // a fold under `/aa` exactly when no code point of the fold is ASCII.
+  //
+  // `ss` is ASCII, so `\u00df` loses it. `\u0390` folds to
+  // U+03B9 U+0308 U+0301 and `\u1fb3` to U+03B1 U+03B9, neither of which
+  // touches ASCII, so both keep it - in a class as well as bare, and in the
+  // reverse direction, which is the half a corpus of forward cases misses.
+  const std::string sharp = "\xC3\x9F";              // U+00DF -> "ss"
+  const std::string iota = "\xCE\x90";               // U+0390 -> 3, no ASCII
+  const std::string iota_fold = "\xCE\xB9\xCC\x88\xCC\x81";
+  const std::string alpha_i = "\xE1\xBE\xB3";        // U+1FB3 -> U+03B1 U+03B9
+  const std::string alpha_i_fold = "\xCE\xB1\xCE\xB9";
+  const std::string ff = "\xEF\xAC\x80";             // U+FB00 -> "ff"
+
+  EXPECT_EQ(span_of("(?i)^(?:" + sharp + ")$", "ss", GRX_SYNTAX_PERL), "0-2");
+  EXPECT_EQ(span_of("(?aai)^(?:" + sharp + ")$", "ss", GRX_SYNTAX_PERL),
+      "nomatch");
+  EXPECT_EQ(span_of("(?aai)^(?:" + iota + ")$", iota_fold, GRX_SYNTAX_PERL),
+      "0-6");
+  EXPECT_EQ(span_of("(?aai)^(?:[" + iota + "])$", iota_fold, GRX_SYNTAX_PERL),
+      "0-6");
+  EXPECT_EQ(span_of("(?aai)^(?:" + alpha_i + ")$", alpha_i_fold,
+                GRX_SYNTAX_PERL),
+      "0-4");
+
+  // The reverse direction: a fold written out, matched by the single
+  // character that folds to it. Kept when the fold is not ASCII, dropped
+  // when it is.
+  EXPECT_EQ(span_of("(?aai)^(?:" + alpha_i_fold + ")$", alpha_i,
+                GRX_SYNTAX_PERL),
+      "0-3");
+  EXPECT_EQ(span_of("(?i)^(?:ff)$", ff, GRX_SYNTAX_PERL), "0-3");
+  EXPECT_EQ(span_of("(?aai)^(?:ff)$", ff, GRX_SYNTAX_PERL), "nomatch");
+
   // `\K` may be repeated in Perl and is error 109 in pcre2test. Repeating it
   // changes nothing - it moves the reported start to here, and moving it
   // here again leaves it here - which is why `(?iaa:A?\K*)` reports 1-1.

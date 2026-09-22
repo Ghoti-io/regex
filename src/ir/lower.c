@@ -626,6 +626,35 @@ static GRX_Result lower_codepoint(Lowering * low, uint32_t codepoint,
   return GRX_OK;
 }
 
+/** Whether this folding is a full one, `/aa` or not. */
+static int full_folding(GRX_FoldKind kind) {
+  return kind == GRX_FOLD_FULL || kind == GRX_FOLD_FULL_ASCII_APART;
+}
+
+/**
+ * Whether `/aa` lets this full fold through.
+ *
+ * Perl keeps a full fold under `/aa` exactly when no code point of the fold
+ * is ASCII, which is the same cut GRX_FOLD_SIMPLE_ASCII_APART makes in an
+ * orbit: a fold with an ASCII character in it is a fold that would let an
+ * ASCII character stand for a non-ASCII one, and that is what the flag is
+ * for. `ß` to "ss" and `ﬀ` to "ff" go; `U+0390` to `U+03B9 U+0308 U+0301`
+ * and `U+1FB3` to `U+03B1 U+03B9` stay, and 87 of the 104 full folds are of
+ * the second kind.
+ */
+static int full_fold_allowed(
+    GRX_FoldKind kind, const uint32_t * fold, size_t length) {
+  if (kind != GRX_FOLD_FULL_ASCII_APART) {
+    return 1;
+  }
+  for (size_t i = 0; i < length; i++) {
+    if (fold[i] < 0x80) {
+      return 0;
+    }
+  }
+  return 1;
+}
+
 /**
  * Build the folded form of a run of code points.
  *
@@ -642,6 +671,12 @@ static GRX_Result fold_run_target(Lowering * low, const uint32_t * points,
   for (size_t i = 0; i < length; i++) {
     uint32_t folded[GRX_FULL_FOLD_MAX];
     size_t written = grx_unicode_fold_full(points[i], folded);
+    if (!full_fold_allowed(low->fold, folded, written)) {
+      // `/aa` refuses this one, so the code point stands for itself and the
+      // ordinary per-code-point path folds it simply, cut at U+0080.
+      folded[0] = points[i];
+      written = 1;
+    }
     for (size_t j = 0; j < written; j++) {
       GRX_Result result = grx_arena_append(out_target, &folded[j], NULL);
       if (result != GRX_OK) {
@@ -665,7 +700,8 @@ static GRX_Result fold_run_target(Lowering * low, const uint32_t * points,
  * When neither holds, the fold is the run's own code points folded simply
  * and the chain of classes lower_run() already builds is exactly right.
  */
-static int fold_run_needed(const uint32_t * target, size_t n, size_t length) {
+static int fold_run_needed(
+    GRX_FoldKind kind, const uint32_t * target, size_t n, size_t length) {
   if (n != length) {
     return 1;
   }
@@ -673,6 +709,13 @@ static int fold_run_needed(const uint32_t * target, size_t n, size_t length) {
   for (size_t i = 0; i < n; i++) {
     for (size_t span = 2; span <= GRX_FULL_FOLD_MAX && i + span <= n; span++) {
       uint32_t sources[GRX_FULL_FOLD_SOURCE_MAX];
+      // A source's fold *is* this span, so `/aa` refuses the source exactly
+      // when it refuses the span. Without this, `(?aa)ff` would still be
+      // matched by the `ﬀ` ligature - the reverse direction of the same
+      // rule, and the one a corpus of forward cases would not catch.
+      if (!full_fold_allowed(kind, target + i, span)) {
+        continue;
+      }
       if (grx_unicode_fold_full_sources(target + i, span, sources)) {
         return 1;
       }
@@ -699,7 +742,8 @@ static GRX_Result fold_run_plan(Lowering * low, const uint32_t * points,
 
   const uint32_t * folded = GRX_ARENA_AT(const uint32_t, out_target, 0);
   if (folded) {
-    *out_wanted = fold_run_needed(folded, out_target->count, length);
+    *out_wanted
+        = fold_run_needed(low->fold, folded, out_target->count, length);
   }
   return GRX_OK;
 }
@@ -1138,14 +1182,21 @@ static void adopt_options(Lowering * low, uint32_t options) {
   low->fold = GRX_FOLD_NONE;
   if (options & GRX_OPT_CASELESS) {
     low->fold = utf ? low->profile.fold_utf : low->profile.fold;
-    // `/aa` cuts every orbit at U+0080, and it takes full folding with it:
-    // every code point with a full fold is outside ASCII and every one of
-    // those folds is at least partly inside it, so there is no full fold
-    // `/aa` would let through. `ß` stops matching "ss" there, which is the
-    // same rule that stops `s` matching U+017F.
-    if ((options & GRX_OPT_ASCII_FOLD_SEPARATE)
-        && (low->fold == GRX_FOLD_SIMPLE || low->fold == GRX_FOLD_FULL)) {
-      low->fold = GRX_FOLD_SIMPLE_ASCII_APART;
+    // `/aa` cuts every orbit at U+0080. It does *not* take full folding with
+    // it, though this said it did: the claim was that every full fold has an
+    // ASCII character somewhere in it, and that is false for 87 of the 104
+    // `F` lines of CaseFolding.txt. Perl keeps a full fold under `/aa`
+    // exactly when no code point of the fold is ASCII, which is what
+    // GRX_FOLD_FULL_ASCII_APART means and full_fold_allowed() decides. `ß`
+    // stops matching "ss" - its fold is ASCII - while `U+0390` goes on
+    // matching `U+03B9 U+0308 U+0301`, none of which is.
+    if (options & GRX_OPT_ASCII_FOLD_SEPARATE) {
+      if (low->fold == GRX_FOLD_SIMPLE) {
+        low->fold = GRX_FOLD_SIMPLE_ASCII_APART;
+      }
+      else if (low->fold == GRX_FOLD_FULL) {
+        low->fold = GRX_FOLD_FULL_ASCII_APART;
+      }
     }
   }
 }
@@ -1862,7 +1913,7 @@ static GRX_Result lower_sequence(Lowering * low, const GRX_Node * node,
     // only matches because the fold of one may finish inside the fold of
     // the next. Every other folding, and every run that turns out not to
     // need this, takes the ordinary path below.
-    if (kind == GRX_IR_CONCAT && low->fold == GRX_FOLD_FULL
+    if (kind == GRX_IR_CONCAT && full_folding(low->fold)
         && child_node->kind == GRX_NODE_LITERAL) {
       uint32_t after = child;
       GRX_Arena run;
@@ -2295,7 +2346,7 @@ static GRX_Result lower_run(Lowering * low, const uint32_t * points,
   // Full folding first, because it is the one folding that cannot be taken a
   // code point at a time - and, for most runs, it turns out that it can be
   // after all, which is what fold_run_needed() decides.
-  if (low->fold == GRX_FOLD_FULL && length) {
+  if (full_folding(low->fold) && length) {
     GRX_Arena target;
     int wanted = 0;
     GRX_Result result = fold_run_plan(low, points, length, &target, &wanted);
@@ -2477,7 +2528,7 @@ static GRX_Result lower_class_set(
 static GRX_Result lower_class_full_folds(Lowering * low,
     const GRX_Node * node, uint32_t class_node, uint32_t * out_node) {
   *out_node = class_node;
-  if (low->fold != GRX_FOLD_FULL || (node->flags & GRX_NODE_NEGATED)) {
+  if (!full_folding(low->fold) || (node->flags & GRX_NODE_NEGATED)) {
     return GRX_OK;
   }
 
@@ -2503,7 +2554,7 @@ static GRX_Result lower_class_full_folds(Lowering * low,
 
     uint32_t fold[GRX_FULL_FOLD_MAX];
     size_t length = grx_unicode_fold_full(item->lo, fold);
-    if (length <= 1) {
+    if (length <= 1 || !full_fold_allowed(low->fold, fold, length)) {
       continue;
     }
 

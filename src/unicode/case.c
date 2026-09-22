@@ -228,7 +228,11 @@ size_t grx_unicode_orbit(GRX_FoldKind kind, uint32_t codepoint,
     // several, which no orbit can say.
     case GRX_FOLD_FULL:
       return grx_unicode_fold_orbit(codepoint, out);
-    case GRX_FOLD_SIMPLE_ASCII_APART: {
+    case GRX_FOLD_SIMPLE_ASCII_APART:
+    // Full folding's orbits are the simple ones here too; what `/aa` adds is
+    // the cut below, and which *full* folds survive it, which is lowering's
+    // business and not an orbit's.
+    case GRX_FOLD_FULL_ASCII_APART: {
       // The simple orbit, less whatever is on the other side of U+0080.
       size_t count = grx_unicode_fold_orbit(codepoint, out);
       int ascii = codepoint < 0x80;
@@ -268,6 +272,7 @@ size_t grx_unicode_orbit_table_size(GRX_FoldKind kind) {
     case GRX_FOLD_SIMPLE:
     case GRX_FOLD_SIMPLE_ASCII_APART:
     case GRX_FOLD_FULL:
+    case GRX_FOLD_FULL_ASCII_APART:
       return grx_unicode_fold_orbit_count;
     case GRX_FOLD_ES_LEGACY:
       return grx_unicode_es_legacy_orbit_count;
@@ -292,7 +297,8 @@ size_t grx_unicode_orbit_table_at(GRX_FoldKind kind, size_t index,
     case GRX_FOLD_SIMPLE:
     case GRX_FOLD_SIMPLE_ASCII_APART:
     case GRX_FOLD_FULL:
-      // The same table. Where the two differ is in what a *class* closure
+    case GRX_FOLD_FULL_ASCII_APART:
+      // The same table. Where they differ is in what a *class* closure
       // does with an orbit that straddles U+0080, which is
       // grx_charclass_fold_closure()'s business and not this table's.
       entry = &grx_unicode_fold_orbits[index];
