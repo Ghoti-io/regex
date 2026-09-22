@@ -1638,6 +1638,20 @@ clean: ## Remove all contents of the build directories.
 	-@rm -rvf $(APP_DIR)/*
 	-@rm -rvf $(GEN_DIR)/*
 	-@rm -rvf $(ASAN_BUILD_DIR)
+# The fuzz tree too, which it did not remove for as long as the tree existed.
+# ASan's was here and fuzz's was not - a sibling directory under the same
+# BUILD_DIR, missed when the second of the two was added - so `make clean`
+# left objects compiled against the *previous* prefix's headers, and the next
+# `fuzz-run-*` linked them against the new .so. Header-resident inline code of
+# one vintage against compiled functions of another, arrived at by way of the
+# command whose entire job is to prevent it, and a fuzz soak is the worst
+# place to find out: a crash would be attributable to nothing.
+#
+# Safe for the corpus, which is what fuzz-clean's "keeps the corpus" is about:
+# FUZZ_CORPUS is tests/fuzz/corpus, outside BUILD_DIR entirely, so no rm here
+# can reach the 22,584 accumulated inputs. Checked before this line was
+# written rather than after.
+	-@rm -rvf $(FUZZ_DIR)
 
 help: ## Display this help
 	@grep -E '^[ a-zA-Z_-]+:.*?## .*$$' Makefile | sort | sed 's/\\([^:]*\\):.*## \\(.*\\)/\\1:\\2/' | awk -F: '{printf "%-20s %s\n", $$1, $$2}' | sed "s/(SUITE)/$(SUITE)/g; s/(PROJECT)/$(PROJECT)/g; s/(BRANCH)/$(BRANCH)/g"
