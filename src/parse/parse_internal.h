@@ -249,6 +249,13 @@ typedef struct GRX_ClassItem {
  * | OPTIONS | options to set | options to clear | SCOPED; one child when scoped |
  * | CLASS_OP | GRX_ClassOpKind | - | children are the operands |
  * | STRING_SET | first string in `strings` | count of strings | - |
+ * | CALLOUT | the number, 0 for a string callout | string offset in `names`, or GRX_INDEX_NONE | `min` is the string's length, `max` its offset in the pattern |
+ *
+ * CALLOUT is the one non-REPEAT kind that uses `min` and `max`, which is
+ * cheaper than a side table for two numbers: a string's length is not its
+ * span in the pattern whenever a delimiter was doubled, so neither can be
+ * computed from the other. `max` is recorded where the delimiter actually
+ * was rather than derived from the spelling of `(?C` afterwards.
  *
  * RECURSE's `b` carries two things because a call names a *definition*, not
  * a number, and the two spellings say so differently. `(?&b)` names one and
@@ -563,6 +570,18 @@ typedef struct GRX_GroupOpen {
   uint32_t flags;    ///< GRX_NODE_* bits for the node.
   uint32_t a;        ///< Kind-specific payload; see @ref GRX_Node.
   uint32_t b;        ///< Kind-specific payload.
+  /**
+   * @name The rest of the node's payload
+   *
+   * Copied onto the node exactly as `a` and `b` are, and named for the
+   * fields they land in. A hook that does not use them leaves them zero,
+   * which is what every kind but CALLOUT and REPEAT does - and REPEAT is
+   * not a group, so CALLOUT is the only hook here that fills them.
+   * @{
+   */
+  uint32_t min;
+  uint32_t max;
+  /** @} */
   int has_body;      ///< Non-zero when a body and a `)` follow.
   /**
    * Read a body that is not one alternation. NULL for the usual case.

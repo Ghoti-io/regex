@@ -95,6 +95,8 @@ const char * grx_node_kind_name(GRX_NodeKind kind) {
       return "branch-reset";
     case GRX_NODE_GRAPHEME:
       return "grapheme";
+    case GRX_NODE_CALLOUT:
+      return "callout";
     case GRX_NODE_COUNT:
     default:
       return "?";
@@ -633,6 +635,18 @@ static void dump_payload(
       break;
     case GRX_NODE_STRING_SET:
       fprintf(out, " strings=%u", node->b);
+      break;
+    case GRX_NODE_CALLOUT:
+      if (node->b == GRX_INDEX_NONE) {
+        fprintf(out, " number=%u", node->a);
+      }
+      else {
+        // The bytes, not a quoted form: a callout string may hold anything
+        // the pattern held, delimiters included.
+        const char * text = grx_pattern_name(pattern, node->b);
+        fprintf(out, " string@%u+%u=%.*s", node->a, node->min,
+            (int)node->min, text ? text : "");
+      }
       break;
     default:
       break;

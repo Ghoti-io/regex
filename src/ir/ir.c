@@ -43,9 +43,13 @@ static const char * ir_kind_name(GRX_IRKind kind) {
   static const char * const names[GRX_IR_COUNT] = {
     "empty", "char", "class", "any", "concat", "alternate", "repeat",
     "capture", "backref", "assert", "look", "atomic", "cond", "recurse",
-    "keep", "verb", "scan", "script-run", "fold-run",
+    "keep", "verb", "scan", "script-run", "fold-run", "callout",
   };
-  return (unsigned)kind < GRX_IR_COUNT ? names[kind] : "?";
+  // The NULL test is not defensive padding: a kind added without a name
+  // here is a zeroed slot, and returning it crashed testIr once already.
+  // "?" in a dump is a defect to chase; a segfault in a debugging aid is a
+  // defect that hides the one being chased.
+  return (unsigned)kind < GRX_IR_COUNT && names[kind] ? names[kind] : "?";
 }
 
 /** The name of an assertion, for the dump. */
@@ -534,6 +538,16 @@ static void dump_payload(FILE * out, const GRX_IR * ir, const GRX_IRNode * node)
       }
       break;
     }
+    case GRX_IR_CALLOUT:
+      if (node->b == GRX_INDEX_NONE) {
+        fprintf(out, " number=%u", node->a);
+      }
+      else {
+        const char * text = grx_ir_name(ir, node->b);
+        fprintf(out, " string@%u+%u=%.*s", node->max, node->min,
+            (int)node->min, text ? text : "");
+      }
+      break;
     default:
       break;
   }

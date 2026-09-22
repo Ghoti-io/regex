@@ -621,7 +621,11 @@ static GRX_Result parse_atom(GRX_Parser * parser, uint32_t * out_node) {
     // restore the value it had just written. `^a(?i:b)c$` matching "aBC" is
     // what that looked like.
     uint32_t outer_options = parser->options;
-    GRX_GroupOpen open = {GRX_NODE_GROUP, 0, 0, GRX_INDEX_NONE, 1, NULL};
+    GRX_GroupOpen open = {
+      .kind = GRX_NODE_GROUP,
+      .b = GRX_INDEX_NONE,
+      .has_body = 1,
+    };
     GRX_Result result = parser->frontend->group_open(parser, &open);
     if (result != GRX_OK) {
       return result;
@@ -635,6 +639,8 @@ static GRX_Result parse_atom(GRX_Parser * parser, uint32_t * out_node) {
     node->flags = open.flags;
     node->a = open.a;
     node->b = open.b;
+    node->min = open.min;
+    node->max = open.max;
 
     if (open.has_body) {
       if (parser->limits->max_nesting_depth

@@ -129,6 +129,8 @@ typedef struct GRX_ExecRequest {
    */
   GRX_Diag * out_diag;
   int memoize;              ///< Run the backtracker with a visited bitmap.
+  GRX_CalloutFn callout;    ///< Called at each `(?C...)`. May be NULL.
+  void * callout_data;      ///< Passed to `callout` untouched.
 } GRX_ExecRequest;
 
 /**

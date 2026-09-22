@@ -199,6 +199,16 @@ typedef enum {
    * *later* offset, so the span is taken in whichever order the two come.
    */
   GRX_OP_SCRIPT_RUN,
+  /**
+   * Report this position to the caller's @ref GRX_CalloutFn.
+   *
+   * `x` is the index of a @ref GRX_ProgramCallout in the program's
+   * `callouts`. The only instruction with an effect outside the match, and
+   * the only one whose behaviour depends on the *search* rather than on the
+   * program: with no function registered it is a no-op every engine steps
+   * over, and with one it runs on the backtracker alone.
+   */
+  GRX_OP_CALLOUT,
   GRX_OP_COUNT         ///< Closes the enum; not an opcode.
 } GRX_Opcode;
 
@@ -291,6 +301,23 @@ typedef struct GRX_Inst {
 } GRX_Inst;
 
 /**
+ * @brief One `(?C...)`, as an engine needs it.
+ *
+ * A record rather than the two operands of @ref GRX_Inst, because a callout
+ * carries four independent things and an instruction holds two. The offsets
+ * are size_t for the reason GRX_IR::look_spans is: a pattern offset is a
+ * size_t everywhere else, and truncating one here would be a silent lie in
+ * the field a caller uses to point at the pattern.
+ */
+typedef struct GRX_ProgramCallout {
+  size_t pattern_offset; ///< Where the next item begins: past this `)`.
+  size_t string_offset;  ///< Where the string's body began, before collapsing.
+  size_t string_length;  ///< Its length in bytes.
+  uint32_t number;       ///< `(?C7)`; 0 for `(?C)` and for a string callout.
+  uint32_t string;       ///< Offset in `callout_strings`, or GRX_INDEX_NONE.
+} GRX_ProgramCallout;
+
+/**
  * @brief A compiled program: instructions, the classes they name, and the
  * two properties that belong to the whole of it rather than to any node.
  */
@@ -313,6 +340,22 @@ typedef struct GRX_Program {
    * tree it came from.
    */
   GRX_Arena look_spans;
+  /**
+   * The `(?C...)` records a `GRX_OP_CALLOUT`'s `x` indexes.
+   *
+   * Copied out of the IR rather than shared with it, as the scan lists and
+   * the look spans are: a program outlives the tree it came from.
+   */
+  GRX_Arena callouts;
+  /**
+   * The bytes of every string callout, NUL-terminated and by offset.
+   *
+   * A byte arena rather than one `char *` each, so that the strings are one
+   * allocation. The terminator is a convenience for a caller printing one;
+   * GRX_ProgramCallout::string_length is the authority, because the bytes
+   * came from a counted pattern and may include a NUL.
+   */
+  GRX_Arena callout_strings;
   uint32_t flags;                 ///< GRX_PROGRAM_* bits.
   uint32_t register_count;        ///< Progress registers a thread needs.
   GRX_MatchPreference preference; ///< Which match a search reports.
@@ -372,6 +415,27 @@ GRX_Result grx_program_add(
  *   Invalidated by the next grx_program_add().
  */
 GRX_Inst * grx_program_at(const GRX_Program * program, uint32_t index);
+
+/**
+ * @brief The callout record at an index in a program.
+ *
+ * @param program The program.
+ * @param index The index, as a GRX_OP_CALLOUT's `x` holds it.
+ * @return The record, or NULL when the index is out of range.
+ */
+const GRX_ProgramCallout * grx_program_callout(
+    const GRX_Program * program, uint32_t index);
+
+/**
+ * @brief The bytes of a callout's string.
+ *
+ * @param program The program.
+ * @param offset The offset, as GRX_ProgramCallout::string holds it.
+ * @return The NUL-terminated bytes, or NULL for GRX_INDEX_NONE or an
+ *   offset out of range.
+ */
+const char * grx_program_callout_string(
+    const GRX_Program * program, uint32_t offset);
 
 /**
  * @brief The mnemonic for an opcode.

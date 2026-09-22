@@ -219,6 +219,23 @@ static GRX_Result exec(const GRX_Regex * regex, const char * subject,
   GRX_Engine engine = options->engine;
   int needs_backtracking = grx_exec_program_needs_backtracking(regex);
   int memoizable = grx_exec_program_is_memoizable(regex);
+  // A fourth row, and the only one that is a fact about the *search* rather
+  // than about the program: a caller who registered a GRX_CalloutFn against
+  // a pattern that has callouts is asking to be told where the match is,
+  // one arrival at a time, and that order is backtracking order. The Pike
+  // VM has no such order - two paths reaching one instruction are one
+  // thread there - and the bit-state engine would skip the arrivals its
+  // memo has already seen. So the three branches below are reused rather
+  // than a fourth written: AUTO takes the backtracker, and PIKE or BITSTATE
+  // named by hand is refused the way every other engine mismatch is.
+  //
+  // Without a function registered nothing changes, which is PCRE2's rule
+  // too, and is what keeps `a(?C1)b` a linear-time pattern for every caller
+  // who is not watching it.
+  if (options->callout && (regex->program.flags & GRX_PROGRAM_HAS_CALLOUT)) {
+    needs_backtracking = 1;
+    memoizable = 0;
+  }
   if (engine == GRX_ENGINE_AUTO) {
     engine = !needs_backtracking ? GRX_ENGINE_PIKE
         : memoizable             ? GRX_ENGINE_BITSTATE
@@ -264,6 +281,11 @@ static GRX_Result exec(const GRX_Regex * regex, const char * subject,
     .out_steps = &steps,
     .out_diag = &diag,
     .memoize = engine == GRX_ENGINE_BITSTATE,
+    // Passed even when the program has no callout in it: the engine tests
+    // for the function where it meets the instruction, and one place that
+    // decides whether callouts are live is one place to get it wrong.
+    .callout = options->callout,
+    .callout_data = options->callout_data,
   };
 
   GRX_Result result = engine == GRX_ENGINE_PIKE

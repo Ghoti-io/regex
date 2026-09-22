@@ -212,6 +212,17 @@ typedef enum {
   GRX_DIAG_INVALID_ARGUMENT,       ///< A caller-supplied argument is wrong.
   GRX_DIAG_INVALID_SUBJECT_UTF8,   ///< The subject is not valid UTF-8.
   GRX_DIAG_INTERNAL,               ///< An invariant of this library failed.
+  /**
+   * A @ref GRX_CalloutFn returned something other than GRX_OK.
+   *
+   * Out of group order because it was added after the rest, and appending
+   * is what keeps every other enumerator's value where it was.
+   *
+   * The result code the search returns is the callout's own, so this is the
+   * part that says where it came from: without it a callout returning
+   * GRX_ERR_OOM and the allocator failing are one record.
+   */
+  GRX_DIAG_CALLOUT_STOPPED,
 
   GRX_DIAG_COUNT ///< Closes the enum; not a diagnostic.
 } GRX_Diag;

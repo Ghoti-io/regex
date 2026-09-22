@@ -45,6 +45,7 @@
 
 #include <ghoti.io/regex/macros.h>
 
+#include <ghoti.io/regex/allocator.h>
 #include <ghoti.io/regex/core.h>
 #include <ghoti.io/regex/pattern.h>
 #include <ghoti.io/regex/syntax.h>
@@ -2955,11 +2956,25 @@ static GRX_Result pcre_skip_ignorable(GRX_Parser * parser);
  */
 static GRX_Result read_group_atom(GRX_Parser * parser, uint32_t * out_node) {
   size_t start = parser->position;
-  GRX_GroupOpen open = {GRX_NODE_GROUP, 0, 0, GRX_INDEX_NONE, 1, NULL};
+  GRX_GroupOpen open = {
+    .kind = GRX_NODE_GROUP,
+    .b = GRX_INDEX_NONE,
+    .has_body = 1,
+  };
 
   // `(?(?C9)(?=a)b|c)` puts callouts before the condition, and `(?(?#x)(?=a)`
-  // puts a comment there. Both are inert, and both are skipped here rather
-  // than being made children of a conditional that has no place for them.
+  // puts a comment there. Both are skipped here rather than being made
+  // children of a conditional that has no place for them: its children are
+  // the condition and the branches, positionally, and a fourth would change
+  // a shape lowering and codegen both read.
+  //
+  // For the comment that is exact. For the callout it is the one place this
+  // library does not report one that pcre2test does - `(?(?C9)(?=a)b|c)`
+  // prints callout 9 there, at the same positions a callout written just
+  // before the conditional would print it. The *match* is identical, and
+  // only a caller watching the sequence can tell. Recorded in
+  // documentation/dialects.md section 6 and pinned by
+  // CalloutInAConditionsPositionIsNotReported in tests/unit/test_callout.cpp.
   for (;;) {
     GRX_Result skipped = pcre_skip_ignorable(parser);
     if (skipped != GRX_OK) {
@@ -2973,7 +2988,8 @@ static GRX_Result read_group_atom(GRX_Parser * parser, uint32_t * out_node) {
     if (result != GRX_OK) {
       return result;
     }
-    if (open.kind == GRX_NODE_EMPTY && !open.has_body) {
+    if (!open.has_body
+        && (open.kind == GRX_NODE_EMPTY || open.kind == GRX_NODE_CALLOUT)) {
       continue;
     }
     break;
@@ -3732,10 +3748,9 @@ static GRX_Result pcre_group_open(GRX_Parser * parser, GRX_GroupOpen * out) {
   }
 
   if (c == 'C') {
-    // A callout. It reports a position to a caller that has registered a
-    // function, and this library has no such API - so it matches the same
-    // subjects with the callout as without, and accepting it changes no
-    // answer. Recorded in documentation/dialects.md section 6.
+    // A callout. It reports a position to a @ref GRX_CalloutFn the caller
+    // registered on the search, and changes no answer when there is none -
+    // which is PCRE2's rule for a callout with no function registered too.
     //
     // PCRE2's, and only PCRE2's: perl answers "Sequence (?C...) not
     // recognized in regex" for every spelling of it, `(?C)` included.
@@ -3743,54 +3758,115 @@ static GRX_Result pcre_group_open(GRX_Parser * parser, GRX_GroupOpen * out) {
       return grx_parse_fail(parser, GRX_DIAG_INVALID_GROUP_SYNTAX, start, 3);
     }
     parser->position++;
+    uint32_t number = 0;
+    uint32_t text = GRX_INDEX_NONE;
+    size_t text_length = 0;
+    size_t body_offset = 0;
     if (byte_at(parser, 0) == '`' || byte_at(parser, 0) == '\''
         || byte_at(parser, 0) == '"' || byte_at(parser, 0) == '^'
         || byte_at(parser, 0) == '%' || byte_at(parser, 0) == '#'
         || byte_at(parser, 0) == '$' || byte_at(parser, 0) == '{') {
       char opener = byte_at(parser, 0);
-      char closer = opener == '`' ? '`'
-          : opener == '\''       ? '\''
-          : opener == '"'        ? '"'
-          : opener == '{'        ? '}'
-                                 : opener;
+      char closer = opener == '{' ? '}' : opener;
       parser->position++;
-      while (!grx_parse_at_end(parser) && byte_at(parser, 0) != closer) {
+      // The body's offset in the pattern, which is what a caller gets as
+      // GRX_Callout::string_offset. Taken from where the delimiter actually
+      // was rather than computed from the spelling later.
+      body_offset = parser->position;
+      size_t body = parser->position;
+      // pcre2pattern: "If the ending delimiter is needed within the string,
+      // it must be doubled." So the delimiter's own character is the escape,
+      // and the collapsed string is shorter than the text it came from -
+      // which is why `(?C"a""b")` reports offset 4, length 3 and `a"b`, and
+      // why `(?C"a"")` is *unterminated* rather than the string `a"`.
+      size_t raw = 0;
+      size_t collapsed = 0;
+      int terminated = 0;
+      while (!grx_parse_at_end(parser)) {
+        if (byte_at(parser, 0) == closer) {
+          if (byte_at(parser, 1) != closer) {
+            terminated = 1;
+            break;
+          }
+          parser->position += 2;
+          raw += 2;
+          collapsed++;
+          continue;
+        }
         parser->position++;
+        raw++;
+        collapsed++;
       }
-      if (grx_parse_at_end(parser)) {
+      if (!terminated) {
         return grx_parse_fail(parser, GRX_DIAG_UNMATCHED_OPEN_PAREN, start, 1);
       }
       parser->position++;
+
+      text_length = collapsed;
+      if (raw == collapsed) {
+        GRX_Result added = grx_pattern_add_name(
+            parser->pattern, parser->text + body, collapsed, &text);
+        if (added != GRX_OK) {
+          return grx_parse_fail(parser, GRX_DIAG_OUT_OF_MEMORY, start, 1);
+        }
+      }
+      else {
+        // A doubled delimiter, so the stored string is not a span of the
+        // pattern and has to be built. Allocated rather than kept on the
+        // stack because a callout string has no length this library bounds
+        // below max_pattern_length.
+        const GRX_Allocator * allocator = parser->pattern->allocator;
+        char * buffer = gcu_allocator_malloc(allocator, collapsed);
+        if (!buffer) {
+          return grx_parse_fail(parser, GRX_DIAG_OUT_OF_MEMORY, start, 1);
+        }
+        size_t at = body;
+        size_t out_at = 0;
+        while (out_at < collapsed) {
+          buffer[out_at++] = parser->text[at];
+          at += parser->text[at] == closer ? 2 : 1;
+        }
+        GRX_Result added
+            = grx_pattern_add_name(parser->pattern, buffer, collapsed, &text);
+        gcu_allocator_free(allocator, buffer);
+        if (added != GRX_OK) {
+          return grx_parse_fail(parser, GRX_DIAG_OUT_OF_MEMORY, start, 1);
+        }
+      }
     }
     else {
       // The number identifies the callout to the caller's function and is
       // one byte wide in PCRE2: `(?C256)` is error 138 there, "number after
-      // (?C is greater than 255". A number this library does not pass to
-      // anybody is still a number the reference refuses, and the digits are
-      // where a pattern written for PCRE2 would find out.
-      size_t number = 0;
+      // (?C is greater than 255". The digits are where a pattern written
+      // for PCRE2 finds that out.
+      size_t digits = 0;
       int overflowed = 0;
       while (is_decimal(byte_at(parser, 0))) {
-        if (number > (GRX_PCRE_CALLOUT_MAX - (size_t)(byte_at(parser, 0)
+        if (digits > (GRX_PCRE_CALLOUT_MAX - (size_t)(byte_at(parser, 0)
                          - '0'))
                 / 10) {
           overflowed = 1;
         }
         else {
-          number = number * 10 + (size_t)(byte_at(parser, 0) - '0');
+          digits = digits * 10 + (size_t)(byte_at(parser, 0) - '0');
         }
         parser->position++;
       }
-      if (overflowed || number > GRX_PCRE_CALLOUT_MAX) {
+      if (overflowed || digits > GRX_PCRE_CALLOUT_MAX) {
         return grx_parse_fail(parser, GRX_DIAG_INVALID_GROUP_SYNTAX, start,
             parser->position - start);
       }
+      number = (uint32_t)digits;
     }
     if (!grx_parse_eat(parser, ')')) {
       return grx_parse_fail(parser, GRX_DIAG_UNMATCHED_OPEN_PAREN, start, 1);
     }
-    out->kind = GRX_NODE_EMPTY;
+    out->kind = GRX_NODE_CALLOUT;
     out->has_body = 0;
+    out->a = number;
+    out->b = text;
+    out->min = (uint32_t)text_length;
+    out->max = (uint32_t)body_offset;
     return GRX_OK;
   }
 
@@ -4119,6 +4195,15 @@ static GRX_Result pcre_check_quantifier_target(
     // is a syntax error in ECMAScript's Unicode mode. So is `(*ACCEPT)*`.
     // Both were refused until the corpus said otherwise.
     case GRX_NODE_EMPTY:
+      return grx_parse_fail(
+          parser, GRX_DIAG_NOTHING_TO_REPEAT, offset, length);
+
+    case GRX_NODE_CALLOUT:
+      // `a(?C1)*` is error 109 in pcre2test, which is the whole reason a
+      // callout is a node rather than something pcre_skip_ignorable() eats:
+      // a comment is lexically invisible and `a(?#x)*` repeats the `a`,
+      // where a callout is an atom that may not be repeated. Only PCRE2
+      // reaches this - perl refuses `(?C...)` outright.
       return grx_parse_fail(
           parser, GRX_DIAG_NOTHING_TO_REPEAT, offset, length);
 

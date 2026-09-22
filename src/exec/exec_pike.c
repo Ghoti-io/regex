@@ -772,6 +772,18 @@ static void add_thread(
         break;
       }
 
+      case GRX_OP_CALLOUT:
+        // Zero-width, and inert: this engine only ever meets a callout when
+        // no GRX_CalloutFn is registered, because exec.c sends a search
+        // that registered one to the backtracker - the order callouts fire
+        // in is backtracking order, and a thread set has no such order to
+        // report. So step over it. Resting the thread here, which the
+        // default arm would do, would stall it forever.
+        pike->stack[depth].pc = current_pc + 1;
+        pike->stack[depth].state = current;
+        depth++;
+        break;
+
       default:
         // A consuming instruction, or MATCH. This is where the thread rests
         // until the next position.

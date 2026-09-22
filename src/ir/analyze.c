@@ -583,6 +583,16 @@ static Span walk(Analysis * analysis, uint32_t node_index) {
       span = (Span) {0, 0, 0, 0, 0, 0};
       break;
 
+    case GRX_IR_CALLOUT:
+      // Zero-width, and regular. With no @ref GRX_CalloutFn registered a
+      // callout changes nothing a match can observe, so a pattern that is
+      // otherwise a plain automaton keeps its linear guarantee and the
+      // Pike VM keeps running it. Registering one is what takes a search
+      // off that engine, and that is decided per search in exec.c: a fact
+      // about a program must not depend on how a caller later runs it.
+      span = (Span) {0, 0, 0, 0, 0, 0};
+      break;
+
     case GRX_IR_COUNT:
     default:
       analysis->is_regular = 0;

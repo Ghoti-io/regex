@@ -40,9 +40,12 @@ const char * grx_opcode_name(GRX_Opcode op) {
     "assert", "progress-set", "reset", "reset-stale", "progress-check",
     "backref", "look",
     "scan", "rewind", "atomic-begin", "atomic-end", "cond", "call", "ret",
-    "keep", "verb", "script-run",
+    "keep", "verb", "script-run", "callout",
   };
-  return (unsigned)op < GRX_OP_COUNT ? names[op] : "?";
+  // NULL-checked for the reason ir_kind_name() is: an opcode added without
+  // a mnemonic is a zeroed slot, and a disassembler that crashes hides the
+  // defect it was opened to find.
+  return (unsigned)op < GRX_OP_COUNT && names[op] ? names[op] : "?";
 }
 
 /** The name of an assertion, for the disassembly. */
@@ -121,6 +124,10 @@ void grx_program_init(GRX_Program * program, const GRX_Allocator * allocator,
       &program->scan_lists, allocator, sizeof(uint32_t), 0, GRX_DIAG_NONE);
   grx_arena_init(
       &program->look_spans, allocator, sizeof(size_t), 0, GRX_DIAG_NONE);
+  grx_arena_init(&program->callouts, allocator, sizeof(GRX_ProgramCallout), 0,
+      GRX_DIAG_NONE);
+  grx_arena_init(
+      &program->callout_strings, allocator, sizeof(char), 0, GRX_DIAG_NONE);
   program->flags = 0;
   program->register_count = 0;
   program->preference = GRX_PREFER_LEFTMOST_FIRST;
@@ -232,6 +239,25 @@ static void dump_operands(
     case GRX_OP_SCRIPT_RUN:
       fprintf(out, "from=r%u", inst->x);
       break;
+    case GRX_OP_CALLOUT: {
+      const GRX_ProgramCallout * callout
+          = grx_program_callout(program, inst->x);
+      if (!callout) {
+        fprintf(out, "#%u", inst->x);
+      }
+      else if (callout->string == GRX_INDEX_NONE) {
+        fprintf(out, "number=%u at=%zu", callout->number,
+            callout->pattern_offset);
+      }
+      else {
+        const char * text
+            = grx_program_callout_string(program, callout->string);
+        fprintf(out, "string@%zu+%zu=%.*s at=%zu", callout->string_offset,
+            callout->string_length, (int)callout->string_length,
+            text ? text : "", callout->pattern_offset);
+      }
+      break;
+    }
     default:
       break;
   }
@@ -306,6 +332,24 @@ const uint32_t * grx_program_scan_list(
   return GRX_ARENA_AT(const uint32_t, &program->scan_lists, offset + 1);
 }
 
+const GRX_ProgramCallout * grx_program_callout(
+    const GRX_Program * program, uint32_t index) {
+  if (!program) {
+    return NULL;
+  }
+
+  return GRX_ARENA_AT(const GRX_ProgramCallout, &program->callouts, index);
+}
+
+const char * grx_program_callout_string(
+    const GRX_Program * program, uint32_t offset) {
+  if (!program || offset == GRX_INDEX_NONE) {
+    return NULL;
+  }
+
+  return GRX_ARENA_AT(const char, &program->callout_strings, offset);
+}
+
 void grx_program_clear(GRX_Program * program) {
   if (!program) {
     return;
@@ -315,5 +359,7 @@ void grx_program_clear(GRX_Program * program) {
   grx_class_table_clear(&program->classes);
   grx_arena_clear(&program->scan_lists);
   grx_arena_clear(&program->look_spans);
+  grx_arena_clear(&program->callouts);
+  grx_arena_clear(&program->callout_strings);
   program->register_count = 0;
 }

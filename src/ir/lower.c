@@ -1420,6 +1420,45 @@ static GRX_Result verb_node(Lowering * low, const GRX_Node * node,
 }
 
 /**
+ * Lower a callout: the payload copied across, and nothing else.
+ *
+ * It is carried through rather than dropped because it is a side effect.
+ * Everything else here that matches nothing - a comment, an empty group -
+ * is gone by now precisely because nothing can observe it, and a callout
+ * can: with a @ref GRX_CalloutFn registered it reports where the match is
+ * and can fail the path it stands on.
+ */
+static GRX_Result lower_callout(
+    Lowering * low, const GRX_Node * node, uint32_t * out_node) {
+  uint32_t text = GRX_INDEX_NONE;
+  if (node->b != GRX_INDEX_NONE) {
+    const char * source = grx_pattern_name(low->pattern, node->b);
+    if (!source) {
+      return fail(low, GRX_DIAG_INTERNAL, node);
+    }
+    // `node->min` bytes, not strlen: a callout string is whatever the
+    // pattern held between the delimiters, and a pattern is a counted
+    // string that may hold a NUL.
+    GRX_Result result = grx_ir_add_name(low->ir, source, node->min, &text);
+    if (result != GRX_OK) {
+      return storage_failed(low, result, node);
+    }
+  }
+
+  GRX_Result result = add(low, GRX_IR_CALLOUT, node, out_node);
+  if (result != GRX_OK) {
+    return result;
+  }
+  GRX_IRNode * out = grx_ir_node(low->ir, *out_node);
+  out->a = node->a;
+  out->b = text;
+  out->min = node->min;
+  out->max = node->max;
+  low->ir->flags |= GRX_PROGRAM_HAS_CALLOUT;
+  return GRX_OK;
+}
+
+/**
  * Lower a control verb, resolving the name it carries to a mark index.
  *
  * `(*MARK:A)` sets the mark and `(*SKIP:A)` looks for it. Every other verb
@@ -1552,7 +1591,18 @@ static GRX_LookKind opposite_look(GRX_LookKind kind) {
  *
  * The cost is that the assertion is compiled twice and, when it fails, run
  * twice. An assertion is zero-width and the second run answers the same
- * question at the same position, so what is paid is time and not meaning.
+ * question at the same position, so for every construct that existed when
+ * this was written, what is paid is time and not meaning.
+ *
+ * `(?C...)` is the exception, and it is the reason that sentence now has
+ * one. A callout is a *side effect*, so a body run twice reports itself
+ * twice: `(?(?=(?C1)a)ab|c)` fires callout 1 once in pcre2test and twice
+ * here. The match is identical - the rewrite is still exact - and only a
+ * caller watching the sequence can tell. tools/oracle/callout_diff.py
+ * classifies it by checking that our trace is pcre2's with entries
+ * repeated, and CalloutInsideAnAssertionConditionFiresTwice in
+ * tests/unit/test_callout.cpp pins it, so that building the single-run
+ * conditional this needs is a change something notices.
  */
 static GRX_Result lower_assertion_conditional(
     Lowering * low, const GRX_Node * node, uint32_t * out_node) {
@@ -2775,6 +2825,9 @@ static GRX_Result lower_node(
 
     case GRX_NODE_KEEP:
       return add(low, GRX_IR_KEEP, node, out_node);
+
+    case GRX_NODE_CALLOUT:
+      return lower_callout(low, node, out_node);
 
     case GRX_NODE_CONTROL:
       return lower_verb(low, node, out_node);

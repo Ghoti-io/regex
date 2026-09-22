@@ -21,6 +21,22 @@
  *   template                  the template was refused
  *   skip <reason>             the driver declines to answer
  *
+ * With `callout` it registers a callout function and writes the *trace*
+ * instead of the match:
+ *
+ *   trace <outcome> <n>       then one field per callout, in the order they
+ *                             fired, as
+ *                             `number/start/position/pattern_position/
+ *                             capture_top/string/mark`, with `-` for an
+ *                             absent string or mark and both in hex
+ *
+ * and compiles with PCRE2_NO_START_OPTIMIZE and PCRE2_NO_AUTO_POSSESS.
+ * Neither changes what pcre2 matches; both change which paths it *takes*,
+ * and so which callouts fire. This library has neither optimisation, so
+ * without them the comparison would be about pcre2's start-up analysis
+ * rather than about the construct. pcre2test's own callout examples set the
+ * first of them for the same reason.
+ *
  * The two shapes are grx_match.c's and grx_replace.c's respectively, so one
  * generator can drive either side of a comparison without knowing which
  * implementation is answering.
@@ -122,6 +138,54 @@ static uint32_t options_for(const char * flags) {
   return options;
 }
 
+/** One row's trace, rebuilt for each row. */
+typedef struct {
+  char text[1 << 16];
+  size_t used;
+  size_t count;
+  int overflow;
+} Trace;
+
+/** The most callouts one row's trace will carry; grx_match.c's number. */
+#define MAX_CALLOUTS 4096
+
+/** Append one callout to the trace, in grx_match.c's `callout` format. */
+static int trace_callout(pcre2_callout_block * block, void * data) {
+  Trace * trace = data;
+  trace->count++;
+  if (trace->count > MAX_CALLOUTS
+      || trace->used + 256 >= sizeof(trace->text)) {
+    trace->overflow = 1;
+    return 0;
+  }
+
+  trace->used += (size_t)snprintf(trace->text + trace->used,
+      sizeof(trace->text) - trace->used, " %u/%zu/%zu/%zu/%u/",
+      (unsigned)block->callout_number, (size_t)block->start_match,
+      (size_t)block->current_position, (size_t)block->pattern_position,
+      (unsigned)block->capture_top);
+  if (!block->callout_string) {
+    trace->used += (size_t)snprintf(trace->text + trace->used,
+        sizeof(trace->text) - trace->used, "-");
+  }
+  for (PCRE2_SIZE i = 0; i < block->callout_string_length; i++) {
+    trace->used += (size_t)snprintf(trace->text + trace->used,
+        sizeof(trace->text) - trace->used, "%02x",
+        (unsigned)block->callout_string[i]);
+  }
+  trace->used += (size_t)snprintf(trace->text + trace->used,
+      sizeof(trace->text) - trace->used, "/");
+  if (!block->mark) {
+    trace->used += (size_t)snprintf(trace->text + trace->used,
+        sizeof(trace->text) - trace->used, "-");
+  }
+  for (PCRE2_SPTR m = block->mark; m && *m; m++) {
+    trace->used += (size_t)snprintf(trace->text + trace->used,
+        sizeof(trace->text) - trace->used, "%02x", (unsigned)*m);
+  }
+  return 0;
+}
+
 /**
  * Replace every match, and print the result.
  *
@@ -177,6 +241,8 @@ int main(int argc, char ** argv) {
   static char template[MAX_PATTERN];
 
   int replacing = argc > 1 && strcmp(argv[1], "replace") == 0;
+  int tracing = argc > 1 && strcmp(argv[1], "callout") == 0;
+  static Trace trace;
 
   fprintf(stderr, "pcre2 %d.%d\n", PCRE2_MAJOR, PCRE2_MINOR);
 
@@ -218,6 +284,12 @@ int main(int argc, char ** argv) {
 
     int errorcode = 0;
     PCRE2_SIZE erroroffset = 0;
+    if (tracing) {
+      // See the file header: both are optimisations this library does not
+      // have, and both change which paths pcre2 takes and so which
+      // callouts it reports. Neither changes what it matches.
+      options |= PCRE2_NO_START_OPTIMIZE | PCRE2_NO_AUTO_POSSESS;
+    }
     pcre2_code * code = pcre2_compile((PCRE2_SPTR)pattern, pattern_length,
         options, &errorcode, &erroroffset, NULL);
     if (!code) {
@@ -270,8 +342,44 @@ int main(int argc, char ** argv) {
       }
     }
 
+    pcre2_match_context * context = NULL;
+    if (tracing) {
+      trace.used = 0;
+      trace.count = 0;
+      trace.overflow = 0;
+      trace.text[0] = '\0';
+      context = pcre2_match_context_create(NULL);
+      if (!context) {
+        printf("skip nomemory\n");
+        fflush(stdout);
+        pcre2_match_data_free(data);
+        pcre2_code_free(code);
+        continue;
+      }
+      pcre2_set_callout(context, trace_callout, &trace);
+    }
+
     int rc = pcre2_match(code, (PCRE2_SPTR)subject, end, begin,
-        match_options, data, NULL);
+        match_options, data, context);
+    if (tracing) {
+      pcre2_match_context_free(context);
+      if (trace.overflow) {
+        printf("trace-overflow\n");
+      }
+      else if (rc == PCRE2_ERROR_NOMATCH) {
+        printf("trace nomatch %zu%s\n", trace.count, trace.text);
+      }
+      else if (rc < 0) {
+        printf("skip error%d\n", rc);
+      }
+      else {
+        printf("trace match %zu%s\n", trace.count, trace.text);
+      }
+      fflush(stdout);
+      pcre2_match_data_free(data);
+      pcre2_code_free(code);
+      continue;
+    }
     if (rc == PCRE2_ERROR_NOMATCH) {
       printf("nomatch\n");
     }

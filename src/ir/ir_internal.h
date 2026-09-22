@@ -146,6 +146,17 @@ typedef enum {
    * times has a Fibonacci number of paths and thirty-one states.
    */
   GRX_IR_FOLD_RUN,
+  /**
+   * `(?C1)`, `(?C"text")`: report this position to the caller's function.
+   *
+   * It survives lowering rather than becoming an EMPTY because it is a
+   * *side effect*, and a side effect with no matching behaviour is exactly
+   * the kind of node an optimiser deletes. Nothing here may treat it as
+   * removable: with a @ref GRX_CalloutFn registered it can also fail the
+   * path it stands on, so it is not even reliably zero-width in the sense
+   * that matters to analysis.
+   */
+  GRX_IR_CALLOUT,
   GRX_IR_COUNT       ///< Closes the enum; not a node kind.
 } GRX_IRKind;
 
@@ -288,6 +299,7 @@ typedef enum {
  * | VERB | name offset, or GRX_INDEX_NONE | - | GRX_VerbKind | - |
  * | SCAN | scan-list offset | - | - | one child |
  * | FOLD_RUN | edge-list offset | positions in the folded string | - | - |
+ * | CALLOUT | the number | string offset in `names`, or GRX_INDEX_NONE | - | `min` is the string's length, `max` its offset in the pattern |
  */
 typedef struct GRX_IRNode {
   GRX_IRKind kind;       ///< What this node is.

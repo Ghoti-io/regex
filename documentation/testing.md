@@ -701,6 +701,62 @@ answer. `b$` against "\x00\r\nb" under `(*ANY)`: the backtracker and the
 bit-state engine both reported 3-4 and the Pike VM reported no match. An
 invariant that nothing states is an invariant the next change breaks.
 
+### The callout differential
+
+`make check-oracle-callouts` runs
+[callout_diff.py](../tools/oracle/callout_diff.py). A callout is the one
+construct here whose answer is not "did it match" but "where were you, and
+when", which makes it the one construct every other gate in this file is
+blind to: `a(?C1)b` and `ab` match the same subjects, so a span comparison
+would report agreement about a feature that had not been built. This
+compares the **trace** instead - for each row, the sequence both sides
+reported, each callout as its number, the offset the attempt began at, how
+far matching had got, the pattern offset, pcre2's `capture_top`, and the
+string and mark it carried.
+
+Every callout spelling at every position of every skeleton, against every
+subject: **25,600 rows**, of which 330 are the two classified divergences
+below and **no other disagreement**. Most of the insertions are syntax
+errors - `a(?C1)*b` has nothing to repeat - and those rows are kept,
+because that both sides refuse them is half of what "the same grammar"
+means.
+
+**Two pcre2 optimisations are off**, and the comparison would measure them
+rather than the construct with them on. `PCRE2_NO_START_OPTIMIZE`: with it
+on, `/a(?C1)b(?C2)c/` against "abd" prints *no* callouts, because pcre2's
+required-code-unit test rejects the subject before the match runs.
+`PCRE2_NO_AUTO_POSSESS`: with it on, `a*(?C1)b` against four a's prints
+five callouts where a plain backtracker prints fifteen, because `a*` before
+a disjoint `b` becomes `a*+`. Neither changes what pcre2 matches, and this
+library has neither. The backtracking control verbs are absent from the
+skeletons for the same reason: pcre2api says `NO_START_OPTIMIZE` changes
+what `(*COMMIT)` and `(*SKIP)` do.
+
+The two classified shapes are both inside `(?(...))`, both leave the match
+identical, and both are in [dialects.md](dialects.md) §6. Each is checked
+rather than waved through - the second by confirming that our trace is
+pcre2's with entries *repeated*, not merely that the pattern has that
+shape - and a run that finds none of either exits 2, because a gate that
+has quietly stopped producing its own known cases has quietly stopped
+asking.
+
+It found three things on its first run, none of them in the classified
+list. Our `capture_top` was one too high wherever a callout stood inside an
+*open* group: the group's start slot was set, and a group that has not
+closed has captured nothing - it now reads as unset, which is both pcre2's
+answer and the only safe one, since `{start, GRX_NPOS}` is a span a caller
+could subtract. The mark was the wrong one of two: pcre2api defines the
+callout block's as "the most recently passed" mark, the running value that
+an abandoned branch does not take back, where this library was reporting
+the narrower "still standing on this path" that `grx_match_mark()` answers
+with. And the assertion-condition rewrite's comment claimed its cost was
+"time and not meaning", which a side effect in the body is the exception
+to.
+
+Proven by planting: `pattern_offset` off by one gives 9,165
+disagreements; the path-local mark gives 15. Both exit non-zero, and both
+restore to zero.
+
 ### The replacement differential
 
 `make check-oracle-replace` runs `tools/oracle/replace_diff.py`, which builds

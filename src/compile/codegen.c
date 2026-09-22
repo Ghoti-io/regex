@@ -1192,6 +1192,54 @@ static GRX_Result copy_group_list(Codegen * codegen, const GRX_IRNode * node,
 }
 
 /**
+ * Emit a callout, copying its payload into the program's own tables.
+ *
+ * The record is per instruction rather than deduplicated. Two callouts that
+ * are written the same way are still two places in the pattern, and
+ * GRX_ProgramCallout::pattern_offset is what tells them apart - which is
+ * the opposite of a mark, where two `(*MARK:A)` are deliberately one entry
+ * because a `(*SKIP:A)` has to compare them.
+ */
+static GRX_Result gen_callout(Codegen * codegen, const GRX_IRNode * node) {
+  GRX_ProgramCallout record = {
+    // Past this callout's own `)`, which is where the next item begins in
+    // every case - including the ones where that item is a `)`, a `|` or
+    // the end of the pattern.
+    .pattern_offset = node->offset + node->length,
+    .string_offset = node->max,
+    .string_length = node->min,
+    .number = node->a,
+    .string = GRX_INDEX_NONE,
+  };
+
+  if (node->b != GRX_INDEX_NONE) {
+    const char * text = grx_ir_name(codegen->ir, node->b);
+    if (!text) {
+      return fail(codegen, GRX_DIAG_INTERNAL, node);
+    }
+    record.string = (uint32_t)codegen->program->callout_strings.count;
+    for (size_t i = 0; i < record.string_length; i++) {
+      if (grx_arena_append(&codegen->program->callout_strings, &text[i], NULL)
+          != GRX_OK) {
+        return fail(codegen, GRX_DIAG_OUT_OF_MEMORY, node);
+      }
+    }
+    char terminator = '\0';
+    if (grx_arena_append(
+            &codegen->program->callout_strings, &terminator, NULL)
+        != GRX_OK) {
+      return fail(codegen, GRX_DIAG_OUT_OF_MEMORY, node);
+    }
+  }
+
+  uint32_t index = (uint32_t)codegen->program->callouts.count;
+  if (grx_arena_append(&codegen->program->callouts, &record, NULL) != GRX_OK) {
+    return fail(codegen, GRX_DIAG_OUT_OF_MEMORY, node);
+  }
+  return emit(codegen, GRX_OP_CALLOUT, 0, index, 0, node, NULL);
+}
+
+/**
  * Emit a backreference.
  *
  * `x` is the group, unless the name it was written with belongs to several -
@@ -1364,6 +1412,9 @@ static GRX_Result gen(Codegen * codegen, uint32_t node_index) {
 
     case GRX_IR_FOLD_RUN:
       return gen_fold_run(codegen, node);
+
+    case GRX_IR_CALLOUT:
+      return gen_callout(codegen, node);
 
     case GRX_IR_COND:
       return gen_cond(codegen, node);

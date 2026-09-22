@@ -39,6 +39,25 @@
  * (documentation/dialects.md section 5.10), and it is a rule no single
  * search can be asked about.
  *
+ * With `callout` instead it registers a GRX_CalloutFn and reports the
+ * *trace* rather than the match:
+ *
+ *   `trace <outcome> <n>` then one field per callout, in the order they
+ *   fired: `number/start/position/pattern_offset/capture_top/string/mark`,
+ *   with `-` for an absent string or mark and both of those in hex.
+ *
+ * `capture_top` is derived here rather than carried in GRX_Callout - it is
+ * one more than the highest group set, which is PCRE2's definition and
+ * which every entry of `captures` being present already answers. It is in
+ * the trace because pcre2's block has it, and a differential can only
+ * compare what both sides say.
+ *
+ * The sequence is backtracking order, so the comparison is only meaningful
+ * against a pcre2 compiled with PCRE2_NO_START_OPTIMIZE and
+ * PCRE2_NO_AUTO_POSSESS: both of those change which paths are *taken*, and
+ * neither is an optimisation this library has. tools/oracle/pcre2_match.c
+ * sets them in this mode and in no other.
+ *
  * Copyright 2026 by Corey Pennycuff
  */
 
@@ -46,6 +65,66 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+/** The most callouts one row's trace will carry. */
+#define MAX_CALLOUTS 4096
+
+/** One row's trace, rebuilt for each row. */
+typedef struct {
+  char text[1 << 16];
+  size_t used;
+  size_t count;
+  int overflow;
+} Trace;
+
+/** Append one callout to the trace. */
+static GRX_Result trace_callout(
+    const GRX_Callout * callout, int * out_fail, void * data) {
+  (void)out_fail;
+  Trace * trace = data;
+  trace->count++;
+  if (trace->count > MAX_CALLOUTS || trace->used + 256 >= sizeof(trace->text)) {
+    trace->overflow = 1;
+    // Stopping here would change the *match*, which is the one thing a
+    // trace must not do: an overflowed row is reported as overflowed and
+    // the search is left to finish.
+    return GRX_OK;
+  }
+
+  // pcre2's capture_top: one more than the highest group set. Derived,
+  // because GRX_Callout writes every entry and so has no such field.
+  size_t top = 1;
+  for (size_t i = 0; i < callout->count; i++) {
+    if (callout->captures[i].start != GRX_NPOS) {
+      top = i + 1;
+    }
+  }
+
+  trace->used += (size_t)snprintf(trace->text + trace->used,
+      sizeof(trace->text) - trace->used, " %u/%zu/%zu/%zu/%zu/",
+      callout->number, callout->start, callout->position,
+      callout->pattern_offset, top);
+  if (!callout->string) {
+    trace->used += (size_t)snprintf(trace->text + trace->used,
+        sizeof(trace->text) - trace->used, "-");
+  }
+  for (size_t i = 0; i < callout->string_length; i++) {
+    trace->used += (size_t)snprintf(trace->text + trace->used,
+        sizeof(trace->text) - trace->used, "%02x",
+        (unsigned char)callout->string[i]);
+  }
+  trace->used += (size_t)snprintf(trace->text + trace->used,
+      sizeof(trace->text) - trace->used, "/");
+  if (!callout->mark) {
+    trace->used += (size_t)snprintf(trace->text + trace->used,
+        sizeof(trace->text) - trace->used, "-");
+  }
+  for (const char * m = callout->mark; m && *m; m++) {
+    trace->used += (size_t)snprintf(trace->text + trace->used,
+        sizeof(trace->text) - trace->used, "%02x", (unsigned char)*m);
+  }
+  return GRX_OK;
+}
 
 /** The longest pattern or subject a line may carry. */
 /*
@@ -146,6 +225,8 @@ int main(int argc, char ** argv) {
     return 2;
   }
   int find_all = argc > 3 && strcmp(argv[3], "all") == 0;
+  int tracing = (argc > 2 && strcmp(argv[2], "callout") == 0)
+      || (argc > 3 && strcmp(argv[3], "callout") == 0);
   GRX_Engine engine = GRX_ENGINE_AUTO;
   if (argc > 2) {
     if (strcmp(argv[2], "pike") == 0) {
@@ -293,9 +374,41 @@ int main(int argc, char ** argv) {
       }
     }
 
+    static Trace trace;
+    if (tracing) {
+      trace.used = 0;
+      trace.count = 0;
+      trace.overflow = 0;
+      trace.text[0] = '\0';
+      search.callout = trace_callout;
+      search.callout_data = &trace;
+    }
+
     GRX_Match * match = NULL;
     if (grx_match_create(regex, NULL, &match) != GRX_OK) {
       printf("error oom\n");
+      continue;
+    }
+
+    if (tracing) {
+      int matched = 0;
+      GRX_Result result = grx_regex_search_ex(
+          regex, subject, subject_length, &search, match, &matched);
+      if (trace.overflow) {
+        printf("trace-overflow\n");
+      }
+      else if (result == GRX_ERR_UNSUPPORTED) {
+        printf("unsupported\n");
+      }
+      else if (result != GRX_OK) {
+        printf("error %s\n", grx_result_string(result));
+      }
+      else {
+        printf("trace %s %zu%s\n", matched ? "match" : "nomatch",
+            trace.count, trace.text);
+      }
+      fflush(stdout);
+      grx_match_destroy(match);
       continue;
     }
 

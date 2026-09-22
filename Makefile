@@ -704,7 +704,8 @@ check-oracles: ## Run every differential check against the reference implementat
 check-oracles: check-oracle-syntax check-oracle-match check-oracle-properties \
 	check-oracle-numeric-properties check-oracle-string-properties \
 	check-oracle-posix check-oracle-perl check-oracle-perl-syntax \
-	check-oracle-script-runs check-oracle-newlines check-oracle-sed \
+	check-oracle-script-runs check-oracle-newlines check-oracle-callouts \
+	check-oracle-sed \
 	check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
 	check-engine-equivalence
 
@@ -779,6 +780,19 @@ check-oracle-newlines: $(TOOLS)
 		exit 0; \
 	fi; \
 	python3 tools/oracle/newline_diff.py
+
+check-oracle-callouts: ## Compare the `(?C...)` trace against pcre2
+# The one construct whose answer is not "did it match" but "where were you,
+# and when" - so every other gate here is blind to it, and `a(?C1)b` and
+# `ab` would report agreement about a feature that had not been built.
+# pcre2 is compiled with NO_START_OPTIMIZE and NO_AUTO_POSSESS for this,
+# because both change which paths it takes and this library has neither.
+check-oracle-callouts: $(TOOLS)
+	@if ! command -v python3 >/dev/null 2>&1; then \
+		printf "check-oracle-callouts: skipped (no python3)\n"; \
+		exit 0; \
+	fi; \
+	python3 tools/oracle/callout_diff.py
 
 check-oracle-posix: ## Compare the POSIX and GNU front ends against glibc
 check-oracle-posix: $(TOOLS)

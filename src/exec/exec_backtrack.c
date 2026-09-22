@@ -338,6 +338,27 @@ typedef struct {
    */
   size_t window_start;
   size_t window_end;
+
+  /**
+   * Where the current attempt began, for GRX_Callout::start.
+   *
+   * Not `slots[0]`, which is the *reported* start and moves under `\K`, and
+   * not `request->start`, which is where the whole search began and does
+   * not move at all. PCRE2's callout block calls this `start_match` and
+   * means the bumpalong position, which is the one thing neither of the
+   * other two says.
+   */
+  size_t attempt_start;
+
+  /**
+   * The spans handed to a @ref GRX_CalloutFn, or NULL when none is
+   * registered.
+   *
+   * Allocated once for the run rather than per callout: a callout in a loop
+   * fires as often as the loop turns, and a malloc for each would make
+   * observing a match cost more than running it.
+   */
+  GRX_Capture * callout_captures;
 } Backtrack;
 
 /**
@@ -805,6 +826,99 @@ static int span_is_script_run(Backtrack * bt, size_t from, size_t to) {
     }
   }
   return ok;
+}
+
+/**
+ * Report a `(?C...)` to the caller's function.
+ *
+ * The one place this engine calls out of the library while a match is in
+ * flight, so everything it hands over is a copy or a borrow of something
+ * already immutable: the block lives on this frame, the spans live in a
+ * buffer the run owns, and neither outlives the call.
+ *
+ * @return Non-zero to carry on. Zero with `bt->failure` set when the
+ *   function asked to stop; `*out_fail` is set instead when it asked only
+ *   for this path to fail.
+ */
+static int fire_callout(Backtrack * bt, const GRX_Inst * inst,
+    size_t position, int * out_fail) {
+  const GRX_ProgramCallout * record
+      = grx_program_callout(bt->program, inst->x);
+  if (!record || !bt->callout_captures) {
+    bt->failure = GRX_ERR_INTERNAL;
+    bt->failure_diag = GRX_DIAG_INTERNAL;
+    return 0;
+  }
+
+  size_t groups = bt->captures / 2;
+  for (size_t i = 0; i < groups; i++) {
+    // A group that is *open* - its start written and its end not - has
+    // captured nothing yet, and is reported as unset. `{start, GRX_NPOS}`
+    // would be a span whose end a caller could subtract, and the pair is
+    // the one shape GRX_Capture has no way to mark as half-made.
+    //
+    // It is also pcre2's answer: `((?C)a)(b)` reports capture_top 1 there,
+    // not 2, and this library said 2 until tools/oracle/callout_diff.py
+    // was run for the first time.
+    int complete = bt->slots[2 * i] != GRX_NPOS
+        && bt->slots[2 * i + 1] != GRX_NPOS;
+    bt->callout_captures[i] = complete
+        ? (GRX_Capture) {bt->slots[2 * i], bt->slots[2 * i + 1]}
+        : (GRX_Capture) {GRX_NPOS, GRX_NPOS};
+  }
+
+  // `nomatch_mark`, not `mark`. pcre2api defines the callout block's as
+  // "the most recently passed (*MARK), (*PRUNE), or (*THEN) item in the
+  // match" - the running value, which a branch being abandoned does not
+  // take back and a failed attempt does not clear. `bt->mark` is the
+  // narrower "still standing on this path", which is the right answer to a
+  // different question and the one grx_match_mark() reports after a match.
+  //
+  // Measured, not assumed: pcre2test on `(?C1)x(*MARK:m)y` against "xaby"
+  // reports the mark at every attempt after the first, where a callout
+  // standing *before* the `(*MARK:m)` can be on no path that passed it.
+  const GRX_Regex * regex = bt->request->regex;
+  uint32_t seen = bt->nomatch_mark;
+  const char * mark = seen != GRX_INDEX_NONE && regex->mark_names
+          && seen < regex->mark_count
+      ? regex->mark_names[seen]
+      : NULL;
+
+  GRX_Callout block = {
+    .number = record->number,
+    .string = grx_program_callout_string(bt->program, record->string),
+    .string_length = record->string_length,
+    .string_offset = record->string_offset,
+    .pattern_offset = record->pattern_offset,
+    .subject = bt->request->subject,
+    // The search's subject, not `window_end`: inside a `(*scs:(n)...)` the
+    // engine treats a captured substring as the whole subject, and a
+    // callout's job is to say where the match is in the text the *caller*
+    // passed. `position` is an offset into that same buffer either way.
+    .subject_length = bt->request->length,
+    .start = bt->attempt_start,
+    .position = position,
+    .count = groups,
+    .captures = bt->callout_captures,
+    .mark = mark,
+  };
+
+  *out_fail = 0;
+  GRX_Result result
+      = bt->request->callout(&block, out_fail, bt->request->callout_data);
+  if (result == GRX_OK) {
+    return 1;
+  }
+
+  // A function that returned something outside the enum is out of contract,
+  // and passing it through would make a public entry point return a value
+  // that is not a GRX_Result. GRX_DIAG_CALLOUT_STOPPED's own row says what
+  // that becomes.
+  bt->failure = (unsigned)result < (unsigned)GRX_RESULT_COUNT
+      ? result
+      : grx_diag_result(GRX_DIAG_CALLOUT_STOPPED);
+  bt->failure_diag = GRX_DIAG_CALLOUT_STOPPED;
+  return 0;
 }
 
 /**
@@ -1890,6 +2004,23 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
         break;
       }
 
+      case GRX_OP_CALLOUT: {
+        if (!bt->request->callout) {
+          // What PCRE2 does with no function registered: nothing. The
+          // instruction is still emitted, because whether a callout has an
+          // effect is a fact about the *search* and the program is shared
+          // between searches that differ on it.
+          pc++;
+          continue;
+        }
+        int fail_path = 0;
+        if (!fire_callout(bt, inst, position, &fail_path)) {
+          return 0;
+        }
+        ok = !fail_path;
+        break;
+      }
+
       case GRX_OP_VERB:
         switch ((GRX_VerbKind)inst->mode) {
           case GRX_VERB_ACCEPT:
@@ -2113,6 +2244,8 @@ GRX_Result grx_exec_backtrack(
     .mark_capacity = 0,
     .mark = GRX_INDEX_NONE,
     .nomatch_mark = GRX_INDEX_NONE,
+    .attempt_start = request->start,
+    .callout_captures = NULL,
   };
   if (!bt.allocator) {
     bt.allocator = grx_allocator_default();
@@ -2130,6 +2263,14 @@ GRX_Result grx_exec_backtrack(
       bt.allocator, bt.slot_count * sizeof(size_t));
   if (!bt.slots) {
     return GRX_ERR_OOM;
+  }
+  if (request->callout) {
+    bt.callout_captures = gcu_allocator_malloc(
+        bt.allocator, (bt.captures / 2) * sizeof(GRX_Capture));
+    if (!bt.callout_captures) {
+      gcu_allocator_free(bt.allocator, bt.slots);
+      return GRX_ERR_OOM;
+    }
   }
   if (bt.longest) {
     bt.best_slots = gcu_allocator_malloc(
@@ -2174,7 +2315,16 @@ GRX_Result grx_exec_backtrack(
       return GRX_ERR_OOM;
     }
   }
-  else if (!bt.longest && grx_exec_program_is_memoizable(request->regex)) {
+  else if (!bt.longest && !request->callout
+      && grx_exec_program_is_memoizable(request->regex)) {
+    // `!request->callout` because the late memo skips a state already
+    // tried, and a callout on that state is a side effect the caller can
+    // see not happening. Sound for the *match*, which is what a visited bit
+    // claims; wrong for the sequence of callouts, which is what the caller
+    // asked to be told. Tested by CalloutFiresOnEveryArrivalNotOnlyTheFirst
+    // in tests/unit/test_callout.cpp, which is a pattern this branch would
+    // otherwise arm.
+    //
     // The plain backtracker, on a program the memo would be sound for: arm
     // the late cache rather than allocating a bitmap a run that never needs
     // one would pay for. The threshold is the state count; anything past it
@@ -2206,6 +2356,7 @@ GRX_Result grx_exec_backtrack(
     // mark it reached anywhere, which is pcre2_get_mark()'s answer too.
     bt.mark_depth = 0;
     bt.mark = GRX_INDEX_NONE;
+    bt.attempt_start = start;
     if (run(&bt, 0, start, 0, 1, &end)) {
       *out_matched = 1;
       break;
@@ -2310,5 +2461,6 @@ GRX_Result grx_exec_backtrack(
   gcu_allocator_free(bt.allocator, bt.call_group);
   gcu_allocator_free(bt.allocator, bt.call_slots);
   gcu_allocator_free(bt.allocator, bt.marks);
+  gcu_allocator_free(bt.allocator, bt.callout_captures);
   return result;
 }

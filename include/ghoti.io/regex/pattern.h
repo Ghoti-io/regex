@@ -104,6 +104,14 @@ typedef enum {
    * are one algorithm and cannot come apart.
    */
   GRX_NODE_GRAPHEME,
+  /**
+   * `(?C1)`, `(?C"text")`: report this position to the caller's function.
+   *
+   * Zero-width and, with no @ref GRX_CalloutFn registered, without effect -
+   * which is PCRE2's rule and the reason a pattern's callouts cannot change
+   * what it matches unless a caller asks them to.
+   */
+  GRX_NODE_CALLOUT,
   GRX_NODE_COUNT        ///< Closes the enum; not a node kind.
 } GRX_NodeKind;
 

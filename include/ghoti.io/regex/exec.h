@@ -139,6 +139,113 @@ typedef enum {
 } GRX_SearchFlag;
 
 /**
+ * @brief Where a `(?C...)` callout is, and what the match can tell it.
+ *
+ * PCRE2's `pcre2_callout_block`, less the parts that are artefacts of its
+ * ovector. Everything here is a fact about the attempt at the moment the
+ * callout was reached; nothing in it outlives the call.
+ *
+ * **The captures are all of them, always.** PCRE2 offers `capture_top` and
+ * says the ovector past it holds rubbish, so a caller there has to check a
+ * count before reading a pair. Here every entry is written, and a group that
+ * has not participated *yet* reads GRX_NPOS/GRX_NPOS - the same answer
+ * grx_match_group() gives for one that never did. There is nothing a count
+ * would protect, and a count a caller can forget to consult is a hazard
+ * rather than a fact.
+ */
+typedef struct GRX_Callout {
+  /**
+   * The number in `(?C7)`; 0 for a bare `(?C)` and for every string callout.
+   *
+   * @ref string is what tells the two apart, not this.
+   */
+  uint32_t number;
+  /**
+   * The body of `(?C"text")` with its delimiters removed and any doubled
+   * delimiter collapsed to one, or NULL for a numbered callout.
+   *
+   * NUL-terminated as a convenience, and @ref string_length is still the
+   * authority: a pattern is a counted string and may put a NUL in here.
+   */
+  const char * string;
+  size_t string_length;   ///< Its length in bytes, 0 for `(?C"")`.
+  /**
+   * Where the body began in the pattern text, *before* collapsing.
+   *
+   * So `(?C"a""b")` reports offset 4, length 3 and the text `a"b`: the
+   * offset points into the pattern and the length describes the string, and
+   * the two do not span the same bytes whenever a delimiter was doubled.
+   * PCRE2 reports the same pair for the same reason.
+   */
+  size_t string_offset;
+  /**
+   * Where the next item to be matched begins in the pattern text.
+   *
+   * PCRE2's `pattern_position`, and the byte just past this callout's own
+   * `)` in every case - including the ones where the next item is a `)`, a
+   * `|` or the end of the pattern.
+   *
+   * PCRE2 pairs it with a `next_item_length` and there is deliberately none
+   * here. That length is the extent of the next token *as PCRE2's compiler
+   * read it*, which is not the extent of the next thing this library
+   * parsed: pcre2test prints `(?:` for a group, `)*` for a closing
+   * parenthesis carrying a quantifier, and `\Qa` for the first character of
+   * a quoted run - three places where the two grammars divide the same text
+   * differently, and none of them a boundary this parser keeps. A field
+   * that agreed with the reference for a literal and disagreed for a group
+   * would be worse than no field, because a caller would build a cursor on
+   * it and never see the cases where it slipped.
+   */
+  size_t pattern_offset;
+  const char * subject;   ///< The subject, as the search was given it.
+  /**
+   * How much of it this search can see: GRX_SearchOptions::end resolved.
+   *
+   * The window rather than the buffer, because that is what the match is
+   * running against - `$` holds here and nothing past it is read.
+   */
+  size_t subject_length;
+  size_t start;           ///< Where this attempt at a match began.
+  size_t position;        ///< How far matching has got.
+  size_t count;           ///< Entries in @ref captures; group 0 included.
+  const GRX_Capture * captures; ///< The spans so far, unset ones GRX_NPOS.
+  const char * mark;      ///< The `(*MARK:NAME)` standing here, or NULL.
+} GRX_Callout;
+
+/**
+ * @brief Called at each `(?C...)` the match reaches.
+ *
+ * Registered on the search rather than on the regex, because a compiled
+ * regex is immutable and shareable and a function pointer with a `void *`
+ * behind it is neither.
+ *
+ * Two things can be said back, and they are different in kind. *This path
+ * does not match* is an outcome, so it goes in `out_fail`, for the same
+ * reason grx_regex_search()'s `out_matched` is an out-parameter and not a
+ * result code; the search carries on and may still match somewhere else.
+ * *Stop* is a failure, so it is the return value, and it is returned from
+ * grx_regex_search_ex() to the caller unchanged - the convention every
+ * callback in this suite follows.
+ *
+ * The callout runs inside the match, so it must not touch the regex or the
+ * match object it was called from. Reading the subject and the spans in
+ * @p callout is what it is for.
+ *
+ * @param callout Where the match is. Valid only for the duration of the
+ *   call.
+ * @param out_fail Pre-set to 0. Write non-zero to make the path that
+ *   reached this callout fail, exactly as though the next item had not
+ *   matched. A function that only observes can ignore it.
+ * @param user_data GRX_SearchOptions::callout_data, untouched.
+ * @return GRX_OK to let the match go on. Anything else abandons the search
+ *   and is what grx_regex_search_ex() returns; grx_match_error() then
+ *   reports it with GRX_DIAG_CALLOUT_STOPPED, so that a code the callout
+ *   borrowed - GRX_ERR_OOM, say - is not mistaken for the library's own.
+ */
+typedef GRX_Result (*GRX_CalloutFn)(
+    const GRX_Callout * callout, int * out_fail, void * user_data);
+
+/**
  * @brief Everything one search needs beyond the subject itself.
  *
  * A struct rather than more parameters, because the list grows: the scaffold's
@@ -164,6 +271,19 @@ typedef struct GRX_SearchOptions {
   uint32_t flags; ///< GRX_SearchFlag bits.
   GRX_Engine engine; ///< Which engine to use. GRX_ENGINE_AUTO chooses.
   const GRX_Limits * limits; ///< Caps to apply. NULL uses the defaults.
+  /**
+   * Called at each `(?C...)`, or NULL to leave callouts inert.
+   *
+   * A pattern's callouts have no effect on what it matches until one of
+   * these is here, which is PCRE2's rule too: a callout with no function
+   * registered changes no answer. Registering one narrows the engines that
+   * can run the search to the backtracking one, because the order callouts
+   * fire in *is* backtracking order and no lockstep simulation has it; a
+   * caller who also names GRX_ENGINE_PIKE or GRX_ENGINE_BITSTATE gets
+   * GRX_ERR_UNSUPPORTED rather than a plausible wrong sequence.
+   */
+  GRX_CalloutFn callout;
+  void * callout_data; ///< Passed to @ref callout untouched.
 } GRX_SearchOptions;
 
 /**

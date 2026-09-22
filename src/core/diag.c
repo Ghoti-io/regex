@@ -202,6 +202,11 @@ static const DiagRow diag_table[GRX_DIAG_COUNT] = {
   [GRX_DIAG_INVALID_SUBJECT_UTF8]
       = {"subject is not valid UTF-8", GRX_ERR_INVALID},
   [GRX_DIAG_INTERNAL] = {"internal error", GRX_ERR_INTERNAL},
+  // The code a search reports for this is the callout's own return value,
+  // so this row's is the fallback and is consulted in exactly one case: a
+  // callout that returned something that is not a GRX_Result at all, which
+  // is a caller-supplied function behaving out of contract.
+  [GRX_DIAG_CALLOUT_STOPPED] = {"a callout stopped the match", GRX_ERR_INVALID},
 };
 
 const char * grx_diag_string(GRX_Diag diag) {

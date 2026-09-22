@@ -137,6 +137,18 @@ extern "C" {
 #define GRX_PROGRAM_HAS_CR_OR_LF GRX_BIT(4)
 
 /**
+ * @brief The pattern contains a `(?C...)` callout.
+ *
+ * Read in one place: the engine choice. A callout is inert until a caller
+ * registers a @ref GRX_CalloutFn, and a search that does register one can
+ * only run on the backtracking engine - the order callouts fire in *is*
+ * backtracking order, and a lockstep simulation has no such order to
+ * report. Without the flag that test would be a walk of the program on
+ * every search.
+ */
+#define GRX_PROGRAM_HAS_CALLOUT GRX_BIT(5)
+
+/**
  * @brief A zero-width assertion.
  *
  * The line and boundary kinds are parameterised by a character class - the

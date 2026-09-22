@@ -46,6 +46,8 @@
 // Public types. Renamed as well as the functions, so that two versions whose
 // structs differ in layout cannot be confused for one another.
 #define GRX_Allocator GHOTIIO_REGEX(GRX_Allocator)
+#define GRX_Callout GHOTIIO_REGEX(GRX_Callout)
+#define GRX_CalloutFn GHOTIIO_REGEX(GRX_CalloutFn)
 #define GRX_Capture GHOTIIO_REGEX(GRX_Capture)
 #define GRX_Diag GHOTIIO_REGEX(GRX_Diag)
 #define GRX_Engine GHOTIIO_REGEX(GRX_Engine)
