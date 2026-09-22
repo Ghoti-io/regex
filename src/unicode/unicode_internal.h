@@ -67,6 +67,26 @@ extern "C" {
 #define GRX_FULL_FOLD_SOURCE_MAX 4
 
 /**
+ * @brief The most multi-code-point folds one character class can carry.
+ *
+ * Perl full-folds a class member written as a single code point, so `[ß]`
+ * matches "ss" and a class lowers to an alternation with one branch per
+ * distinct such fold (src/ir/lower.c, lower_class_full_folds()). The bound
+ * is a property of Unicode rather than of the pattern: a class cannot name
+ * more distinct multi-code-point folds than exist, which in UCD 17.0.0 is
+ * **73** over 104 CaseFolding.txt `F` lines.
+ *
+ * 128 rather than 73 so that a UCD revision cannot reach it between one
+ * table regeneration and the next. test_unicode.cpp asserts
+ * `grx_unicode_full_fold_count <= GRX_CLASS_FULL_FOLD_MAX`, which is the
+ * sufficient form of the same bound - every distinct fold needs at least one
+ * `F` line - and lowering fails with GRX_DIAG_INTERNAL rather than
+ * truncating if it is ever wrong, because a silently dropped branch is a
+ * wrong answer and not a slow one.
+ */
+#define GRX_CLASS_FULL_FOLD_MAX 128
+
+/**
  * @brief Decode one UTF-8 sequence.
  *
  * Strict: an overlong encoding, a surrogate (U+D800..U+DFFF), a code point

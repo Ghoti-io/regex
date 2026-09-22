@@ -415,31 +415,49 @@ match one. The two meet in the middle, which is why the run is what is
 folded: `sß` and `ßs` both fold to "sss", and Perl matches either against
 the other.
 
-It stops at three boundaries here. A *class* is folded simply, because a
-class matches one character - `[ß]` does not match "ss". `/aa` drops it
-entirely, because every code point with a full fold is outside ASCII and
-every one of those folds is at least partly inside it, so there is no full
-fold that rule would let through. And PCRE2 does not have it at all, which is
-one of the reasons `GRX_SYNTAX_PERL` and `GRX_SYNTAX_PCRE` are separate
-dialects.
+It stops at two boundaries. `/aa` drops it, because a fold that crosses the
+ASCII line is what that flag exists to prevent - though *which* folds it drops
+is narrower than it looks, and §6 carries the part this library still has
+wrong. And PCRE2 does not have it at all, which is one of the reasons
+`GRX_SYNTAX_PERL` and `GRX_SYNTAX_PCRE` are separate dialects.
 
-**The first of those three is a deviation and not a shared rule**, and this
-page asserted the opposite until it was measured. Perl *does* full-fold a
-class member, so `"ss" =~ /^(?:[ß])$/iu` matches there and not here. Over
-every code point whose full fold is longer than one code point - the 104 `F`
-lines of `CaseFolding.txt` - bare and in a class, both directions: bare
-agrees 104 of 104, in a class it disagrees 104 of 104. One systematic
-divergence, not a scatter.
+**A character class is not the third boundary, though this page said it was.**
+It claimed a class folds simply "and Perl agrees". Perl does not agree:
+`"ss" =~ /^(?:[ß])$/iu` matches there. Measured over the 104 `F` lines of
+`CaseFolding.txt` - every code point whose full fold is longer than one code
+point - bare and in a class, both directions, this library agreed 104 of 104
+bare and **0 of 104** in a class. Both are 104 of 104 now, on all three
+engines, and `tests/data/vectors/perl/folding.rxt` holds it.
 
-Perl's rule is narrower than "classes fold fully": only a member written out
-as a *literal* gets it. A range (`[a-ÿ]`), a shorthand (`[\w]`), a property
-(`[\p{Latin}]`) and a negated class all answer nomatch in perl too. It
-composes like any other branch - `[ß]{2}` matches "ssss" there - so the
-implementable shape is a class under `FULL_FOLD` lowering to its
-simply-folded self *or* an alternation of the multi-character folds its
-literal members have. That is not built; §6 carries it as a named deviation.
-No imported vector reaches it, which is why `re_tests` is at 2,592 of 2,592
-with it outstanding.
+The rule Perl actually has is narrower than "a class folds fully", and every
+row below was measured rather than argued:
+
+| In a class | Full-folds | Why |
+| --- | --- | --- |
+| `[ß]`, `[\x{df}]`, `[\N{U+00DF}]` | **yes** | one code point, written out |
+| `[ß-ß]` | **yes** | a degenerate range is a single member |
+| `[ßq]`, `[qß]` | **yes** | position among the other members is irrelevant |
+| `[^ß]` | no | a negated class does not, in Perl either |
+| `[a-ÿ]` | no | a real range does not |
+| `[\w]`, `[[:alpha:]]`, `[\p{L}]` | no | nor a shorthand, a POSIX class or a property |
+
+It is **one-directional**, which is what keeps a class a class: `[s]` does not
+match `ß` in Perl, though the literal `ss` does. A class stands for one
+character, so there is nothing for the second half of a two-character fold to
+come from. And it composes like any other branch - `[ß]{2}` matches "ssss".
+
+What it lowers to is an alternation: the class as it already was, or one
+branch per distinct multi-code-point fold its single-code-point members have,
+each branch a concatenation whose code points match by their simple orbit -
+which is why `[ß]` matches "SS" and "sſ" as well as "ss". Two members with one
+fold, `ß` and `ẞ`, produce one branch. The bound is a property of Unicode
+rather than of the pattern: 104 `F` lines, 73 distinct sequences, and
+`GRX_CLASS_FULL_FOLD_MAX` is 128 so that it cannot be reached.
+
+No imported vector reaches any of this, which is why `re_tests` read 2,592 of
+2,592 throughout. `tools/corpus/make_fold_vectors.py` is what asks the
+question; it generates 1,300 rows from Perl, and found a second defect on the
+day it was written, which §6 records.
 
 **Perl's subject is text.** There is no byte mode in Perl: a Perl string is a
 sequence of characters, and `/u`, `/a` and `/l` say which *rules* apply to
@@ -941,7 +959,7 @@ to be complete for every shipped tier.
 | ECMAScript | Repeat counts are limited (the grammar admits 2^53 - 1) | as above | `GRX_ERR_LIMIT` |
 | ECMAScript | **The subject is code points, not UTF-16 code units, in *both* modes** | see below | - |
 | ECMAScript | A match cannot begin or end between the halves of a surrogate pair | as above | - |
-| Perl | **A character class** folds simply where Perl full-folds a literally listed member: `[ß]` matches "ss" in perl and not here. Full folding itself is built and agrees with perl everywhere else - measured over all 104 multi-character folds, bare and in a class (§5.8) | a class matches one character, and a multi-character fold inside one makes the class match a *run*; the fix is an alternation beside the folded class and is not built | - |
+| Perl | **`/aa` drops more full folds than Perl drops.** Perl keeps a full fold under `/aa` exactly when no code point of the fold is ASCII; this library drops every one. The premise was that "every code point with a full fold is outside ASCII and every one of those folds is at least partly inside it", and the second half is false for **87 of the 104** `F` lines - `U+0390` folds to `U+03B9 U+0308 U+0301`, none of it ASCII. Four rows in `known-gaps.txt`, counted as failures | a rule held backwards rather than a missing construct; found by `tools/corpus/make_fold_vectors.py` | - |
 | Perl | `(?{ })`, `(??{ })`, `\N{name}` by name | code execution; name table size | `GRX_ERR_UNSUPPORTED` |
 | PCRE2 | `(?{ })` is not a construct it has at all | pcre2test: "unrecognized character after (? or (?-" | `GRX_ERR_SYNTAX` |
 | Perl | `(?[ ])` is PCRE2's grammar only | Perl's nests and takes different operands; a shared reader would accept neither exactly | `GRX_ERR_SYNTAX` |

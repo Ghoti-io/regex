@@ -1625,46 +1625,75 @@ TEST(Perl, CaselessMatchingUsesFullFoldingAndSoCanChangeLength) {
   EXPECT_EQ(span_of("(?i)abc", "ABC", GRX_SYNTAX_PERL), "0-3");
   EXPECT_EQ(span_of(sharp_s, "ss", GRX_SYNTAX_PERL), "nomatch");
 
-  // A class is not a run here: UTS #18 applies full folding to the text a
-  // pattern spells out and not to the sets it names, so a class matches one
-  // character and `[\u00df]` cannot match two.
+  // A class takes part in full folding too, which is the one place a class
+  // is not simply "one character". `[\u00df]` matches "ss" in perl, and now
+  // here. This comment used to say Perl agreed that a class folds simply; it
+  // does not, and the measurement is what settled it - every code point whose
+  // full fold is longer than one code point, the 104 `F` lines of
+  // CaseFolding.txt, bare and in a class, both directions. Bare agreed 104 of
+  // 104 before the fix and in a class 0 of 104; both are 104 of 104 now, on
+  // all three engines.
   //
-  // **Perl does not agree, and this comment used to say it did.** perl
-  // full-folds a class member that is written out as a literal:
-  // `"ss" =~ /^(?:[\x{df}])$/iu` is a match there. Measured rather than
-  // argued, over every code point whose full fold is longer than one code
-  // point - 104 of them, from CaseFolding.txt's `F` lines - bare and inside
-  // a class, both directions: **bare agrees 104 of 104, class disagrees 104
-  // of 104.** So this is one systematic divergence and not a scatter.
-  //
-  // perl's rule is narrow. Only a *literally listed* member gets it; a
-  // range, `\w`, `\p{...}` and a negated class all answer nomatch there
-  // too, and `[\x{df}]{2}` against "ssss" matches, so it composes like any
-  // other branch. That is the shape a fix would take - a class under
-  // FULL_FOLD lowering to its simply-folded self *or* an alternation of the
-  // multi-character folds its literal members have - and it is not built.
-  // dialects.md section 6 carries it as a named deviation; no imported
-  // vector reaches it, which is why 2,592 of 2,592 did not.
-  EXPECT_EQ(span_of("(?i)[" + sharp_s + "]", "ss", GRX_SYNTAX_PERL),
-      "nomatch");
+  // tests/data/vectors/perl/folding.rxt is the corpus that holds it, so these
+  // are the readable statement of the rule rather than its coverage.
+  EXPECT_EQ(span_of("(?i)[" + sharp_s + "]", "ss", GRX_SYNTAX_PERL), "0-2");
+  EXPECT_EQ(span_of("(?i)^(?:[" + sharp_s + "])$", "ss", GRX_SYNTAX_PERL),
+      "0-2");
+
+  // The fold's own code points match by their orbit, so the subject may be
+  // cased any way at all - "SS", and the long s as well.
+  EXPECT_EQ(span_of("(?i)^(?:[" + sharp_s + "])$", "SS", GRX_SYNTAX_PERL),
+      "0-2");
+  EXPECT_EQ(span_of("(?i)^(?:[" + sharp_s + "])$", "s\xC5\xBF",
+                GRX_SYNTAX_PERL),
+      "0-3");
+
+  // And the class still matches what it always did.
   EXPECT_EQ(span_of("(?i)[" + sharp_s + "]", sharp_s, GRX_SYNTAX_PERL), "0-2");
 
+  // It is **one-directional**, which is what keeps a class a class: `[s]`
+  // does not match `\u00df`, though the literal "ss" does. A class stands for
+  // one character, so there is nothing for the second half of a two-character
+  // fold to come from.
+  EXPECT_EQ(span_of("(?i)^(?:[s])$", sharp_s, GRX_SYNTAX_PERL), "nomatch");
+  EXPECT_EQ(span_of("(?i)^(?:ss)$", sharp_s, GRX_SYNTAX_PERL), "0-2");
+
+  // Three code points, and a fold that is itself a combining sequence.
+  EXPECT_EQ(span_of("(?i)^(?:[\xEF\xAC\x83])$", "ffi", GRX_SYNTAX_PERL),
+      "0-3");
+  EXPECT_EQ(span_of("(?i)^(?:[\xC7\xB0])$", "j\xCC\x8C", GRX_SYNTAX_PERL),
+      "0-3");
+
+  // It composes like any other branch.
+  EXPECT_EQ(span_of("(?i)^(?:[" + sharp_s + "]{2})$", "ssss",
+                GRX_SYNTAX_PERL),
+      "0-4");
+
+  // Two members with one fold produce one branch, not two, and the answer is
+  // the same either way round.
+  EXPECT_EQ(span_of("(?i)^(?:[" + sharp_s + capital_sharp_s + "])$", "ss",
+                GRX_SYNTAX_PERL),
+      "0-2");
+
   // The shapes perl does *not* full-fold in a class, which this library
-  // answers the same way. They are here so that building the literal case
-  // later cannot quietly take these with it. Anchored, because the question
-  // is whether the class can match *both* characters - unanchored, every one
-  // of these matches the first `s` and answers a different question.
+  // answers the same way. Anchored, because the question is whether the class
+  // can match *both* characters - unanchored, every one of these matches the
+  // first `s` and answers a different question. A negated class is the one
+  // that would be easiest to get wrong by generalising.
+  EXPECT_EQ(span_of("(?i)^(?:[^" + sharp_s + "])$", "ss", GRX_SYNTAX_PERL),
+      "nomatch");
   EXPECT_EQ(span_of("(?i)^(?:[a-\xC3\xBF])$", "ss", GRX_SYNTAX_PERL),
       "nomatch");
   EXPECT_EQ(span_of("(?i)^(?:[\\w])$", "ss", GRX_SYNTAX_PERL), "nomatch");
   EXPECT_EQ(span_of("(?i)^(?:[\\p{Latin}])$", "ss", GRX_SYNTAX_PERL),
       "nomatch");
-  EXPECT_EQ(span_of("(?i)^(?:[^a])$", "ss", GRX_SYNTAX_PERL), "nomatch");
-
-  // And the anchored form of the divergence itself, which is exactly the
-  // question perl was asked: match there, nomatch here.
-  EXPECT_EQ(span_of("(?i)^(?:[" + sharp_s + "])$", "ss", GRX_SYNTAX_PERL),
+  EXPECT_EQ(span_of("(?i)^(?:[[:alpha:]])$", "ss", GRX_SYNTAX_PERL),
       "nomatch");
+
+  // A degenerate range is a single member, and perl treats it as one.
+  EXPECT_EQ(span_of("(?i)^(?:[" + sharp_s + "-" + sharp_s + "])$", "ss",
+                GRX_SYNTAX_PERL),
+      "0-2");
 }
 
 TEST(Perl, PcreFoldsSimplyWherePerlFoldsFully) {

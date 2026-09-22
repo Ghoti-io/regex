@@ -2440,6 +2440,125 @@ static GRX_Result lower_class_set(
   return result;
 }
 
+/**
+ * Perl full-folds a class member written out as a single code point.
+ *
+ * `[\x{df}]` matches "ss" in perl, and this is the only place a *class*
+ * takes part in full folding: everywhere else a class matches one character,
+ * which is why the fold closure in evaluate_class() is a simple one even
+ * under GRX_FOLD_FULL.
+ *
+ * The rule is narrower than "a class folds fully", and each boundary was
+ * measured against perl rather than reasoned about
+ * ([dialects.md](dialects.md) §5.8):
+ *
+ * - Only a member that denotes exactly **one code point** gets it - written
+ *   as a literal, as `\x{...}` or as `\N{U+...}`, all of which reach here
+ *   as GRX_CLASS_ITEM_SINGLE, plus a degenerate range like `[\x{df}-\x{df}]`,
+ *   which perl also accepts. A real range, a shorthand, a POSIX class and a
+ *   property all answer nomatch in perl too.
+ * - A **negated class** does not get it: `[^\x{df}]` does not match "ss"
+ *   there. Nor does a negated *item*.
+ * - It is **one-directional**. `[s]` does not match `\x{df}` in perl, which
+ *   is the opposite of the literal path, where "ss" does match it. A class
+ *   stands for one character, so there is nothing for the second half of a
+ *   two-character fold to come from.
+ *
+ * What it becomes is an alternation: the class as it already was, or one
+ * branch per distinct multi-character fold. Each branch is a concatenation
+ * of lower_codepoint(), so the fold's own code points match by their orbit -
+ * `[\x{df}]` matches "SS" and "s\x{17f}" as well as "ss", which is what perl
+ * does.
+ *
+ * The class comes first so that a subject that the class itself matches is
+ * still answered by one instruction, and because the branches are strictly
+ * longer: nothing that reaches a branch could have been taken by the class.
+ */
+static GRX_Result lower_class_full_folds(Lowering * low,
+    const GRX_Node * node, uint32_t class_node, uint32_t * out_node) {
+  *out_node = class_node;
+  if (low->fold != GRX_FOLD_FULL || (node->flags & GRX_NODE_NEGATED)) {
+    return GRX_OK;
+  }
+
+  // Gathered before anything is added to the IR, so that a class with no
+  // such member costs one walk of its items and builds nothing.
+  uint32_t folds[GRX_CLASS_FULL_FOLD_MAX][GRX_FULL_FOLD_MAX];
+  size_t lengths[GRX_CLASS_FULL_FOLD_MAX];
+  size_t count = 0;
+
+  for (uint32_t i = 0; i < node->b; i++) {
+    const GRX_ClassItem * item = GRX_ARENA_AT(
+        const GRX_ClassItem, &low->pattern->class_items, node->a + i);
+    if (!item) {
+      return fail(low, GRX_DIAG_INTERNAL, node);
+    }
+    if (item->flags & GRX_CLASS_ITEM_NEGATED) {
+      continue;
+    }
+    if (item->kind != GRX_CLASS_ITEM_SINGLE
+        && !(item->kind == GRX_CLASS_ITEM_RANGE && item->lo == item->hi)) {
+      continue;
+    }
+
+    uint32_t fold[GRX_FULL_FOLD_MAX];
+    size_t length = grx_unicode_fold_full(item->lo, fold);
+    if (length <= 1) {
+      continue;
+    }
+
+    // `[\x{df}\x{1e9e}]` names two code points with the same fold, and one
+    // branch answers for both.
+    int seen = 0;
+    for (size_t j = 0; j < count && !seen; j++) {
+      seen = lengths[j] == length
+          && memcmp(folds[j], fold, length * sizeof(uint32_t)) == 0;
+    }
+    if (seen) {
+      continue;
+    }
+    if (count >= GRX_CLASS_FULL_FOLD_MAX) {
+      // Unreachable while the bound holds, and a hard failure rather than a
+      // silent truncation if it ever does not: a dropped branch is a wrong
+      // answer, which is worse than a refused pattern.
+      return fail(low, GRX_DIAG_INTERNAL, node);
+    }
+    memcpy(folds[count], fold, length * sizeof(uint32_t));
+    lengths[count] = length;
+    count++;
+  }
+
+  if (!count) {
+    return GRX_OK;
+  }
+
+  uint32_t alternation = GRX_INDEX_NONE;
+  GRX_Result result = add(low, GRX_IR_ALTERNATE, node, &alternation);
+  if (result == GRX_OK) {
+    result = attach(low, alternation, class_node);
+  }
+  for (size_t i = 0; result == GRX_OK && i < count; i++) {
+    uint32_t branch = GRX_INDEX_NONE;
+    result = add(low, GRX_IR_CONCAT, node, &branch);
+    for (size_t j = 0; result == GRX_OK && j < lengths[i]; j++) {
+      uint32_t child = GRX_INDEX_NONE;
+      result = lower_codepoint(low, folds[i][j], node, &child);
+      if (result == GRX_OK) {
+        result = attach(low, branch, child);
+      }
+    }
+    if (result == GRX_OK) {
+      result = attach(low, alternation, branch);
+    }
+  }
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  *out_node = alternation;
+  return GRX_OK;
+}
+
 static GRX_Result lower_node(
     Lowering * low, uint32_t node_index, uint32_t * out_node) {
   const GRX_Node * node = grx_pattern_node(low->pattern, node_index);
@@ -2469,12 +2588,13 @@ static GRX_Result lower_node(
       if (result != GRX_OK) {
         return result;
       }
-      result = add(low, GRX_IR_CLASS, node, out_node);
+      uint32_t class_node = GRX_INDEX_NONE;
+      result = add(low, GRX_IR_CLASS, node, &class_node);
       if (result != GRX_OK) {
         return result;
       }
-      grx_ir_node(low->ir, *out_node)->a = class_index;
-      return GRX_OK;
+      grx_ir_node(low->ir, class_node)->a = class_index;
+      return lower_class_full_folds(low, node, class_node, out_node);
     }
 
     case GRX_NODE_ANY:
