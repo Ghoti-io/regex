@@ -51,6 +51,7 @@
 #include <string.h>
 
 #include "../core/core_internal.h"
+#include "../unicode/unicode_internal.h"
 #include "../parse/parse_internal.h"
 #include "../unicode/unicode_internal.h"
 
@@ -655,8 +656,7 @@ static GRX_Result read_named_codepoint(GRX_Parser * parser, int in_class,
   }
 
   // `\N{2,3}` is `\N` quantified, and the `{` is the quantifier's. Only a
-  // brace that cannot be a quantifier is the `\N{name}` form, which neither
-  // PCRE2 nor this library implements.
+  // brace that cannot be a quantifier is the `\N{name}` form. See below.
   if (brace_is_repeat(parser, 0)) {
     if (in_class) {
       // `[\N{4}]` is a class item that quantifies nothing; pcre2test reads
@@ -667,7 +667,49 @@ static GRX_Result read_named_codepoint(GRX_Parser * parser, int in_class,
     return GRX_OK;
   }
 
-  return grx_parse_fail(parser, GRX_DIAG_INVALID_ESCAPE, start, 3);
+  // `\N{name}`. Perl has the construct and PCRE2 does not - pcre2test
+  // answers error 137, "PCRE2 does not support \F, \L, \l, \N{name}, \U,
+  // or \u" - so this is one spelling with two answers rather than one gap.
+  if (flavour(parser) != FLAVOUR_PERL) {
+    return grx_parse_fail(parser, GRX_DIAG_INVALID_ESCAPE, start, 3);
+  }
+
+  // The name runs to the closing brace. `scan` counts from the `{` and the
+  // leading spaces were skipped before the `U+` test, so this is already the
+  // first character of the name.
+  size_t name_start = scan;
+  while (byte_at(parser, scan) && byte_at(parser, scan) != '}') {
+    scan++;
+  }
+  if (byte_at(parser, scan) != '}') {
+    return grx_parse_fail(parser, GRX_DIAG_INVALID_ESCAPE, start, scan + 2);
+  }
+  // Trailing space inside the braces, which Perl also ignores - `\N{ SPACE }`
+  // is U+0020 there. The leading half was skipped above, so the two ends are
+  // handled in the same place and for the same reason.
+  size_t name_end = scan;
+  while (name_end > name_start
+      && (byte_at(parser, name_end - 1) == ' '
+          || byte_at(parser, name_end - 1) == '\t')) {
+    name_end--;
+  }
+
+  uint32_t named = 0;
+  if (!grx_unicode_codepoint_from_name(
+          parser->text + parser->position + name_start,
+          name_end - name_start, &named)) {
+    // A name nobody has is a *syntax* error rather than an unsupported
+    // construct, because Perl rejects it too: `/abc\N{def}/` does not
+    // compile there, and `re_tests` carries four rows that turn on it.
+    // GRX_ERR_UNSUPPORTED would promise that the dialect accepts this.
+    return grx_parse_fail(
+        parser, GRX_DIAG_UNKNOWN_CHARACTER_NAME, start, scan + 2);
+  }
+
+  parser->position += scan + 1;
+  out->kind = ESC_LITERAL;
+  out->codepoint = named;
+  return GRX_OK;
 }
 
 /**

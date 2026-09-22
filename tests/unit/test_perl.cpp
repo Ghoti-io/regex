@@ -1534,42 +1534,109 @@ TEST(Perl, TheSecondAOfSlashAaCutsEveryFoldOrbitAtAscii) {
   EXPECT_EQ(compile_result("A\\K*", GRX_SYNTAX_PCRE), GRX_ERR_SYNTAX);
 }
 
-TEST(Perl, ANamedCodePointIsASyntaxErrorBecauseWeCannotTellWhichKindItIs) {
-  // core.h draws a line: GRX_ERR_SYNTAX is "this dialect rejects this text",
-  // GRX_ERR_UNSUPPORTED is "this dialect accepts it and this library does
-  // not yet". `\N{name}` looks like it belongs on the UNSUPPORTED side -
-  // Perl has the construct, and with `use charnames`
-  // /\N{LATIN SMALL LETTER A}/ matches "a" - and dialects.md section 6 said
-  // so for years.
+TEST(Perl, ANamedCodePointResolvesAgainstTheCharacterNameTable) {
+  // `\N{NAME}` is Perl's, and PCRE2 does not have it at all - pcre2test
+  // answers error 137, "PCRE2 does not support \F, \L, \l, \N{name}, \U,
+  // or \u" - so one spelling gets two answers.
   //
-  // It does not, and the reason is that Perl accepts only a name it *knows*.
-  // `/abc\N{def}/` is a syntax error in Perl, and `re_tests` carries four
-  // such rows. Telling one from the other needs UnicodeData.txt's Name
-  // field, which this library does not generate - the "both name resolvers"
-  // in the README are the strict and loose resolvers for *property* names,
-  // which is a different table.
-  //
-  // So the honest answer for every `\N{...}` is the one that matches the
-  // reference on every case anyone can currently produce: SYNTAX. Claiming
-  // UNSUPPORTED would assert "Perl accepts this" for inputs where it does
-  // not. Changing it back breaks re_tests.rxt lines 6549, 6577, 6585 and
-  // 6589, which is how this test came to exist.
-  EXPECT_EQ(compile_result("\\N{LATIN SMALL LETTER A}", GRX_SYNTAX_PERL),
-      GRX_ERR_SYNTAX);
-  EXPECT_EQ(compile_result("abc\\N{def}", GRX_SYNTAX_PERL), GRX_ERR_SYNTAX);
+  // Matching is exact and case sensitive, which is Perl's rule rather than a
+  // simplification of it: every loose spelling below is an error in perl
+  // 5.40.1 too, and each was tried there before this test was written.
+  EXPECT_EQ(span_of("\\N{LATIN SMALL LETTER A}", "a", GRX_SYNTAX_PERL), "0-1");
+  EXPECT_EQ(span_of("\\N{GREEK SMALL LETTER ALPHA}", "\xCE\xB1",
+                GRX_SYNTAX_PERL),
+      "0-2");
   EXPECT_EQ(compile_result("\\N{LATIN SMALL LETTER A}", GRX_SYNTAX_PCRE),
       GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("\\N{latin small letter a}", GRX_SYNTAX_PERL),
+      GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("\\N{LATIN-SMALL-LETTER-A}", GRX_SYNTAX_PERL),
+      GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("\\N{LATIN  SMALL  LETTER  A}", GRX_SYNTAX_PERL),
+      GRX_ERR_SYNTAX);
 
-  // The spellings both dialects do have keep working. `(*UTF)` because
-  // pcre2 makes `\N{U+hh}` UTF-only - "\N{U+dddd} is supported only in
-  // Unicode (UTF) mode" - and refuses it without, exactly as this library
-  // does; Perl's subject is always text, so its row needs no directive.
+  // An unknown name is a *syntax* error and not an unsupported construct,
+  // because Perl rejects it too: `/abc\N{def}/` does not compile there, and
+  // `re_tests` carries four rows that turn on it. GRX_ERR_UNSUPPORTED would
+  // promise that the dialect accepts this.
+  EXPECT_EQ(compile_result("abc\\N{def}", GRX_SYNTAX_PERL), GRX_ERR_SYNTAX);
+  {
+    Attempt attempt = compile("\\N{NO SUCH CHARACTER}", GRX_SYNTAX_PERL);
+    EXPECT_EQ(attempt.result, GRX_ERR_SYNTAX);
+    EXPECT_EQ(attempt.diag, GRX_DIAG_UNKNOWN_CHARACTER_NAME);
+    grx_regex_free(attempt.regex);
+  }
+
+  // All five alias kinds from NameAliases.txt, because Perl resolves all
+  // five and a table built from UnicodeData alone would answer "unknown" to
+  // things that work there. Abbreviation, control, correction, figment.
+  EXPECT_EQ(span_of("\\N{LF}", "\n", GRX_SYNTAX_PERL), "0-1");
+  EXPECT_EQ(span_of("\\N{ALERT}", "\a", GRX_SYNTAX_PERL), "0-1");
+  EXPECT_EQ(span_of("\\N{LATIN CAPITAL LETTER GHA}", "\xC6\xA2",
+                GRX_SYNTAX_PERL),
+      "0-2");
+  EXPECT_EQ(span_of("\\N{WEIERSTRASS ELLIPTIC FUNCTION}", "\xE2\x84\x98",
+                GRX_SYNTAX_PERL),
+      "0-3");
+
+  // The computed families, which are not in the table: storing the Hangul
+  // syllables alone would add 11,172 rows and the CJK ideographs 100,000.
+  EXPECT_EQ(span_of("\\N{CJK UNIFIED IDEOGRAPH-4E00}", "\xE4\xB8\x80",
+                GRX_SYNTAX_PERL),
+      "0-3");
+  EXPECT_EQ(span_of("\\N{HANGUL SYLLABLE GA}", "\xEA\xB0\x80",
+                GRX_SYNTAX_PERL),
+      "0-3");
+  EXPECT_EQ(span_of("\\N{HANGUL SYLLABLE GAG}", "\xEA\xB0\x81",
+                GRX_SYNTAX_PERL),
+      "0-3");
+  EXPECT_EQ(span_of("\\N{HANGUL SYLLABLE HIH}", "\xED\x9E\xA3",
+                GRX_SYNTAX_PERL),
+      "0-3");
+  EXPECT_EQ(span_of("\\N{TANGUT IDEOGRAPH-17000}", "\xF0\x97\x80\x80",
+                GRX_SYNTAX_PERL),
+      "0-4");
+  // A name of the right shape for a range it does not fall in is not a name.
+  EXPECT_EQ(compile_result("\\N{CJK UNIFIED IDEOGRAPH-0041}",
+                GRX_SYNTAX_PERL),
+      GRX_ERR_SYNTAX);
+
+  // `BELL` is U+1F514 and U+0007 is `ALERT`. Perl agrees, and the pair is
+  // here because "the obvious answer" and "the Unicode answer" differ.
+  EXPECT_EQ(span_of("\\N{BELL}", "\xF0\x9F\x94\x94", GRX_SYNTAX_PERL),
+      "0-4");
+  EXPECT_EQ(span_of("\\N{BELL}", "\a", GRX_SYNTAX_PERL), "nomatch");
+
+  // Nineteen names have two adjacent separators, and the encoder dropped one
+  // of the pair until it was caught. That lost more than those nineteen: the
+  // table is sorted by the real name and searched by the decoded one, so the
+  // ordering invariant broke and the search walked past healthy neighbours -
+  // DDHA below has no adjacent separators and was unreachable all the same.
+  EXPECT_EQ(span_of("\\N{ZANABAZAR SQUARE LETTER -A}", "\xF0\x91\xA8\xA9",
+                GRX_SYNTAX_PERL),
+      "0-4");
+  EXPECT_EQ(span_of("\\N{ZANABAZAR SQUARE LETTER DDHA}",
+                "\xF0\x91\xA8\x97", GRX_SYNTAX_PERL),
+      "0-4");
+
+  // Space inside the braces is ignored at both ends, as it is for `\N{U+h}`.
+  EXPECT_EQ(span_of("\\N{ SPACE }", " ", GRX_SYNTAX_PERL), "0-1");
+
+  // The spellings that were already here keep working, so the name branch
+  // cannot have swallowed them. `(*UTF)` because pcre2 makes `\N{U+hh}`
+  // UTF-only and refuses it without, exactly as this library does.
   EXPECT_EQ(span_of("\\N{U+0041}", "A", GRX_SYNTAX_PERL), "0-1");
   EXPECT_EQ(span_of("(*UTF)\\N{U+0041}", "A", GRX_SYNTAX_PCRE), "0-1");
-  EXPECT_EQ(compile_result("\\N{U+0041}", GRX_SYNTAX_PCRE), GRX_ERR_SYNTAX);
   EXPECT_EQ(span_of("\\N", "a", GRX_SYNTAX_PERL), "0-1");
   EXPECT_EQ(span_of("\\N", "\n", GRX_SYNTAX_PCRE), "nomatch");
   EXPECT_EQ(span_of("a\\N{2}b", "axyb", GRX_SYNTAX_PERL), "0-4");
+
+  // And in a class, where it is a member and a range endpoint.
+  EXPECT_EQ(span_of("^[\\N{LATIN SMALL LETTER A}]$", "a", GRX_SYNTAX_PERL),
+      "0-1");
+  EXPECT_EQ(span_of("^[\\N{LATIN SMALL LETTER A}-\\N{LATIN SMALL LETTER C}]$",
+                "b", GRX_SYNTAX_PERL),
+      "0-1");
 }
 
 TEST(Perl, AnIterationThatConsumedNothingStopsTheLoopRatherThanFailing) {

@@ -21,6 +21,7 @@ Copyright 2026 by Corey Pennycuff
 import argparse
 import math
 import os
+import re
 import sys
 
 MAX_CODEPOINT = 0x10FFFF
@@ -640,6 +641,202 @@ def build_string_sets(ucd):
     return {"sets": sets, "sequences": flat}
 
 
+def read_names(ucd):
+    """Every spelling `\\N{...}` accepts, as (name, code point) pairs.
+
+    Three sources, because Perl accepts all three and a table built from the
+    first alone answers "unknown charname" to things Perl resolves:
+
+    - `UnicodeData.txt` field 1, less the `<...>` rows. Those are range
+      endpoints and control characters, which have no name of their own -
+      the ranges are handled algorithmically at lookup and the controls get
+      their names from the aliases below.
+    - `NameAliases.txt`, **all five types**. Measured rather than assumed:
+      perl 5.40.1 resolves `\\N{NUL}` (abbreviation), `\\N{NULL}` and
+      `\\N{ALERT}` (control), `\\N{LATIN CAPITAL LETTER GHA}` (correction),
+      `\\N{BYTE ORDER MARK}` (alternate) and even
+      `\\N{WEIERSTRASS ELLIPTIC FUNCTION}` (figment, a name for a character
+      that was never encoded as described).
+    **Not** field 10, the Unicode 1.0 name, though it looks like the place a
+    superseded spelling would live. Perl does not use it: it resolves
+    `\\N{LATIN CAPITAL LETTER YOGH}` to U+021C, whose *current* name that is,
+    and not to U+01B7, whose Unicode 1.0 name it was. Including it made the
+    two collide, which is how this was found - the duplicate check below
+    fired rather than a later test. A superseded spelling that Perl does
+    accept is a `correction` alias and arrives with the rest of them:
+    U+01A2 is named OI today and GHA is its correction, so both resolve
+    without field 10 being read at all.
+
+    Not here: the algorithmic families (CJK, Tangut, Hangul syllables), which
+    are generated from the code point at lookup rather than stored - 
+    `HANGUL SYLLABLE GAG` alone would cost 11,172 rows.
+    """
+    names = []
+    seen = {}
+
+    def add(name, codepoint):
+        # A name that resolved to two code points would make the table
+        # ambiguous and the binary search arbitrary, so it is an error rather
+        # than a last-one-wins.
+        if name in seen and seen[name] != codepoint:
+            raise SystemExit(
+                "name %r maps to both U+%04X and U+%04X" % (
+                    name, seen[name], codepoint))
+        if name in seen:
+            return
+        seen[name] = codepoint
+        names.append((name, codepoint))
+
+    with open(os.path.join(ucd, "UnicodeData.txt"), "r", encoding="utf-8") as f:
+        for line in f:
+            fields = line.split(";")
+            if len(fields) < 2 or not fields[1] or fields[1].startswith("<"):
+                continue
+            add(fields[1], int(fields[0], 16))
+
+    with open(os.path.join(ucd, "NameAliases.txt"), "r", encoding="utf-8") as f:
+        for line in f:
+            line = strip_comment(line)
+            if not line:
+                continue
+            fields = [x.strip() for x in line.split(";")]
+            if len(fields) < 2:
+                continue
+            add(fields[1], int(fields[0], 16))
+
+    names.sort(key=lambda pair: pair[0].encode("ascii"))
+    return names
+
+
+def read_name_ranges(ucd):
+    """The families whose names are computed rather than stored.
+
+    UnicodeData.txt gives these as `<Label, First>` / `<Label, Last>` pairs
+    with no name of their own, because the name is a rule: every CJK
+    ideograph is `CJK UNIFIED IDEOGRAPH-` and its code point in hex, and
+    every Hangul syllable is `HANGUL SYLLABLE ` and its jamo spelling. Read
+    from the UCD rather than written down so that a new extension block
+    arrives with the next regeneration instead of being noticed later.
+
+    Surrogates and private use are in the same shape and are deliberately
+    absent: they have no names at all, and Perl resolves none of them.
+    """
+    labels = {
+        "CJK Ideograph": "CJK UNIFIED IDEOGRAPH-",
+        "Tangut Ideograph": "TANGUT IDEOGRAPH-",
+        "Hangul Syllable": "HANGUL SYLLABLE ",
+    }
+    ranges = []
+    first = None
+    with open(os.path.join(ucd, "UnicodeData.txt"), "r", encoding="utf-8") as f:
+        for line in f:
+            fields = line.split(";")
+            if len(fields) < 2 or not fields[1].startswith("<"):
+                continue
+            label = fields[1].strip("<>")
+            if label.endswith(", First"):
+                first = (int(fields[0], 16), label[:-len(", First")])
+                continue
+            if not label.endswith(", Last") or first is None:
+                continue
+            start, name = first
+            first = None
+            # "CJK Ideograph Extension A" and "CJK Ideograph" share a rule,
+            # as do the two Tangut blocks; the prefix is chosen by the stem.
+            for stem, prefix in labels.items():
+                if name == stem or name.startswith(stem + " "):
+                    ranges.append((start, int(fields[0], 16), prefix,
+                                   1 if stem == "Hangul Syllable" else 0))
+                    break
+    ranges.sort()
+    return ranges
+
+
+def build_name_table(names):
+    """Word-dictionary encoding of the names.
+
+    Unicode names are a small vocabulary repeated endlessly - LETTER appears
+    11,350 times, EGYPTIAN 5,105 - so storing the words once and the names as
+    word numbers costs about half what storing the strings costs. Measured
+    before it was written: 1,056 KB of raw name bytes against 104 KB of
+    dictionary plus 316 KB of tokens.
+
+    A token is a word number in the low 15 bits and, in bit 15, the separator
+    that *precedes* it: set for `-` and clear for a space. The first token of
+    a name has no separator and the bit is clear. Two separators are enough
+    because no Unicode name contains anything else - checked here rather than
+    assumed, since a name with an apostrophe would silently lose it.
+    """
+    vocabulary = {}
+    order = []
+
+    def word_number(word):
+        if word not in vocabulary:
+            vocabulary[word] = len(order)
+            order.append(word)
+        return vocabulary[word]
+
+    tokens = []
+    offsets = []
+    codepoints = []
+    for name, codepoint in names:
+        for ch in name:
+            if not (ch.isupper() or ch.isdigit() or ch in " -"):
+                raise SystemExit("name %r has an unexpected character %r"
+                                 % (name, ch))
+        offsets.append(len(tokens))
+        pieces = re.split(r"([ -])", name)
+        hyphen = False
+        for piece in pieces:
+            if piece == " ":
+                hyphen = False
+                continue
+            if piece == "-":
+                hyphen = True
+                continue
+            # An *empty* piece is what `re.split` yields between two adjacent
+            # separators, and nineteen Unicode names have a pair - the UCD
+            # spells U+11A0A `ZANABAZAR SQUARE LETTER -A` and U+0FCB
+            # `TIBETAN SYMBOL NOR BU GSUM -KHYIL`. Skipping them dropped one
+            # separator of the two, which is worse than losing those
+            # nineteen: the table is sorted by the *real* name and searched
+            # by the decoded one, so a mismatch there breaks the ordering
+            # invariant and the binary search walks past healthy neighbours
+            # as well. It cost `ZANABAZAR SQUARE LETTER DDHA`, which has no
+            # adjacent separators at all.
+            number = word_number(piece)
+            if number >= 0x8000:
+                raise SystemExit("more than 32767 distinct words in names")
+            tokens.append(number | (0x8000 if hyphen else 0))
+            hyphen = False
+        codepoints.append(codepoint)
+    offsets.append(len(tokens))
+
+    # Decode every name back and compare. The encoding is only useful if it
+    # round-trips, and the sort order the lookup relies on is the order of
+    # the *original* strings - so a lossy encoding does not merely lose the
+    # name it mangled, it invalidates the search for its neighbours. Checked
+    # here, where it is one loop, rather than left to a differential.
+    for index, (name, _codepoint) in enumerate(names):
+        decoded = []
+        for position in range(offsets[index], offsets[index + 1]):
+            token = tokens[position]
+            if position != offsets[index]:
+                decoded.append("-" if token & 0x8000 else " ")
+            decoded.append(order[token & 0x7FFF])
+        if "".join(decoded) != name:
+            raise SystemExit("name %r encodes to %r"
+                             % (name, "".join(decoded)))
+
+    return {
+        "words": order,
+        "tokens": tokens,
+        "offsets": offsets,
+        "codepoints": codepoints,
+        "names": names,
+    }
+
+
 def read_aliases(path):
     """PropertyAliases.txt: short name first, then the long name and others."""
     aliases = {}
@@ -987,6 +1184,8 @@ def build_tables(ucd, version):
         "es_orbits": es_orbits,
         "simple_upper": simple_upper,
         "simple_lower": simple_lower,
+        "names": build_name_table(read_names(ucd)),
+        "name_ranges": read_name_ranges(ucd),
     }
 
 
@@ -1249,6 +1448,34 @@ extern const size_t grx_unicode_es_legacy_orbit_count;
 extern const uint32_t grx_unicode_es_legacy_orbit_members[];
 extern const size_t grx_unicode_es_legacy_orbit_member_count;
 
+/** Character names for `\\N{NAME}`: the word dictionary, then the names.
+ *
+ * A name is a run of tokens in `grx_unicode_name_tokens`, from its entry in
+ * `grx_unicode_name_offset` to the next; each token is a word number into
+ * the dictionary in its low 15 bits, with bit 15 set when a `-` rather than
+ * a space precedes it. The rows are sorted by name so that a lookup can
+ * binary search them.
+ */
+extern const char grx_unicode_name_words[];
+extern const uint32_t grx_unicode_name_word_offset[];
+extern const size_t grx_unicode_name_word_count;
+
+/** A family whose names are computed from the code point. */
+typedef struct {
+  uint32_t first;        /**< First code point. */
+  uint32_t last;         /**< Last code point. */
+  const char * prefix;   /**< What every name in it begins with. */
+  uint8_t hangul;        /**< 1 when the tail is a jamo spelling, not hex. */
+} GRX_UnicodeNameRange;
+
+extern const GRX_UnicodeNameRange grx_unicode_name_ranges[];
+extern const size_t grx_unicode_name_range_count;
+
+extern const uint16_t grx_unicode_name_tokens[];
+extern const uint32_t grx_unicode_name_offset[];
+extern const uint32_t grx_unicode_name_codepoint[];
+extern const size_t grx_unicode_name_count;
+
 #ifdef __cplusplus
 }
 #endif
@@ -1479,6 +1706,99 @@ def write_breaks(out_dir, tables):
                       % (name, len(rows)))
 
 
+def write_names(out_dir, tables):
+    """The character-name table, as a word dictionary and encoded names.
+
+    Sorted by name and searched with a comparison against the decoded form,
+    so the order here and the order the lookup assumes are the same object.
+    """
+    path = os.path.join(out_dir, "tables_names.c")
+    table = tables["names"]
+    words = table["words"]
+    tokens = table["tokens"]
+    offsets = table["offsets"]
+    codepoints = table["codepoints"]
+
+    blob = []
+    word_offsets = []
+    for word in words:
+        word_offsets.append(len(blob))
+        blob.extend(word.encode("ascii"))
+        blob.append(0)
+
+    with open(path, "w", encoding="utf-8") as out:
+        out.write(HEADER_NOTICE % tables["version"])
+        out.write("""
+/*
+ * Character names, for Perl's `\\N{NAME}`.
+ *
+ * The vocabulary is stored once and each name is a list of word numbers into
+ * it, because Unicode names repeat themselves: LETTER appears 11,350 times
+ * and EGYPTIAN 5,105, so the raw strings cost 1,056 KB where this costs
+ * about 420 KB. Bit 15 of a token is the separator that precedes its word -
+ * set for `-`, clear for a space.
+ *
+ * Sorted by name, so `grx_unicode_codepoint_from_name` binary searches it.
+ * The algorithmic families are *not* here and are computed from the code
+ * point instead: the Hangul syllables alone would add 11,172 rows, and the
+ * CJK ideographs another 100,000.
+ */
+
+#include "tables_internal.h"
+
+""")
+        # A byte array rather than a string literal: the dictionary is about
+        # 106 KB and C99 only requires a compiler to support a 4,095-byte
+        # string, which -pedantic-errors turns into a hard failure. Adjacent
+        # literals would not help, since concatenation produces one literal
+        # and the limit is on the result.
+        out.write("const char grx_unicode_name_words[] = {\n")
+        for i in range(0, len(blob), 20):
+            chunk = blob[i:i + 20]
+            out.write("  " + "".join("%d," % b for b in chunk) + "\n")
+        out.write("};\n\n")
+
+        out.write("const uint32_t grx_unicode_name_word_offset[] = {\n")
+        emit_u32_array(out, word_offsets)
+        out.write("};\n\n")
+        out.write("const size_t grx_unicode_name_word_count = %d;\n\n"
+                  % len(words))
+
+        out.write("const uint16_t grx_unicode_name_tokens[] = {\n")
+        emit_u16_array(out, tokens)
+        out.write("};\n\n")
+
+        out.write("const uint32_t grx_unicode_name_offset[] = {\n")
+        emit_u32_array(out, offsets)
+        out.write("};\n\n")
+
+        out.write("const uint32_t grx_unicode_name_codepoint[] = {\n")
+        emit_u32_array(out, codepoints)
+        out.write("};\n\n")
+        out.write("const size_t grx_unicode_name_count = %d;\n\n"
+                  % len(codepoints))
+
+        out.write("const GRX_UnicodeNameRange grx_unicode_name_ranges[] = {\n")
+        for start, end, prefix, hangul in tables["name_ranges"]:
+            out.write('  {0x%04X, 0x%04X, "%s", %d},\n'
+                      % (start, end, prefix, hangul))
+        out.write("};\n")
+        out.write("const size_t grx_unicode_name_range_count = %d;\n"
+                  % len(tables["name_ranges"]))
+
+
+def emit_u16_array(out, values, per_line=12):
+    for i in range(0, len(values), per_line):
+        chunk = values[i:i + per_line]
+        out.write("  " + " ".join("0x%04X," % v for v in chunk) + "\n")
+
+
+def emit_u32_array(out, values, per_line=8):
+    for i in range(0, len(values), per_line):
+        chunk = values[i:i + per_line]
+        out.write("  " + " ".join("%d," % v for v in chunk) + "\n")
+
+
 def write_strings(out_dir, tables):
     """The properties of strings, as one flat code-point array and an index.
 
@@ -1556,6 +1876,7 @@ def main(argv):
     write_case(out_dir, tables)
     write_breaks(out_dir, tables)
     write_strings(out_dir, tables)
+    write_names(out_dir, tables)
 
     total_ranges = sum(len(prop["ranges"]) for prop in tables["properties"])
     sys.stderr.write(

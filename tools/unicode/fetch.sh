@@ -33,6 +33,8 @@ base="https://www.unicode.org/Public/$version"
 # "Public/17.0.0/emoji" is the 17.0 that matches everything else here.
 files="
 ucd/UnicodeData.txt
+ucd/NameAliases.txt
+ucd/NamedSequences.txt
 ucd/PropList.txt
 ucd/PropertyAliases.txt
 ucd/PropertyValueAliases.txt

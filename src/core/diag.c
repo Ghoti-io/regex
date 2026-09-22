@@ -82,6 +82,12 @@ static const DiagRow diag_table[GRX_DIAG_COUNT] = {
 
   [GRX_DIAG_INVALID_ESCAPE]
       = {"unrecognized escape sequence", GRX_ERR_SYNTAX},
+  // Syntax rather than unsupported, and the distinction is Perl's rather
+  // than a convenience: Perl resolves only a name it knows, so
+  // `/abc\N{def}/` does not compile there either. Saying UNSUPPORTED would
+  // promise that the dialect accepts it.
+  [GRX_DIAG_UNKNOWN_CHARACTER_NAME]
+      = {"unknown character name", GRX_ERR_SYNTAX},
   [GRX_DIAG_INVALID_HEX_ESCAPE]
       = {"malformed hexadecimal escape", GRX_ERR_SYNTAX},
   [GRX_DIAG_INVALID_OCTAL_ESCAPE]

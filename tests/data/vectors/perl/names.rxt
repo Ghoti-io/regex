@@ -1,0 +1,7308 @@
+# Perl's `\N{NAME}`, with Perl 5.40 as the oracle.
+# Written by tools/corpus/make_name_vectors.py.
+#
+# Stored names, every NameAliases kind, the computed families at
+# their range edges, and the spellings Perl refuses - a lower-case
+# name, hyphens for spaces, a doubled space, an unknown name, and a
+# name of the right shape for a range it does not fall in.
+#
+# Rows for characters Perl's UCD 15.0.0 does not have are left out:
+# those are a version difference rather than a disagreement, the
+# same skew unicode.md section 1 describes.
+dialect: perl
+unicode: 17.0
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH E005})$
+flags: 
+subject: \u{130D6}
+expect: 0-4
+
+pattern: ^(?:\\N{LATIN SMALL LETTER IOTA WITH STROKE})$
+flags: 
+subject: \u1D7C
+expect: 0-3
+
+pattern: ^(?:\\N{LATIN SMALL LETTER QP DIGRAPH})$
+flags: 
+subject: \u0239
+expect: 0-2
+
+pattern: ^(?:\\N{ZNAMENNY NEUME OSOKA SVETLAYA})$
+flags: 
+subject: \u{1CFB0}
+expect: 0-4
+
+pattern: ^(?:\\N{CANADIAN SYLLABICS CARRIER GHA})$
+flags: 
+subject: \u15C9
+expect: 0-3
+
+pattern: ^(?:\\N{WANCHO LETTER YIH})$
+flags: 
+subject: \u{1E2EB}
+expect: 0-4
+
+pattern: ^(?:\\N{GREEK VOCAL NOTATION SYMBOL-13})$
+flags: 
+subject: \u{1D20C}
+expect: 0-4
+
+pattern: ^(?:\\N{GUJARATI DIGIT TWO})$
+flags: 
+subject: \u0AE8
+expect: 0-3
+
+pattern: ^(?:\\N{ETHIOPIC SYLLABLE THU})$
+flags: 
+subject: \u1321
+expect: 0-3
+
+pattern: ^(?:\\N{CJK COMPATIBILITY IDEOGRAPH-2F84F})$
+flags: 
+subject: \u{2F84F}
+expect: 0-4
+
+pattern: ^(?:\\N{PAHAWH HMONG CLAN SIGN TSAB})$
+flags: 
+subject: \u{16B86}
+expect: 0-4
+
+pattern: ^(?:\\N{HANGUL JONGSEONG NIEUN-SIOS})$
+flags: 
+subject: \u11C7
+expect: 0-3
+
+pattern: ^(?:\\N{BYZANTINE MUSICAL SYMBOL YFESIS TRIGRAMMOS OKTO DODEKATA})$
+flags: 
+subject: \u{1D0D7}
+expect: 0-4
+
+pattern: ^(?:\\N{XIANGQI BLACK HORSE})$
+flags: 
+subject: \u{1FA6A}
+expect: 0-4
+
+pattern: ^(?:\\N{LATIN SMALL LETTER TURNED INSULAR G})$
+flags: 
+subject: \uA77F
+expect: 0-3
+
+pattern: ^(?:\\N{LARGER THAN})$
+flags: 
+subject: \u2AAB
+expect: 0-3
+
+pattern: ^(?:\\N{MATHEMATICAL ITALIC SMALL GAMMA})$
+flags: 
+subject: \u{1D6FE}
+expect: 0-4
+
+pattern: ^(?:\\N{TETRAGRAM FOR RITUAL})$
+flags: 
+subject: \u{1D335}
+expect: 0-4
+
+pattern: ^(?:\\N{LATIN CAPITAL LETTER Y WITH GRAVE})$
+flags: 
+subject: \u1EF2
+expect: 0-3
+
+pattern: ^(?:\\N{SIGNWRITING HAND-ANGLE LITTLE INDEX THUMB INDEX THUMB OUT})$
+flags: 
+subject: \u{1D89E}
+expect: 0-4
+
+pattern: ^(?:\\N{YI SYLLABLE YIET})$
+flags: 
+subject: \uA475
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL DOUBLE DOT TONE MARK})$
+flags: 
+subject: \u302F
+expect: 0-3
+
+pattern: ^(?:\\N{MANICHAEAN LETTER KHAPH})$
+flags: 
+subject: \u{10AD2}
+expect: 0-4
+
+pattern: ^(?:\\N{HALFWIDTH KATAKANA LETTER MO})$
+flags: 
+subject: \uFF93
+expect: 0-3
+
+pattern: ^(?:\\N{GRANTHA LETTER TTHA})$
+flags: 
+subject: \u{11320}
+expect: 0-4
+
+pattern: ^(?:\\N{MODIFIER LETTER CAPITAL H})$
+flags: 
+subject: \u1D34
+expect: 0-3
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH O032})$
+flags: 
+subject: \u{13280}
+expect: 0-4
+
+pattern: ^(?:\\N{ETHIOPIC SYLLABLE KXEE})$
+flags: 
+subject: \u12BC
+expect: 0-3
+
+pattern: ^(?:\\N{COMBINING ENCLOSING SQUARE})$
+flags: 
+subject: \u20DE
+expect: 0-3
+
+pattern: ^(?:\\N{LEFTWARDS OPEN-HEADED ARROW})$
+flags: 
+subject: \u21FD
+expect: 0-3
+
+pattern: ^(?:\\N{DUPLOYAN LETTER SLOAN ON})$
+flags: 
+subject: \u{1BC69}
+expect: 0-4
+
+pattern: ^(?:\\N{YI RADICAL VUR})$
+flags: 
+subject: \uA4AF
+expect: 0-3
+
+pattern: ^(?:\\N{ARABIC LIGATURE YEH WITH HAMZA ABOVE WITH MEEM ISOLATED FORM})$
+flags: 
+subject: \uFC02
+expect: 0-3
+
+pattern: ^(?:\\N{CANADIAN SYLLABICS PWAA})$
+flags: 
+subject: \u1446
+expect: 0-3
+
+pattern: ^(?:\\N{NEWA LETTER A})$
+flags: 
+subject: \u{11400}
+expect: 0-4
+
+pattern: ^(?:\\N{LINEAR A SIGN A618})$
+flags: 
+subject: \u{10713}
+expect: 0-4
+
+pattern: ^(?:\\N{CYRILLIC CAPITAL LETTER EM WITH TAIL})$
+flags: 
+subject: \u04CD
+expect: 0-2
+
+pattern: ^(?:\\N{CIRCLED KATAKANA KO})$
+flags: 
+subject: \u32D9
+expect: 0-3
+
+pattern: ^(?:\\N{BLACK CURVED UPWARDS AND RIGHTWARDS ARROW})$
+flags: 
+subject: \u2BAB
+expect: 0-3
+
+pattern: ^(?:\\N{BLOCK SEXTANT-12346})$
+flags: 
+subject: \u{1FB2C}
+expect: 0-4
+
+pattern: ^(?:\\N{MATHEMATICAL ITALIC CAPITAL TAU})$
+flags: 
+subject: \u{1D6F5}
+expect: 0-4
+
+pattern: ^(?:\\N{HEBREW MARK MASORA CIRCLE})$
+flags: 
+subject: \u05AF
+expect: 0-2
+
+pattern: ^(?:\\N{PARENTHESIZED IDEOGRAPH FESTIVAL})$
+flags: 
+subject: \u3240
+expect: 0-3
+
+pattern: ^(?:\\N{RECYCLING SYMBOL FOR TYPE-5 PLASTICS})$
+flags: 
+subject: \u2677
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL JONGSEONG RIEUL-YEORINHIEUH})$
+flags: 
+subject: \u11D9
+expect: 0-3
+
+pattern: ^(?:\\N{WHITE LARGE SQUARE})$
+flags: 
+subject: \u2B1C
+expect: 0-3
+
+pattern: ^(?:\\N{BRAILLE PATTERN DOTS-568})$
+flags: 
+subject: \u28B0
+expect: 0-3
+
+pattern: ^(?:\\N{YI SYLLABLE LUOP})$
+flags: 
+subject: \uA1C6
+expect: 0-3
+
+pattern: ^(?:\\N{PAW PRINTS})$
+flags: 
+subject: \u{1F43E}
+expect: 0-4
+
+pattern: ^(?:\\N{YI SYLLABLE NJYP})$
+flags: 
+subject: \uA447
+expect: 0-3
+
+pattern: ^(?:\\N{ARABIC LETTER YEH})$
+flags: 
+subject: \u064A
+expect: 0-2
+
+pattern: ^(?:\\N{PHAISTOS DISC SIGN RAM})$
+flags: 
+subject: \u{101ED}
+expect: 0-4
+
+pattern: ^(?:\\N{LEPCHA PUNCTUATION NYET THYOOM TA-ROL})$
+flags: 
+subject: \u1C3C
+expect: 0-3
+
+pattern: ^(?:\\N{SIGNWRITING LIMB LENGTH-4})$
+flags: 
+subject: \u{1DA7A}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT COMPONENT-629})$
+flags: 
+subject: \u{18A74}
+expect: 0-4
+
+pattern: ^(?:\\N{CUNEIFORM SIGN ZIB})$
+flags: 
+subject: \u{12366}
+expect: 0-4
+
+pattern: ^(?:\\N{CUNEIFORM SIGN URU TIMES IGI})$
+flags: 
+subject: \u{12342}
+expect: 0-4
+
+pattern: ^(?:\\N{LIMBU LETTER JHA})$
+flags: 
+subject: \u1909
+expect: 0-3
+
+pattern: ^(?:\\N{TIBETAN LETTER TTA})$
+flags: 
+subject: \u0F4A
+expect: 0-3
+
+pattern: ^(?:\\N{GUNJALA GONDI LETTER TTHA})$
+flags: 
+subject: \u{11D7E}
+expect: 0-4
+
+pattern: ^(?:\\N{MATHEMATICAL BOLD SCRIPT SMALL N})$
+flags: 
+subject: \u{1D4F7}
+expect: 0-4
+
+pattern: ^(?:\\N{CUNEIFORM SIGN E2 TIMES GAR})$
+flags: 
+subject: \u{1208F}
+expect: 0-4
+
+pattern: ^(?:\\N{LINEAR B SYMBOL B022})$
+flags: 
+subject: \u{10052}
+expect: 0-4
+
+pattern: ^(?:\\N{PARALLEL TO})$
+flags: 
+subject: \u2225
+expect: 0-3
+
+pattern: ^(?:\\N{BAMUM COMBINING MARK TUKWENTIS})$
+flags: 
+subject: \uA6F1
+expect: 0-3
+
+pattern: ^(?:\\N{BROCCOLI})$
+flags: 
+subject: \u{1F966}
+expect: 0-4
+
+pattern: ^(?:\\N{PLAYING CARD FIVE OF HEARTS})$
+flags: 
+subject: \u{1F0B5}
+expect: 0-4
+
+pattern: ^(?:\\N{PAU CIN HAU LETTER FINAL K})$
+flags: 
+subject: \u{11ADD}
+expect: 0-4
+
+pattern: ^(?:\\N{MODIFIER LETTER DOUBLE PRIME})$
+flags: 
+subject: \u02BA
+expect: 0-2
+
+pattern: ^(?:\\N{CIRCLE WITH UPPER RIGHT QUADRANT BLACK})$
+flags: 
+subject: \u25D4
+expect: 0-3
+
+pattern: ^(?:\\N{LEFTWARDS SANS-SERIF ARROW})$
+flags: 
+subject: \u{1F850}
+expect: 0-4
+
+pattern: ^(?:\\N{ZNAMENNY NEUME STRELA KLYUCHEPOVODNAYA})$
+flags: 
+subject: \u{1CF98}
+expect: 0-4
+
+pattern: ^(?:\\N{CJK COMPATIBILITY IDEOGRAPH-2F8CC})$
+flags: 
+subject: \u{2F8CC}
+expect: 0-4
+
+pattern: ^(?:\\N{VAI SYLLABLE GE})$
+flags: 
+subject: \uA606
+expect: 0-3
+
+pattern: ^(?:\\N{BALINESE LETTER OKARA TEDUNG})$
+flags: 
+subject: \u1B12
+expect: 0-3
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH H008})$
+flags: 
+subject: \u{13187}
+expect: 0-4
+
+pattern: ^(?:\\N{DASH WITH LEFT UPTURN})$
+flags: 
+subject: \u2E43
+expect: 0-3
+
+pattern: ^(?:\\N{MATHEMATICAL SANS-SERIF BOLD ITALIC CAPITAL U})$
+flags: 
+subject: \u{1D650}
+expect: 0-4
+
+pattern: ^(?:\\N{LINEAR B IDEOGRAM B104 DEER})$
+flags: 
+subject: \u{10082}
+expect: 0-4
+
+pattern: ^(?:\\N{VAI SYLLABLE AN})$
+flags: 
+subject: \uA54A
+expect: 0-3
+
+pattern: ^(?:\\N{ARABIC CURLY DAMMATAN})$
+flags: 
+subject: \u08E8
+expect: 0-3
+
+pattern: ^(?:\\N{UPWARDS ARROW WITH SMALL EQUILATERAL ARROWHEAD})$
+flags: 
+subject: \u{1F811}
+expect: 0-4
+
+pattern: ^(?:\\N{LATIN CAPITAL LETTER H WITH CEDILLA})$
+flags: 
+subject: \u1E28
+expect: 0-3
+
+pattern: ^(?:\\N{GURMUKHI LETTER BA})$
+flags: 
+subject: \u0A2C
+expect: 0-3
+
+pattern: ^(?:\\N{TANGUT COMPONENT-528})$
+flags: 
+subject: \u{18A0F}
+expect: 0-4
+
+pattern: ^(?:\\N{ALCHEMICAL SYMBOL FOR SUBLIMATE OF ANTIMONY})$
+flags: 
+subject: \u{1F72C}
+expect: 0-4
+
+pattern: ^(?:\\N{BYZANTINE MUSICAL SYMBOL SYRMATIKI})$
+flags: 
+subject: \u{1D008}
+expect: 0-4
+
+pattern: ^(?:\\N{ETHIOPIC SYLLABLE QHO})$
+flags: 
+subject: \u1256
+expect: 0-3
+
+pattern: ^(?:\\N{CUNEIFORM SIGN KA TIMES UR})$
+flags: 
+subject: \u{124D3}
+expect: 0-4
+
+pattern: ^(?:\\N{SQUARED VOD})$
+flags: 
+subject: \u{1F1AC}
+expect: 0-4
+
+pattern: ^(?:\\N{LATIN CAPITAL LETTER A WITH HOOK ABOVE})$
+flags: 
+subject: \u1EA2
+expect: 0-3
+
+pattern: ^(?:\\N{NOT SQUARE ORIGINAL OF OR EQUAL TO})$
+flags: 
+subject: \u22E3
+expect: 0-3
+
+pattern: ^(?:\\N{SIGNWRITING MOVEMENT-FLOORPLANE LOOP HITTING FLOOR SMALL SINGLE})$
+flags: 
+subject: \u{1D9CC}
+expect: 0-4
+
+pattern: ^(?:\\N{BOX DRAWINGS VERTICAL DOUBLE AND RIGHT SINGLE})$
+flags: 
+subject: \u255F
+expect: 0-3
+
+pattern: ^(?:\\N{OLD PERSIAN SIGN TA})$
+flags: 
+subject: \u{103AB}
+expect: 0-4
+
+pattern: ^(?:\\N{KAWI LETTER VOCALIC LL})$
+flags: 
+subject: \u{11F0D}
+expect: 0-4
+
+pattern: ^(?:\\N{CUNEIFORM SIGN SAG TIMES KUR})$
+flags: 
+subject: \u{1229B}
+expect: 0-4
+
+pattern: ^(?:\\N{PAU CIN HAU LETTER MA})$
+flags: 
+subject: \u{11AC3}
+expect: 0-4
+
+pattern: ^(?:\\N{BENGALI LETTER DHA})$
+flags: 
+subject: \u09A7
+expect: 0-3
+
+pattern: ^(?:\\N{SIGNWRITING HAND-HINGE INDEX THUMB OPEN})$
+flags: 
+subject: \u{1D8EE}
+expect: 0-4
+
+pattern: ^(?:\\N{LATIN SMALL LETTER TURNED OPEN E})$
+flags: 
+subject: \u1D08
+expect: 0-3
+
+pattern: ^(?:\\N{DEVANAGARI OM})$
+flags: 
+subject: \u0950
+expect: 0-3
+
+pattern: ^(?:\\N{CIRCLED LATIN CAPITAL LETTER S})$
+flags: 
+subject: \u24C8
+expect: 0-3
+
+pattern: ^(?:\\N{MYANMAR SHAN DIGIT SEVEN})$
+flags: 
+subject: \u1097
+expect: 0-3
+
+pattern: ^(?:\\N{CARIAN LETTER G2})$
+flags: 
+subject: \u{102C1}
+expect: 0-4
+
+pattern: ^(?:\\N{SQUARED FALLING DIAGONAL SLASH})$
+flags: 
+subject: \u29C5
+expect: 0-3
+
+pattern: ^(?:\\N{TAGALOG VOWEL SIGN U})$
+flags: 
+subject: \u1713
+expect: 0-3
+
+pattern: ^(?:\\N{CYRILLIC SMALL LETTER ER WITH TICK})$
+flags: 
+subject: \u048F
+expect: 0-2
+
+pattern: ^(?:\\N{COMBINING LATIN SMALL LETTER B})$
+flags: 
+subject: \u1DE8
+expect: 0-3
+
+pattern: ^(?:\\N{TANGUT COMPONENT-033})$
+flags: 
+subject: \u{18820}
+expect: 0-4
+
+pattern: ^(?:\\N{SYMBOL FOR END OF MEDIUM})$
+flags: 
+subject: \u2419
+expect: 0-3
+
+pattern: ^(?:\\N{GREEK CAPITAL LETTER ETA WITH DASIA AND PROSGEGRAMMENI})$
+flags: 
+subject: \u1F99
+expect: 0-3
+
+pattern: ^(?:\\N{ZANABAZAR SQUARE SIGN ANUSVARA})$
+flags: 
+subject: \u{11A38}
+expect: 0-4
+
+pattern: ^(?:\\N{CUNEIFORM SIGN PI TIMES I})$
+flags: 
+subject: \u{12285}
+expect: 0-4
+
+pattern: ^(?:\\N{ORIYA LETTER A})$
+flags: 
+subject: \u0B05
+expect: 0-3
+
+pattern: ^(?:\\N{OTTOMAN SIYAQ NUMBER THREE THOUSAND})$
+flags: 
+subject: \u{1ED1E}
+expect: 0-4
+
+pattern: ^(?:\\N{ANATOLIAN HIEROGLYPH A114})$
+flags: 
+subject: \u{1448A}
+expect: 0-4
+
+pattern: ^(?:\\N{BAMUM LETTER PHASE-D NSIEET})$
+flags: 
+subject: \u{1692B}
+expect: 0-4
+
+pattern: ^(?:\\N{NOTE})$
+flags: 
+subject: \u{1F5C8}
+expect: 0-4
+
+pattern: ^(?:\\N{BAMUM LETTER PHASE-E YUEQ})$
+flags: 
+subject: \u{169B2}
+expect: 0-4
+
+pattern: ^(?:\\N{CJK COMPATIBILITY IDEOGRAPH-FA30})$
+flags: 
+subject: \uFA30
+expect: 0-3
+
+pattern: ^(?:\\N{NYIAKENG PUACHUE HMONG SIGN FOR THING})$
+flags: 
+subject: \u{1E138}
+expect: 0-4
+
+pattern: ^(?:\\N{KHAROSHTHI LETTER TTTHA})$
+flags: 
+subject: \u{10A33}
+expect: 0-4
+
+pattern: ^(?:\\N{LINEAR A SIGN AB077})$
+flags: 
+subject: \u{1063E}
+expect: 0-4
+
+pattern: ^(?:\\N{CYRILLIC SMALL LETTER LHA})$
+flags: 
+subject: \u0515
+expect: 0-2
+
+pattern: ^(?:\\N{CUNEIFORM SIGN NINDA2 TIMES SHE PLUS ASH PLUS ASH})$
+flags: 
+subject: \u{1225D}
+expect: 0-4
+
+pattern: ^(?:\\N{BAMUM LETTER PHASE-D SHEE})$
+flags: 
+subject: \u{168FD}
+expect: 0-4
+
+pattern: ^(?:\\N{BENGALI LETTER U})$
+flags: 
+subject: \u0989
+expect: 0-3
+
+pattern: ^(?:\\N{TIBETAN SUBJOINED LETTER PA})$
+flags: 
+subject: \u0FA4
+expect: 0-3
+
+pattern: ^(?:\\N{LATIN SMALL LETTER BARRED E})$
+flags: 
+subject: \uAB33
+expect: 0-3
+
+pattern: ^(?:\\N{MYANMAR LETTER NNYA})$
+flags: 
+subject: \u100A
+expect: 0-3
+
+pattern: ^(?:\\N{IDEOGRAPHIC TELEGRAPH SYMBOL FOR JULY})$
+flags: 
+subject: \u32C6
+expect: 0-3
+
+pattern: ^(?:\\N{REVERSED TILDE EQUALS})$
+flags: 
+subject: \u22CD
+expect: 0-3
+
+pattern: ^(?:\\N{SIGNWRITING HAND-FLAT SPLIT INDEX THUMB SIDE})$
+flags: 
+subject: \u{1D861}
+expect: 0-4
+
+pattern: ^(?:\\N{MEETEI MAYEK VOWEL SIGN VISARGA})$
+flags: 
+subject: \uAAF5
+expect: 0-3
+
+pattern: ^(?:\\N{PHAGS-PA LETTER DA})$
+flags: 
+subject: \uA84A
+expect: 0-3
+
+pattern: ^(?:\\N{TWO BUTTON MOUSE})$
+flags: 
+subject: \u{1F5B0}
+expect: 0-4
+
+pattern: ^(?:\\N{CYRILLIC CAPITAL LETTER EL WITH MIDDLE HOOK})$
+flags: 
+subject: \u0520
+expect: 0-2
+
+pattern: ^(?:\\N{LYCIAN LETTER A})$
+flags: 
+subject: \u{10280}
+expect: 0-4
+
+pattern: ^(?:\\N{CHAM LETTER JHA})$
+flags: 
+subject: \uAA0F
+expect: 0-3
+
+pattern: ^(?:\\N{MODI LETTER HA})$
+flags: 
+subject: \u{1162E}
+expect: 0-4
+
+pattern: ^(?:\\N{GREEK SMALL LETTER OMEGA WITH PERISPOMENI AND YPOGEGRAMMENI})$
+flags: 
+subject: \u1FF7
+expect: 0-3
+
+pattern: ^(?:\\N{MEROITIC CURSIVE NUMBER NINE})$
+flags: 
+subject: \u{109C8}
+expect: 0-4
+
+pattern: ^(?:\\N{BRAILLE PATTERN DOTS-34567})$
+flags: 
+subject: \u287C
+expect: 0-3
+
+pattern: ^(?:\\N{BOX DRAWINGS LIGHT DOWN AND LEFT})$
+flags: 
+subject: \u2510
+expect: 0-3
+
+pattern: ^(?:\\N{ANATOLIAN HIEROGLYPH A301})$
+flags: 
+subject: \u{14553}
+expect: 0-4
+
+pattern: ^(?:\\N{KHOJKI LETTER NA})$
+flags: 
+subject: \u{1121E}
+expect: 0-4
+
+pattern: ^(?:\\N{MATHEMATICAL SANS-SERIF SMALL L})$
+flags: 
+subject: \u{1D5C5}
+expect: 0-4
+
+pattern: ^(?:\\N{SINHALA ARCHAIC DIGIT NINE})$
+flags: 
+subject: \u{111E9}
+expect: 0-4
+
+pattern: ^(?:\\N{COMBINING GLAGOLITIC LETTER INITIAL IZHE})$
+flags: 
+subject: \u{1E00A}
+expect: 0-4
+
+pattern: ^(?:\\N{MEDEFAIDRIN CAPITAL LETTER B})$
+flags: 
+subject: \u{16E50}
+expect: 0-4
+
+pattern: ^(?:\\N{ZNAMENNY NEUME STRELA TRYASOGLASNAYA})$
+flags: 
+subject: \u{1CFAC}
+expect: 0-4
+
+pattern: ^(?:\\N{ANATOLIAN HIEROGLYPH A412})$
+flags: 
+subject: \u{145D1}
+expect: 0-4
+
+pattern: ^(?:\\N{HENTAIGANA LETTER NA-9})$
+flags: 
+subject: \u{1B086}
+expect: 0-4
+
+pattern: ^(?:\\N{HALFWIDTH KATAKANA LETTER RE})$
+flags: 
+subject: \uFF9A
+expect: 0-3
+
+pattern: ^(?:\\N{ETHIOPIC SYLLABLE SSE})$
+flags: 
+subject: \u2DA5
+expect: 0-3
+
+pattern: ^(?:\\N{BYZANTINE MUSICAL SYMBOL DIESIS APLI DYO DODEKATA})$
+flags: 
+subject: \u{1D0D0}
+expect: 0-4
+
+pattern: ^(?:\\N{BAMUM LETTER PHASE-F NI})$
+flags: 
+subject: \u{16A24}
+expect: 0-4
+
+pattern: ^(?:\\N{LATIN SMALL LETTER B WITH DOT BELOW})$
+flags: 
+subject: \u1E05
+expect: 0-3
+
+pattern: ^(?:\\N{CAPITULUM})$
+flags: 
+subject: \u2E3F
+expect: 0-3
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH D067H})$
+flags: 
+subject: \u{130D1}
+expect: 0-4
+
+pattern: ^(?:\\N{KAITHI LETTER SHA})$
+flags: 
+subject: \u{110AC}
+expect: 0-4
+
+pattern: ^(?:\\N{CUNEIFORM SIGN SHU OVER INVERTED SHU})$
+flags: 
+subject: \u{122D8}
+expect: 0-4
+
+pattern: ^(?:\\N{YI SYLLABLE RRO})$
+flags: 
+subject: \uA382
+expect: 0-3
+
+pattern: ^(?:\\N{SIGNWRITING FILL MODIFIER-4})$
+flags: 
+subject: \u{1DA9D}
+expect: 0-4
+
+pattern: ^(?:\\N{HEBREW LETTER HE WITH MAPIQ})$
+flags: 
+subject: \uFB34
+expect: 0-3
+
+pattern: ^(?:\\N{LINEAR A SIGN A534})$
+flags: 
+subject: \u{106CD}
+expect: 0-4
+
+pattern: ^(?:\\N{ANATOLIAN HIEROGLYPH A037})$
+flags: 
+subject: \u{14426}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGSA LETTER UIC})$
+flags: 
+subject: \u{16A8D}
+expect: 0-4
+
+pattern: ^(?:\\N{CUNEIFORM SIGN LAGAB TIMES KU3})$
+flags: 
+subject: \u{121D1}
+expect: 0-4
+
+pattern: ^(?:\\N{ORANGE HEART})$
+flags: 
+subject: \u{1F9E1}
+expect: 0-4
+
+pattern: ^(?:\\N{CJK COMPATIBILITY IDEOGRAPH-2F8B4})$
+flags: 
+subject: \u{2F8B4}
+expect: 0-4
+
+pattern: ^(?:\\N{BYZANTINE MUSICAL SYMBOL YFESIS APLI DYO DODEKATA})$
+flags: 
+subject: \u{1D0D4}
+expect: 0-4
+
+pattern: ^(?:\\N{MATHEMATICAL BOLD SMALL M})$
+flags: 
+subject: \u{1D426}
+expect: 0-4
+
+pattern: ^(?:\\N{OLD PERMIC LETTER VOOI})$
+flags: 
+subject: \u{1035E}
+expect: 0-4
+
+pattern: ^(?:\\N{UGARITIC LETTER NUN})$
+flags: 
+subject: \u{10390}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH Z010})$
+flags: 
+subject: \u{133F5}
+expect: 0-4
+
+pattern: ^(?:\\N{COMBINING OLD PERMIC LETTER NENOE})$
+flags: 
+subject: \u{10379}
+expect: 0-4
+
+pattern: ^(?:\\N{LINEAR B SYLLABLE B068 RO2})$
+flags: 
+subject: \u{1004A}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH T027})$
+flags: 
+subject: \u{13327}
+expect: 0-4
+
+pattern: ^(?:\\N{MULTANI LETTER RHA})$
+flags: 
+subject: \u{112A8}
+expect: 0-4
+
+pattern: ^(?:\\N{SIGNWRITING HAND-HINGE INDEX MIDDLE LITTLE})$
+flags: 
+subject: \u{1D8A6}
+expect: 0-4
+
+pattern: ^(?:\\N{SIGNWRITING ROTATION-WALLPLANE DOUBLE HITTING FRONT WALL})$
+flags: 
+subject: \u{1D9AB}
+expect: 0-4
+
+pattern: ^(?:\\N{CJK STROKE PG})$
+flags: 
+subject: \u31E2
+expect: 0-3
+
+pattern: ^(?:\\N{BAMUM LETTER PHASE-D MU})$
+flags: 
+subject: \u{16953}
+expect: 0-4
+
+pattern: ^(?:\\N{COFFIN})$
+flags: 
+subject: \u26B0
+expect: 0-3
+
+pattern: ^(?:\\N{MUSICAL SYMBOL DECRESCENDO})$
+flags: 
+subject: \u{1D193}
+expect: 0-4
+
+pattern: ^(?:\\N{ARABIC LIGATURE YEH WITH HAMZA ABOVE WITH JEEM ISOLATED FORM})$
+flags: 
+subject: \uFC00
+expect: 0-3
+
+pattern: ^(?:\\N{MODIFIER LETTER EXTRA-LOW TONE BAR})$
+flags: 
+subject: \u02E9
+expect: 0-2
+
+pattern: ^(?:\\N{ANATOLIAN HIEROGLYPH A473})$
+flags: 
+subject: \u{14610}
+expect: 0-4
+
+pattern: ^(?:\\N{YI SYLLABLE ZHUR})$
+flags: 
+subject: \uA35A
+expect: 0-3
+
+pattern: ^(?:\\N{PARENTHESIZED KOREAN CHARACTER OJEON})$
+flags: 
+subject: \u321D
+expect: 0-3
+
+pattern: ^(?:\\N{ARABIC MATHEMATICAL SEEN})$
+flags: 
+subject: \u{1EE0E}
+expect: 0-4
+
+pattern: ^(?:\\N{CJK COMPATIBILITY IDEOGRAPH-FA5A})$
+flags: 
+subject: \uFA5A
+expect: 0-3
+
+pattern: ^(?:\\N{MATHEMATICAL SANS-SERIF BOLD DIGIT EIGHT})$
+flags: 
+subject: \u{1D7F4}
+expect: 0-4
+
+pattern: ^(?:\\N{IMPERIAL ARAMAIC SECTION SIGN})$
+flags: 
+subject: \u{10857}
+expect: 0-4
+
+pattern: ^(?:\\N{YI SYLLABLE SAX})$
+flags: 
+subject: \uA311
+expect: 0-3
+
+pattern: ^(?:\\N{LINEAR B IDEOGRAM VESSEL B219})$
+flags: 
+subject: \u{100F2}
+expect: 0-4
+
+pattern: ^(?:\\N{HENTAIGANA LETTER KU-6})$
+flags: 
+subject: \u{1B030}
+expect: 0-4
+
+pattern: ^(?:\\N{ALTERNATIVE KEY SYMBOL})$
+flags: 
+subject: \u2387
+expect: 0-3
+
+pattern: ^(?:\\N{ARABIC LETTER MEEM WITH DOT ABOVE})$
+flags: 
+subject: \u0765
+expect: 0-2
+
+pattern: ^(?:\\N{TANGUT COMPONENT-068})$
+flags: 
+subject: \u{18843}
+expect: 0-4
+
+pattern: ^(?:\\N{BLACK SLIGHTLY SMALL CIRCLE})$
+flags: 
+subject: \u{1F784}
+expect: 0-4
+
+pattern: ^(?:\\N{CJK COMPATIBILITY IDEOGRAPH-FA89})$
+flags: 
+subject: \uFA89
+expect: 0-3
+
+pattern: ^(?:\\N{KHAROSHTHI LETTER KKA})$
+flags: 
+subject: \u{10A32}
+expect: 0-4
+
+pattern: ^(?:\\N{TIRHUTA LETTER VOCALIC RR})$
+flags: 
+subject: \u{11488}
+expect: 0-4
+
+pattern: ^(?:\\N{CJK COMPATIBILITY IDEOGRAPH-FA81})$
+flags: 
+subject: \uFA81
+expect: 0-3
+
+pattern: ^(?:\\N{ARABIC LIGATURE LAM WITH JEEM WITH JEEM FINAL FORM})$
+flags: 
+subject: \uFD84
+expect: 0-3
+
+pattern: ^(?:\\N{THAANA LETTER MEEMU})$
+flags: 
+subject: \u0789
+expect: 0-2
+
+pattern: ^(?:\\N{RUBLE SIGN})$
+flags: 
+subject: \u20BD
+expect: 0-3
+
+pattern: ^(?:\\N{TANGUT COMPONENT-765})$
+flags: 
+subject: \u{18AFC}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH NL002})$
+flags: 
+subject: \u{13221}
+expect: 0-4
+
+pattern: ^(?:\\N{ARABIC LIGATURE YEH WITH HAMZA ABOVE WITH YEH ISOLATED FORM})$
+flags: 
+subject: \uFC04
+expect: 0-3
+
+pattern: ^(?:\\N{CIRCLED NUMBER FORTY ON BLACK SQUARE})$
+flags: 
+subject: \u324B
+expect: 0-3
+
+pattern: ^(?:\\N{ARABIC LETTER HAMZA})$
+flags: 
+subject: \u0621
+expect: 0-2
+
+pattern: ^(?:\\N{MATHEMATICAL BOLD CAPITAL Y})$
+flags: 
+subject: \u{1D418}
+expect: 0-4
+
+pattern: ^(?:\\N{KANGXI RADICAL DO NOT})$
+flags: 
+subject: \u2F4F
+expect: 0-3
+
+pattern: ^(?:\\N{HANIFI ROHINGYA DIGIT ONE})$
+flags: 
+subject: \u{10D31}
+expect: 0-4
+
+pattern: ^(?:\\N{MALAYALAM LETTER GHA})$
+flags: 
+subject: \u0D18
+expect: 0-3
+
+pattern: ^(?:\\N{KHAROSHTHI VOWEL SIGN U})$
+flags: 
+subject: \u{10A02}
+expect: 0-4
+
+pattern: ^(?:\\N{HENTAIGANA LETTER KU-2})$
+flags: 
+subject: \u{1B02C}
+expect: 0-4
+
+pattern: ^(?:\\N{GUNJALA GONDI DIGIT THREE})$
+flags: 
+subject: \u{11DA3}
+expect: 0-4
+
+pattern: ^(?:\\N{ORIYA VOWEL SIGN UU})$
+flags: 
+subject: \u0B42
+expect: 0-3
+
+pattern: ^(?:\\N{WHITE SQUARE WITH VERTICAL BISECTING LINE})$
+flags: 
+subject: \u25EB
+expect: 0-3
+
+pattern: ^(?:\\N{BAMUM LETTER PHASE-D MVOP})$
+flags: 
+subject: \u{1695E}
+expect: 0-4
+
+pattern: ^(?:\\N{DEVANAGARI SIGN SPACING CANDRABINDU})$
+flags: 
+subject: \uA8F2
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL CHOSEONG SSANGTHIEUTH})$
+flags: 
+subject: \uA979
+expect: 0-3
+
+pattern: ^(?:\\N{TANGUT COMPONENT-101})$
+flags: 
+subject: \u{18864}
+expect: 0-4
+
+pattern: ^(?:\\N{VAI SYLLABLE POO})$
+flags: 
+subject: \uA576
+expect: 0-3
+
+pattern: ^(?:\\N{PAU CIN HAU LETTER U})$
+flags: 
+subject: \u{11AD9}
+expect: 0-4
+
+pattern: ^(?:\\N{HANGUL JONGSEONG CIEUC-SSANGPIEUP})$
+flags: 
+subject: \uD7F8
+expect: 0-3
+
+pattern: ^(?:\\N{ANATOLIAN HIEROGLYPH A215A})$
+flags: 
+subject: \u{144F7}
+expect: 0-4
+
+pattern: ^(?:\\N{BAMUM LETTER PHASE-D SUU})$
+flags: 
+subject: \u{16952}
+expect: 0-4
+
+pattern: ^(?:\\N{MEETEI MAYEK CHEIKHEI})$
+flags: 
+subject: \uABEB
+expect: 0-3
+
+pattern: ^(?:\\N{BRAHMI LETTER THA})$
+flags: 
+subject: \u{11023}
+expect: 0-4
+
+pattern: ^(?:\\N{YI SYLLABLE BBOP})$
+flags: 
+subject: \uA068
+expect: 0-3
+
+pattern: ^(?:\\N{MRO LETTER BA})$
+flags: 
+subject: \u{16A44}
+expect: 0-4
+
+pattern: ^(?:\\N{NUSHU CHARACTER-1B2C1})$
+flags: 
+subject: \u{1B2C1}
+expect: 0-4
+
+pattern: ^(?:\\N{MIAO LETTER YI TA})$
+flags: 
+subject: \u{16F0D}
+expect: 0-4
+
+pattern: ^(?:\\N{PAGES})$
+flags: 
+subject: \u{1F5D0}
+expect: 0-4
+
+pattern: ^(?:\\N{BALINESE LETTER TA})$
+flags: 
+subject: \u1B22
+expect: 0-3
+
+pattern: ^(?:\\N{UGARITIC LETTER DHAL})$
+flags: 
+subject: \u{1038F}
+expect: 0-4
+
+pattern: ^(?:\\N{SIGN OF THE HORNS})$
+flags: 
+subject: \u{1F918}
+expect: 0-4
+
+pattern: ^(?:\\N{JIGSAW PUZZLE PIECE})$
+flags: 
+subject: \u{1F9E9}
+expect: 0-4
+
+pattern: ^(?:\\N{DOMINO TILE VERTICAL-04-02})$
+flags: 
+subject: \u{1F081}
+expect: 0-4
+
+pattern: ^(?:\\N{WHITE LEFT-POINTING POINTER})$
+flags: 
+subject: \u25C5
+expect: 0-3
+
+pattern: ^(?:\\N{RIGHT-POINTING DOUBLE ANGLE QUOTATION MARK})$
+flags: 
+subject: \u00BB
+expect: 0-2
+
+pattern: ^(?:\\N{YI SYLLABLE JJUOP})$
+flags: 
+subject: \uA422
+expect: 0-3
+
+pattern: ^(?:\\N{ANATOLIAN HIEROGLYPH A380})$
+flags: 
+subject: \u{145AD}
+expect: 0-4
+
+pattern: ^(?:\\N{PHOENICIAN LETTER ALF})$
+flags: 
+subject: \u{10900}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH N030})$
+flags: 
+subject: \u{1320F}
+expect: 0-4
+
+pattern: ^(?:\\N{DOUBLE-ENDED MULTIMAP})$
+flags: 
+subject: \u29DF
+expect: 0-3
+
+pattern: ^(?:\\N{KAYAH LI LETTER YA})$
+flags: 
+subject: \uA91B
+expect: 0-3
+
+pattern: ^(?:\\N{LATIN CAPITAL LETTER A WITH BREVE AND ACUTE})$
+flags: 
+subject: \u1EAE
+expect: 0-3
+
+pattern: ^(?:\\N{SIGNWRITING HAND-FLAT BETWEEN PALM FACINGS})$
+flags: 
+subject: \u{1D85B}
+expect: 0-4
+
+pattern: ^(?:\\N{MOTHER CHRISTMAS})$
+flags: 
+subject: \u{1F936}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH AA024})$
+flags: 
+subject: \u{13426}
+expect: 0-4
+
+pattern: ^(?:\\N{LARGE ORANGE DIAMOND})$
+flags: 
+subject: \u{1F536}
+expect: 0-4
+
+pattern: ^(?:\\N{ARABIC MATHEMATICAL INITIAL DAD})$
+flags: 
+subject: \u{1EE39}
+expect: 0-4
+
+pattern: ^(?:\\N{MATHEMATICAL ITALIC CAPITAL P})$
+flags: 
+subject: \u{1D443}
+expect: 0-4
+
+pattern: ^(?:\\N{CHEROKEE LETTER TSA})$
+flags: 
+subject: \u13E3
+expect: 0-3
+
+pattern: ^(?:\\N{LONG LEFTWARDS DOUBLE ARROW})$
+flags: 
+subject: \u27F8
+expect: 0-3
+
+pattern: ^(?:\\N{CUNEIFORM SIGN AB TIMES GAN2 TENU})$
+flags: 
+subject: \u{1200E}
+expect: 0-4
+
+pattern: ^(?:\\N{RUMI DIGIT NINE})$
+flags: 
+subject: \u{10E68}
+expect: 0-4
+
+pattern: ^(?:\\N{LATIN CAPITAL LETTER O WITH CARON})$
+flags: 
+subject: \u01D1
+expect: 0-2
+
+pattern: ^(?:\\N{DIGIT ZERO})$
+flags: 
+subject: 0
+expect: 0-1
+
+pattern: ^(?:\\N{AEGEAN NUMBER EIGHT THOUSAND})$
+flags: 
+subject: \u{10129}
+expect: 0-4
+
+pattern: ^(?:\\N{CUNEIFORM SIGN HI TIMES NUN})$
+flags: 
+subject: \u{12134}
+expect: 0-4
+
+pattern: ^(?:\\N{DUPLOYAN LETTER YE})$
+flags: 
+subject: \u{1BC50}
+expect: 0-4
+
+pattern: ^(?:\\N{NEUTRAL CHESS KNIGHT ROTATED FORTY-FIVE DEGREES})$
+flags: 
+subject: \u{1FA08}
+expect: 0-4
+
+pattern: ^(?:\\N{YI SYLLABLE NRYT})$
+flags: 
+subject: \uA3A5
+expect: 0-3
+
+pattern: ^(?:\\N{LATIN CAPITAL LETTER Z WITH HOOK})$
+flags: 
+subject: \u0224
+expect: 0-2
+
+pattern: ^(?:\\N{PARENTHESIZED LATIN SMALL LETTER N})$
+flags: 
+subject: \u24A9
+expect: 0-3
+
+pattern: ^(?:\\N{SUNDANESE LETTER NGA})$
+flags: 
+subject: \u1B8D
+expect: 0-3
+
+pattern: ^(?:\\N{CHEROKEE LETTER WA})$
+flags: 
+subject: \u13E9
+expect: 0-3
+
+pattern: ^(?:\\N{CUNEIFORM SIGN LAK-080})$
+flags: 
+subject: \u{124DD}
+expect: 0-4
+
+pattern: ^(?:\\N{LATIN CAPITAL LETTER X})$
+flags: 
+subject: X
+expect: 0-1
+
+pattern: ^(?:\\N{VARIATION SELECTOR-79})$
+flags: 
+subject: \u{E013E}
+expect: 0-4
+
+pattern: ^(?:\\N{ARABIC LETTER SEEN WITH INVERTED V})$
+flags: 
+subject: \u077E
+expect: 0-2
+
+pattern: ^(?:\\N{SIGNWRITING HAND-ANGLE INDEX THUMB OUT})$
+flags: 
+subject: \u{1D8F2}
+expect: 0-4
+
+pattern: ^(?:\\N{BASSA VAH COMBINING HIGH-LOW TONE})$
+flags: 
+subject: \u{16AF4}
+expect: 0-4
+
+pattern: ^(?:\\N{ARABIC LETTER SEEN WITH SMALL ARABIC LETTER TAH AND TWO DOTS})$
+flags: 
+subject: \u0770
+expect: 0-2
+
+pattern: ^(?:\\N{ARABIC LIGATURE YEH WITH MEEM WITH YEH FINAL FORM})$
+flags: 
+subject: \uFDB0
+expect: 0-3
+
+pattern: ^(?:\\N{LATIN SMALL LETTER I WITH STROKE})$
+flags: 
+subject: \u0268
+expect: 0-2
+
+pattern: ^(?:\\N{CUNEIFORM SIGN NINDA2 TIMES ASH})$
+flags: 
+subject: \u{12254}
+expect: 0-4
+
+pattern: ^(?:\\N{SOGDIAN COMBINING CURVE BELOW})$
+flags: 
+subject: \u{10F4B}
+expect: 0-4
+
+pattern: ^(?:\\N{MODI DIGIT EIGHT})$
+flags: 
+subject: \u{11658}
+expect: 0-4
+
+pattern: ^(?:\\N{LINEAR A SIGN A582})$
+flags: 
+subject: \u{106F5}
+expect: 0-4
+
+pattern: ^(?:\\N{KHITAN SMALL SCRIPT CHARACTER-18C56})$
+flags: 
+subject: \u{18C56}
+expect: 0-4
+
+pattern: ^(?:\\N{SAURASHTRA LETTER VOCALIC RR})$
+flags: 
+subject: \uA889
+expect: 0-3
+
+pattern: ^(?:\\N{KHAROSHTHI LETTER TTHA})$
+flags: 
+subject: \u{10A1B}
+expect: 0-4
+
+pattern: ^(?:\\N{MODIFIER LETTER SMALL G WITH HOOK})$
+flags: 
+subject: \u{10793}
+expect: 0-4
+
+pattern: ^(?:\\N{CJK COMPATIBILITY IDEOGRAPH-2F963})$
+flags: 
+subject: \u{2F963}
+expect: 0-4
+
+pattern: ^(?:\\N{COMBINING CYRILLIC TITLO LEFT HALF})$
+flags: 
+subject: \uFE2E
+expect: 0-3
+
+pattern: ^(?:\\N{YI SYLLABLE DA})$
+flags: 
+subject: \uA109
+expect: 0-3
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH C013})$
+flags: 
+subject: \u{1306A}
+expect: 0-4
+
+pattern: ^(?:\\N{TIBETAN VOWEL SIGN E})$
+flags: 
+subject: \u0F7A
+expect: 0-3
+
+pattern: ^(?:\\N{CUNEIFORM SIGN AB TIMES HA})$
+flags: 
+subject: \u{1200F}
+expect: 0-4
+
+pattern: ^(?:\\N{CUNEIFORM SIGN DA TIMES TAK4})$
+flags: 
+subject: \u{12488}
+expect: 0-4
+
+pattern: ^(?:\\N{MENDE KIKAKUI SYLLABLE M118 WE})$
+flags: 
+subject: \u{1E80C}
+expect: 0-4
+
+pattern: ^(?:\\N{REVERSED RAISED HAND WITH FINGERS SPLAYED})$
+flags: 
+subject: \u{1F591}
+expect: 0-4
+
+pattern: ^(?:\\N{DO NOT LITTER SYMBOL})$
+flags: 
+subject: \u{1F6AF}
+expect: 0-4
+
+pattern: ^(?:\\N{HANGUL LETTER RIEUL-PIEUP})$
+flags: 
+subject: \u313C
+expect: 0-3
+
+pattern: ^(?:\\N{ARABIC LIGATURE LAM WITH KHAH ISOLATED FORM})$
+flags: 
+subject: \uFC41
+expect: 0-3
+
+pattern: ^(?:\\N{CYRILLIC CAPITAL LETTER BINOCULAR O})$
+flags: 
+subject: \uA66A
+expect: 0-3
+
+pattern: ^(?:\\N{SORA SOMPENG LETTER OH})$
+flags: 
+subject: \u{110E6}
+expect: 0-4
+
+pattern: ^(?:\\N{SIGNWRITING HAND-FIST LITTLE TOUCHES THUMB})$
+flags: 
+subject: \u{1D899}
+expect: 0-4
+
+pattern: ^(?:\\N{TILDE WITH DOT ABOVE})$
+flags: 
+subject: \u2E1E
+expect: 0-3
+
+pattern: ^(?:\\N{BATAK LETTER JA})$
+flags: 
+subject: \u1BD0
+expect: 0-3
+
+pattern: ^(?:\\N{CJK COMPATIBILITY IDEOGRAPH-2F891})$
+flags: 
+subject: \u{2F891}
+expect: 0-4
+
+pattern: ^(?:\\N{ANATOLIAN HIEROGLYPH A251})$
+flags: 
+subject: \u{1451D}
+expect: 0-4
+
+pattern: ^(?:\\N{CHAKMA LETTER CAA})$
+flags: 
+subject: \u{1110C}
+expect: 0-4
+
+pattern: ^(?:\\N{CJK RADICAL RAM})$
+flags: 
+subject: \u2EB7
+expect: 0-3
+
+pattern: ^(?:\\N{OSAGE CAPITAL LETTER EHCHA})$
+flags: 
+subject: \u{104B6}
+expect: 0-4
+
+pattern: ^(?:\\N{CJK COMPATIBILITY IDEOGRAPH-FA4F})$
+flags: 
+subject: \uFA4F
+expect: 0-3
+
+pattern: ^(?:\\N{DOWNWARDS TRIANGLE-HEADED PAIRED ARROWS})$
+flags: 
+subject: \u2B87
+expect: 0-3
+
+pattern: ^(?:\\N{KHITAN SMALL SCRIPT CHARACTER-18B22})$
+flags: 
+subject: \u{18B22}
+expect: 0-4
+
+pattern: ^(?:\\N{CANADIAN SYLLABICS CARRIER EE})$
+flags: 
+subject: \u1408
+expect: 0-3
+
+pattern: ^(?:\\N{MEDEFAIDRIN CAPITAL LETTER K})$
+flags: 
+subject: \u{16E4C}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH M019})$
+flags: 
+subject: \u{131CE}
+expect: 0-4
+
+pattern: ^(?:\\N{GREEK INSTRUMENTAL NOTATION SYMBOL-7})$
+flags: 
+subject: \u{1D221}
+expect: 0-4
+
+pattern: ^(?:\\N{BUHID LETTER GA})$
+flags: 
+subject: \u1744
+expect: 0-3
+
+pattern: ^(?:\\N{MULTANI LETTER NNA})$
+flags: 
+subject: \u{11295}
+expect: 0-4
+
+pattern: ^(?:\\N{YI SYLLABLE NZIE})$
+flags: 
+subject: \uA2F2
+expect: 0-3
+
+pattern: ^(?:\\N{ARABIC SMALL LOW SEEN})$
+flags: 
+subject: \u06E3
+expect: 0-2
+
+pattern: ^(?:\\N{SIGNWRITING MOVEMENT-DIAGONAL AWAY MEDIUM})$
+flags: 
+subject: \u{1D956}
+expect: 0-4
+
+pattern: ^(?:\\N{MEROITIC CURSIVE LOGOGRAM IMN})$
+flags: 
+subject: \u{109BF}
+expect: 0-4
+
+pattern: ^(?:\\N{ERASE TO THE LEFT})$
+flags: 
+subject: \u232B
+expect: 0-3
+
+pattern: ^(?:\\N{LATIN SMALL LETTER C WITH STROKE})$
+flags: 
+subject: \u023C
+expect: 0-2
+
+pattern: ^(?:\\N{CJK COMPATIBILITY IDEOGRAPH-F9F9})$
+flags: 
+subject: \uF9F9
+expect: 0-3
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH Z016F})$
+flags: 
+subject: \u{1340A}
+expect: 0-4
+
+pattern: ^(?:\\N{BRAILLE PATTERN DOTS-2367})$
+flags: 
+subject: \u2866
+expect: 0-3
+
+pattern: ^(?:\\N{MEROITIC CURSIVE NUMBER ONE})$
+flags: 
+subject: \u{109C0}
+expect: 0-4
+
+pattern: ^(?:\\N{SQUARE PIKO})$
+flags: 
+subject: \u3330
+expect: 0-3
+
+pattern: ^(?:\\N{AHOM VOWEL SIGN UU})$
+flags: 
+subject: \u{11725}
+expect: 0-4
+
+pattern: ^(?:\\N{DOMINO TILE HORIZONTAL-04-01})$
+flags: 
+subject: \u{1F04E}
+expect: 0-4
+
+pattern: ^(?:\\N{ARMENIAN CAPITAL LETTER INI})$
+flags: 
+subject: \u053B
+expect: 0-2
+
+pattern: ^(?:\\N{LESS-THAN BUT NOT EQUAL TO})$
+flags: 
+subject: \u2268
+expect: 0-3
+
+pattern: ^(?:\\N{CUNEIFORM SIGN MUG GUNU})$
+flags: 
+subject: \u{1222F}
+expect: 0-4
+
+pattern: ^(?:\\N{ZANABAZAR SQUARE LETTER VA})$
+flags: 
+subject: \u{11A2D}
+expect: 0-4
+
+pattern: ^(?:\\N{TETRAGRAM FOR SEVERANCE})$
+flags: 
+subject: \u{1D34B}
+expect: 0-4
+
+pattern: ^(?:\\N{MAYAN NUMERAL TWO})$
+flags: 
+subject: \u{1D2E2}
+expect: 0-4
+
+pattern: ^(?:\\N{LATIN SMALL LETTER H WITH BREVE BELOW})$
+flags: 
+subject: \u1E2B
+expect: 0-3
+
+pattern: ^(?:\\N{LOCK})$
+flags: 
+subject: \u{1F512}
+expect: 0-4
+
+pattern: ^(?:\\N{TAI LE LETTER I})$
+flags: 
+subject: \u1964
+expect: 0-3
+
+pattern: ^(?:\\N{DESERET SMALL LETTER THEE})$
+flags: 
+subject: \u{10444}
+expect: 0-4
+
+pattern: ^(?:\\N{WARANG CITI SMALL LETTER PU})$
+flags: 
+subject: \u{118D8}
+expect: 0-4
+
+pattern: ^(?:\\N{BOX DRAWINGS HEAVY DOWN AND HORIZONTAL})$
+flags: 
+subject: \u2533
+expect: 0-3
+
+pattern: ^(?:\\N{YI SYLLABLE ZIEP})$
+flags: 
+subject: \uA293
+expect: 0-3
+
+pattern: ^(?:\\N{YI SYLLABLE JJUOX})$
+flags: 
+subject: \uA420
+expect: 0-3
+
+pattern: ^(?:\\N{HALFWIDTH KATAKANA LETTER NA})$
+flags: 
+subject: \uFF85
+expect: 0-3
+
+pattern: ^(?:\\N{DISAPPOINTED BUT RELIEVED FACE})$
+flags: 
+subject: \u{1F625}
+expect: 0-4
+
+pattern: ^(?:\\N{ZANABAZAR SQUARE LETTER RA})$
+flags: 
+subject: \u{11A2B}
+expect: 0-4
+
+pattern: ^(?:\\N{RISING DIAGONAL CROSSING SOUTH EAST ARROW})$
+flags: 
+subject: \u2930
+expect: 0-3
+
+pattern: ^(?:\\N{CUNEIFORM SIGN LAK-003})$
+flags: 
+subject: \u{124D5}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT COMPONENT-100})$
+flags: 
+subject: \u{18863}
+expect: 0-4
+
+pattern: ^(?:\\N{LATIN SMALL LETTER P WITH DOT ABOVE})$
+flags: 
+subject: \u1E57
+expect: 0-3
+
+pattern: ^(?:\\N{OLD NORTH ARABIAN LETTER WAW})$
+flags: 
+subject: \u{10A85}
+expect: 0-4
+
+pattern: ^(?:\\N{NORTH EAST DOUBLE ARROW})$
+flags: 
+subject: \u21D7
+expect: 0-3
+
+pattern: ^(?:\\N{YI SYLLABLE GOP})$
+flags: 
+subject: \uA1ED
+expect: 0-3
+
+pattern: ^(?:\\N{CANADIAN SYLLABICS WEST-CREE SWI})$
+flags: 
+subject: \u14F9
+expect: 0-3
+
+pattern: ^(?:\\N{SQUARE IU})$
+flags: 
+subject: \u337A
+expect: 0-3
+
+pattern: ^(?:\\N{MAHAJANI LETTER TA})$
+flags: 
+subject: \u{11163}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT COMPONENT-471})$
+flags: 
+subject: \u{189D6}
+expect: 0-4
+
+pattern: ^(?:\\N{TIBETAN LETTER MA})$
+flags: 
+subject: \u0F58
+expect: 0-3
+
+pattern: ^(?:\\N{MANDAIC VOCALIZATION MARK})$
+flags: 
+subject: \u085A
+expect: 0-3
+
+pattern: ^(?:\\N{LATIN SMALL LETTER P WITH STROKE})$
+flags: 
+subject: \u1D7D
+expect: 0-3
+
+pattern: ^(?:\\N{DEVANAGARI DIGIT TWO})$
+flags: 
+subject: \u0968
+expect: 0-3
+
+pattern: ^(?:\\N{MEDIUM LEFT CURLY BRACKET ORNAMENT})$
+flags: 
+subject: \u2774
+expect: 0-3
+
+pattern: ^(?:\\N{DEVANAGARI SIGN CANDRABINDU THREE})$
+flags: 
+subject: \uA8F6
+expect: 0-3
+
+pattern: ^(?:\\N{KHITAN SMALL SCRIPT CHARACTER-18C36})$
+flags: 
+subject: \u{18C36}
+expect: 0-4
+
+pattern: ^(?:\\N{LINEAR A SIGN A401-VAS})$
+flags: 
+subject: \u{106A1}
+expect: 0-4
+
+pattern: ^(?:\\N{BAMUM LETTER PHASE-A PON MFON PIPAEMBA})$
+flags: 
+subject: \u{16803}
+expect: 0-4
+
+pattern: ^(?:\\N{FISH CAKE WITH SWIRL DESIGN})$
+flags: 
+subject: \u{1F365}
+expect: 0-4
+
+pattern: ^(?:\\N{ARABIC LIGATURE LAM WITH JEEM WITH MEEM INITIAL FORM})$
+flags: 
+subject: \uFDBA
+expect: 0-3
+
+pattern: ^(?:\\N{CANADIAN SYLLABICS CARRIER JJA})$
+flags: 
+subject: \u1621
+expect: 0-3
+
+pattern: ^(?:\\N{PHOENICIAN LETTER HE})$
+flags: 
+subject: \u{10904}
+expect: 0-4
+
+pattern: ^(?:\\N{SOYOMBO LETTER HA})$
+flags: 
+subject: \u{11A82}
+expect: 0-4
+
+pattern: ^(?:\\N{SEMIDIRECT PRODUCT WITH BOTTOM CLOSED})$
+flags: 
+subject: \u2A32
+expect: 0-3
+
+pattern: ^(?:\\N{CUNEIFORM SIGN BU OVER BU TIMES NA2})$
+flags: 
+subject: \u{12487}
+expect: 0-4
+
+pattern: ^(?:\\N{YI SYLLABLE ROT})$
+flags: 
+subject: \uA3CD
+expect: 0-3
+
+pattern: ^(?:\\N{TAI VIET LETTER HIGH GO})$
+flags: 
+subject: \uAA87
+expect: 0-3
+
+pattern: ^(?:\\N{GRANTHA VOWEL SIGN VOCALIC LL})$
+flags: 
+subject: \u{11363}
+expect: 0-4
+
+pattern: ^(?:\\N{CUNEIFORM SIGN DAG KISIM5 TIMES IR PLUS LU})$
+flags: 
+subject: \u{12062}
+expect: 0-4
+
+pattern: ^(?:\\N{THREE LINES CONVERGING RIGHT})$
+flags: 
+subject: \u269E
+expect: 0-3
+
+pattern: ^(?:\\N{VITHKUQI CAPITAL LETTER CE})$
+flags: 
+subject: \u{10573}
+expect: 0-4
+
+pattern: ^(?:\\N{PAHAWH HMONG VOWEL KIB})$
+flags: 
+subject: \u{16B02}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH V036})$
+flags: 
+subject: \u{133A8}
+expect: 0-4
+
+pattern: ^(?:\\N{HENTAIGANA LETTER RA-1})$
+flags: 
+subject: \u{1B0ED}
+expect: 0-4
+
+pattern: ^(?:\\N{CUNEIFORM SIGN GA2 TIMES KU3 PLUS AN})$
+flags: 
+subject: \u{120DC}
+expect: 0-4
+
+pattern: ^(?:\\N{CUNEIFORM SIGN SI GUNU})$
+flags: 
+subject: \u{122DC}
+expect: 0-4
+
+pattern: ^(?:\\N{HANGUL LETTER KIYEOK-SIOS})$
+flags: 
+subject: \u3133
+expect: 0-3
+
+pattern: ^(?:\\N{ANATOLIAN HIEROGLYPH A197})$
+flags: 
+subject: \u{144E0}
+expect: 0-4
+
+pattern: ^(?:\\N{MARCHEN SUBJOINED LETTER TSHA})$
+flags: 
+subject: \u{11CA3}
+expect: 0-4
+
+pattern: ^(?:\\N{DUPLOYAN LETTER J S WITH DOT})$
+flags: 
+subject: \u{1BC2F}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH Z003A})$
+flags: 
+subject: \u{133EB}
+expect: 0-4
+
+pattern: ^(?:\\N{NUSHU CHARACTER-1B19F})$
+flags: 
+subject: \u{1B19F}
+expect: 0-4
+
+pattern: ^(?:\\N{LINEAR B IDEOGRAM VESSEL B204})$
+flags: 
+subject: \u{100E3}
+expect: 0-4
+
+pattern: ^(?:\\N{CANADIAN SYLLABICS KO})$
+flags: 
+subject: \u146F
+expect: 0-3
+
+pattern: ^(?:\\N{MASARAM GONDI VOWEL SIGN VOCALIC R})$
+flags: 
+subject: \u{11D36}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT COMPONENT-482})$
+flags: 
+subject: \u{189E1}
+expect: 0-4
+
+pattern: ^(?:\\N{LEFT HALF CIRCLE WITH FOUR DOTS})$
+flags: 
+subject: \u{1F903}
+expect: 0-4
+
+pattern: ^(?:\\N{CUNEIFORM SIGN UD GUNU})$
+flags: 
+subject: \u{12319}
+expect: 0-4
+
+pattern: ^(?:\\N{GREEK CAPITAL REVERSED LUNATE SIGMA SYMBOL})$
+flags: 
+subject: \u03FD
+expect: 0-2
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH M015A})$
+flags: 
+subject: \u{131C8}
+expect: 0-4
+
+pattern: ^(?:\\N{PHAGS-PA LETTER XA})$
+flags: 
+subject: \uA863
+expect: 0-3
+
+pattern: ^(?:\\N{KHITAN SMALL SCRIPT CHARACTER-18B83})$
+flags: 
+subject: \u{18B83}
+expect: 0-4
+
+pattern: ^(?:\\N{MONGOLIAN LETTER TODO NIA})$
+flags: 
+subject: \u185B
+expect: 0-3
+
+pattern: ^(?:\\N{CUNEIFORM SIGN TA TIMES HI})$
+flags: 
+subject: \u{122ED}
+expect: 0-4
+
+pattern: ^(?:\\N{SCRIPT LIGATURE ET ORNAMENT})$
+flags: 
+subject: \u{1F670}
+expect: 0-4
+
+pattern: ^(?:\\N{BOOKMARK})$
+flags: 
+subject: \u{1F516}
+expect: 0-4
+
+pattern: ^(?:\\N{CJK COMPATIBILITY IDEOGRAPH-2F8BD})$
+flags: 
+subject: \u{2F8BD}
+expect: 0-4
+
+pattern: ^(?:\\N{OPEN HANDS SIGN})$
+flags: 
+subject: \u{1F450}
+expect: 0-4
+
+pattern: ^(?:\\N{HALFWIDTH HANGUL LETTER SSANGSIOS})$
+flags: 
+subject: \uFFB6
+expect: 0-3
+
+pattern: ^(?:\\N{LEFT SQUARE BRACKET WITH UNDERBAR})$
+flags: 
+subject: \u298B
+expect: 0-3
+
+pattern: ^(?:\\N{HIRAGANA LETTER SMALL I})$
+flags: 
+subject: \u3043
+expect: 0-3
+
+pattern: ^(?:\\N{TANGUT COMPONENT-349})$
+flags: 
+subject: \u{1895C}
+expect: 0-4
+
+pattern: ^(?:\\N{YI SYLLABLE CIP})$
+flags: 
+subject: \uA2B1
+expect: 0-3
+
+pattern: ^(?:\\N{GRANTHA LETTER VEDIC ANUSVARA})$
+flags: 
+subject: \u{1135E}
+expect: 0-4
+
+pattern: ^(?:\\N{MODIFIER LETTER GEORGIAN NAR})$
+flags: 
+subject: \u10FC
+expect: 0-3
+
+pattern: ^(?:\\N{TANGUT COMPONENT-017})$
+flags: 
+subject: \u{18810}
+expect: 0-4
+
+pattern: ^(?:\\N{IDEOGRAPHIC SPACE})$
+flags: 
+subject: \u3000
+expect: 0-3
+
+pattern: ^(?:\\N{WHITE RIGHT-POINTING SMALL TRIANGLE})$
+flags: 
+subject: \u25B9
+expect: 0-3
+
+pattern: ^(?:\\N{MENDE KIKAKUI SYLLABLE M018 DU})$
+flags: 
+subject: \u{1E840}
+expect: 0-4
+
+pattern: ^(?:\\N{LATIN SMALL LETTER D WITH DOT BELOW})$
+flags: 
+subject: \u1E0D
+expect: 0-3
+
+pattern: ^(?:\\N{NANDINAGARI LETTER KA})$
+flags: 
+subject: \u{119AE}
+expect: 0-4
+
+pattern: ^(?:\\N{TAI THAM LETTER LOW HA})$
+flags: 
+subject: \u1A4C
+expect: 0-3
+
+pattern: ^(?:\\N{SINHALA LETTER DANTAJA LAYANNA})$
+flags: 
+subject: \u0DBD
+expect: 0-3
+
+pattern: ^(?:\\N{CJK COMPATIBILITY IDEOGRAPH-F9EE})$
+flags: 
+subject: \uF9EE
+expect: 0-3
+
+pattern: ^(?:\\N{ARABIC LETTER UIGHUR KAZAKH KIRGHIZ ALEF MAKSURA MEDIAL FORM})$
+flags: 
+subject: \uFBE9
+expect: 0-3
+
+pattern: ^(?:\\N{YI SYLLABLE GGAX})$
+flags: 
+subject: \uA21B
+expect: 0-3
+
+pattern: ^(?:\\N{TANGUT COMPONENT-514})$
+flags: 
+subject: \u{18A01}
+expect: 0-4
+
+pattern: ^(?:\\N{DOUBLE CIRCLED DIGIT SEVEN})$
+flags: 
+subject: \u24FB
+expect: 0-3
+
+pattern: ^(?:\\N{SYRIAC LETTER SADHE})$
+flags: 
+subject: \u0728
+expect: 0-2
+
+pattern: ^(?:\\N{CYRILLIC CAPITAL LETTER YERU})$
+flags: 
+subject: \u042B
+expect: 0-2
+
+pattern: ^(?:\\N{LEFTWARDS DASHED ARROW})$
+flags: 
+subject: \u21E0
+expect: 0-3
+
+pattern: ^(?:\\N{PHOENICIAN LETTER ZAI})$
+flags: 
+subject: \u{10906}
+expect: 0-4
+
+pattern: ^(?:\\N{BRAILLE PATTERN DOTS-4578})$
+flags: 
+subject: \u28D8
+expect: 0-3
+
+pattern: ^(?:\\N{NUSHU CHARACTER-1B27D})$
+flags: 
+subject: \u{1B27D}
+expect: 0-4
+
+pattern: ^(?:\\N{HANGUL CHOSEONG SIOS-PIEUP})$
+flags: 
+subject: \u1132
+expect: 0-3
+
+pattern: ^(?:\\N{HALFWIDTH IDEOGRAPHIC COMMA})$
+flags: 
+subject: \uFF64
+expect: 0-3
+
+pattern: ^(?:\\N{LATIN CAPITAL LETTER A WITH MACRON})$
+flags: 
+subject: \u0100
+expect: 0-2
+
+pattern: ^(?:\\N{ZANABAZAR SQUARE VOWEL SIGN UE})$
+flags: 
+subject: \u{11A02}
+expect: 0-4
+
+pattern: ^(?:\\N{OLD PERSIAN NUMBER TEN})$
+flags: 
+subject: \u{103D3}
+expect: 0-4
+
+pattern: ^(?:\\N{SIGNWRITING MOVEMENT-DIAGONAL BETWEEN TOWARDS LARGE})$
+flags: 
+subject: \u{1D963}
+expect: 0-4
+
+pattern: ^(?:\\N{GUJARATI SIGN SUKUN})$
+flags: 
+subject: \u0AFA
+expect: 0-3
+
+pattern: ^(?:\\N{BAMUM LETTER PHASE-B SAKEUAE})$
+flags: 
+subject: \u{16877}
+expect: 0-4
+
+pattern: ^(?:\\N{WIDE-HEADED DOWNWARDS BARB ARROW})$
+flags: 
+subject: \u{1F86B}
+expect: 0-4
+
+pattern: ^(?:\\N{YI SYLLABLE NJUP})$
+flags: 
+subject: \uA441
+expect: 0-3
+
+pattern: ^(?:\\N{NEWA VOWEL SIGN AU})$
+flags: 
+subject: \u{11441}
+expect: 0-4
+
+pattern: ^(?:\\N{DUPLOYAN LETTER X})$
+flags: 
+subject: \u{1BC01}
+expect: 0-4
+
+pattern: ^(?:\\N{MYANMAR LETTER SHAN HA})$
+flags: 
+subject: \u1081
+expect: 0-3
+
+pattern: ^(?:\\N{CHEROKEE LETTER HNA})$
+flags: 
+subject: \u13BF
+expect: 0-3
+
+pattern: ^(?:\\N{YI SYLLABLE FU})$
+flags: 
+subject: \uA0DA
+expect: 0-3
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH BEGIN SEGMENT})$
+flags: 
+subject: \u{13437}
+expect: 0-4
+
+pattern: ^(?:\\N{CUNEIFORM SIGN NINDA2 TIMES BAL})$
+flags: 
+subject: \u{12391}
+expect: 0-4
+
+pattern: ^(?:\\N{NUSHU CHARACTER-1B2D9})$
+flags: 
+subject: \u{1B2D9}
+expect: 0-4
+
+pattern: ^(?:\\N{MUSICAL SYMBOL KIEVAN QUARTER NOTE STEM UP})$
+flags: 
+subject: \u{1D1E5}
+expect: 0-4
+
+pattern: ^(?:\\N{BAMUM LETTER PHASE-A MOOMPUQ})$
+flags: 
+subject: \u{16826}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT COMPONENT-581})$
+flags: 
+subject: \u{18A44}
+expect: 0-4
+
+pattern: ^(?:\\N{PHAGS-PA LETTER LA})$
+flags: 
+subject: \uA859
+expect: 0-3
+
+pattern: ^(?:\\N{MALAYALAM FRACTION THREE TWENTIETHS})$
+flags: 
+subject: \u0D5D
+expect: 0-3
+
+pattern: ^(?:\\N{TAI LE LETTER KHA})$
+flags: 
+subject: \u1960
+expect: 0-3
+
+pattern: ^(?:\\N{KANGXI RADICAL DOT})$
+flags: 
+subject: \u2F02
+expect: 0-3
+
+pattern: ^(?:\\N{CJK COMPATIBILITY IDEOGRAPH-F9CC})$
+flags: 
+subject: \uF9CC
+expect: 0-3
+
+pattern: ^(?:\\N{ARABIC LETTER NOON})$
+flags: 
+subject: \u0646
+expect: 0-2
+
+pattern: ^(?:\\N{HANGUL JUNGSEONG YO-YEO})$
+flags: 
+subject: \u1186
+expect: 0-3
+
+pattern: ^(?:\\N{MEROITIC CURSIVE LETTER ARCHAIC SA})$
+flags: 
+subject: \u{109B0}
+expect: 0-4
+
+pattern: ^(?:\\N{CJK COMPATIBILITY IDEOGRAPH-2F830})$
+flags: 
+subject: \u{2F830}
+expect: 0-4
+
+pattern: ^(?:\\N{DESERET CAPITAL LETTER AY})$
+flags: 
+subject: \u{1040C}
+expect: 0-4
+
+pattern: ^(?:\\N{DOTTED LINE FACE})$
+flags: 
+subject: \u{1FAE5}
+expect: 0-4
+
+pattern: ^(?:\\N{UPWARDS TRIANGLE-HEADED ARROW WITH HEAVY SHAFT})$
+flags: 
+subject: \u{1F82D}
+expect: 0-4
+
+pattern: ^(?:\\N{VAI SYLLABLE RU})$
+flags: 
+subject: \uA5A9
+expect: 0-3
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH A004})$
+flags: 
+subject: \u{13003}
+expect: 0-4
+
+pattern: ^(?:\\N{ETHIOPIC SYLLABLE TSAA})$
+flags: 
+subject: \u133B
+expect: 0-3
+
+pattern: ^(?:\\N{MODIFIER LETTER RAISED INVERTED EXCLAMATION MARK})$
+flags: 
+subject: \uA71E
+expect: 0-3
+
+pattern: ^(?:\\N{BLACK CHESS TURNED ROOK})$
+flags: 
+subject: \u{1FA26}
+expect: 0-4
+
+pattern: ^(?:\\N{ALCHEMICAL SYMBOL FOR VITRIOL-2})$
+flags: 
+subject: \u{1F717}
+expect: 0-4
+
+pattern: ^(?:\\N{MENS SYMBOL})$
+flags: 
+subject: \u{1F6B9}
+expect: 0-4
+
+pattern: ^(?:\\N{CJK COMPATIBILITY IDEOGRAPH-F905})$
+flags: 
+subject: \uF905
+expect: 0-3
+
+pattern: ^(?:\\N{TANGUT COMPONENT-479})$
+flags: 
+subject: \u{189DE}
+expect: 0-4
+
+pattern: ^(?:\\N{TAI LE LETTER AI})$
+flags: 
+subject: \u196D
+expect: 0-3
+
+pattern: ^(?:\\N{WARANG CITI CAPITAL LETTER YU})$
+flags: 
+subject: \u{118A3}
+expect: 0-4
+
+pattern: ^(?:\\N{APL FUNCTIONAL SYMBOL QUAD})$
+flags: 
+subject: \u2395
+expect: 0-3
+
+pattern: ^(?:\\N{IDEOGRAPHIC TELEGRAPH SYMBOL FOR HOUR TWENTY-FOUR})$
+flags: 
+subject: \u3370
+expect: 0-3
+
+pattern: ^(?:\\N{TIBETAN SYMBOL NOR BU GSUM -KHYIL})$
+flags: 
+subject: \u0FCB
+expect: 0-3
+
+pattern: ^(?:\\N{YI SYLLABLE RO})$
+flags: 
+subject: \uA3CF
+expect: 0-3
+
+pattern: ^(?:\\N{WARANG CITI SMALL LETTER DA})$
+flags: 
+subject: \u{118D4}
+expect: 0-4
+
+pattern: ^(?:\\N{ETHIOPIC SYLLABLE XWEE})$
+flags: 
+subject: \u128C
+expect: 0-3
+
+pattern: ^(?:\\N{BAMUM LETTER PHASE-A MBAQ})$
+flags: 
+subject: \u{16856}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH NU007})$
+flags: 
+subject: \u{1323C}
+expect: 0-4
+
+pattern: ^(?:\\N{LEFTWARDS ARROW WITH VERTICAL STROKE})$
+flags: 
+subject: \u21F7
+expect: 0-3
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH G039})$
+flags: 
+subject: \u{1316D}
+expect: 0-4
+
+pattern: ^(?:\\N{LINEAR B SYLLABLE B044 KE})$
+flags: 
+subject: \u{10010}
+expect: 0-4
+
+pattern: ^(?:\\N{GREEK SMALL LETTER OMEGA WITH PSILI AND VARIA AND YPOGEGRAMMENI})$
+flags: 
+subject: \u1FA2
+expect: 0-3
+
+pattern: ^(?:\\N{ARABIC LIGATURE SHADDA WITH DAMMATAN ISOLATED FORM})$
+flags: 
+subject: \uFC5E
+expect: 0-3
+
+pattern: ^(?:\\N{BASSA VAH LETTER KPAH})$
+flags: 
+subject: \u{16AD8}
+expect: 0-4
+
+pattern: ^(?:\\N{SQUARE M OVER S SQUARED})$
+flags: 
+subject: \u33A8
+expect: 0-3
+
+pattern: ^(?:\\N{CANADIAN SYLLABICS NASKAPI STWA})$
+flags: 
+subject: \u150D
+expect: 0-3
+
+pattern: ^(?:\\N{CHORASMIAN NUMBER TWENTY})$
+flags: 
+subject: \u{10FCA}
+expect: 0-4
+
+pattern: ^(?:\\N{SOCKS})$
+flags: 
+subject: \u{1F9E6}
+expect: 0-4
+
+pattern: ^(?:\\N{MEROITIC CURSIVE NUMBER THREE HUNDRED THOUSAND})$
+flags: 
+subject: \u{109EF}
+expect: 0-4
+
+pattern: ^(?:\\N{MODIFIER LETTER SMALL HENG WITH HOOK})$
+flags: 
+subject: \u{10797}
+expect: 0-4
+
+pattern: ^(?:\\N{KAITHI DANDA})$
+flags: 
+subject: \u{110C0}
+expect: 0-4
+
+pattern: ^(?:\\N{VAI SYLLABLE MBO})$
+flags: 
+subject: \uA5C4
+expect: 0-3
+
+pattern: ^(?:\\N{DUMPLING})$
+flags: 
+subject: \u{1F95F}
+expect: 0-4
+
+pattern: ^(?:\\N{RUMI DIGIT THREE})$
+flags: 
+subject: \u{10E62}
+expect: 0-4
+
+pattern: ^(?:\\N{MASARAM GONDI VIRAMA})$
+flags: 
+subject: \u{11D45}
+expect: 0-4
+
+pattern: ^(?:\\N{ARABIC LIGATURE LAM WITH MEEM INITIAL FORM})$
+flags: 
+subject: \uFCCC
+expect: 0-3
+
+pattern: ^(?:\\N{ORIYA LETTER E})$
+flags: 
+subject: \u0B0F
+expect: 0-3
+
+pattern: ^(?:\\N{RIGHT TRIANGULAR ONE QUARTER BLOCK})$
+flags: 
+subject: \u{1FB6E}
+expect: 0-4
+
+pattern: ^(?:\\N{YI SYLLABLE FYX})$
+flags: 
+subject: \uA0DF
+expect: 0-3
+
+pattern: ^(?:\\N{LEFTWARDS TRIANGLE-HEADED ARROW WITH DOUBLE HORIZONTAL STROKE})$
+flags: 
+subject: \u2B7A
+expect: 0-3
+
+pattern: ^(?:\\N{YI SYLLABLE NJIE})$
+flags: 
+subject: \uA437
+expect: 0-3
+
+pattern: ^(?:\\N{DIVES AKURU LETTER KHA})$
+flags: 
+subject: \u{1190D}
+expect: 0-4
+
+pattern: ^(?:\\N{CUNEIFORM SIGN KAK TIMES IGI GUNU})$
+flags: 
+subject: \u{12196}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH V001})$
+flags: 
+subject: \u{13362}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH F023})$
+flags: 
+subject: \u{13117}
+expect: 0-4
+
+pattern: ^(?:\\N{SIGNWRITING MOVEMENT-WALLPLANE CURVED CROSS SMALL})$
+flags: 
+subject: \u{1D9A0}
+expect: 0-4
+
+pattern: ^(?:\\N{DUPLOYAN LETTER D S})$
+flags: 
+subject: \u{1BC0D}
+expect: 0-4
+
+pattern: ^(?:\\N{WHITE LEFT POINTING BACKHAND INDEX})$
+flags: 
+subject: \u{1F448}
+expect: 0-4
+
+pattern: ^(?:\\N{GLAGOLITIC SMALL LETTER SHTA})$
+flags: 
+subject: \u2C4B
+expect: 0-3
+
+pattern: ^(?:\\N{ARABIC SMALL HIGH WORD WAQFA})$
+flags: 
+subject: \u08DF
+expect: 0-3
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH D004})$
+flags: 
+subject: \u{13079}
+expect: 0-4
+
+pattern: ^(?:\\N{TAI THAM VOWEL SIGN II})$
+flags: 
+subject: \u1A66
+expect: 0-3
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH U042})$
+flags: 
+subject: \u{13361}
+expect: 0-4
+
+pattern: ^(?:\\N{CROSS POMMEE WITH HALF-CIRCLE BELOW})$
+flags: 
+subject: \u{1F541}
+expect: 0-4
+
+pattern: ^(?:\\N{COMBINING CYRILLIC LETTER YI})$
+flags: 
+subject: \uA676
+expect: 0-3
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH R004})$
+flags: 
+subject: \u{132B5}
+expect: 0-4
+
+pattern: ^(?:\\N{HENTAIGANA LETTER TE-7})$
+flags: 
+subject: \u{1B074}
+expect: 0-4
+
+pattern: ^(?:\\N{CJK COMPATIBILITY IDEOGRAPH-2F85D})$
+flags: 
+subject: \u{2F85D}
+expect: 0-4
+
+pattern: ^(?:\\N{ZNAMENNY NEUME DEMESTVENNY KLYUCH})$
+flags: 
+subject: \u{1CF75}
+expect: 0-4
+
+pattern: ^(?:\\N{ANATOLIAN HIEROGLYPH A467})$
+flags: 
+subject: \u{1460A}
+expect: 0-4
+
+pattern: ^(?:\\N{LATIN SUBSCRIPT SMALL LETTER P})$
+flags: 
+subject: \u209A
+expect: 0-3
+
+pattern: ^(?:\\N{IMPERIAL ARAMAIC LETTER DALETH})$
+flags: 
+subject: \u{10843}
+expect: 0-4
+
+pattern: ^(?:\\N{MUSICAL SYMBOL SEMIBREVIS BLACK})$
+flags: 
+subject: \u{1D1BA}
+expect: 0-4
+
+pattern: ^(?:\\N{BYZANTINE MUSICAL SYMBOL OXEIA NEO})$
+flags: 
+subject: \u{1D048}
+expect: 0-4
+
+pattern: ^(?:\\N{AEGEAN NUMBER ONE THOUSAND})$
+flags: 
+subject: \u{10122}
+expect: 0-4
+
+pattern: ^(?:\\N{PAU CIN HAU LETTER RA})$
+flags: 
+subject: \u{11AD2}
+expect: 0-4
+
+pattern: ^(?:\\N{CYRILLIC CAPITAL LETTER SCHWA WITH DIAERESIS})$
+flags: 
+subject: \u04DA
+expect: 0-2
+
+pattern: ^(?:\\N{VARIATION SELECTOR-14})$
+flags: 
+subject: \uFE0D
+expect: 0-3
+
+pattern: ^(?:\\N{LIGHT FIVE POINTED BLACK STAR})$
+flags: 
+subject: \u{1F7C9}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT COMPONENT-411})$
+flags: 
+subject: \u{1899A}
+expect: 0-4
+
+pattern: ^(?:\\N{CYRILLIC SMALL LETTER ROUND OMEGA})$
+flags: 
+subject: \u047B
+expect: 0-2
+
+pattern: ^(?:\\N{PRINCESS})$
+flags: 
+subject: \u{1F478}
+expect: 0-4
+
+pattern: ^(?:\\N{BALINESE PAMADA LANTANG})$
+flags: 
+subject: \u1B7E
+expect: 0-3
+
+pattern: ^(?:\\N{CYPRIOT SYLLABLE MA})$
+flags: 
+subject: \u{10814}
+expect: 0-4
+
+pattern: ^(?:\\N{APOLLON})$
+flags: 
+subject: \u2BE4
+expect: 0-3
+
+pattern: ^(?:\\N{SIGNWRITING HAND-FLAT FOUR FINGERS CONJOINED SPLIT})$
+flags: 
+subject: \u{1D848}
+expect: 0-4
+
+pattern: ^(?:\\N{CANADIAN SYLLABICS CARRIER THE})$
+flags: 
+subject: \u15DE
+expect: 0-3
+
+pattern: ^(?:\\N{CUNEIFORM SIGN GESHTIN})$
+flags: 
+subject: \u{120FE}
+expect: 0-4
+
+pattern: ^(?:\\N{CHAM LETTER AI})$
+flags: 
+subject: \uAA04
+expect: 0-3
+
+pattern: ^(?:\\N{OLD PERMIC LETTER MENOE})$
+flags: 
+subject: \u{1035C}
+expect: 0-4
+
+pattern: ^(?:\\N{LATIN LETTER SMALL CAPITAL H})$
+flags: 
+subject: \u029C
+expect: 0-2
+
+pattern: ^(?:\\N{HANGUL CHOSEONG NIEUN-SIOS})$
+flags: 
+subject: \u115B
+expect: 0-3
+
+pattern: ^(?:\\N{BLACK VERY SMALL SQUARE})$
+flags: 
+subject: \u2B1D
+expect: 0-3
+
+pattern: ^(?:\\N{MONEY-MOUTH FACE})$
+flags: 
+subject: \u{1F911}
+expect: 0-4
+
+pattern: ^(?:\\N{YI SYLLABLE NJYR})$
+flags: 
+subject: \uA449
+expect: 0-3
+
+pattern: ^(?:\\N{HEXAGRAM FOR INFLUENCE})$
+flags: 
+subject: \u4DDE
+expect: 0-3
+
+pattern: ^(?:\\N{SIGNWRITING HAND-FIST INDEX MIDDLE CONJOINED THUMB SIDE})$
+flags: 
+subject: \u{1D82D}
+expect: 0-4
+
+pattern: ^(?:\\N{DEVANAGARI VOWEL SIGN CANDRA O})$
+flags: 
+subject: \u0949
+expect: 0-3
+
+pattern: ^(?:\\N{CANADIAN SYLLABICS NASKAPI S-W})$
+flags: 
+subject: \u150B
+expect: 0-3
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH T033A})$
+flags: 
+subject: \u{1332F}
+expect: 0-4
+
+pattern: ^(?:\\N{SINGLE LEFT-POINTING ANGLE QUOTATION MARK})$
+flags: 
+subject: \u2039
+expect: 0-3
+
+pattern: ^(?:\\N{GLAGOLITIC CAPITAL LETTER SMALL YUS WITH TAIL})$
+flags: 
+subject: \u2C25
+expect: 0-3
+
+pattern: ^(?:\\N{TIRHUTA LETTER VOCALIC L})$
+flags: 
+subject: \u{11489}
+expect: 0-4
+
+pattern: ^(?:\\N{COMBINING ENCLOSING DIAMOND})$
+flags: 
+subject: \u20DF
+expect: 0-3
+
+pattern: ^(?:\\N{ALCHEMICAL SYMBOL FOR VERDIGRIS})$
+flags: 
+subject: \u{1F728}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH U014})$
+flags: 
+subject: \u{13342}
+expect: 0-4
+
+pattern: ^(?:\\N{MYANMAR SHAN DIGIT NINE})$
+flags: 
+subject: \u1099
+expect: 0-3
+
+pattern: ^(?:\\N{YI SYLLABLE PAT})$
+flags: 
+subject: \uA03F
+expect: 0-3
+
+pattern: ^(?:\\N{ANTICLOCKWISE DOWNWARDS AND UPWARDS OPEN CIRCLE ARROWS})$
+flags: 
+subject: \u{1F504}
+expect: 0-4
+
+pattern: ^(?:\\N{CHEROKEE LETTER NA})$
+flags: 
+subject: \u13BE
+expect: 0-3
+
+pattern: ^(?:\\N{BAMUM LETTER PHASE-C NTEUNGBA})$
+flags: 
+subject: \u{168B9}
+expect: 0-4
+
+pattern: ^(?:\\N{SQUARED HDR})$
+flags: 
+subject: \u{1F1A7}
+expect: 0-4
+
+pattern: ^(?:\\N{CUNEIFORM SIGN KA TIMES GISH})$
+flags: 
+subject: \u{12380}
+expect: 0-4
+
+pattern: ^(?:\\N{DIGIT ONE FULL STOP})$
+flags: 
+subject: \u2488
+expect: 0-3
+
+pattern: ^(?:\\N{OLD SOUTH ARABIAN LETTER LAMEDH})$
+flags: 
+subject: \u{10A61}
+expect: 0-4
+
+pattern: ^(?:\\N{MODIFIER LETTER LOW UP ARROWHEAD})$
+flags: 
+subject: \u02F0
+expect: 0-2
+
+pattern: ^(?:\\N{KHITAN SMALL SCRIPT CHARACTER-18B74})$
+flags: 
+subject: \u{18B74}
+expect: 0-4
+
+pattern: ^(?:\\N{BALINESE LETTER DA MURDA ALPAPRANA})$
+flags: 
+subject: \u1B1F
+expect: 0-3
+
+pattern: ^(?:\\N{CUNEIFORM SIGN LAGAB TIMES U})$
+flags: 
+subject: \u{121E5}
+expect: 0-4
+
+pattern: ^(?:\\N{BLOCK SEXTANT-25})$
+flags: 
+subject: \u{1FB11}
+expect: 0-4
+
+pattern: ^(?:\\N{WHITE CHESS KNIGHT ROTATED TWO HUNDRED TWENTY-FIVE DEGREES})$
+flags: 
+subject: \u{1FA30}
+expect: 0-4
+
+pattern: ^(?:\\N{SORA SOMPENG DIGIT ZERO})$
+flags: 
+subject: \u{110F0}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH N024})$
+flags: 
+subject: \u{13208}
+expect: 0-4
+
+pattern: ^(?:\\N{TETRAGRAM FOR LAW OR MODEL})$
+flags: 
+subject: \u{1D32D}
+expect: 0-4
+
+pattern: ^(?:\\N{ARABIC LIGATURE JEEM WITH MEEM WITH ALEF MAKSURA FINAL FORM})$
+flags: 
+subject: \uFDA7
+expect: 0-3
+
+pattern: ^(?:\\N{RIGHTWARDS SANS-SERIF ARROW})$
+flags: 
+subject: \u{1F852}
+expect: 0-4
+
+pattern: ^(?:\\N{BAMUM LETTER PHASE-D NGGWAEN})$
+flags: 
+subject: \u{16933}
+expect: 0-4
+
+pattern: ^(?:\\N{WIDE-HEADED SOUTH EAST LIGHT BARB ARROW})$
+flags: 
+subject: \u{1F866}
+expect: 0-4
+
+pattern: ^(?:\\N{MIAO LETTER NYA})$
+flags: 
+subject: \u{16F2C}
+expect: 0-4
+
+pattern: ^(?:\\N{MYANMAR LETTER SHAN NA})$
+flags: 
+subject: \u107C
+expect: 0-3
+
+pattern: ^(?:\\N{CIRCLED KATAKANA NO})$
+flags: 
+subject: \u32E8
+expect: 0-3
+
+pattern: ^(?:\\N{TANGUT COMPONENT-120})$
+flags: 
+subject: \u{18877}
+expect: 0-4
+
+pattern: ^(?:\\N{GREEK SMALL LETTER ALPHA WITH DASIA AND VARIA AND YPOGEGRAMMENI})$
+flags: 
+subject: \u1F83
+expect: 0-3
+
+pattern: ^(?:\\N{TANGUT COMPONENT-275})$
+flags: 
+subject: \u{18912}
+expect: 0-4
+
+pattern: ^(?:\\N{HENTAIGANA LETTER KO-1})$
+flags: 
+subject: \u{1B038}
+expect: 0-4
+
+pattern: ^(?:\\N{PSALTER PAHLAVI LETTER SADHE})$
+flags: 
+subject: \u{10B8F}
+expect: 0-4
+
+pattern: ^(?:\\N{PSALTER PAHLAVI NUMBER TWENTY})$
+flags: 
+subject: \u{10BAE}
+expect: 0-4
+
+pattern: ^(?:\\N{KHITAN SMALL SCRIPT CHARACTER-18BF0})$
+flags: 
+subject: \u{18BF0}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT COMPONENT-464})$
+flags: 
+subject: \u{189CF}
+expect: 0-4
+
+pattern: ^(?:\\N{KHITAN SMALL SCRIPT CHARACTER-18B19})$
+flags: 
+subject: \u{18B19}
+expect: 0-4
+
+pattern: ^(?:\\N{LATIN CAPITAL LETTER MIDDLE-WELSH V})$
+flags: 
+subject: \u1EFC
+expect: 0-3
+
+pattern: ^(?:\\N{PASSED SYMBOL})$
+flags: 
+subject: \u2BFD
+expect: 0-3
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH E033})$
+flags: 
+subject: \u{130F8}
+expect: 0-4
+
+pattern: ^(?:\\N{CYPRIOT SYLLABLE KU})$
+flags: 
+subject: \u{1080E}
+expect: 0-4
+
+pattern: ^(?:\\N{LINEAR B SYLLABLE B017 ZA})$
+flags: 
+subject: \u{1003C}
+expect: 0-4
+
+pattern: ^(?:\\N{KATAKANA LETTER WA})$
+flags: 
+subject: \u30EF
+expect: 0-3
+
+pattern: ^(?:\\N{DUPLOYAN LETTER K})$
+flags: 
+subject: \u{1BC05}
+expect: 0-4
+
+pattern: ^(?:\\N{PAHAWH HMONG CONSONANT LAU})$
+flags: 
+subject: \u{16B1E}
+expect: 0-4
+
+pattern: ^(?:\\N{VAI SYLLABLE U})$
+flags: 
+subject: \uA595
+expect: 0-3
+
+pattern: ^(?:\\N{MAHAJANI LETTER BHA})$
+flags: 
+subject: \u{1116B}
+expect: 0-4
+
+pattern: ^(?:\\N{LEPCHA LETTER SHA})$
+flags: 
+subject: \u1C21
+expect: 0-3
+
+pattern: ^(?:\\N{NAG MUNDARI LETTER UR})$
+flags: 
+subject: \u{1E4E3}
+expect: 0-4
+
+pattern: ^(?:\\N{OLD PERMIC LETTER SHCHOOI})$
+flags: 
+subject: \u{10366}
+expect: 0-4
+
+pattern: ^(?:\\N{BRAILLE PATTERN DOTS-124568})$
+flags: 
+subject: \u28BB
+expect: 0-3
+
+pattern: ^(?:\\N{BRAILLE PATTERN DOTS-4567})$
+flags: 
+subject: \u2878
+expect: 0-3
+
+pattern: ^(?:\\N{CJK COMPATIBILITY IDEOGRAPH-FACB})$
+flags: 
+subject: \uFACB
+expect: 0-3
+
+pattern: ^(?:\\N{FULLWIDTH CIRCUMFLEX ACCENT})$
+flags: 
+subject: \uFF3E
+expect: 0-3
+
+pattern: ^(?:\\N{TAG TILDE})$
+flags: 
+subject: \u{E007E}
+expect: 0-4
+
+pattern: ^(?:\\N{COPTIC CAPITAL LETTER CRYPTOGRAMMIC SHEI})$
+flags: 
+subject: \u2CEB
+expect: 0-3
+
+pattern: ^(?:\\N{YI SYLLABLE LIE})$
+flags: 
+subject: \uA1BD
+expect: 0-3
+
+pattern: ^(?:\\N{TAPE CARTRIDGE})$
+flags: 
+subject: \u{1F5AD}
+expect: 0-4
+
+pattern: ^(?:\\N{PAU CIN HAU LETTER UA})$
+flags: 
+subject: \u{11ADA}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH T003})$
+flags: 
+subject: \u{13309}
+expect: 0-4
+
+pattern: ^(?:\\N{CJK COMPATIBILITY IDEOGRAPH-F968})$
+flags: 
+subject: \uF968
+expect: 0-3
+
+pattern: ^(?:\\N{ARABIC LETTER DOTLESS BEH})$
+flags: 
+subject: \u066E
+expect: 0-2
+
+pattern: ^(?:\\N{ETHIOPIC SYLLABLE GURAGE HHWA})$
+flags: 
+subject: \u{1E7E8}
+expect: 0-4
+
+pattern: ^(?:\\N{GRANTHA LETTER AI})$
+flags: 
+subject: \u{11310}
+expect: 0-4
+
+pattern: ^(?:\\N{CHARACTER TIE})$
+flags: 
+subject: \u2040
+expect: 0-3
+
+pattern: ^(?:\\N{OLD SOGDIAN LETTER FINAL TAW})$
+flags: 
+subject: \u{10F1B}
+expect: 0-4
+
+pattern: ^(?:\\N{MATHEMATICAL SCRIPT SMALL A})$
+flags: 
+subject: \u{1D4B6}
+expect: 0-4
+
+pattern: ^(?:\\N{SQUARED HV})$
+flags: 
+subject: \u{1F14A}
+expect: 0-4
+
+pattern: ^(?:\\N{CUNEIFORM SIGN AMAR})$
+flags: 
+subject: \u{1202B}
+expect: 0-4
+
+pattern: ^(?:\\N{CANADIAN SYLLABICS YWAA})$
+flags: 
+subject: \u153B
+expect: 0-3
+
+pattern: ^(?:\\N{ARABIC START OF RUB EL HIZB})$
+flags: 
+subject: \u06DE
+expect: 0-2
+
+pattern: ^(?:\\N{INDIC SIYAQ NUMBER THIRTY})$
+flags: 
+subject: \u{1EC7C}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT COMPONENT-346})$
+flags: 
+subject: \u{18959}
+expect: 0-4
+
+pattern: ^(?:\\N{MATHEMATICAL BOLD FRAKTUR CAPITAL S})$
+flags: 
+subject: \u{1D57E}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT COMPONENT-683})$
+flags: 
+subject: \u{18AAA}
+expect: 0-4
+
+pattern: ^(?:\\N{PAHAWH HMONG VOWEL KUAB})$
+flags: 
+subject: \u{16B10}
+expect: 0-4
+
+pattern: ^(?:\\N{SIDDHAM DOUBLE DANDA})$
+flags: 
+subject: \u{115C3}
+expect: 0-4
+
+pattern: ^(?:\\N{CJK COMPATIBILITY IDEOGRAPH-F926})$
+flags: 
+subject: \uF926
+expect: 0-3
+
+pattern: ^(?:\\N{CANADIAN SYLLABICS CARRIER ZEE})$
+flags: 
+subject: \u1643
+expect: 0-3
+
+pattern: ^(?:\\N{CJK COMPATIBILITY IDEOGRAPH-2F953})$
+flags: 
+subject: \u{2F953}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT COMPONENT-692})$
+flags: 
+subject: \u{18AB3}
+expect: 0-4
+
+pattern: ^(?:\\N{GUNJALA GONDI LETTER CHA})$
+flags: 
+subject: \u{11D7C}
+expect: 0-4
+
+pattern: ^(?:\\N{ARABIC FATHA MEDIAL FORM})$
+flags: 
+subject: \uFE77
+expect: 0-3
+
+pattern: ^(?:\\N{REJANG LETTER SA})$
+flags: 
+subject: \uA93C
+expect: 0-3
+
+pattern: ^(?:\\N{GREEK SMALL LETTER RHO WITH DASIA})$
+flags: 
+subject: \u1FE5
+expect: 0-3
+
+pattern: ^(?:\\N{ARABIC MATHEMATICAL WAW})$
+flags: 
+subject: \u{1EE05}
+expect: 0-4
+
+pattern: ^(?:\\N{OLD SOGDIAN NUMBER FOUR})$
+flags: 
+subject: \u{10F20}
+expect: 0-4
+
+pattern: ^(?:\\N{NEGATIVE CIRCLED LATIN CAPITAL LETTER B})$
+flags: 
+subject: \u{1F151}
+expect: 0-4
+
+pattern: ^(?:\\N{BYZANTINE MUSICAL SYMBOL YFEN KATO})$
+flags: 
+subject: \u{1D07C}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH R009})$
+flags: 
+subject: \u{132BA}
+expect: 0-4
+
+pattern: ^(?:\\N{MODIFIER LETTER HALF TRIANGULAR COLON})$
+flags: 
+subject: \u02D1
+expect: 0-2
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH U038})$
+flags: 
+subject: \u{1335D}
+expect: 0-4
+
+pattern: ^(?:\\N{DUPLOYAN DOUBLE MARK})$
+flags: 
+subject: \u{1BC9E}
+expect: 0-4
+
+pattern: ^(?:\\N{BAMUM LETTER PHASE-F KO})$
+flags: 
+subject: \u{16A2F}
+expect: 0-4
+
+pattern: ^(?:\\N{CJK COMPATIBILITY IDEOGRAPH-F945})$
+flags: 
+subject: \uF945
+expect: 0-3
+
+pattern: ^(?:\\N{PICKUP TRUCK})$
+flags: 
+subject: \u{1F6FB}
+expect: 0-4
+
+pattern: ^(?:\\N{KHITAN SMALL SCRIPT CHARACTER-18B60})$
+flags: 
+subject: \u{18B60}
+expect: 0-4
+
+pattern: ^(?:\\N{COPTIC CAPITAL LETTER KHEI})$
+flags: 
+subject: \u03E6
+expect: 0-2
+
+pattern: ^(?:\\N{VARIATION SELECTOR-53})$
+flags: 
+subject: \u{E0124}
+expect: 0-4
+
+pattern: ^(?:\\N{TETRAGRAM FOR KEEPING SMALL})$
+flags: 
+subject: \u{1D30A}
+expect: 0-4
+
+pattern: ^(?:\\N{LEFTWARDS TWO-HEADED ARROW WITH TAIL})$
+flags: 
+subject: \u2B3B
+expect: 0-3
+
+pattern: ^(?:\\N{DOUBLE PRECEDES})$
+flags: 
+subject: \u2ABB
+expect: 0-3
+
+pattern: ^(?:\\N{ARABIC LETTER U})$
+flags: 
+subject: \u06C7
+expect: 0-2
+
+pattern: ^(?:\\N{MATHEMATICAL ITALIC CAPITAL BETA})$
+flags: 
+subject: \u{1D6E3}
+expect: 0-4
+
+pattern: ^(?:\\N{NABATAEAN NUMBER ONE})$
+flags: 
+subject: \u{108A7}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT COMPONENT-721})$
+flags: 
+subject: \u{18AD0}
+expect: 0-4
+
+pattern: ^(?:\\N{FIREWORKS})$
+flags: 
+subject: \u{1F386}
+expect: 0-4
+
+pattern: ^(?:\\N{LESS-THAN OR EQUIVALENT TO})$
+flags: 
+subject: \u2272
+expect: 0-3
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH S041})$
+flags: 
+subject: \u{13301}
+expect: 0-4
+
+pattern: ^(?:\\N{ANATOLIAN HIEROGLYPH A332C})$
+flags: 
+subject: \u{14576}
+expect: 0-4
+
+pattern: ^(?:\\N{LATIN SMALL LETTER GLOTTAL I})$
+flags: 
+subject: \uA7BD
+expect: 0-3
+
+pattern: ^(?:\\N{GREEK CAPITAL LETTER NU})$
+flags: 
+subject: \u039D
+expect: 0-2
+
+pattern: ^(?:\\N{YI SYLLABLE HMIEX})$
+flags: 
+subject: \uA095
+expect: 0-3
+
+pattern: ^(?:\\N{CANADIAN SYLLABICS TTHWE})$
+flags: 
+subject: \u18E5
+expect: 0-3
+
+pattern: ^(?:\\N{DECIMAL EXPONENT SYMBOL})$
+flags: 
+subject: \u23E8
+expect: 0-3
+
+pattern: ^(?:\\N{COPTIC CAPITAL LETTER DIALECT-P ALEF})$
+flags: 
+subject: \u2CB2
+expect: 0-3
+
+pattern: ^(?:\\N{BALINESE VOWEL SIGN TALING REPA TEDUNG})$
+flags: 
+subject: \u1B41
+expect: 0-3
+
+pattern: ^(?:\\N{CUNEIFORM SIGN LAK-492})$
+flags: 
+subject: \u{124FC}
+expect: 0-4
+
+pattern: ^(?:\\N{ETHIOPIC SYLLABLE MEE})$
+flags: 
+subject: \u121C
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL LETTER SSANGPIEUP})$
+flags: 
+subject: \u3143
+expect: 0-3
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH T015})$
+flags: 
+subject: \u{1331A}
+expect: 0-4
+
+pattern: ^(?:\\N{LATIN SMALL LETTER D WITH DOT ABOVE})$
+flags: 
+subject: \u1E0B
+expect: 0-3
+
+pattern: ^(?:\\N{BAMUM LETTER PHASE-D NDEE})$
+flags: 
+subject: \u{16915}
+expect: 0-4
+
+pattern: ^(?:\\N{ETHIOPIC SYLLABLE HI})$
+flags: 
+subject: \u1202
+expect: 0-3
+
+pattern: ^(?:\\N{LATIN SMALL LETTER Z WITH PALATAL HOOK})$
+flags: 
+subject: \u1D8E
+expect: 0-3
+
+pattern: ^(?:\\N{OLD SOGDIAN NUMBER TWENTY})$
+flags: 
+subject: \u{10F23}
+expect: 0-4
+
+pattern: ^(?:\\N{YI SYLLABLE LYP})$
+flags: 
+subject: \uA1D7
+expect: 0-3
+
+pattern: ^(?:\\N{KAWI SIGN CANDRABINDU})$
+flags: 
+subject: \u{11F00}
+expect: 0-4
+
+pattern: ^(?:\\N{ARABIC LIGATURE SALAM ISOLATED FORM})$
+flags: 
+subject: \uFDF5
+expect: 0-3
+
+pattern: ^(?:\\N{OSAGE SMALL LETTER SHA})$
+flags: 
+subject: \u{104EF}
+expect: 0-4
+
+pattern: ^(?:\\N{ANATOLIAN HIEROGLYPH A433})$
+flags: 
+subject: \u{145E6}
+expect: 0-4
+
+pattern: ^(?:\\N{KANGXI RADICAL LEAF})$
+flags: 
+subject: \u2FB4
+expect: 0-3
+
+pattern: ^(?:\\N{AVESTAN LETTER DE})$
+flags: 
+subject: \u{10B1B}
+expect: 0-4
+
+pattern: ^(?:\\N{MATHEMATICAL SANS-SERIF BOLD ITALIC SMALL ALPHA})$
+flags: 
+subject: \u{1D7AA}
+expect: 0-4
+
+pattern: ^(?:\\N{TRIPLE SOLIDUS BINARY RELATION})$
+flags: 
+subject: \u2AFB
+expect: 0-3
+
+pattern: ^(?:\\N{LINEAR B IDEOGRAM VESSEL B214})$
+flags: 
+subject: \u{100ED}
+expect: 0-4
+
+pattern: ^(?:\\N{TIRHUTA LETTER UU})$
+flags: 
+subject: \u{11486}
+expect: 0-4
+
+pattern: ^(?:\\N{COMBINING ZIGZAG ABOVE})$
+flags: 
+subject: \u035B
+expect: 0-2
+
+pattern: ^(?:\\N{DEVANAGARI LETTER SA})$
+flags: 
+subject: \u0938
+expect: 0-3
+
+pattern: ^(?:\\N{DOUBLE-STRUCK N-ARY SUMMATION})$
+flags: 
+subject: \u2140
+expect: 0-3
+
+pattern: ^(?:\\N{CANADIAN SYLLABICS WEST-CREE SWOO})$
+flags: 
+subject: \u14FF
+expect: 0-3
+
+pattern: ^(?:\\N{DESERET SMALL LETTER KAY})$
+flags: 
+subject: \u{1043F}
+expect: 0-4
+
+pattern: ^(?:\\N{ETHIOPIC SYLLABLE LOA})$
+flags: 
+subject: \u2D80
+expect: 0-3
+
+pattern: ^(?:\\N{CJK RADICAL HEAD})$
+flags: 
+subject: \u2EE1
+expect: 0-3
+
+pattern: ^(?:\\N{CYPRO-MINOAN SIGN CM024})$
+flags: 
+subject: \u{12FA2}
+expect: 0-4
+
+pattern: ^(?:\\N{MARCHEN LETTER TA})$
+flags: 
+subject: \u{11C7A}
+expect: 0-4
+
+pattern: ^(?:\\N{LIMBU SMALL LETTER NGA})$
+flags: 
+subject: \u1931
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL JUNGSEONG I-YA-O})$
+flags: 
+subject: \uD7BD
+expect: 0-3
+
+pattern: ^(?:\\N{WHITE FROWNING FACE})$
+flags: 
+subject: \u2639
+expect: 0-3
+
+pattern: ^(?:\\N{KAYAH LI LETTER MA})$
+flags: 
+subject: \uA917
+expect: 0-3
+
+pattern: ^(?:\\N{MODIFIER LETTER CYRILLIC SMALL KA})$
+flags: 
+subject: \u{1E039}
+expect: 0-4
+
+pattern: ^(?:\\N{ARABIC SYMBOL TWO DOTS ABOVE})$
+flags: 
+subject: \uFBB4
+expect: 0-3
+
+pattern: ^(?:\\N{BAMUM LETTER PHASE-E NTAP})$
+flags: 
+subject: \u{169CE}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH D031A})$
+flags: 
+subject: \u{13097}
+expect: 0-4
+
+pattern: ^(?:\\N{HALFWIDTH HANGUL LETTER EU})$
+flags: 
+subject: \uFFDA
+expect: 0-3
+
+pattern: ^(?:\\N{CANADIAN SYLLABICS CARRIER KKU})$
+flags: 
+subject: \u15FB
+expect: 0-3
+
+pattern: ^(?:\\N{BOPOMOFO LETTER CH})$
+flags: 
+subject: \u3114
+expect: 0-3
+
+pattern: ^(?:\\N{VAI SYLLABLE BHO})$
+flags: 
+subject: \uA5C2
+expect: 0-3
+
+pattern: ^(?:\\N{MYANMAR LETTER I})$
+flags: 
+subject: \u1023
+expect: 0-3
+
+pattern: ^(?:\\N{DRESS})$
+flags: 
+subject: \u{1F457}
+expect: 0-4
+
+pattern: ^(?:\\N{MATHEMATICAL BOLD ITALIC PHI SYMBOL})$
+flags: 
+subject: \u{1D753}
+expect: 0-4
+
+pattern: ^(?:\\N{CIRCLED DIGIT TWO})$
+flags: 
+subject: \u2461
+expect: 0-3
+
+pattern: ^(?:\\N{CUNEIFORM NUMERIC SIGN ONE GESHU})$
+flags: 
+subject: \u{1241E}
+expect: 0-4
+
+pattern: ^(?:\\N{ENVELOPE WITH LIGHTNING})$
+flags: 
+subject: \u{1F584}
+expect: 0-4
+
+pattern: ^(?:\\N{CJK COMPATIBILITY IDEOGRAPH-2F958})$
+flags: 
+subject: \u{2F958}
+expect: 0-4
+
+pattern: ^(?:\\N{SMALL BLUE DIAMOND})$
+flags: 
+subject: \u{1F539}
+expect: 0-4
+
+pattern: ^(?:\\N{YI SYLLABLE NRU})$
+flags: 
+subject: \uA3A1
+expect: 0-3
+
+pattern: ^(?:\\N{PLAYING CARD FOUR OF CLUBS})$
+flags: 
+subject: \u{1F0D4}
+expect: 0-4
+
+pattern: ^(?:\\N{LATIN LETTER SMALL CAPITAL L})$
+flags: 
+subject: \u029F
+expect: 0-2
+
+pattern: ^(?:\\N{ARABIC LETTER KAF})$
+flags: 
+subject: \u0643
+expect: 0-2
+
+pattern: ^(?:\\N{LYCIAN LETTER S})$
+flags: 
+subject: \u{10296}
+expect: 0-4
+
+pattern: ^(?:\\N{CUNEIFORM SIGN LAK-617 TIMES TE})$
+flags: 
+subject: \u{12508}
+expect: 0-4
+
+pattern: ^(?:\\N{MENDE KIKAKUI SYLLABLE M089 DEE})$
+flags: 
+subject: \u{1E841}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH T009})$
+flags: 
+subject: \u{13312}
+expect: 0-4
+
+pattern: ^(?:\\N{ANATOLIAN HIEROGLYPH A248})$
+flags: 
+subject: \u{1451A}
+expect: 0-4
+
+pattern: ^(?:\\N{CUNEIFORM NUMERIC SIGN NINE U})$
+flags: 
+subject: \u{12414}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT COMPONENT-526})$
+flags: 
+subject: \u{18A0D}
+expect: 0-4
+
+pattern: ^(?:\\N{LEPCHA LETTER BLA})$
+flags: 
+subject: \u1C14
+expect: 0-3
+
+pattern: ^(?:\\N{NKO COMMA})$
+flags: 
+subject: \u07F8
+expect: 0-2
+
+pattern: ^(?:\\N{LATIN CAPITAL LETTER O WITH DOT ABOVE})$
+flags: 
+subject: \u022E
+expect: 0-2
+
+pattern: ^(?:\\N{IDEOGRAPHIC TELEGRAPH SYMBOL FOR DAY ELEVEN})$
+flags: 
+subject: \u33EA
+expect: 0-3
+
+pattern: ^(?:\\N{CANADIAN SYLLABICS TH-CREE THE})$
+flags: 
+subject: \u15A7
+expect: 0-3
+
+pattern: ^(?:\\N{CJK COMPATIBILITY IDEOGRAPH-2F9CB})$
+flags: 
+subject: \u{2F9CB}
+expect: 0-4
+
+pattern: ^(?:\\N{BHAIKSUKI LETTER PHA})$
+flags: 
+subject: \u{11C23}
+expect: 0-4
+
+pattern: ^(?:\\N{HORSE RACING})$
+flags: 
+subject: \u{1F3C7}
+expect: 0-4
+
+pattern: ^(?:\\N{CIRCLED LATIN CAPITAL LETTER J})$
+flags: 
+subject: \u24BF
+expect: 0-3
+
+pattern: ^(?:\\N{MATHEMATICAL MONOSPACE DIGIT NINE})$
+flags: 
+subject: \u{1D7FF}
+expect: 0-4
+
+pattern: ^(?:\\N{GEORGIAN LETTER MAN})$
+flags: 
+subject: \u10DB
+expect: 0-3
+
+pattern: ^(?:\\N{ARABIC LIGATURE HEH WITH MEEM ISOLATED FORM})$
+flags: 
+subject: \uFC52
+expect: 0-3
+
+pattern: ^(?:\\N{ARABIC LETTER KAF WITH TWO DOTS ABOVE})$
+flags: 
+subject: \u077F
+expect: 0-2
+
+pattern: ^(?:\\N{ONCOMING BUS})$
+flags: 
+subject: \u{1F68D}
+expect: 0-4
+
+pattern: ^(?:\\N{SIGNWRITING MOVEMENT-WALLPLANE BOX MEDIUM})$
+flags: 
+subject: \u{1D943}
+expect: 0-4
+
+pattern: ^(?:\\N{MYANMAR SIGN SHAN TONE-5})$
+flags: 
+subject: \u1089
+expect: 0-3
+
+pattern: ^(?:\\N{MANICHAEAN LETTER JAYIN})$
+flags: 
+subject: \u{10ACB}
+expect: 0-4
+
+pattern: ^(?:\\N{BYZANTINE MUSICAL SYMBOL YPOKRISIS DIPLI})$
+flags: 
+subject: \u{1D00B}
+expect: 0-4
+
+pattern: ^(?:\\N{SYMBOL FOR MARKS CHAPTER})$
+flags: 
+subject: \u{1F545}
+expect: 0-4
+
+pattern: ^(?:\\N{THAI CHARACTER LO CHULA})$
+flags: 
+subject: \u0E2C
+expect: 0-3
+
+pattern: ^(?:\\N{KANNADA LETTER II})$
+flags: 
+subject: \u0C88
+expect: 0-3
+
+pattern: ^(?:\\N{DOUBLE VERTICAL BAR})$
+flags: 
+subject: \u23F8
+expect: 0-3
+
+pattern: ^(?:\\N{DIVES AKURU DIGIT SEVEN})$
+flags: 
+subject: \u{11957}
+expect: 0-4
+
+pattern: ^(?:\\N{MODIFIER LETTER SMALL Q})$
+flags: 
+subject: \u{107A5}
+expect: 0-4
+
+pattern: ^(?:\\N{MATHEMATICAL BOLD ITALIC CAPITAL SIGMA})$
+flags: 
+subject: \u{1D72E}
+expect: 0-4
+
+pattern: ^(?:\\N{UGARITIC LETTER ZETA})$
+flags: 
+subject: \u{10387}
+expect: 0-4
+
+pattern: ^(?:\\N{ARABIC LIGATURE RAHIMAHUM ALLAAH})$
+flags: 
+subject: \uFD4F
+expect: 0-3
+
+pattern: ^(?:\\N{COMBINING LATIN SMALL LETTER X})$
+flags: 
+subject: \u036F
+expect: 0-2
+
+pattern: ^(?:\\N{GREEK CAPITAL LETTER UPSILON WITH VARIA})$
+flags: 
+subject: \u1FEA
+expect: 0-3
+
+pattern: ^(?:\\N{MYANMAR SYMBOL LOCATIVE})$
+flags: 
+subject: \u104C
+expect: 0-3
+
+pattern: ^(?:\\N{BRAILLE PATTERN DOTS-378})$
+flags: 
+subject: \u28C4
+expect: 0-3
+
+pattern: ^(?:\\N{MATHEMATICAL SANS-SERIF BOLD ITALIC SMALL OMICRON})$
+flags: 
+subject: \u{1D7B8}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT COMPONENT-025})$
+flags: 
+subject: \u{18818}
+expect: 0-4
+
+pattern: ^(?:\\N{YI SYLLABLE SSAT})$
+flags: 
+subject: \uA331
+expect: 0-3
+
+pattern: ^(?:\\N{TIBETAN MARK GTER YIG MGO -UM RNAM BCAD MA})$
+flags: 
+subject: \u0F02
+expect: 0-3
+
+pattern: ^(?:\\N{TIBETAN MARK GTER YIG MGO -UM GTER TSHEG MA})$
+flags: 
+subject: \u0F03
+expect: 0-3
+
+pattern: ^(?:\\N{TIBETAN MARK BKA- SHOG YIG MGO})$
+flags: 
+subject: \u0F0A
+expect: 0-3
+
+pattern: ^(?:\\N{TIBETAN MARK CARET -DZUD RTAGS ME LONG CAN})$
+flags: 
+subject: \u0F13
+expect: 0-3
+
+pattern: ^(?:\\N{TIBETAN ASTROLOGICAL SIGN SGRA GCAN -CHAR RTAGS})$
+flags: 
+subject: \u0F17
+expect: 0-3
+
+pattern: ^(?:\\N{TIBETAN ASTROLOGICAL SIGN -KHYUD PA})$
+flags: 
+subject: \u0F18
+expect: 0-3
+
+pattern: ^(?:\\N{TIBETAN MARK CARET -DZUD RTAGS BZHI MIG CAN})$
+flags: 
+subject: \u0F36
+expect: 0-3
+
+pattern: ^(?:\\N{TIBETAN MARK TSA -PHRU})$
+flags: 
+subject: \u0F39
+expect: 0-3
+
+pattern: ^(?:\\N{TIBETAN LETTER -A})$
+flags: 
+subject: \u0F60
+expect: 0-3
+
+pattern: ^(?:\\N{TIBETAN SUBJOINED LETTER -A})$
+flags: 
+subject: \u0FB0
+expect: 0-3
+
+pattern: ^(?:\\N{TIBETAN CANTILLATION SIGN SBUB -CHAL})$
+flags: 
+subject: \u0FC3
+expect: 0-3
+
+pattern: ^(?:\\N{TIBETAN SYMBOL NOR BU NYIS -KHYIL})$
+flags: 
+subject: \u0FCA
+expect: 0-3
+
+pattern: ^(?:\\N{TIBETAN SYMBOL NOR BU GSUM -KHYIL})$
+flags: 
+subject: \u0FCB
+expect: 0-3
+
+pattern: ^(?:\\N{TIBETAN SYMBOL NOR BU BZHI -KHYIL})$
+flags: 
+subject: \u0FCC
+expect: 0-3
+
+pattern: ^(?:\\N{TIBETAN MARK BSKA- SHOG GI MGO RGYAN})$
+flags: 
+subject: \u0FD0
+expect: 0-3
+
+pattern: ^(?:\\N{ZANABAZAR SQUARE LETTER -A})$
+flags: 
+subject: \u{11A29}
+expect: 0-4
+
+pattern: ^(?:\\N{SOYOMBO LETTER -A})$
+flags: 
+subject: \u{11A7A}
+expect: 0-4
+
+pattern: ^(?:\\N{SOYOMBO FINAL CONSONANT SIGN -A})$
+flags: 
+subject: \u{11A95}
+expect: 0-4
+
+pattern: ^(?:\\N{MARCHEN LETTER -A})$
+flags: 
+subject: \u{11C88}
+expect: 0-4
+
+pattern: ^(?:\\N{NULL})$
+flags: 
+subject: \x00
+expect: 0-1
+
+pattern: ^(?:\\N{NUL})$
+flags: 
+subject: \x00
+expect: 0-1
+
+pattern: ^(?:\\N{START OF HEADING})$
+flags: 
+subject: \x01
+expect: 0-1
+
+pattern: ^(?:\\N{SOH})$
+flags: 
+subject: \x01
+expect: 0-1
+
+pattern: ^(?:\\N{START OF TEXT})$
+flags: 
+subject: \x02
+expect: 0-1
+
+pattern: ^(?:\\N{STX})$
+flags: 
+subject: \x02
+expect: 0-1
+
+pattern: ^(?:\\N{END OF TEXT})$
+flags: 
+subject: \x03
+expect: 0-1
+
+pattern: ^(?:\\N{ETX})$
+flags: 
+subject: \x03
+expect: 0-1
+
+pattern: ^(?:\\N{END OF TRANSMISSION})$
+flags: 
+subject: \x04
+expect: 0-1
+
+pattern: ^(?:\\N{EOT})$
+flags: 
+subject: \x04
+expect: 0-1
+
+pattern: ^(?:\\N{ENQUIRY})$
+flags: 
+subject: \x05
+expect: 0-1
+
+pattern: ^(?:\\N{ENQ})$
+flags: 
+subject: \x05
+expect: 0-1
+
+pattern: ^(?:\\N{ACKNOWLEDGE})$
+flags: 
+subject: \x06
+expect: 0-1
+
+pattern: ^(?:\\N{ACK})$
+flags: 
+subject: \x06
+expect: 0-1
+
+pattern: ^(?:\\N{ALERT})$
+flags: 
+subject: \x07
+expect: 0-1
+
+pattern: ^(?:\\N{BEL})$
+flags: 
+subject: \x07
+expect: 0-1
+
+pattern: ^(?:\\N{BACKSPACE})$
+flags: 
+subject: \x08
+expect: 0-1
+
+pattern: ^(?:\\N{BS})$
+flags: 
+subject: \x08
+expect: 0-1
+
+pattern: ^(?:\\N{CHARACTER TABULATION})$
+flags: 
+subject: \t
+expect: 0-1
+
+pattern: ^(?:\\N{HORIZONTAL TABULATION})$
+flags: 
+subject: \t
+expect: 0-1
+
+pattern: ^(?:\\N{HT})$
+flags: 
+subject: \t
+expect: 0-1
+
+pattern: ^(?:\\N{TAB})$
+flags: 
+subject: \t
+expect: 0-1
+
+pattern: ^(?:\\N{LINE FEED})$
+flags: 
+subject: \n
+expect: 0-1
+
+pattern: ^(?:\\N{NEW LINE})$
+flags: 
+subject: \n
+expect: 0-1
+
+pattern: ^(?:\\N{END OF LINE})$
+flags: 
+subject: \n
+expect: 0-1
+
+pattern: ^(?:\\N{LF})$
+flags: 
+subject: \n
+expect: 0-1
+
+pattern: ^(?:\\N{NL})$
+flags: 
+subject: \n
+expect: 0-1
+
+pattern: ^(?:\\N{EOL})$
+flags: 
+subject: \n
+expect: 0-1
+
+pattern: ^(?:\\N{LINE TABULATION})$
+flags: 
+subject: \x0B
+expect: 0-1
+
+pattern: ^(?:\\N{VERTICAL TABULATION})$
+flags: 
+subject: \x0B
+expect: 0-1
+
+pattern: ^(?:\\N{VT})$
+flags: 
+subject: \x0B
+expect: 0-1
+
+pattern: ^(?:\\N{FORM FEED})$
+flags: 
+subject: \x0C
+expect: 0-1
+
+pattern: ^(?:\\N{FF})$
+flags: 
+subject: \x0C
+expect: 0-1
+
+pattern: ^(?:\\N{CARRIAGE RETURN})$
+flags: 
+subject: \r
+expect: 0-1
+
+pattern: ^(?:\\N{CR})$
+flags: 
+subject: \r
+expect: 0-1
+
+pattern: ^(?:\\N{SHIFT OUT})$
+flags: 
+subject: \x0E
+expect: 0-1
+
+pattern: ^(?:\\N{LOCKING-SHIFT ONE})$
+flags: 
+subject: \x0E
+expect: 0-1
+
+pattern: ^(?:\\N{SO})$
+flags: 
+subject: \x0E
+expect: 0-1
+
+pattern: ^(?:\\N{SHIFT IN})$
+flags: 
+subject: \x0F
+expect: 0-1
+
+pattern: ^(?:\\N{LOCKING-SHIFT ZERO})$
+flags: 
+subject: \x0F
+expect: 0-1
+
+pattern: ^(?:\\N{SI})$
+flags: 
+subject: \x0F
+expect: 0-1
+
+pattern: ^(?:\\N{DATA LINK ESCAPE})$
+flags: 
+subject: \x10
+expect: 0-1
+
+pattern: ^(?:\\N{DLE})$
+flags: 
+subject: \x10
+expect: 0-1
+
+pattern: ^(?:\\N{DEVICE CONTROL ONE})$
+flags: 
+subject: \x11
+expect: 0-1
+
+pattern: ^(?:\\N{DC1})$
+flags: 
+subject: \x11
+expect: 0-1
+
+pattern: ^(?:\\N{DEVICE CONTROL TWO})$
+flags: 
+subject: \x12
+expect: 0-1
+
+pattern: ^(?:\\N{DC2})$
+flags: 
+subject: \x12
+expect: 0-1
+
+pattern: ^(?:\\N{DEVICE CONTROL THREE})$
+flags: 
+subject: \x13
+expect: 0-1
+
+pattern: ^(?:\\N{DC3})$
+flags: 
+subject: \x13
+expect: 0-1
+
+pattern: ^(?:\\N{DEVICE CONTROL FOUR})$
+flags: 
+subject: \x14
+expect: 0-1
+
+pattern: ^(?:\\N{DC4})$
+flags: 
+subject: \x14
+expect: 0-1
+
+pattern: ^(?:\\N{NEGATIVE ACKNOWLEDGE})$
+flags: 
+subject: \x15
+expect: 0-1
+
+pattern: ^(?:\\N{NAK})$
+flags: 
+subject: \x15
+expect: 0-1
+
+pattern: ^(?:\\N{SYNCHRONOUS IDLE})$
+flags: 
+subject: \x16
+expect: 0-1
+
+pattern: ^(?:\\N{SYN})$
+flags: 
+subject: \x16
+expect: 0-1
+
+pattern: ^(?:\\N{END OF TRANSMISSION BLOCK})$
+flags: 
+subject: \x17
+expect: 0-1
+
+pattern: ^(?:\\N{ETB})$
+flags: 
+subject: \x17
+expect: 0-1
+
+pattern: ^(?:\\N{CANCEL})$
+flags: 
+subject: \x18
+expect: 0-1
+
+pattern: ^(?:\\N{CAN})$
+flags: 
+subject: \x18
+expect: 0-1
+
+pattern: ^(?:\\N{END OF MEDIUM})$
+flags: 
+subject: \x19
+expect: 0-1
+
+pattern: ^(?:\\N{EOM})$
+flags: 
+subject: \x19
+expect: 0-1
+
+pattern: ^(?:\\N{EM})$
+flags: 
+subject: \x19
+expect: 0-1
+
+pattern: ^(?:\\N{SUBSTITUTE})$
+flags: 
+subject: \x1A
+expect: 0-1
+
+pattern: ^(?:\\N{SUB})$
+flags: 
+subject: \x1A
+expect: 0-1
+
+pattern: ^(?:\\N{ESCAPE})$
+flags: 
+subject: \x1B
+expect: 0-1
+
+pattern: ^(?:\\N{ESC})$
+flags: 
+subject: \x1B
+expect: 0-1
+
+pattern: ^(?:\\N{INFORMATION SEPARATOR FOUR})$
+flags: 
+subject: \x1C
+expect: 0-1
+
+pattern: ^(?:\\N{FILE SEPARATOR})$
+flags: 
+subject: \x1C
+expect: 0-1
+
+pattern: ^(?:\\N{FS})$
+flags: 
+subject: \x1C
+expect: 0-1
+
+pattern: ^(?:\\N{INFORMATION SEPARATOR THREE})$
+flags: 
+subject: \x1D
+expect: 0-1
+
+pattern: ^(?:\\N{GROUP SEPARATOR})$
+flags: 
+subject: \x1D
+expect: 0-1
+
+pattern: ^(?:\\N{GS})$
+flags: 
+subject: \x1D
+expect: 0-1
+
+pattern: ^(?:\\N{INFORMATION SEPARATOR TWO})$
+flags: 
+subject: \x1E
+expect: 0-1
+
+pattern: ^(?:\\N{RECORD SEPARATOR})$
+flags: 
+subject: \x1E
+expect: 0-1
+
+pattern: ^(?:\\N{RS})$
+flags: 
+subject: \x1E
+expect: 0-1
+
+pattern: ^(?:\\N{INFORMATION SEPARATOR ONE})$
+flags: 
+subject: \x1F
+expect: 0-1
+
+pattern: ^(?:\\N{UNIT SEPARATOR})$
+flags: 
+subject: \x1F
+expect: 0-1
+
+pattern: ^(?:\\N{US})$
+flags: 
+subject: \x1F
+expect: 0-1
+
+pattern: ^(?:\\N{SP})$
+flags: 
+subject:  
+expect: 0-1
+
+pattern: ^(?:\\N{DELETE})$
+flags: 
+subject: \x7F
+expect: 0-1
+
+pattern: ^(?:\\N{DEL})$
+flags: 
+subject: \x7F
+expect: 0-1
+
+pattern: ^(?:\\N{PADDING CHARACTER})$
+flags: 
+subject: \u0080
+expect: 0-2
+
+pattern: ^(?:\\N{PAD})$
+flags: 
+subject: \u0080
+expect: 0-2
+
+pattern: ^(?:\\N{HIGH OCTET PRESET})$
+flags: 
+subject: \u0081
+expect: 0-2
+
+pattern: ^(?:\\N{HOP})$
+flags: 
+subject: \u0081
+expect: 0-2
+
+pattern: ^(?:\\N{BREAK PERMITTED HERE})$
+flags: 
+subject: \u0082
+expect: 0-2
+
+pattern: ^(?:\\N{BPH})$
+flags: 
+subject: \u0082
+expect: 0-2
+
+pattern: ^(?:\\N{NO BREAK HERE})$
+flags: 
+subject: \u0083
+expect: 0-2
+
+pattern: ^(?:\\N{NBH})$
+flags: 
+subject: \u0083
+expect: 0-2
+
+pattern: ^(?:\\N{INDEX})$
+flags: 
+subject: \u0084
+expect: 0-2
+
+pattern: ^(?:\\N{IND})$
+flags: 
+subject: \u0084
+expect: 0-2
+
+pattern: ^(?:\\N{NEXT LINE})$
+flags: 
+subject: \u0085
+expect: 0-2
+
+pattern: ^(?:\\N{NEL})$
+flags: 
+subject: \u0085
+expect: 0-2
+
+pattern: ^(?:\\N{START OF SELECTED AREA})$
+flags: 
+subject: \u0086
+expect: 0-2
+
+pattern: ^(?:\\N{SSA})$
+flags: 
+subject: \u0086
+expect: 0-2
+
+pattern: ^(?:\\N{END OF SELECTED AREA})$
+flags: 
+subject: \u0087
+expect: 0-2
+
+pattern: ^(?:\\N{ESA})$
+flags: 
+subject: \u0087
+expect: 0-2
+
+pattern: ^(?:\\N{CHARACTER TABULATION SET})$
+flags: 
+subject: \u0088
+expect: 0-2
+
+pattern: ^(?:\\N{HORIZONTAL TABULATION SET})$
+flags: 
+subject: \u0088
+expect: 0-2
+
+pattern: ^(?:\\N{HTS})$
+flags: 
+subject: \u0088
+expect: 0-2
+
+pattern: ^(?:\\N{CHARACTER TABULATION WITH JUSTIFICATION})$
+flags: 
+subject: \u0089
+expect: 0-2
+
+pattern: ^(?:\\N{HORIZONTAL TABULATION WITH JUSTIFICATION})$
+flags: 
+subject: \u0089
+expect: 0-2
+
+pattern: ^(?:\\N{HTJ})$
+flags: 
+subject: \u0089
+expect: 0-2
+
+pattern: ^(?:\\N{LINE TABULATION SET})$
+flags: 
+subject: \u008A
+expect: 0-2
+
+pattern: ^(?:\\N{VERTICAL TABULATION SET})$
+flags: 
+subject: \u008A
+expect: 0-2
+
+pattern: ^(?:\\N{VTS})$
+flags: 
+subject: \u008A
+expect: 0-2
+
+pattern: ^(?:\\N{PARTIAL LINE FORWARD})$
+flags: 
+subject: \u008B
+expect: 0-2
+
+pattern: ^(?:\\N{PARTIAL LINE DOWN})$
+flags: 
+subject: \u008B
+expect: 0-2
+
+pattern: ^(?:\\N{PLD})$
+flags: 
+subject: \u008B
+expect: 0-2
+
+pattern: ^(?:\\N{PARTIAL LINE BACKWARD})$
+flags: 
+subject: \u008C
+expect: 0-2
+
+pattern: ^(?:\\N{PARTIAL LINE UP})$
+flags: 
+subject: \u008C
+expect: 0-2
+
+pattern: ^(?:\\N{PLU})$
+flags: 
+subject: \u008C
+expect: 0-2
+
+pattern: ^(?:\\N{REVERSE LINE FEED})$
+flags: 
+subject: \u008D
+expect: 0-2
+
+pattern: ^(?:\\N{REVERSE INDEX})$
+flags: 
+subject: \u008D
+expect: 0-2
+
+pattern: ^(?:\\N{RI})$
+flags: 
+subject: \u008D
+expect: 0-2
+
+pattern: ^(?:\\N{SINGLE SHIFT TWO})$
+flags: 
+subject: \u008E
+expect: 0-2
+
+pattern: ^(?:\\N{SINGLE-SHIFT-2})$
+flags: 
+subject: \u008E
+expect: 0-2
+
+pattern: ^(?:\\N{SS2})$
+flags: 
+subject: \u008E
+expect: 0-2
+
+pattern: ^(?:\\N{SINGLE SHIFT THREE})$
+flags: 
+subject: \u008F
+expect: 0-2
+
+pattern: ^(?:\\N{SINGLE-SHIFT-3})$
+flags: 
+subject: \u008F
+expect: 0-2
+
+pattern: ^(?:\\N{SS3})$
+flags: 
+subject: \u008F
+expect: 0-2
+
+pattern: ^(?:\\N{DEVICE CONTROL STRING})$
+flags: 
+subject: \u0090
+expect: 0-2
+
+pattern: ^(?:\\N{DCS})$
+flags: 
+subject: \u0090
+expect: 0-2
+
+pattern: ^(?:\\N{PRIVATE USE ONE})$
+flags: 
+subject: \u0091
+expect: 0-2
+
+pattern: ^(?:\\N{PRIVATE USE-1})$
+flags: 
+subject: \u0091
+expect: 0-2
+
+pattern: ^(?:\\N{PU1})$
+flags: 
+subject: \u0091
+expect: 0-2
+
+pattern: ^(?:\\N{PRIVATE USE TWO})$
+flags: 
+subject: \u0092
+expect: 0-2
+
+pattern: ^(?:\\N{PRIVATE USE-2})$
+flags: 
+subject: \u0092
+expect: 0-2
+
+pattern: ^(?:\\N{PU2})$
+flags: 
+subject: \u0092
+expect: 0-2
+
+pattern: ^(?:\\N{SET TRANSMIT STATE})$
+flags: 
+subject: \u0093
+expect: 0-2
+
+pattern: ^(?:\\N{STS})$
+flags: 
+subject: \u0093
+expect: 0-2
+
+pattern: ^(?:\\N{CANCEL CHARACTER})$
+flags: 
+subject: \u0094
+expect: 0-2
+
+pattern: ^(?:\\N{CCH})$
+flags: 
+subject: \u0094
+expect: 0-2
+
+pattern: ^(?:\\N{MESSAGE WAITING})$
+flags: 
+subject: \u0095
+expect: 0-2
+
+pattern: ^(?:\\N{MW})$
+flags: 
+subject: \u0095
+expect: 0-2
+
+pattern: ^(?:\\N{START OF GUARDED AREA})$
+flags: 
+subject: \u0096
+expect: 0-2
+
+pattern: ^(?:\\N{START OF PROTECTED AREA})$
+flags: 
+subject: \u0096
+expect: 0-2
+
+pattern: ^(?:\\N{SPA})$
+flags: 
+subject: \u0096
+expect: 0-2
+
+pattern: ^(?:\\N{END OF GUARDED AREA})$
+flags: 
+subject: \u0097
+expect: 0-2
+
+pattern: ^(?:\\N{END OF PROTECTED AREA})$
+flags: 
+subject: \u0097
+expect: 0-2
+
+pattern: ^(?:\\N{EPA})$
+flags: 
+subject: \u0097
+expect: 0-2
+
+pattern: ^(?:\\N{START OF STRING})$
+flags: 
+subject: \u0098
+expect: 0-2
+
+pattern: ^(?:\\N{SOS})$
+flags: 
+subject: \u0098
+expect: 0-2
+
+pattern: ^(?:\\N{SINGLE GRAPHIC CHARACTER INTRODUCER})$
+flags: 
+subject: \u0099
+expect: 0-2
+
+pattern: ^(?:\\N{SGC})$
+flags: 
+subject: \u0099
+expect: 0-2
+
+pattern: ^(?:\\N{SINGLE CHARACTER INTRODUCER})$
+flags: 
+subject: \u009A
+expect: 0-2
+
+pattern: ^(?:\\N{SCI})$
+flags: 
+subject: \u009A
+expect: 0-2
+
+pattern: ^(?:\\N{CONTROL SEQUENCE INTRODUCER})$
+flags: 
+subject: \u009B
+expect: 0-2
+
+pattern: ^(?:\\N{CSI})$
+flags: 
+subject: \u009B
+expect: 0-2
+
+pattern: ^(?:\\N{STRING TERMINATOR})$
+flags: 
+subject: \u009C
+expect: 0-2
+
+pattern: ^(?:\\N{ST})$
+flags: 
+subject: \u009C
+expect: 0-2
+
+pattern: ^(?:\\N{OPERATING SYSTEM COMMAND})$
+flags: 
+subject: \u009D
+expect: 0-2
+
+pattern: ^(?:\\N{OSC})$
+flags: 
+subject: \u009D
+expect: 0-2
+
+pattern: ^(?:\\N{PRIVACY MESSAGE})$
+flags: 
+subject: \u009E
+expect: 0-2
+
+pattern: ^(?:\\N{PM})$
+flags: 
+subject: \u009E
+expect: 0-2
+
+pattern: ^(?:\\N{APPLICATION PROGRAM COMMAND})$
+flags: 
+subject: \u009F
+expect: 0-2
+
+pattern: ^(?:\\N{APC})$
+flags: 
+subject: \u009F
+expect: 0-2
+
+pattern: ^(?:\\N{NBSP})$
+flags: 
+subject: \u00A0
+expect: 0-2
+
+pattern: ^(?:\\N{SHY})$
+flags: 
+subject: \u00AD
+expect: 0-2
+
+pattern: ^(?:\\N{LATIN CAPITAL LETTER GHA})$
+flags: 
+subject: \u01A2
+expect: 0-2
+
+pattern: ^(?:\\N{LATIN SMALL LETTER GHA})$
+flags: 
+subject: \u01A3
+expect: 0-2
+
+pattern: ^(?:\\N{CGJ})$
+flags: 
+subject: \u034F
+expect: 0-2
+
+pattern: ^(?:\\N{ARABIC SMALL HIGH LIGATURE ALEF WITH YEH BARREE})$
+flags: 
+subject: \u0616
+expect: 0-2
+
+pattern: ^(?:\\N{ALM})$
+flags: 
+subject: \u061C
+expect: 0-2
+
+pattern: ^(?:\\N{SYRIAC SUBLINEAR COLON SKEWED LEFT})$
+flags: 
+subject: \u0709
+expect: 0-2
+
+pattern: ^(?:\\N{KANNADA LETTER LLLA})$
+flags: 
+subject: \u0CDE
+expect: 0-3
+
+pattern: ^(?:\\N{LAO LETTER FO FON})$
+flags: 
+subject: \u0E9D
+expect: 0-3
+
+pattern: ^(?:\\N{LAO LETTER FO FAY})$
+flags: 
+subject: \u0E9F
+expect: 0-3
+
+pattern: ^(?:\\N{LAO LETTER RO})$
+flags: 
+subject: \u0EA3
+expect: 0-3
+
+pattern: ^(?:\\N{LAO LETTER LO})$
+flags: 
+subject: \u0EA5
+expect: 0-3
+
+pattern: ^(?:\\N{TIBETAN MARK BKA- SHOG GI MGO RGYAN})$
+flags: 
+subject: \u0FD0
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL JONGSEONG YESIEUNG-KIYEOK})$
+flags: 
+subject: \u11EC
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL JONGSEONG YESIEUNG-SSANGKIYEOK})$
+flags: 
+subject: \u11ED
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL JONGSEONG SSANGYESIEUNG})$
+flags: 
+subject: \u11EE
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL JONGSEONG YESIEUNG-KHIEUKH})$
+flags: 
+subject: \u11EF
+expect: 0-3
+
+pattern: ^(?:\\N{FVS1})$
+flags: 
+subject: \u180B
+expect: 0-3
+
+pattern: ^(?:\\N{FVS2})$
+flags: 
+subject: \u180C
+expect: 0-3
+
+pattern: ^(?:\\N{FVS3})$
+flags: 
+subject: \u180D
+expect: 0-3
+
+pattern: ^(?:\\N{MVS})$
+flags: 
+subject: \u180E
+expect: 0-3
+
+pattern: ^(?:\\N{FVS4})$
+flags: 
+subject: \u180F
+expect: 0-3
+
+pattern: ^(?:\\N{SUNDANESE LETTER ARCHAIC I})$
+flags: 
+subject: \u1BBD
+expect: 0-3
+
+pattern: ^(?:\\N{ZWSP})$
+flags: 
+subject: \u200B
+expect: 0-3
+
+pattern: ^(?:\\N{ZWNJ})$
+flags: 
+subject: \u200C
+expect: 0-3
+
+pattern: ^(?:\\N{ZWJ})$
+flags: 
+subject: \u200D
+expect: 0-3
+
+pattern: ^(?:\\N{LRM})$
+flags: 
+subject: \u200E
+expect: 0-3
+
+pattern: ^(?:\\N{RLM})$
+flags: 
+subject: \u200F
+expect: 0-3
+
+pattern: ^(?:\\N{LRE})$
+flags: 
+subject: \u202A
+expect: 0-3
+
+pattern: ^(?:\\N{RLE})$
+flags: 
+subject: \u202B
+expect: 0-3
+
+pattern: ^(?:\\N{PDF})$
+flags: 
+subject: \u202C
+expect: 0-3
+
+pattern: ^(?:\\N{LRO})$
+flags: 
+subject: \u202D
+expect: 0-3
+
+pattern: ^(?:\\N{RLO})$
+flags: 
+subject: \u202E
+expect: 0-3
+
+pattern: ^(?:\\N{NNBSP})$
+flags: 
+subject: \u202F
+expect: 0-3
+
+pattern: ^(?:\\N{MMSP})$
+flags: 
+subject: \u205F
+expect: 0-3
+
+pattern: ^(?:\\N{WJ})$
+flags: 
+subject: \u2060
+expect: 0-3
+
+pattern: ^(?:\\N{LRI})$
+flags: 
+subject: \u2066
+expect: 0-3
+
+pattern: ^(?:\\N{RLI})$
+flags: 
+subject: \u2067
+expect: 0-3
+
+pattern: ^(?:\\N{FSI})$
+flags: 
+subject: \u2068
+expect: 0-3
+
+pattern: ^(?:\\N{PDI})$
+flags: 
+subject: \u2069
+expect: 0-3
+
+pattern: ^(?:\\N{WEIERSTRASS ELLIPTIC FUNCTION})$
+flags: 
+subject: \u2118
+expect: 0-3
+
+pattern: ^(?:\\N{MICR ON US SYMBOL})$
+flags: 
+subject: \u2448
+expect: 0-3
+
+pattern: ^(?:\\N{MICR DASH SYMBOL})$
+flags: 
+subject: \u2449
+expect: 0-3
+
+pattern: ^(?:\\N{LEFTWARDS TRIANGLE-HEADED ARROW WITH DOUBLE VERTICAL STROKE})$
+flags: 
+subject: \u2B7A
+expect: 0-3
+
+pattern: ^(?:\\N{RIGHTWARDS TRIANGLE-HEADED ARROW WITH DOUBLE VERTICAL STROKE})$
+flags: 
+subject: \u2B7C
+expect: 0-3
+
+pattern: ^(?:\\N{YI SYLLABLE ITERATION MARK})$
+flags: 
+subject: \uA015
+expect: 0-3
+
+pattern: ^(?:\\N{MYANMAR LETTER KHAMTI LLA})$
+flags: 
+subject: \uAA6E
+expect: 0-3
+
+pattern: ^(?:\\N{VS1})$
+flags: 
+subject: \uFE00
+expect: 0-3
+
+pattern: ^(?:\\N{VS2})$
+flags: 
+subject: \uFE01
+expect: 0-3
+
+pattern: ^(?:\\N{VS3})$
+flags: 
+subject: \uFE02
+expect: 0-3
+
+pattern: ^(?:\\N{VS4})$
+flags: 
+subject: \uFE03
+expect: 0-3
+
+pattern: ^(?:\\N{VS5})$
+flags: 
+subject: \uFE04
+expect: 0-3
+
+pattern: ^(?:\\N{VS6})$
+flags: 
+subject: \uFE05
+expect: 0-3
+
+pattern: ^(?:\\N{VS7})$
+flags: 
+subject: \uFE06
+expect: 0-3
+
+pattern: ^(?:\\N{VS8})$
+flags: 
+subject: \uFE07
+expect: 0-3
+
+pattern: ^(?:\\N{VS9})$
+flags: 
+subject: \uFE08
+expect: 0-3
+
+pattern: ^(?:\\N{VS10})$
+flags: 
+subject: \uFE09
+expect: 0-3
+
+pattern: ^(?:\\N{VS11})$
+flags: 
+subject: \uFE0A
+expect: 0-3
+
+pattern: ^(?:\\N{VS12})$
+flags: 
+subject: \uFE0B
+expect: 0-3
+
+pattern: ^(?:\\N{VS13})$
+flags: 
+subject: \uFE0C
+expect: 0-3
+
+pattern: ^(?:\\N{VS14})$
+flags: 
+subject: \uFE0D
+expect: 0-3
+
+pattern: ^(?:\\N{VS15})$
+flags: 
+subject: \uFE0E
+expect: 0-3
+
+pattern: ^(?:\\N{VS16})$
+flags: 
+subject: \uFE0F
+expect: 0-3
+
+pattern: ^(?:\\N{PRESENTATION FORM FOR VERTICAL RIGHT WHITE LENTICULAR BRACKET})$
+flags: 
+subject: \uFE18
+expect: 0-3
+
+pattern: ^(?:\\N{BYTE ORDER MARK})$
+flags: 
+subject: \uFEFF
+expect: 0-3
+
+pattern: ^(?:\\N{BOM})$
+flags: 
+subject: \uFEFF
+expect: 0-3
+
+pattern: ^(?:\\N{ZWNBSP})$
+flags: 
+subject: \uFEFF
+expect: 0-3
+
+pattern: ^(?:\\N{CUNEIFORM SIGN NU11 TENU})$
+flags: 
+subject: \u{122D4}
+expect: 0-4
+
+pattern: ^(?:\\N{CUNEIFORM SIGN NU11 OVER NU11 BUR OVER BUR})$
+flags: 
+subject: \u{122D5}
+expect: 0-4
+
+pattern: ^(?:\\N{MEDEFAIDRIN CAPITAL LETTER H})$
+flags: 
+subject: \u{16E56}
+expect: 0-4
+
+pattern: ^(?:\\N{MEDEFAIDRIN CAPITAL LETTER NG})$
+flags: 
+subject: \u{16E57}
+expect: 0-4
+
+pattern: ^(?:\\N{MEDEFAIDRIN SMALL LETTER H})$
+flags: 
+subject: \u{16E76}
+expect: 0-4
+
+pattern: ^(?:\\N{MEDEFAIDRIN SMALL LETTER NG})$
+flags: 
+subject: \u{16E77}
+expect: 0-4
+
+pattern: ^(?:\\N{HENTAIGANA LETTER E-1})$
+flags: 
+subject: \u{1B001}
+expect: 0-4
+
+pattern: ^(?:\\N{BYZANTINE MUSICAL SYMBOL FTHORA SKLIRON CHROMA VASIS})$
+flags: 
+subject: \u{1D0C5}
+expect: 0-4
+
+pattern: ^(?:\\N{VS17})$
+flags: 
+subject: \u{E0100}
+expect: 0-4
+
+pattern: ^(?:\\N{VS18})$
+flags: 
+subject: \u{E0101}
+expect: 0-4
+
+pattern: ^(?:\\N{VS19})$
+flags: 
+subject: \u{E0102}
+expect: 0-4
+
+pattern: ^(?:\\N{VS20})$
+flags: 
+subject: \u{E0103}
+expect: 0-4
+
+pattern: ^(?:\\N{VS21})$
+flags: 
+subject: \u{E0104}
+expect: 0-4
+
+pattern: ^(?:\\N{VS22})$
+flags: 
+subject: \u{E0105}
+expect: 0-4
+
+pattern: ^(?:\\N{VS23})$
+flags: 
+subject: \u{E0106}
+expect: 0-4
+
+pattern: ^(?:\\N{VS24})$
+flags: 
+subject: \u{E0107}
+expect: 0-4
+
+pattern: ^(?:\\N{VS25})$
+flags: 
+subject: \u{E0108}
+expect: 0-4
+
+pattern: ^(?:\\N{VS26})$
+flags: 
+subject: \u{E0109}
+expect: 0-4
+
+pattern: ^(?:\\N{VS27})$
+flags: 
+subject: \u{E010A}
+expect: 0-4
+
+pattern: ^(?:\\N{VS28})$
+flags: 
+subject: \u{E010B}
+expect: 0-4
+
+pattern: ^(?:\\N{VS29})$
+flags: 
+subject: \u{E010C}
+expect: 0-4
+
+pattern: ^(?:\\N{VS30})$
+flags: 
+subject: \u{E010D}
+expect: 0-4
+
+pattern: ^(?:\\N{VS31})$
+flags: 
+subject: \u{E010E}
+expect: 0-4
+
+pattern: ^(?:\\N{VS32})$
+flags: 
+subject: \u{E010F}
+expect: 0-4
+
+pattern: ^(?:\\N{VS33})$
+flags: 
+subject: \u{E0110}
+expect: 0-4
+
+pattern: ^(?:\\N{VS34})$
+flags: 
+subject: \u{E0111}
+expect: 0-4
+
+pattern: ^(?:\\N{VS35})$
+flags: 
+subject: \u{E0112}
+expect: 0-4
+
+pattern: ^(?:\\N{VS36})$
+flags: 
+subject: \u{E0113}
+expect: 0-4
+
+pattern: ^(?:\\N{VS37})$
+flags: 
+subject: \u{E0114}
+expect: 0-4
+
+pattern: ^(?:\\N{VS38})$
+flags: 
+subject: \u{E0115}
+expect: 0-4
+
+pattern: ^(?:\\N{VS39})$
+flags: 
+subject: \u{E0116}
+expect: 0-4
+
+pattern: ^(?:\\N{VS40})$
+flags: 
+subject: \u{E0117}
+expect: 0-4
+
+pattern: ^(?:\\N{VS41})$
+flags: 
+subject: \u{E0118}
+expect: 0-4
+
+pattern: ^(?:\\N{VS42})$
+flags: 
+subject: \u{E0119}
+expect: 0-4
+
+pattern: ^(?:\\N{VS43})$
+flags: 
+subject: \u{E011A}
+expect: 0-4
+
+pattern: ^(?:\\N{VS44})$
+flags: 
+subject: \u{E011B}
+expect: 0-4
+
+pattern: ^(?:\\N{VS45})$
+flags: 
+subject: \u{E011C}
+expect: 0-4
+
+pattern: ^(?:\\N{VS46})$
+flags: 
+subject: \u{E011D}
+expect: 0-4
+
+pattern: ^(?:\\N{VS47})$
+flags: 
+subject: \u{E011E}
+expect: 0-4
+
+pattern: ^(?:\\N{VS48})$
+flags: 
+subject: \u{E011F}
+expect: 0-4
+
+pattern: ^(?:\\N{VS49})$
+flags: 
+subject: \u{E0120}
+expect: 0-4
+
+pattern: ^(?:\\N{VS50})$
+flags: 
+subject: \u{E0121}
+expect: 0-4
+
+pattern: ^(?:\\N{VS51})$
+flags: 
+subject: \u{E0122}
+expect: 0-4
+
+pattern: ^(?:\\N{VS52})$
+flags: 
+subject: \u{E0123}
+expect: 0-4
+
+pattern: ^(?:\\N{VS53})$
+flags: 
+subject: \u{E0124}
+expect: 0-4
+
+pattern: ^(?:\\N{VS54})$
+flags: 
+subject: \u{E0125}
+expect: 0-4
+
+pattern: ^(?:\\N{VS55})$
+flags: 
+subject: \u{E0126}
+expect: 0-4
+
+pattern: ^(?:\\N{VS56})$
+flags: 
+subject: \u{E0127}
+expect: 0-4
+
+pattern: ^(?:\\N{VS57})$
+flags: 
+subject: \u{E0128}
+expect: 0-4
+
+pattern: ^(?:\\N{VS58})$
+flags: 
+subject: \u{E0129}
+expect: 0-4
+
+pattern: ^(?:\\N{VS59})$
+flags: 
+subject: \u{E012A}
+expect: 0-4
+
+pattern: ^(?:\\N{VS60})$
+flags: 
+subject: \u{E012B}
+expect: 0-4
+
+pattern: ^(?:\\N{VS61})$
+flags: 
+subject: \u{E012C}
+expect: 0-4
+
+pattern: ^(?:\\N{VS62})$
+flags: 
+subject: \u{E012D}
+expect: 0-4
+
+pattern: ^(?:\\N{VS63})$
+flags: 
+subject: \u{E012E}
+expect: 0-4
+
+pattern: ^(?:\\N{VS64})$
+flags: 
+subject: \u{E012F}
+expect: 0-4
+
+pattern: ^(?:\\N{VS65})$
+flags: 
+subject: \u{E0130}
+expect: 0-4
+
+pattern: ^(?:\\N{VS66})$
+flags: 
+subject: \u{E0131}
+expect: 0-4
+
+pattern: ^(?:\\N{VS67})$
+flags: 
+subject: \u{E0132}
+expect: 0-4
+
+pattern: ^(?:\\N{VS68})$
+flags: 
+subject: \u{E0133}
+expect: 0-4
+
+pattern: ^(?:\\N{VS69})$
+flags: 
+subject: \u{E0134}
+expect: 0-4
+
+pattern: ^(?:\\N{VS70})$
+flags: 
+subject: \u{E0135}
+expect: 0-4
+
+pattern: ^(?:\\N{VS71})$
+flags: 
+subject: \u{E0136}
+expect: 0-4
+
+pattern: ^(?:\\N{VS72})$
+flags: 
+subject: \u{E0137}
+expect: 0-4
+
+pattern: ^(?:\\N{VS73})$
+flags: 
+subject: \u{E0138}
+expect: 0-4
+
+pattern: ^(?:\\N{VS74})$
+flags: 
+subject: \u{E0139}
+expect: 0-4
+
+pattern: ^(?:\\N{VS75})$
+flags: 
+subject: \u{E013A}
+expect: 0-4
+
+pattern: ^(?:\\N{VS76})$
+flags: 
+subject: \u{E013B}
+expect: 0-4
+
+pattern: ^(?:\\N{VS77})$
+flags: 
+subject: \u{E013C}
+expect: 0-4
+
+pattern: ^(?:\\N{VS78})$
+flags: 
+subject: \u{E013D}
+expect: 0-4
+
+pattern: ^(?:\\N{VS79})$
+flags: 
+subject: \u{E013E}
+expect: 0-4
+
+pattern: ^(?:\\N{VS80})$
+flags: 
+subject: \u{E013F}
+expect: 0-4
+
+pattern: ^(?:\\N{VS81})$
+flags: 
+subject: \u{E0140}
+expect: 0-4
+
+pattern: ^(?:\\N{VS82})$
+flags: 
+subject: \u{E0141}
+expect: 0-4
+
+pattern: ^(?:\\N{VS83})$
+flags: 
+subject: \u{E0142}
+expect: 0-4
+
+pattern: ^(?:\\N{VS84})$
+flags: 
+subject: \u{E0143}
+expect: 0-4
+
+pattern: ^(?:\\N{VS85})$
+flags: 
+subject: \u{E0144}
+expect: 0-4
+
+pattern: ^(?:\\N{VS86})$
+flags: 
+subject: \u{E0145}
+expect: 0-4
+
+pattern: ^(?:\\N{VS87})$
+flags: 
+subject: \u{E0146}
+expect: 0-4
+
+pattern: ^(?:\\N{VS88})$
+flags: 
+subject: \u{E0147}
+expect: 0-4
+
+pattern: ^(?:\\N{VS89})$
+flags: 
+subject: \u{E0148}
+expect: 0-4
+
+pattern: ^(?:\\N{VS90})$
+flags: 
+subject: \u{E0149}
+expect: 0-4
+
+pattern: ^(?:\\N{VS91})$
+flags: 
+subject: \u{E014A}
+expect: 0-4
+
+pattern: ^(?:\\N{VS92})$
+flags: 
+subject: \u{E014B}
+expect: 0-4
+
+pattern: ^(?:\\N{VS93})$
+flags: 
+subject: \u{E014C}
+expect: 0-4
+
+pattern: ^(?:\\N{VS94})$
+flags: 
+subject: \u{E014D}
+expect: 0-4
+
+pattern: ^(?:\\N{VS95})$
+flags: 
+subject: \u{E014E}
+expect: 0-4
+
+pattern: ^(?:\\N{VS96})$
+flags: 
+subject: \u{E014F}
+expect: 0-4
+
+pattern: ^(?:\\N{VS97})$
+flags: 
+subject: \u{E0150}
+expect: 0-4
+
+pattern: ^(?:\\N{VS98})$
+flags: 
+subject: \u{E0151}
+expect: 0-4
+
+pattern: ^(?:\\N{VS99})$
+flags: 
+subject: \u{E0152}
+expect: 0-4
+
+pattern: ^(?:\\N{VS100})$
+flags: 
+subject: \u{E0153}
+expect: 0-4
+
+pattern: ^(?:\\N{VS101})$
+flags: 
+subject: \u{E0154}
+expect: 0-4
+
+pattern: ^(?:\\N{VS102})$
+flags: 
+subject: \u{E0155}
+expect: 0-4
+
+pattern: ^(?:\\N{VS103})$
+flags: 
+subject: \u{E0156}
+expect: 0-4
+
+pattern: ^(?:\\N{VS104})$
+flags: 
+subject: \u{E0157}
+expect: 0-4
+
+pattern: ^(?:\\N{VS105})$
+flags: 
+subject: \u{E0158}
+expect: 0-4
+
+pattern: ^(?:\\N{VS106})$
+flags: 
+subject: \u{E0159}
+expect: 0-4
+
+pattern: ^(?:\\N{VS107})$
+flags: 
+subject: \u{E015A}
+expect: 0-4
+
+pattern: ^(?:\\N{VS108})$
+flags: 
+subject: \u{E015B}
+expect: 0-4
+
+pattern: ^(?:\\N{VS109})$
+flags: 
+subject: \u{E015C}
+expect: 0-4
+
+pattern: ^(?:\\N{VS110})$
+flags: 
+subject: \u{E015D}
+expect: 0-4
+
+pattern: ^(?:\\N{VS111})$
+flags: 
+subject: \u{E015E}
+expect: 0-4
+
+pattern: ^(?:\\N{VS112})$
+flags: 
+subject: \u{E015F}
+expect: 0-4
+
+pattern: ^(?:\\N{VS113})$
+flags: 
+subject: \u{E0160}
+expect: 0-4
+
+pattern: ^(?:\\N{VS114})$
+flags: 
+subject: \u{E0161}
+expect: 0-4
+
+pattern: ^(?:\\N{VS115})$
+flags: 
+subject: \u{E0162}
+expect: 0-4
+
+pattern: ^(?:\\N{VS116})$
+flags: 
+subject: \u{E0163}
+expect: 0-4
+
+pattern: ^(?:\\N{VS117})$
+flags: 
+subject: \u{E0164}
+expect: 0-4
+
+pattern: ^(?:\\N{VS118})$
+flags: 
+subject: \u{E0165}
+expect: 0-4
+
+pattern: ^(?:\\N{VS119})$
+flags: 
+subject: \u{E0166}
+expect: 0-4
+
+pattern: ^(?:\\N{VS120})$
+flags: 
+subject: \u{E0167}
+expect: 0-4
+
+pattern: ^(?:\\N{VS121})$
+flags: 
+subject: \u{E0168}
+expect: 0-4
+
+pattern: ^(?:\\N{VS122})$
+flags: 
+subject: \u{E0169}
+expect: 0-4
+
+pattern: ^(?:\\N{VS123})$
+flags: 
+subject: \u{E016A}
+expect: 0-4
+
+pattern: ^(?:\\N{VS124})$
+flags: 
+subject: \u{E016B}
+expect: 0-4
+
+pattern: ^(?:\\N{VS125})$
+flags: 
+subject: \u{E016C}
+expect: 0-4
+
+pattern: ^(?:\\N{VS126})$
+flags: 
+subject: \u{E016D}
+expect: 0-4
+
+pattern: ^(?:\\N{VS127})$
+flags: 
+subject: \u{E016E}
+expect: 0-4
+
+pattern: ^(?:\\N{VS128})$
+flags: 
+subject: \u{E016F}
+expect: 0-4
+
+pattern: ^(?:\\N{VS129})$
+flags: 
+subject: \u{E0170}
+expect: 0-4
+
+pattern: ^(?:\\N{VS130})$
+flags: 
+subject: \u{E0171}
+expect: 0-4
+
+pattern: ^(?:\\N{VS131})$
+flags: 
+subject: \u{E0172}
+expect: 0-4
+
+pattern: ^(?:\\N{VS132})$
+flags: 
+subject: \u{E0173}
+expect: 0-4
+
+pattern: ^(?:\\N{VS133})$
+flags: 
+subject: \u{E0174}
+expect: 0-4
+
+pattern: ^(?:\\N{VS134})$
+flags: 
+subject: \u{E0175}
+expect: 0-4
+
+pattern: ^(?:\\N{VS135})$
+flags: 
+subject: \u{E0176}
+expect: 0-4
+
+pattern: ^(?:\\N{VS136})$
+flags: 
+subject: \u{E0177}
+expect: 0-4
+
+pattern: ^(?:\\N{VS137})$
+flags: 
+subject: \u{E0178}
+expect: 0-4
+
+pattern: ^(?:\\N{VS138})$
+flags: 
+subject: \u{E0179}
+expect: 0-4
+
+pattern: ^(?:\\N{VS139})$
+flags: 
+subject: \u{E017A}
+expect: 0-4
+
+pattern: ^(?:\\N{VS140})$
+flags: 
+subject: \u{E017B}
+expect: 0-4
+
+pattern: ^(?:\\N{VS141})$
+flags: 
+subject: \u{E017C}
+expect: 0-4
+
+pattern: ^(?:\\N{VS142})$
+flags: 
+subject: \u{E017D}
+expect: 0-4
+
+pattern: ^(?:\\N{VS143})$
+flags: 
+subject: \u{E017E}
+expect: 0-4
+
+pattern: ^(?:\\N{VS144})$
+flags: 
+subject: \u{E017F}
+expect: 0-4
+
+pattern: ^(?:\\N{VS145})$
+flags: 
+subject: \u{E0180}
+expect: 0-4
+
+pattern: ^(?:\\N{VS146})$
+flags: 
+subject: \u{E0181}
+expect: 0-4
+
+pattern: ^(?:\\N{VS147})$
+flags: 
+subject: \u{E0182}
+expect: 0-4
+
+pattern: ^(?:\\N{VS148})$
+flags: 
+subject: \u{E0183}
+expect: 0-4
+
+pattern: ^(?:\\N{VS149})$
+flags: 
+subject: \u{E0184}
+expect: 0-4
+
+pattern: ^(?:\\N{VS150})$
+flags: 
+subject: \u{E0185}
+expect: 0-4
+
+pattern: ^(?:\\N{VS151})$
+flags: 
+subject: \u{E0186}
+expect: 0-4
+
+pattern: ^(?:\\N{VS152})$
+flags: 
+subject: \u{E0187}
+expect: 0-4
+
+pattern: ^(?:\\N{VS153})$
+flags: 
+subject: \u{E0188}
+expect: 0-4
+
+pattern: ^(?:\\N{VS154})$
+flags: 
+subject: \u{E0189}
+expect: 0-4
+
+pattern: ^(?:\\N{VS155})$
+flags: 
+subject: \u{E018A}
+expect: 0-4
+
+pattern: ^(?:\\N{VS156})$
+flags: 
+subject: \u{E018B}
+expect: 0-4
+
+pattern: ^(?:\\N{VS157})$
+flags: 
+subject: \u{E018C}
+expect: 0-4
+
+pattern: ^(?:\\N{VS158})$
+flags: 
+subject: \u{E018D}
+expect: 0-4
+
+pattern: ^(?:\\N{VS159})$
+flags: 
+subject: \u{E018E}
+expect: 0-4
+
+pattern: ^(?:\\N{VS160})$
+flags: 
+subject: \u{E018F}
+expect: 0-4
+
+pattern: ^(?:\\N{VS161})$
+flags: 
+subject: \u{E0190}
+expect: 0-4
+
+pattern: ^(?:\\N{VS162})$
+flags: 
+subject: \u{E0191}
+expect: 0-4
+
+pattern: ^(?:\\N{VS163})$
+flags: 
+subject: \u{E0192}
+expect: 0-4
+
+pattern: ^(?:\\N{VS164})$
+flags: 
+subject: \u{E0193}
+expect: 0-4
+
+pattern: ^(?:\\N{VS165})$
+flags: 
+subject: \u{E0194}
+expect: 0-4
+
+pattern: ^(?:\\N{VS166})$
+flags: 
+subject: \u{E0195}
+expect: 0-4
+
+pattern: ^(?:\\N{VS167})$
+flags: 
+subject: \u{E0196}
+expect: 0-4
+
+pattern: ^(?:\\N{VS168})$
+flags: 
+subject: \u{E0197}
+expect: 0-4
+
+pattern: ^(?:\\N{VS169})$
+flags: 
+subject: \u{E0198}
+expect: 0-4
+
+pattern: ^(?:\\N{VS170})$
+flags: 
+subject: \u{E0199}
+expect: 0-4
+
+pattern: ^(?:\\N{VS171})$
+flags: 
+subject: \u{E019A}
+expect: 0-4
+
+pattern: ^(?:\\N{VS172})$
+flags: 
+subject: \u{E019B}
+expect: 0-4
+
+pattern: ^(?:\\N{VS173})$
+flags: 
+subject: \u{E019C}
+expect: 0-4
+
+pattern: ^(?:\\N{VS174})$
+flags: 
+subject: \u{E019D}
+expect: 0-4
+
+pattern: ^(?:\\N{VS175})$
+flags: 
+subject: \u{E019E}
+expect: 0-4
+
+pattern: ^(?:\\N{VS176})$
+flags: 
+subject: \u{E019F}
+expect: 0-4
+
+pattern: ^(?:\\N{VS177})$
+flags: 
+subject: \u{E01A0}
+expect: 0-4
+
+pattern: ^(?:\\N{VS178})$
+flags: 
+subject: \u{E01A1}
+expect: 0-4
+
+pattern: ^(?:\\N{VS179})$
+flags: 
+subject: \u{E01A2}
+expect: 0-4
+
+pattern: ^(?:\\N{VS180})$
+flags: 
+subject: \u{E01A3}
+expect: 0-4
+
+pattern: ^(?:\\N{VS181})$
+flags: 
+subject: \u{E01A4}
+expect: 0-4
+
+pattern: ^(?:\\N{VS182})$
+flags: 
+subject: \u{E01A5}
+expect: 0-4
+
+pattern: ^(?:\\N{VS183})$
+flags: 
+subject: \u{E01A6}
+expect: 0-4
+
+pattern: ^(?:\\N{VS184})$
+flags: 
+subject: \u{E01A7}
+expect: 0-4
+
+pattern: ^(?:\\N{VS185})$
+flags: 
+subject: \u{E01A8}
+expect: 0-4
+
+pattern: ^(?:\\N{VS186})$
+flags: 
+subject: \u{E01A9}
+expect: 0-4
+
+pattern: ^(?:\\N{VS187})$
+flags: 
+subject: \u{E01AA}
+expect: 0-4
+
+pattern: ^(?:\\N{VS188})$
+flags: 
+subject: \u{E01AB}
+expect: 0-4
+
+pattern: ^(?:\\N{VS189})$
+flags: 
+subject: \u{E01AC}
+expect: 0-4
+
+pattern: ^(?:\\N{VS190})$
+flags: 
+subject: \u{E01AD}
+expect: 0-4
+
+pattern: ^(?:\\N{VS191})$
+flags: 
+subject: \u{E01AE}
+expect: 0-4
+
+pattern: ^(?:\\N{VS192})$
+flags: 
+subject: \u{E01AF}
+expect: 0-4
+
+pattern: ^(?:\\N{VS193})$
+flags: 
+subject: \u{E01B0}
+expect: 0-4
+
+pattern: ^(?:\\N{VS194})$
+flags: 
+subject: \u{E01B1}
+expect: 0-4
+
+pattern: ^(?:\\N{VS195})$
+flags: 
+subject: \u{E01B2}
+expect: 0-4
+
+pattern: ^(?:\\N{VS196})$
+flags: 
+subject: \u{E01B3}
+expect: 0-4
+
+pattern: ^(?:\\N{VS197})$
+flags: 
+subject: \u{E01B4}
+expect: 0-4
+
+pattern: ^(?:\\N{VS198})$
+flags: 
+subject: \u{E01B5}
+expect: 0-4
+
+pattern: ^(?:\\N{VS199})$
+flags: 
+subject: \u{E01B6}
+expect: 0-4
+
+pattern: ^(?:\\N{VS200})$
+flags: 
+subject: \u{E01B7}
+expect: 0-4
+
+pattern: ^(?:\\N{VS201})$
+flags: 
+subject: \u{E01B8}
+expect: 0-4
+
+pattern: ^(?:\\N{VS202})$
+flags: 
+subject: \u{E01B9}
+expect: 0-4
+
+pattern: ^(?:\\N{VS203})$
+flags: 
+subject: \u{E01BA}
+expect: 0-4
+
+pattern: ^(?:\\N{VS204})$
+flags: 
+subject: \u{E01BB}
+expect: 0-4
+
+pattern: ^(?:\\N{VS205})$
+flags: 
+subject: \u{E01BC}
+expect: 0-4
+
+pattern: ^(?:\\N{VS206})$
+flags: 
+subject: \u{E01BD}
+expect: 0-4
+
+pattern: ^(?:\\N{VS207})$
+flags: 
+subject: \u{E01BE}
+expect: 0-4
+
+pattern: ^(?:\\N{VS208})$
+flags: 
+subject: \u{E01BF}
+expect: 0-4
+
+pattern: ^(?:\\N{VS209})$
+flags: 
+subject: \u{E01C0}
+expect: 0-4
+
+pattern: ^(?:\\N{VS210})$
+flags: 
+subject: \u{E01C1}
+expect: 0-4
+
+pattern: ^(?:\\N{VS211})$
+flags: 
+subject: \u{E01C2}
+expect: 0-4
+
+pattern: ^(?:\\N{VS212})$
+flags: 
+subject: \u{E01C3}
+expect: 0-4
+
+pattern: ^(?:\\N{VS213})$
+flags: 
+subject: \u{E01C4}
+expect: 0-4
+
+pattern: ^(?:\\N{VS214})$
+flags: 
+subject: \u{E01C5}
+expect: 0-4
+
+pattern: ^(?:\\N{VS215})$
+flags: 
+subject: \u{E01C6}
+expect: 0-4
+
+pattern: ^(?:\\N{VS216})$
+flags: 
+subject: \u{E01C7}
+expect: 0-4
+
+pattern: ^(?:\\N{VS217})$
+flags: 
+subject: \u{E01C8}
+expect: 0-4
+
+pattern: ^(?:\\N{VS218})$
+flags: 
+subject: \u{E01C9}
+expect: 0-4
+
+pattern: ^(?:\\N{VS219})$
+flags: 
+subject: \u{E01CA}
+expect: 0-4
+
+pattern: ^(?:\\N{VS220})$
+flags: 
+subject: \u{E01CB}
+expect: 0-4
+
+pattern: ^(?:\\N{VS221})$
+flags: 
+subject: \u{E01CC}
+expect: 0-4
+
+pattern: ^(?:\\N{VS222})$
+flags: 
+subject: \u{E01CD}
+expect: 0-4
+
+pattern: ^(?:\\N{VS223})$
+flags: 
+subject: \u{E01CE}
+expect: 0-4
+
+pattern: ^(?:\\N{VS224})$
+flags: 
+subject: \u{E01CF}
+expect: 0-4
+
+pattern: ^(?:\\N{VS225})$
+flags: 
+subject: \u{E01D0}
+expect: 0-4
+
+pattern: ^(?:\\N{VS226})$
+flags: 
+subject: \u{E01D1}
+expect: 0-4
+
+pattern: ^(?:\\N{VS227})$
+flags: 
+subject: \u{E01D2}
+expect: 0-4
+
+pattern: ^(?:\\N{VS228})$
+flags: 
+subject: \u{E01D3}
+expect: 0-4
+
+pattern: ^(?:\\N{VS229})$
+flags: 
+subject: \u{E01D4}
+expect: 0-4
+
+pattern: ^(?:\\N{VS230})$
+flags: 
+subject: \u{E01D5}
+expect: 0-4
+
+pattern: ^(?:\\N{VS231})$
+flags: 
+subject: \u{E01D6}
+expect: 0-4
+
+pattern: ^(?:\\N{VS232})$
+flags: 
+subject: \u{E01D7}
+expect: 0-4
+
+pattern: ^(?:\\N{VS233})$
+flags: 
+subject: \u{E01D8}
+expect: 0-4
+
+pattern: ^(?:\\N{VS234})$
+flags: 
+subject: \u{E01D9}
+expect: 0-4
+
+pattern: ^(?:\\N{VS235})$
+flags: 
+subject: \u{E01DA}
+expect: 0-4
+
+pattern: ^(?:\\N{VS236})$
+flags: 
+subject: \u{E01DB}
+expect: 0-4
+
+pattern: ^(?:\\N{VS237})$
+flags: 
+subject: \u{E01DC}
+expect: 0-4
+
+pattern: ^(?:\\N{VS238})$
+flags: 
+subject: \u{E01DD}
+expect: 0-4
+
+pattern: ^(?:\\N{VS239})$
+flags: 
+subject: \u{E01DE}
+expect: 0-4
+
+pattern: ^(?:\\N{VS240})$
+flags: 
+subject: \u{E01DF}
+expect: 0-4
+
+pattern: ^(?:\\N{VS241})$
+flags: 
+subject: \u{E01E0}
+expect: 0-4
+
+pattern: ^(?:\\N{VS242})$
+flags: 
+subject: \u{E01E1}
+expect: 0-4
+
+pattern: ^(?:\\N{VS243})$
+flags: 
+subject: \u{E01E2}
+expect: 0-4
+
+pattern: ^(?:\\N{VS244})$
+flags: 
+subject: \u{E01E3}
+expect: 0-4
+
+pattern: ^(?:\\N{VS245})$
+flags: 
+subject: \u{E01E4}
+expect: 0-4
+
+pattern: ^(?:\\N{VS246})$
+flags: 
+subject: \u{E01E5}
+expect: 0-4
+
+pattern: ^(?:\\N{VS247})$
+flags: 
+subject: \u{E01E6}
+expect: 0-4
+
+pattern: ^(?:\\N{VS248})$
+flags: 
+subject: \u{E01E7}
+expect: 0-4
+
+pattern: ^(?:\\N{VS249})$
+flags: 
+subject: \u{E01E8}
+expect: 0-4
+
+pattern: ^(?:\\N{VS250})$
+flags: 
+subject: \u{E01E9}
+expect: 0-4
+
+pattern: ^(?:\\N{VS251})$
+flags: 
+subject: \u{E01EA}
+expect: 0-4
+
+pattern: ^(?:\\N{VS252})$
+flags: 
+subject: \u{E01EB}
+expect: 0-4
+
+pattern: ^(?:\\N{VS253})$
+flags: 
+subject: \u{E01EC}
+expect: 0-4
+
+pattern: ^(?:\\N{VS254})$
+flags: 
+subject: \u{E01ED}
+expect: 0-4
+
+pattern: ^(?:\\N{VS255})$
+flags: 
+subject: \u{E01EE}
+expect: 0-4
+
+pattern: ^(?:\\N{VS256})$
+flags: 
+subject: \u{E01EF}
+expect: 0-4
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-4E00})$
+flags: 
+subject: \u4E00
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-4E01})$
+flags: 
+subject: \u4E01
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-9FFE})$
+flags: 
+subject: \u9FFE
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-9FFF})$
+flags: 
+subject: \u9FFF
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-84B7})$
+flags: 
+subject: \u84B7
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-63AB})$
+flags: 
+subject: \u63AB
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-90A0})$
+flags: 
+subject: \u90A0
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-91AA})$
+flags: 
+subject: \u91AA
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-8730})$
+flags: 
+subject: \u8730
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-4E09})$
+flags: 
+subject: \u4E09
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-7977})$
+flags: 
+subject: \u7977
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-6992})$
+flags: 
+subject: \u6992
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-4E24})$
+flags: 
+subject: \u4E24
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-534D})$
+flags: 
+subject: \u534D
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-68C0})$
+flags: 
+subject: \u68C0
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-65CD})$
+flags: 
+subject: \u65CD
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-9EE2})$
+flags: 
+subject: \u9EE2
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-4E18})$
+flags: 
+subject: \u4E18
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-98B9})$
+flags: 
+subject: \u98B9
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-67EF})$
+flags: 
+subject: \u67EF
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-869F})$
+flags: 
+subject: \u869F
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-6C0C})$
+flags: 
+subject: \u6C0C
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-70B0})$
+flags: 
+subject: \u70B0
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-77EF})$
+flags: 
+subject: \u77EF
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-8AA8})$
+flags: 
+subject: \u8AA8
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-7B3B})$
+flags: 
+subject: \u7B3B
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-9DCB})$
+flags: 
+subject: \u9DCB
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-6426})$
+flags: 
+subject: \u6426
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-7C5E})$
+flags: 
+subject: \u7C5E
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-5C78})$
+flags: 
+subject: \u5C78
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-7800})$
+flags: 
+subject: \u7800
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-4FF6})$
+flags: 
+subject: \u4FF6
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-7DA7})$
+flags: 
+subject: \u7DA7
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-8814})$
+flags: 
+subject: \u8814
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-7BF8})$
+flags: 
+subject: \u7BF8
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-6AE0})$
+flags: 
+subject: \u6AE0
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-8AD6})$
+flags: 
+subject: \u8AD6
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-7DDF})$
+flags: 
+subject: \u7DDF
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-8CA0})$
+flags: 
+subject: \u8CA0
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-96BA})$
+flags: 
+subject: \u96BA
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-85D0})$
+flags: 
+subject: \u85D0
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-6272})$
+flags: 
+subject: \u6272
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-715E})$
+flags: 
+subject: \u715E
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-9B9D})$
+flags: 
+subject: \u9B9D
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-3400})$
+flags: 
+subject: \u3400
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-3401})$
+flags: 
+subject: \u3401
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-4DBE})$
+flags: 
+subject: \u4DBE
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-4DBF})$
+flags: 
+subject: \u4DBF
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-4B27})$
+flags: 
+subject: \u4B27
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-49BA})$
+flags: 
+subject: \u49BA
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-35D2})$
+flags: 
+subject: \u35D2
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-3845})$
+flags: 
+subject: \u3845
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-34D8})$
+flags: 
+subject: \u34D8
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-3F5F})$
+flags: 
+subject: \u3F5F
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-4D22})$
+flags: 
+subject: \u4D22
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-3802})$
+flags: 
+subject: \u3802
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-3CE5})$
+flags: 
+subject: \u3CE5
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-4633})$
+flags: 
+subject: \u4633
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-4AE2})$
+flags: 
+subject: \u4AE2
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-3C69})$
+flags: 
+subject: \u3C69
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-44F0})$
+flags: 
+subject: \u44F0
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-3507})$
+flags: 
+subject: \u3507
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-373C})$
+flags: 
+subject: \u373C
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-4B40})$
+flags: 
+subject: \u4B40
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-4750})$
+flags: 
+subject: \u4750
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-4191})$
+flags: 
+subject: \u4191
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-3EDE})$
+flags: 
+subject: \u3EDE
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-4660})$
+flags: 
+subject: \u4660
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-3DC1})$
+flags: 
+subject: \u3DC1
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-4877})$
+flags: 
+subject: \u4877
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-373D})$
+flags: 
+subject: \u373D
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-4A3B})$
+flags: 
+subject: \u4A3B
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-3FFA})$
+flags: 
+subject: \u3FFA
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-49F2})$
+flags: 
+subject: \u49F2
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-36D8})$
+flags: 
+subject: \u36D8
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-3691})$
+flags: 
+subject: \u3691
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-4575})$
+flags: 
+subject: \u4575
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-362B})$
+flags: 
+subject: \u362B
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-3B75})$
+flags: 
+subject: \u3B75
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-428A})$
+flags: 
+subject: \u428A
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-4985})$
+flags: 
+subject: \u4985
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-3EE3})$
+flags: 
+subject: \u3EE3
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-367B})$
+flags: 
+subject: \u367B
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-42AC})$
+flags: 
+subject: \u42AC
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-36AC})$
+flags: 
+subject: \u36AC
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-3E6A})$
+flags: 
+subject: \u3E6A
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-3E0B})$
+flags: 
+subject: \u3E0B
+expect: 0-3
+
+pattern: ^(?:\\N{CJK UNIFIED IDEOGRAPH-4CA4})$
+flags: 
+subject: \u4CA4
+expect: 0-3
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-17000})$
+flags: 
+subject: \u{17000}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-17001})$
+flags: 
+subject: \u{17001}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-17126})$
+flags: 
+subject: \u{17126}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-17284})$
+flags: 
+subject: \u{17284}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-17326})$
+flags: 
+subject: \u{17326}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-1868C})$
+flags: 
+subject: \u{1868C}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-17C33})$
+flags: 
+subject: \u{17C33}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-171C6})$
+flags: 
+subject: \u{171C6}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-17791})$
+flags: 
+subject: \u{17791}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-171F1})$
+flags: 
+subject: \u{171F1}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-17076})$
+flags: 
+subject: \u{17076}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-17A9A})$
+flags: 
+subject: \u{17A9A}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-1737C})$
+flags: 
+subject: \u{1737C}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-17804})$
+flags: 
+subject: \u{17804}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-172C4})$
+flags: 
+subject: \u{172C4}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-184CB})$
+flags: 
+subject: \u{184CB}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-182C0})$
+flags: 
+subject: \u{182C0}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-17B5D})$
+flags: 
+subject: \u{17B5D}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-17398})$
+flags: 
+subject: \u{17398}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-17892})$
+flags: 
+subject: \u{17892}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-178F6})$
+flags: 
+subject: \u{178F6}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-17BC7})$
+flags: 
+subject: \u{17BC7}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-1862E})$
+flags: 
+subject: \u{1862E}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-181C8})$
+flags: 
+subject: \u{181C8}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-172EF})$
+flags: 
+subject: \u{172EF}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-17D3F})$
+flags: 
+subject: \u{17D3F}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-172C3})$
+flags: 
+subject: \u{172C3}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-181A5})$
+flags: 
+subject: \u{181A5}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-18419})$
+flags: 
+subject: \u{18419}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-1755A})$
+flags: 
+subject: \u{1755A}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-17AC0})$
+flags: 
+subject: \u{17AC0}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-1847D})$
+flags: 
+subject: \u{1847D}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-1735F})$
+flags: 
+subject: \u{1735F}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-18425})$
+flags: 
+subject: \u{18425}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-17430})$
+flags: 
+subject: \u{17430}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-18710})$
+flags: 
+subject: \u{18710}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-17A8D})$
+flags: 
+subject: \u{17A8D}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-17CA2})$
+flags: 
+subject: \u{17CA2}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-17CDF})$
+flags: 
+subject: \u{17CDF}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-183A0})$
+flags: 
+subject: \u{183A0}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-17D23})$
+flags: 
+subject: \u{17D23}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-1753D})$
+flags: 
+subject: \u{1753D}
+expect: 0-4
+
+pattern: ^(?:\\N{HANGUL SYLLABLE GA})$
+flags: 
+subject: \uAC00
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE GAG})$
+flags: 
+subject: \uAC01
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE HIP})$
+flags: 
+subject: \uD7A2
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE HIH})$
+flags: 
+subject: \uD7A3
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE RYEOP})$
+flags: 
+subject: \uB83E
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE GGEC})$
+flags: 
+subject: \uAEEF
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE PALG})$
+flags: 
+subject: \uD315
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE JJYIN})$
+flags: 
+subject: \uCBF4
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE DYALH})$
+flags: 
+subject: \uB32B
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE EUN})$
+flags: 
+subject: \uC740
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE KID})$
+flags: 
+subject: \uD0AB
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE PAENG})$
+flags: 
+subject: \uD33D
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE CUN})$
+flags: 
+subject: \uCD98
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE DOB})$
+flags: 
+subject: \uB3D5
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE DDYAENG})$
+flags: 
+subject: \uB599
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE MAEG})$
+flags: 
+subject: \uB9E5
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE MWEB})$
+flags: 
+subject: \uBB7D
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE SWEOJ})$
+flags: 
+subject: \uC24A
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE GGYAL})$
+flags: 
+subject: \uAE8C
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE JWELH})$
+flags: 
+subject: \uC943
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE DIGG})$
+flags: 
+subject: \uB516
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE GGOEJ})$
+flags: 
+subject: \uAF96
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE CEG})$
+flags: 
+subject: \uCCB5
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE PONG})$
+flags: 
+subject: \uD401
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE MAL})$
+flags: 
+subject: \uB9D0
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE AEH})$
+flags: 
+subject: \uC57B
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE PED})$
+flags: 
+subject: \uD39F
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE BBWELT})$
+flags: 
+subject: \uC011
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE HYALM})$
+flags: 
+subject: \uD59A
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE HOEJ})$
+flags: 
+subject: \uD6A2
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE WAEP})$
+flags: 
+subject: \uC676
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE DDYELG})$
+flags: 
+subject: \uB5FD
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE GYUP})$
+flags: 
+subject: \uADF6
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE GGYUD})$
+flags: 
+subject: \uB02F
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE BOED})$
+flags: 
+subject: \uBD4F
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE GGYEOLH})$
+flags: 
+subject: \uAF03
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE SSWENH})$
+flags: 
+subject: \uC4A2
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE ROGS})$
+flags: 
+subject: \uB85F
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE NYEOLH})$
+flags: 
+subject: \uB14F
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE NYUC})$
+flags: 
+subject: \uB28B
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE DDAC})$
+flags: 
+subject: \uB547
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE MWEP})$
+flags: 
+subject: \uBB86
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE DWAK})$
+flags: 
+subject: \uB3F8
+expect: 0-3
+
+pattern: ^(?:\\N{HANGUL SYLLABLE GONG})$
+flags: 
+subject: \uACF5
+expect: 0-3
+
+pattern: \\N{latin small letter a}
+flags: 
+subject: a
+expect: error syntax
+
+pattern: \\N{LATIN-SMALL-LETTER-A}
+flags: 
+subject: a
+expect: error syntax
+
+pattern: \\N{LATIN_SMALL_LETTER_A}
+flags: 
+subject: a
+expect: error syntax
+
+pattern: \\N{LATINSMALLLETTERA}
+flags: 
+subject: a
+expect: error syntax
+
+pattern: \\N{LATIN  SMALL  LETTER  A}
+flags: 
+subject: a
+expect: error syntax
+
+pattern: \\N{NO SUCH CHARACTER AT ALL}
+flags: 
+subject: a
+expect: error syntax
+
+pattern: \\N{CJK UNIFIED IDEOGRAPH-0041}
+flags: 
+subject: a
+expect: error syntax
+
+pattern: \\N{CJK UNIFIED IDEOGRAPH-4e00}
+flags: 
+subject: a
+expect: error syntax
+
+pattern: \\N{HANGUL SYLLABLE QQ}
+flags: 
+subject: a
+expect: error syntax
+
+pattern: \\N{TANGUT IDEOGRAPH-0041}
+flags: 
+subject: a
+expect: error syntax
+
+pattern: \\N{}
+flags: 
+subject: a
+expect: error syntax
+
+pattern: \\N{ }
+flags: 
+subject: a
+expect: error syntax
+
+pattern: ^(?:\\N{U+0041})$
+flags: 
+subject: A
+expect: 0-1
+
+pattern: ^(?:\\N)$
+flags: 
+subject: a
+expect: 0-1
+
+pattern: ^(?:a\\N{2}b)$
+flags: 
+subject: axyb
+expect: 0-4
+
+pattern: ^(?:\\N{ SPACE })$
+flags: 
+subject:  
+expect: 0-1

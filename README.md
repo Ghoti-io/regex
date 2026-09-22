@@ -173,12 +173,12 @@ Nothing is allocated for the caller to free on a failing call.
 | Dialect table, semantic profile, `grx_options_parse()` | working; the rows for dialects with no oracle installed are provisional |
 | UTF-8 decode and encode | working, strict |
 | Character classes: membership, insertion, set algebra, fold closure | working |
-| Unicode tables: 457 properties, both foldings, both name resolvers | working, UCD 17.0.0 |
+| Unicode tables: 457 properties, both foldings, both property-name resolvers, 40,951 character names | working, UCD 17.0.0 |
 | UTF-8 reverse decode and whole-buffer validation | working |
 | Parser skeleton and hook interface | working |
 | ECMAScript front end, legacy and Unicode modes | working |
 | ECMAScript UnicodeSets (`v`) mode | working - set operations, string disjunctions, the seven properties of strings |
-| PCRE2 and Perl front ends | working - verbs, conditionals, recursion, branch reset, `\Q..\E`, extended modes, the leading directives |
+| PCRE2 and Perl front ends | working - verbs, conditionals, recursion, branch reset, `\Q..\E`, extended modes, the leading directives, and Perl's `\N{NAME}` against the full character-name table |
 | POSIX and GNU front ends | working - one reader for `posix-bre`, `posix-ere`, `gnu-bre` and `gnu-ere` |
 | Every dialect but those seven | named, `GRX_ERR_UNSUPPORTED` |
 | Lowering, analysis and code generation | working |

@@ -199,6 +199,27 @@ size_t grx_unicode_fold_full_sources(const uint32_t * sequence, size_t length,
     uint32_t out[GRX_FULL_FOLD_SOURCE_MAX]);
 
 /**
+ * @brief The code point a `\N{NAME}` spelling names.
+ *
+ * Perl's rule, and exact: the match is case sensitive and the separators
+ * must be the ones the UCD uses, because `\N{latin small letter a}` and
+ * `\N{LATIN-SMALL-LETTER-A}` are both errors in perl 5.40.1. Leading and
+ * trailing space inside the braces is the caller's to trim.
+ *
+ * Resolves the stored names, every alias in `NameAliases.txt` (all five
+ * kinds - Perl accepts corrections and figments as readily as
+ * abbreviations), and the computed families, which are not stored: the CJK
+ * ideographs, the Tangut ideographs and the Hangul syllables.
+ *
+ * @param name The text between the braces.
+ * @param length Its length in bytes.
+ * @param out_codepoint Receives the code point. Required.
+ * @return 1 when the name resolves, 0 when it does not.
+ */
+int grx_unicode_codepoint_from_name(
+    const char * name, size_t length, uint32_t * out_codepoint);
+
+/**
  * @brief Which folding a dialect uses for a caseless match.
  *
  * documentation/dialects.md section 5.8. One of the five values there is
