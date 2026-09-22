@@ -2080,6 +2080,16 @@ static int only_directives_before(const GRX_Parser * parser, size_t start) {
  */
 static GRX_Result apply_directive(GRX_Parser * parser, const char * name,
     size_t length, size_t start) {
+  // Every name below is PCRE2's own. Perl has none of them: `(*UTF)`,
+  // `(*UCP)`, `(*NO_JIT)`, `(*CRLF)`, `(*LIMIT_MATCH=5)` and the rest are
+  // each "Unknown verb pattern" there, all nineteen probed against perl
+  // 5.40.1 rather than read off a manual page. Accepting one under the Perl
+  // dialect is this library inventing a construct the reference refuses -
+  // and inventing it *silently*, since none of them changes a match.
+  if (flavour(parser) != FLAVOUR_PCRE) {
+    return GRX_ERR_SYNTAX;
+  }
+
   static const struct {
     const char * name;
     uint32_t option;

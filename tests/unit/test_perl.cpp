@@ -790,6 +790,43 @@ TEST(Perl, ALeadingDirectiveAppliesAndOnlyAtTheStart) {
   grx_regex_free(several.regex);
 }
 
+TEST(Perl, TheLeadingDirectivesArePcre2sAndPerlRefusesEveryOne) {
+  // All nineteen, because the list is the kind that grows a hole: a name
+  // added for PCRE2 is accepted by both dialects unless something says
+  // otherwise, and nothing here changes a match, so the difference is
+  // silent. Probed against perl 5.40.1 - every one is "Unknown verb
+  // pattern 'NAME' in regex" there.
+  const char * directives[] = {
+    "(*UTF)", "(*UCP)", "(*NO_AUTO_POSSESS)", "(*NO_START_OPT)",
+    "(*NO_DOTSTAR_ANCHOR)", "(*NO_JIT)", "(*NOTEMPTY)",
+    "(*NOTEMPTY_ATSTART)", "(*CR)", "(*LF)", "(*CRLF)", "(*ANYCRLF)",
+    "(*ANY)", "(*NUL)", "(*BSR_ANYCRLF)", "(*BSR_UNICODE)",
+    "(*LIMIT_MATCH=5)", "(*LIMIT_DEPTH=5)", "(*LIMIT_HEAP=5)",
+  };
+
+  for (const char * directive : directives) {
+    std::string pattern = std::string(directive) + "abc";
+
+    Attempt pcre = compile(pattern, GRX_SYNTAX_PCRE);
+    EXPECT_EQ(pcre.result, GRX_OK) << pattern << " under PCRE2";
+    grx_regex_free(pcre.regex);
+
+    Attempt perl = compile(pattern, GRX_SYNTAX_PERL);
+    EXPECT_EQ(perl.result, GRX_ERR_SYNTAX) << pattern << " under Perl";
+    EXPECT_EQ(perl.diag, GRX_DIAG_INVALID_GROUP_SYNTAX) << pattern;
+    grx_regex_free(perl.regex);
+  }
+
+  // The verbs proper are a different list and Perl does have them, so the
+  // gate above must not have taken those with it.
+  Attempt mark = compile("(*MARK:x)abc", GRX_SYNTAX_PERL);
+  EXPECT_EQ(mark.result, GRX_OK);
+  grx_regex_free(mark.regex);
+  Attempt skip = compile("a(*SKIP)b", GRX_SYNTAX_PERL);
+  EXPECT_EQ(skip.result, GRX_OK);
+  grx_regex_free(skip.regex);
+}
+
 TEST(Perl, TheConstructsThisLibraryRefusesSayWhyAndNotSomethingElse) {
   // Each of these is real syntax the reference compiles. Refusing them is a
   // decision; refusing them as *syntax errors* would be a lie about the

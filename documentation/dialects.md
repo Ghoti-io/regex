@@ -1500,7 +1500,14 @@ modes; `\h \H \v \V \R \N \X`; `\C` (single code unit: refused,
 `GRX_ERR_UNSUPPORTED`); auto-possessification is an optimisation and has no
 semantic effect, so it is not modelled.
 
-**Perl 5.40.** As PCRE2 minus verbs-with-arguments differences, plus:
+**Perl 5.40.** As PCRE2 minus verbs-with-arguments differences, and minus
+**every leading directive**: `(*UTF)`, `(*UCP)`, `(*CRLF)` and kin,
+`(*NO_AUTO_POSSESS)` and kin, and `(*LIMIT_MATCH=d)` and kin are each
+"Unknown verb pattern" in perl. All nineteen probed there rather than read
+off perlre, because the list is one this front end shares between the two
+dialects and a name added for PCRE2 is accepted by both unless something
+says otherwise - and since none of them changes a match, the difference
+would be silent. Plus:
 `\b{wb}` and friends (later); `(?<name>)` with duplicate names via `(?|`;
 `\N{U+263A}`; `(?^...)` caret to reset flags; `\g{-1}` relative
 backreferences; `/n` no-capture; `/xx`. Perl's real difference from PCRE2 is
