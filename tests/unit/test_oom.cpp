@@ -22,6 +22,7 @@
  * Copyright 2026 by Corey Pennycuff
  */
 
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -227,6 +228,118 @@ TEST(OutOfMemory, ReplaceAndSplitReportEveryFailureAndLeakNothing) {
           << row.pattern << ": failing allocation " << n << " of " << total
           << " leaked " << allocator.live() << " block(s)";
     }
+  }
+}
+
+/**
+ * Patterns this library refuses, across the failure kinds and the dialects.
+ *
+ * The sweep above injects a failure into a pattern that is *valid*, so the
+ * path it unwinds is the out-of-memory one. A pattern the front end rejects
+ * unwinds somewhere else - the parser has built part of an AST, opened part
+ * of a class, perhaps interned a name, and then returns a diagnostic instead
+ * of a tree - and nothing was checking that path at all. It is the same hole
+ * the POSIX differential had: a corpus of things that succeed never asks the
+ * question the failure path answers.
+ */
+namespace {
+
+struct Rejection {
+  const char * pattern;
+  GRX_Syntax syntax;
+  uint32_t options;
+  const char * why;
+};
+
+const Rejection kRejections[] = {
+  // Nothing allocated yet: the cheapest rejection there is, and the control.
+  {"*", GRX_SYNTAX_ECMASCRIPT, 0, "a quantifier with nothing to quantify"},
+  // Deep into a group, with captures open and a name interned.
+  {"(?<word>[a-z]+", GRX_SYNTAX_ECMASCRIPT, 0, "an unclosed group"},
+  {"(?<word>a)(?<word>b)", GRX_SYNTAX_ECMASCRIPT, 0, "a duplicate name"},
+  // Inside a class, which has its own range table growing as it reads.
+  {"[a-z", GRX_SYNTAX_ECMASCRIPT, 0, "an unclosed class"},
+  {"[z-a]", GRX_SYNTAX_ECMASCRIPT, 0, "a reversed range"},
+  {"[[:nosuch:]]", GRX_SYNTAX_POSIX_ERE, 0, "an unknown class name"},
+  // Properties, which allocate a name buffer before they look anything up.
+  {"\\p{NoSuchProperty}", GRX_SYNTAX_ECMASCRIPT, GRX_OPT_UTF,
+      "an unknown property"},
+  {"\\p{Script=NoSuchScript}", GRX_SYNTAX_ECMASCRIPT, GRX_OPT_UTF,
+      "an unknown script"},
+  // References, resolved after the tree exists. Both need unicode mode to be
+  // errors at all: Annex B reads `\\2` with no group 2 as a legacy octal
+  // escape and `\\k` with no named group in the pattern as a literal `k`, and
+  // this library follows it - which is what the first draft of these two
+  // rows found out by being accepted.
+  {"(a)\\2", GRX_SYNTAX_ECMASCRIPT, GRX_OPT_UTF,
+      "a backreference to no group"},
+  {"\\k<nosuch>", GRX_SYNTAX_ECMASCRIPT, GRX_OPT_UTF,
+      "a named reference to no group"},
+  // Repeats, rejected after both bounds are read.
+  {"a{3,2}", GRX_SYNTAX_ECMASCRIPT, 0, "a repeat whose bounds are inverted"},
+  // A construct the dialect does not have, refused by the front end rather
+  // than by the grammar - a different return and a different unwind.
+  {"(?<=a)b", GRX_SYNTAX_POSIX_ERE, 0, "a lookbehind in POSIX ERE"},
+  // Not `\\d`, which POSIX leaves undefined for an escaped ordinary character
+  // and which glibc and this library both read as a literal `d`.
+  {"\\(a", GRX_SYNTAX_POSIX_BRE, 0, "an unclosed group in POSIX BRE"},
+  // The other dialect family, whose reader is a different file.
+  {"(?(1)a)", GRX_SYNTAX_ECMASCRIPT, 0, "a conditional in ECMAScript"},
+  {"a\\", GRX_SYNTAX_PERL, 0, "a trailing escape"},
+  // UnicodeSets, whose class algebra allocates operand sets as it goes.
+  {"[\\q{abc}&&", GRX_SYNTAX_ECMASCRIPT, GRX_OPT_UTF | GRX_OPT_UNICODE_SETS,
+      "an unclosed set operation"},
+};
+
+} // namespace
+
+/**
+ * Invariant 4, for the calls that fail because the *input* is wrong.
+ *
+ * design.md section 9 says no failing call leaves an allocation, and the
+ * sweep above had only ever asked it of calls that failed because memory ran
+ * out. Every row here is refused, and after each one the allocator must be
+ * back to zero - so a parser that returns a diagnostic while still holding
+ * the half-built tree it was working on is caught here rather than by
+ * whoever next runs the library under Valgrind.
+ *
+ * The rows go through the whole sequence, not just the parse, because a
+ * pattern that parses and is then refused by lowering or codegen unwinds a
+ * third way again.
+ */
+TEST(OutOfMemory, ARefusedPatternLeavesNothingAllocated) {
+  for (const Rejection & row : kRejections) {
+    grxtest::CountingAllocator allocator;
+    GRX_Error error;
+    grx_error_clear(&error);
+
+    GRX_Pattern * parsed = nullptr;
+    GRX_Result result = grx_pattern_parse_with_allocator(row.pattern,
+        std::strlen(row.pattern), row.syntax, row.options, nullptr,
+        allocator.get(), &error, &parsed);
+    if (result == GRX_OK) {
+      // Some rows are refused later than others; carry on to the step that
+      // refuses them, so the row is still testing what it says it is.
+      GRX_Regex * regex = nullptr;
+      result = grx_regex_compile_pattern(
+          parsed, nullptr, allocator.get(), &error, &regex);
+      grx_regex_free(regex);
+      grx_pattern_free(parsed);
+      parsed = nullptr;
+    }
+
+    EXPECT_NE(result, GRX_OK)
+        << row.pattern << " (" << row.why
+        << ") was accepted; this row is no longer testing a failure path";
+    EXPECT_EQ(parsed, nullptr) << row.pattern;
+    EXPECT_GT(allocator.total(), 0)
+        << row.pattern << " (" << row.why
+        << ") allocated nothing at all, so it cannot show a leak; find an "
+           "input that is refused later";
+    EXPECT_EQ(allocator.live(), 0)
+        << row.pattern << " (" << row.why << ") was refused with "
+        << allocator.live() << " of " << allocator.total()
+        << " block(s) still held";
   }
 }
 
