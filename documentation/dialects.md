@@ -415,12 +415,31 @@ match one. The two meet in the middle, which is why the run is what is
 folded: `sß` and `ßs` both fold to "sss", and Perl matches either against
 the other.
 
-It stops at three boundaries. A *class* is folded simply, because a class
-matches one character - `[ß]` does not match "ss". `/aa` drops it entirely,
-because every code point with a full fold is outside ASCII and every one of
-those folds is at least partly inside it, so there is no full fold that rule
-would let through. And PCRE2 does not have it at all, which is one of the
-reasons `GRX_SYNTAX_PERL` and `GRX_SYNTAX_PCRE` are separate dialects.
+It stops at three boundaries here. A *class* is folded simply, because a
+class matches one character - `[ß]` does not match "ss". `/aa` drops it
+entirely, because every code point with a full fold is outside ASCII and
+every one of those folds is at least partly inside it, so there is no full
+fold that rule would let through. And PCRE2 does not have it at all, which is
+one of the reasons `GRX_SYNTAX_PERL` and `GRX_SYNTAX_PCRE` are separate
+dialects.
+
+**The first of those three is a deviation and not a shared rule**, and this
+page asserted the opposite until it was measured. Perl *does* full-fold a
+class member, so `"ss" =~ /^(?:[ß])$/iu` matches there and not here. Over
+every code point whose full fold is longer than one code point - the 104 `F`
+lines of `CaseFolding.txt` - bare and in a class, both directions: bare
+agrees 104 of 104, in a class it disagrees 104 of 104. One systematic
+divergence, not a scatter.
+
+Perl's rule is narrower than "classes fold fully": only a member written out
+as a *literal* gets it. A range (`[a-ÿ]`), a shorthand (`[\w]`), a property
+(`[\p{Latin}]`) and a negated class all answer nomatch in perl too. It
+composes like any other branch - `[ß]{2}` matches "ssss" there - so the
+implementable shape is a class under `FULL_FOLD` lowering to its
+simply-folded self *or* an alternation of the multi-character folds its
+literal members have. That is not built; §6 carries it as a named deviation.
+No imported vector reaches it, which is why `re_tests` is at 2,592 of 2,592
+with it outstanding.
 
 **Perl's subject is text.** There is no byte mode in Perl: a Perl string is a
 sequence of characters, and `/u`, `/a` and `/l` say which *rules* apply to
@@ -922,7 +941,7 @@ to be complete for every shipped tier.
 | ECMAScript | Repeat counts are limited (the grammar admits 2^53 - 1) | as above | `GRX_ERR_LIMIT` |
 | ECMAScript | **The subject is code points, not UTF-16 code units, in *both* modes** | see below | - |
 | ECMAScript | A match cannot begin or end between the halves of a surrogate pair | as above | - |
-| Perl | Full case folding is simple folding | [design.md](design.md) §5.2 | - |
+| Perl | **A character class** folds simply where Perl full-folds a literally listed member: `[ß]` matches "ss" in perl and not here. Full folding itself is built and agrees with perl everywhere else - measured over all 104 multi-character folds, bare and in a class (§5.8) | a class matches one character, and a multi-character fold inside one makes the class match a *run*; the fix is an alternation beside the folded class and is not built | - |
 | Perl | `(?{ })`, `(??{ })`, `\N{name}` by name | code execution; name table size | `GRX_ERR_UNSUPPORTED` |
 | PCRE2 | `(?{ })` is not a construct it has at all | pcre2test: "unrecognized character after (? or (?-" | `GRX_ERR_SYNTAX` |
 | Perl | `(?[ ])` is PCRE2's grammar only | Perl's nests and takes different operands; a shared reader would accept neither exactly | `GRX_ERR_SYNTAX` |
