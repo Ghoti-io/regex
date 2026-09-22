@@ -353,8 +353,26 @@ typedef struct GRX_Profile {
   GRX_SearchStartRule search_start; ///< What `\G` asserts while iterating.
   GRX_DollarRule dollar;            ///< `$` without multiline.
   GRX_NewlineSet newlines;          ///< The line-terminator set.
-  GRX_ShorthandSet shorthands;      ///< `\w`, `\d`, `\s` without UTF.
-  GRX_ShorthandSet shorthands_utf;  ///< The same, with UTF or UCP.
+  GRX_ShorthandSet shorthands;      ///< `\w`, `\d`, `\s` by default.
+  /**
+   * @brief The same, once the dialect's *widening* flag is set.
+   *
+   * GRX_OPT_UCP, and not GRX_OPT_UTF. pcre2pattern is explicit that `\w`,
+   * `\d` and `\s` use Unicode "only if PCRE2_UCP is set", exactly as the
+   * POSIX classes do, and Java's widening flag is
+   * UNICODE_CHARACTER_CLASS - which is what GRX_OPT_UCP stands for. Those
+   * two are the only dialects whose columns differ.
+   *
+   * It was called `shorthands_utf` and was read on `UTF || UCP`, so
+   * `(*UTF)\w` matched "é" where pcre2test does not. The field's *name*
+   * was the whole of the error: section 5.9 of documentation/dialects.md
+   * has said "ASCII; Unicode under `UCP`" since it was written.
+   *
+   * Case folding is the other way round and keys on UTF, which is why the
+   * two are computed separately: `(*UTF)(?i)é` matches "É" in pcre2test
+   * with no UCP anywhere.
+   */
+  GRX_ShorthandSet shorthands_wide;
   GRX_FoldKind fold;                ///< Caseless folding without UTF.
   GRX_FoldKind fold_utf;            ///< Caseless folding with UTF.
   GRX_PropertyMatch property_match; ///< How `\p{...}` names are spelled.

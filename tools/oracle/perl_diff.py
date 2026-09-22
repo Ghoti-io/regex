@@ -165,7 +165,15 @@ SUBJECTS = ["", "a", "b", "ab", "aab", "abc", "aaa", "a.b", "A", "AB", "aA",
 # `x` is left out on purpose: grx_match maps flag letters to GRX_Option bits
 # and has no GRX_OPT_EXTENDED among them, so a row with `x` would be asking
 # perl one question and this library another.
-FLAG_SETS = ["", "i", "m", "s", "im", "ims"]
+#
+# `u` and `P` are UTF and UCP, and they are *separate* letters because
+# pcre2 separates them - `(*UTF)\w` does not match "é" and
+# `(*UTF)(*UCP)\w` does. They were one letter in pcre2_match, which made
+# the only flag combination that shows the difference unaskable; this
+# library widened its shorthands on UTF and no differential could see it.
+# For the perl row both are no-ops: its subject is a Unicode string and its
+# shorthands are Unicode either way, which is itself worth asserting.
+FLAG_SETS = ["", "i", "m", "s", "im", "ims", "u", "uP", "iu", "iuP"]
 
 ATOMS = {
     "perl": SHARED_ATOMS + PERL_ONLY,

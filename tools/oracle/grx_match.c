@@ -215,6 +215,10 @@ int main(int argc, char ** argv) {
         case 'm': options |= GRX_OPT_MULTILINE; break;
         case 's': options |= GRX_OPT_DOTALL; break;
         case 'u': options |= GRX_OPT_UTF; break;
+        // Separate from `u`, because PCRE2 separates them and the pair is
+        // the axis this library got wrong: `\w`, `\d` and `\s` widen on
+        // UCP and the case folding widens on UTF.
+        case 'P': options |= GRX_OPT_UCP; break;
         case 'v': options |= GRX_OPT_UNICODE_SETS | GRX_OPT_UTF; break;
         // `n` is REG_NEWLINE, spelled the way posix_match.c and
         // musl_match.c spell it, so that a differential can hand the same

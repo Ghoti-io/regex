@@ -95,10 +95,16 @@ static size_t decode_hex(const char * text, char * out, size_t capacity) {
  * The flag letters, mapped to compile options.
  *
  * The same letters the other drivers take, so that one generator can feed
- * all of them. `u` is PCRE2_UTF: pcre2 is byte-oriented by default where
- * this library's pcre row is not, so the caller passes it to ask the same
- * question. PCRE2_UCP goes with it, because `\w` meaning "word character"
- * rather than "[A-Za-z0-9_]" is part of what UTF mode means elsewhere.
+ * all of them. `u` is PCRE2_UTF and `P` is PCRE2_UCP, and they are two
+ * letters because pcre2 treats them as two things: `(*UTF)\w` does not
+ * match "é" here and `(*UTF)(*UCP)\w` does.
+ *
+ * `u` used to set both, on the reasoning that `\w` meaning "word
+ * character" is part of what UTF mode means elsewhere. It is not what it
+ * means *in pcre2*, and folding the two together made the one flag
+ * combination that would have shown the difference unaskable - this
+ * library widened its shorthands on UTF for years and no differential
+ * could see it, because every driver was told UTF and UCP at once.
  */
 static uint32_t options_for(const char * flags) {
   uint32_t options = 0;
@@ -108,7 +114,8 @@ static uint32_t options_for(const char * flags) {
       case 'm': options |= PCRE2_MULTILINE; break;
       case 's': options |= PCRE2_DOTALL; break;
       case 'x': options |= PCRE2_EXTENDED; break;
-      case 'u': options |= PCRE2_UTF | PCRE2_UCP; break;
+      case 'u': options |= PCRE2_UTF; break;
+      case 'P': options |= PCRE2_UCP; break;
       default: break;
     }
   }

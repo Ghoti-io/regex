@@ -497,6 +497,17 @@ reads bytes until `PCRE2_UTF` says otherwise.
 | Vim | `[0-9A-Za-z_]` | `[0-9]` | `[ \t]` | none |
 | Emacs | syntax table: word constituents (**deviation:** treated as `[[:word:]]` = Unicode letters and digits) | none | `\s-` (syntax class), not `\s` | none |
 
+**`UCP` widens the shorthands and `UTF` widens the folding**, and they are
+two different questions. `(*UTF)\w` does not match "é" in pcre2test and
+`(*UTF)(*UCP)\w` does, while `(*UTF)(?i)é` matches "É" with no `UCP`
+anywhere. This library read one bit for both until 2026-09-22 - the row
+above has said "Unicode under `UCP`" since it was written, and the field
+the code read was called `shorthands_utf`, which is the whole of how a
+correct page and wrong code coexisted. `\b` moves with `\w`, being defined
+from it. Perl is neither case: its subject is a Unicode string and its
+shorthands are Unicode with no flag, so `/a` is the interesting direction
+there.
+
 POSIX bracket classes (`[:alpha:]` and the other eleven) are ASCII in POSIX
 and GNU (C locale), Unicode in Perl, PCRE2 under `UCP`, Ruby, Tcl, Rust,
 Vim; RE2 is ASCII. `\b` is defined from `\w` in every dialect; Perl's

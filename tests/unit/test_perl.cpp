@@ -997,6 +997,48 @@ TEST(Perl, ACalloutIsPcre2sAndItsNumberIsBounded) {
   }
 }
 
+TEST(Perl, TheShorthandsWidenOnUcpAndTheFoldingWidensOnUtf) {
+  // Two triggers, and they were one. pcre2pattern says `\w`, `\d` and `\s`
+  // use Unicode "only if PCRE2_UCP is set" - exactly what it says about the
+  // POSIX classes - while caseless matching of a non-ASCII character needs
+  // only UTF. Every row below is pcre2test 10.46's answer.
+  const char * e_acute = "\xc3\xa9";          // U+00E9
+  const char * E_acute = "\xc3\x89";          // U+00C9
+  const char * arabic_one = "\xd9\xa1";       // U+0661
+  const char * nbsp = "\xc2\xa0";             // U+00A0
+
+  // UTF alone leaves the shorthands ASCII.
+  EXPECT_FALSE(search("(*UTF)\\w", e_acute).matched);
+  EXPECT_FALSE(search("(*UTF)\\d", arabic_one).matched);
+  EXPECT_FALSE(search("(*UTF)\\s", nbsp).matched);
+  // `\b` is defined from `\w`, so it moves with it.
+  EXPECT_FALSE(search("(*UTF)\\b\\w", e_acute).matched);
+
+  // UCP widens all four.
+  EXPECT_TRUE(search("(*UTF)(*UCP)\\w", e_acute).matched);
+  EXPECT_TRUE(search("(*UTF)(*UCP)\\d", arabic_one).matched);
+  EXPECT_TRUE(search("(*UTF)(*UCP)\\s", nbsp).matched);
+  EXPECT_TRUE(search("(*UTF)(*UCP)\\b\\w", e_acute).matched);
+
+  // The POSIX classes always keyed on UCP, and the extended class reads
+  // the same sets, so both follow.
+  EXPECT_FALSE(search("(*UTF)[[:alpha:]]", e_acute).matched);
+  EXPECT_TRUE(search("(*UTF)(*UCP)[[:alpha:]]", e_acute).matched);
+  EXPECT_FALSE(search("(*UTF)(?[ \\w ])", e_acute).matched);
+  EXPECT_TRUE(search("(*UTF)(*UCP)(?[ \\w ])", e_acute).matched);
+
+  // Folding is the other way round: UTF alone is enough, and no UCP is
+  // needed. This is why the two are computed from different bits.
+  EXPECT_TRUE(search("(*UTF)(?i)" + std::string(e_acute), E_acute).matched);
+  EXPECT_FALSE(search("(?i)" + std::string(e_acute), E_acute).matched);
+
+  // Perl is neither case: its subject is a Unicode string and its
+  // shorthands are Unicode with no flag at all, which is what makes `/a`
+  // the interesting direction there.
+  EXPECT_TRUE(search("\\w", e_acute, GRX_SYNTAX_PERL).matched);
+  EXPECT_FALSE(search("(?a)\\w", e_acute, GRX_SYNTAX_PERL).matched);
+}
+
 TEST(Perl, AScriptRunIsCheckedAgainstTheTextItsBodyMatched) {
   // UTS #39 section 5.1, as pcre2unicode's "Script Runs" states it. Every
   // expectation here is one perl 5.40.1 and pcre2test 10.46 both give,

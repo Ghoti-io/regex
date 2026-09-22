@@ -1238,7 +1238,13 @@ static GRX_Result lower_group(
 static void adopt_options(Lowering * low, uint32_t options) {
   low->options = options;
   int utf = (options & GRX_OPT_UTF) != 0 || (options & GRX_OPT_UCP) != 0;
-  low->shorthands = utf ? low->profile.shorthands_utf : low->profile.shorthands;
+  // The shorthands widen on UCP and the folding widens on UTF, which are
+  // two different questions and were one. pcre2test: `(*UTF)\w` does not
+  // match "é" and `(*UTF)(*UCP)\w` does, while `(*UTF)(?i)é` matches "É"
+  // with no UCP in sight. The POSIX-class path a few hundred lines up had
+  // the shorthand rule right and said so; this line did not.
+  low->shorthands = (options & GRX_OPT_UCP) ? low->profile.shorthands_wide
+                                            : low->profile.shorthands;
   // Perl's `/a` and `/l`, which narrow where GRX_OPT_UCP widens. Applied
   // after the UTF choice rather than instead of it, because the two are
   // written together: `(?a)` under a dialect whose subject is Unicode still

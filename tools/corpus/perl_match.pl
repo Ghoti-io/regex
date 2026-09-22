@@ -82,11 +82,25 @@ while (my $line = <STDIN>) {
     next;
   }
 
+  # `u` and `P` are dropped before the prefix is built. They are UTF and
+  # UCP, which the other drivers take as compile options and Perl has as
+  # neither: this driver already decodes its subject as UTF-8, and Perl's
+  # shorthands are Unicode with no flag at all. `(?u)` would therefore ask
+  # for what is already true and `(?P)` is not a flag Perl has - it is
+  # "Sequence (?P...) not recognized", which would turn every row carrying
+  # it into a compile error and read as thousands of disagreements.
+  #
+  # Dropped rather than rejected, because a generator that varies UTF and
+  # UCP is asking a question about *pcre2* and the perl column should
+  # answer the same question it answers without them. That the answers
+  # match is the assertion.
+  (my $inline = $flags) =~ s/[uP]//g;
+
   # `(?flags)` prepended, not `(?flags:...)` wrapped. Wrapping changes the
   # grammar: the corpus's `)(` is a compile error in Perl and becomes the
   # perfectly valid `(?:)()` once a group is put around it, so every
   # unbalanced-parenthesis row came back as a match.
-  my $prefix = length($flags) ? "(?$flags)" : "";
+  my $prefix = length($inline) ? "(?$inline)" : "";
   my $regex = eval { qr/$prefix$pattern/ };
   if (!defined $regex) {
     print "compile\n";
