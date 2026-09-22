@@ -16,8 +16,25 @@ Where the reference oracle checks that the library matches what ECMAScript
 says, this checks that the library agrees with *itself* - which catches the
 cases the oracle corpus happens not to reach, and needs no oracle installed.
 
+**Every engine, and every dialect that changes what a match is.** Two things
+were missing, and both were found by breaking the library on purpose and
+watching this tool report zero disagreements anyway.
+
+The first was the bit-state engine. The invariant names every engine that can
+run a program, and this compared two of the three.
+
+The second was the dialect. Every row came from `match_diff`'s ECMAScript
+generator, and the one thing that makes two engines disagree about a match
+they can both find is the *preference*: ECMAScript and Perl take the
+leftmost-first match, POSIX and GNU the leftmost-longest, and the two engines
+implement longest by completely different means - the Pike VM keeps the best
+of its live threads, the backtracker reports failure from MATCH and keeps
+searching. Turning the Pike VM's longest mode off entirely changed nothing
+this tool could see, because no POSIX row had ever reached it.
+
 Usage:
     tools/oracle/engine_diff.py [--seed N] [--patterns N] [--subjects N]
+                                [--syntax NAME|all]
 
 Copyright 2026 by Corey Pennycuff
 """
@@ -35,6 +52,123 @@ ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE)
 
 import match_diff
+import posix_diff
+
+# The dialects whose preference is leftmost-longest, and where the atoms that
+# tell the two preferences apart already live. posix_diff built them for a
+# reference comparison; the same vocabulary is what this needs, because the
+# question - does the alternation `a|ab` end at 1 or at 2 - is the same one.
+LONGEST_DIALECTS = ("posix-ere", "posix-bre", "gnu-ere", "gnu-bre")
+
+# Every engine that can be asked for by name. GRX_ENGINE_AUTO is deliberately
+# not among them: the invariant is about engines agreeing, and AUTO is
+# whichever of these the selector picked.
+ENGINES = ("pike", "backtrack", "bitstate")
+
+
+def rows_for(syntax, rng, patterns, subjects):
+    """The (flags, pattern, subject) rows to put through every engine."""
+    if syntax == "ecmascript":
+        out = []
+        for _ in range(patterns):
+            pattern = match_diff.make_pattern(rng)
+            flags = rng.choice(match_diff.FLAG_SETS)
+            for _ in range(subjects):
+                out.append((flags, pattern,
+                    match_diff.make_subject(rng, "u" in flags)))
+        return out
+
+    atoms = posix_diff.ATOMS[syntax] + posix_diff.ILL_FORMED[syntax]
+    built = set()
+    for _ in range(patterns):
+        built.add("".join(rng.choice(atoms) for _ in range(rng.randint(1, 3))))
+    flag = posix_diff.BASIC_FLAG[syntax]
+    return [(flag, pattern, subject)
+            for pattern in sorted(built) for subject in posix_diff.SUBJECTS]
+
+
+def ask(driver, syntax, rows, engine):
+    lines = "".join("%s\t%s\t%s\n" % (
+        flags, pattern.encode("utf-8").hex(), subject.encode("utf-8").hex())
+        for flags, pattern, subject in rows)
+    finished = subprocess.run([driver, syntax, engine], input=lines,
+        capture_output=True, text=True, check=True)
+    return finished.stdout.splitlines()
+
+
+def compare(driver, syntax, rng, patterns, subjects, examples):
+    """Every pair of engines, over one dialect. Returns disagreements."""
+    rows = rows_for(syntax, rng, patterns, subjects)
+    answers = {}
+    for engine in ENGINES:
+        answers[engine] = ask(driver, syntax, rows, engine)
+        if len(answers[engine]) != len(rows):
+            sys.stderr.write("the %s run did not answer every row\n" % engine)
+            return None
+
+    disagreements = []
+    compared = 0
+    single = 0
+
+    for index, (flags, pattern, subject) in enumerate(rows):
+        lines = {engine: answers[engine][index] for engine in ENGINES}
+
+        # A record the driver could not hold. Every engine would answer
+        # "toolong" and the invariant would look satisfied by a comparison
+        # that never happened, so stop instead.
+        if any(line == "toolong" for line in lines.values()):
+            sys.stderr.write(
+                "the driver could not hold a record this run generated; "
+                "raise MAX_PATTERN/MAX_SUBJECT in tools/oracle/grx_match.c\n")
+            return None
+
+        # A pattern nobody could compile says nothing about any engine. A
+        # program only one engine can run is not a program two engines can
+        # both run, so the invariant says nothing about it either.
+        if any(line.startswith("compile") for line in lines.values()):
+            single += 1
+            continue
+        able = {engine: line for engine, line in lines.items()
+                if not line.startswith("unsupported")}
+        if len(able) < 2:
+            single += 1
+            continue
+
+        compared += 1
+        # The engine name is part of each line and is expected to differ.
+        normalised = {engine: line.replace("match %s" % engine, "match")
+                      for engine, line in able.items()}
+        if len(set(normalised.values())) != 1:
+            disagreements.append((flags, pattern, subject, normalised))
+
+    for flags, pattern, subject, seen in disagreements[:examples]:
+        print("/%s/%s on %s" % (pattern, flags, json.dumps(subject)))
+        for engine in ENGINES:
+            if engine in seen:
+                print("    %-10s %s" % (engine + ":", seen[engine]))
+
+    # Per-engine counts, because "0 disagreements" is also what an engine
+    # that answered nothing at all would produce. The bit-state engine is
+    # *expected* to be 0 on the four longest dialects - it cannot do
+    # leftmost-longest and refuses rather than answering the wrong question
+    # (dialects.md section 5.1) - and a reader should be able to see that
+    # from the output rather than having to know it.
+    ran = {engine: sum(1 for line in answers[engine]
+                       if line.startswith("match") or line == "nomatch")
+           for engine in ENGINES}
+    print("%-11s %d rows, %d run on two engines or more, %d disagreements"
+          % (syntax + ":", len(rows), compared, len(disagreements)))
+    print("%-11s ran: %s" % ("",
+        ", ".join("%s %d" % (engine, ran[engine]) for engine in ENGINES)))
+    if single:
+        print("%-11s %d skipped: refused, or only one engine can run them"
+              % ("", single))
+    if sum(1 for engine in ENGINES if ran[engine]) < 2:
+        sys.stderr.write(
+            "%s: fewer than two engines ran anything, so nothing was "
+            "compared\n" % syntax)
+        return None
+    return len(disagreements)
 
 
 def main(argv):
@@ -44,6 +178,9 @@ def main(argv):
     parser.add_argument("--subjects", type=int, default=12)
     parser.add_argument("--driver", default=None)
     parser.add_argument("--examples", type=int, default=6)
+    parser.add_argument("--syntax", default="all",
+        help="a dialect name, or 'all' for ecmascript and the four "
+             "leftmost-longest rows")
     args = parser.parse_args(argv[1:])
 
     driver = args.driver
@@ -62,60 +199,18 @@ def main(argv):
             "the grx_match tool was not found; run `make tools` first\n")
         return 2
 
-    rng = random.Random(args.seed)
-    rows = []
-    for _ in range(args.patterns):
-        pattern = match_diff.make_pattern(rng)
-        flags = rng.choice(match_diff.FLAG_SETS)
-        for _ in range(args.subjects):
-            rows.append(
-                (flags, pattern, match_diff.make_subject(rng, "u" in flags)))
-
-    pike = match_diff.ask_library(driver, rows, "pike")
-    backtrack = match_diff.ask_library(driver, rows, "backtrack")
-    if len(pike) != len(rows) or len(backtrack) != len(rows):
-        sys.stderr.write("a run did not answer every row\n")
-        return 2
-
-    disagreements = []
-    compared = 0
-    skipped = 0
-
-    for (flags, pattern, subject), first, second in zip(rows, pike, backtrack):
-        # A record the driver could not hold. Both engines would answer
-        # "toolong" and the invariant would look satisfied by a comparison
-        # that never happened, so stop instead.
-        if first == "toolong" or second == "toolong":
-            sys.stderr.write(
-                "the driver could not hold a record this run generated; "
-                "raise MAX_PATTERN/MAX_SUBJECT in tools/oracle/grx_match.c\n")
+    dialects = (("ecmascript",) + LONGEST_DIALECTS
+                if args.syntax == "all" else (args.syntax,))
+    total = 0
+    for syntax in dialects:
+        # A seed per dialect, so that adding one does not renumber the others.
+        rng = random.Random(args.seed)
+        found = compare(driver, syntax, rng, args.patterns, args.subjects,
+            args.examples)
+        if found is None:
             return 2
-
-        # A program the Pike VM cannot run is not a program both engines can
-        # run, so the invariant says nothing about it.
-        if first.startswith("unsupported") or first.startswith("compile") \
-                or second.startswith("compile"):
-            skipped += 1
-            continue
-
-        compared += 1
-        # The engine name is part of each line and is expected to differ.
-        left = first.replace("match pike", "match")
-        right = second.replace("match backtrack", "match")
-        if left != right:
-            disagreements.append((flags, pattern, subject, first, second))
-
-    for flags, pattern, subject, first, second in \
-            disagreements[:args.examples]:
-        print("/%s/%s on %s" % (pattern, flags, json.dumps(subject)))
-        print("    pike:      %s" % first)
-        print("    backtrack: %s" % second)
-
-    print("\n%d rows, %d run on both engines, %d disagreements"
-          % (len(rows), compared, len(disagreements)))
-    if skipped:
-        print("%d skipped: only one engine can run them" % skipped)
-    return 1 if disagreements else 0
+        total += found
+    return 1 if total else 0
 
 
 if __name__ == "__main__":

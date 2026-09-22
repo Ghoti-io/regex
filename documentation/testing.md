@@ -399,6 +399,34 @@ the exponential engine running out of budget, which is what the budget is
 for - or the bit-state engine refusing a bitmap that will not fit in
 `max_match_memory`, which is what that budget is for.
 
+**What the check could not see until Phase 4 was audited.** The paragraphs
+above describe what the *vectors* compare. `tools/oracle/engine_diff.py`,
+which generates rows rather than reading them, was doing less than they say:
+it ran two engines rather than three, and every row it generated was
+ECMAScript, because it borrowed `match_diff`'s generator wholesale.
+
+The dialect is the part that mattered. The one thing that makes two engines
+disagree about a match they can both find is the *preference* - leftmost-
+first against leftmost-longest - and the two engines implement longest by
+entirely different means: the Pike VM keeps the best of its live threads,
+the backtracker reports failure from `MATCH` and carries on searching. With
+no POSIX row in the corpus, switching the Pike VM's longest mode off
+entirely changed nothing the check could see. It now generates from
+`posix_diff`'s per-dialect atoms as well, across all five dialects and all
+three engines, and the same experiment reports `(a|ab)` on "ab" as 0-1
+against 0-2 on the first screen.
+
+The per-engine row counts are printed for the same reason the oracle checks
+refuse to skip: "0 disagreements" is also what an engine that answered
+nothing would report. Fewer than two engines answering anything is an error
+rather than a pass. The bit-state engine answering nothing on the four
+longest dialects is expected and visible - it cannot do leftmost-longest and
+says so rather than guessing (dialects.md section 5.1).
+
+Also fixed there: `tools/oracle/grx_match.c` had no name for the bit-state
+engine and printed `?`, which is what turned the first run of the extended
+check into 1,304 spurious disagreements.
+
 ### The properties of strings
 
 `make check-oracle-string-properties` runs

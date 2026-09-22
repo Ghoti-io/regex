@@ -208,8 +208,11 @@ cases, no disagreement.
 
 `make check-engine-equivalence` requires every engine that can run a program
 to give the same answer for it, which is the invariant of
-[design.md](documentation/design.md) §3.5.4. No disagreement. The
-`crossengine` fuzzer checks the same thing on random input.
+[design.md](documentation/design.md) §3.5.4. Five dialects, three engines,
+no disagreement; it runs as part of `make test` rather than only under
+`make check-oracles`, because it consults no reference implementation and
+nothing else enforces that invariant. The `crossengine` fuzzer checks the
+same thing on random input.
 
 One `v`-mode rule goes the other way and the oracle is not followed:
 [dialects.md](documentation/dialects.md) §8.6.1 has the table and the

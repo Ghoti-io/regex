@@ -260,7 +260,17 @@ TESTFLAGS := `PKG_CONFIG_PATH=$(PKG_CONFIG_LOOKUP_PATH) pkg-config --libs --cfla
 # coverage target does, because --coverage links the gcov runtime, whose
 # mangle_path check-symbols is right to reject in a shipping library and
 # wrong to reject in an instrumented one. Spelled as text's TEST_GATES is.
-TEST_GATES ?= check-symbols check-layering check-unicode-tables check-diagnostics
+#
+# check-engine-equivalence is here rather than only in check-oracles because
+# it is not an oracle check. It compares this library against itself - the
+# same rows through every engine that can run them - which is design.md
+# section 9 invariant 2, and nothing else enforces it. It was reachable only
+# through check-oracles, a target a routine build does not type, which is the
+# shape of hole a gate goes unnoticed in. It needs python3 and this library's
+# own driver, no reference implementation, and costs about a second and a
+# half.
+TEST_GATES ?= check-symbols check-layering check-unicode-tables \
+	check-diagnostics check-engine-equivalence
 
 # How much of the pattern space `make check-oracle-syntax` walks. The default
 # is a few seconds; a soak before a milestone raises the count and varies the
@@ -735,7 +745,9 @@ check-limits: $(TOOLS)
 		--matcher $(APP_DIR)/tools/grx_match
 
 check-engine-equivalence: ## Fail if two engines disagree about one program
-check-engine-equivalence: $(TOOLS)
+# Only the one driver, not $(TOOLS): this check consults no reference
+# implementation, and `make test` should not have to build the tools that do.
+check-engine-equivalence: $(APP_DIR)/tools/grx_match$(EXE_EXTENSION)
 	@if ! command -v python3 >/dev/null 2>&1; then \
 		printf "check-engine-equivalence: skipped (no python3)\n"; \
 		exit 0; \
