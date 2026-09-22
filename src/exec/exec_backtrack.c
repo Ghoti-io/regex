@@ -849,6 +849,12 @@ static int assertion_holds(
   int has_before = read_backward(bt, position, &before, &width);
   int has_after = read_forward(bt, position, &after, &width);
 
+  // `(*CRLF)`, `(*ANYCRLF)` and `(*ANY)`: a CR LF pair is one terminator.
+  // The same three clauses as exec_pike.c's, which this switch has to
+  // agree with exactly - the helpers are shared for that reason.
+  int crlf = (inst->flags & GRX_INST_NEWLINE_CRLF) != 0;
+  const char * text = request->subject;
+
   // NOTBOL and NOTEOL suppress only the end-of-subject halves; see the same
   // switch in exec_pike.c, which this one has to agree with exactly.
   switch ((GRX_AssertKind)inst->mode) {
@@ -863,21 +869,33 @@ static int assertion_holds(
       if (position == bt->window_end) {
         return 1;
       }
-      return has_after && in_class(bt, inst->x, after)
-          && position + width == bt->window_end;
+      return (has_after && in_class(bt, inst->x, after)
+                 && position + width == bt->window_end)
+          || (crlf && grx_crlf_begins_at(text, bt->window_end, position)
+              && position + 2 == bt->window_end);
     case GRX_ASSERT_START_LINE:
       return (position == bt->window_start && !at_subject_start_suppressed(bt, inst))
-          || (has_before && in_class(bt, inst->x, before));
+          || (has_before && in_class(bt, inst->x, before)
+              && !(crlf
+                  && grx_between_crlf(
+                      text, bt->window_start, bt->window_end, position)))
+          || (crlf && grx_crlf_ends_at(text, bt->window_start, position));
 
     case GRX_ASSERT_START_LINE_INTERIOR:
       // The same, less the position after a newline that ends the
       // subject: there is no line there to be at the start of.
       return (position == bt->window_start && !at_subject_start_suppressed(bt, inst))
-          || (position != bt->window_end && has_before
-              && in_class(bt, inst->x, before));
+          || (position != bt->window_end
+              && ((has_before && in_class(bt, inst->x, before)
+                      && !(crlf
+                          && grx_between_crlf(text, bt->window_start,
+                              bt->window_end, position)))
+                  || (crlf
+                      && grx_crlf_ends_at(text, bt->window_start, position))));
     case GRX_ASSERT_END_LINE:
       return (position == bt->window_end && !at_subject_end_suppressed(bt, inst))
-          || (has_after && in_class(bt, inst->x, after));
+          || (has_after && in_class(bt, inst->x, after))
+          || (crlf && grx_crlf_begins_at(text, bt->window_end, position));
     case GRX_ASSERT_WORD_BOUNDARY:
     case GRX_ASSERT_NOT_WORD_BOUNDARY:
     case GRX_ASSERT_WORD_START:
@@ -1367,6 +1385,17 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
             break;
           case GRX_OP_ANY:
             ok = !in_class(bt, inst->x, codepoint);
+            // `.` and `\N` refuse the position where a line terminator
+            // *begins*, and under `(*CRLF)` that is a CR followed by an LF
+            // while no single character ends a line at all. So `a..b`
+            // refuses "a\r\nb" in pcre2test and `\r.b` accepts "\r\nb" -
+            // the CR is refused and the LF is not, which is what "begins"
+            // means and what a class could never say.
+            if (ok && (inst->flags & GRX_INST_NEWLINE_CRLF)) {
+              size_t at = reverse ? position - width : position;
+              ok = !grx_crlf_begins_at(
+                  bt->request->subject, bt->window_end, at);
+            }
             break;
           default:
             ok = 1;
@@ -2226,6 +2255,21 @@ GRX_Result grx_exec_backtrack(
     if (!read_forward(&bt, start, &codepoint, &width)) {
       result = GRX_ERR_INVALID;
       break;
+    }
+    // pcre2api's CRLF rule, which it calls a compromise: an attempt that
+    // failed at a CR LF sequence resumes *after* the LF, so no attempt
+    // ever begins between the two - unless the pattern names CR or LF
+    // itself, in which case the author plainly meant to reach that
+    // position. pcre2's own example is `.+A`, which does not match
+    // "\r\nA" and where `[\r\n]A` does.
+    //
+    // A caller's explicit start offset is not affected, because this is
+    // the *advance* and the first attempt has already happened.
+    if ((program->flags & GRX_PROGRAM_NEWLINE_CRLF)
+        && !(program->flags & GRX_PROGRAM_HAS_CR_OR_LF)
+        && grx_crlf_begins_at(request->subject, request->length, start)) {
+      start += 2;
+      continue;
     }
     start += width;
   }

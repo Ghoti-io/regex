@@ -301,6 +301,26 @@ struct GRX_Pattern {
   GRX_Arena strings;               ///< uint32_t; length-prefixed runs.
   size_t capture_count;            ///< Capturing groups, excluding group 0.
   GRX_PatternLimits limits;        ///< What `(*LIMIT_MATCH=d)` and kin asked.
+  /**
+   * The newline convention `(*CR)` and kin chose, or GRX_NEWLINES_COUNT.
+   *
+   * A pattern may name its own, and it decides what `.` refuses and where
+   * `^` and `$` hold - so it has to travel from the front end to lowering,
+   * which is where the dialect's default would otherwise be the only
+   * answer. GRX_NEWLINES_COUNT is "the pattern did not choose".
+   */
+  GRX_NewlineSet newlines;
+  /**
+   * The pattern names CR or LF as a literal code point.
+   *
+   * PCRE2's HASCRORLF, and it suppresses the CRLF skip in an unanchored
+   * search (documentation/dialects.md section 5.2). Recorded here rather
+   * than derived from the lowered class, because "explicit" is narrower
+   * than "can match" and the difference is only visible in the *spelling*:
+   * `[\x{0a}-\x{0f}]` counts and `[\x{09}-\x{0f}]` does not, and `\s`
+   * contains both CR and LF and counts for neither.
+   */
+  int has_cr_or_lf;
 };
 
 /**

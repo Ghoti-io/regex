@@ -59,6 +59,25 @@ typedef enum {
   GRX_NEWLINES_ECMASCRIPT, ///< LF, CR, U+2028, U+2029.
   GRX_NEWLINES_UNICODE,    ///< The `\R` set: adds CR LF, VT, FF, U+0085.
   GRX_NEWLINES_NONE,       ///< No line breaks at all. POSIX without REG_NEWLINE.
+  /**
+   * PCRE2's newline conventions, which a pattern may choose for itself.
+   *
+   * `(*CR)`, `(*CRLF)`, `(*ANYCRLF)`, `(*ANY)` and `(*NUL)`; `(*LF)` is
+   * GRX_NEWLINES_LF and is the default both here and there. Each decides
+   * two things at once - which single characters `.` refuses, and where
+   * `^` and `$` hold - and the three that include a CR LF *pair* make the
+   * second question one a code-point set cannot answer on its own. So the
+   * pair is asked for separately, with grx_newline_has_crlf().
+   *
+   * GRX_NEWLINES_CRLF's set of single characters is *empty*: under
+   * `(*CRLF)` nothing ends a line by itself, and pcre2test matches `a.b`
+   * against both "a\nb" and "a\rb" there.
+   */
+  GRX_NEWLINES_CR,         ///< `\r` alone.
+  GRX_NEWLINES_CRLF,       ///< The two-character pair, and nothing else.
+  GRX_NEWLINES_ANYCRLF,    ///< `\r`, `\n`, or the pair.
+  GRX_NEWLINES_ANY,        ///< The Unicode set, and the pair.
+  GRX_NEWLINES_NUL,        ///< NUL alone.
   GRX_NEWLINES_COUNT       ///< Closes the enum; not a set.
 } GRX_NewlineSet;
 

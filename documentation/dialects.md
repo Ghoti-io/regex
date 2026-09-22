@@ -199,7 +199,7 @@ match - so naming `GRX_ENGINE_BITSTATE` for one of these dialects is
 | Dialect | Newline set for `.`, `^`, `$` | `.` excludes | Dot-all spelling |
 | --- | --- | --- | --- |
 | POSIX, GNU | `\n` only with `REG_NEWLINE`; otherwise none, and `.` matches `\n` | `\n` under `REG_NEWLINE` | n/a |
-| Perl, PCRE2 | `\n` (PCRE2: build default; `(*CR)`, `(*CRLF)`, `(*ANYCRLF)`, `(*ANY)` and `(*NUL)` change it per pattern - **not built**, and refused rather than ignored, §6) | the newline set | `s` |
+| Perl, PCRE2 | `\n` (PCRE2: build default; `(*CR)`, `(*CRLF)`, `(*ANYCRLF)`, `(*ANY)` and `(*NUL)` change it per pattern, and all six are built - see below) | the newline set | `s` |
 | ECMAScript | LF, CR, U+2028, U+2029 | all four | `s` |
 | Python | `\n` | `\n` | `s` (`DOTALL`) |
 | Java | `\n`, `\r`, `\r\n`, U+0085, U+2028, U+2029; `\n` alone under `UNIX_LINES` | all | `s` |
@@ -209,6 +209,41 @@ match - so naming `GRX_ENGINE_BITSTATE` for one of these dialects is
 | Tcl | `\n` | `\n` under `(?n)`/`(?p)` only | default is dot-all; `(?n)` turns it off |
 | Vim | line-based: the subject is a line; `\n` matches a line break only via `\n`/`\_` forms | end of line | `\_.` |
 | Emacs | `\n` | `\n` | none (`[^z-a]` idiom) |
+
+**PCRE2's newline conventions**, measured against pcre2test 10.46 and
+checked by `make check-oracle-newlines` over 360,360 rows:
+
+| Convention | `.` and `\N` refuse | Line terminator |
+| --- | --- | --- |
+| `(*CR)` | CR | CR |
+| `(*LF)` | LF - the default, here and there | LF |
+| `(*CRLF)` | **nothing** | the two-character CR LF |
+| `(*ANYCRLF)` | CR, LF | CR, LF, or the pair |
+| `(*ANY)` | LF VT FF CR NEL LS PS | those, and the pair |
+| `(*NUL)` | NUL | NUL |
+
+`(*CRLF)`'s empty column is the case that shapes the implementation: a
+convention whose terminator is two characters long cannot be a set of code
+points, so the pair travels as a flag beside the set. Four consequences,
+each measured rather than derived:
+
+- **`^` does not hold between the CR and the LF, and `$` does.** pcre2test
+  is asymmetric here and is followed as measured: `(*ANY)^\n` does not
+  match "a\r\n" while `(*ANY)\r$` does, because under `(*ANY)` a lone LF
+  ends a line and so `$` has a reason that does not involve the pair.
+- **`.` refuses the place a terminator *begins*.** Under `(*CRLF)` that is
+  the CR of a pair and not the LF: `a..b` refuses "a\r\nb" and `\r.b`
+  accepts "\r\nb". Dot-all lifts it; a negated class never had it.
+- **`$` and `\Z` outside multiline** take the pair as the final terminator:
+  `(*CRLF)abc$` matches "abc\r\n" and not "abc\n".
+- **An unanchored search does not begin between the two.** pcre2api states
+  it and calls it a compromise: an attempt that failed at a CR LF resumes
+  after the LF, *unless the pattern contains an explicit match for CR or
+  LF*. Its own example is `.+A`, which does not match "\r\nA" where
+  `[\r\n]A` does. "Explicit" is narrower than "can match" and the
+  difference is only in the spelling - `[\x0a-\x0f]` names LF and
+  `[\x09-\x0f]` does not, and `\s` contains both CR and LF and names
+  neither.
 
 ### 5.3 `^` and `$`
 
@@ -993,7 +1028,6 @@ to be complete for every shipped tier.
 | PCRE2 | Callouts `(?C...)` are read and have no effect | no callback API; a callout with no function registered changes no match in PCRE2 either, so accepting it answers the same question. The *syntax* is followed exactly: the number is bounded at 255 as PCRE2 bounds it, and Perl - which answers "Sequence (?C...) not recognized" for every spelling - refuses them here too | - |
 | PCRE2 | A script run may mix Han with **two** of Hiragana/Katakana, Hangul and Bopomofo | pcre2 10.46 accepts the mixture its own manual denies. pcre2unicode says a run may hold "a mixture of Hiragana, Katakana, and Han, or a mixture of Hangul and Han, or a mixture of Bopomofo and Han, but not, for example, a mixture of Hangul and Bopomofo and Han", and pcre2test matches that last one. All twenty two- and three-way combinations of U+6F22, U+304B, U+30AB, U+D55C and U+3105 were put to both references: they agree on fourteen - including `Hiragana+Hangul`, which both refuse, so it is not that Han lets anything through - and differ on exactly the six that mix two families. perl 5.40.1 refuses all six, which is UTS #39 section 5.1, and so does this library | - |
 | PCRE2, Perl | `\C`, one code unit | the subject here is code points, and a construct that can land inside a character has no honest approximation | `GRX_ERR_UNSUPPORTED` |
-| PCRE2 | `(*CR)`, `(*CRLF)`, `(*ANYCRLF)`, `(*ANY)`, `(*NUL)` - the newline conventions other than `(*LF)` | each decides what `.` refuses and where `^` and `$` hold, so a pattern naming one and read with another answers a different question. Measured against pcre2test 10.46: `(*CR)` refuses CR from `.`; `(*CRLF)` refuses **nothing**, its terminator being two characters where `.` excludes one; `(*ANYCRLF)` refuses CR and LF; `(*ANY)` refuses LF VT FF CR NEL LS PS; `(*NUL)` refuses NUL. Three of the five need a line terminator two characters long, which `GRX_ASSERT_START_LINE` cannot express - it asks a class about one code point - and pcre2 is not self-consistent about it either: under `(*ANY)` a `^` does not hold between CR and LF and a `$` does. They were accepted and silently ignored until 2026-09-22, which is the answer this table exists to prevent. `(*LF)` is accepted, because it names the convention both sides already use | `GRX_ERR_UNSUPPORTED` |
 | PCRE2 | `(*BSR_ANYCRLF)`, `(*BSR_UNICODE)` | built: `\R` is an alternation the parser writes and a directive may only lead the pattern, so the flag is set before the `\R` it governs. `(*BSR_ANYCRLF)\R` refuses a vertical tab and plain `\R` takes one, in pcre2test and here | - |
 | PCRE2 | `(*LIMIT_MATCH=n)` and kin are applied in this library's units, not PCRE2's | the directive is honoured - §7.1 below - but `(*LIMIT_MATCH=n)` lands on `max_steps` and PCRE2's match limit counts calls to its internal match function, so the same `n` buys a different amount of work in each. A pattern that asks for a limit gets one, and the *number* is not portable | `GRX_ERR_LIMIT` |
 | PCRE2 | A limit directive whose number does not fit a `size_t` is refused | pcre2test answers error 160, "(*VERB) not recognized or malformed", for `(*LIMIT_MATCH=4294967294)`, because its counter is 32 bits wide. This library's ceiling is its own and far higher, so the two disagree only between 2^32 and 2^64; what they share is refusing an unrepresentable request rather than turning it into another number | `GRX_ERR_SYNTAX` |

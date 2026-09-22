@@ -83,6 +83,9 @@ typedef enum {
   GRX_SET_NEWLINES_LF,      ///< `[\n]`.
   GRX_SET_NEWLINES_ES,      ///< LF, CR, U+2028 and U+2029.
   GRX_SET_NEWLINES_UNICODE, ///< The `\R` set, less the CR LF pair.
+  GRX_SET_NEWLINES_CR,      ///< `[\r]`: PCRE2's `(*CR)`.
+  GRX_SET_NEWLINES_CRLF,    ///< `[\r\n]`: PCRE2's `(*ANYCRLF)`.
+  GRX_SET_NEWLINES_NUL,     ///< `[\0]`: PCRE2's `(*NUL)`.
   GRX_SET_COUNT             ///< Closes the enum; not a set.
 } GRX_NamedSet;
 
@@ -124,6 +127,18 @@ GRX_Result grx_shorthand_set(GRX_CharClass * cls, GRX_ShorthandSet shorthands,
  */
 GRX_Result grx_newline_set(GRX_CharClass * cls, GRX_NewlineSet newlines,
     const GRX_Limits * limits);
+
+/**
+ * @brief Whether a CR LF pair is one line terminator in this convention.
+ *
+ * Separate from grx_newline_set() because it is not a fact about single
+ * code points: `^` does not hold between the CR and the LF, and `$` before
+ * a final CR LF holds where the set alone would say it does not.
+ *
+ * @param newlines The convention.
+ * @return Non-zero for `(*CRLF)`, `(*ANYCRLF)` and `(*ANY)`.
+ */
+int grx_newline_has_crlf(GRX_NewlineSet newlines);
 
 /**
  * @brief Lower a parsed pattern into the intermediate representation.

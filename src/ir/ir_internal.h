@@ -250,6 +250,22 @@ typedef enum {
 #define GRX_IR_LINE_ANCHOR GRX_BIT(7)
 
 /**
+ * @brief ASSERT: a CR LF pair is one line terminator in this pattern.
+ *
+ * PCRE2's `(*CRLF)`, `(*ANYCRLF)` and `(*ANY)`. It cannot be carried in the
+ * assertion's class, because a class holds code points and this is a
+ * sentence about two of them in sequence, so it travels as a flag and the
+ * engines read it beside the class.
+ *
+ * What it changes, measured against pcre2test 10.46 and asymmetric there:
+ * `^` does **not** hold between the CR and the LF - `(*ANY)^\n` does not
+ * match "a\r\n" - while `$` does, because under `(*ANY)` a lone LF ends a
+ * line as well. Under `(*CRLF)`, where no single character ends one, `$`
+ * holds before the CR of a pair and nowhere else.
+ */
+#define GRX_IR_NEWLINE_CRLF GRX_BIT(8)
+
+/**
  * @brief One node of the intermediate representation.
  *
  * `a`, `b`, `mode`, `min` and `max` are the kind-specific payload:

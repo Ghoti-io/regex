@@ -191,7 +191,9 @@ static GRX_Result emit(Codegen * codegen, GRX_Opcode op, uint8_t mode,
     .flags = (uint8_t)(
         ((node && (node->flags & GRX_IR_REVERSE)) ? GRX_INST_REVERSE : 0u)
         | ((node && (node->flags & GRX_IR_LINE_ANCHOR))
-            ? GRX_INST_LINE_ANCHOR : 0u)),
+            ? GRX_INST_LINE_ANCHOR : 0u)
+        | ((node && (node->flags & GRX_IR_NEWLINE_CRLF))
+            ? GRX_INST_NEWLINE_CRLF : 0u)),
     .reserved = 0,
     .x = x,
     .y = y,

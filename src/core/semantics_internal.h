@@ -111,6 +111,32 @@ extern "C" {
 #define GRX_PROGRAM_SHADOW_CAPTURES GRX_BIT(2)
 
 /**
+ * @brief A CR LF pair is one line terminator, and the search must skip it.
+ *
+ * PCRE2's `(*CRLF)`, `(*ANYCRLF)` and `(*ANY)`. pcre2api states the rule in
+ * the section on newline handling and calls it a compromise: when an
+ * unanchored attempt fails at a CR LF sequence, *and the pattern contains
+ * no explicit match for CR or LF*, the next attempt starts after the LF
+ * rather than at it. Its own example is `.+A`, which does not match
+ * "\r\nA" for that reason while `[\r\n]A` does.
+ *
+ * Two flags rather than one because the rule has two halves, and the second
+ * is a property of the pattern rather than of the convention.
+ */
+#define GRX_PROGRAM_NEWLINE_CRLF GRX_BIT(3)
+
+/**
+ * @brief The pattern names CR or LF as a literal code point.
+ *
+ * Which suppresses the skip above. Measured against pcre2test 10.46 rather
+ * than guessed at, because "explicit" is narrower than "can match": `\n`,
+ * `[\x{0a}]` and `[\x{0a}-\x{0f}]` all count, while `[\x{09}-\x{0f}]`,
+ * `\s`, `\v` and `[^q]` do not - so it is the *literal in the pattern
+ * text* and not the set the construct denotes.
+ */
+#define GRX_PROGRAM_HAS_CR_OR_LF GRX_BIT(4)
+
+/**
  * @brief A zero-width assertion.
  *
  * The line and boundary kinds are parameterised by a character class - the

@@ -92,6 +92,9 @@ static const GRX_CharRange newlines_es[]
     = {{0x000A, 0x000A}, {0x000D, 0x000D}, {0x2028, 0x2029}};
 static const GRX_CharRange newlines_unicode[]
     = {{0x000A, 0x000D}, {0x0085, 0x0085}, {0x2028, 0x2029}};
+static const GRX_CharRange newlines_cr[] = {{0x0D, 0x0D}};
+static const GRX_CharRange newlines_crlf[] = {{0x0A, 0x0A}, {0x0D, 0x0D}};
+static const GRX_CharRange newlines_nul[] = {{0x00, 0x00}};
 
 /** Add every code point of a Unicode property, by its canonical name. */
 static GRX_Result add_property(
@@ -130,6 +133,11 @@ GRX_Result grx_named_set(
     [GRX_SET_NEWLINES_ES] = {newlines_es, sizeof(newlines_es) / sizeof(*newlines_es)},
     [GRX_SET_NEWLINES_UNICODE]
         = {newlines_unicode, sizeof(newlines_unicode) / sizeof(*newlines_unicode)},
+    [GRX_SET_NEWLINES_CR] = {newlines_cr, sizeof(newlines_cr) / sizeof(*newlines_cr)},
+    [GRX_SET_NEWLINES_CRLF]
+        = {newlines_crlf, sizeof(newlines_crlf) / sizeof(*newlines_crlf)},
+    [GRX_SET_NEWLINES_NUL]
+        = {newlines_nul, sizeof(newlines_nul) / sizeof(*newlines_nul)},
   };
 
   if ((unsigned)set >= (unsigned)GRX_SET_COUNT) {
@@ -230,10 +238,34 @@ GRX_Result grx_newline_set(GRX_CharClass * cls, GRX_NewlineSet newlines,
       return grx_named_set(cls, GRX_SET_NEWLINES_ES, limits);
     case GRX_NEWLINES_UNICODE:
       return grx_named_set(cls, GRX_SET_NEWLINES_UNICODE, limits);
+    case GRX_NEWLINES_CR:
+      return grx_named_set(cls, GRX_SET_NEWLINES_CR, limits);
+    case GRX_NEWLINES_ANYCRLF:
+      return grx_named_set(cls, GRX_SET_NEWLINES_CRLF, limits);
+    case GRX_NEWLINES_ANY:
+      return grx_named_set(cls, GRX_SET_NEWLINES_UNICODE, limits);
+    case GRX_NEWLINES_NUL:
+      return grx_named_set(cls, GRX_SET_NEWLINES_NUL, limits);
+    case GRX_NEWLINES_CRLF:
+      // Empty on purpose, and it is the case that shows why the CR LF pair
+      // is a *flag* and not a member: under `(*CRLF)` no single character
+      // ends a line, so `.` refuses nothing - pcre2test matches `a.b`
+      // against both "a\nb" and "a\rb" there - while `^` and `$` still
+      // hold around the pair.
+      return GRX_OK;
     case GRX_NEWLINES_NONE:
       return GRX_OK; // An empty set: nothing ends a line.
     case GRX_NEWLINES_COUNT:
     default:
       return GRX_ERR_INVALID;
   }
+}
+
+int grx_newline_has_crlf(GRX_NewlineSet newlines) {
+  // The three conventions in which a CR LF pair is one line terminator
+  // rather than two. What it changes is where `^`, `$` and `\Z` hold, and
+  // nothing about which single characters end a line - which is why it is
+  // asked separately from grx_newline_set().
+  return newlines == GRX_NEWLINES_CRLF || newlines == GRX_NEWLINES_ANYCRLF
+      || newlines == GRX_NEWLINES_ANY;
 }

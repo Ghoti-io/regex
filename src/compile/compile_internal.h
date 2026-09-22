@@ -266,6 +266,15 @@ typedef enum {
 #define GRX_INST_LINE_ANCHOR GRX_BIT(4)
 
 /**
+ * @brief ASSERT: a CR LF pair is one line terminator.
+ *
+ * GRX_IR_NEWLINE_CRLF carried through codegen; the reasoning is there. The
+ * three line assertions read it beside their class, and every other
+ * instruction ignores it.
+ */
+#define GRX_INST_NEWLINE_CRLF GRX_BIT(5)
+
+/**
  * @brief One compiled instruction.
  *
  * Twelve bytes and fixed-size, so that a program is one array a jump can

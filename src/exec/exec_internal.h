@@ -224,6 +224,47 @@ GRX_Result grx_exec_pike(const GRX_ExecRequest * request, int * out_matched);
 GRX_Result grx_exec_backtrack(
     const GRX_ExecRequest * request, int * out_matched);
 
+/**
+ * @name The CR LF pair, for the line assertions
+ *
+ * PCRE2's `(*CRLF)`, `(*ANYCRLF)` and `(*ANY)` make a CR LF pair one line
+ * terminator, which a class of code points cannot say. GRX_INST_NEWLINE_CRLF
+ * is the flag and these three are what it asks.
+ *
+ * Bytes, with no decoding: CR and LF are one byte each in UTF-8 and in byte
+ * mode alike, and no multi-byte sequence contains either, so the question
+ * "do these two positions spell CR LF" is the same question at every level.
+ *
+ * Here rather than in each engine because both have an `assertion_holds()`
+ * and the two have to agree exactly - the Pike VM's already carries a
+ * comment saying so, which is the shape a rule written twice takes just
+ * before it drifts.
+ * @{
+ */
+
+/** Whether `position` sits between the CR and the LF of a pair. */
+static inline int grx_between_crlf(
+    const char * subject, size_t start, size_t end, size_t position) {
+  return position > start && position < end && subject[position - 1] == '\r'
+      && subject[position] == '\n';
+}
+
+/** Whether a CR LF pair ends at `position`. */
+static inline int grx_crlf_ends_at(
+    const char * subject, size_t start, size_t position) {
+  return position >= start + 2 && subject[position - 2] == '\r'
+      && subject[position - 1] == '\n';
+}
+
+/** Whether a CR LF pair begins at `position`. */
+static inline int grx_crlf_begins_at(
+    const char * subject, size_t end, size_t position) {
+  return position + 1 < end && subject[position] == '\r'
+      && subject[position + 1] == '\n';
+}
+
+/** @} */
+
 #ifdef __cplusplus
 }
 #endif

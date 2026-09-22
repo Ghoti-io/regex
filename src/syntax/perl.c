@@ -2167,10 +2167,8 @@ static GRX_Result apply_directive(GRX_Parser * parser, const char * name,
   };
 
   // The newline convention decides what `.` refuses and where `^` and `$`
-  // hold, so a pattern that names one and is read with another answers a
-  // different question. Measured against pcre2test 10.46 rather than read
-  // off pcre2pattern, and recorded in documentation/dialects.md section 6
-  // so that whoever builds it has the table:
+  // hold. Measured against pcre2test 10.46 rather than read off
+  // pcre2pattern:
   //
   //   convention  `.` refuses                  line terminator
   //   ----------  ---------------------------  ------------------------
@@ -2181,14 +2179,22 @@ static GRX_Result apply_directive(GRX_Parser * parser, const char * name,
   //   (*ANY)      LF VT FF CR NEL LS PS        those, and CR LF
   //   (*NUL)      NUL                          NUL
   //
-  // Three of the five need a terminator that is two characters long, which
-  // no assertion here can express yet - GRX_ASSERT_START_LINE asks a class
-  // about one code point. The other two could be built from a per-pattern
-  // newline set alone, and are refused with them rather than shipped as a
-  // partial convention: a caller told `(*CR)` works and `(*CRLF)` does not
-  // has to know which of two nearly identical directives they wrote.
-  static const char * const unbuilt_newline_conventions[]
-      = {"CR", "CRLF", "ANYCRLF", "ANY", "NUL", NULL};
+  // `(*LF)` is in the inert list above rather than here, because naming
+  // the default asks for what is already true. The other five are written
+  // onto the pattern and spent by lowering; the CR LF pair travels as a
+  // flag rather than as a set member, since no code-point set can say
+  // "these two characters are one terminator".
+  static const struct {
+    const char * name;
+    GRX_NewlineSet newlines;
+  } newline_conventions[] = {
+    {"CR", GRX_NEWLINES_CR},
+    {"CRLF", GRX_NEWLINES_CRLF},
+    {"ANYCRLF", GRX_NEWLINES_ANYCRLF},
+    {"ANY", GRX_NEWLINES_ANY},
+    {"NUL", GRX_NEWLINES_NUL},
+    {NULL, GRX_NEWLINES_LF},
+  };
 
   for (size_t i = 0; option_directives[i].name; i++) {
     if (strlen(option_directives[i].name) == length
@@ -2244,16 +2250,19 @@ static GRX_Result apply_directive(GRX_Parser * parser, const char * name,
     }
   }
 
-  for (size_t i = 0; unbuilt_newline_conventions[i]; i++) {
-    if (strlen(unbuilt_newline_conventions[i]) == length
-        && memcmp(unbuilt_newline_conventions[i], name, length) == 0) {
-      if (!only_directives_before(parser, start)) {
-        return grx_parse_fail(parser, GRX_DIAG_INVALID_GROUP_SYNTAX, start,
-            parser->position - start);
-      }
-      return grx_parse_fail(parser, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED,
-          start, parser->position - start + 1);
+  for (size_t i = 0; newline_conventions[i].name; i++) {
+    if (strlen(newline_conventions[i].name) != length
+        || memcmp(newline_conventions[i].name, name, length) != 0) {
+      continue;
     }
+    if (!only_directives_before(parser, start)) {
+      return grx_parse_fail(parser, GRX_DIAG_INVALID_GROUP_SYNTAX, start,
+          parser->position - start);
+    }
+    // The last one written wins, which is what pcre2test does with two of
+    // them and is the same rule the limit directives follow.
+    parser->pattern->newlines = newline_conventions[i].newlines;
+    return GRX_OK;
   }
 
   // `(*LIMIT_MATCH=d)` and kin. PCRE2 lets a pattern lower a limit and never

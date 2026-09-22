@@ -1002,6 +1002,14 @@ static GRX_Result lower_any(
     return result;
   }
   grx_ir_node(low->ir, *out_node)->a = excluded;
+  // A CR LF pair is a line terminator that *begins* at the CR, and `.`
+  // refuses the place a terminator begins. Only when something is being
+  // excluded at all: `(?s).` matches the CR of a pair in pcre2test, and a
+  // negated class matches it too, so this belongs to `.` and `\N` alone.
+  if (excluded != GRX_INDEX_NONE
+      && grx_newline_has_crlf(low->profile.newlines)) {
+    grx_ir_node(low->ir, *out_node)->flags |= GRX_IR_NEWLINE_CRLF;
+  }
   return GRX_OK;
 }
 
@@ -1145,6 +1153,14 @@ static GRX_Result lower_anchor(
   assertion->a = class_index;
   if (line_anchor) {
     assertion->flags |= GRX_IR_LINE_ANCHOR;
+  }
+  // Only the assertions that read the newline set care, and only when the
+  // convention makes a CR LF pair one terminator. Set here rather than in
+  // the engines because it is a property of the pattern's convention, and
+  // an engine that asked which convention this was would be naming a
+  // dialect decision that lowering exists to spend.
+  if (needs_newlines && grx_newline_has_crlf(low->profile.newlines)) {
+    assertion->flags |= GRX_IR_NEWLINE_CRLF;
   }
   return GRX_OK;
 }
@@ -2865,6 +2881,14 @@ GRX_Result grx_lower_pattern(const GRX_Pattern * pattern,
     return result;
   }
 
+  // A pattern that named its own newline convention overrides the dialect's
+  // here, once, so that every later reader - `.`, `\N`, `^`, `$`, `\Z` -
+  // asks the same question and none of them has to know that `(*CR)`
+  // exists. GRX_NEWLINES_COUNT is the front end's "did not choose".
+  if (pattern->newlines != GRX_NEWLINES_COUNT) {
+    low.profile.newlines = pattern->newlines;
+  }
+
   // The two option-dependent choices the whole run reads. Both are made once
   // here rather than at each use, so that "which folding is this pattern
   // using" has one answer.
@@ -2888,6 +2912,15 @@ GRX_Result grx_lower_pattern(const GRX_Pattern * pattern,
   low.ir->capture_count = pattern->capture_count;
   if ((low.options & GRX_OPT_UTF) || low.profile.subject_is_text) {
     low.ir->flags |= GRX_PROGRAM_UTF;
+  }
+  // The two halves of pcre2api's CRLF skip: the convention says a pair is
+  // one terminator, and the pattern's own spelling says whether to
+  // suppress it.
+  if (grx_newline_has_crlf(low.profile.newlines)) {
+    low.ir->flags |= GRX_PROGRAM_NEWLINE_CRLF;
+  }
+  if (pattern->has_cr_or_lf) {
+    low.ir->flags |= GRX_PROGRAM_HAS_CR_OR_LF;
   }
 
   uint32_t root = GRX_INDEX_NONE;

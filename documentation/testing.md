@@ -662,6 +662,45 @@ backtracking into a run behaves, next to a quantifier or an anchor. Its
 subjects are Latin and Common, so the rule itself is never what is being
 asked there.
 
+### The newline-convention differential
+
+`make check-oracle-newlines` runs
+[newline_diff.py](../tools/oracle/newline_diff.py). PCRE2's six newline
+conventions each decide four things at once - which single characters `.`
+refuses, where `^` and `$` hold, where they hold *between* the two
+characters of a CR LF pair, and where an unanchored search may begin - so
+the rule is not one rule and the four interact. Every convention against
+every anchor-and-dot pattern against every two- and three-piece subject
+over eleven pieces, in two flag settings: **360,360 rows, no
+disagreement.**
+
+pcre2 alone decides, which is this file's one asymmetry against its
+neighbours: Perl has no newline conventions, so there is no second opinion
+to be had and none is pretended.
+
+It was written after the conventions were built, and it found two of the
+four rules. The model assembled from hand probes had `.` refusing the
+convention's character set and the anchors knowing about the pair; the
+sweep came back with 60 disagreements, all `(*CRLF)`, and they said that
+`.` also refuses **the position a terminator begins at** - which under
+`(*CRLF)` is the CR of a pair and not the LF. Fixing that left 23, all one
+shape, which turned out to be pcre2api's documented start-position
+compromise. Neither was reachable from a handful of cases: the first needs
+a pattern that consumes *two* characters across the pair, and the second
+needs an unanchored search whose first attempt fails at the CR.
+
+Proven by planting: with the pair unknown to the assertions, 23
+disagreements; with `.` not refusing the CR of a pair, 37. Both exit 1.
+
+One defect of this library's own came out of it and is worth recording,
+because it was not in the new code. The Pike VM's search loop stopped when
+its thread list was empty, which was sound while an unanchored search
+always seeded a thread at every position - and the start-position skip
+broke that invariant, so the search stopped one character before the
+answer. `b$` against "\x00\r\nb" under `(*ANY)`: the backtracker and the
+bit-state engine both reported 3-4 and the Pike VM reported no match. An
+invariant that nothing states is an invariant the next change breaks.
+
 ### The replacement differential
 
 `make check-oracle-replace` runs `tools/oracle/replace_diff.py`, which builds

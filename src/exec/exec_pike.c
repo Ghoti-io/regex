@@ -380,6 +380,13 @@ static int assertion_holds(
   int not_bol = request->not_bol && (inst->flags & GRX_INST_LINE_ANCHOR);
   int not_eol = request->not_eol && (inst->flags & GRX_INST_LINE_ANCHOR);
 
+  // `(*CRLF)`, `(*ANYCRLF)` and `(*ANY)`: a CR LF pair is one terminator.
+  // Asymmetric in pcre2test and followed as measured - `^` does not hold
+  // between the two characters and `$` does, when the convention also has
+  // a single character that ends a line there.
+  int crlf = (inst->flags & GRX_INST_NEWLINE_CRLF) != 0;
+  const char * text = request->subject;
+
   switch ((GRX_AssertKind)inst->mode) {
     case GRX_ASSERT_START_SUBJECT:
       return position == 0 && !not_bol;
@@ -396,23 +403,33 @@ static int assertion_holds(
       }
       // The end, or immediately before a line terminator that is the last
       // thing in the subject.
-      return has_after && in_class(pike, inst->x, after)
-          && position + width == request->length;
+      return (has_after && in_class(pike, inst->x, after)
+                 && position + width == request->length)
+          || (crlf && grx_crlf_begins_at(text, request->length, position)
+              && position + 2 == request->length);
 
     case GRX_ASSERT_START_LINE:
       return (position == 0 && !not_bol)
-          || (has_before && in_class(pike, inst->x, before));
+          || (has_before && in_class(pike, inst->x, before)
+              && !(crlf
+                  && grx_between_crlf(text, 0, request->length, position)))
+          || (crlf && grx_crlf_ends_at(text, 0, position));
 
     case GRX_ASSERT_START_LINE_INTERIOR:
       // The same, less the position after a newline that ends the
       // subject: there is no line there to be at the start of.
       return (position == 0 && !not_bol)
-          || (position != request->length && has_before
-              && in_class(pike, inst->x, before));
+          || (position != request->length
+              && ((has_before && in_class(pike, inst->x, before)
+                      && !(crlf
+                          && grx_between_crlf(
+                              text, 0, request->length, position)))
+                  || (crlf && grx_crlf_ends_at(text, 0, position))));
 
     case GRX_ASSERT_END_LINE:
       return (position == request->length && !not_eol)
-          || (has_after && in_class(pike, inst->x, after));
+          || (has_after && in_class(pike, inst->x, after))
+          || (crlf && grx_crlf_begins_at(text, request->length, position));
 
     case GRX_ASSERT_WORD_BOUNDARY:
     case GRX_ASSERT_NOT_WORD_BOUNDARY:
@@ -883,7 +900,20 @@ GRX_Result grx_exec_pike(const GRX_ExecRequest * request, int * out_matched) {
     // something matches. Not a restart: the sparse set means an occupied
     // program counter is not occupied twice, so the whole search stays
     // linear in the subject rather than quadratic.
-    if (!pike.matched && (!request->anchored || position == request->start)) {
+    // pcre2api's CRLF rule: an unanchored search never *begins* an attempt
+    // between the CR and the LF of a pair, because an attempt that failed
+    // at the CR resumes after the LF. Suppressed when the pattern names CR
+    // or LF itself. Here rather than in a bumpalong loop because this
+    // engine has none - it seeds a thread at each position instead, and
+    // not seeding one is the same statement. The caller's own start offset
+    // is exempt, as it is in exec_backtrack.c, which this has to agree
+    // with: the rule is about the advance and not about the position.
+    int crlf_skip = (program->flags & GRX_PROGRAM_NEWLINE_CRLF)
+        && !(program->flags & GRX_PROGRAM_HAS_CR_OR_LF)
+        && position != request->start
+        && grx_between_crlf(request->subject, 0, request->length, position);
+    if (!pike.matched && !crlf_skip
+        && (!request->anchored || position == request->start)) {
       PikeState * state = state_create(&pike);
       if (!state) {
         result = pike.failure;
@@ -892,7 +922,14 @@ GRX_Result grx_exec_pike(const GRX_ExecRequest * request, int * out_matched) {
       add_thread(&pike, &pike.current, 0, state, position);
     }
 
-    if (!pike.current.count) {
+    // An empty thread list used to mean the search was over, because an
+    // unanchored search that had not matched always seeded one here. The
+    // CRLF skip breaks that: it can leave the list empty at a position
+    // whose *successor* will still be seeded, and breaking there stopped
+    // the search one character before the answer. `b$` against
+    // "\x00\r\nb" under `(*ANY)` is the case - the backtracker found
+    // 3-4 and this engine reported no match.
+    if (!pike.current.count && !crlf_skip) {
       break;
     }
 
@@ -939,6 +976,16 @@ GRX_Result grx_exec_pike(const GRX_ExecRequest * request, int * out_matched) {
           break;
         case GRX_OP_ANY:
           advance = have_input && !in_class(&pike, inst->x, codepoint);
+          // The same clause exec_backtrack.c carries, for the same reason:
+          // `.` refuses the position where a line terminator *begins*, and
+          // under `(*CRLF)` that is a CR followed by an LF while no single
+          // character ends a line. The Pike VM runs forwards only, so the
+          // position is the character's own start with no direction to
+          // resolve.
+          if (advance && (inst->flags & GRX_INST_NEWLINE_CRLF)) {
+            advance = !grx_crlf_begins_at(
+                request->subject, request->length, position);
+          }
           break;
         case GRX_OP_ANY_NL:
           advance = have_input;

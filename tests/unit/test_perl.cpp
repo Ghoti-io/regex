@@ -803,22 +803,11 @@ TEST(Perl, TheLeadingDirectivesArePcre2sAndPerlRefusesEveryOne) {
     "(*ANY)", "(*NUL)", "(*BSR_ANYCRLF)", "(*BSR_UNICODE)",
     "(*LIMIT_MATCH=5)", "(*LIMIT_DEPTH=5)", "(*LIMIT_HEAP=5)",
   };
-  // Five of the nineteen are refused under PCRE2 as well, because the
-  // newline convention is not built - a separate question from which
-  // dialect the spelling belongs to, and the one this test is not about.
-  const char * unbuilt[]
-      = {"(*CR)", "(*CRLF)", "(*ANYCRLF)", "(*ANY)", "(*NUL)"};
-
   for (const char * directive : directives) {
     std::string pattern = std::string(directive) + "abc";
-    bool built = true;
-    for (const char * name : unbuilt) {
-      built = built && std::string(directive) != name;
-    }
 
     Attempt pcre = compile(pattern, GRX_SYNTAX_PCRE);
-    EXPECT_EQ(pcre.result, built ? GRX_OK : GRX_ERR_UNSUPPORTED)
-        << pattern << " under PCRE2";
+    EXPECT_EQ(pcre.result, GRX_OK) << pattern << " under PCRE2";
     grx_regex_free(pcre.regex);
 
     // Under Perl it is a syntax error either way, and that is the point:
@@ -917,7 +906,7 @@ TEST(Perl, FiveConstructFamiliesArePcre2sAndPerlHasNoneOfThem) {
   }
 }
 
-TEST(Perl, TheNewlineDirectivesAreBuiltOrRefusedAndNeverIgnored) {
+TEST(Perl, TheNewlineConventionsAndWhatEachOneChanges) {
   // `(*BSR_ANYCRLF)` cuts `\R` to the three ASCII line endings and
   // `(*BSR_UNICODE)` restores it. Both are built, because `\R` is an
   // alternation the parser writes and a directive may only lead the
@@ -932,27 +921,84 @@ TEST(Perl, TheNewlineDirectivesAreBuiltOrRefusedAndNeverIgnored) {
   // The last one written wins, as the directives are read in order.
   EXPECT_TRUE(search("(*BSR_ANYCRLF)(*BSR_UNICODE)\\R", "\x0b").matched);
 
-  // The newline *conventions* are refused rather than ignored. Each of
-  // these changes which subjects a pattern matches - `(*CR)a.b` matches
-  // "a\nb" in pcre2test and `a.b` does not - and three of the five need a
-  // line terminator two characters long, which no assertion here can
-  // express. Accepting one silently would read a pattern with a convention
-  // other than the one it named.
-  for (const char * pattern : {"(*CR)a.b", "(*CRLF)a.b", "(*ANYCRLF)a.b",
-           "(*ANY)a.b", "(*NUL)^.*"}) {
-    Attempt refused = compile(pattern, GRX_SYNTAX_PCRE);
-    EXPECT_EQ(refused.result, GRX_ERR_UNSUPPORTED) << pattern;
-    EXPECT_EQ(refused.diag, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED) << pattern;
-    grx_regex_free(refused.regex);
+  // Which single characters each convention takes out of `.`. Every row
+  // is pcre2test 10.46's answer, and `(*CRLF)` taking out *nothing* is the
+  // one that shows why the CR LF pair travels as a flag rather than as a
+  // member of the set.
+  //
+  // The subjects are built with an explicit length, because two of them
+  // hold a NUL: `std::string` from a `const char *` would stop there and
+  // ask about "a". The form-feed rows are split across two literals for
+  // the neighbouring reason - `"a\x0cb"` is one hex escape reading
+  // "0cb", which is U+00CB and not a form feed followed by a b.
+  const std::string with_lf("a\nb");
+  const std::string with_cr("a\rb");
+  const std::string ff = std::string("a\x0c") + "b";
+  const std::string nul = std::string("a\0b", 3);
+  struct { const char * conv; const std::string & subject; int dot; }
+  dots[] = {
+    {"(*LF)", with_lf, 0},      {"(*LF)", with_cr, 1},
+    {"(*CR)", with_lf, 1},      {"(*CR)", with_cr, 0},
+    {"(*CRLF)", with_lf, 1},    {"(*CRLF)", with_cr, 1},
+    {"(*ANYCRLF)", with_lf, 0}, {"(*ANYCRLF)", with_cr, 0},
+    {"(*ANY)", ff, 0},          {"(*ANY)", nul, 1},
+    {"(*NUL)", nul, 0},         {"(*NUL)", with_lf, 1},
+  };
+  for (const auto & row : dots) {
+    std::string pattern = std::string("(*UTF)") + row.conv + "a.b";
+    EXPECT_EQ(search(pattern, row.subject).matched ? 1 : 0, row.dot)
+        << pattern;
+    // `\N` is `.` with dot-all taken away, so it answers the same way.
+    std::string not_newline
+        = std::string("(*UTF)") + row.conv + "a\\Nb";
+    EXPECT_EQ(search(not_newline, row.subject).matched ? 1 : 0, row.dot)
+        << not_newline;
   }
 
+  // Where `^` and `$` hold, which is the half a code-point set cannot
+  // answer. Under `(*CRLF)` the terminator is the pair and nothing else.
+  EXPECT_TRUE(search("(*CRLF)^b", "a\r\nb", GRX_SYNTAX_PCRE,
+                  "m").matched);
+  EXPECT_FALSE(search("(*CRLF)^b", "a\nb", GRX_SYNTAX_PCRE, "m").matched);
+  EXPECT_FALSE(search("(*CRLF)^b", "a\rb", GRX_SYNTAX_PCRE, "m").matched);
+  EXPECT_TRUE(search("(*ANYCRLF)^b", "a\rb", GRX_SYNTAX_PCRE, "m").matched);
+
+  // `^` does not hold *between* the CR and the LF, and `$` does - which is
+  // asymmetric in pcre2test and followed as measured rather than tidied.
+  EXPECT_FALSE(search("(*ANY)^\n", "a\r\n", GRX_SYNTAX_PCRE, "m").matched);
+  EXPECT_TRUE(search("(*ANY)\r$", "a\r\n", GRX_SYNTAX_PCRE, "m").matched);
+  EXPECT_FALSE(search("(*CRLF)\r$", "a\r\n", GRX_SYNTAX_PCRE, "m").matched);
+
+  // `$` and `\Z` outside multiline: before a *final* terminator, and the
+  // pair counts as one.
+  EXPECT_TRUE(search("(*CRLF)abc$", "abc\r\n").matched);
+  EXPECT_FALSE(search("(*CRLF)abc$", "abc\n").matched);
+  EXPECT_TRUE(search("(*CRLF)abc\\Z", "abc\r\n").matched);
+
+  // `.` also refuses the place a terminator *begins*, which under
+  // `(*CRLF)` is the CR of a pair and not the LF: pcre2test refuses
+  // `a..b` against "a\r\nb" and accepts `\rb.` reaching the LF. Dot-all
+  // lifts it, and a negated class never had it.
+  EXPECT_FALSE(search("(*CRLF)a..b", "a\r\nb").matched);
+  EXPECT_TRUE(search("(*CRLF)a..b", "a\r\nb", GRX_SYNTAX_PCRE, "s").matched);
+  EXPECT_TRUE(search("(*CRLF)a[^q][^q]b", "a\r\nb").matched);
+
+  // pcre2api's compromise: an unanchored attempt that failed at a CR LF
+  // resumes after the LF, so `.+A` does not match "\r\nA" - unless the
+  // pattern names CR or LF itself, which `[\r\n]A` does.
+  EXPECT_FALSE(search("(*CRLF).+A", "\r\nA").matched);
+  EXPECT_TRUE(search("(*CRLF)[\r\n]A", "\r\nA").matched);
+  EXPECT_FALSE(search("(*CRLF)[^q]A", "\r\nA").matched);
+  // A range endpoint names it and a range that merely spans it does not,
+  // which is what "explicit" means and is measured, not assumed.
+  EXPECT_TRUE(search("(*CRLF)[\x0a-\x0f]A", "\r\nA").matched);
+  EXPECT_FALSE(search("(*CRLF)[\x09-\x0f]A", "\r\nA").matched);
+
   // `(*LF)` names the convention this library and PCRE2 both already use,
-  // so it asks for what is already true and is accepted.
+  // so it asks for what is already true.
   Attempt lf = compile("(*LF)a.b", GRX_SYNTAX_PCRE);
   EXPECT_EQ(lf.result, GRX_OK);
   grx_regex_free(lf.regex);
-  EXPECT_FALSE(search("(*LF)a.b", "a\nb").matched);
-  EXPECT_TRUE(search("(*LF)a.b", "a\rb").matched);
 
   // Mid-pattern it is not a directive at all, in either spelling.
   Attempt late = compile("a(*CR)b", GRX_SYNTAX_PCRE);

@@ -205,6 +205,14 @@ GRX_Result grx_parse_literal_node(GRX_Parser * parser, uint32_t codepoint,
     return GRX_ERR_INVALID;
   }
 
+  // PCRE2's HASCRORLF. Set at the two places a literal code point enters a
+  // pattern - here and grx_parse_add_class_item() - because what the rule
+  // asks is whether the *pattern named* CR or LF, not whether some
+  // construct in it happens to match one.
+  if (codepoint == 0x0A || codepoint == 0x0D) {
+    parser->pattern->has_cr_or_lf = 1;
+  }
+
   uint32_t first = (uint32_t)parser->pattern->literals.count;
   GRX_Result result
       = grx_arena_append(&parser->pattern->literals, &codepoint, NULL);
@@ -262,6 +270,17 @@ GRX_Result grx_parse_class_add(
   // this one's items, and the span would silently include the other's.
   if (node->a + node->b != parser->pattern->class_items.count) {
     return GRX_ERR_INTERNAL;
+  }
+
+  // A single member or either endpoint of a range counts; a shorthand does
+  // not, which is why this is here and not on the set the item denotes.
+  // `[\x{0a}-\x{0f}]` names LF and `[\x{09}-\x{0f}]` does not, and
+  // pcre2test tells the two apart.
+  if ((item->kind == GRX_CLASS_ITEM_SINGLE
+          || item->kind == GRX_CLASS_ITEM_RANGE)
+      && (item->lo == 0x0A || item->lo == 0x0D || item->hi == 0x0A
+          || item->hi == 0x0D)) {
+    parser->pattern->has_cr_or_lf = 1;
   }
 
   GRX_Result result
