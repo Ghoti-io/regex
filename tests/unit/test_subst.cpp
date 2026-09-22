@@ -624,3 +624,48 @@ TEST(Split, PerlSplitsLikePerl) {
   EXPECT_EQ(split_into(",", "a,b,,", none, GRX_ENGINE_AUTO, GRX_SYNTAX_PCRE),
       "[\"a\",\"b\",\"\",\"\"]");
 }
+
+/**
+ * `split /^/` is `split /^/m`, and which patterns that covers.
+ *
+ * perlfunc states it as a rule about the pattern `/^/`, which reads like a
+ * rule about the source text and is not: `(?:^)` and `(?i)^` are different
+ * text and get it, `(^)` is barely different and does not. perl was asked
+ * rather than read, and the rule that fits every answer is "the pattern is
+ * *nothing but* a `^`" - a property of what it compiled to.
+ *
+ * `\A` is the case that makes the test non-trivial. It is the same *kind* of
+ * assertion as a non-multiline `^` and must not get the flag, which is only
+ * decidable because lowering marks the line-anchor spellings -
+ * GRX_INST_LINE_ANCHOR, the flag NOTBOL needed for the same reason.
+ */
+TEST(Split, PerlTreatsABareCaretAsMultiline) {
+  const GRX_Syntax perl = GRX_SYNTAX_PERL;
+  const size_t none = GRX_NPOS;
+  const std::string lines = "a\nb\nc";
+
+  // Nothing but a `^`, however it is spelled.
+  EXPECT_EQ(split_into("^", lines, none, GRX_ENGINE_AUTO, perl),
+      "[\"a\n\",\"b\n\",\"c\"]");
+  EXPECT_EQ(split_into("(?:^)", lines, none, GRX_ENGINE_AUTO, perl),
+      "[\"a\n\",\"b\n\",\"c\"]");
+  EXPECT_EQ(split_into("(?:(?:^))", lines, none, GRX_ENGINE_AUTO, perl),
+      "[\"a\n\",\"b\n\",\"c\"]");
+  EXPECT_EQ(split_into("(?i)^", lines, none, GRX_ENGINE_AUTO, perl),
+      "[\"a\n\",\"b\n\",\"c\"]");
+
+  // Anything more than a `^` is not. A capture, an alternation, a literal -
+  // and `\A`, which is not a line anchor at all.
+  EXPECT_EQ(split_into("(^)", lines, none, GRX_ENGINE_AUTO, perl),
+      "[\"a\nb\nc\"]");
+  EXPECT_EQ(split_into("^|x", lines, none, GRX_ENGINE_AUTO, perl),
+      "[\"a\nb\nc\"]");
+  EXPECT_EQ(split_into("\\A", lines, none, GRX_ENGINE_AUTO, perl),
+      "[\"a\nb\nc\"]");
+  EXPECT_EQ(split_into("^a", lines, none, GRX_ENGINE_AUTO, perl),
+      "[\"\",\"\nb\nc\"]");
+
+  // ECMAScript has no such rule: `^` there is the start of the subject and
+  // splits nothing.
+  EXPECT_EQ(split_into("^", lines), "[\"a\nb\nc\"]");
+}

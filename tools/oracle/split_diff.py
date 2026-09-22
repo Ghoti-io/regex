@@ -41,6 +41,11 @@ means the opposite. Translating on the way in is how a differential stops
 comparing two implementations and starts comparing one of them with the
 harness.
 
+Nothing is excluded. perl's `/^/`-is-`/^/m` rule was carried as a deviation
+here for one commit, on a reading of perlfunc that turned out to be wrong -
+perl applies it to `(?:^)` and `(?i)^` as well, and not to `(^)` or `^|x` -
+and it is implemented now.
+
 The dialects in documentation/dialects.md section 5.16 that this machine
 cannot run - Java's and Go's - stay **probe**.
 
@@ -165,23 +170,6 @@ def parse_ours(line):
             for field in fields[2].split("|")]
 
 
-def deviation(dialect, pattern):
-    """A difference this library documents rather than reproduces.
-
-    perlfunc: a split pattern of exactly `/^/` "is treated as if the /m
-    modifier were supplied". It is the *source text* that perl special-cases,
-    not the compiled pattern - `/^a/` does not get it, and `(?:^)` would not
-    either - and a compiled GRX_Regex does not keep its source, so the only
-    way to reproduce it would be to detect the shape of the program, which
-    would catch spellings perl leaves alone.
-
-    documentation/dialects.md section 6 carries it as a deviation. Counted
-    every run rather than filtered silently, so that an exclusion which has
-    stopped matching anything is visible.
-    """
-    return dialect == "perl" and pattern == "^"
-
-
 def theirs(answer):
     """The oracle's answer in the same shape, or the word it gave instead."""
     return answer
@@ -239,7 +227,6 @@ def main(argv):
     refused = 0
     one_sided = 0
     surrogates = 0
-    deviations = 0
 
     for index, (flags, pattern, subject, limit) in enumerate(rows):
         mine = parse_ours(ours[index])
@@ -247,9 +234,6 @@ def main(argv):
 
         if yours == "surrogate":
             surrogates += 1
-            continue
-        if deviation(args.dialect, pattern):
-            deviations += 1
             continue
         # A pattern both sides refuse says nothing. One that only one side
         # refuses is a syntax disagreement, which syntax_diff.py is the tool
@@ -293,17 +277,6 @@ def main(argv):
     if surrogates:
         print("%-6s %d hold half a surrogate pair and cannot be compared"
               % ("", surrogates))
-    if deviations:
-        print("%-6s %d excluded: /^/ alone, which perl treats as /^/m and "
-              "this library does not (dialects.md section 6)"
-              % ("", deviations))
-    elif args.dialect == "perl":
-        # An exclusion that has stopped matching anything is either a rule
-        # that was implemented or a generator that stopped producing the
-        # shape; both want a person, and neither announces itself.
-        sys.stderr.write(
-            "note: the /^/ deviation matched no row this run; check that the "
-            "generator still produces it before trusting a clean sweep\n")
     # A run that compared almost nothing reports zero disagreements and looks
     # exactly like a run that compared everything, which is the failure this
     # suite has already been caught by twice.

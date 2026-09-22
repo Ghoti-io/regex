@@ -917,6 +917,59 @@ GRX_Result grx_regex_split(const GRX_Regex * regex, const char * subject,
   }
   const int perl_rule = profile.split == GRX_SPLIT_PERL;
 
+  // perlfunc: a split pattern of `/^/` "is treated as if the /m modifier
+  // were supplied". Which patterns count is not what that sentence suggests,
+  // and perl was asked rather than read: `(?:^)`, `(?:(?:^))` and `(?i)^`
+  // all get it, `(^)`, `^|x`, `^a` and `\A` all do not. That is not a test
+  // on the source text - it is "the pattern is nothing but a `^`", which is
+  // a property of what it compiled to.
+  //
+  // Two instructions: the assertion and the match. A capturing group adds
+  // saves, an alternation adds a split, and `\A` is the same *kind* of
+  // assertion but is not a line anchor - the distinction GRX_INST_LINE_ANCHOR
+  // exists for, so that NOTBOL can suppress `^` without suppressing `\A`.
+  GRX_Regex * multiline = NULL;
+  if (perl_rule && !(regex->options & GRX_OPT_MULTILINE)) {
+    // Nothing but a `^`: one line-anchor assertion, group 0's two saves, and
+    // the match. A capturing group adds saves of its own, an alternation
+    // adds a split, and a literal adds a char - any of which makes this
+    // false, which is what perl does too.
+    int caret_only = 0;
+    for (size_t i = 0; i < regex->program.insts.count; i++) {
+      const GRX_Inst * inst
+          = GRX_ARENA_AT(const GRX_Inst, &regex->program.insts, i);
+      if (!inst) {
+        caret_only = 0;
+        break;
+      }
+      if (inst->op == GRX_OP_MATCH
+          || (inst->op == GRX_OP_SAVE && inst->x < 2)) {
+        continue;
+      }
+      if (inst->op == GRX_OP_ASSERT
+          && inst->mode == GRX_ASSERT_START_SUBJECT
+          && (inst->flags & GRX_INST_LINE_ANCHOR) && !caret_only) {
+        caret_only = 1;
+        continue;
+      }
+      caret_only = 0;
+      break;
+    }
+    if (caret_only) {
+      // Compiled again with the flag on rather than patched, so the walk
+      // runs an ordinary program. Bounded to a pattern of four instructions,
+      // so the cost is bounded with it.
+      if (grx_regex_compile_with_allocator("^", 1, regex->syntax,
+              regex->options | GRX_OPT_MULTILINE, NULL, allocator, NULL,
+              &multiline) == GRX_OK) {
+        regex = multiline;
+      }
+      // A failure here leaves `regex` alone: the caller asked for a split,
+      // not for a second compile, and the unsplit answer is better than an
+      // error about a pattern they did not write.
+    }
+  }
+
   // perl's LIMIT: zero or absent means *no limit* and drops trailing empty
   // fields; a positive one keeps them and makes the last field the unsplit
   // remainder. ECMAScript's `limit` of 0 means no pieces at all, which is the
@@ -1056,6 +1109,7 @@ GRX_Result grx_regex_split(const GRX_Regex * regex, const char * subject,
   }
 
 publish_pieces:
+  grx_regex_free(multiline);
   if (result != GRX_OK) {
     grx_arena_clear(&pieces);
     if (out_error && out_error->diag == GRX_DIAG_NONE) {

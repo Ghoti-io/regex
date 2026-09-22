@@ -767,14 +767,25 @@ Splitting is reachable from every dialect that compiles - ECMAScript, Perl,
 PCRE2, and the POSIX and GNU rows - and an earlier version of this section
 said it was not, which was true when only ECMAScript had a front end.
 
-**One perl rule is deliberately not reproduced.** perlfunc: a split pattern
-of exactly `/^/` "is treated as if the `/m` modifier were supplied". It is
-the *source text* perl special-cases and not the compiled pattern - `/^a/`
-does not get it - and a compiled `GRX_Regex` does not keep its source, so the
-only way to reproduce it would be to recognise the shape of the program,
-which would also catch spellings such as `(?:^)` that perl leaves alone.
-Recorded in §6, and excluded by name and counted in every
-`split_diff.py --dialect perl` run rather than filtered quietly.
+**`split /^/` is `split /^/m`.** perlfunc says so, and which patterns it
+covers is not what that sentence suggests, so perl was asked rather than
+read. Against `"a\nb\nc"`:
+
+| pattern | perl | pattern | perl |
+| --- | --- | --- | --- |
+| `^` | 3 pieces | `(^)` | 1 piece |
+| `(?:^)` | 3 pieces | `^\|x` | 1 piece |
+| `(?:(?:^))` | 3 pieces | `\A` | 1 piece |
+| `(?i)^` | 3 pieces | `^a` | 2 pieces |
+
+The rule is not about the source text - `(?:^)` and `(?i)^` are different
+text and get it, `(^)` is barely different and does not. It is "the pattern
+is **nothing but** a `^`", which is a property of what the pattern compiled
+to: one line-anchor assertion, group 0's two saves, and the match. A
+capturing group adds saves, an alternation adds a split, a literal adds a
+char. `\A` is the same *kind* of assertion and is not a line anchor, which
+is the distinction `GRX_INST_LINE_ANCHOR` exists for (§5.3). All eight
+spellings above agree with perl.
 
 ### 5.17 Captures a failed negative lookaround made
 
@@ -926,7 +937,6 @@ to be complete for every shipped tier.
 | POSIX BRE, POSIX ERE | Measured only where two references agree, and not at all where the dialects differ from both | glibc's `regcomp` defines what POSIX leaves undefined and so answers as GNU; musl's regex, from Laurikari's TRE, shares no code with it but is not strict POSIX either - its basic RE takes `\|`, `\+` and `\?`, and it refuses the `[[.x.]]` POSIX requires. Neither decides alone. The 380 `posix-*` vectors are Spencer's rows the two answer *identically*; 41 they answer differently are left out as open questions and 8 use a construct these dialects do not have. What defines these rows - refusing the GNU operators - has no reference on this machine and is still built from the standard alone | - |
 | GNU BRE | `\<\?` and `\>\+`: a quantifier on an anchor is refused rather than compiled | glibc compiles it and then cannot match with it - `\<\?` against "" is **nomatch** there, and an optional assertion that declines to match the empty string is an artifact rather than a rule. musl compiles the same pattern and matches, so the two references disagree and there is nothing to reproduce. An `*` after an anchor is a different question and is followed exactly: it is an ordinary character, as it is after `^`, which is why `\>*` against "a*" matches 1-2 | `GRX_ERR_SYNTAX` |
 | Perl | `\p{nv=1/1}` and its kin resolve; perl refuses a fraction that reduces to an integer | UAX #44 §5.9.2 says numeric values match by "numeric equivalencies", and `1/1` is `1`. Perl keys its table by the *spelling* instead, so `1/1`, `2/2` and `0/3` are errors there while `2/4` and `9/12` resolve. Following the stated rule accepts a spelling perl rejects and never changes a match set | - |
-| Perl | A split pattern of exactly `^` is not treated as `^` with multiline | perlfunc says `split /^/` behaves as `split /^/m`. perl special-cases the *source text*, which a compiled regex here does not keep; recognising the compiled shape instead would also catch `(?:^)` and `(?m:^)`, which perl does not special-case. Every other cell of §5.16's Perl column is implemented, and `tools/oracle/split_diff.py --dialect perl` excludes this one by name and counts it, so the exclusion cannot go stale unnoticed | - |
 | Perl | `/l` asks for the locale's semantics and gets the C locale's | there is no other locale here (section 6), and the C locale's word characters are the ASCII ones | - |
 | POSIX | `[[.ch.]]` multi-character collating elements, `[[=e=]]` | no collation | `GRX_ERR_UNSUPPORTED` when a dialect has them; **`GRX_ERR_SYNTAX`** in Perl and PCRE2, which do not — pcre2test raises error 113 and perl calls the syntax "reserved for future extensions", so a pattern using one there is not valid rather than not built |
 | POSIX, GNU | POSIX's "every subexpression takes the longest match consistent with the whole" is not implemented as a rule | the engines implement leftmost-longest for the *whole* match (§5.1) and their own capture rules for the parts, and those agree with glibc and musl on every case either corpus or `tools/oracle/posix_diff.py` reaches - the ten rows once filed under this heading were an empty-iteration question (§5.5) and all pass now. What is not claimed is the general rule: no tagged-transition machinery exists here, so a case that needs one to be decided has not been ruled out, only not found | - |
