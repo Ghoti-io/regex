@@ -235,13 +235,18 @@ endif
 endif
 INCLUDE += $(CUTIL_CFLAGS)
 
-# ghoti.io-text, for WP-11's JSON Schema seam. Optional, and deliberately so:
-# nothing that ships links it. It is needed by examples/json_schema_provider.c,
-# which is the adapter, and by tools/jsonschema, which runs
-# JSON-Schema-Test-Suite through that adapter. A checkout without `text`
-# installed builds everything else and skips those two with a message, rather
-# than failing - the opposite of the cutil rule above, because cutil is a
-# dependency of the library and this is a dependency of two demonstrations.
+# ghoti.io-text, for WP-11's JSON Schema seam. Nothing that ships links it:
+# it is needed by examples/json_schema_provider.c, which is the adapter, and
+# by tools/jsonschema, which runs JSON-Schema-Test-Suite through that
+# adapter.
+#
+# So `make all` and `make install` do not need it, and `make examples`
+# without it builds the rest and names the one it left out. `make test` does
+# need it, because check-json-schema-suite is one of TEST_GATES and a gate
+# that can decline to run is not a gate - this seam went unverified for as
+# long as it did precisely because its absence printed "skipped" and exited
+# 0. workspace.txt still marks text optional for regex and that stays true:
+# bootstrap.sh builds and installs, it does not test.
 TEXT_PC ?= ghoti.io-text$(BRANCH)
 TEXT_CFLAGS := $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_LOOKUP_PATH) pkg-config --cflags $(TEXT_PC) 2>/dev/null)
 TEXT_LIBS := $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_LOOKUP_PATH) pkg-config --libs $(TEXT_PC) 2>/dev/null)
@@ -269,8 +274,21 @@ TESTFLAGS := `PKG_CONFIG_PATH=$(PKG_CONFIG_LOOKUP_PATH) pkg-config --libs --cfla
 # shape of hole a gate goes unnoticed in. It needs python3 and this library's
 # own driver, no reference implementation, and costs about a second and a
 # half.
-TEST_GATES ?= check-symbols check-layering check-unicode-tables \
-	check-diagnostics check-engine-equivalence
+# check-json-schema-suite is here for the same reason: it is the only thing
+# that asks whether WP-11's seam is right - this library's matcher driving
+# `text`'s JSON Schema engine over the corpus every other implementation is
+# measured with - and it was reachable only by typing its name. Both of its
+# preconditions are hard failures rather than skips, and the runner is given
+# the count it must reach, because all three of "text is not installed", "the
+# suite was never fetched" and "the corpus is there but answered nothing"
+# used to exit 0.
+# Spelled as two variables so that dropping one gate is a thing you can say
+# on a command line. `TEST_GATES='$$(filter-out <gate>,$$(TEST_GATES))'` is
+# not: a command-line assignment is recursively expanded, so a TEST_GATES
+# that names itself is a recursion error rather than a subtraction.
+ALL_TEST_GATES := check-symbols check-layering check-unicode-tables \
+	check-diagnostics check-engine-equivalence check-json-schema-suite
+TEST_GATES ?= $(ALL_TEST_GATES)
 
 # How much of the pattern space `make check-oracle-syntax` walks. The default
 # is a few seconds; a soak before a milestone raises the count and varies the
@@ -843,20 +861,44 @@ vectors-perl: ## Re-import Perl's re_tests corpus (needs perl)
 	fi; \
 	python3 tools/corpus/import_re_tests.py
 
+# Only the one tool, not $(TOOLS): this is a gate, and a gate that first
+# builds every oracle in the tree is one people learn to skip. It is also a
+# conditional prerequisite, because the runner links `text` and a build
+# without `text` cannot make it - the recipe is then reached with nothing
+# built, and says why instead of letting a link error explain it.
+ifdef HAVE_TEXT
+check-json-schema-suite: $(APP_DIR)/tools/grx_json_schema$(EXE_EXTENSION)
+endif
+
 check-json-schema-suite: ## Run JSON-Schema-Test-Suite's pattern files through `text`
-check-json-schema-suite: $(TOOLS)
+check-json-schema-suite:
 	@if [ -z "$(HAVE_TEXT)" ]; then \
-		printf "check-json-schema-suite: skipped (ghoti.io-text not found by pkg-config)\n"; \
-		exit 0; \
+		printf "\033[0;31m\n### check-json-schema-suite: ghoti.io-text is not installed ###\033[0m\n" >&2; \
+		printf "\npkg-config cannot find $(TEXT_PC), so the adapter WP-11 is about\n" >&2; \
+		printf "cannot be built, and nothing checks that this library's matcher\n" >&2; \
+		printf "answers correctly through it. This used to print \"skipped\" and\n" >&2; \
+		printf "exit 0, which is how the seam stayed unverified.\n\n" >&2; \
+		printf "  ./bootstrap.sh                        # installs text into .local\n" >&2; \
+		printf "  make test PREFIX=<prefix>             # ...then test against it\n\n" >&2; \
+		printf "If this machine genuinely has no \`text\`, clear the gate for the\n" >&2; \
+		printf "run, so that the choice is visible in the command rather than\n" >&2; \
+		printf "in the output of one that looked like it passed:\n\n" >&2; \
+		printf "  make test TEST_GATES='\$$(filter-out check-json-schema-suite,\$$(ALL_TEST_GATES))'\n\n" >&2; \
+		exit 1; \
 	fi; \
 	dir="$(JSON_SCHEMA_SUITE)/tests/$(JSON_SCHEMA_DRAFT)"; \
 	if [ ! -d "$$dir" ]; then \
-		printf "check-json-schema-suite: skipped (run tools/jsonschema/fetch.sh first)\n"; \
-		exit 0; \
+		printf "\033[0;31m\n### check-json-schema-suite: the suite is not here ###\033[0m\n" >&2; \
+		printf "\n%s\n" "$$dir" >&2; \
+		printf "\nThe corpus is not committed - it is somebody else's, and a copy\n" >&2; \
+		printf "here would stop being what everyone else is measured against.\n" >&2; \
+		printf "The commit is pinned instead, so fetching is reproducible:\n\n" >&2; \
+		printf "  tools/jsonschema/fetch.sh\n\n" >&2; \
+		exit 1; \
 	fi; \
 	files=""; \
 	for f in $(JSON_SCHEMA_FILES); do files="$$files $$dir/$$f.json"; done; \
-	$(APP_DIR)/tools/grx_json_schema $$files
+	$(APP_DIR)/tools/grx_json_schema --expect-passed $(JSON_SCHEMA_EXPECT) $$files
 
 # Where tools/jsonschema/fetch.sh puts the corpus, and which draft's files are
 # run. The suite is not committed - it is somebody else's, and a copy here
@@ -873,6 +915,17 @@ JSON_SCHEMA_DRAFT ?= draft2020-12
 # only the pattern files, and so could not have caught a defect in the pair it
 # exists to validate - which is exactly what maxLength.json then found.
 JSON_SCHEMA_FILES ?= pattern patternProperties maxLength minLength
+
+# How many assertions those files make. Named because the exit status alone
+# only says that nothing answered *wrongly*, and an empty file, an unfetched
+# corpus and a group skipped for a keyword `text` stopped implementing all
+# satisfy that. The suite commit is pinned, so this is a constant; it moves
+# in the same commit that moves tools/jsonschema/SUITE_COMMIT. It counts the
+# files above, and on the draft - `JSON_SCHEMA_DRAFT=draft7` is a documented
+# way to run this, so both counts are here and neither goes stale unnoticed.
+# Overriding JSON_SCHEMA_FILES means overriding this too, and the check says
+# so rather than quietly measuring something else.
+JSON_SCHEMA_EXPECT ?= $(if $(filter draft7,$(JSON_SCHEMA_DRAFT)),46,51)
 
 check-limits: ## Report what real patterns cost against grx_limits_default()
 check-limits: $(TOOLS)

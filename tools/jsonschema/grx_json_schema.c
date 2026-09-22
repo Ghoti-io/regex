@@ -4,18 +4,25 @@
  * Run JSON-Schema-Test-Suite files through `text`, with this library as the
  * regular-expression provider.
  *
- *     grx_json_schema <file.json> [<file.json> ...]
+ *     grx_json_schema [--expect-passed <n>] <file.json> [<file.json> ...]
  *
  * This is the other half of WP-11. examples/json_schema_provider.c shows the
  * adapter; this asks whether the adapter is *right*, against the corpus every
  * other JSON Schema implementation is measured with, rather than against
  * cases written by the person who wrote the code.
  *
- * `make check-json-schema-suite` drives it, and is gated on
- * `GRX_JSON_SCHEMA_SUITE` naming a checkout of
+ * `make check-json-schema-suite` drives it, and needs `JSON_SCHEMA_SUITE` to
+ * name a checkout of
  * https://github.com/json-schema-org/JSON-Schema-Test-Suite - the suite is
  * not vendored here, because a vendored copy is a snapshot that stops being
  * the thing everyone else is measured against the moment it is taken.
+ *
+ * `--expect-passed` is how this stops being a check that can pass by
+ * declining to run. Without it the exit status only says that nothing gave a
+ * *wrong* answer, which an empty file, a corpus trimmed to nothing, and a
+ * group skipped for an unimplemented keyword all satisfy. The suite commit is
+ * pinned, so the number of assertions is a constant; naming it means the
+ * count has to move in the same commit that moves the pin.
  *
  * Each file is an array of groups; each group has a schema and a list of
  * instances with the answer expected for each. A group whose schema uses a
@@ -31,6 +38,7 @@
 #include <ghoti.io/regex/regex.h>
 #include <ghoti.io/text/json.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 // ===========================================================================
@@ -198,8 +206,23 @@ static void run_group(const char * file, const GTEXT_JSON_Value * group,
 }
 
 int main(int argc, char ** argv) {
-  if (argc < 2) {
-    fprintf(stderr, "usage: grx_json_schema <file.json> [<file.json> ...]\n");
+  /* Negative means "no expectation": running the tool by hand over files the
+   * Makefile does not name has no constant to check against. */
+  long expect_passed = -1;
+  int first = 1;
+  if (argc > 1 && strcmp(argv[1], "--expect-passed") == 0) {
+    char * end = NULL;
+    expect_passed = (argc > 2) ? strtol(argv[2], &end, 10) : -1;
+    if (argc < 3 || !end || *end != '\0' || expect_passed < 0) {
+      fprintf(stderr, "--expect-passed wants a count, not \"%s\"\n",
+          (argc > 2) ? argv[2] : "");
+      return 2;
+    }
+    first = 3;
+  }
+  if (argc <= first) {
+    fprintf(stderr,
+        "usage: grx_json_schema [--expect-passed <n>] <file.json> ...\n");
     return 2;
   }
 
@@ -213,7 +236,7 @@ int main(int argc, char ** argv) {
 
   GTEXT_JSON_Parse_Options parse_options = gtext_json_parse_options_default();
 
-  for (int i = 1; i < argc; i++) {
+  for (int i = first; i < argc; i++) {
     size_t length = 0;
     char * text = read_file(argv[i], &length);
     if (!text) {
@@ -248,5 +271,20 @@ int main(int argc, char ** argv) {
 
   printf("\n%zu passed, %zu failed, %zu groups skipped\n", passed, failed,
       skipped_groups);
-  return failed ? 1 : 0;
+  if (failed) {
+    return 1;
+  }
+  if (expect_passed >= 0 && passed != (size_t)expect_passed) {
+    fprintf(stderr,
+        "\nexpected %ld assertions to pass, and %zu did.\n"
+        "Fewer means something declined to answer rather than answered\n"
+        "wrongly - a group skipped for a keyword `text` no longer\n"
+        "implements, or a suite file that is present but empty - and an exit\n"
+        "status of 0 would have called that a pass. More means the corpus\n"
+        "grew: raise JSON_SCHEMA_EXPECT in the commit that moves\n"
+        "tools/jsonschema/SUITE_COMMIT.\n",
+        expect_passed, passed);
+    return 1;
+  }
+  return 0;
 }

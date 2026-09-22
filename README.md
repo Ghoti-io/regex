@@ -161,7 +161,7 @@ Nothing is allocated for the caller to free on a failing call.
 | Part | State |
 | --- | --- |
 | Build, install, Doxygen | working |
-| Gates: `check-symbols`, `check-layering`, `check-unicode-tables` | working, in `TEST_GATES` |
+| Gates: `check-symbols`, `check-layering`, `check-unicode-tables`, `check-diagnostics`, `check-engine-equivalence`, `check-json-schema-suite` | working, in `TEST_GATES` |
 | Gates: `check-oracles` - twelve differential checks: syntax, match, iteration, the search window, properties, numeric properties, properties of strings, POSIX, the Perl family, and three replacement and split grammars | working; not in `TEST_GATES`, because they need Node, perl or pcre2 |
 | Gate: `check-limits` - what real patterns cost against the defaults | working; the report behind dialects.md section 7 |
 | Result codes, limits, allocator, version | working |
@@ -281,7 +281,9 @@ that adapter written against this library - about sixty lines - and
 with it: **51 of 51** cases in draft2020-12 and **46 of 46** in draft7, no
 group skipped. `tools/jsonschema/fetch.sh` fetches the corpus at the commit
 pinned in `tools/jsonschema/SUITE_COMMIT`; it is not vendored, for the same
-reason the UCD is not.
+reason the UCD is not. It is one of `TEST_GATES`, and a missing `text` or an
+unfetched corpus fails the run rather than skipping it - as does a run that
+answers fewer questions than the pinned corpus asks.
 
 The files run are `pattern` and `patternProperties`, which is what the seam is
 for, plus `maxLength` and `minLength`, which are not. Those two are there

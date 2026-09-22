@@ -1085,13 +1085,39 @@ absent.
   them and `JSON_SCHEMA_DRAFT=draft7` selects the older one. The corpus is not
   vendored for the same reason the UCD is not: it is somebody else's, and a
   copy here would be a snapshot that stops being what every other
-  implementation is measured against. The gate is out of `TEST_GATES`,
-  because it needs `text` installed and the corpus fetched.
+  implementation is measured against.
+
+  The gate is in `TEST_GATES`. It was not, for as long as it took to notice,
+  and the reason it was not is the reason it is now: it needs `text`
+  installed and the corpus fetched, and each of those printed `skipped` and
+  exited 0. A target nobody types, which cannot fail when it is not run,
+  cannot report anything; this seam is the only thing that asks whether this
+  library and `text` are right *together*, and nothing was asking. Both
+  preconditions are now hard failures naming their fix, and a machine that
+  genuinely has no `text` drops the gate on the command line -
+  `make test TEST_GATES='$(filter-out check-json-schema-suite,$(ALL_TEST_GATES))'`
+  - so that the choice is in the command rather than in the output of a run
+  that looked like it passed. `ALL_TEST_GATES` exists for that: a
+  command-line `TEST_GATES` that names itself is a make recursion error, not
+  a subtraction.
 
   Current: **51 of 51** cases in draft2020-12 and **46 of 46** in draft7, no
   group skipped. The runner exits non-zero on a wrong answer, which was
   checked by flipping one expectation and watching it fail rather than by
   assuming.
+
+  It also exits non-zero when it does not reach the count it was told to
+  reach. `--expect-passed`, which the Makefile fills from
+  `JSON_SCHEMA_EXPECT`, is what stops the check from passing by declining to
+  run - the exit status alone says only that nothing answered *wrongly*, and
+  an empty suite file, a corpus trimmed to nothing, and a group skipped
+  because `text` stopped implementing a keyword all satisfy that. That last
+  one is not hypothetical in shape: a skip is exactly how this pair would
+  come apart, and it would have lowered the pass count and changed nothing
+  else. The suite commit is pinned, so the count is a constant, and it moves
+  in the commit that moves `tools/jsonschema/SUITE_COMMIT`. Four plants were
+  run before this was believed - `text` absent, the suite absent, the count
+  one too high, the count one too low - and all four failed the gate.
 
   `JSON_SCHEMA_FILES` is `pattern patternProperties maxLength minLength`. The
   last two are not about regular expressions, and they are there because the
