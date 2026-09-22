@@ -9,9 +9,11 @@
 #ifndef GHOTI_IO_GRX_TEST_HELPERS_H
 #define GHOTI_IO_GRX_TEST_HELPERS_H
 
+#include <cstring>
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -292,6 +294,129 @@ private:
   long fail_at_ = 0;
   long requested_ = 0;
   long live_ = 0;
+};
+
+/**
+ * An allocator whose `realloc` always moves the block.
+ *
+ * What it is for: an arena that grows invalidates every pointer into it, and
+ * code that holds one across a growth is reading freed memory. The system
+ * allocator hides that almost always - `realloc` grows a block in place
+ * whenever the following bytes are free, which for the small, mostly
+ * sequential allocations a compile makes is nearly every time - so the bug
+ * lives in the source, passes every test, passes valgrind and passes ASan,
+ * and then one day a pattern is a few nodes longer.
+ *
+ * This removes the hiding place. Every `realloc` allocates a fresh block,
+ * copies, **scribbles over the old one**, and frees it. Under ASan the stale
+ * read is a use-after-free; without ASan the scribble usually turns it into a
+ * wrong answer, which a differential or a conformance vector then catches.
+ *
+ * The old size has to be tracked to copy and to scribble, which is why there
+ * is a map. That makes it far too slow for a benchmark and perfectly fast
+ * enough for a test.
+ */
+class MovingAllocator {
+public:
+  MovingAllocator() {
+    vtable_.ctx = this;
+    vtable_.malloc_fn = [](void * ctx, size_t size) -> void * {
+      auto * self = static_cast<MovingAllocator *>(ctx);
+      return self->fresh(size ? size : 1, nullptr, 0);
+    };
+    vtable_.calloc_fn = [](void * ctx, size_t nitems, size_t size) -> void * {
+      auto * self = static_cast<MovingAllocator *>(ctx);
+      if (nitems && size && nitems > (size_t)-1 / size) {
+        return nullptr;
+      }
+      size_t bytes = (nitems ? nitems : 1) * (size ? size : 1);
+      void * p = self->fresh(bytes, nullptr, 0);
+      if (p) {
+        std::memset(p, 0, bytes);
+      }
+      return p;
+    };
+    vtable_.realloc_fn = [](void * ctx, void * ptr, size_t size) -> void * {
+      auto * self = static_cast<MovingAllocator *>(ctx);
+      size_t wanted = size ? size : 1;
+      if (!ptr) {
+        return self->fresh(wanted, nullptr, 0);
+      }
+      size_t old = header(ptr);
+      void * moved = self->fresh(wanted, ptr, old < wanted ? old : wanted);
+      if (!moved) {
+        return nullptr;            // the original must stay valid
+      }
+      self->release(ptr);
+      self->moves_++;
+      return moved;
+    };
+    vtable_.free_fn = [](void * ctx, void * ptr) {
+      auto * self = static_cast<MovingAllocator *>(ctx);
+      if (ptr) {
+        self->release(ptr);
+      }
+    };
+  }
+
+  const GRX_Allocator * get() const { return &vtable_; }
+
+  /** Allocations made and not yet freed. */
+  long live() const { return live_; }
+
+  /**
+   * How many reallocs actually moved a block.
+   *
+   * Asserted to be non-zero by every test here: a run in which no arena ever
+   * grew would pass every other assertion while testing nothing this class
+   * exists to test.
+   */
+  long moves() const { return moves_; }
+
+private:
+  /**
+   * The size is kept in a header before the block rather than in a map.
+   *
+   * A `std::map` keyed on the pointer is the obvious way and made the whole
+   * class too slow to point at the conformance corpus, which is the one
+   * place worth pointing it. The header is `kHeader` bytes so that the
+   * returned pointer keeps the alignment `malloc` gave.
+   */
+  static constexpr size_t kHeader = 16;
+
+  static size_t header(void * user) {
+    size_t size = 0;
+    std::memcpy(&size, static_cast<char *>(user) - kHeader, sizeof size);
+    return size;
+  }
+
+  void * fresh(size_t size, const void * copy_from, size_t copy_bytes) {
+    char * raw = static_cast<char *>(std::malloc(size + kHeader));
+    if (!raw) {
+      return nullptr;
+    }
+    std::memcpy(raw, &size, sizeof size);
+    char * user = raw + kHeader;
+    if (copy_from && copy_bytes) {
+      std::memcpy(user, copy_from, copy_bytes);
+    }
+    live_++;
+    return user;
+  }
+
+  void release(void * user) {
+    // The point of the whole class: the bytes a stale pointer would read are
+    // no longer the bytes that were there. Under ASan the read is a
+    // use-after-free outright; without it, 0xDD is what a wrong answer is
+    // then made of.
+    std::memset(user, 0xDD, header(user));
+    live_--;
+    std::free(static_cast<char *>(user) - kHeader);
+  }
+
+  GRX_Allocator vtable_ {};
+  long live_ = 0;
+  long moves_ = 0;
 };
 
 } // namespace grxtest

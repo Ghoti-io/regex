@@ -151,6 +151,17 @@ bool dialect_is_built(GRX_Syntax syntax) {
 }
 
 /** Run one record and say what happened. */
+/**
+ * The allocator every vector is run through.
+ *
+ * NULL is the library default, and is what the ordinary pass uses. The
+ * second pass points it at a grxtest::MovingAllocator so that every arena
+ * growth in the whole corpus relocates the block - see
+ * tests/unit/test_allocator.cpp for why that is worth doing, and why the
+ * default allocator hides what it hides.
+ */
+const GRX_Allocator * g_allocator = nullptr;
+
 Outcome run_record(const grxtest::Record & record) {
   Outcome outcome;
 
@@ -167,7 +178,7 @@ Outcome run_record(const grxtest::Record & record) {
   GRX_Regex * regex = nullptr;
   GRX_Result compiled = grx_regex_compile_with_allocator(
       record.pattern.data(), record.pattern.size(), record.syntax,
-      record.options, limits, nullptr, &error, &regex);
+      record.options, limits, g_allocator, &error, &regex);
 
   if (record.expectation == grxtest::Expectation::Compiles) {
     outcome.passed = compiled == GRX_OK;
@@ -249,7 +260,7 @@ Outcome run_record(const grxtest::Record & record) {
 
   for (GRX_Engine engine : engines) {
     GRX_Match * match = nullptr;
-    if (grx_match_create(regex, nullptr, &match) != GRX_OK) {
+    if (grx_match_create(regex, g_allocator, &match) != GRX_OK) {
       outcome.passed = false;
       outcome.reason = "out of memory";
       break;
@@ -529,6 +540,44 @@ TEST(Conformance, EveryVectorAgreesWithItsOracle) {
   // avoid: a runner that discovered nothing would report success forever.
   EXPECT_GT(total.passed + total.failed, 0u)
       << "no vectors were found under " << grxtest::data("vectors");
+}
+
+TEST(Conformance, EveryVectorAgreesAgainWhenEveryArenaMoves) {
+  // The same corpus through an allocator whose `realloc` always relocates
+  // the block, scribbling over the old one first.
+  //
+  // What it is for: an arena that grows invalidates every pointer into it,
+  // and the system allocator almost never lets that show - `realloc` grows a
+  // small block in place whenever the bytes after it are free, which for the
+  // mostly sequential allocations a compile makes is nearly every time. A
+  // pointer held across a growth therefore passes every test, valgrind and
+  // ASan, until one day a pattern is a few nodes longer.
+  //
+  // 33,829 vectors is the widest net this library has, so it is the one
+  // worth pointing at the question. Under ASan the stale read is a
+  // use-after-free; here it is 0xDD, and a vector whose answer is made of
+  // 0xDD does not match its oracle.
+  grxtest::MovingAllocator allocator;
+  g_allocator = allocator.get();
+
+  std::vector<std::string> failures;
+  std::map<std::string, Tally> by_dialect;
+  Tally total = run_directory(
+      grxtest::data("vectors"), &failures, &by_dialect);
+
+  g_allocator = nullptr;
+
+  for (const std::string & failure : failures) {
+    ADD_FAILURE() << "with a moving allocator: " << failure;
+  }
+  printf("\nmoving allocator: %zu passed, %zu failed, %zu blocks relocated\n",
+      total.passed, total.failed, allocator.moves());
+
+  EXPECT_GT(total.passed + total.failed, 0u);
+  // A run in which no realloc moved anything would pass while testing
+  // nothing at all.
+  EXPECT_GT(allocator.moves(), 0);
+  EXPECT_EQ(allocator.live(), 0);
 }
 
 TEST(Conformance, TheRunnerFailsAVectorThatIsWrong) {

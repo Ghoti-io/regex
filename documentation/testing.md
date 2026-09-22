@@ -568,6 +568,51 @@ for `u` under `pcre`, which that row rightly refuses because PCRE2's UTF mode
 is an option and not a pattern flag, and counted 1,283 refusals as
 disagreements.
 
+### The allocator that always moves
+
+`tests/unit/test_allocator.cpp` and a second pass over the whole corpus in
+`tests/conformance/test_vectors.cpp` run the library through
+`grxtest::MovingAllocator`, whose `realloc` never grows a block in place:
+it allocates fresh, copies, scribbles `0xDD` over the old block, and frees
+it.
+
+`test_oom.cpp` asks what happens when an allocation *fails*. This asks what
+happens when one succeeds in a way the system allocator almost never does.
+An arena that grows invalidates every pointer into it, and code that obtains
+a node or an instruction, appends something, and then writes through the
+pointer it obtained is using freed memory - but `realloc` grows a small block
+in place whenever the bytes after it are free, which for the mostly
+sequential allocations a compile makes is nearly every time. Such a defect
+passes every test, passes valgrind, passes ASan, and surfaces the day a
+pattern is a few nodes longer than the ones anybody tried.
+
+**Two halves, catching different things.** The unit test compares a digest -
+every match of a search-all loop, the replaced text, the split pieces, and
+the facts - between the default allocator and the moving one, so *the answer
+must not depend on the allocator*. ASan catches the other kind: a stale write
+whose value nothing reads yet.
+
+Both were proven by planting one of each in `src/compile/codegen.c`:
+
+| Planted | default allocator | moving allocator | under ASan |
+| --- | --- | --- | --- |
+| the alternation's `SPLIT` held across a branch's codegen | 730 vectors fail | 783 fail | fails |
+| the `ATOMIC_BEGIN` held across its body's codegen | nothing fails | nothing fails | `heap-use-after-free` |
+
+The first row's 53-vector difference is the hiding place, measured: those are
+the vectors where the default allocator's in-place growth left the held
+pointer valid. The second row is why ASan is in the table at all -
+`GRX_OP_ATOMIC_BEGIN`'s `x` is written by codegen, documented in the
+instruction table and printed by the disassembler, and read by no engine, so
+corrupting it changes no answer anywhere. That is a fourth instance of the
+unread-constant shape this suite keeps finding, and here it was found by a
+plant that refused to show up.
+
+The corpus pass costs about 0.8 s on top of the 3.5 s the ordinary one takes,
+and relocates 125,792 blocks. The size of each block is kept in a header
+before it rather than in a `std::map`: the map version was correct and far
+too slow to point at 33,829 vectors, which is the one place worth pointing it.
+
 ### The iteration differential
 
 `make check-oracle-iterate` runs `tools/oracle/iterate_diff.py`, which asks
