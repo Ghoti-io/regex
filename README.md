@@ -13,11 +13,13 @@ all three engines: ECMAScript in its legacy, `u` and `v` modes, checked
 against Node 22; PCRE2 and Perl against pcre2 10.46 and perl 5.40.1; and
 `posix-bre`, `posix-ere`, `gnu-bre` and `gnu-ere` against glibc and musl.
 `text` validates JSON Schema's `pattern` and `patternProperties` through
-this library. Of 35,753 conformance vectors, every dialect passes 100%,
-Perl over the 4,516 of its 4,524 whose expectation is sound: the other
+this library. Of 37,212 conformance vectors, six of the seven dialects pass
+100%, Perl over the 5,975 of its 5,983 whose expectation is sound: the other
 eight are defects in Perl itself, excluded from the denominator and each
 named in `tests/data/vectors/known-gaps.txt` with the reproduction that
-demonstrates it. The other nine dialects are named and
+demonstrates it. PCRE2 passes 1,862 of 1,869 - the seven are PCRE2's newline
+conventions, `(*CR)` and kin, which are refused rather than applied and are
+named in the same file. The other nine dialects are named and
 report `GRX_ERR_UNSUPPORTED`. See [Status](#status) below for exactly what
 works today.
 
@@ -162,7 +164,7 @@ Nothing is allocated for the caller to free on a failing call.
 | --- | --- |
 | Build, install, Doxygen | working |
 | Gates: `check-symbols`, `check-layering`, `check-unicode-tables`, `check-diagnostics`, `check-engine-equivalence`, `check-json-schema-suite` | working, in `TEST_GATES` |
-| Gates: `check-oracles` - twelve differential checks: syntax, match, iteration, the search window, properties, numeric properties, properties of strings, POSIX, the Perl family, and three replacement and split grammars | working; not in `TEST_GATES`, because they need Node, perl or pcre2 |
+| Gates: `check-oracles` - thirteen differential checks: syntax, match, iteration, the search window, properties, numeric properties, properties of strings, POSIX, the Perl family, the Perl/PCRE2 syntax split, and three replacement and split grammars | working; not in `TEST_GATES`, because they need Node, perl or pcre2 |
 | Gate: `check-limits` - what real patterns cost against the defaults | working; the report behind dialects.md section 7 |
 | Result codes, limits, allocator, version | working |
 | Diagnostics and error reporting | working |
@@ -178,8 +180,8 @@ Nothing is allocated for the caller to free on a failing call.
 | Parser skeleton and hook interface | working |
 | ECMAScript front end, legacy and Unicode modes | working |
 | ECMAScript UnicodeSets (`v`) mode | working - set operations, string disjunctions, the seven properties of strings |
-| PCRE2 and Perl front ends | working - verbs, conditionals, recursion, branch reset, `\Q..\E`, extended modes, the leading directives, and Perl's `\N{NAME}` against the full character-name table |
-| POSIX and GNU front ends | working - one reader for `posix-bre`, `posix-ere`, `gnu-bre` and `gnu-ere` |
+| PCRE2 and Perl front ends | working - verbs, conditionals, recursion, branch reset, `\Q..\E`, extended modes, the leading directives (PCRE2's alone; Perl has none of them), Perl's `\N{NAME}` against the full character-name table, and `(*LIMIT_MATCH=n)` applied rather than parsed and dropped. The newline conventions `(*CR)` and kin are refused, `(*BSR_ANYCRLF)` is built |
+| POSIX and GNU front ends | working - one reader for `posix-bre`, `posix-ere`, `gnu-bre` and `gnu-ere`; both halves of `REG_NEWLINE`, as `GRX_OPT_MULTILINE` and `GRX_OPT_NEWLINE_TERMINATES` |
 | Every dialect but those seven | named, `GRX_ERR_UNSUPPORTED` |
 | Lowering, analysis and code generation | working |
 | Pike VM | working - the regular subset, in linear time |
@@ -192,11 +194,11 @@ Nothing is allocated for the caller to free on a failing call.
 | Limits | measured, not guessed; dialects.md section 7 |
 | The `text` seam for JSON Schema | working - `pattern` and `patternProperties` validate through this library |
 
-**Conformance.** Twelve differential checks, each against whichever
+**Conformance.** Thirteen differential checks, each against whichever
 implementation *defines* the thing it asks about: Node 22 for ECMAScript,
 pcre2 10.46 and perl 5.40.1 for the Perl family, glibc and musl for POSIX and
 GNU, and GNU sed for the POSIX replacement grammar. `make check-oracles` runs
-all twelve. A few are described below; [testing.md](documentation/testing.md)
+all thirteen. A few are described below; [testing.md](documentation/testing.md)
 §5 has every one, and says for each what was broken on purpose to prove the
 check can fail.
 
@@ -310,8 +312,8 @@ cannot mean "the suite ran nothing".
 | Corpus | Records | Agreeing |
 | --- | --- | --- |
 | ECMAScript, from Node 22 and test262 | 28,559 | **100%** |
-| PCRE2, from pcre2test 10.46's `testinput1` and `testinput2` | 1,869 | **100%** |
-| Perl, from `re_tests` under Perl 5.40, and generated boundary and case-folding vectors | 4,524 | **100%** of 4,516; 8 excluded |
+| PCRE2, from pcre2test 10.46's `testinput1` and `testinput2` | 1,869 | **99.63%**; 7 gaps |
+| Perl, from `re_tests` under Perl 5.40, and generated boundary, case-folding and character-name vectors | 5,983 | **100%** of 5,975; 8 excluded |
 | GNU ERE, from Spencer's test set answered by glibc 2.41 | 270 | **100%** |
 | GNU BRE, the same set read as a basic RE | 159 | **100%** |
 | POSIX ERE, the same set where glibc 2.41 and musl 1.2.6 agree | 245 | **100%** |
@@ -330,7 +332,7 @@ sharing no code agree, that is the strongest evidence this machine can offer
 for what POSIX means in practice; where they differ, the question is recorded
 as open rather than settled by picking a side.
 
-The 8 that do not agree are listed one per line in
+The 15 that do not agree are listed one per line in
 `tests/data/vectors/known-gaps.txt`, with the reason written beside each. That file is a gate in both directions: a vector that
 fails and is not listed fails the suite; a vector that *is* listed and passes
 fails it too, with "remove the entry"; and an entry naming a record the
@@ -349,7 +351,14 @@ count is printed beside the rate everywhere the rate appears - which is why
 the table above says "100% of 4,516; 8 excluded" and not "100%". A rate that
 rose because rows left the denominator has to say so.
 
-All eight are reference defects, and all eight are Perl's. **Six** turn on
+Eight are reference defects, and all eight are Perl's. The other seven are
+gaps and all seven are PCRE2's newline conventions - `(*CR)`, `(*CRLF)`,
+`(*ANYCRLF)`, `(*ANY)` and `(*NUL)`, each of which decides what `.` refuses
+and where `^` and `$` hold. They were accepted and silently ignored until
+2026-09-22, when all seven vectors passed and the rate read 100%; every one
+of them says only `expect: compiles`, which is how a compiles-only vector
+reads as coverage while the construct is inert. Refusing them is the honest
+answer and costs the row 0.37 points. **Six** turn on
 what a *failed* attempt leaves in the capture slots, and a minimal pair shows
 that Perl has no rule there: `((a){2})+` against "aaa" gives group 2 as 1-2
 in Perl, in pcre2 10.46 and here, but widen the repeated body by one
