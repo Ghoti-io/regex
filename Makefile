@@ -290,6 +290,19 @@ ALL_TEST_GATES := check-symbols check-layering check-unicode-tables \
 	check-diagnostics check-engine-equivalence check-json-schema-suite
 TEST_GATES ?= $(ALL_TEST_GATES)
 
+# Every target that runs the suites carries them - `test`, `test-quiet`,
+# `test-valgrind`, `test-valgrind-quiet` - because a gate that hangs off one
+# spelling of "run the tests" is a gate for whoever types that spelling. It
+# was on `test` alone, and `test-quiet` is the readable one; `image` had the
+# same hole and this is that fix swept here. `test-debug` and
+# `test-valgrind-debug` re-enter through those, so they inherit it.
+#
+# Two are exempt, for the same reason and deliberately: `test-asan` and
+# `coverage` build a *different* library - the sanitizer runtime and gcov's
+# `mangle_path` are symbols check-symbols is right to reject in a shipping
+# library and wrong to reject there. coverage clears TEST_GATES on its
+# sub-make; test-asan never named them.
+
 # How much of the pattern space `make check-oracle-syntax` walks. The default
 # is a few seconds; a soak before a milestone raises the count and varies the
 # seed (documentation/testing.md).
@@ -1193,7 +1206,7 @@ test: $(APP_DIR)/$(TARGET) $(TEST_EXECUTABLES) $(TEST_GATES)
 	fi
 
 test-quiet: ## Run tests with minimal output (one line per test suite)
-test-quiet: $(APP_DIR)/$(TARGET) $(TEST_EXECUTABLES)
+test-quiet: $(APP_DIR)/$(TARGET) $(TEST_EXECUTABLES) $(TEST_GATES)
 	@total_tests=0; total_passed=0; total_failed=0; total_time=0; failed_suites=""; \
 	printf "\n\033[1;36m%-30s %8s %10s %s\033[0m\n" "Test Suite" "Tests" "Time" "Status"; \
 	printf "\033[1;36m%-30s %8s %10s %s\033[0m\n" "------------------------------" "--------" "----------" "------"; \
@@ -1229,7 +1242,7 @@ test-quiet: $(APP_DIR)/$(TARGET) $(TEST_EXECUTABLES)
 	fi
 
 test-valgrind: ## Run all tests under valgrind (Linux only)
-test-valgrind: $(APP_DIR)/$(TARGET) $(TEST_EXECUTABLES)
+test-valgrind: $(APP_DIR)/$(TARGET) $(TEST_EXECUTABLES) $(TEST_GATES)
 ifeq ($(OS_NAME), Linux)
 	@failed=""; \
 	for test_exe in $(TEST_EXECUTABLES); do \
@@ -1255,7 +1268,7 @@ endif
 # test-valgrind-quiet passes only when both the tests pass and Valgrind is
 # clean, so a FAIL here can mean an assertion failure even with no leaks.
 test-valgrind-quiet: ## Run tests under valgrind with minimal output (Linux only)
-test-valgrind-quiet: $(APP_DIR)/$(TARGET) $(TEST_EXECUTABLES)
+test-valgrind-quiet: $(APP_DIR)/$(TARGET) $(TEST_EXECUTABLES) $(TEST_GATES)
 ifeq ($(OS_NAME), Linux)
 	@total_tests=0; total_failed=0; total_time=0; failed_suites=""; \
 	printf "\n\033[1;35m%-30s %8s %10s %s\033[0m\n" "Test Suite (Valgrind)" "Tests" "Time" "Status"; \
