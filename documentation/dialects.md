@@ -773,11 +773,24 @@ assertion itself does. What it does *not* settle is what the last write was
 when the body's failing part is a loop — see
 `tests/data/vectors/known-gaps.txt`, where four records turn on where Perl's
 own engine happens to restore an offset rather than on any rule, and are
-categorised there as `reference-defect` for that reason. The minimal
-pair is `(?!(a){2}$)` and `(?!(aa){2}$)` against "aaa": perl discards the
-write for the first and keeps it for the second, which is the width of the
-repeated body selecting between repeat opcodes and not a rule a second engine
-can follow. It is not settled here either - see §6.
+categorised there as `reference-defect` for that reason. The minimal pair is
+`(?!(a){2}$)` and `(?!(aa){2}$)` against "aaa": perl discards the write for
+the first and keeps it for the second, which is the width of the repeated
+body selecting between repeat opcodes and not a rule a second engine can
+follow.
+
+**What `KEEP` keeps here is the last value an iteration *finished* writing.**
+The question only arises when the body fails part way through an iteration of
+a repeat. A repeat clears its group at the top of every iteration (§5.5), so
+at that moment the group holds the clear and no replacement yet, and an
+implementation that reports the raw slots answers by where in the iteration
+the failure happened - which is a fact about its own lowering, not a rule.
+So against "aaa" `(?!(a){2}$)` reports group 1 as 1-2, both iterations having
+finished, and `(?!(aa){2}$)` reports 0-2, the first having finished and the
+second having died inside its body. Perl answers those two the other way
+round, unset and 0-2, and so states no rule; this library answers both by the
+one above. Where no repeat is involved the two agree, which is the case §5.17
+is really about: `a(?!(b)c)` against "abd" reports group 1 as 1-2 in both.
 
 ### 5.18 The POSIX and GNU grammars
 
@@ -876,7 +889,7 @@ to be complete for every shipped tier.
 | Perl | `(?{ })`, `(??{ })`, `\N{name}` by name | code execution; name table size | `GRX_ERR_UNSUPPORTED` |
 | PCRE2 | `(?{ })` is not a construct it has at all | pcre2test: "unrecognized character after (? or (?-" | `GRX_ERR_SYNTAX` |
 | Perl | `(?[ ])` is PCRE2's grammar only | Perl's nests and takes different operands; a shared reader would accept neither exactly | `GRX_ERR_SYNTAX` |
-| Perl | Where a failed negative lookaround's body stopped *part way through an iteration*, which of its writes stand follows this library's lowering | §5.17 is followed as written - Perl keeps, ECMAScript and PCRE2 discard - but "what the body last wrote" is only well defined if the body failed between iterations. Perl decides it on the width of the repeated body and so answers `((a){2})+` and `((aa){2})+` differently; here it depends on whether the failure fell before or after the per-iteration slot reset. On `(?!(a){2}$)` against "aaa" that reports group 1 as 1-2 where perl and pcre2test both report it unset. Undecided rather than chosen | - |
+| Perl | Where a failed negative lookaround's body stopped *part way through an iteration*, the group reports the last value an iteration **finished** | §5.17 is followed as written - Perl keeps, ECMAScript and PCRE2 discard - but "what the body last wrote" is only well defined if the body failed between iterations, and Perl states no rule for the rest: it decides on the width of the repeated body, answering `(?!(a){2}$)` and `(?!(aa){2}$)` against "aaa" as unset and 0-2. The rule here answers them 1-2 and 0-2, so the two agree wherever Perl is self-consistent and differ on the narrow case where it is not | - |
 | PCRE2 | Callouts `(?C...)` are read and have no effect | no callback API; a callout with no function registered changes no match, so accepting it answers the same question | - |
 | PCRE2 | `(*script_run:`, `(*sr:`, `(*asr:` | each constrains what its body may match and an ordinary group does not | `GRX_ERR_UNSUPPORTED` — except as a conditional's *condition*, where pcre2test refuses every one of them too ("atomic assertion expected after `(?(`"), so `(?(*script_run:x)y)` is `GRX_ERR_SYNTAX` |
 | PCRE2, Perl | `\C`, one code unit | the subject here is code points, and a construct that can land inside a character has no honest approximation | `GRX_ERR_UNSUPPORTED` |

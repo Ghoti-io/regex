@@ -278,20 +278,35 @@ typedef struct {
   size_t look_end;
 
   /**
-   * The stack height above which a capture undo is *not* applied, or
-   * GRX_NPOS.
+   * Inside a KEEP body: the last value each slot was given by an iteration
+   * that *finished*, or NULL outside one.
    *
-   * Set while the body of a negative lookaround runs in a dialect that keeps
-   * what the body captured (GRX_INST_KEEP_CAPTURES). Ordinary backtracking
-   * puts a capture back as it unwinds, so by the time a failing body has run
-   * out of paths its writes are already gone - which is the right answer
-   * everywhere except here, where the assertion succeeding *because* the
-   * body failed is supposed to leave them standing.
+   * The obvious implementation - stop undoing captures while the body runs,
+   * so whatever it wrote is still there when it fails - was wrong twice over.
+   * A repeat clears its group at the top of every iteration (GRX_OP_RESET,
+   * the capture-reset axis), so a body failing part way through an iteration
+   * fails with that clear applied and no write yet to replace it: not undoing
+   * it keeps the *clear* rather than the value, and which of the two a
+   * pattern gets depends on where in the iteration the failure fell, which is
+   * a rule stated in terms of this file's own lowering. Worse, un-restored
+   * slots are incoherent *during* the search and not merely at the end, so a
+   * group could be read with its start from one abandoned path and its end
+   * from another - `^(a*?)(?!(a{6}|a{5})*$)` against 31 a's reported a group
+   * as 28-27, ending before it began.
    *
-   * Frames below the floor are the caller's and are undone normally, so
-   * backtracking past the whole assertion still puts everything back.
+   * So captures are undone normally, exactly as everywhere else, and this is
+   * the whole of the rule instead.
+   *
+   * So the value a group reports is the last one an iteration finished
+   * writing, recorded here when a group's closing SAVE runs. A group that
+   * never completed one inside the body has no entry and keeps whatever it
+   * held before. GRX_NPOS is the "nothing recorded" mark, and it cannot
+   * collide with a real one: a closing SAVE always writes a real offset.
+   *
+   * Saved and replaced around a nested lookaround, so an inner body's
+   * completions cannot be read as an outer body's.
    */
-  size_t keep_floor;
+  size_t * keep_last;
 
   VerbStop verb_stop;    ///< What a control verb asked for, or VERB_NONE.
   size_t skip_to;        ///< Where `(*SKIP)` fired, for VERB_STOP_SKIP.
@@ -614,12 +629,6 @@ static int backtrack(Backtrack * bt, uint32_t * out_pc, size_t * out_position,
         *out_position = frame.position;
         return 1;
       case FRAME_CAPTURE:
-        if (bt->keep_floor != GRX_NPOS && bt->depth >= bt->keep_floor) {
-          // Inside a negative lookaround body whose writes are meant to
-          // survive it. A register is still put back: it is the loop's own
-          // bookkeeping, not something a caller can read.
-          break;
-        }
         bt->slots[frame.pc] = frame.position;
         break;
       case FRAME_REGISTER:
@@ -1337,6 +1346,14 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
         }
         if (inst->x < bt->captures) {
           bt->slots[inst->x] = position;
+          // An odd slot is a group's end, so the group has just become whole.
+          // Recorded rather than read off the slots at the end, because by
+          // then a later iteration may have cleared it.
+          if (bt->keep_last && (inst->x % 2) == 1
+              && bt->slots[inst->x - 1] != GRX_NPOS) {
+            bt->keep_last[inst->x - 1] = bt->slots[inst->x - 1];
+            bt->keep_last[inst->x] = bt->slots[inst->x];
+          }
         }
         if (!shadow_close(bt, inst->x, reverse)) {
           return 0;
@@ -1528,9 +1545,20 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
         size_t min = 0;
         size_t max = 0;
         int body_matched;
-        size_t outer_keep = bt->keep_floor;
+        size_t * outer_keep_last = bt->keep_last;
+        size_t * keep_last = NULL;
         if (negative && (inst->flags & GRX_INST_KEEP_CAPTURES)) {
-          bt->keep_floor = body_floor;
+          keep_last = gcu_allocator_malloc(
+              bt->allocator, bt->captures * sizeof(size_t));
+          if (!keep_last) {
+            gcu_allocator_free(bt->allocator, before);
+            bt->failure = GRX_ERR_OOM;
+            return 0;
+          }
+          for (size_t i = 0; i < bt->captures; i++) {
+            keep_last[i] = GRX_NPOS;
+          }
+          bt->keep_last = keep_last;
         }
         if (grx_program_look_span(bt->program, inst->x, &min, &max)) {
           body_matched = look_behind_forward(
@@ -1542,14 +1570,16 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
           body_matched = run(bt, pc + 1, position, body_floor, 0, &end);
           bt->look_end = outer_look_end;
         }
-        bt->keep_floor = outer_keep;
+        bt->keep_last = outer_keep_last;
         bt->depth = body_floor;
         if (bt->failure != GRX_OK) {
+          gcu_allocator_free(bt->allocator, keep_last);
           gcu_allocator_free(bt->allocator, before);
           return 0;
         }
         if (verb_escapes_assertion(bt, negative)) {
           memcpy(bt->slots, before, bt->captures * sizeof(size_t));
+          gcu_allocator_free(bt->allocator, keep_last);
           gcu_allocator_free(bt->allocator, before);
           return 0;
         }
@@ -1559,6 +1589,7 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
           // body succeeded. Either way the construct fails and the captures
           // go back to what they were.
           memcpy(bt->slots, before, bt->captures * sizeof(size_t));
+          gcu_allocator_free(bt->allocator, keep_last);
           gcu_allocator_free(bt->allocator, before);
           ok = 0;
           break;
@@ -1573,6 +1604,21 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
           memcpy(bt->slots, before, bt->captures * sizeof(size_t));
         }
         else {
+          // The body failed and its writes stand. What stands is the last
+          // value each group *finished*, not the raw slot state: a group
+          // whose final iteration was abandoned part way through holds that
+          // iteration's clear, and reporting it would make the answer depend
+          // on where in the iteration the body ran out of paths.
+          // NULL here for a *positive* lookaround, which reaches this same
+          // bookkeeping with nothing to correct.
+          if (keep_last) {
+            for (size_t i = 1; i < bt->captures; i += 2) {
+              if (keep_last[i] != GRX_NPOS) {
+                bt->slots[i - 1] = keep_last[i - 1];
+                bt->slots[i] = keep_last[i];
+              }
+            }
+          }
           for (size_t i = 0; i < bt->captures; i++) {
             if (bt->slots[i] == before[i]) {
               continue;
@@ -1581,12 +1627,14 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
             size_t current = bt->slots[i];
             bt->slots[i] = old;
             if (!save_slot(bt, i)) {
+              gcu_allocator_free(bt->allocator, keep_last);
               gcu_allocator_free(bt->allocator, before);
               return 0;
             }
             bt->slots[i] = current;
           }
         }
+        gcu_allocator_free(bt->allocator, keep_last);
         gcu_allocator_free(bt->allocator, before);
 
         pc = inst->y;
@@ -1951,7 +1999,7 @@ GRX_Result grx_exec_backtrack(
     .call_depth = 0,
     .call_capacity = 0,
     .look_end = GRX_NPOS,
-    .keep_floor = GRX_NPOS,
+    .keep_last = NULL,
     .verb_stop = VERB_NONE,
     .skip_to = 0,
     .window_start = 0,

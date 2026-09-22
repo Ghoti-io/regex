@@ -1332,6 +1332,67 @@ TEST(Perl, ANonAtomicLookaroundCanBeReEntered) {
   EXPECT_EQ(compile_result("(?(*napla:xx)bc)"), GRX_ERR_SYNTAX);
 }
 
+TEST(Perl, KeepReportsTheLastValueAnIterationFinished) {
+  // Perl keeps what a failed negative lookaround's body captured
+  // (dialects.md section 5.17), and this says *which* value that is: the
+  // last one an iteration finished writing, not whatever happens to be in
+  // the slot when the body runs out of paths.
+  //
+  // The distinction is invisible until the body fails part way through an
+  // iteration. A repeat clears its group at the top of every iteration, so
+  // at that moment the group holds the clear and no replacement, and an
+  // implementation that reports the raw slots answers by where in the
+  // iteration the failure fell. Against "aaa":
+  //
+  //   (?!(a){2}$)   both iterations finish, then `$` fails
+  //   (?!(aa){2}$)  the first finishes, the second dies inside its body
+  //
+  // Same construct, one operand wider. This library reported 1-2 for the
+  // first and *unset* for the second, which is the shape of its own lowering
+  // showing through. perl reports unset for the first and 0-2 for the
+  // second, which is the shape of perl's opcode selection showing through -
+  // each of us right once and wrong once, and neither stating a rule.
+  EXPECT_EQ(group_of("(?!(a){2}$)", "aaa", 1, GRX_SYNTAX_PERL), "1-2");
+  EXPECT_EQ(group_of("(?!(aa){2}$)", "aaa", 1, GRX_SYNTAX_PERL), "0-2");
+  EXPECT_EQ(group_of("(?!(aaa){2}$)", "aaa", 1, GRX_SYNTAX_PERL), "0-3");
+
+  // Widening the count rather than the body asks the same question, and the
+  // rule answers it the same way: the second iteration finishes at 2-3 and
+  // the third dies, so 2-3 is the last finished value.
+  EXPECT_EQ(group_of("(?!(a){3}$)", "aaa", 1, GRX_SYNTAX_PERL), "2-3");
+
+  // No repeat, so nothing is ever cleared and the question does not arise.
+  // perl agrees on both of these, and they are what section 5.17 is about.
+  EXPECT_EQ(group_of("a(?!(b)c)", "abd", 1, GRX_SYNTAX_PERL), "1-2");
+  EXPECT_EQ(group_of("(?!(a)(a)$)", "aaa", 1, GRX_SYNTAX_PERL), "0-1");
+  EXPECT_EQ(group_of("(?!(a)(a)$)", "aaa", 2, GRX_SYNTAX_PERL), "1-2");
+
+  // A group inside a repeat that never completes an iteration has no value
+  // to keep, and stays unset rather than inheriting one.
+  EXPECT_EQ(group_of("a(?!(b)*c)", "aaa", 1, GRX_SYNTAX_PERL), "-");
+
+  // The spans reported are always coherent. The first implementation of this
+  // rule read the group's start out of the live slots at the moment its end
+  // was written, and under the old arrangement - where a KEEP body's capture
+  // undos were skipped - those slots could hold a start from one abandoned
+  // path and an end from another: this pattern reported 28-27, a group
+  // ending before it began. Captures are undone normally now.
+  const std::string thirty_one(31, 'a');
+  const std::string span
+      = group_of("^(a*?)(?!(a{6}|a{5})*$)", thirty_one, 2, GRX_SYNTAX_PERL);
+  ASSERT_NE(span, "-");
+  const size_t dash = span.find('-');
+  ASSERT_NE(dash, std::string::npos);
+  EXPECT_LE(std::stoul(span.substr(0, dash)), std::stoul(span.substr(dash + 1)))
+      << "group 2 reported as " << span;
+
+  // ECMAScript and PCRE2 discard the writes instead, which this does not
+  // touch: the axis is which of the two a dialect takes, and only the value
+  // Perl keeps was ever in question.
+  EXPECT_EQ(group_of("(?!(aa){2}$)", "aaa", 1, GRX_SYNTAX_ECMASCRIPT), "-");
+  EXPECT_EQ(group_of("(?!(aa){2}$)", "aaa", 1, GRX_SYNTAX_PCRE), "-");
+}
+
 TEST(Perl, PerlsBoundTypesAreReadRatherThanMisread) {
   // `\b{wb}` is Perl's, and only Perl's: pcre2test compiles it as a word
   // boundary followed by four ordinary characters. This library did the same
