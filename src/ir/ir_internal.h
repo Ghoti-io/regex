@@ -218,6 +218,25 @@ typedef enum {
 #define GRX_IR_AMBIGUOUS_REF GRX_BIT(6)
 
 /**
+ * @brief ASSERT: this assertion is a *line* anchor, so NOTBOL/NOTEOL reach it.
+ *
+ * `^` without multiline and `\A` mean the same position and lower to the
+ * same GRX_ASSERT_START_SUBJECT; `$` where it means the end and `\z` lower to
+ * the same GRX_ASSERT_END_SUBJECT; `$` before a final newline and `\Z` to the
+ * same GRX_ASSERT_END_BEFORE_NEWLINE. Fusing them is right for every search
+ * of a whole subject, and GRX_SEARCH_NOTBOL and GRX_SEARCH_NOTEOL are exactly
+ * the conditions under which the two stop meaning the same thing:
+ * PCRE2_NOTBOL suppresses `^` and says in as many words that it does not
+ * affect `\A`, and glibc's REG_NOTBOL suppresses `^` and leaves GNU's
+ * `` \` `` alone. Two references, the same rule.
+ *
+ * So the kind says where the position is and this says which spelling asked
+ * for it. Set on everything `^` and `$` produce, including the multiline
+ * kinds, which no other spelling reaches.
+ */
+#define GRX_IR_LINE_ANCHOR GRX_BIT(7)
+
+/**
  * @brief One node of the intermediate representation.
  *
  * `a`, `b`, `mode`, `min` and `max` are the kind-specific payload:

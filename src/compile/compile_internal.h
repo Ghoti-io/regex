@@ -233,6 +233,16 @@ typedef enum {
 #define GRX_INST_AMBIGUOUS_REF GRX_BIT(3)
 
 /**
+ * @brief ASSERT: a line anchor, which GRX_SEARCH_NOTBOL/NOTEOL suppress.
+ *
+ * GRX_IR_LINE_ANCHOR carried through codegen; see the reasoning there. An
+ * engine reads it beside the kind: the kind says which position, this says
+ * whether the caller's "my buffer is a piece of a longer line" flags have
+ * anything to say about it.
+ */
+#define GRX_INST_LINE_ANCHOR GRX_BIT(4)
+
+/**
  * @brief One compiled instruction.
  *
  * Twelve bytes and fixed-size, so that a program is one array a jump can

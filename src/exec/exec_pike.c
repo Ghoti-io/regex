@@ -368,15 +368,23 @@ static int assertion_holds(
   // its two ends are not the text's two ends. They suppress only the
   // end-of-subject halves of these rules: a `^` that holds because a newline
   // precedes it is still holding for a reason inside the buffer.
+  //
+  // And only for a *line* anchor. `^` and `\A` share a kind here, as do `$`
+  // and `\z`, and `$` and `\Z`; GRX_INST_LINE_ANCHOR is which spelling
+  // asked. PCRE2_NOTBOL says in as many words that it does not affect `\A`,
+  // and glibc leaves GNU's `` \` `` alone under REG_NOTBOL.
+  int not_bol = request->not_bol && (inst->flags & GRX_INST_LINE_ANCHOR);
+  int not_eol = request->not_eol && (inst->flags & GRX_INST_LINE_ANCHOR);
+
   switch ((GRX_AssertKind)inst->mode) {
     case GRX_ASSERT_START_SUBJECT:
-      return position == 0 && !request->not_bol;
+      return position == 0 && !not_bol;
 
     case GRX_ASSERT_END_SUBJECT:
-      return position == request->length && !request->not_eol;
+      return position == request->length && !not_eol;
 
     case GRX_ASSERT_END_BEFORE_NEWLINE:
-      if (request->not_eol) {
+      if (not_eol) {
         return 0;
       }
       if (position == request->length) {
@@ -388,18 +396,18 @@ static int assertion_holds(
           && position + width == request->length;
 
     case GRX_ASSERT_START_LINE:
-      return (position == 0 && !request->not_bol)
+      return (position == 0 && !not_bol)
           || (has_before && in_class(pike, inst->x, before));
 
     case GRX_ASSERT_START_LINE_INTERIOR:
       // The same, less the position after a newline that ends the
       // subject: there is no line there to be at the start of.
-      return (position == 0 && !request->not_bol)
+      return (position == 0 && !not_bol)
           || (position != request->length && has_before
               && in_class(pike, inst->x, before));
 
     case GRX_ASSERT_END_LINE:
-      return (position == request->length && !request->not_eol)
+      return (position == request->length && !not_eol)
           || (has_after && in_class(pike, inst->x, after));
 
     case GRX_ASSERT_WORD_BOUNDARY:

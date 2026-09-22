@@ -568,6 +568,62 @@ for `u` under `pcre`, which that row rightly refuses because PCRE2's UTF mode
 is an option and not a pattern flag, and counted 1,283 refusals as
 disagreements.
 
+### The window differential
+
+`make check-oracle-window` runs `tools/oracle/window_diff.py`, which varies
+the six fields of `GRX_SearchOptions` that decide an answer - `begin`, `end`,
+and the NOTBOL / NOTEOL / NOTEMPTY / NOTEMPTY_ATSTART flags - and puts the
+result through `pcre2_match()` beside this library. Until it existed, every
+differential in this suite searched the whole subject with no flags, so all
+six knobs sat at one value across every one of the hundreds of thousands of
+rows the suite runs. `tests/unit/test_search.cpp` had thirteen hand-written
+cases for them.
+
+**pcre2 is the oracle, and it is the only one that can be.** `begin` is
+`pcre2_match()`'s `startoffset`, `end` is the `length` it is given, and the
+four flags are PCRE2_NOTBOL, PCRE2_NOTEOL, PCRE2_NOTEMPTY and
+PCRE2_NOTEMPTY_ATSTART. More than the mapping: PCRE2 is the one reference
+here whose offsets are bytes and whose `^` and `\A` mean the start of the
+*subject* rather than the start of the search, which is what
+`GRX_SearchOptions::begin` means too. node has `lastIndex` and slicing but no
+NOTBOL at all and UTF-16 offsets; glibc has `REG_NOTBOL` and `REG_NOTEOL`,
+and `REG_STARTEND` looks like a window until you read what it does to `^` -
+it matches at `rm_so`, where PCRE2's and this library's stay at offset 0.
+
+**It found one defect, and it was in the header first.** `GRX_SEARCH_NOTBOL`
+was documented as making "`^` and `\A` fail", and `GRX_SEARCH_NOTEOL` as
+making "`$`, `\Z` and `\z` fail". Neither reference does that: PCRE2_NOTBOL
+says in as many words that it does not affect `\A`, PCRE2_NOTEOL says the
+same of `\Z` and `\z`, and glibc leaves GNU's `` \` `` and `\'` standing
+under REG_NOTBOL and REG_NOTEOL. Two references, one rule, and the
+thirteen hand-written cases all used `^` and `$` - the spelling the author
+was thinking of - so none of them could see it.
+
+The cause is a lowering that is right everywhere else: `^` without multiline
+and `\A` are the same position, so they lower to the same
+`GRX_ASSERT_START_SUBJECT`; `$` and `\z` to the same `END_SUBJECT`; `$` and
+`\Z` to the same `END_BEFORE_NEWLINE`. Fusing them is correct for every
+search of a whole subject, and these flags are precisely the condition under
+which the two stop meaning the same thing. `GRX_IR_LINE_ANCHOR` and
+`GRX_INST_LINE_ANCHOR` carry which spelling asked.
+
+Each of the six fields was then broken in `src/exec/exec.c` in turn:
+
+| Field ignored | Disagreements in 130,960 compared rows |
+| --- | --- |
+| `begin` | 30,716 |
+| `end` | 10,821 |
+| `NOTEMPTY` | 17,086 |
+| `NOTEMPTY_ATSTART` | 7,055 |
+| `NOTEOL` | 705 |
+| `NOTBOL` | 672 |
+
+Every row runs in byte mode, because PCRE2's UTF mode is an option rather
+than a pattern flag and the shared flag alphabet has none. Every offset the
+generator produces is therefore a valid one and none has to be excluded -
+which is worth saying because the two differentials either side of this one
+in this file both have an exclusion they have to count.
+
 ### The split differential
 
 `make check-oracle-split` runs `tools/oracle/split_diff.py`, which builds

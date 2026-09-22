@@ -112,13 +112,25 @@ typedef struct GRX_Match GRX_Match;
  * know, and so belongs to the search rather than to the regex. A caller
  * feeding one buffer in pieces, or searching one field of a larger record,
  * needs all of them; a caller with a whole string in hand needs none.
+ *
+ * **NOTBOL and NOTEOL are about lines, not about the subject.** They
+ * suppress `^` and `$` and leave `\A`, `\Z`, `\z` and GNU's `` \` `` and
+ * `\'` alone, which is what both references that have these flags do:
+ * PCRE2_NOTBOL "does not affect \A" in as many words, PCRE2_NOTEOL says the
+ * same of `\Z` and `\z`, and glibc's REG_NOTBOL and REG_NOTEOL leave the
+ * GNU buffer anchors standing. The distinction matters because a caller
+ * feeding a buffer in pieces means "this piece is not the whole text" - and
+ * the subject anchors are asking about the *buffer*, which is the one thing
+ * the caller has not called into question.
  */
 typedef enum {
   GRX_SEARCH_NONE = 0,                  ///< No flags.
   GRX_SEARCH_NOTBOL = GRX_BIT(0),       ///< Offset 0 is not the start of a
-                                        ///< line, so `^` and `\A` fail there.
+                                        ///< line, so `^` fails there. Not
+                                        ///< `\A`; see the note above.
   GRX_SEARCH_NOTEOL = GRX_BIT(1),       ///< The end is not the end of a line,
-                                        ///< so `$`, `\Z` and `\z` fail there.
+                                        ///< so `$` fails there. Not `\Z` or
+                                        ///< `\z`; see the note above.
   GRX_SEARCH_NOTEMPTY = GRX_BIT(2),     ///< An empty match is not a match.
   GRX_SEARCH_NOTEMPTY_ATSTART = GRX_BIT(3), ///< An empty match is not a match
                                         ///< when it begins at `begin`.

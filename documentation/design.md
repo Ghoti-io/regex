@@ -495,8 +495,13 @@ request (§7) that adds what the scaffold lacks:
   with lookbehind still able to see before `start` and `$` still meaning the
   end of the buffer unless told otherwise. This is what makes iteration and
   "search this field of a larger record" correct without copying.
-- **`NOTBOL` / `NOTEOL`:** `^` and `$` do not match at the window edges,
-  for a caller feeding a buffer in pieces.
+- **`NOTBOL` / `NOTEOL`:** `^` and `$` do not match at the subject's two
+  ends, for a caller feeding a buffer in pieces. The subject's ends and not
+  the *window's*: `begin` says where a match may start, and a `^` suppressed
+  there would make a search-all loop report a different answer on its second
+  call than on its first. And `^` and `$` only - `\A`, `\Z`, `\z` and GNU's
+  `` \` `` and `\'` stand, which is what PCRE2 and glibc both do and what
+  `tools/oracle/window_diff.py` checks.
 - **`NOTEMPTY` / `NOTEMPTY_ATSTART`:** an empty match is refused (anywhere,
   or at `start`), which is one of the two iteration rules below.
 - **`NO_UTF_CHECK`:** the caller guarantees the subject is valid UTF-8, and

@@ -629,7 +629,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 ####################################################################
 
 # General commands
-.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-diagnostics check-unicode-tables check-oracle-syntax check-oracle-match check-engine-equivalence check-oracle-perl check-oracle-replace check-oracle-split \
+.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-diagnostics check-unicode-tables check-oracle-syntax check-oracle-match check-engine-equivalence check-oracle-perl check-oracle-replace check-oracle-split check-oracle-window \
 	check-oracle-properties check-oracle-numeric-properties \
 	check-oracle-string-properties check-oracle-posix check-oracle-sed \
 	check-oracles \
@@ -673,7 +673,8 @@ check-oracles: ## Run every differential check against the reference implementat
 check-oracles: check-oracle-syntax check-oracle-match check-oracle-properties \
 	check-oracle-numeric-properties check-oracle-string-properties \
 	check-oracle-posix check-oracle-perl check-oracle-sed \
-	check-oracle-replace check-oracle-split check-engine-equivalence
+	check-oracle-replace check-oracle-split check-oracle-window \
+	check-engine-equivalence
 
 check-oracle-properties: ## Compare every Unicode property table against the reference
 check-oracle-properties: $(TOOLS)
@@ -738,6 +739,23 @@ check-oracle-split: $(TOOLS)
 		exit 0; \
 	fi; \
 	python3 tools/oracle/split_diff.py --seed $(ORACLE_SEED)
+
+check-oracle-window: ## Compare the search window and its flags against pcre2
+# The six fields of GRX_SearchOptions that decide an answer - begin, end and
+# the four subject-side flags - sat at one value in every other differential
+# this suite runs. Varying them found that NOTBOL and NOTEOL suppressed the
+# subject anchors as well as the line anchors, which neither PCRE2 nor glibc
+# does.
+check-oracle-window: $(TOOLS)
+	@if ! command -v python3 >/dev/null 2>&1; then \
+		printf "check-oracle-window: skipped (no python3)\n"; \
+		exit 0; \
+	fi; \
+	if [ ! -x "$(PCRE2_MATCH)" ]; then \
+		printf "check-oracle-window: skipped (pcre2 is not available)\n"; \
+		exit 0; \
+	fi; \
+	python3 tools/oracle/window_diff.py --seed $(ORACLE_SEED)
 
 check-oracle-sed: ## Compare the POSIX and GNU replacement templates against sed
 check-oracle-sed: $(TOOLS)

@@ -4,8 +4,9 @@
  * pcre2 as a matching and replacing oracle, in the shape the other drivers
  * here use.
  *
- * With no argument it reads `<flags>\t<pattern hex>\t<subject hex>` lines
- * and writes one answer per line:
+ * With no argument it reads `<flags>\t<pattern hex>\t<subject hex>` lines,
+ * optionally followed by `\t<begin>,<end>,<match flags>`, and writes one
+ * answer per line:
  *
  *   match <start>:<end> ...   one span per group, `-` for a group that is unset
  *   nomatch
@@ -23,6 +24,15 @@
  * The two shapes are grx_match.c's and grx_replace.c's respectively, so one
  * generator can drive either side of a comparison without knowing which
  * implementation is answering.
+ *
+ * The optional window field is grx_match.c's too, and it maps onto pcre2
+ * exactly: `begin` is pcre2_match()'s `startoffset`, `end` is the `length` it
+ * is given, and the letters are PCRE2_NOTBOL, PCRE2_NOTEOL, PCRE2_NOTEMPTY
+ * and PCRE2_NOTEMPTY_ATSTART. That correspondence is the reason a window
+ * differential is possible at all: PCRE2 is the one reference here whose
+ * offsets are bytes and whose `^` means the start of the *subject* rather
+ * than the start of the search, which is what
+ * GRX_SearchOptions::begin also means.
  *
  * Hex for the same reason tools/oracle/grx_match.c uses it: a pattern or a
  * subject may contain a newline, a NUL, or bytes that are not valid UTF-8,
@@ -179,12 +189,11 @@ int main(int argc, char ** argv) {
     if (!second) { continue; }
     *second = '\0';
 
-    char * third = NULL;
-    if (replacing) {
-      third = strchr(second + 1, '\t');
-      if (!third) { continue; }
+    char * third = strchr(second + 1, '\t');
+    if (third) {
       *third = '\0';
     }
+    if (replacing && !third) { continue; }
 
     uint32_t options = options_for(line);
     size_t pattern_length = decode_hex(first + 1, pattern, sizeof pattern);
@@ -233,8 +242,29 @@ int main(int argc, char ** argv) {
       continue;
     }
 
-    int rc = pcre2_match(code, (PCRE2_SPTR)subject, subject_length, 0, 0,
-        data, NULL);
+    size_t begin = 0;
+    size_t end = subject_length;
+    uint32_t match_options = 0;
+    if (third) {
+      char * cursor = third + 1;
+      begin = (size_t)strtoull(cursor, &cursor, 10);
+      if (*cursor == ',') { cursor++; }
+      if (*cursor == '-') { cursor++; }
+      else { end = (size_t)strtoull(cursor, &cursor, 10); }
+      if (*cursor == ',') { cursor++; }
+      for (; *cursor; cursor++) {
+        switch (*cursor) {
+          case 'B': match_options |= PCRE2_NOTBOL; break;
+          case 'E': match_options |= PCRE2_NOTEOL; break;
+          case 'M': match_options |= PCRE2_NOTEMPTY; break;
+          case 'A': match_options |= PCRE2_NOTEMPTY_ATSTART; break;
+          default: break;
+        }
+      }
+    }
+
+    int rc = pcre2_match(code, (PCRE2_SPTR)subject, end, begin,
+        match_options, data, NULL);
     if (rc == PCRE2_ERROR_NOMATCH) {
       printf("nomatch\n");
     }

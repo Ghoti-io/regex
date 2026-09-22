@@ -4,10 +4,17 @@
  * This library, as a matching oracle: reads pattern-and-subject pairs, prints
  * what matched.
  *
- * Each input line is `<flags>\t<pattern hex>\t<subject hex>`, hex for the
- * same reason the syntax oracle uses it: a pattern or a subject may contain a
- * newline, a NUL or a byte sequence that is not valid UTF-8, and the
- * transport should not need an escape of its own.
+ * Each input line is `<flags>\t<pattern hex>\t<subject hex>`, optionally
+ * followed by `\t<begin>,<end>,<search flags>` - the window and the
+ * subject-side flags of GRX_SearchOptions. Hex for the same reason the syntax
+ * oracle uses it: a pattern or a subject may contain a newline, a NUL or a
+ * byte sequence that is not valid UTF-8, and the transport should not need an
+ * escape of its own.
+ *
+ * The window field is optional so that every harness written before it
+ * existed keeps working unchanged. `end` may be `-` for "all of it", and the
+ * search flags are letters: `B` for NOTBOL, `E` for NOTEOL, `M` for NOTEMPTY
+ * and `A` for NOTEMPTY_ATSTART.
  *
  * Each output line is one of:
  *
@@ -25,6 +32,7 @@
 
 #include <ghoti.io/regex/regex.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 /** The longest pattern or subject a line may carry. */
@@ -151,6 +159,15 @@ int main(int argc, char ** argv) {
     }
     *second = '\0';
 
+    // The window, when the harness asked for one. Split off before the
+    // subject is decoded: decode_hex stops at the first byte that is not a
+    // hex digit, so leaving the tab in place would silently hand the engine
+    // a *shorter subject* and report agreement about a different question.
+    char * third = strchr(second + 1, '\t');
+    if (third) {
+      *third = '\0';
+    }
+
     uint32_t options = 0;
     for (const char * f = line; *f; f++) {
       switch (*f) {
@@ -195,6 +212,35 @@ int main(int argc, char ** argv) {
       cached_valid = 1;
     }
 
+    GRX_SearchOptions search;
+    grx_search_options_default(&search);
+    search.engine = engine;
+    if (third) {
+      char * cursor = third + 1;
+      search.begin = (size_t)strtoull(cursor, &cursor, 10);
+      if (*cursor == ',') {
+        cursor++;
+      }
+      if (*cursor == '-') {
+        cursor++;
+      }
+      else {
+        search.end = (size_t)strtoull(cursor, &cursor, 10);
+      }
+      if (*cursor == ',') {
+        cursor++;
+      }
+      for (; *cursor; cursor++) {
+        switch (*cursor) {
+          case 'B': search.flags |= GRX_SEARCH_NOTBOL; break;
+          case 'E': search.flags |= GRX_SEARCH_NOTEOL; break;
+          case 'M': search.flags |= GRX_SEARCH_NOTEMPTY; break;
+          case 'A': search.flags |= GRX_SEARCH_NOTEMPTY_ATSTART; break;
+          default: break;
+        }
+      }
+    }
+
     GRX_Match * match = NULL;
     if (grx_match_create(regex, NULL, &match) != GRX_OK) {
       printf("error oom\n");
@@ -202,8 +248,8 @@ int main(int argc, char ** argv) {
     }
 
     int matched = 0;
-    GRX_Result result = grx_regex_search(
-        regex, subject, subject_length, 0, engine, NULL, match, &matched);
+    GRX_Result result = grx_regex_search_ex(
+        regex, subject, subject_length, &search, match, &matched);
 
     if (result == GRX_ERR_UNSUPPORTED) {
       printf("unsupported\n");

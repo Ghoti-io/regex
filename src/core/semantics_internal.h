@@ -120,9 +120,17 @@ extern "C" {
  * know which dialect it is running.
  */
 typedef enum {
-  GRX_ASSERT_START_SUBJECT = 0, ///< `\A`, and `^` without multiline.
+  /**
+   * `\A`, and `^` without multiline.
+   *
+   * Two spellings of one position, which is why they are one kind - and
+   * GRX_INST_LINE_ANCHOR is what tells them apart, because
+   * GRX_SEARCH_NOTBOL reaches the `^` spelling and not the `\A` one. The
+   * next two kinds are each shared the same way.
+   */
+  GRX_ASSERT_START_SUBJECT = 0,
   GRX_ASSERT_END_SUBJECT,       ///< `\z`, and `$` where it means the end.
-  GRX_ASSERT_END_BEFORE_NEWLINE, ///< `\Z`: the end, or before a final newline.
+  GRX_ASSERT_END_BEFORE_NEWLINE, ///< `\Z`, and `$` before a final newline.
   GRX_ASSERT_START_LINE,        ///< `^` with multiline; uses the newline set.
   /**
    * `^` with multiline, except after a newline that ends the subject.

@@ -753,14 +753,23 @@ static int read_backward(const Backtrack * bt, size_t position,
  * A flag about the *caller's* subject, so it says nothing about the start of
  * a scan-substring window: inside one, `^` holds because the substring is
  * the subject there, and PCRE2_NOTBOL was about a different string.
+ *
+ * And a flag about a *line*, so it says nothing about `\A`, which shares a
+ * kind with `^` here. PCRE2_NOTBOL states that it does not affect `\A`, and
+ * glibc's REG_NOTBOL leaves GNU's `` \` `` alone; GRX_INST_LINE_ANCHOR is
+ * which of the two spellings produced this instruction.
  */
-static int at_subject_start_suppressed(const Backtrack * bt) {
-  return bt->request->not_bol && !bt->window_start;
+static int at_subject_start_suppressed(
+    const Backtrack * bt, const GRX_Inst * inst) {
+  return bt->request->not_bol && !bt->window_start
+      && (inst->flags & GRX_INST_LINE_ANCHOR);
 }
 
 /** The same for the end, and PCRE2_NOTEOL. */
-static int at_subject_end_suppressed(const Backtrack * bt) {
-  return bt->request->not_eol && bt->window_end == bt->request->length;
+static int at_subject_end_suppressed(
+    const Backtrack * bt, const GRX_Inst * inst) {
+  return bt->request->not_eol && bt->window_end == bt->request->length
+      && (inst->flags & GRX_INST_LINE_ANCHOR);
 }
 
 static int in_class(const Backtrack * bt, uint32_t index, uint32_t codepoint) {
@@ -784,11 +793,11 @@ static int assertion_holds(
   // switch in exec_pike.c, which this one has to agree with exactly.
   switch ((GRX_AssertKind)inst->mode) {
     case GRX_ASSERT_START_SUBJECT:
-      return position == bt->window_start && !at_subject_start_suppressed(bt);
+      return position == bt->window_start && !at_subject_start_suppressed(bt, inst);
     case GRX_ASSERT_END_SUBJECT:
-      return position == bt->window_end && !at_subject_end_suppressed(bt);
+      return position == bt->window_end && !at_subject_end_suppressed(bt, inst);
     case GRX_ASSERT_END_BEFORE_NEWLINE:
-      if (at_subject_end_suppressed(bt)) {
+      if (at_subject_end_suppressed(bt, inst)) {
         return 0;
       }
       if (position == bt->window_end) {
@@ -797,17 +806,17 @@ static int assertion_holds(
       return has_after && in_class(bt, inst->x, after)
           && position + width == bt->window_end;
     case GRX_ASSERT_START_LINE:
-      return (position == bt->window_start && !at_subject_start_suppressed(bt))
+      return (position == bt->window_start && !at_subject_start_suppressed(bt, inst))
           || (has_before && in_class(bt, inst->x, before));
 
     case GRX_ASSERT_START_LINE_INTERIOR:
       // The same, less the position after a newline that ends the
       // subject: there is no line there to be at the start of.
-      return (position == bt->window_start && !at_subject_start_suppressed(bt))
+      return (position == bt->window_start && !at_subject_start_suppressed(bt, inst))
           || (position != bt->window_end && has_before
               && in_class(bt, inst->x, before));
     case GRX_ASSERT_END_LINE:
-      return (position == bt->window_end && !at_subject_end_suppressed(bt))
+      return (position == bt->window_end && !at_subject_end_suppressed(bt, inst))
           || (has_after && in_class(bt, inst->x, after));
     case GRX_ASSERT_WORD_BOUNDARY:
     case GRX_ASSERT_NOT_WORD_BOUNDARY:

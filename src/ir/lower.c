@@ -934,9 +934,14 @@ static GRX_Result lower_anchor(
   GRX_AssertKind kind;
   int needs_newlines = 0;
   int needs_word = 0;
+  // `^` and `$` only. Three of the kinds below are reached by two spellings
+  // each - `^` and `\A`, `$` and `\z`, `$` and `\Z` - and the caller's
+  // NOTBOL/NOTEOL apply to one spelling of each pair; see GRX_IR_LINE_ANCHOR.
+  int line_anchor = 0;
 
   switch ((GRX_AnchorKind)node->a) {
     case GRX_ANCHOR_CARET:
+      line_anchor = 1;
       if (multiline(low)) {
         kind = low->profile.caret_after_final_newline
             ? GRX_ASSERT_START_LINE : GRX_ASSERT_START_LINE_INTERIOR;
@@ -948,6 +953,7 @@ static GRX_Result lower_anchor(
       break;
 
     case GRX_ANCHOR_DOLLAR:
+      line_anchor = 1;
       if (multiline(low) || low->profile.dollar == GRX_DOLLAR_ALWAYS_LINE) {
         kind = GRX_ASSERT_END_LINE;
         needs_newlines = 1;
@@ -1047,6 +1053,9 @@ static GRX_Result lower_anchor(
   GRX_IRNode * assertion = grx_ir_node(low->ir, *out_node);
   assertion->mode = (uint8_t)kind;
   assertion->a = class_index;
+  if (line_anchor) {
+    assertion->flags |= GRX_IR_LINE_ANCHOR;
+  }
   return GRX_OK;
 }
 

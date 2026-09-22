@@ -45,11 +45,12 @@ public:
   /**
    * Put the program on a different dialect's iteration rule.
    *
-   * ECMAScript is the only dialect with a front end, so the other two rules
-   * have no pattern that can reach them from outside. The rule is a field of
-   * the compiled program precisely so that the engines never ask which
-   * dialect they are running, and setting that field is therefore the whole
-   * of what a Perl or Go pattern would do differently here.
+   * The rule is a field of the compiled program precisely so that the
+   * engines never ask which dialect they are running, and setting that field
+   * is therefore the whole of what a Go or Rust pattern would do differently
+   * here. Perl and PCRE2 have front ends now and could be compiled instead;
+   * this stays because GRX_ITERATE_ADVANCE_SKIP_ABUTTING still has no
+   * spelling anywhere.
    */
   void set_iteration(GRX_IterationRule rule) { regex_->program.iteration = rule; }
 
@@ -352,6 +353,58 @@ TEST(SearchFlags, NotbolAndNoteolLeaveLineAnchorsAlone) {
                 mdollar.get(), &matched),
       GRX_OK);
   EXPECT_EQ(span_of(mdollar.get(), matched), "0..1");
+}
+
+TEST(SearchFlags, NotbolAndNoteolDoNotReachTheSubjectAnchors) {
+  // `\A` and `^` without multiline mean the same position, and so do `\z`
+  // and `$`, and `\Z` and `$`; the IR gives each pair one kind because
+  // under an ordinary whole-subject search they are the same assertion.
+  // These flags are exactly when they stop being the same: PCRE2_NOTBOL
+  // "does not affect \A" in as many words, PCRE2_NOTEOL leaves `\Z` and
+  // `\z` alone, and glibc's REG_NOTBOL/REG_NOTEOL leave GNU's `` \` `` and
+  // `\'` alone. Two references, one rule, and this library suppressed all
+  // six spellings until a generated comparison against pcre2 asked.
+  struct Row {
+    const char * pattern;
+    uint32_t flags;
+    bool matches;
+  };
+  static const Row rows[] = {
+    {"\\Aa", GRX_SEARCH_NOTBOL, true},
+    {"^a", GRX_SEARCH_NOTBOL, false},
+    {"c\\z", GRX_SEARCH_NOTEOL, true},
+    {"c\\Z", GRX_SEARCH_NOTEOL, true},
+    {"c$", GRX_SEARCH_NOTEOL, false},
+    // Both flags at once, so that neither is being read in place of the
+    // other, and both anchors in one pattern so the program holds two
+    // instructions of the same kind with different flag bits.
+    {"\\Aabc\\z", GRX_SEARCH_NOTBOL | GRX_SEARCH_NOTEOL, true},
+    {"^abc$", GRX_SEARCH_NOTBOL | GRX_SEARCH_NOTEOL, false},
+    {"\\Aabc$", GRX_SEARCH_NOTBOL | GRX_SEARCH_NOTEOL, false},
+    {"^abc\\z", GRX_SEARCH_NOTBOL | GRX_SEARCH_NOTEOL, false},
+  };
+
+  for (const Row & row : rows) {
+    for (GRX_Engine engine : {GRX_ENGINE_PIKE, GRX_ENGINE_BACKTRACK}) {
+      GRX_Regex * regex = nullptr;
+      ASSERT_EQ(grx_regex_compile(row.pattern, GRX_SYNTAX_PERL, 0, &regex),
+          GRX_OK) << row.pattern;
+
+      GRX_SearchOptions options;
+      grx_search_options_default(&options);
+      options.flags = row.flags;
+      options.engine = engine;
+
+      int matched = 0;
+      EXPECT_EQ(grx_regex_search_ex(regex, "abc", 3, &options, nullptr,
+                    &matched),
+          GRX_OK) << row.pattern;
+      EXPECT_EQ(matched != 0, row.matches)
+          << "/" << row.pattern << "/ with flags " << row.flags
+          << " on engine " << (int)engine;
+      grx_regex_free(regex);
+    }
+  }
 }
 
 TEST(SearchFlags, BothEnginesAgreeOnNotbolAndNoteol) {
