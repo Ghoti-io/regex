@@ -1911,6 +1911,23 @@ static GRX_Result read_option_letters(GRX_Parser * parser, size_t start,
     clear = (clear & ~both) | (both & ~wanted);
   }
 
+  if (reset) {
+    // `^` is a reset applied *before* the letters, not a clear competing
+    // with them: `(?^i:a)` is "defaults, then caseless" and matches "A" in
+    // both references. The caller applies these as
+    // `(options | set) & ~clear`, so leaving `i` in both made the clear win
+    // and `(?^i:...)` silently mean `(?^:...)` - the one form of this
+    // construct that this library got wrong, found by generating patterns
+    // rather than by reading the grammar.
+    //
+    // Safe to do here rather than at the application site because the two
+    // cannot both be explicit: a `-` after `^` is refused above, as it is by
+    // pcre2 ("invalid hyphen in option setting") and by perl ("sequence
+    // (?^i-...) not recognized"). So when `reset` is set, `clear` is the
+    // reset mask and nothing else.
+    clear &= ~set;
+  }
+
   *out_set = set;
   *out_clear = clear;
   return GRX_OK;

@@ -572,7 +572,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 ####################################################################
 
 # General commands
-.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-diagnostics check-unicode-tables check-oracle-syntax check-oracle-match check-engine-equivalence \
+.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-diagnostics check-unicode-tables check-oracle-syntax check-oracle-match check-engine-equivalence check-oracle-perl \
 	check-oracle-properties check-oracle-numeric-properties \
 	check-oracle-string-properties check-oracle-posix check-oracle-sed \
 	check-oracles \
@@ -615,7 +615,8 @@ tools: $(APP_DIR)/$(TARGET) $(TOOLS)
 check-oracles: ## Run every differential check against the reference implementation
 check-oracles: check-oracle-syntax check-oracle-match check-oracle-properties \
 	check-oracle-numeric-properties check-oracle-string-properties \
-	check-oracle-posix check-oracle-sed check-engine-equivalence
+	check-oracle-posix check-oracle-perl check-oracle-sed \
+	check-engine-equivalence
 
 check-oracle-properties: ## Compare every Unicode property table against the reference
 check-oracle-properties: $(TOOLS)
@@ -634,6 +635,18 @@ check-oracle-numeric-properties: $(TOOLS)
 	fi; \
 	python3 tools/oracle/numeric_property_diff.py \
 		--driver $(APP_DIR)/tools/grx_properties
+
+check-oracle-perl: ## Compare the Perl front end against perl, on generated patterns
+# WP-20's missing half. The rates were measured against two imported corpora;
+# this generates the patterns instead, which is what found `(?^i:...)`
+# dropping the letter after the reset.
+check-oracle-perl: $(TOOLS)
+	@if ! command -v perl >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then \
+		printf "check-oracle-perl: skipped (no perl or no python3)\n"; \
+		exit 0; \
+	fi; \
+	python3 tools/oracle/perl_diff.py --seed $(ORACLE_SEED) \
+		--patterns $(ORACLE_PATTERNS)
 
 check-oracle-posix: ## Compare the POSIX and GNU front ends against glibc
 check-oracle-posix: $(TOOLS)

@@ -323,6 +323,38 @@ TEST(Perl, TheCaretResetFormRefusesAHyphen) {
   grx_regex_free(hyphen.regex);
 }
 
+TEST(Perl, TheCaretResetAppliesTheLettersThatFollowIt) {
+  // `^` resets the modifiers to the dialect's defaults and *then* the
+  // letters after it apply, so `(?^i:a)` is caseless and matches "A". Both
+  // references agree, and this library did not: the reset put `i` into the
+  // clear mask, the letter put it into the set mask, and the caller applied
+  // them as `(options | set) & ~clear`, so the clear won and `(?^i:...)`
+  // silently meant `(?^:...)`.
+  //
+  // The test above it says `(?^i)` *compiles*, which is what let this sit:
+  // asking whether a construct is accepted is not asking whether it works.
+  // It took generating patterns and asking perl - tools/oracle/perl_diff.py
+  // - to notice, because no imported corpus has the form.
+  EXPECT_TRUE(search("(?^i:a)", "A").matched);
+  EXPECT_TRUE(search("(?^i)a", "A").matched);
+  EXPECT_TRUE(search("(?^s:a.b)", "a\nb").matched);
+  EXPECT_TRUE(search("^(?^m:a$)", "a\nb", GRX_SYNTAX_PCRE, "m").matched);
+
+  // And the reset itself still resets: without a letter after it, an option
+  // set outside is gone inside.
+  EXPECT_FALSE(search("(?i)(?^:a)", "A").matched);
+  EXPECT_FALSE(search("(?^:a)", "A", GRX_SYNTAX_PCRE, "i").matched);
+
+  // A reset that names one letter does not carry the others in with it.
+  EXPECT_FALSE(search("(?i)(?^s:a)", "A").matched);
+
+  // An explicit `-` still beats an earlier letter, which is why the fix is
+  // not "set always wins": `(?i-i:a)` does not match "A" in either
+  // reference. The two cannot both be explicit - a hyphen after `^` is
+  // refused, see the test above - so they never have to be reconciled.
+  EXPECT_FALSE(search("(?i-i:a)", "A").matched);
+}
+
 TEST(Perl, DuplicateNamesNeedJOrABranchReset) {
   Attempt plain = compile("(?<a>x)(?<a>y)");
   EXPECT_NE(plain.result, GRX_OK);

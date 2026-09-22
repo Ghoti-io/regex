@@ -427,6 +427,42 @@ Also fixed there: `tools/oracle/grx_match.c` had no name for the bit-state
 engine and printed `?`, which is what turned the first run of the extended
 check into 1,304 spurious disagreements.
 
+### The Perl differential
+
+`make check-oracle-perl` runs `tools/oracle/perl_diff.py`, which builds
+patterns from an atom vocabulary and puts them through
+`tools/corpus/perl_match.pl` and this library side by side. perl is the
+definition of `GRX_SYNTAX_PERL` the way glibc is the definition of `gnu-bre`,
+so one oracle decides and there is no agreement to take.
+
+It exists because a corpus is a set of questions somebody already knew to
+ask. The POSIX differential is the standing example - the corpus was at 100%
+while `a|ab` against "ab" answered 0-1 in four shipped dialects, because
+every alternation in it happened to have branches of the same length. This
+one found `(?^i:...)` dropping the letter after the reset, a construct that
+appears in neither `testinput1`, `testinput2` nor `re_tests`.
+
+The vocabulary includes ill-formed atoms for the reason
+[posix_diff.py](../tools/oracle/posix_diff.py) does: without them nothing is
+ever *refused*, and the accept-versus-reject half of the comparison reports
+zero having never been asked. Roughly a third of generated patterns are
+rejected by perl, and the two agree on every one.
+
+Two things the transport cannot carry, both recorded in the file rather than
+left as silence. `\Q...\E` is double-quotish processing that happens when
+perl tokenises its *source*, so a pattern arriving in a variable - the only
+way a driver can pass one - never goes through it, and `qr/$p/` with `$p`
+holding `\Qa.b\E` matches nothing at all; the construct is checked in
+`tests/unit/test_perl.cpp` instead. And `x` is left out of the flag sweep
+because `grx_match.c` maps flag letters to `GRX_Option` bits and has no
+extended-mode bit among them, so a row with `x` would ask perl one question
+and this library another.
+
+There is no pcre2 equivalent. `pcre2test` reports matched text rather than
+offsets and omits a trailing unset group, and this machine has libpcre2-8
+without its header, so the driver shape the other oracles use is not
+available. The foot of `perl_diff.py` says so.
+
 ### The properties of strings
 
 `make check-oracle-string-properties` runs

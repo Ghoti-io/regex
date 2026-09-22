@@ -300,10 +300,28 @@ verbs with their exact backtracking semantics, `\G`. *Done:* `testinput1`
 and `testinput2` match vectors pass on the backtracker; bit-state and Pike
 equivalence holds on their eligible subsets. *Depends on:* WP-08, WP-18.
 
-**WP-20 PCRE2 and Perl conformance.** *conformance, M.* The pcre2test
-format converter of [testing.md](testing.md) §7; Perl's `re_tests`
-converter; both run through their oracles; random-pattern generation for
-the Perl family. *Done:* rates published. *Depends on:* WP-04.
+**WP-20 PCRE2 and Perl conformance.** *conformance, M.* **Landed** for
+perl. The pcre2test format converter of [testing.md](testing.md) §7; Perl's
+`re_tests` converter; both run through their oracles; random-pattern
+generation for the Perl family. *Done:* rates published. *Depends on:*
+WP-04.
+
+The random-pattern generation was the last piece and it earned its place
+immediately. `tools/oracle/perl_diff.py` puts generated patterns through
+`tools/corpus/perl_match.pl` and this library side by side, and found
+`(?^i:...)` applying the reset and dropping the letter after it: `^` put
+`i` into the clear mask, the `i` put it into the set mask, and the caller
+applied them as `(options | set) & ~clear`, so the clear won and the
+construct silently meant `(?^:...)`. Neither imported corpus contains `(?^`
+at all, which is the argument for a generator in one line. There was already
+a test saying `(?^i)` compiles; asking whether a construct is accepted is
+not asking whether it works.
+
+`GRX_SYNTAX_PCRE` has no generated comparison. pcre2 is its definition and
+`pcre2test` is here, but it reports matched *text* rather than offsets and
+this machine has no `pcre2.h` to link a driver against, so the shape the
+other oracles use is not available for it. `perl_diff.py` says so at the
+foot of the file rather than implying its coverage extends there.
 
 **WP-21 The Perl profile.** *front ends, S.* The differences from PCRE2 in
 [dialects.md](dialects.md) §9 "Perl"; the folding deviation recorded;
