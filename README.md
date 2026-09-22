@@ -187,7 +187,7 @@ Nothing is allocated for the caller to free on a failing call.
 | Conditionals, recursion and subroutine calls, `\K`, the control verbs | working - on the backtracking engine, which is the only one that can run them |
 | Bit-state engine | working - the backtracker with a memo, and the linear bound back |
 | Search window, NOTBOL/NOTEOL/NOTEMPTY, `grx_regex_search_next()` | working - generated against pcre2 and against perl's own loop |
-| `grx_regex_replace()` and `grx_regex_split()` | working - ECMAScript's, PCRE2's, Perl's and sed's template grammars, and ECMAScript's split rule for every dialect (dialects.md section 5.16) |
+| `grx_regex_replace()` and `grx_regex_split()` | working - ECMAScript's, PCRE2's, Perl's and sed's template grammars; splitting is a per-dialect axis, perl's own and ECMAScript's for the rest (dialects.md section 5.16) |
 | `grx_pattern_lint()`, the JSON Schema subset check | working |
 | Limits | measured, not guessed; dialects.md section 7 |
 | The `text` seam for JSON Schema | working - `pattern` and `patternProperties` validate through this library |
