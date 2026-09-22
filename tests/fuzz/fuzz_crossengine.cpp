@@ -33,6 +33,8 @@
 
 #include <ghoti.io/regex/regex.h>
 
+#include "fuzz_syntax.h"
+
 namespace {
 
 /** Report a disagreement in full, then stop. */
@@ -93,10 +95,24 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t * data, size_t size) {
   limits.max_steps = 2000000;
   limits.max_backtrack = 100000;
 
+  // The dialect is part of the question, not a constant. This harness asks
+  // whether two engines agree about one program, and which program a pattern
+  // becomes is exactly what a dialect decides - so an ECMAScript-only
+  // harness cannot reach a lowering that only another dialect selects. The
+  // character-class full fold is the case that made this concrete: it emits
+  // an alternation under GRX_FOLD_FULL, which only the Perl profile chooses,
+  // so the harness whose job is "did the engines diverge" was structurally
+  // blind to it.
+  // Bits 5-7: 0-2 are the option flags and 3-4 are the UnicodeSets quarter,
+  // so the dialect takes the three the selector has left. Sharing a bit with
+  // `v` mode would tie the two together and leave some dialects that can
+  // never be read with it and some that always are.
+  GRX_Syntax syntax = fuzz_pick_syntax((uint32_t)selector >> 5);
+
   GRX_Regex * regex = nullptr;
   if (grx_regex_compile_with_allocator(
           reinterpret_cast<const char *>(data), pattern_size,
-          GRX_SYNTAX_ECMASCRIPT, options, &limits, nullptr, nullptr, &regex)
+          syntax, options, &limits, nullptr, nullptr, &regex)
           != GRX_OK
       || !regex) {
     return 0;

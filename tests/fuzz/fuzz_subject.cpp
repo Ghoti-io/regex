@@ -25,6 +25,8 @@
 
 #include <ghoti.io/regex/regex.h>
 
+#include "fuzz_syntax.h"
+
 namespace {
 
 /**
@@ -95,6 +97,20 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t * data, size_t size) {
     size--;
   }
 
+  // A second byte for the dialect, rather than more bits of the first: every
+  // bit of `selector` is already spoken for - 0-1 gate the UnicodeSets
+  // branch, 5, 6 and 7 the options and the limits, and the pattern index
+  // reuses what is left through a shift - so folding the dialect in would
+  // have tied it to one of those. A campaign that pins GRX_FUZZ_SYNTAX never
+  // reads this byte at all.
+  uint8_t dialect_selector = 0;
+  if (size) {
+    dialect_selector = data[0];
+    data++;
+    size--;
+  }
+  GRX_Syntax syntax = fuzz_pick_syntax(dialect_selector);
+
   // Both budgets are small, and deliberately. The default max_steps is ten
   // million, and this harness runs every input on both engines and both
   // entry points - so one adversarial subject against the backtracker costs
@@ -119,7 +135,11 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t * data, size_t size) {
   // One input in four takes the UnicodeSets list, which needs the flag as
   // well as the pattern.
   const char * pattern;
-  if ((selector & 0x03) == 0x03) {
+  // UnicodeSets is ECMAScript's `v`, so the branch is only taken when that is
+  // the dialect in hand. Offering it to the others would ask for a grammar
+  // they do not have and spend those inputs on a refusal at the first call -
+  // which is the same waste GRX_FUZZ_SYNTAX exists to stop.
+  if ((selector & 0x03) == 0x03 && syntax == GRX_SYNTAX_ECMASCRIPT) {
     options |= GRX_OPT_UNICODE_SETS;
     pattern = kSetsPatterns[(selector >> 2) % kSetsPatternCount];
   }
@@ -131,7 +151,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t * data, size_t size) {
   grx_error_clear(&error);
   GRX_Regex * regex = nullptr;
   if (grx_regex_compile_with_allocator(pattern, std::strlen(pattern),
-          GRX_SYNTAX_ECMASCRIPT, options, &limits, nullptr, &error, &regex)
+          syntax, options, &limits, nullptr, &error, &regex)
           != GRX_OK
       || !regex) {
     return 0;

@@ -21,52 +21,8 @@
 
 #include <ghoti.io/regex/regex.h>
 
-/**
- * The dialects with a front end, which is what most of a campaign should
- * spend its inputs on.
- *
- * Named rather than derived: a dialect joins this list when it has a reader,
- * and a list that walked GRX_SYNTAX_COUNT would quietly spend seven-eighths
- * of the run on dialects that refuse every pattern at the first call.
- */
-static const GRX_Syntax kBuiltSyntaxes[] = {
-  GRX_SYNTAX_ECMASCRIPT,
-  GRX_SYNTAX_PERL,
-  GRX_SYNTAX_PCRE,
-  GRX_SYNTAX_POSIX_BRE,
-  GRX_SYNTAX_POSIX_ERE,
-  GRX_SYNTAX_GNU_BRE,
-  GRX_SYNTAX_GNU_ERE,
-};
-static const size_t kBuiltSyntaxCount
-    = sizeof(kBuiltSyntaxes) / sizeof(kBuiltSyntaxes[0]);
+#include "fuzz_syntax.h"
 
-/** GRX_FUZZ_SYNTAX, read once. */
-static GRX_Syntax forced = GRX_SYNTAX_COUNT;
-static int forced_read = 0;
-
-static void read_forced(void) {
-  forced_read = 1;
-  const char * name = getenv("GRX_FUZZ_SYNTAX");
-  if (!name || !*name) {
-    return;
-  }
-  if (grx_syntax_from_name(name, &forced) != GRX_OK) {
-    fprintf(stderr, "GRX_FUZZ_SYNTAX: unknown dialect %s\n", name);
-    abort();
-  }
-}
-
-static int forced_syntax_is_set(void) {
-  if (!forced_read) {
-    read_forced();
-  }
-  return forced != GRX_SYNTAX_COUNT;
-}
-
-static GRX_Syntax forced_syntax(void) {
-  return forced;
-}
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t * data, size_t size) {
   // The first byte selects the dialect and the limits, so that the capped
@@ -91,21 +47,22 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t * data, size_t size) {
     //
     // *Which* dialects have a front end changed and this did not: it sent
     // seven inputs in eight to ECMAScript for as long as ECMAScript was the
-    // only one built, and went on doing it through WP-18 and WP-23. Six are
-    // built now and they share those seven-eighths, so each gets about an
-    // eighth of the campaign rather than a thirty-second of it.
+    // only one built, and went on doing it through WP-18 and WP-23. Seven
+    // are built now - the count said six while the list held seven - and
+    // they share those seven-eighths, so each gets about an eighth of the
+    // campaign rather than a thirty-second of it.
     //
     // GRX_FUZZ_SYNTAX pins one by name, which is what plan.md section 4's
     // fourth condition - "the pattern fuzzer has run eight hours clean with
     // the dialect selected" - needs in order to be a thing anyone can do.
-    if (forced_syntax_is_set()) {
-      syntax = forced_syntax();
+    if (fuzz_syntax_is_pinned()) {
+      syntax = fuzz_pick_syntax(0);
     }
     else if ((selector & 0x07) == 0) {
       syntax = (GRX_Syntax)((selector >> 3) % (unsigned)GRX_SYNTAX_COUNT);
     }
     else {
-      syntax = kBuiltSyntaxes[(selector >> 3) % kBuiltSyntaxCount];
+      syntax = fuzz_pick_syntax((uint32_t)selector >> 3);
     }
     if (selector & 0x40) {
       limits.max_nesting_depth = 8;
