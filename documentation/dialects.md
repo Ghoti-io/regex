@@ -351,9 +351,10 @@ that was *entered and failed*. The unrolled form disagrees too:
 it is not simply "a failed attempt clears what it touched".
 
 No single rule this page could write covers all four, and a rule nobody can
-state is a rule this library will not implement. The nineteen records in
+state is a rule this library will not implement. The two records in
 `tests/data/vectors/known-gaps.txt` that turn on it are named for the
-question rather than for an answer.
+question rather than for an answer, and the minimal pair in §5.17 is
+why they stay that way.
 
 ### 5.6 Backreferences to unset groups; forward and nested references
 
@@ -769,7 +770,11 @@ whole assertion puts them back; what the value changes is whether the
 assertion itself does. What it does *not* settle is what the last write was
 when the body's failing part is a loop — see
 `tests/data/vectors/known-gaps.txt`, where four records turn on where Perl's
-own engine happens to restore an offset rather than on any rule.
+own engine happens to restore an offset rather than on any rule. The minimal
+pair is `(?!(a){2}$)` and `(?!(aa){2}$)` against "aaa": perl discards the
+write for the first and keeps it for the second, which is the width of the
+repeated body selecting between repeat opcodes and not a rule a second engine
+can follow. It is not settled here either - see §6.
 
 ### 5.18 The POSIX and GNU grammars
 
@@ -868,7 +873,7 @@ to be complete for every shipped tier.
 | Perl | `(?{ })`, `(??{ })`, `\N{name}` by name | code execution; name table size | `GRX_ERR_UNSUPPORTED` |
 | PCRE2 | `(?{ })` is not a construct it has at all | pcre2test: "unrecognized character after (? or (?-" | `GRX_ERR_SYNTAX` |
 | Perl | `(?[ ])` is PCRE2's grammar only | Perl's nests and takes different operands; a shared reader would accept neither exactly | `GRX_ERR_SYNTAX` |
-| Perl | A capture set inside a *failed* negative lookahead is discarded | PCRE2 discards it and ECMA-262 22.2.2.4 says to; Perl keeps it | - |
+| Perl | Where a failed negative lookaround's body stopped *part way through an iteration*, which of its writes stand follows this library's lowering | §5.17 is followed as written - Perl keeps, ECMAScript and PCRE2 discard - but "what the body last wrote" is only well defined if the body failed between iterations. Perl decides it on the width of the repeated body and so answers `((a){2})+` and `((aa){2})+` differently; here it depends on whether the failure fell before or after the per-iteration slot reset. On `(?!(a){2}$)` against "aaa" that reports group 1 as 1-2 where perl and pcre2test both report it unset. Undecided rather than chosen | - |
 | PCRE2 | Callouts `(?C...)` are read and have no effect | no callback API; a callout with no function registered changes no match, so accepting it answers the same question | - |
 | PCRE2 | `(*script_run:`, `(*sr:`, `(*asr:` | each constrains what its body may match and an ordinary group does not | `GRX_ERR_UNSUPPORTED` — except as a conditional's *condition*, where pcre2test refuses every one of them too ("atomic assertion expected after `(?(`"), so `(?(*script_run:x)y)` is `GRX_ERR_SYNTAX` |
 | PCRE2, Perl | `\C`, one code unit | the subject here is code points, and a construct that can land inside a character has no honest approximation | `GRX_ERR_UNSUPPORTED` |
