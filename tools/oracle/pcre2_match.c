@@ -1,15 +1,28 @@
 /**
  * @file
  *
- * pcre2 as a matching oracle, in the shape the other drivers here use.
+ * pcre2 as a matching and replacing oracle, in the shape the other drivers
+ * here use.
  *
- * Reads `<flags>\t<pattern hex>\t<subject hex>` lines and writes one answer
- * per line:
+ * With no argument it reads `<flags>\t<pattern hex>\t<subject hex>` lines
+ * and writes one answer per line:
  *
  *   match <start>:<end> ...   one span per group, `-` for a group that is unset
  *   nomatch
  *   compile                   the pattern was refused
  *   skip <reason>             the driver declines to answer
+ *
+ * With `replace` it reads a fourth field, the template, and writes:
+ *
+ *   ok <count> <result hex>   the subject with every match replaced, and
+ *                             how many replacements that was
+ *   compile                   the pattern was refused
+ *   template                  the template was refused
+ *   skip <reason>             the driver declines to answer
+ *
+ * The two shapes are grx_match.c's and grx_replace.c's respectively, so one
+ * generator can drive either side of a comparison without knowing which
+ * implementation is answering.
  *
  * Hex for the same reason tools/oracle/grx_match.c uses it: a pattern or a
  * subject may contain a newline, a NUL, or bytes that are not valid UTF-8,
@@ -92,10 +105,61 @@ static uint32_t options_for(const char * flags) {
   return options;
 }
 
-int main(void) {
-  static char line[2 * (MAX_PATTERN + MAX_SUBJECT) + 64];
+/**
+ * Replace every match, and print the result.
+ *
+ * PCRE2_SUBSTITUTE_GLOBAL because grx_replace is given GRX_REPLACE_GLOBAL,
+ * and PCRE2_SUBSTITUTE_UNSET_EMPTY is deliberately *not* set: without it a
+ * reference to a group that did not participate is an error, which is what
+ * pcre2's own default is and therefore what the dialect this library calls
+ * `pcre` has to be measured against.
+ *
+ * The output buffer is grown once on PCRE2_ERROR_NOMEMORY rather than sized
+ * by a guess, because a template may multiply the subject - `$&$&$&` on a
+ * subject of a thousand matches is not a length anybody can predict.
+ */
+static void do_replace(pcre2_code * code, const char * subject,
+    size_t subject_length, const char * template, size_t template_length) {
+  static PCRE2_UCHAR out[4 * (MAX_SUBJECT + MAX_PATTERN)];
+  PCRE2_SIZE length = sizeof out / sizeof out[0];
+
+  int rc = pcre2_substitute(code, (PCRE2_SPTR)subject, subject_length, 0,
+      PCRE2_SUBSTITUTE_GLOBAL, NULL, NULL, (PCRE2_SPTR)template,
+      template_length, out, &length);
+
+  if (rc == PCRE2_ERROR_NOMEMORY) {
+    printf("skip toolong\n");
+    return;
+  }
+  if (rc < 0) {
+    // Every remaining negative is pcre2 refusing the *template*: a bad
+    // `$` form, a reference to a group the pattern has not got, an
+    // unterminated `${`. A match-time failure cannot reach here, because
+    // "no match" is a successful substitution of nothing.
+    printf("template\n");
+    return;
+  }
+
+  // The substitution *count*, which pcre2_substitute() returns and nothing
+  // else here reports. It is what says whether the template was ever
+  // reached: pcre2 parses a template lazily, so a malformed one on a subject
+  // with no match comes back as the subject unchanged rather than as an
+  // error, and a comparison that could not tell "no match" from "matched and
+  // produced the same text" would have to guess which.
+  printf("ok %d ", rc);
+  for (PCRE2_SIZE i = 0; i < length; i++) {
+    printf("%02x", (unsigned)out[i]);
+  }
+  printf("\n");
+}
+
+int main(int argc, char ** argv) {
+  static char line[3 * (MAX_PATTERN + MAX_SUBJECT) + 64];
   static char pattern[MAX_PATTERN];
   static char subject[MAX_SUBJECT];
+  static char template[MAX_PATTERN];
+
+  int replacing = argc > 1 && strcmp(argv[1], "replace") == 0;
 
   fprintf(stderr, "pcre2 %d.%d\n", PCRE2_MAJOR, PCRE2_MINOR);
 
@@ -115,10 +179,22 @@ int main(void) {
     if (!second) { continue; }
     *second = '\0';
 
+    char * third = NULL;
+    if (replacing) {
+      third = strchr(second + 1, '\t');
+      if (!third) { continue; }
+      *third = '\0';
+    }
+
     uint32_t options = options_for(line);
     size_t pattern_length = decode_hex(first + 1, pattern, sizeof pattern);
     size_t subject_length = decode_hex(second + 1, subject, sizeof subject);
-    if (pattern_length == (size_t)-1 || subject_length == (size_t)-1) {
+    size_t template_length = 0;
+    if (replacing) {
+      template_length = decode_hex(third + 1, template, sizeof template);
+    }
+    if (pattern_length == (size_t)-1 || subject_length == (size_t)-1
+        || template_length == (size_t)-1) {
       printf("toolong\n");
       fflush(stdout);
       continue;
@@ -131,6 +207,13 @@ int main(void) {
     if (!code) {
       printf("compile\n");
       fflush(stdout);
+      continue;
+    }
+
+    if (replacing) {
+      do_replace(code, subject, subject_length, template, template_length);
+      fflush(stdout);
+      pcre2_code_free(code);
       continue;
     }
 

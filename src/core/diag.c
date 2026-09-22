@@ -189,6 +189,9 @@ static const DiagRow diag_table[GRX_DIAG_COUNT] = {
   [GRX_DIAG_TEMPLATE_UNKNOWN_GROUP]
       = {"replacement template names a group the pattern does not have",
           GRX_ERR_SYNTAX},
+  [GRX_DIAG_TEMPLATE_UNSET_GROUP]
+      = {"replacement template names a group that did not participate",
+          GRX_ERR_SYNTAX},
 
   [GRX_DIAG_INVALID_SUBJECT_UTF8]
       = {"subject is not valid UTF-8", GRX_ERR_INVALID},

@@ -207,6 +207,73 @@ typedef enum {
  */
 #define GRX_TMPL_ESCAPE_ANY GRX_BIT(15)
 
+/**
+ * @brief A sigil that begins no complete reference is an error.
+ *
+ * ECMAScript's rule is the opposite and is the one this library applied
+ * everywhere: every spelling it does not recognise is ordinary text, so `$`
+ * at the end of a template is a dollar sign and `${1` is four characters.
+ * PCRE2 refuses all of them - "invalid replacement string" for a sigil that
+ * begins nothing, "expected closing curly bracket" for a `${` with no `}`.
+ *
+ * Distinct from GRX_TemplateMissing, which is about a reference that is well
+ * formed and names a group the pattern has not got. `$9` against two groups
+ * is that; `${1` is this. A dialect can want either answer to either
+ * question, and PCRE2 wants an error to both.
+ *
+ * Not set on the perl row. perl's replacement is an interpolated string
+ * rather than a grammar of its own, and it cannot be asked through a driver
+ * (tools/oracle/perl_diff.py says why), so the row keeps the rule it was
+ * written with rather than gaining one by analogy.
+ */
+#define GRX_TMPL_SIGIL_STRICT GRX_BIT(16)
+
+/**
+ * @brief `<sigil><digits>` takes every digit, and does not fall back.
+ *
+ * PCRE2's rule. ECMAScript's, GRX_TMPL_NUMBER, tries two digits and then
+ * one, so `$12` against a two-group pattern is group 1 followed by "2" and
+ * against a twelve-group pattern is group 12 - a reference whose meaning
+ * depends on the pattern it is used with. PCRE2 reads the whole run as one
+ * number and refuses it if the pattern has not got that group: `$12` with
+ * one group is an error, not `$1` and a "2".
+ *
+ * Leading zeros belong to the number, so `$01` is group 1 - which is why
+ * this claims a leading `0` before GRX_TMPL_WHOLE_ZERO can. `$0` on its own
+ * is still the whole match, because the number is then zero and zero is no
+ * group.
+ */
+#define GRX_TMPL_NUMBER_GREEDY GRX_BIT(17)
+
+/**
+ * @brief `<sigil>_` is the whole subject.
+ *
+ * PCRE2's, and not the same as GRX_TMPL_WHOLE: `$&` is the text the pattern
+ * matched and `$_` is every byte of the subject, match and all. `$&` on
+ * "xay" against `(a)` gives "a" and `$_` gives "xay".
+ *
+ * Not on the perl row. perl's `$_` in a replacement is the default variable,
+ * which is a fact about the surrounding program rather than about the
+ * template, and a row claiming it would be claiming something else.
+ */
+#define GRX_TMPL_SUBJECT GRX_BIT(18)
+
+/**
+ * @brief A reference to a group that did not participate is an error.
+ *
+ * PCRE2's default, and the one template rule that cannot be checked when the
+ * template is read: whether group 1 is set depends on the match, so
+ * `(a)?b` with `$1` is an error against "b" and a substitution against "ab".
+ * PCRE2_SUBSTITUTE_UNSET_EMPTY is the option that turns it off, which is why
+ * it is a default rather than an oddity.
+ *
+ * A second axis to GRX_TemplateMissing, not a value of it. That enum answers
+ * "the pattern has no such group"; this answers "it has one and it is
+ * unset", and ECMAScript says LITERAL to the first and empty to the second
+ * while PCRE2 says error to both.
+ */
+#define GRX_TMPL_UNSET_ERROR GRX_BIT(19)
+
 #define GRX_TMPL_BACKSLASH_ESCAPE GRX_BIT(11)
 
 /** @brief What a reference to a group the pattern does not have does. */

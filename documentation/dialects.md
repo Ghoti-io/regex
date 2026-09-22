@@ -492,14 +492,31 @@ from.
 
 The template is parsed by a per-dialect grammar into a small sequence
 (literal, group by number, group by name, whole match, prefix, suffix,
-case operator), then applied; a template is validated at
+subject, case operator), then applied; a template is validated at
 `grx_regex_replace()` time against the regex's group count and names, with
 the dialect's rule for a reference to a group that does not exist.
+
+Two things are settled later than that, and have to be. A *name* may belong
+to several groups, and the reference then means the first of them that is
+set - so it is resolved when the substitution happens, exactly as a
+backreference is (section 5.17). And PCRE2's rule for a group that exists and
+did not participate is an error, which is not knowable until there is a match
+to ask: `(a)?b` with `$1` substitutes against "ab" and fails against "b".
+
+**The PCRE2 row above was wrong in four places until a generator was pointed
+at it** (`tools/oracle/replace_diff.py`, testing.md section 8). It said PCRE2
+had no whole-match or context forms and it has six; it did not have
+`$<name>`; and it did not say that the numbered form takes every digit rather
+than falling back to a shorter prefix the way ECMAScript's does. Each of
+those was a defect in `src/syntax/syntax.c`'s row as well, because the row
+was written from this table. The corpora could not have found them:
+`testinput1` and `testinput2` carry patterns and subjects, and no templates
+at all.
 
 | Dialect | Group | Named | Whole / prefix / suffix | Escape | Missing group | Unset group | Case ops |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | ECMAScript (`String.prototype.replace`) | `$n`, `$nn` (1-99) | `$<name>` (only if the regex has named groups) | `$&`, `` $` ``, `$'` | `$$` | literal `$n` | empty | none |
-| PCRE2 (`pcre2_substitute`) | `$n`, `${n}` | `$name`, `${name}` | none (extended: `$*MARK`) | `$$` | error | error, or empty with `SUBSTITUTE_UNSET_EMPTY` (exposed as an option) | extended mode: `\U \L \E \u \l`, and `${n:+a:b}`, `${n:-d}` |
+| PCRE2 (`pcre2_substitute`) | `$n`, `${n}` - every digit, no fallback | `$name`, `${name}`, `$<name>` | `$&`, `$0`, `${0}`, `` $` ``, `$'`, `$_` (the whole subject) | `$$` | error | error, or empty with `SUBSTITUTE_UNSET_EMPTY` (exposed as an option) | extended mode: `\U \L \E \u \l`, and `${n:+a:b}`, `${n:-d}` |
 | Perl (interpolation subset) | `$n`, `${n}`, `\n` (deprecated) | `$+{name}` | `$&`, `` $` ``, `$'` | `\$`, `\\` | empty (undef) | empty | `\U \L \E \u \l \Q` |
 | Python (`re.sub`) | `\n`, `\g<n>` | `\g<name>` | `\g<0>` | `\\`; other C escapes processed | error | empty | none |
 | Java (`appendReplacement`) | `$n` (longest valid prefix) | `${name}` | none | `\` quotes the next character | error | empty (**probe**) | none |

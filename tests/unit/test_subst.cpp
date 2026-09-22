@@ -25,9 +25,9 @@ namespace {
 /** A compiled regex that frees itself. */
 class Regex {
 public:
-  Regex(const char * pattern, uint32_t options = GRX_OPT_UTF) {
-    result_ = grx_regex_compile(pattern, GRX_SYNTAX_ECMASCRIPT, options,
-        &regex_);
+  Regex(const char * pattern, uint32_t options = GRX_OPT_UTF,
+      GRX_Syntax syntax = GRX_SYNTAX_ECMASCRIPT) {
+    result_ = grx_regex_compile(pattern, syntax, options, &regex_);
   }
   Regex(const Regex &) = delete;
   Regex & operator=(const Regex &) = delete;
@@ -44,8 +44,10 @@ private:
 /** `subject.replace(new RegExp(pattern, flags), replacement)`. */
 std::string replaced(const char * pattern, const std::string & subject,
     const std::string & replacement, uint32_t flags = GRX_REPLACE_GLOBAL,
-    GRX_Engine engine = GRX_ENGINE_AUTO) {
-  Regex regex(pattern);
+    GRX_Engine engine = GRX_ENGINE_AUTO,
+    GRX_Syntax syntax = GRX_SYNTAX_ECMASCRIPT) {
+  Regex regex(pattern, syntax == GRX_SYNTAX_ECMASCRIPT ? GRX_OPT_UTF : 0,
+      syntax);
   if (!regex.ok()) {
     return "<compile failed>";
   }
@@ -210,6 +212,79 @@ TEST(Replace, GroupsByName) {
   EXPECT_EQ(replaced("(?<x>a)", "ab", "$<x"), "$<xb");
   // No named groups in the pattern at all: literal text, not a reference.
   EXPECT_EQ(replaced("(a)", "ab", "$<x>"), "$<x>b");
+}
+
+/** `replaced()` under the PCRE2 dialect, which has its own template grammar. */
+std::string pcre_replaced(const char * pattern, const std::string & subject,
+    const std::string & replacement) {
+  return replaced(pattern, subject, replacement, GRX_REPLACE_GLOBAL,
+      GRX_ENGINE_AUTO, GRX_SYNTAX_PCRE);
+}
+
+TEST(Replace, ThePcreTemplateGrammarIsNotEcmaScripts) {
+  // Six differences, all of them found by generating templates and asking
+  // pcre2_substitute() - tools/oracle/replace_diff.py - and none of them
+  // reachable from the imported corpus, which carries patterns and subjects
+  // and no templates at all. The row had been written from a reading of the
+  // documentation and checked by hand on the forms somebody thought to try.
+
+  // 1. The whole match, three ways. The row had none of them, so `$&`
+  //    substituted the two characters `$&`.
+  EXPECT_EQ(pcre_replaced("(a)", "xay", "<$&>"), "x<a>y");
+  EXPECT_EQ(pcre_replaced("(a)", "xay", "<$0>"), "x<a>y");
+  EXPECT_EQ(pcre_replaced("(a)", "xay", "<${0}>"), "x<a>y");
+
+  // 2. The context forms, and `$_` for the whole subject - which is not the
+  //    whole *match* and needed a piece of its own.
+  EXPECT_EQ(pcre_replaced("(a)", "xay", "<$`>"), "x<x>y");
+  EXPECT_EQ(pcre_replaced("(a)", "xay", "<$\'>"), "x<y>y");
+  EXPECT_EQ(pcre_replaced("(a)", "xay", "<$_>"), "x<xay>y");
+
+  // 3. A sigil that begins no complete reference is an error, where
+  //    ECMAScript makes it ordinary text.
+  EXPECT_EQ(pcre_replaced("(a)", "xay", "$"), "<error malformed replacement template>");
+  EXPECT_EQ(pcre_replaced("(a)", "xay", "${1"), "<error malformed replacement template>");
+  EXPECT_EQ(pcre_replaced("(a)", "xay", "${}"), "<error malformed replacement template>");
+  EXPECT_EQ(replaced("(a)", "xay", "$"), "x$y");
+  EXPECT_EQ(replaced("(a)", "xay", "${1"), "x${1y");
+
+  // 4. `$<digits>` takes every digit and does not fall back to a shorter
+  //    prefix, so `$12` with one group is an error rather than `$1` and "2".
+  //    A leading zero belongs to the number: `$01` is group 1.
+  EXPECT_EQ(pcre_replaced("(a)", "za", "$12"),
+      "<error replacement template names a group the pattern does not have>");
+  EXPECT_EQ(pcre_replaced("(a)", "za", "$01"), "za");
+  EXPECT_EQ(pcre_replaced("(a)", "za", "$1x"), "zax");
+  // ECMAScript keeps its own rule, which the test above this one states.
+  EXPECT_EQ(replaced("(a)", "za", "$12"), "za2");
+
+  // 5. `$<name>`, which the row did not have, and an unknown name in it,
+  //    which is an error here and the empty string in ECMAScript.
+  EXPECT_EQ(pcre_replaced("(?<n>a)", "xay", "<$<n>>"), "x<a>y");
+  EXPECT_EQ(pcre_replaced("(?<n>a)", "xay", "<$<nope>>"),
+      "<error replacement template names a group the pattern does not have>");
+
+  // 6. A group that exists and did not participate is an error - PCRE2's
+  //    default, the one template rule that cannot be settled until there is
+  //    a match, which is why it is checked here against two subjects.
+  EXPECT_EQ(pcre_replaced("(a)?b", "xaby", "<$1>"), "x<a>y");
+  EXPECT_EQ(pcre_replaced("(a)?b", "xby", "<$1>"),
+      "<error replacement template names a group that did not participate>");
+  EXPECT_EQ(replaced("(a)?b", "xby", "<$1>"), "x<>y");
+}
+
+TEST(Replace, ANameSharedByTwoGroupsTakesTheOneThatMatched) {
+  // The same rule the engine follows for a backreference, asked of a
+  // template: `(?J)` lets one name belong to several groups and the
+  // reference means the first of them that is *set*. The name is therefore
+  // resolved when the substitution happens and not when the template is
+  // read, which is what GRX_TPL_GROUP_NAMED exists for - before it, the name
+  // became the first group's number and a match through the second branch
+  // substituted nothing.
+  EXPECT_EQ(pcre_replaced("(?J)(?<n>a)|(?<n>b)", "xay", "<$<n>>"), "x<a>y");
+  EXPECT_EQ(pcre_replaced("(?J)(?<n>a)|(?<n>b)", "xby", "<$<n>>"), "x<b>y");
+  EXPECT_EQ(pcre_replaced("(?J)(?<n>a)|(?<n>b)", "xby", "<${n}>"), "x<b>y");
+  EXPECT_EQ(pcre_replaced("(?J)(?<n>a)|(?<n>b)", "xby", "<$n>"), "x<b>y");
 }
 
 TEST(Replace, LiteralModeTakesNoTemplateAtAll) {

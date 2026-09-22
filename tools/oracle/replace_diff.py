@@ -1,0 +1,382 @@
+#!/usr/bin/env python3
+"""Compare replacement templates against their references, on templates
+nobody wrote.
+
+`tools/oracle/sed_diff.py` does this for the POSIX and GNU rows against sed.
+Nothing did it for ECMAScript, whose template grammar is the largest of the
+five this library implements - `$1`, `$<name>`, `$&`, the two context forms
+`` $` `` and `$'`, `$$`, and the rule that decides what every *other* `$` is.
+
+That last rule is the reason a generator is worth more here than a list. The
+recognised forms are easy to check by hand and this file's author did check
+them, all twelve, and found no disagreement. What is hard to check by hand is
+the boundary: `$12` is group 1 followed by "2" when the pattern has one
+group and group 12 when it has twelve; `$<` with no `>` is two characters;
+`$<nope>` names a group that does not exist and ECMAScript says the whole
+thing is empty rather than an error. Those are decided by interactions
+between the template and the *pattern*, which is exactly what a hand-written
+list cannot cover and a generator covers for free.
+
+**Each dialect has one definition.** node is ECMA-262 22.1.3.19
+GetSubstitution; pcre2's `pcre2_substitute()` is the PCRE2 grammar. The perl
+row has no generated comparison, for the reason `perl_diff.py` gives at
+length: perl's replacement is an interpolated string rather than a grammar of
+its own, so asking perl about a template means evaluating it as perl code,
+and generated code is not something to run.
+
+The two grammars disagree about the rule that decides everything else -
+ECMAScript makes an unrecognised `$` ordinary text, PCRE2 refuses it - which
+is why they are separate vocabularies and separate runs rather than one.
+
+Usage:
+    tools/oracle/replace_diff.py [--seed N] [--patterns N] [--examples N]
+                                 [--dialect ecmascript|pcre|all]
+
+Copyright 2026 by Corey Pennycuff
+"""
+
+import argparse
+import json
+import os
+import random
+import subprocess
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(os.path.dirname(HERE))
+
+sys.path.insert(0, HERE)
+
+import match_diff
+import perl_diff
+
+# The pieces a template is built from. Every recognised form, every way of
+# spelling something that looks like one and is not, and plain text between
+# them so that a `$` at the very end is reached as often as one in the
+# middle.
+# The pieces a template is built from. Every recognised form, every way of
+# spelling something that looks like one and is not, and plain text between
+# them so that a `$` at the very end is reached as often as one in the
+# middle.
+#
+# Split into well-formed and not, and weighted, because the two dialects
+# disagree about what "not" *means*: ECMAScript has no ill-formed template
+# and PCRE2 refuses a dozen spellings. A vocabulary that was one third
+# malformed put three pcre rows in five beyond comparison - pcre2 parses a
+# template only when it has a match to put it in, so a bad template on a
+# subject that does not match is not an answer either way - and a run that
+# excludes most of its rows is measuring its own generator.
+WELL_FORMED = [
+    # Plain text, weighted by appearing several times.
+    "X", "-", "", "ab", " ", "X", "-", " ",
+    # The forms both dialects recognise.
+    "$&", "$$", "$1", "$2",
+    "$&", "$$", "$1",
+]
+
+# Forms one dialect has and the other does not, or that mean different
+# things. Kept apart so a run can say which side it is asking about.
+DIALECT_FORMS = {
+    "ecmascript": ["$`", "$'", "$<n>", "$<m>", "$3", "$9"],
+    "pcre": ["$`", "$'", "$_", "$<n>", "${n}", "$n", "${1}", "$0", "${0}"],
+}
+
+# Spellings that begin like a form and are not one, or name something that is
+# not there. A minority of the vocabulary, not a third of it.
+MALFORMED = [
+    "$", "$<", "$<>", "$<nope>", "$<n", "$}", "$-",
+    "$10", "$12", "$01", "$0",
+    "$$1", "$&$&", "$1$", "$$<n>",
+]
+
+# Patterns whose group count and names the numbered and named forms can be
+# tested against. Generated patterns come from match_diff, which knows how to
+# build something node will accept; these are added so that `$<n>` and the
+# two-digit forms have something to refer to in at least some rows.
+NAMED_PATTERNS = [
+    "(?<n>a)", "(?<n>a)(?<m>b)", "(?<n>a)(b)", "(a)(?<n>b)",
+    "(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)(k)(l)",
+    "(a)", "(a)(b)", "(a)(b)(c)", "(?<n>a)|(?<n>b)",
+]
+
+# Each dialect's own alphabet. `u` and `v` are ECMAScript's letters and the
+# pcre row does not have them - PCRE2's UTF mode is an option rather than a
+# pattern flag - so a shared list would ask this library for something it
+# rightly refuses and count the refusal as a disagreement. Which is what the
+# first draft did, 1,283 times.
+#
+# Both sides of the pcre run are therefore byte-oriented, which is pcre2's
+# default and this library's for that row, so the two agree about what a
+# position is and the surrogate question never arises.
+FLAG_SETS = {
+    "ecmascript": ("", "u", "i", "m", "iu", "s"),
+    "pcre": ("", "i", "m", "s", "x", "im"),
+}
+
+
+def find(name):
+    for platform in ("linux", "mac", "win64", "win32"):
+        for build in ("release", "debug"):
+            path = os.path.join(ROOT, "build", platform, build, "apps",
+                "tools", name)
+            if os.path.exists(path):
+                return path
+    return None
+
+
+def make_template(dialect, rng):
+    """A template, mostly well formed.
+
+    One piece in six is a spelling that begins like a form and is not, which
+    is enough for every run to ask the accept-or-refuse question many times
+    over without spending the budget on it.
+    """
+    pieces = WELL_FORMED + DIALECT_FORMS[dialect]
+    out = []
+    for _ in range(rng.randint(1, 4)):
+        source = MALFORMED if rng.randrange(6) == 0 else pieces
+        out.append(rng.choice(source))
+    return "".join(out)
+
+
+def make_pattern(dialect, rng):
+    """A pattern in the dialect's own grammar.
+
+    Not match_diff's for both. That generator builds ECMAScript, and an
+    ECMAScript pattern is not a PCRE2 pattern - the two grammars overlap and
+    do not coincide - so half the pcre rows came back as "this library
+    refuses the pattern, pcre2 does not" and buried the template question the
+    run exists to ask. perl_diff's per-dialect atoms are the right
+    vocabulary, and they are already written.
+    """
+    if dialect == "ecmascript":
+        return match_diff.make_pattern(rng)
+    atoms = perl_diff.ATOMS["pcre"]
+    return "".join(rng.choice(atoms) for _ in range(rng.randint(1, 3)))
+
+
+def ask_pcre2(driver, rows):
+    """pcre2's answers, each paired with how many substitutions it made."""
+    lines = "".join("%s\t%s\t%s\t%s\n" % (
+        flags, pattern.encode("utf-8").hex(), subject.encode("utf-8").hex(),
+        template.encode("utf-8").hex())
+        for flags, pattern, subject, template in rows)
+    finished = subprocess.run([driver, "replace"], input=lines,
+        capture_output=True, text=True, check=True)
+    out = []
+    for line in finished.stdout.splitlines():
+        if line.startswith("ok "):
+            count, _, body = line[3:].partition(" ")
+            out.append((bytes.fromhex(body).decode("utf-8", "replace"),
+                int(count)))
+        else:
+            out.append((parse_driver(line), 0))
+    return out
+
+
+def parse_driver(line):
+    """A grx_replace line, as the shape node's answers have."""
+    if line.startswith("ok "):
+        return bytes.fromhex(line[3:]).decode("utf-8", "replace")
+    if line == "ok":
+        return ""
+    if line.startswith("compile"):
+        return "syntax"
+    if line.startswith("skip"):
+        return "error"
+    return line.split()[0]
+
+
+def ask_node(rows):
+    payload = json.dumps([[f, p, s, t] for f, p, s, t in rows])
+    finished = subprocess.run(["node", os.path.join(HERE, "node_replace.mjs")],
+        input=payload, capture_output=True, text=True, check=True)
+    return json.loads(finished.stdout)
+
+
+def ask_library(driver, dialect, rows):
+    lines = "".join("%s\t%s\t%s\t%s\n" % (
+        flags, pattern.encode("utf-8").hex(), subject.encode("utf-8").hex(),
+        template.encode("utf-8").hex())
+        for flags, pattern, subject, template in rows)
+    finished = subprocess.run([driver, dialect], input=lines,
+        capture_output=True, text=True, check=True)
+    return [parse_driver(line) for line in finished.stdout.splitlines()]
+
+
+# "template" has no counterpart on the node side: ECMAScript has no
+# ill-formed template, so a row where this library says `template` and node
+# returns text is a real disagreement about the grammar. Against pcre2 both
+# sides can say it and it compares as itself.
+parse_ours = parse_driver
+
+
+def splits_a_surrogate_pair(text):
+    """Whether node's answer put a replacement inside a surrogate pair.
+
+    The documented deviation, dialects.md section 6: ECMA-262 matches over
+    UTF-16 code units and a zero-width assertion may therefore match between
+    the halves of a surrogate pair, where this library's subject is code
+    points and a match can begin and end only on a character boundary. A
+    global replace visits every position, so every astral subject reaches it.
+
+    Detected rather than assumed. When node replaces at such a position the
+    two halves end up separated, and the result is a string holding unpaired
+    surrogates - which is precisely a string that cannot be encoded as UTF-8.
+    Nothing else produces one, so this cannot quietly cover anything but the
+    deviation it names.
+    """
+    try:
+        text.encode("utf-8")
+    except UnicodeEncodeError:
+        return True
+    return False
+
+
+def compare(dialect, driver, seed, patterns, templates, subjects, examples):
+    """One dialect against its reference. None means the run was not made."""
+    reference = None
+    if dialect == "pcre":
+        pcre2 = find("pcre2_match")
+        if not pcre2:
+            print("pcre: skipped (no pcre2_match; run tools/corpus/fetch.sh "
+                  "pcre2 and `make tools`)")
+            return 0
+        reference = pcre2
+
+    rng = random.Random(seed)
+    rows = []
+    for i in range(patterns):
+        # Half from the generator, half from the named list, so that the
+        # named and high-numbered forms have something to refer to and the
+        # rest still explores shapes nobody chose.
+        if i % 2:
+            pattern = make_pattern(dialect, rng)
+        else:
+            pattern = rng.choice(NAMED_PATTERNS)
+        flags = rng.choice(FLAG_SETS[dialect])
+        for _ in range(templates):
+            template = make_template(dialect, rng)
+            for _ in range(subjects):
+                subject = match_diff.make_subject(rng, "u" in flags)
+                rows.append((flags, pattern, subject, template))
+
+    if dialect == "ecmascript":
+        # node never substitutes nothing and then reports a template error,
+        # because ECMAScript has no template error to report; the count is
+        # only needed where one side parses the template lazily.
+        theirs = [(answer, 1) for answer in ask_node(rows)]
+    else:
+        theirs = ask_pcre2(reference, rows)
+    mine = ask_library(driver, dialect, rows)
+    if len(theirs) != len(rows) or len(mine) != len(rows):
+        sys.stderr.write("%s: the drivers answered %d and %d of %d requests\n"
+            % (dialect, len(theirs), len(mine), len(rows)))
+        return None
+
+    disagreements = []
+    compared = 0
+    rejected = 0
+    declined = 0
+    deviation = 0
+    lazy = 0
+    defect = 0
+
+    for (flags, pattern, subject, template), (them, count), us in \
+            zip(rows, theirs, mine):
+        if them == "error":
+            declined += 1
+            continue
+        if them == "syntax":
+            if dialect == "pcre" and perl_diff.reference_defect(
+                    "pcre", pattern, "compile"):
+                # pcre2 10.46 fails to compile a pattern holding both a
+                # lookbehind and an extended class whose body uses an
+                # operator. Found and characterised by perl_diff.py, recorded
+                # in tools/corpus/VERSIONS, and excluded by the same
+                # predicate here rather than by a second copy of it.
+                defect += 1
+                continue
+            # Both must refuse the pattern. Counted separately so that a run
+            # where nothing was ever rejected is visible: that is the half of
+            # the comparison sed_diff.py and posix_diff.py were each blind to
+            # in turn.
+            rejected += 1
+            compared += 1
+            if us != "syntax":
+                disagreements.append(
+                    (flags, pattern, subject, template, them, us))
+            continue
+        if splits_a_surrogate_pair(them):
+            deviation += 1
+            continue
+        if count == 0 and us == "template":
+            # pcre2 parses a replacement template *lazily* - only when it has
+            # a match to substitute into - so a malformed template against a
+            # subject that does not match comes back as the subject
+            # unchanged. This library parses it up front and reports the
+            # error whether or not anything would have been replaced.
+            #
+            # A deliberate difference rather than a defect, and the count
+            # from pcre2_substitute() is what makes it safe to say so: the
+            # exclusion fires only where pcre2 made *no* substitution at all,
+            # so a template this library wrongly rejects on a subject that
+            # does match is still a disagreement. Recorded in dialects.md
+            # section 5.11 and counted here.
+            lazy += 1
+            continue
+        compared += 1
+        if us != them:
+            disagreements.append((flags, pattern, subject, template, them, us))
+
+    for flags, pattern, subject, template, them, us in \
+            disagreements[:examples]:
+        print("  /%s/%s  %s on %s" % (pattern, flags, json.dumps(template),
+            json.dumps(subject)))
+        print("      reference: %s" % json.dumps(them))
+        print("      ours:      %s" % json.dumps(us))
+
+    print("%-11s %d rows, %d compared, %d the pattern was rejected, "
+          "%d the reference declined, %d the surrogate-pair deviation, "
+          "%d the template parsed up front, %d a known reference defect, "
+          "%d disagreements"
+          % (dialect + ":", len(rows), compared, rejected, declined,
+             deviation, lazy, defect, len(disagreements)))
+    if not rejected:
+        sys.stderr.write(
+            "%s: no generated pattern was rejected, so the accept/reject "
+            "half was never asked\n" % dialect)
+        return None
+    return len(disagreements)
+
+
+def main(argv):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--seed", type=int, default=1)
+    parser.add_argument("--patterns", type=int, default=300)
+    parser.add_argument("--templates", type=int, default=8)
+    parser.add_argument("--subjects", type=int, default=4)
+    parser.add_argument("--examples", type=int, default=10)
+    parser.add_argument("--dialect", default="all",
+        help="ecmascript, pcre, or all")
+    args = parser.parse_args(argv[1:])
+
+    driver = find("grx_replace")
+    if not driver:
+        sys.stderr.write("run `make tools` first\n")
+        return 2
+
+    dialects = ("ecmascript", "pcre") if args.dialect == "all" \
+        else (args.dialect,)
+    total = 0
+    for dialect in dialects:
+        found = compare(dialect, driver, args.seed, args.patterns,
+            args.templates, args.subjects, args.examples)
+        if found is None:
+            return 2
+        total += found
+    return 1 if total else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

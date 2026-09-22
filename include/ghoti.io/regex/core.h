@@ -204,6 +204,7 @@ typedef enum {
   // pattern's.
   GRX_DIAG_INVALID_TEMPLATE,       ///< The replacement template is malformed.
   GRX_DIAG_TEMPLATE_UNKNOWN_GROUP, ///< It names a group the regex does not have.
+  GRX_DIAG_TEMPLATE_UNSET_GROUP,   ///< It names a group that did not participate.
 
   // Everything else.
   GRX_DIAG_OUT_OF_MEMORY,          ///< The allocator returned NULL.

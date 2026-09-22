@@ -57,7 +57,6 @@ UNPRODUCED = {
     # so the enumerator is spelled nowhere. Worth a look when the error
     # plumbing is next touched.
     "GRX_DIAG_INVALID_ARGUMENT": "callers return GRX_ERR_INVALID directly",
-    "GRX_DIAG_INVALID_TEMPLATE": "the template paths name a sharper one",
 }
 
 

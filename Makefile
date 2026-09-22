@@ -629,7 +629,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 ####################################################################
 
 # General commands
-.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-diagnostics check-unicode-tables check-oracle-syntax check-oracle-match check-engine-equivalence check-oracle-perl \
+.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-diagnostics check-unicode-tables check-oracle-syntax check-oracle-match check-engine-equivalence check-oracle-perl check-oracle-replace \
 	check-oracle-properties check-oracle-numeric-properties \
 	check-oracle-string-properties check-oracle-posix check-oracle-sed \
 	check-oracles \
@@ -673,7 +673,7 @@ check-oracles: ## Run every differential check against the reference implementat
 check-oracles: check-oracle-syntax check-oracle-match check-oracle-properties \
 	check-oracle-numeric-properties check-oracle-string-properties \
 	check-oracle-posix check-oracle-perl check-oracle-sed \
-	check-engine-equivalence
+	check-oracle-replace check-engine-equivalence
 
 check-oracle-properties: ## Compare every Unicode property table against the reference
 check-oracle-properties: $(TOOLS)
@@ -714,6 +714,17 @@ check-oracle-posix: $(TOOLS)
 		exit 0; \
 	fi; \
 	python3 tools/oracle/posix_diff.py
+
+check-oracle-replace: ## Compare the ECMAScript and PCRE2 templates against node and pcre2
+# WP-16 and WP-22's missing generator. sed_diff.py did this for the POSIX and
+# GNU rows; nothing did it for the two largest template grammars, and it
+# found six defects in the pcre row alone.
+check-oracle-replace: $(TOOLS)
+	@if ! command -v node >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then \
+		printf "check-oracle-replace: skipped (no node or no python3)\n"; \
+		exit 0; \
+	fi; \
+	python3 tools/oracle/replace_diff.py --seed $(ORACLE_SEED)
 
 check-oracle-sed: ## Compare the POSIX and GNU replacement templates against sed
 check-oracle-sed: $(TOOLS)

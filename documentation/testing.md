@@ -511,6 +511,46 @@ offsets and omits a trailing unset group, and this machine has libpcre2-8
 without its header, so the driver shape the other oracles use is not
 available. The foot of `perl_diff.py` says so.
 
+### The replacement differential
+
+`make check-oracle-replace` runs `tools/oracle/replace_diff.py`, which builds
+patterns *and templates* and puts them through node and `pcre2_substitute()`
+beside this library. `sed_diff.py` had done this for the POSIX and GNU rows
+since WP-23; the two largest template grammars had no generator at all, and
+their rates came from corpora that carry patterns and subjects and no
+templates.
+
+ECMAScript agreed from the first run and has never disagreed since. The PCRE2
+row had **six** defects, every one of them also an error in the dialects.md
+table the row was written from: no `$&`, `$0` or `${0}`; no `` $` ``, `$'` or
+`$_`; no `$<name>`; a sigil beginning no complete reference treated as
+ordinary text where PCRE2 refuses it; `$12` falling back to `$1` and a "2"
+where PCRE2 takes every digit; and a reference to a group that exists and did
+not participate substituting nothing where PCRE2's default is an error.
+
+Three things are excluded, each counted in every run so that an exclusion
+which stops applying is visible rather than silent:
+
+- **The surrogate-pair deviation** (dialects.md section 6). A global replace
+  visits every position, and ECMA-262 lets a zero-width assertion match
+  between the halves of a surrogate pair where this library's subject is code
+  points. Detected rather than assumed: node's answer then holds unpaired
+  surrogates, which is exactly a string that cannot be encoded as UTF-8.
+- **Template parsing up front.** pcre2 parses a template only when it has a
+  match to put it in, so a malformed one against a subject that does not
+  match comes back as the subject unchanged; this library parses it at
+  `grx_regex_replace()` and reports the error either way. The exclusion is
+  safe because `pcre2_substitute()` returns the substitution *count*, so it
+  fires only where pcre2 made none - a template this library wrongly rejects
+  on a subject that does match is still a disagreement.
+- **The pcre2 10.46 internal error**, through `perl_diff.py`'s predicate
+  rather than a second copy of it.
+
+The flag alphabets are each dialect's own. A shared list asked this library
+for `u` under `pcre`, which that row rightly refuses because PCRE2's UTF mode
+is an option and not a pattern flag, and counted 1,283 refusals as
+disagreements.
+
 ### The properties of strings
 
 `make check-oracle-string-properties` runs

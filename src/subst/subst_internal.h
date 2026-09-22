@@ -56,6 +56,8 @@ typedef enum {
   GRX_TPL_WHOLE,       ///< The whole match.
   GRX_TPL_PREFIX,      ///< The subject before the match.
   GRX_TPL_SUFFIX,      ///< The subject after the match.
+  GRX_TPL_SUBJECT,     ///< The whole subject, match and all.
+  GRX_TPL_GROUP_NAMED, ///< A group named by `offset`/`length` in the text.
   GRX_TPL_NOTHING,     ///< Substitutes the empty string.
   GRX_TPL_COUNT        ///< Closes the enum; not a piece.
 } GRX_TemplateOpKind;
@@ -70,8 +72,8 @@ typedef enum {
 typedef struct GRX_TemplateOp {
   uint8_t kind;  ///< A @ref GRX_TemplateOpKind.
   uint32_t a;    ///< GROUP: the group index.
-  size_t offset; ///< LITERAL: byte offset into the template.
-  size_t length; ///< LITERAL: bytes.
+  size_t offset; ///< LITERAL, GROUP_NAMED: byte offset into the template.
+  size_t length; ///< LITERAL, GROUP_NAMED: bytes.
 } GRX_TemplateOp;
 
 /** @brief A parsed template: the ops, and the text they point into. */

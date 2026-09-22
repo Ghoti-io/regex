@@ -504,9 +504,18 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     // expose, and the ordinary grammar is the one a caller gets by default.
     .template_spec = {
       .sigil = '$',
-      .features = GRX_TMPL_NUMBER | GRX_TMPL_NUMBER_BRACED
-          | GRX_TMPL_NAME_BRACED | GRX_TMPL_NAME_BARE
-          | GRX_TMPL_DOUBLE_SIGIL,
+      // WHOLE and WHOLE_ZERO because pcre2 spells the whole match three
+      // ways - `$&`, `$0` and `${0}` - and this row had none of them. Before
+      // GRX_TMPL_SIGIL_STRICT arrived they fell through to "unrecognised is
+      // literal text" and `$&` substituted the two characters `$&`, which is
+      // what a generated template found. pcre2_substitute() substitutes the
+      // match.
+      .features = GRX_TMPL_NUMBER_GREEDY | GRX_TMPL_NUMBER_BRACED
+          | GRX_TMPL_NAME_BRACED | GRX_TMPL_NAME_BARE | GRX_TMPL_NAME_ANGLE
+          | GRX_TMPL_DOUBLE_SIGIL | GRX_TMPL_SIGIL_STRICT
+          | GRX_TMPL_WHOLE | GRX_TMPL_WHOLE_ZERO
+          | GRX_TMPL_PREFIX | GRX_TMPL_SUFFIX | GRX_TMPL_SUBJECT
+          | GRX_TMPL_UNSET_ERROR,
       .missing = GRX_TMPL_MISSING_ERROR,
     },
   },

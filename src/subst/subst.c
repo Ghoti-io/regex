@@ -169,7 +169,8 @@ static size_t digits_naming_a_group(const char * text, size_t length,
  */
 static size_t named_reference(const GRX_Regex * regex, const char * text,
     size_t length, size_t at, char opener, char closer,
-    GRX_TemplateOpKind * out_kind, uint32_t * out_group) {
+    GRX_TemplateOpKind * out_kind, uint32_t * out_group,
+    size_t * out_name_at, size_t * out_name_length) {
   if (at >= length || text[at] != opener) {
     return 0;
   }
@@ -192,8 +193,17 @@ static size_t named_reference(const GRX_Regex * regex, const char * text,
 
   size_t index = 0;
   if (grx_regex_capture_index(regex, name, &index) == GRX_OK) {
-    *out_kind = GRX_TPL_GROUP;
+    // GROUP_NAMED rather than GROUP, so that the name is resolved when the
+    // substitution happens rather than now. One name may stand for several
+    // groups - perl always, PCRE2 under `(?J)` - and which of them the
+    // reference means is the first that *took part*, which is not knowable
+    // until there is a match. grx_match_group_named() is that rule and was
+    // already written; this makes the template ask it instead of resolving
+    // the name to the first group and comparing against that one alone.
+    *out_kind = GRX_TPL_GROUP_NAMED;
     *out_group = (uint32_t)index;
+    *out_name_at = at + 1;
+    *out_name_length = name_length;
   }
   else {
     *out_kind = GRX_TPL_NOTHING;
@@ -211,7 +221,7 @@ static size_t named_reference(const GRX_Regex * regex, const char * text,
  */
 static size_t bare_name_reference(const GRX_Regex * regex, const char * text,
     size_t length, size_t at, GRX_TemplateOpKind * out_kind,
-    uint32_t * out_group) {
+    uint32_t * out_group, size_t * out_name_at, size_t * out_name_length) {
   size_t end = at;
   while (end < length) {
     char c = text[end];
@@ -238,8 +248,10 @@ static size_t bare_name_reference(const GRX_Regex * regex, const char * text,
 
   size_t index = 0;
   if (grx_regex_capture_index(regex, name, &index) == GRX_OK) {
-    *out_kind = GRX_TPL_GROUP;
+    *out_kind = GRX_TPL_GROUP_NAMED;
     *out_group = (uint32_t)index;
+    *out_name_at = at;
+    *out_name_length = name_length;
     return name_length;
   }
 
@@ -257,7 +269,8 @@ static size_t bare_name_reference(const GRX_Regex * regex, const char * text,
  */
 static size_t braced_reference(const GRX_TemplateSpec * spec,
     const GRX_Regex * regex, const char * text, size_t length, size_t at,
-    size_t captures, GRX_TemplateOpKind * out_kind, uint32_t * out_group) {
+    size_t captures, GRX_TemplateOpKind * out_kind, uint32_t * out_group,
+    size_t * out_name_at, size_t * out_name_length) {
   if (at >= length || text[at] != '{') {
     return 0;
   }
@@ -287,6 +300,16 @@ static size_t braced_reference(const GRX_TemplateSpec * spec,
     for (size_t i = 0; i < inner && value <= captures; i++) {
       value = value * 10 + (uint32_t)(text[at + 1 + i] - '0');
     }
+    if (!value && (spec->features & GRX_TMPL_WHOLE_ZERO)) {
+      // `${0}` is the whole match wherever `$0` is. pcre2 spells it three
+      // ways - `$&`, `$0` and `${0}` - and this read the braced one as a
+      // reference to group zero, which is no group, so it became "a group
+      // the pattern has not got" and an error. The bare form was handled
+      // where the digits are read and the braced form was not.
+      *out_kind = GRX_TPL_WHOLE;
+      *out_group = 0;
+      return inner + 2;
+    }
     *out_kind = value && value <= captures ? GRX_TPL_GROUP : GRX_TPL_NOTHING;
     *out_group = value;
     return inner + 2;
@@ -295,8 +318,8 @@ static size_t braced_reference(const GRX_TemplateSpec * spec,
   if (!(spec->features & GRX_TMPL_NAME_BRACED)) {
     return 0;
   }
-  return named_reference(
-      regex, text, length, at, '{', '}', out_kind, out_group);
+  return named_reference(regex, text, length, at, '{', '}', out_kind,
+      out_group, out_name_at, out_name_length);
 }
 
 GRX_Result grx_template_parse(const GRX_TemplateSpec * spec,
@@ -364,6 +387,9 @@ GRX_Result grx_template_parse(const GRX_TemplateSpec * spec,
     GRX_TemplateOpKind kind = GRX_TPL_COUNT;
     uint32_t group = 0;
     size_t consumed = 0;
+    // Where the name sits inside the template, for GRX_TPL_GROUP_NAMED.
+    size_t name_at = 0;
+    size_t name_length = 0;
 
     if (after < length) {
       char c = text[after];
@@ -395,16 +421,30 @@ GRX_Result grx_template_parse(const GRX_TemplateSpec * spec,
         kind = GRX_TPL_SUFFIX;
         consumed = 1;
       }
+      else if (c == '_' && (spec->features & GRX_TMPL_SUBJECT)) {
+        kind = GRX_TPL_SUBJECT;
+        consumed = 1;
+      }
       else if (c == '<' && (spec->features & GRX_TMPL_NAME_ANGLE)
           && (named || !(spec->features & GRX_TMPL_NAME_NEEDS_NAMED_GROUPS))) {
-        consumed = named_reference(
-            regex, text, length, after, '<', '>', &kind, &group);
+        consumed = named_reference(regex, text, length, after, '<', '>',
+            &kind, &group, &name_at, &name_length);
+        // The same check the braced form has had: a name that resolves to
+        // nothing is an error where the dialect says so. Its absence here
+        // was invisible while `$<...>` belonged to ECMAScript alone, whose
+        // rule is that it substitutes the empty string.
+        if (consumed && kind == GRX_TPL_NOTHING
+            && spec->missing == GRX_TMPL_MISSING_ERROR) {
+          grx_template_clear(out_template);
+          return fail(out_error, GRX_DIAG_TEMPLATE_UNKNOWN_GROUP, start,
+              1 + consumed);
+        }
       }
       else if (c == '{'
           && (spec->features
               & (GRX_TMPL_NUMBER_BRACED | GRX_TMPL_NAME_BRACED))) {
-        consumed = braced_reference(
-            spec, regex, text, length, after, captures, &kind, &group);
+        consumed = braced_reference(spec, regex, text, length, after,
+            captures, &kind, &group, &name_at, &name_length);
         if (consumed && kind == GRX_TPL_NOTHING
             && spec->missing == GRX_TMPL_MISSING_ERROR) {
           grx_template_clear(out_template);
@@ -415,10 +455,39 @@ GRX_Result grx_template_parse(const GRX_TemplateSpec * spec,
       else if (c == '+' && (spec->features & GRX_TMPL_NAME_PLUS_BRACE)
           && after + 1 < length && text[after + 1] == '{') {
         // Perl's `$+{name}`: the named-capture hash, spelled as a lookup.
-        consumed = named_reference(
-            regex, text, length, after + 1, '{', '}', &kind, &group);
+        consumed = named_reference(regex, text, length, after + 1, '{', '}',
+            &kind, &group, &name_at, &name_length);
         if (consumed) {
           consumed += 1;
+        }
+      }
+      else if (c >= '0' && c <= '9'
+          && (spec->features & GRX_TMPL_NUMBER_GREEDY)) {
+        // Before the WHOLE_ZERO branch, because a leading zero belongs to
+        // the number here: `$01` is group 1 and only a number that *is*
+        // zero is the whole match.
+        uint32_t value = 0;
+        size_t taken = 0;
+        while (after + taken < length && text[after + taken] >= '0'
+            && text[after + taken] <= '9' && value <= captures + 1) {
+          value = value * 10 + (uint32_t)(text[after + taken] - '0');
+          taken++;
+        }
+        consumed = taken;
+        if (!value && (spec->features & GRX_TMPL_WHOLE_ZERO)) {
+          kind = GRX_TPL_WHOLE;
+        }
+        else if (value && value <= captures) {
+          group = value;
+          kind = GRX_TPL_GROUP;
+        }
+        else if (spec->missing == GRX_TMPL_MISSING_ERROR) {
+          grx_template_clear(out_template);
+          return fail(out_error, GRX_DIAG_TEMPLATE_UNKNOWN_GROUP, start,
+              1 + taken);
+        }
+        else {
+          kind = GRX_TPL_NOTHING;
         }
       }
       else if (c == '0' && (spec->features & GRX_TMPL_WHOLE_ZERO)) {
@@ -464,7 +533,8 @@ GRX_Result grx_template_parse(const GRX_TemplateSpec * spec,
       }
       else if (spec->features & GRX_TMPL_NAME_BARE) {
         consumed
-            = bare_name_reference(regex, text, length, after, &kind, &group);
+            = bare_name_reference(regex, text, length, after, &kind, &group,
+                &name_at, &name_length);
         if (!consumed && spec->missing == GRX_TMPL_MISSING_ERROR) {
           grx_template_clear(out_template);
           return fail(out_error, GRX_DIAG_TEMPLATE_UNKNOWN_GROUP, start, 2);
@@ -507,6 +577,17 @@ GRX_Result grx_template_parse(const GRX_TemplateSpec * spec,
     }
 
     if (!consumed || kind == GRX_TPL_COUNT) {
+      if (spec->features & GRX_TMPL_SIGIL_STRICT) {
+        // PCRE2's rule: a sigil that begins no complete reference is an
+        // error. `$` at the end of a template, `${1` with no closing brace
+        // and `${}` with nothing between are the three this reaches - every
+        // other spelling is claimed by a rule above, and a well-formed
+        // reference to a group that does not exist is GRX_TemplateMissing's
+        // question rather than this one.
+        grx_template_clear(out_template);
+        return fail(out_error, GRX_DIAG_INVALID_TEMPLATE, start,
+            after > start ? after - start + 1 : 1);
+      }
       // Not a reference. The sigil is ordinary text, which is ECMAScript's
       // rule for every spelling it does not recognise - including `$3` in a
       // pattern with two groups.
@@ -517,7 +598,9 @@ GRX_Result grx_template_parse(const GRX_TemplateSpec * spec,
     GRX_Result result
         = emit_literal(out_template, literal_from, start - literal_from);
     if (result == GRX_OK) {
-      result = emit(out_template, kind, group, 0, 0);
+      result = kind == GRX_TPL_GROUP_NAMED
+          ? emit(out_template, kind, group, name_at, name_length)
+          : emit(out_template, kind, group, 0, 0);
     }
     if (result != GRX_OK) {
       grx_template_clear(out_template);
@@ -564,7 +647,7 @@ static GRX_Result push(GRX_Arena * out, const char * bytes, size_t length) {
 
 /** Apply a parsed template to one match. */
 static GRX_Result expand(const GRX_Template * tmpl, const GRX_Match * match,
-    const char * subject, size_t end, GRX_Arena * out) {
+    const char * subject, size_t end, int unset_is_error, GRX_Arena * out) {
   GRX_Capture whole = {GRX_NPOS, GRX_NPOS};
   if (grx_match_span(match, &whole) != GRX_OK || whole.start == GRX_NPOS) {
     return GRX_ERR_INTERNAL;
@@ -587,6 +670,36 @@ static GRX_Result expand(const GRX_Template * tmpl, const GRX_Match * match,
       case GRX_TPL_SUFFIX:
         result = push(out, subject + whole.end, end - whole.end);
         break;
+      case GRX_TPL_GROUP_NAMED: {
+        // Resolved now rather than when the template was read, because one
+        // name may belong to several groups and the reference means the
+        // first of them that took part. grx_match_group_named() is that
+        // rule; the name is a slice of the template text, so nothing was
+        // copied to get here.
+        char name[256];
+        if (op->length >= sizeof(name)) {
+          return GRX_ERR_INTERNAL;
+        }
+        memcpy(name, tmpl->text + op->offset, op->length);
+        name[op->length] = '\0';
+        GRX_Capture capture = {GRX_NPOS, GRX_NPOS};
+        if (grx_match_group_named(match, name, &capture) == GRX_OK
+            && capture.start != GRX_NPOS) {
+          result = push(
+              out, subject + capture.start, capture.end - capture.start);
+        }
+        else if (unset_is_error) {
+          return GRX_ERR_SYNTAX;
+        }
+        break;
+      }
+      case GRX_TPL_SUBJECT:
+        // From 0 to `end`, which is what GRX_TPL_PREFIX and GRX_TPL_SUFFIX
+        // between them already call the subject: the prefix starts at 0 and
+        // the suffix stops at the window's end, so `$_` spanning both is the
+        // same stretch and not a third opinion about where the subject is.
+        result = push(out, subject, end);
+        break;
       case GRX_TPL_GROUP: {
         GRX_Capture capture = {GRX_NPOS, GRX_NPOS};
         if (grx_match_group(match, op->a, &capture) == GRX_OK
@@ -594,8 +707,14 @@ static GRX_Result expand(const GRX_Template * tmpl, const GRX_Match * match,
           result = push(
               out, subject + capture.start, capture.end - capture.start);
         }
-        // A group that did not participate substitutes nothing, which is
-        // every dialect in section 5.11 but PCRE2's default.
+        else if (unset_is_error) {
+          // PCRE2's default: "requested value is not set". The one template
+          // rule that cannot be settled when the template is read, because
+          // whether a group participated is a fact about the match.
+          return GRX_ERR_SYNTAX;
+        }
+        // Otherwise a group that did not participate substitutes nothing,
+        // which is every other dialect in section 5.11.
         break;
       }
       case GRX_TPL_NOTHING:
@@ -713,7 +832,15 @@ GRX_Result grx_regex_replace(const GRX_Regex * regex, const char * subject,
     }
     result = push(&out, subject + copied, whole.start - copied);
     if (result == GRX_OK) {
-      result = expand(&tmpl, match, subject, end, &out);
+      result = expand(&tmpl, match, subject, end,
+          (profile.template_spec.features & GRX_TMPL_UNSET_ERROR) != 0,
+          &out);
+      if (result == GRX_ERR_SYNTAX) {
+        // expand() has no error structure of its own; the only failure it
+        // reports this way is the unset-group rule, and naming it here keeps
+        // the diagnostic beside the feature bit that asked for it.
+        fail(out_error, GRX_DIAG_TEMPLATE_UNSET_GROUP, 0, 0);
+      }
     }
     if (result != GRX_OK) {
       break;
