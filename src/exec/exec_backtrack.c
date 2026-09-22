@@ -252,6 +252,15 @@ typedef struct {
   size_t call_capacity;
 
   /**
+   * How deep run() has called itself, against GRX_BACKTRACK_MAX_C_DEPTH.
+   *
+   * Not `depth`, which counts backtrack frames on the heap, and not
+   * `call_depth`, which counts `(?R)` and subroutine calls whatever engine
+   * machinery they use. This is the C stack itself.
+   */
+  size_t run_depth;
+
+  /**
    * Where a sub-match's own MATCH must land, or GRX_NPOS for anywhere.
    *
    * Set only while a forward lookbehind's body runs. That model picks a
@@ -997,6 +1006,57 @@ static int run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
     int toplevel, size_t * out_end);
 
 /**
+ * The deepest run() will call itself, whatever the caller's limits say.
+ *
+ * run() recurses in C for three things, all of them assertions in the wide
+ * sense: a lookahead body, a lookbehind's forward pass, and a sub-match
+ * condition. One level of nested assertion is one C frame, so the engine's
+ * stack use is linear in how deeply the *program* nests them - which is the
+ * one place design.md section 9 invariant 6 does not hold, and now says so.
+ *
+ * The number is a stack budget rather than a taste, and it is bounded from
+ * both sides.
+ *
+ * From below, by what has to keep working: assertion nesting can never
+ * exceed parse nesting, so the default `max_nesting_depth` of 128 is the
+ * deepest a pattern compiled at the defaults can be, and a pattern that
+ * compiles has to be one that runs. The ceiling must clear 128, plus the
+ * top-level frame.
+ *
+ * From above, by the smallest stack this library claims: the 256 KB every
+ * harness gets in the soak (testing.md section 12). A level costs about 600
+ * bytes in this library's own -O0 objects - tests/unit/test_stack.cpp
+ * measures it rather than trusting the figure, because it moves with the
+ * optimisation level, and 515 bytes at -O1 was what made a first draft of
+ * this constant 240 and 40 KB over budget. 160 levels at 600 bytes is 96 KB,
+ * two fifths of the smallest stack, leaving the caller's own frames the rest.
+ *
+ * That the limits field bounds this at all is why nothing had hit it. The
+ * field is not enough on its own, being the caller's to raise: raising it to
+ * the 480 the *parser* can take asks the matcher for 241 KB, which on a
+ * 256 KB stack was a segmentation fault rather than a refusal. This is the
+ * floor underneath it, and it is deliberately not a GRX_Limits field - a
+ * bound whose whole job is to be un-liftable should not come with a lever.
+ */
+#define GRX_BACKTRACK_MAX_C_DEPTH 160
+
+/** run(), less the C-stack bookkeeping. */
+static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
+    int toplevel, size_t * out_end);
+
+static int run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
+    int toplevel, size_t * out_end) {
+  if (bt->run_depth >= GRX_BACKTRACK_MAX_C_DEPTH) {
+    bt->failure = GRX_ERR_LIMIT;
+    return 0;
+  }
+  bt->run_depth++;
+  int matched = run_body(bt, pc, position, floor, toplevel, out_end);
+  bt->run_depth--;
+  return matched;
+}
+
+/**
  * Leave the innermost subroutine call, and say where to carry on.
  *
  * Two instructions reach here: the RET a call's block ends in, and an
@@ -1128,7 +1188,7 @@ static int look_behind_forward(Backtrack * bt, uint32_t body, size_t position,
   return matched;
 }
 
-static int run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
+static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
     int toplevel, size_t * out_end) {
   const GRX_Limits * limits = bt->request->limits;
   // The call depth this run started at. `(*ACCEPT)` ends the innermost thing

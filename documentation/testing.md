@@ -757,6 +757,20 @@ Every harness also runs under a 256 KB stack (`ulimit -s 256`) in the
 soak, because the promise that no engine's stack depth depends on its input
 is one only a small stack can test.
 
+A small stack tests it; it does not measure it, and for a long time nothing
+did. `tests/unit/test_stack.cpp` does: it runs a search on a thread whose
+stack it owns, paints the memory below the frame, and scans back for the
+high-water mark afterwards, which is the engine's actual cost in bytes
+rather than a frame count that would need the engine's cooperation to
+collect. It sweeps the subject over four orders of magnitude, the program's
+size over two, and the program's assertion nesting to the cap - and it is
+where the claim in design.md section 9 invariant 6 was found to be half
+wrong. The measurement is skipped under AddressSanitizer, which relocates
+locals to a heap fake stack, and under Valgrind, which counts a deliberate
+write below the stack pointer as an invalid one; the verdicts those runs
+check - that nesting past the cap is a `GRX_ERR_LIMIT` and not a crash - are
+checked in every build.
+
 Corpus seeds come from the vectors: `make fuzz-seed` writes every vector's
 pattern (and subject) as a corpus file, so the fuzzers start from real
 syntax.

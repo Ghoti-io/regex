@@ -719,14 +719,14 @@ need:
 | Field | Enforced in | Bounds |
 | --- | --- | --- |
 | `max_pattern_length` | entry | bytes of pattern |
-| `max_nesting_depth` | parser | recursion depth of groups, classes and lookarounds - this is also the C stack bound, so its default is small (a few hundred) and it is the one limit a caller should not lift casually |
+| `max_nesting_depth` | parser | recursion depth of groups, classes and lookarounds - this is also the C stack bound, so its default is small (a few hundred) and it is the one limit a caller should not lift casually. It bounds the *parser's* stack; the backtracker's own recursion over nested assertions has its own floor under it, `GRX_BACKTRACK_MAX_C_DEPTH`, because this field is the caller's to raise and that one must not be (section 9 invariant 6) |
 | `max_nodes` | parser | AST nodes |
 | `max_captures` | lowering | capturing groups |
 | `max_repeat_count` | parser | any bound in `{m,n}` |
 | `max_class_ranges` | lowering | ranges in one canonical class, after expansion of properties and folding |
 | `max_program_size` | codegen | instructions, after repeat expansion |
 | `max_lookbehind_length` | analysis, after lowering | maximum length of a lookbehind body. `GRX_NPOS` for an unbounded body, which exceeds every finite cap. A *caller's* policy rather than a dialect's rule, so its default is 0; a dialect that bounds its own lookbehind enforces that through its profile instead |
-| `max_recursion_depth` | *reserved* | nested `CALL` frames. Nothing reads it: no dialect here has recursion, which arrives with WP-18. `tests/unit/test_limits.cpp` fails the moment one does |
+| `max_recursion_depth` | backtracker | nested `CALL` frames. Reserved until WP-18 brought a dialect that recurses; `tests/unit/test_limits.cpp:RecursionDepthIsEnforcedNowThatADialectHasRecursion` is the test that was waiting for it. Frames, not C frames - a subroutine call is heap bookkeeping |
 | `max_subject_length` | entry | bytes of subject |
 | `max_steps` | all engines | instructions executed in one search |
 | `max_backtrack` | backtracker | frames on the stack |
@@ -839,8 +839,24 @@ The things the tests exist to hold. Each is checked somewhere named in
 5. Every pattern in every oracle's own test corpus is accepted or rejected
    as the oracle accepts or rejects it, and matches as the oracle matches.
    (The conformance vectors, per dialect, with the pass rate published.)
-6. No engine's C stack depth depends on the subject or the program.
-   (Reviewed; and the fuzzers run with a small stack.)
+6. No engine's C stack depth depends on the subject, and depends on the
+   program only through how deeply it nests assertions - which the engine
+   caps itself, so that the depth is bounded whatever the caller's limits
+   say. (`tests/unit/test_stack.cpp`, which measures the high-water mark
+   rather than counting frames; and the fuzzers run with a small stack.)
+
+   This used to read "nor the program", and was enforced by the word
+   "Reviewed". Measuring it found the half that was not true: the
+   backtracker's `run()` calls itself for an assertion body, a lookbehind's
+   forward pass and a sub-match condition, so a nested assertion is a C
+   frame and the cost is linear in the nesting - about 600 bytes a level.
+   `max_nesting_depth` held it down at the defaults by accident, being 128;
+   raised to the 480 the *parser* takes, the matcher wanted 241 KB and a
+   256 KB stack gave a segmentation fault instead of a diagnostic.
+   `GRX_BACKTRACK_MAX_C_DEPTH` is the floor underneath that field now, and
+   over it the answer is `GRX_ERR_LIMIT`. Making the engine iterative here
+   would let this invariant go back to its original wording; until somebody
+   does, the wording follows the code.
 7. The Unicode tables regenerate byte-identical from the pinned UCD.
    (`make check-unicode-tables`.)
 

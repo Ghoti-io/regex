@@ -151,6 +151,14 @@ TEST(Limits, NestingIsBoundedWellInsideTheSmallestStack) {
   // default of 128 is therefore a factor of about four inside the smallest
   // stack this library claims to work on, and thirty inside the usual one.
   //
+  // "Parses" was the whole of that measurement, and it was not the whole of
+  // the cost. Matching a pattern whose nesting is *assertions* costs the
+  // backtracker about the same per level again, so the 480 this comment
+  // says the parser takes used to be a segmentation fault at match time;
+  // tests/unit/test_stack.cpp measures that half and
+  // GRX_BACKTRACK_MAX_C_DEPTH bounds it. The figures above still stand for
+  // what they describe - they just never described both ends.
+  //
   // What is checked here is the half that does not need a `ulimit`: that the
   // default is enforced exactly, one level either side of it.
   GRX_Limits limits;
