@@ -1222,6 +1222,7 @@ test: $(APP_DIR)/$(TARGET) $(TEST_EXECUTABLES) $(TEST_GATES)
 test-quiet: ## Run tests with minimal output (one line per test suite)
 test-quiet: $(APP_DIR)/$(TARGET) $(TEST_EXECUTABLES) $(TEST_GATES)
 	@total_tests=0; total_passed=0; total_failed=0; total_time=0; failed_suites=""; \
+	failed_count=0; \
 	printf "\n\033[1;36m%-30s %8s %10s %s\033[0m\n" "Test Suite" "Tests" "Time" "Status"; \
 	printf "\033[1;36m%-30s %8s %10s %s\033[0m\n" "------------------------------" "--------" "----------" "------"; \
 	for test_exe in $(TEST_EXECUTABLES); do \
@@ -1241,19 +1242,31 @@ test-quiet: $(APP_DIR)/$(TARGET) $(TEST_EXECUTABLES) $(TEST_GATES)
 			failures=$$(echo "$$output" | grep -oP '\[\s*FAILED\s*\]\s*\K\d+' | head -1); \
 			[ -z "$$failures" ] && failures=$$num_tests; \
 			total_failed=$$((total_failed + failures)); \
+			failed_count=$$((failed_count + 1)); \
 			total_passed=$$((total_passed + num_tests - failures)); \
 			printf "%-30s %8d %8dms \033[0;31mFAIL\033[0m\n" "$$test_name" "$$num_tests" "$$time_ms"; \
 			failed_suites="$$failed_suites\n\033[0;31m=== $$test_name FAILURES ===\033[0m\n$$output\n"; \
 		fi; \
 	done; \
 	printf "\033[1;36m%-30s %8s %10s %s\033[0m\n" "------------------------------" "--------" "----------" "------"; \
-	if [ $$total_failed -eq 0 ]; then \
+	if [ $$failed_count -eq 0 ]; then \
 		printf "\033[0;32m%-30s %8d %6dms PASS\033[0m\n\n" "TOTAL" "$$total_tests" "$$total_time"; \
 	else \
-		printf "\033[0;31m%-30s %8d %6dms FAIL (%d failed)\033[0m\n" "TOTAL" "$$total_tests" "$$total_time" "$$total_failed"; \
+		printf "\033[0;31m%-30s %8d %6dms FAIL (%d failed in %d suites)\033[0m\n" "TOTAL" "$$total_tests" "$$total_time" "$$total_failed" "$$failed_count"; \
 		printf "$$failed_suites\n"; \
 		exit 1; \
 	fi
+
+# The verdict is `failed_count`, which counts *suites that exited non-zero*,
+# and not `total_failed`, which counts the failing assertions the output
+# reported. A suite that segfaults reports neither a test count nor a
+# `[  FAILED  ]` line, so `total_failed` gained nothing from it and the
+# whole run printed PASS and exited 0 - with the crashed suite's own line
+# right there saying FAIL. Found by a NULL in a name table, which crashed
+# testIr and left `make test-quiet` green; `make test` exited 2 throughout,
+# so the two spellings disagreed about whether the suite passed. The count
+# is a report and the exit status is the verdict, and only one of them can
+# be the gate.
 
 test-valgrind: ## Run all tests under valgrind (Linux only)
 test-valgrind: $(APP_DIR)/$(TARGET) $(TEST_EXECUTABLES) $(TEST_GATES)

@@ -1311,6 +1311,7 @@ when the gate changes:
 | Gate | Injected fault | Must give |
 | --- | --- | --- |
 | `make test` | a failing `EXPECT_EQ` in the *first* test binary, not the last | non-zero, naming the suite |
+| `make test-quiet` | a *crash* in one binary, not an assertion failure | non-zero; the TOTAL line must not say PASS |
 | `make test-valgrind` | a `malloc` never freed, in the first binary | non-zero, naming the suite |
 | `make test-asan` | a write past a heap allocation | non-zero, ASan report |
 | `make test-asan` | a signed integer overflow | non-zero, UBSan report, no "clean" line |
@@ -1322,6 +1323,21 @@ when the gate changes:
 
 **The first binary, not the last**, is the point of the first two rows: the
 defect they guard against is invisible if the fault is injected at the end.
+
+**A crash, not an assertion failure**, is the point of the third, and it was
+added because the gate failed it. `test-quiet` decided its verdict from the
+number of failing assertions it could parse out of each suite's output. A
+suite that segfaults prints no `[  FAILED  ]` line and no test count, so it
+contributed *zero* failures, and a run with one crashed binary printed
+`TOTAL ... PASS` and exited 0 - with that binary's own line, four rows
+above, saying FAIL. `make test` exited 2 the whole time, so the two
+spellings of "run the tests" disagreed about whether the suite passed.
+
+The verdict now counts suites that exited non-zero and the assertion count
+is only reported. That is the general form: **the count is a report and the
+exit status is the verdict**, and a gate that computes its verdict from the
+report can only see the failures that were articulate enough to describe
+themselves.
 
 ### A driver that shortens its input answers a different question
 
