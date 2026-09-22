@@ -727,18 +727,30 @@ check-oracle-replace: $(TOOLS)
 	fi; \
 	python3 tools/oracle/replace_diff.py --seed $(ORACLE_SEED)
 
-check-oracle-split: ## Compare grx_regex_split() against ECMAScript's
+check-oracle-split: ## Compare grx_regex_split() against ECMAScript's and perl's
 # The last documented surface of the substitution API with no generator
 # behind it. Its six hand-written tests each assert a rule the author had
 # already decided was right; deleting any one of ECMA-262 22.2.6.14's four
 # rules from src/subst/subst.c makes this report hundreds of disagreements
 # and makes none of those six fail.
+#
+# Both dialects, since splitting became a profile axis. The perl side earned
+# its place immediately: twenty-four hand-written probe cases agreed with
+# perl exactly and the generator still found two rules they had missed - a
+# zero-width match at the very end of the subject is a separator in perl and
+# not in ECMAScript, and perl's trailing-empty drop removes *elements* rather
+# than fields, an unset capture among them.
 check-oracle-split: $(TOOLS)
 	@if ! command -v node >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then \
 		printf "check-oracle-split: skipped (no node or no python3)\n"; \
 		exit 0; \
 	fi; \
 	python3 tools/oracle/split_diff.py --seed $(ORACLE_SEED)
+	@if ! command -v perl >/dev/null 2>&1; then \
+		printf "check-oracle-split: perl half skipped (no perl)\n"; \
+		exit 0; \
+	fi; \
+	python3 tools/oracle/split_diff.py --dialect perl --seed $(ORACLE_SEED)
 
 check-oracle-window: ## Compare the search window and its flags against pcre2
 # The six fields of GRX_SearchOptions that decide an answer - begin, end and

@@ -908,12 +908,30 @@ GRX_Result grx_regex_split(const GRX_Regex * regex, const char * subject,
     return GRX_ERR_INVALID;
   }
 
+  // Which of the two splits this dialect has. Read from the profile rather
+  // than threaded through the program, because splitting is a fact about the
+  // library function and not about the compiled pattern.
+  GRX_Profile profile;
+  if (grx_syntax_profile(regex->syntax, &profile) != GRX_OK) {
+    return GRX_ERR_INVALID;
+  }
+  const int perl_rule = profile.split == GRX_SPLIT_PERL;
+
+  // perl's LIMIT: zero or absent means *no limit* and drops trailing empty
+  // fields; a positive one keeps them and makes the last field the unsplit
+  // remainder. ECMAScript's `limit` of 0 means no pieces at all, which is the
+  // same spelling for the opposite thing.
+  const int drop_trailing
+      = perl_rule && (limit == 0 || limit == GRX_NPOS);
+  const size_t field_limit
+      = (perl_rule && limit == 0) ? GRX_NPOS : limit;
+
   GRX_Arena pieces;
   grx_arena_init(&pieces, allocator, sizeof(GRX_Capture), 0,
       GRX_DIAG_OUT_OF_MEMORY);
 
   GRX_Result result = GRX_OK;
-  if (!limit) {
+  if (!perl_rule && !limit) {
     // ECMAScript's `split(re, 0)`: no pieces, whatever the subject is.
     goto publish_pieces;
   }
@@ -934,15 +952,19 @@ GRX_Result grx_regex_split(const GRX_Regex * regex, const char * subject,
     // with the position stepping done by the engine.
     size_t piece_start = resolved.begin;
     int matched = 0;
+    size_t fields = 0;
 
-    // The empty subject is its own rule: one empty piece, unless the pattern
-    // matches the empty string, in which case none at all.
+    // The empty subject is its own rule, and the two dialects disagree
+    // flatly: ECMAScript yields one empty piece unless the pattern matches
+    // the empty string, and perl yields nothing whatever the pattern does.
     if (resolved.begin == end) {
-      GRX_SearchOptions probe = resolved;
-      result = grx_regex_search_ex(regex, subject, length, &probe, match,
-          &matched);
-      if (result == GRX_OK && !matched) {
-        result = add_piece(&pieces, resolved.begin, end);
+      if (!perl_rule) {
+        GRX_SearchOptions probe = resolved;
+        result = grx_regex_search_ex(regex, subject, length, &probe, match,
+            &matched);
+        if (result == GRX_OK && !matched) {
+          result = add_piece(&pieces, resolved.begin, end);
+        }
       }
       goto done;
     }
@@ -956,9 +978,16 @@ GRX_Result grx_regex_split(const GRX_Regex * regex, const char * subject,
         result = GRX_ERR_INTERNAL;
         break;
       }
-      // A separator at or past the end is not a separator: the trailing
-      // piece already covers it.
-      if (whole.start >= end) {
+      // A separator at or past the end. ECMA-262 22.2.6.14 never looks
+      // there - its loop runs while `q < size` - so the trailing piece
+      // already covers it. perl does look, and a zero-width match at the very
+      // end is a separator there, giving a trailing empty field:
+      // `split /$/m, "aab", 2` is ("aab", "") in perl and ["aab"] in node.
+      // It shows only with a positive limit, because otherwise perl's own
+      // trailing-empty drop removes the field again - which is why the
+      // twenty-four hand-written probe cases missed it and the generator
+      // found it.
+      if (whole.start >= end && !perl_rule) {
         break;
       }
       if (whole.end == piece_start) {
@@ -968,16 +997,25 @@ GRX_Result grx_regex_split(const GRX_Regex * regex, const char * subject,
         continue;
       }
 
+      // perl's LIMIT counts *fields* and not the captures between them, and
+      // the last field it produces is the whole unsplit remainder rather than
+      // a truncation. So it stops one short and falls out to the trailing
+      // piece below, where ECMAScript stops dead at `limit` pieces.
+      if (perl_rule && field_limit != GRX_NPOS && fields + 1 >= field_limit) {
+        break;
+      }
+
       result = add_piece(&pieces, piece_start, whole.start);
-      if (result != GRX_OK || pieces.count >= limit) {
+      if (result != GRX_OK || (!perl_rule && pieces.count >= limit)) {
         goto done;
       }
+      fields++;
 
       for (size_t group = 1; group < grx_match_count(match); group++) {
         GRX_Capture capture = {GRX_NPOS, GRX_NPOS};
         grx_match_group(match, group, &capture);
         result = grx_arena_append(&pieces, &capture, NULL);
-        if (result != GRX_OK || pieces.count >= limit) {
+        if (result != GRX_OK || (!perl_rule && pieces.count >= limit)) {
           goto done;
         }
       }
@@ -989,6 +1027,28 @@ GRX_Result grx_regex_split(const GRX_Regex * regex, const char * subject,
 
     if (result == GRX_OK) {
       result = add_piece(&pieces, piece_start, end);
+      fields++;
+    }
+
+    // perl drops trailing empties when no limit was given, and it drops
+    // *elements* rather than fields: a trailing unset capture goes too, and
+    // the walk stops at the first non-empty one whatever kind it is.
+    //
+    // `split /(,)/, "a,b,,"` keeps its final "," - which reads like "a
+    // trailing capture stands" and is not the rule, only that capture being
+    // non-empty. `split /(a)|(b)/, "xa"` is the case that says so: with a
+    // negative limit perl gives "x", "a", undef, "" and without one it gives
+    // "x", "a", having removed the empty field *and* the unset capture
+    // behind it.
+    if (result == GRX_OK && drop_trailing) {
+      while (pieces.count) {
+        const GRX_Capture * last
+            = GRX_ARENA_AT(const GRX_Capture, &pieces, pieces.count - 1);
+        if (!last || (last->start != GRX_NPOS && last->start != last->end)) {
+          break;
+        }
+        pieces.count--;
+      }
     }
 
   done:

@@ -449,6 +449,7 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     // unset in pcre2test and in Node: the body captured it before failing,
     // and Perl does not take it back. ECMA-262 22.2.2.4 says the other two.
     .negative_look = GRX_NEGATIVE_LOOK_KEEP,
+    .split = GRX_SPLIT_PERL,
     // Perl alone again, and for a reason that is about who writes the loop.
     // `\G` is `pos()`, a property of the string that a *failed* match does
     // not move; PCRE2 has no loop of its own, so its `\G` can only mean the

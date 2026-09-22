@@ -77,8 +77,10 @@ std::string replaced(const char * pattern, const std::string & subject,
 
 /** `subject.split(new RegExp(pattern, "u"))`, rendered like JSON. */
 std::string split_into(const char * pattern, const std::string & subject,
-    size_t limit = GRX_NPOS, GRX_Engine engine = GRX_ENGINE_AUTO) {
-  Regex regex(pattern);
+    size_t limit = GRX_NPOS, GRX_Engine engine = GRX_ENGINE_AUTO,
+    GRX_Syntax syntax = GRX_SYNTAX_ECMASCRIPT) {
+  Regex regex(pattern, syntax == GRX_SYNTAX_ECMASCRIPT ? GRX_OPT_UTF : 0,
+      syntax);
   if (!regex.ok()) {
     return "<compile failed>";
   }
@@ -542,4 +544,83 @@ TEST(Subst, LimitsReachReplaceAndSplit) {
 int main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
+}
+
+/**
+ * Perl splits the way perl does, which is not the way ECMAScript does.
+ *
+ * `grx_regex_split()` applied ECMA-262 22.2.6.14 whatever the dialect until
+ * splitting became a profile axis (GRX_SplitRule). Five rules differ, and
+ * every one of them is checked here against what perl 5.40.1 actually
+ * answers rather than against perlfunc's description of it.
+ *
+ * Two of the five were found by tools/oracle/split_diff.py after
+ * twenty-four hand-written probe cases had agreed with perl exactly, which
+ * is the argument for the generator in one sentence.
+ */
+TEST(Split, PerlSplitsLikePerl) {
+  const GRX_Syntax perl = GRX_SYNTAX_PERL;
+  const size_t none = GRX_NPOS;
+
+  // 1. An empty subject yields nothing in perl, whatever the pattern does,
+  //    where ECMAScript yields one empty piece unless the pattern matches
+  //    empty.
+  EXPECT_EQ(split_into(",", "", none, GRX_ENGINE_AUTO, perl), "[]");
+  EXPECT_EQ(split_into("x*", "", none, GRX_ENGINE_AUTO, perl), "[]");
+  EXPECT_EQ(split_into(",", ""), "[\"\"]");
+
+  // 2. Trailing empties are dropped when no limit was given. perl drops
+  //    *elements* and not fields: `split /(a)|(b)/, "xa"` gives "x", "a"
+  //    there, the empty field and the unset capture behind it both gone,
+  //    where a negative limit gives "x", "a", undef, "".
+  EXPECT_EQ(split_into(",", "a,b,,", none, GRX_ENGINE_AUTO, perl),
+      "[\"a\",\"b\"]");
+  EXPECT_EQ(split_into("(a)|(b)", "xa", none, GRX_ENGINE_AUTO, perl),
+      "[\"x\",\"a\"]");
+  // A trailing capture that is *not* empty stands, which is what makes the
+  // rule about emptiness rather than about being a capture.
+  EXPECT_EQ(split_into("(,)", "a,b,,", none, GRX_ENGINE_AUTO, perl),
+      "[\"a\",\",\",\"b\",\",\",\"\",\",\"]");
+  // A positive limit turns the drop off, as perl's positive LIMIT does.
+  EXPECT_EQ(split_into(",", "a,b,,", 10, GRX_ENGINE_AUTO, perl),
+      "[\"a\",\"b\",\"\",\"\"]");
+
+  // 3. `limit` counts fields and not the captures between them, and the last
+  //    field is the unsplit remainder rather than a truncation.
+  EXPECT_EQ(split_into(",", "a,b,c", 2, GRX_ENGINE_AUTO, perl),
+      "[\"a\",\"b,c\"]");
+  EXPECT_EQ(split_into("(,)", "a,b,c", 2, GRX_ENGINE_AUTO, perl),
+      "[\"a\",\",\",\"b,c\"]");
+  EXPECT_EQ(split_into(",", "a,b,c", 2), "[\"a\",\"b\"]");
+
+  // 4. Zero means *no limit* in perl and *no pieces* in ECMAScript - the
+  //    same spelling for opposite things - and perl's zero also drops
+  //    trailing empties, being its absent LIMIT under another name.
+  EXPECT_EQ(split_into(",", "a,b,,", 0, GRX_ENGINE_AUTO, perl),
+      "[\"a\",\"b\"]");
+  EXPECT_EQ(split_into(",", "a,b,c", 0), "[]");
+
+  // 5. A zero-width match at the very end of the subject is a separator in
+  //    perl and not in ECMAScript, whose loop never looks there. Visible
+  //    only with a positive limit, because otherwise rule 2 removes the
+  //    field again - which is why the probe cases missed it.
+  EXPECT_EQ(split_into("$", "aab", 5, GRX_ENGINE_AUTO, perl),
+      "[\"aab\",\"\"]");
+  EXPECT_EQ(split_into("x*", "ab", 5, GRX_ENGINE_AUTO, perl),
+      "[\"a\",\"b\",\"\"]");
+  EXPECT_EQ(split_into("$", "aab", 5), "[\"aab\"]");
+  EXPECT_EQ(split_into("$", "aab", none, GRX_ENGINE_AUTO, perl), "[\"aab\"]");
+
+  // The rules they share, so that making perl differ did not make it differ
+  // everywhere: captures appear between the pieces, and an empty match where
+  // a piece begins is not a separator.
+  EXPECT_EQ(split_into("(,)", "a,b", none, GRX_ENGINE_AUTO, perl),
+      "[\"a\",\",\",\"b\"]");
+  EXPECT_EQ(split_into("b*", "abc", none, GRX_ENGINE_AUTO, perl),
+      "[\"a\",\"c\"]");
+
+  // PCRE2, POSIX and GNU define no split of their own, so they take the
+  // library's default rather than a claim about them.
+  EXPECT_EQ(split_into(",", "a,b,,", none, GRX_ENGINE_AUTO, GRX_SYNTAX_PCRE),
+      "[\"a\",\"b\",\"\",\"\"]");
 }

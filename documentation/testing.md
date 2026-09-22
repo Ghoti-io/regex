@@ -294,9 +294,9 @@ writing `tests/data/probe/split.md`. Splitting could not join the table
 above: its answer is a list of pieces rather than a span, it takes a `limit`
 whose meaning is one of the things being measured, and only three of this
 machine's references have a split at all. It has a column for this library
-as well as for the references, because `grx_regex_split()` implements
-ECMAScript's rule for every dialect and a row where it differs from node is
-a defect rather than an entry in the table.
+as well as for the references, because splitting is now a per-dialect axis
+and a row where a dialect differs from *its own* reference is a defect rather
+than an entry in the table.
 
 Its twenty-four cases are chosen so that no two rules ride on one example.
 That is not a stylistic preference: `split /b*/, "abb"` differs between perl
@@ -305,6 +305,18 @@ rather than anything about the empty-match rule the case looks like it is
 about. Asking perl the same split with a negative limit makes the two agree.
 Section 5.5's capture-reset cell was wrong for exactly that reason before
 WP-03 probed it.
+
+**And twenty-four careful cases were still not enough.** When Perl's split
+became its own profile row, all twenty-four agreed with perl immediately -
+and `tools/oracle/split_diff.py --dialect perl` then found two rules they had
+missed, in 2,000 generated rows. Both hide for the same reason: they are
+visible only when the other rules are held out of the way. A zero-width match
+at the end of the subject is a separator in perl, which shows only under a
+positive limit because perl's trailing-empty drop otherwise removes the field
+again; and that drop removes *elements* rather than fields, which shows only
+when the trailing capture is empty or unset rather than a comma. A probe
+picks cases a person can think of one at a time, which is what makes it a
+good place to *start* an axis and a bad place to finish one.
 
 ### The vector corpus, and proving it can fail
 

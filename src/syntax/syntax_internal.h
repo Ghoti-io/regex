@@ -113,6 +113,38 @@ typedef enum {
 } GRX_NegativeLookCaptures;
 
 /**
+ * @brief How grx_regex_split() divides a subject.
+ *
+ * documentation/dialects.md section 5.16. Three rules move together and are
+ * one axis rather than three, because no implementation mixes them:
+ *
+ * - what an empty subject yields;
+ * - whether trailing empty fields survive;
+ * - what `limit` counts, and what zero means.
+ *
+ * Unlike the other axes here this one is a fact about a *library function*
+ * rather than about a grammar, so most dialects have no answer of their own:
+ * PCRE2, POSIX and GNU define no split at all. Those take `ECMASCRIPT`,
+ * which is the library's default rather than a claim about them.
+ */
+typedef enum {
+  /**
+   * ECMA-262 22.2.6.14. An empty subject yields one empty piece unless the
+   * pattern matches empty; trailing empty pieces are kept; `limit` counts
+   * pieces with captures among them, and zero yields none.
+   */
+  GRX_SPLIT_ECMASCRIPT = 0,
+  /**
+   * perlfunc. An empty subject yields nothing whatever the pattern; trailing
+   * empty *fields* are dropped when no limit was given, a trailing capture
+   * standing after them; `limit` counts fields and not captures, the last
+   * field is the unsplit remainder, and zero means no limit.
+   */
+  GRX_SPLIT_PERL,
+  GRX_SPLIT_COUNT              ///< Closes the enum; not a rule.
+} GRX_SplitRule;
+
+/**
  * @brief Which code points `\w`, `\d` and `\s` stand for.
  *
  * documentation/dialects.md section 5.9. One enum rather than three because
@@ -316,6 +348,7 @@ typedef struct GRX_Profile {
   GRX_BackrefUnsetMode backref_unset; ///< A reference to an unset group.
   GRX_LookbehindLimit lookbehind;   ///< How long a lookbehind may be.
   GRX_NegativeLookCaptures negative_look; ///< Captures a failed body made.
+  GRX_SplitRule split;              ///< How grx_regex_split() divides.
   GRX_IterationRule iteration;      ///< Search-all after an empty match.
   GRX_SearchStartRule search_start; ///< What `\G` asserts while iterating.
   GRX_DollarRule dollar;            ///< `$` without multiline.

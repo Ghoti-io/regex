@@ -26,14 +26,27 @@ piece and its captures, an empty match immediately after a non-empty one, a
 capture that participates on one branch and not the other, an anchor that
 makes a pattern match only at a position the walk has already passed.
 
-**One definition.** node is ECMA-262; there is no second opinion to take and
-none is wanted. The other dialects in documentation/dialects.md section 5.16
-are marked **probe** and this library applies ECMAScript's rule to all of
-them, so running perl's `split` against this would compare two different
-functions - see notes, not this file.
+**Two dialects, two oracles.** Splitting is a per-dialect axis
+(GRX_SplitRule), so each side is asked with its own reference: `ecmascript`
+against node, which is ECMA-262 and needs no second opinion, and `perl`
+against perl's own `split`. Before that axis existed this library applied
+ECMAScript's rule to every dialect, and this file said so and refused to run
+perl - which was honest at the time and would now be measuring the wrong
+question.
+
+Nothing is translated between the two sides. The limit in particular is
+passed through as written: `-` is "no limit", which is perl's *absent* LIMIT,
+and perl's 0 and its absent LIMIT mean the same thing where ECMAScript's 0
+means the opposite. Translating on the way in is how a differential stops
+comparing two implementations and starts comparing one of them with the
+harness.
+
+The dialects in documentation/dialects.md section 5.16 that this machine
+cannot run - Java's and Go's - stay **probe**.
 
 Usage:
-    tools/oracle/split_diff.py [--seed N] [--patterns N] [--subjects N]
+    tools/oracle/split_diff.py [--dialect ecmascript|perl]
+                               [--seed N] [--patterns N] [--subjects N]
                                [--examples N]
 
 Copyright 2026 by Corey Pennycuff
@@ -81,8 +94,26 @@ def make_subject(rng, unicode_mode):
     return "".join(rng.choice(pieces) for _ in range(rng.randint(0, 6)))
 
 
-def make_pattern(rng, unicode_sets):
+# ECMAScript's flag letters are not perl's - `v` and `u` in particular are a
+# syntax error there - so each dialect is driven with its own set, the perl
+# one being perl_diff.py's.
+FLAG_SETS = {
+    "ecmascript": match_diff.FLAG_SETS,
+    "perl": ("", "i", "m", "s", "im", "ims"),
+}
+
+
+def make_pattern(rng, unicode_sets, dialect):
     """Half from the split vocabulary, half from the matching one."""
+    if dialect == "perl":
+        # The split vocabulary only. What this file measures is the *walk* -
+        # where a piece ends, what a limit counts, which empties survive - and
+        # that turns on the separator, not on how exotic the atom is.
+        # match_diff's generator spells ECMAScript's grammar, and feeding it
+        # to perl would measure the front ends again, which perl_diff.py
+        # already does far better.
+        return "".join(rng.choice(SPLIT_ATOMS)
+                       for _ in range(rng.randint(1, 2)))
     if rng.random() < 0.5:
         return rng.choice(SPLIT_ATOMS)
     return match_diff.make_pattern(rng, unicode_sets)
@@ -95,14 +126,31 @@ def ask_node(rows):
     return json.loads(finished.stdout)
 
 
-def ask_library(driver, rows):
-    lines = "".join("%s\t%s\t%s\t%s\n" % (
+def wire(rows):
+    """The rows in the transport both drivers read."""
+    return "".join("%s\t%s\t%s\t%s\n" % (
         flags, pattern.encode("utf-8").hex(), subject.encode("utf-8").hex(),
         "-" if limit is None else limit)
         for flags, pattern, subject, limit in rows)
-    finished = subprocess.run([driver, "ecmascript"], input=lines,
+
+
+def ask_library(driver, rows, dialect):
+    finished = subprocess.run([driver, dialect], input=wire(rows),
         capture_output=True, text=True, check=True)
     return finished.stdout.splitlines()
+
+
+def ask_perl(rows):
+    """perl's own `split`, in grx_split's output shape."""
+    # errors="replace" because perl's warnings quote the offending pattern,
+    # and the generator makes patterns that are not valid UTF-8 on purpose.
+    # Without it the harness dies decoding a warning about the very input it
+    # was built to send.
+    finished = subprocess.run(
+        ["perl", os.path.join(ROOT, "tools", "corpus", "perl_split.pl")],
+        input=wire(rows), capture_output=True, text=True, check=True,
+        errors="replace")
+    return [parse_ours(line) for line in finished.stdout.splitlines()]
 
 
 def parse_ours(line):
@@ -117,6 +165,23 @@ def parse_ours(line):
             for field in fields[2].split("|")]
 
 
+def deviation(dialect, pattern):
+    """A difference this library documents rather than reproduces.
+
+    perlfunc: a split pattern of exactly `/^/` "is treated as if the /m
+    modifier were supplied". It is the *source text* that perl special-cases,
+    not the compiled pattern - `/^a/` does not get it, and `(?:^)` would not
+    either - and a compiled GRX_Regex does not keep its source, so the only
+    way to reproduce it would be to detect the shape of the program, which
+    would catch spellings perl leaves alone.
+
+    documentation/dialects.md section 6 carries it as a deviation. Counted
+    every run rather than filtered silently, so that an exclusion which has
+    stopped matching anything is visible.
+    """
+    return dialect == "perl" and pattern == "^"
+
+
 def theirs(answer):
     """The oracle's answer in the same shape, or the word it gave instead."""
     return answer
@@ -129,6 +194,8 @@ def main(argv):
     parser.add_argument("--subjects", type=int, default=12)
     parser.add_argument("--examples", type=int, default=8)
     parser.add_argument("--driver", default=None)
+    parser.add_argument("--dialect", default="ecmascript",
+        choices=("ecmascript", "perl"))
     args = parser.parse_args(argv[1:])
 
     driver = args.driver
@@ -150,23 +217,29 @@ def main(argv):
     rng = random.Random(args.seed)
     rows = []
     for _ in range(args.patterns):
-        flags = rng.choice(match_diff.FLAG_SETS)
-        pattern = make_pattern(rng, "v" in flags)
+        flags = rng.choice(FLAG_SETS[args.dialect])
+        pattern = make_pattern(rng, "v" in flags, args.dialect)
         for _ in range(args.subjects):
             rows.append((flags, pattern, make_subject(rng, "u" in flags or
                 "v" in flags), rng.choice(LIMITS)))
 
-    ours = ask_library(driver, rows)
+    ours = ask_library(driver, rows, args.dialect)
     if len(ours) != len(rows):
         sys.stderr.write("the driver did not answer every row\n")
         return 2
-    reference = ask_node(rows)
+    oracle = "node" if args.dialect == "ecmascript" else "perl"
+    reference = (ask_node(rows) if args.dialect == "ecmascript"
+                 else ask_perl(rows))
+    if len(reference) != len(rows):
+        sys.stderr.write("the oracle did not answer every row\n")
+        return 2
 
     disagreements = []
     compared = 0
     refused = 0
     one_sided = 0
     surrogates = 0
+    deviations = 0
 
     for index, (flags, pattern, subject, limit) in enumerate(rows):
         mine = parse_ours(ours[index])
@@ -174,6 +247,9 @@ def main(argv):
 
         if yours == "surrogate":
             surrogates += 1
+            continue
+        if deviation(args.dialect, pattern):
+            deviations += 1
             continue
         # A pattern both sides refuse says nothing. One that only one side
         # refuses is a syntax disagreement, which syntax_diff.py is the tool
@@ -205,7 +281,7 @@ def main(argv):
               % (pattern, flags, json.dumps(subject),
                  "none" if limit is None else limit))
         print("    ours:  %s" % json.dumps(mine))
-        print("    node:  %s" % json.dumps(yours))
+        print("    %-6s %s" % (oracle + ":", json.dumps(yours)))
 
     print("split: %d rows, %d compared, %d disagreements"
           % (len(rows), compared, len(disagreements)))
@@ -217,6 +293,17 @@ def main(argv):
     if surrogates:
         print("%-6s %d hold half a surrogate pair and cannot be compared"
               % ("", surrogates))
+    if deviations:
+        print("%-6s %d excluded: /^/ alone, which perl treats as /^/m and "
+              "this library does not (dialects.md section 6)"
+              % ("", deviations))
+    elif args.dialect == "perl":
+        # An exclusion that has stopped matching anything is either a rule
+        # that was implemented or a generator that stopped producing the
+        # shape; both want a person, and neither announces itself.
+        sys.stderr.write(
+            "note: the /^/ deviation matched no row this run; check that the "
+            "generator still produces it before trusting a clean sweep\n")
     # A run that compared almost nothing reports zero disagreements and looks
     # exactly like a run that compared everything, which is the failure this
     # suite has already been caught by twice.
