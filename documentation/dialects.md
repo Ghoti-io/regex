@@ -94,11 +94,11 @@ New bits, in addition to the scaffold's:
 | NAMED_CAPTURE | - | - | - | - | `(?<n>)` `(?'n')` `(?P<n>)` | same three | `(?<n>)` |
 | BACKREFERENCE | `\1`-`\9` | - (undefined; glibc accepts) | `\1`-`\9` | `\1`-`\9` (GNU extension) | yes, and `\g{-1}` relative | yes | yes |
 | LOOKAHEAD | - | - | - | - | yes | yes | yes |
-| NON_ATOMIC_LOOKAROUND | - | - | - | - | `(*napla:`, `(*naplb:` | same, and `(?*`, `(?<*` | - |
+| NON_ATOMIC_LOOKAROUND | - | - | - | - | **-** (probed: perl 5.40.1 answers "Unknown '(*...)' construct 'napla'", and "Sequence (?*...) not recognized") | `(*napla:`, `(*naplb:`, `(?*`, `(?<*` | - |
 | LOOKBEHIND | - | - | - | - | yes (§5.4) | yes | yes |
 | ATOMIC_GROUP | - | - | - | - | yes | yes | - |
 | CONDITIONAL | - | - | - | - | yes | yes | - |
-| RECURSION / SUBROUTINE | - | - | - | - | yes | yes | - |
+| RECURSION / SUBROUTINE | - | - | - | - | `(?R)`, `(?1)`, `(?&name)`, `(?P>name)` | same, and `\g<1>`, `\g'name'` (probed: perl answers "Unterminated \g... pattern" for those two) | - |
 | INLINE_FLAGS / SCOPED_FLAGS | - | - | - | - | both | both | scoped only (ES2025), and not in Node 22 (probed: `(?i:X)` is "Invalid group"), so refused here |
 | COMMENT_GROUP | - | - | - | - | yes | yes | - |
 | POSIX_CLASS | yes | yes | yes | yes | yes (in brackets) | yes | - |
@@ -979,13 +979,13 @@ to be complete for every shipped tier.
 | Perl | `(?[ ])` is PCRE2's grammar only | Perl's nests and takes different operands; a shared reader would accept neither exactly | `GRX_ERR_SYNTAX` |
 | Perl | Where a failed negative lookaround's body stopped *part way through an iteration*, the group reports the last value an iteration **finished** | §5.17 is followed as written - Perl keeps, ECMAScript and PCRE2 discard - but "what the body last wrote" is only well defined if the body failed between iterations, and Perl states no rule for the rest: it decides on the width of the repeated body, answering `(?!(a){2}$)` and `(?!(aa){2}$)` against "aaa" as unset and 0-2. The rule here answers them 1-2 and 0-2, so the two agree wherever Perl is self-consistent and differ on the narrow case where it is not | - |
 | PCRE2 | Callouts `(?C...)` are read and have no effect | no callback API; a callout with no function registered changes no match in PCRE2 either, so accepting it answers the same question. The *syntax* is followed exactly: the number is bounded at 255 as PCRE2 bounds it, and Perl - which answers "Sequence (?C...) not recognized" for every spelling - refuses them here too | - |
-| PCRE2 | `(*script_run:`, `(*sr:`, `(*asr:` | each constrains what its body may match and an ordinary group does not | `GRX_ERR_UNSUPPORTED` — except as a conditional's *condition*, where pcre2test refuses every one of them too ("atomic assertion expected after `(?(`"), so `(?(*script_run:x)y)` is `GRX_ERR_SYNTAX` |
+| PCRE2, Perl | `(*script_run:`, `(*sr:`, `(*asr:`, `(*atomic_script_run:` | each constrains what its body may match and an ordinary group does not | `GRX_ERR_UNSUPPORTED` — except as a conditional's *condition*, where pcre2test refuses every one of them too ("atomic assertion expected after `(?(`"), so `(?(*script_run:x)y)` is `GRX_ERR_SYNTAX` |
 | PCRE2, Perl | `\C`, one code unit | the subject here is code points, and a construct that can land inside a character has no honest approximation | `GRX_ERR_UNSUPPORTED` |
 | PCRE2 | `(*CR)`, `(*CRLF)`, `(*ANYCRLF)`, `(*ANY)`, `(*NUL)` - the newline conventions other than `(*LF)` | each decides what `.` refuses and where `^` and `$` hold, so a pattern naming one and read with another answers a different question. Measured against pcre2test 10.46: `(*CR)` refuses CR from `.`; `(*CRLF)` refuses **nothing**, its terminator being two characters where `.` excludes one; `(*ANYCRLF)` refuses CR and LF; `(*ANY)` refuses LF VT FF CR NEL LS PS; `(*NUL)` refuses NUL. Three of the five need a line terminator two characters long, which `GRX_ASSERT_START_LINE` cannot express - it asks a class about one code point - and pcre2 is not self-consistent about it either: under `(*ANY)` a `^` does not hold between CR and LF and a `$` does. They were accepted and silently ignored until 2026-09-22, which is the answer this table exists to prevent. `(*LF)` is accepted, because it names the convention both sides already use | `GRX_ERR_UNSUPPORTED` |
 | PCRE2 | `(*BSR_ANYCRLF)`, `(*BSR_UNICODE)` | built: `\R` is an alternation the parser writes and a directive may only lead the pattern, so the flag is set before the `\R` it governs. `(*BSR_ANYCRLF)\R` refuses a vertical tab and plain `\R` takes one, in pcre2test and here | - |
 | PCRE2 | `(*LIMIT_MATCH=n)` and kin are applied in this library's units, not PCRE2's | the directive is honoured - §7.1 below - but `(*LIMIT_MATCH=n)` lands on `max_steps` and PCRE2's match limit counts calls to its internal match function, so the same `n` buys a different amount of work in each. A pattern that asks for a limit gets one, and the *number* is not portable | `GRX_ERR_LIMIT` |
 | PCRE2 | A limit directive whose number does not fit a `size_t` is refused | pcre2test answers error 160, "(*VERB) not recognized or malformed", for `(*LIMIT_MATCH=4294967294)`, because its counter is 32 bits wide. This library's ceiling is its own and far higher, so the two disagree only between 2^32 and 2^64; what they share is refusing an unrepresentable request rather than turning it into another number | `GRX_ERR_SYNTAX` |
-| PCRE2, Perl | `(?(VERSION>=n.n))` is answered against 10.46 | this library emulates that version rather than being it | - |
+| PCRE2 | `(?(VERSION>=n.n))` is answered against 10.46 | this library emulates that version rather than being it. PCRE2's alone: perl answers "Unknown switch condition (?(...))" for every spelling, asking about its own version with `$]` outside the pattern | - |
 | POSIX, GNU | Without `REG_NEWLINE`, `^` is the start of the subject and `$` its end, wherever in the pattern they stand | glibc answers the same question two ways. `^b` against "a\nb" is **nomatch** there, so `^` is not a line anchor for a search - but `.*^b` against the same subject **matches 0-3**, and `.^` matches 1-2, so a `^` reached after something consumed the newline *does* succeed. `a*^b`, `()^b`, `(^)b` and `(a\|)^b` are all nomatch again, which is the same position reached without consuming. Five of 7,033 differential cases turn on it and no imported vector does; the rule here is the consistent reading of the two | - |
 | POSIX BRE, POSIX ERE | Measured only where two references agree, and not at all where the dialects differ from both | glibc's `regcomp` defines what POSIX leaves undefined and so answers as GNU; musl's regex, from Laurikari's TRE, shares no code with it but is not strict POSIX either - its basic RE takes `\|`, `\+` and `\?`, and it refuses the `[[.x.]]` POSIX requires. Neither decides alone. The 380 `posix-*` vectors are Spencer's rows the two answer *identically*; 41 they answer differently are left out as open questions and 8 use a construct these dialects do not have. What defines these rows - refusing the GNU operators - has no reference on this machine and is still built from the standard alone | - |
 | GNU BRE | `\<\?` and `\>\+`: a quantifier on an anchor is refused rather than compiled | glibc compiles it and then cannot match with it - `\<\?` against "" is **nomatch** there, and an optional assertion that declines to match the empty string is an artifact rather than a rule. musl compiles the same pattern and matches, so the two references disagree and there is nothing to reproduce. An `*` after an anchor is a different question and is followed exactly: it is an ordinary character, as it is after `^`, which is why `\>*` against "a*" matches 1-2 | `GRX_ERR_SYNTAX` |
@@ -1529,7 +1529,8 @@ Verbs `(*ACCEPT)`, `(*FAIL)`, `(*COMMIT)`, `(*PRUNE)`,
 `(*NO_AUTO_POSSESS)`, `(*LIMIT_MATCH=d)` and kin (the limit directives map
 onto `GRX_Limits` and may only lower a limit); `\K` disallowed in lookaround
 by default; `(?|` branch reset; `(?J)` duplicate names; recursion `(?R)`,
-`(?1)`, `(?-1)`, `(?+1)`, `(?&name)`, `(?P>name)`, `\g<1>`; conditionals on
+`(?1)`, `(?-1)`, `(?+1)`, `(?&name)`, `(?P>name)`, `\g<1>` (that last
+spelling PCRE2's alone); conditionals on
 group number, name, `R`, `Rn`, `R&name`, `DEFINE`, `VERSION>=n`, and on an
 assertion; `\Q...\E` including inside classes; `(?x)` and `(?xx)` extended
 modes; `\h \H \v \V \R \N \X`; `\C` (single code unit: refused,
@@ -1543,7 +1544,20 @@ semantic effect, so it is not modelled.
 off perlre, because the list is one this front end shares between the two
 dialects and a name added for PCRE2 is accepted by both unless something
 says otherwise - and since none of them changes a match, the difference
-would be silent. Plus:
+would be silent.
+
+Minus five more construct families, found the same way and each accepted
+here until 2026-09-22: callouts `(?C...)` ("Sequence (?C...) not
+recognized"); the subroutine-call spellings `\g<1>` and `\g'name'`
+("Unterminated \g... pattern" - perl's `\g` takes `\g1`, `\g-1` and
+`\g{...}`, and its subroutine calls are `(?1)` and `(?&name)`);
+`(?(VERSION>=n))` ("Unknown switch condition"); `(?J)` in every position
+("Sequence (?J...) not recognized" - perl lets two groups share a name
+inside `(?|...)`, which is a rule about branch reset rather than a flag);
+and the non-atomic lookarounds in all four spellings, `(*napla:`,
+`(*naplb:`, `(?*` and `(?<*`.
+
+Plus:
 `\b{wb}` and friends (later); `(?<name>)` with duplicate names via `(?|`;
 `\N{U+263A}`; `(?^...)` caret to reset flags; `\g{-1}` relative
 backreferences; `/n` no-capture; `/xx`. Perl's real difference from PCRE2 is

@@ -841,6 +841,71 @@ TEST(Perl, TheLeadingDirectivesArePcre2sAndPerlRefusesEveryOne) {
   grx_regex_free(skip.regex);
 }
 
+TEST(Perl, FourConstructFamiliesArePcre2sAndPerlHasNoneOfThem) {
+  // Found by sweeping the Perl-family grammar against perl 5.40.1 rather
+  // than by reading perlre, after the leading directives and the callouts
+  // turned out to be two instances of the same shape: one front end, one
+  // table, and nothing saying which of the two dialects a row belongs to.
+  //
+  // Each row is `pattern`, and each is "accept under PCRE2, refuse under
+  // Perl". Perl's own message is in the comment above the group.
+  struct { const char * pattern; } pcre_only[] = {
+    // "Unterminated \g... pattern": perl's `\g` takes `\g1`, `\g-1` and
+    // `\g{...}` and not the angle or quote spellings, which are PCRE2's
+    // subroutine call. Perl *has* subroutine calls - `(?1)`, `(?&name)` -
+    // so this is the spelling and not the construct.
+    {"\\g<1>(a)"},
+    {"\\g<name>(?<name>a)"},
+    {"\\g'1'(a)"},
+    {"\\g'name'(?<name>a)"},
+    // "Unknown switch condition (?(...))": perl asks about its own version
+    // with `$]`, outside the pattern.
+    {"(?(VERSION>=10.0)a|b)"},
+    {"(?(VERSION>=5.40)a|b)"},
+    {"(?(VERSION=10.0)a|b)"},
+    // "Sequence (?J...) not recognized". Perl does let two groups share a
+    // name inside `(?|...)`, which is a rule about branch reset rather
+    // than a flag a pattern may set.
+    {"(?J)(?<n>a)(?<n>b)"},
+    {"(?J:(?<n>a)(?<n>b))"},
+    {"(?-J)a"},
+    {"(?iJ)a"},
+    // "Unknown '(*...)' construct 'napla'" and "Sequence (?*...) not
+    // recognized": perl has no non-atomic lookaround in any spelling.
+    {"(*napla:a)"},
+    {"(*naplb:a)"},
+    {"(*non_atomic_positive_lookahead:a)"},
+    {"(*non_atomic_positive_lookbehind:a)"},
+    {"(?*a)"},
+    {"(?<*a)"},
+  };
+
+  for (const auto & row : pcre_only) {
+    Attempt pcre = compile(row.pattern, GRX_SYNTAX_PCRE);
+    EXPECT_EQ(pcre.result, GRX_OK) << row.pattern << " under PCRE2";
+    grx_regex_free(pcre.regex);
+
+    Attempt perl = compile(row.pattern, GRX_SYNTAX_PERL);
+    EXPECT_EQ(perl.result, GRX_ERR_SYNTAX) << row.pattern << " under Perl";
+    grx_regex_free(perl.regex);
+  }
+
+  // The neighbours each gate has to leave alone, because every one of
+  // these compiles in perl and a gate written one character wider would
+  // have taken them: the `\g` spellings perl does have, the lookaround
+  // names it does have, and `(?|` itself.
+  for (const char * pattern : {"\\g{1}(a)", "\\g1(a)", "\\g{name}(?<name>a)",
+           "(?1)(a)", "(?&name)(?<name>a)", "(*atomic:a)", "(*pla:a)",
+           "(*plb:a)", "(*nla:a)", "(*nlb:a)", "(*positive_lookahead:a)",
+           "(*negative_lookbehind:a)", "(?|(a)|(b))",
+           "(?|(?<n>a)|(?<n>b))", "(?(1)a|b)(c)", "(?(<n>)a|b)(?<n>c)",
+           "(?(R)a|b)", "(?(DEFINE)(?<n>a))"}) {
+    Attempt kept = compile(pattern, GRX_SYNTAX_PERL);
+    EXPECT_EQ(kept.result, GRX_OK) << pattern << " is perl's too";
+    grx_regex_free(kept.regex);
+  }
+}
+
 TEST(Perl, TheNewlineDirectivesAreBuiltOrRefusedAndNeverIgnored) {
   // `(*BSR_ANYCRLF)` cuts `\R` to the three ASCII line endings and
   // `(*BSR_UNICODE)` restores it. Both are built, because `\R` is an

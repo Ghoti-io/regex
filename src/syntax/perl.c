@@ -794,6 +794,16 @@ static GRX_Result read_g_reference(GRX_Parser * parser, size_t start,
   int subroutine = open == '<' || open == '\'';
   char terminator = open == '<' ? '>' : (open == '\'' ? '\'' : '}');
 
+  // `\g<1>` and `\g'name'` are PCRE2's spelling of a subroutine call and
+  // are not perl's: perl answers "Unterminated \g... pattern in regex" for
+  // all four of `\g<1>`, `\g<name>`, `\g'1'` and `\g'name'`, its `\g`
+  // taking only `\g1`, `\g-1` and `\g{...}`. Perl has subroutine calls -
+  // `(?1)` and `(?&name)` - so what is refused here is the spelling and not
+  // the construct.
+  if (subroutine && flavour(parser) != FLAVOUR_PCRE) {
+    return grx_parse_fail(parser, GRX_DIAG_INVALID_BACKREFERENCE, start, 2);
+  }
+
   if (open == '{' || subroutine) {
     parser->position++;
     if (open == '{') {
@@ -1804,9 +1814,23 @@ static uint32_t option_for_letter(char c) {
     case 'x': return GRX_OPT_EXTENDED;
     case 'n': return GRX_OPT_NO_CAPTURE;
     case 'U': return GRX_OPT_UNGREEDY;
-    case 'J': return GRX_OPT_DUPLICATE_NAMES;
     default: return 0;
   }
+}
+
+/**
+ * The option a letter sets in one flavour only.
+ *
+ * `J` is PCRE2's: perl answers "Sequence (?J...) not recognized in regex"
+ * for `(?J)`, `(?J:...)`, `(?-J)` and `(?iJ)` alike. Perl does allow two
+ * groups to share a name inside `(?|...)`, which is a rule about branch
+ * reset rather than a flag a pattern may set.
+ */
+static uint32_t flavour_option_for_letter(const GRX_Parser * parser, char c) {
+  if (c == 'J' && flavour(parser) == FLAVOUR_PCRE) {
+    return GRX_OPT_DUPLICATE_NAMES;
+  }
+  return 0;
 }
 
 /**
@@ -1927,6 +1951,9 @@ static GRX_Result read_option_letters(GRX_Parser * parser, size_t start,
 
     uint32_t option = option_for_letter(c);
     if (!option) {
+      option = flavour_option_for_letter(parser, c);
+    }
+    if (!option) {
       return grx_parse_fail(parser, GRX_DIAG_UNKNOWN_FLAG, parser->position, 1);
     }
 
@@ -2021,26 +2048,38 @@ typedef struct {
   const char * name;
   GRX_NodeKind kind;
   uint32_t a;
+  int pcre_only; ///< Perl has no such construct, whatever it is spelled.
 } AltGroupRow;
 
+// The four non-atomic rows are PCRE2's alone: perl answers "Unknown
+// '(*...)' construct 'napla'" for each of them, and "Sequence (?*...) not
+// recognized" for the short spellings read elsewhere. Everything above them
+// is in both - `(*atomic:`, `(*pla:` and the rest all compile in perl
+// 5.40.1, probed rather than assumed, which is also what corrected section
+// 3's feature table: it gave NON_ATOMIC_LOOKAROUND to Perl as well.
 static const AltGroupRow alt_group_table[] = {
-  {"atomic", GRX_NODE_GROUP, 0},
-  {"pla", GRX_NODE_LOOKAROUND, GRX_LOOK_AHEAD_POSITIVE},
-  {"positive_lookahead", GRX_NODE_LOOKAROUND, GRX_LOOK_AHEAD_POSITIVE},
-  {"nla", GRX_NODE_LOOKAROUND, GRX_LOOK_AHEAD_NEGATIVE},
-  {"negative_lookahead", GRX_NODE_LOOKAROUND, GRX_LOOK_AHEAD_NEGATIVE},
-  {"plb", GRX_NODE_LOOKAROUND, GRX_LOOK_BEHIND_POSITIVE},
-  {"positive_lookbehind", GRX_NODE_LOOKAROUND, GRX_LOOK_BEHIND_POSITIVE},
-  {"nlb", GRX_NODE_LOOKAROUND, GRX_LOOK_BEHIND_NEGATIVE},
-  {"negative_lookbehind", GRX_NODE_LOOKAROUND, GRX_LOOK_BEHIND_NEGATIVE},
-  {"napla", GRX_NODE_LOOKAROUND, GRX_LOOK_AHEAD_NON_ATOMIC},
+  {"atomic", GRX_NODE_GROUP, 0, 0},
+  {"pla", GRX_NODE_LOOKAROUND, GRX_LOOK_AHEAD_POSITIVE, 0},
+  {"positive_lookahead", GRX_NODE_LOOKAROUND, GRX_LOOK_AHEAD_POSITIVE, 0},
+  {"nla", GRX_NODE_LOOKAROUND, GRX_LOOK_AHEAD_NEGATIVE, 0},
+  {"negative_lookahead", GRX_NODE_LOOKAROUND, GRX_LOOK_AHEAD_NEGATIVE, 0},
+  {"plb", GRX_NODE_LOOKAROUND, GRX_LOOK_BEHIND_POSITIVE, 0},
+  {"positive_lookbehind", GRX_NODE_LOOKAROUND, GRX_LOOK_BEHIND_POSITIVE, 0},
+  {"nlb", GRX_NODE_LOOKAROUND, GRX_LOOK_BEHIND_NEGATIVE, 0},
+  {"negative_lookbehind", GRX_NODE_LOOKAROUND, GRX_LOOK_BEHIND_NEGATIVE, 0},
+  {"napla", GRX_NODE_LOOKAROUND, GRX_LOOK_AHEAD_NON_ATOMIC, 1},
   {"non_atomic_positive_lookahead", GRX_NODE_LOOKAROUND,
-      GRX_LOOK_AHEAD_NON_ATOMIC},
-  {"naplb", GRX_NODE_LOOKAROUND, GRX_LOOK_BEHIND_NON_ATOMIC},
+      GRX_LOOK_AHEAD_NON_ATOMIC, 1},
+  {"naplb", GRX_NODE_LOOKAROUND, GRX_LOOK_BEHIND_NON_ATOMIC, 1},
   {"non_atomic_positive_lookbehind", GRX_NODE_LOOKAROUND,
-      GRX_LOOK_BEHIND_NON_ATOMIC},
-  {NULL, GRX_NODE_GROUP, 0},
+      GRX_LOOK_BEHIND_NON_ATOMIC, 1},
+  {NULL, GRX_NODE_GROUP, 0, 0},
 };
+
+/** Whether this parse may read that row at all. */
+static int alt_group_available(const GRX_Parser * parser, size_t row) {
+  return !alt_group_table[row].pcre_only || flavour(parser) == FLAVOUR_PCRE;
+}
 
 /**
  * The `(*...)` spellings this library refuses on purpose.
@@ -2315,6 +2354,7 @@ static int star_names_assertion(const GRX_Parser * parser, size_t offset) {
   const char * name = parser->text + first;
   for (size_t i = 0; alt_group_table[i].name; i++) {
     if (alt_group_table[i].kind == GRX_NODE_LOOKAROUND
+        && alt_group_available(parser, i)
         && strlen(alt_group_table[i].name) == length
         && memcmp(alt_group_table[i].name, name, length) == 0) {
       return 1;
@@ -2374,6 +2414,9 @@ static GRX_Result read_star_construct(GRX_Parser * parser, size_t start,
     if (strlen(alt_group_table[i].name) != length
         || memcmp(alt_group_table[i].name, name, length) != 0) {
       continue;
+    }
+    if (!alt_group_available(parser, i)) {
+      break;
     }
     if (!has_argument) {
       return grx_parse_fail(parser, GRX_DIAG_INVALID_GROUP_SYNTAX, start,
@@ -3198,10 +3241,16 @@ static GRX_Result read_condition(GRX_Parser * parser, size_t start,
     return GRX_OK;
   }
 
-  if (looking_at(parser, "VERSION")) {
+  if (looking_at(parser, "VERSION") && flavour(parser) == FLAVOUR_PCRE) {
     // `(?(VERSION>=10.46)...)`. Answered here: this library is not PCRE2 and
     // reports the version it emulates, which documentation/dialects.md
     // section 9 names.
+    //
+    // PCRE2's alone. Perl answers "Unknown switch condition (?(...))" for
+    // every spelling of it, its own version being asked about with `$]`
+    // outside the pattern. Falling through rather than failing here lets
+    // the name branch read `VERSION...` as a group name, which is what
+    // perl's own error is about.
     parser->position += 7;
     int at_least = grx_parse_eat(parser, '>');
     if (!grx_parse_eat(parser, '=')) {
@@ -3479,10 +3528,14 @@ static GRX_Result pcre_group_open(GRX_Parser * parser, GRX_GroupOpen * out) {
     return GRX_OK;
   }
 
-  if (c == '*' || (c == '<' && byte_at(parser, 1) == '*')) {
+  if ((c == '*' || (c == '<' && byte_at(parser, 1) == '*'))
+      && flavour(parser) == FLAVOUR_PCRE) {
     // `(?*` and `(?<*` are `(*napla:` and `(*naplb:` written short. Before
     // the named-group branch, which would otherwise read `(?<*` as a name
     // beginning with an asterisk.
+    //
+    // PCRE2's, with the long spellings: perl has no non-atomic lookaround
+    // at all and answers "Sequence (?*...) not recognized in regex".
     out->kind = GRX_NODE_LOOKAROUND;
     out->a = c == '*' ? GRX_LOOK_AHEAD_NON_ATOMIC
                       : GRX_LOOK_BEHIND_NON_ATOMIC;
