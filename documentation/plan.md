@@ -300,8 +300,7 @@ verbs with their exact backtracking semantics, `\G`. *Done:* `testinput1`
 and `testinput2` match vectors pass on the backtracker; bit-state and Pike
 equivalence holds on their eligible subsets. *Depends on:* WP-08, WP-18.
 
-**WP-20 PCRE2 and Perl conformance.** *conformance, M.* **Landed** for
-perl. The pcre2test format converter of [testing.md](testing.md) §7; Perl's
+**WP-20 PCRE2 and Perl conformance.** *conformance, M.* **Landed.** The pcre2test format converter of [testing.md](testing.md) §7; Perl's
 `re_tests` converter; both run through their oracles; random-pattern
 generation for the Perl family. *Done:* rates published. *Depends on:*
 WP-04.
@@ -317,11 +316,29 @@ at all, which is the argument for a generator in one line. There was already
 a test saying `(?^i)` compiles; asking whether a construct is accepted is
 not asking whether it works.
 
-`GRX_SYNTAX_PCRE` has no generated comparison. pcre2 is its definition and
-`pcre2test` is here, but it reports matched *text* rather than offsets and
-this machine has no `pcre2.h` to link a driver against, so the shape the
-other oracles use is not available for it. `perl_diff.py` says so at the
-foot of the file rather than implying its coverage extends there.
+`GRX_SYNTAX_PCRE` is generated against too, through
+`tools/oracle/pcre2_match.c`. The first draft of this paragraph said it could
+not be: `pcre2test` reports matched *text* rather than offsets and this
+machine has no `pcre2.h`. The first half is still true and is why there is a
+driver; the second turned out to be a fetch rather than a wall, since the
+header is a configure template four version macros deep and the release is
+already pinned. Linking the installed library means the pin, the header, the
+`.so` and the imported `testinput` files are one version.
+
+Two more defects came out of it. A backreference to a name shared by several
+groups resolved to one group at lowering time, so
+`(?(DEFINE)(?<n>a))(?<n>b)\k<n>` could never match - the DEFINE's group never
+participates, and both references take the first group that is *set*, which
+is the rule `grx_match_group_named()` already followed. `GRX_IR_AMBIGUOUS_REF`
+had recorded the case since it was written and only the analyser read it,
+which is the third instance of that shape after `escaped_specials` and
+`GRX_PREFER_LEFTMOST_LONGEST`. And perl quantifies every control verb, as it
+quantifies `\K` and the anchors; the rule had pcre2's half only.
+
+It also found a defect in each reference - perl 5.40.1's branch-reset
+regression, already pinned and described, and a pcre2 10.46 internal error
+when a lookbehind stands beside an extended class. Both are excluded by name
+and counted in every run, so an exclusion that stops applying is visible.
 
 **WP-21 The Perl profile.** *front ends, S.* The differences from PCRE2 in
 [dialects.md](dialects.md) §9 "Perl"; the folding deviation recorded;

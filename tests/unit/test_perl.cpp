@@ -456,10 +456,10 @@ TEST(Perl, AcceptEndsTheMatchAndClosesTheGroupsThatAreOpen) {
   EXPECT_EQ(group_of("(A(A|B(*ACCEPT)|C)D)(E)", "AB", 2), "1-2");
 }
 
-TEST(Perl, FailIsTheOneVerbThatCannotBeRepeated) {
-  // `(*ACCEPT)*` compiles in pcre2test and `(*FAIL)*` does not, which is not
-  // an inconsistency: `(*FAIL)` is `(?!)` written short, and a negative
-  // lookahead is the one verb with no extent of its own.
+TEST(Perl, PcreRepeatsOnlyAcceptAndPerlRepeatsEveryVerb) {
+  // Under PCRE2, `(*ACCEPT)*` compiles and `(*FAIL)*` does not, which is not
+  // an inconsistency: `(*ACCEPT)` is the one verb that ends the match where
+  // it stands, so a quantifier on it is unreachable rather than meaningless.
   Attempt accept = compile("a(*ACCEPT)*b");
   EXPECT_EQ(accept.result, GRX_OK);
   grx_regex_free(accept.regex);
@@ -468,6 +468,25 @@ TEST(Perl, FailIsTheOneVerbThatCannotBeRepeated) {
   EXPECT_NE(fail.result, GRX_OK);
   EXPECT_EQ(fail.diag, GRX_DIAG_NOTHING_TO_REPEAT);
   grx_regex_free(fail.regex);
+
+  // perl quantifies every one of them, as it quantifies `\K` and the
+  // anchors - the third rule in pcre_check_quantifier_target() of that
+  // shape. This half was missing until tools/oracle/perl_diff.py generated
+  // `(*FAIL)*` and perl matched it; no imported corpus has a repeated verb
+  // outside the pcre2 files, which is why the rule had only pcre2's half.
+  for (const char * pattern :
+      {"(*FAIL)*", "(*PRUNE)*", "(*SKIP)*", "(*COMMIT)*", "(*THEN)*",
+       "(*MARK:x)*", "(*:x)*", "(*ACCEPT)*"}) {
+    Attempt perl = compile(pattern, GRX_SYNTAX_PERL);
+    EXPECT_EQ(perl.result, GRX_OK) << pattern;
+    grx_regex_free(perl.regex);
+  }
+
+  // And the repeat is taken zero times, so the verb never fires: perl
+  // matches "ab" against `a(*FAIL)*b` where the same pattern without the
+  // quantifier cannot match at all.
+  EXPECT_EQ(span_of("a(*FAIL)*b", "ab", GRX_SYNTAX_PERL), "0-2");
+  EXPECT_EQ(span_of("a(*FAIL)b", "ab", GRX_SYNTAX_PERL), "nomatch");
 }
 
 TEST(Perl, CommitStopsTheSearchWherePruneOnlyStopsTheAttempt) {

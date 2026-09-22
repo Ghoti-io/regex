@@ -882,9 +882,56 @@ static int assertion_holds(
  * lowering, and it has to: what a backreference matches is not known until
  * the match runs.
  */
+/**
+ * Which group an ambiguous backreference means, right now.
+ *
+ * A name may belong to several groups, and a reference written with it means
+ * the first of them that is *set*. Both references agree and the rule is the
+ * one grx_match_group_named() follows, so this is the same question asked at
+ * match time: `(?(DEFINE)(?<n>a))(?<n>b)\k<n>` matches "abb" because the
+ * DEFINE's group never ran, and `(?<n>a)(?<n>b)\k<n>` does not, because the
+ * first group did run and captured "a".
+ *
+ * "Set" is read through the shadow spans where there are any, for the reason
+ * backref_matches() reads them: a group that is open right now last closed
+ * with something, and that is what a reference to it compares against.
+ *
+ * Returns the first set group, or the first in the list when none is set -
+ * so that the caller's "the group did not participate" branch is reached
+ * with a real group number and the dialect's answer to that question is
+ * still the one given.
+ */
+static uint32_t ambiguous_group(const Backtrack * bt, const GRX_Inst * inst) {
+  size_t count = 0;
+  const uint32_t * groups
+      = grx_program_scan_list(bt->program, inst->x, &count);
+  if (!groups || !count) {
+    return 0;
+  }
+  for (size_t i = 0; i < count; i++) {
+    size_t start_slot = (size_t)groups[i] * 2;
+    size_t end_slot = start_slot + 1;
+    if (end_slot >= bt->captures) {
+      continue;
+    }
+    if (bt->shadow) {
+      start_slot += bt->shadow;
+      end_slot += bt->shadow;
+    }
+    if (bt->slots[start_slot] != GRX_NPOS
+        && bt->slots[end_slot] != GRX_NPOS) {
+      return groups[i];
+    }
+  }
+  return groups[0];
+}
+
 static int backref_matches(const Backtrack * bt, const GRX_Inst * inst,
     size_t position, int reverse, size_t * out_width) {
-  size_t start_slot = (size_t)inst->x * 2;
+  uint32_t group = (inst->flags & GRX_INST_AMBIGUOUS_REF)
+      ? ambiguous_group(bt, inst)
+      : inst->x;
+  size_t start_slot = (size_t)group * 2;
   size_t end_slot = start_slot + 1;
   *out_width = 0;
 

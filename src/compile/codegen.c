@@ -1147,9 +1147,18 @@ static GRX_Result gen_look(Codegen * codegen, const GRX_IRNode * node) {
  * layout is a LOOK's - the body follows the instruction and ends in a MATCH
  * of its own - so `x` is free to hold the list's offset.
  */
-static GRX_Result gen_scan(Codegen * codegen, const GRX_IRNode * node) {
+/**
+ * Copy one of the IR's group lists into the program, and say where it went.
+ *
+ * The program outlives the IR, so a list an instruction refers to has to be
+ * carried over rather than pointed at. Two instructions use one: SCAN, whose
+ * list is the groups `(*scs:(...))` may scan, and an ambiguous BACKREF,
+ * whose list is every group sharing the name it was written with.
+ */
+static GRX_Result copy_group_list(Codegen * codegen, const GRX_IRNode * node,
+    uint32_t ir_list, uint32_t * out_offset) {
   size_t count = 0;
-  const uint32_t * groups = grx_ir_scan_list(codegen->ir, node->a, &count);
+  const uint32_t * groups = grx_ir_scan_list(codegen->ir, ir_list, &count);
   if (!groups || !count) {
     return fail(codegen, GRX_DIAG_INTERNAL, node);
   }
@@ -1165,6 +1174,50 @@ static GRX_Result gen_scan(Codegen * codegen, const GRX_IRNode * node) {
         != GRX_OK) {
       return fail(codegen, GRX_DIAG_OUT_OF_MEMORY, node);
     }
+  }
+  *out_offset = offset;
+  return GRX_OK;
+}
+
+/**
+ * Emit a backreference.
+ *
+ * `x` is the group, unless the name it was written with belongs to several -
+ * then it is a list of them and GRX_INST_AMBIGUOUS_REF says so, because
+ * which one the reference means is whichever is *set* when it runs.
+ */
+static GRX_Result gen_backref(Codegen * codegen, const GRX_IRNode * node) {
+  uint32_t operand = node->a;
+  if (node->flags & GRX_IR_AMBIGUOUS_REF) {
+    GRX_Result listed
+        = copy_group_list(codegen, node, node->b, &operand);
+    if (listed != GRX_OK) {
+      return listed;
+    }
+  }
+
+  uint32_t index = GRX_INDEX_NONE;
+  GRX_Result result = emit(codegen, GRX_OP_BACKREF, node->backref_unset,
+      operand, (node->flags & GRX_IR_CASELESS) ? 1u : 0u, node, &index);
+  if (result != GRX_OK) {
+    return result;
+  }
+  if (node->flags & GRX_IR_AMBIGUOUS_REF) {
+    GRX_Inst * inst
+        = GRX_ARENA_AT(GRX_Inst, &codegen->program->insts, index);
+    if (!inst) {
+      return fail(codegen, GRX_DIAG_INTERNAL, node);
+    }
+    inst->flags |= GRX_INST_AMBIGUOUS_REF;
+  }
+  return GRX_OK;
+}
+
+static GRX_Result gen_scan(Codegen * codegen, const GRX_IRNode * node) {
+  uint32_t offset = 0;
+  GRX_Result listed = copy_group_list(codegen, node, node->a, &offset);
+  if (listed != GRX_OK) {
+    return listed;
   }
 
   uint32_t scan = GRX_INDEX_NONE;
@@ -1269,8 +1322,7 @@ static GRX_Result gen(Codegen * codegen, uint32_t node_index) {
     }
 
     case GRX_IR_BACKREF:
-      return emit(codegen, GRX_OP_BACKREF, node->backref_unset, node->a,
-          (node->flags & GRX_IR_CASELESS) ? 1u : 0u, node, NULL);
+      return gen_backref(codegen, node);
 
     case GRX_IR_KEEP:
       return emit(codegen, GRX_OP_KEEP, 0, 0, 0, node, NULL);

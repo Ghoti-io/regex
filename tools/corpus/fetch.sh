@@ -76,6 +76,14 @@ fetch_pcre2() {
   # disagreement between them and the installed pcre2test is worth seeing.
   fetch_file "$dest/testoutput1" "$base/testoutput1"
   fetch_file "$dest/testoutput2" "$base/testoutput2"
+  # The public header, from the same release, so that a driver can be linked
+  # against the pcre2 already installed without guessing at its ABI. It is a
+  # configure template, but only four substitutions deep and all of them
+  # version numbers - the Makefile does them. Debian ships libpcre2-8.so.0
+  # without the -dev package's pcre2.h, which is the whole reason this is
+  # fetched rather than found.
+  fetch_file "$dest/pcre2.h.in" \
+    "https://raw.githubusercontent.com/PCRE2Project/pcre2/$ref/src/pcre2.h.in"
 }
 
 fetch_perl() {

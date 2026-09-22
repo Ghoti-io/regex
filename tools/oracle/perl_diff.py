@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Compare the Perl-family front end against perl, on patterns nobody wrote.
+"""Compare the Perl-family front ends against their references, on patterns
+nobody wrote.
 
 WP-20 landed with its conformance rates measured against two imported
 corpora - pcre2test's `testinput1` and `testinput2`, and Perl's own
@@ -14,14 +15,17 @@ shipped dialects, because every alternation in the corpus happened to have
 branches of the same length. A generator does not know what is interesting
 and so does not skip it.
 
-**perl is the definition here**, the way glibc is the definition for
-`gnu-bre` and `gnu-ere`: `GRX_SYNTAX_PERL` means "what perl does", so one
-oracle decides and there is no agreement to take. That is not true of
-`GRX_SYNTAX_PCRE`, whose reference is pcre2 and which this tool does not
-cover - see the note at the bottom of the file.
+**Each dialect has one definition**, the way glibc is the definition for
+`gnu-bre` and `gnu-ere`. `GRX_SYNTAX_PERL` means "what perl does" and
+`GRX_SYNTAX_PCRE` means "what pcre2 does", so one oracle decides each and
+there is no agreement to take. The two vocabularies are separate for the
+same reason: `(?J)` is PCRE2's and perl refuses it, `(*scs:` and `(*pla:`
+are PCRE2's, and asking one reference about the other's spelling measures
+nothing.
 
 Usage:
     tools/oracle/perl_diff.py [--seed N] [--patterns N] [--examples N]
+                              [--dialect perl|pcre|all]
 
 Copyright 2026 by Corey Pennycuff
 """
@@ -40,7 +44,7 @@ ROOT = os.path.dirname(os.path.dirname(HERE))
 # interactions rather than one rule at a time. Ordered the way dialects.md
 # describes them, and deliberately including several whose branches are
 # different lengths - the shape that found WP-24.
-ATOMS = [
+SHARED_ATOMS = [
     # Literals and the dot.
     "a", "b", ".", "\\.", "\\n", "\\t",
     # Classes, in all three spellings the dialect has.
@@ -114,10 +118,40 @@ ATOMS = [
 # Deliberately no lone backslash: concatenated with the atom after it, `\` and
 # `b` would spell `\b`, and the generator would be asking a question about a
 # boundary while believing it had asked about a trailing escape.
-ILL_FORMED = [
+SHARED_ILL_FORMED = [
     "(", ")", "[", "a{1", "[a-", "(?", "(?<", "\\k<nope>", "(?<1a>b)",
     "*", "+", "?", "a**", "(?<n>a)(?<n>b)", "\\g{99}", "(?P<n>a)(?P<n>b)",
 ]
+
+# What only perl has, or only perl spells this way.
+PERL_ONLY = [
+    # Duplicate names, ordinary in perl and needing `(?J)` in PCRE2.
+    "(?<n>a)|(?<n>b)", "(?<n>a)|(?<n>b)\\k<n>",
+    # The charset modifiers, which pick which alphabet `\\w` and friends
+    # mean. PCRE2 has no such letter.
+    "(?a:\\w)", "(?u:\\w)", "(?aa:\\w)", "(?d:\\w)",
+]
+
+# What only PCRE2 has.
+PCRE_ONLY = [
+    # The duplicate-name switch perl does not need.
+    "(?J)(?<n>a)(?<n>b)", "(?J)(?<n>a)|(?<n>b)",
+    # The alphabetic spellings of the lookarounds, which are also the only
+    # `(*...)` constructs a conditional accepts.
+    "(*pla:a)", "(*nla:a)", "(*plb:a)", "(*nlb:a)",
+    "(*positive_lookahead:a)", "(a)(?(*pla:a)b|c)",
+    # Non-atomic lookaround, which can be re-entered where an ordinary one
+    # cannot - a difference visible only in what a backreference then sees.
+    "(*napla:a|(.))\\1", "(*naplb:(.)|x)\\1", "(?*a|(.))\\1",
+    # Scan-substring, which re-runs an assertion over what a group captured.
+    "(a)(*scs:(1)a)", "(?<n>a)(*scs:(<n>)a)",
+    # The extended class, added in 10.45. Perl's `(?[...])` is a different
+    # grammar and this library's perl row does not claim it.
+    "(?[ [a-z] & [b-d] ])", "(?[ [ab] | [cd] ])", "(?[ ! [a] ])",
+    # PCRE2's own `\\g` spelling, and the callouts.
+    "(a)\\g{1}", "(?C)a", "(?C1)a",
+]
+
 
 SUBJECTS = ["", "a", "b", "ab", "aab", "abc", "aaa", "a.b", "A", "AB", "aA",
             "\n", "a\nb", "abab", "ababaaa", "aaaa", "a b", "é", "ab\n"]
@@ -126,6 +160,25 @@ SUBJECTS = ["", "a", "b", "ab", "aab", "abc", "aaa", "a.b", "A", "AB", "aA",
 # and has no GRX_OPT_EXTENDED among them, so a row with `x` would be asking
 # perl one question and this library another.
 FLAG_SETS = ["", "i", "m", "s", "im", "ims"]
+
+ATOMS = {
+    "perl": SHARED_ATOMS + PERL_ONLY,
+    "pcre": SHARED_ATOMS + PCRE_ONLY,
+}
+
+ILL_FORMED = {
+    "perl": SHARED_ILL_FORMED,
+    # A duplicate name without `(?J)` is PCRE2's error 143 and perl's
+    # ordinary Tuesday, so it is ill formed in one vocabulary only.
+    "pcre": SHARED_ILL_FORMED
+        + ["(?<n>a)(?<n>b)", "(?[ [a] & ])", "(*scs:(9)a)"],
+}
+
+# Which reference decides each dialect. perl is a script this repository
+# owns; pcre2 is a C driver linked against the pcre2 on the machine, because
+# pcre2test reports matched text rather than offsets and omits a trailing
+# group that did not participate.
+REFERENCE = {"perl": "perl", "pcre": "pcre2"}
 
 
 def find(name):
@@ -195,26 +248,82 @@ def trim_unset(line):
     return " ".join(fields)
 
 
-def main(argv):
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--seed", type=int, default=1)
-    parser.add_argument("--patterns", type=int, default=400)
-    parser.add_argument("--examples", type=int, default=12)
-    args = parser.parse_args(argv[1:])
+def reference_defect(dialect, pattern, them):
+    r"""Rows where the *reference* is known to be wrong.
 
-    perl = os.path.join(ROOT, "tools", "corpus", "perl_match.pl")
-    ours = find("grx_match")
-    if not ours:
-        sys.stderr.write("run `make tools` first\n")
-        return 2
-    if not os.path.exists(perl):
-        sys.stderr.write("tools/corpus/perl_match.pl is missing\n")
-        return 2
+    Counted and reported rather than silently dropped, and written as
+    narrowly as the defect allows, because an exclusion is the one thing in a
+    differential that can hide what it exists to find. Both of these were
+    found by this tool and confirmed by hand against the other reference.
 
-    rng = random.Random(args.seed)
-    atoms = ATOMS + ILL_FORMED
+    **perl, a branch reset whose group is later read.** Two shapes, one
+    defect. `(?|(a)|(b))(a)\g{-1}` does not match "aaaa" in perl 5.40.1 where
+    pcre2 matches it, and `(?|(a)|(b))(?(1)x|y)` takes the false arm on "by"
+    although perl itself reports group 1 as "b" - pcre2 takes "bx", and so
+    does this library. That is Perl/perl5#24577, a regression introduced in
+    5.38 and closed 2026-07-22, already described in tools/corpus/VERSIONS,
+    which pins 5.40.1 because that is what this machine ships. Two rows of
+    known-gaps.txt are the named form of the same question.
+
+    The rule asks for a branch reset *and* a construct that reads a group,
+    because that is the boundary: `(?|(a)|(b))\1` and
+    `(?|(a)|(b))(a)\g{-2}` both agree with pcre2, and `(?:(a)|(b))(?(1)x|y)`
+    without the branch reset agrees too. It excludes nothing from the pcre
+    run, so a real defect of this library in this family would still be
+    caught there, against the reference that has it right.
+
+    When the pin moves past the fix this exclusion should start catching
+    nothing, and the count printed each run is how that will be noticed.
+
+    **pcre2, a lookbehind with an extended class.** Any pattern holding both
+    a lookbehind and a `(?[...])` whose body uses an operator - `|`, `&`,
+    `-`, `^` or `!` - fails to compile with "error 170: internal error:
+    unknown meta code in check_lookbehinds()". A lookahead does not do it and
+    an extended class with no operator does not do it; the order of the two
+    does not matter. pcre2test 10.46 reports the same internal error, so it
+    is the library and not this driver. This library compiles those patterns
+    and matches them.
+
+    The pcre2 rule is gated on the reference having *refused* the pattern, so
+    a row pcre2 actually compiled can never be excluded by it.
+    """
+    if dialect == "perl":
+        return "(?|" in pattern and ("\\g{-" in pattern or "(?(" in pattern)
+    return (them.startswith("compile") and "(?[" in pattern
+        and ("(?<=" in pattern or "(?<!" in pattern or "(*nlb:" in pattern
+            or "(*plb:" in pattern or "(*naplb:" in pattern))
+
+
+def reference_command(dialect):
+    """How to run the reference for a dialect, or None with a reason said."""
+    if dialect == "perl":
+        script = os.path.join(ROOT, "tools", "corpus", "perl_match.pl")
+        if not os.path.exists(script):
+            print("%s: skipped (tools/corpus/perl_match.pl is missing)"
+                  % dialect)
+            return None
+        return ["perl", script]
+    driver = find("pcre2_match")
+    if not driver:
+        # Not an error. The driver needs pcre2's header, which arrives with
+        # the corpus, and a libpcre2-8 to link; a clone that has neither
+        # builds everything else and says this was not run.
+        print("%s: skipped (no pcre2_match; run tools/corpus/fetch.sh pcre2 "
+              "and `make tools`)" % dialect)
+        return None
+    return [driver]
+
+
+def compare(dialect, ours, seed, patterns, examples):
+    """One dialect against its reference. None means the run was not made."""
+    command = reference_command(dialect)
+    if not command:
+        return 0
+
+    rng = random.Random(seed)
+    atoms = ATOMS[dialect] + ILL_FORMED[dialect]
     built = set()
-    for _ in range(args.patterns):
+    for _ in range(patterns):
         built.add("".join(rng.choice(atoms) for _ in range(rng.randint(1, 3))))
 
     cases = [(flags, pattern, subject)
@@ -222,19 +331,26 @@ def main(argv):
              for flags in FLAG_SETS
              for subject in SUBJECTS]
 
-    theirs = ask(["perl", perl], cases)
-    mine = ask([ours, "perl"], cases)
+    theirs = ask(command, cases)
+    mine = ask([ours, dialect], cases)
     if len(theirs) != len(cases) or len(mine) != len(cases):
         sys.stderr.write(
-            "a driver answered %d and %d of %d requests\n"
-            % (len(theirs), len(mine), len(cases)))
-        return 2
+            "%s: the drivers answered %d and %d of %d requests\n"
+            % (dialect, len(theirs), len(mine), len(cases)))
+        return None
 
     disagreements = []
     compared = 0
     unsupported = 0
+    declined = 0
+    known = 0
 
     for (flags, pattern, subject), them, us in zip(cases, theirs, mine):
+        # The reference declining to answer - a match limit, a subject it
+        # will not read - is not an opinion this library can be held to.
+        if them.startswith("skip"):
+            declined += 1
+            continue
         # A construct this library does not implement is a gap, not a
         # disagreement about what the construct means. It is counted and
         # printed rather than dropped, because a rising count is the tool
@@ -243,40 +359,70 @@ def main(argv):
             unsupported += 1
             continue
         compared += 1
-        if trim_unset(normalise_ours(us)) != trim_unset(them):
-            disagreements.append((flags, pattern, subject, them, us))
+        if trim_unset(normalise_ours(us)) == trim_unset(them):
+            continue
+        if reference_defect(dialect, pattern, them):
+            known += 1
+            continue
+        disagreements.append((flags, pattern, subject, them, us))
 
-    for flags, pattern, subject, them, us in disagreements[:args.examples]:
-        print("  /%s/%-4s on %-12s perl=%-22s ours=%s"
-              % (pattern, flags, repr(subject), them, us))
+    for flags, pattern, subject, them, us in disagreements[:examples]:
+        print("  /%s/%-4s on %-12s %s=%-22s ours=%s"
+              % (pattern, flags, repr(subject), REFERENCE[dialect], them, us))
 
-    print("perl: %d patterns x %d flag sets x %d subjects = %d cases, "
-          "%d compared, %d this library does not implement, %d disagreements"
-          % (len(built), len(FLAG_SETS), len(SUBJECTS), len(cases), compared,
-             unsupported, len(disagreements)))
-    return 1 if disagreements else 0
+    print("%-5s %d patterns x %d flag sets x %d subjects = %d cases against "
+          "%s, %d compared, %d this library does not implement, %d the "
+          "reference declined, %d a known %s defect, %d disagreements"
+          % (dialect + ":", len(built), len(FLAG_SETS), len(SUBJECTS),
+             len(cases), REFERENCE[dialect], compared, unsupported, declined,
+             known, REFERENCE[dialect], len(disagreements)))
+    return len(disagreements)
+
+
+def main(argv):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--seed", type=int, default=1)
+    parser.add_argument("--patterns", type=int, default=400)
+    parser.add_argument("--examples", type=int, default=12)
+    parser.add_argument("--dialect", default="all",
+        help="perl, pcre, or all")
+    args = parser.parse_args(argv[1:])
+
+    ours = find("grx_match")
+    if not ours:
+        sys.stderr.write("run `make tools` first\n")
+        return 2
+
+    dialects = ("perl", "pcre") if args.dialect == "all" else (args.dialect,)
+    total = 0
+    for dialect in dialects:
+        if dialect not in ATOMS:
+            sys.stderr.write("unknown dialect: %s\n" % dialect)
+            return 2
+        # A seed per dialect, so that adding one does not renumber the other.
+        found = compare(dialect, ours, args.seed, args.patterns, args.examples)
+        if found is None:
+            return 2
+        total += found
+    return 1 if total else 0
 
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv))
 
 
-# Why there is no pcre2 half
-# --------------------------
+# Why pcre2 is linked rather than driven through pcre2test
+# --------------------------------------------------------
 #
-# `GRX_SYNTAX_PCRE`'s reference is pcre2, and `pcre2test` is installed here,
-# but it cannot be driven in the shape every other oracle in this directory
-# uses. It reports the matched *text* rather than byte offsets, and it omits
-# a trailing group that did not participate rather than naming it - so "which
-# span did group 2 get" is not a question it answers, and that is most of
-# what a match comparison is for.
+# `pcre2test` is installed here and cannot answer the question a match
+# comparison asks. It reports the matched *text* rather than byte offsets,
+# and it omits a trailing group that did not participate rather than naming
+# it - so "which span did group two get" is not something it says.
 #
-# The alternative is a small C driver linking libpcre2-8, as posix_match.c
-# links glibc's regex. This machine has the shared library and not the
-# header, so that is a fetch-and-build away rather than a file away, and it
-# is written down here rather than left as an absence somebody has to notice.
-#
-# What this does *not* mean is that the PCRE2 front end is unchecked: it has
-# pcre2test's own `testinput1` and `testinput2` imported as vectors, which is
-# where its published rate comes from. It means the generator - the part that
-# asks questions nobody thought to write down - reaches perl and not pcre2.
+# `tools/oracle/pcre2_match.c` asks `pcre2_match()` and reads the ovector
+# instead, which is the same question every other oracle here is asked. It
+# links the pcre2 already on the machine through the public header of the
+# release pinned in `tools/corpus/VERSIONS`, fetched alongside the corpus
+# because Debian ships `libpcre2-8.so.0` without the `-dev` package's
+# `pcre2.h`. The pin, the header, the installed library and the imported
+# `testinput` files are therefore one version.

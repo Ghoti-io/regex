@@ -1632,6 +1632,7 @@ static size_t name_definitions(Lowering * low, const char * name) {
 static GRX_Result lower_backref(
     Lowering * low, const GRX_Node * node, uint32_t * out_node) {
   uint32_t group = node->a;
+  uint32_t list = GRX_INDEX_NONE;
   int ambiguous = 0;
   if (node->flags & GRX_NODE_NAMED) {
     const char * name = grx_pattern_name(low->pattern, node->b);
@@ -1641,6 +1642,32 @@ static GRX_Result lower_backref(
     // `(?J)` lets one name belong to several groups, and then the reference
     // names all of them. See GRX_IR_AMBIGUOUS_REF.
     ambiguous = name_definitions(low, name) > 1;
+    if (ambiguous) {
+      // Every group of that name, in the order they were written, because
+      // the reference means the first of them that is *set* and which that
+      // is not known until the match runs. resolve_name() above found the
+      // first, which is the right answer only when it participated.
+      GRX_Result listed = grx_ir_scan_list_begin(low->ir, &list);
+      if (listed != GRX_OK) {
+        return storage_failed(low, listed, node);
+      }
+      for (size_t i = 0; i < low->pattern->nodes.count; i++) {
+        const GRX_Node * candidate
+            = grx_pattern_node(low->pattern, (uint32_t)i);
+        if (!candidate || candidate->kind != GRX_NODE_GROUP
+            || !(candidate->flags & GRX_NODE_NAMED)) {
+          continue;
+        }
+        const char * spelling = grx_pattern_name(low->pattern, candidate->b);
+        if (!spelling || strcmp(spelling, name) != 0) {
+          continue;
+        }
+        listed = grx_ir_scan_list_push(low->ir, list, candidate->a);
+        if (listed != GRX_OK) {
+          return storage_failed(low, listed, node);
+        }
+      }
+    }
   }
 
   GRX_Result result = add(low, GRX_IR_BACKREF, node, out_node);
@@ -1652,6 +1679,7 @@ static GRX_Result lower_backref(
   backref->a = group;
   if (ambiguous) {
     backref->flags |= GRX_IR_AMBIGUOUS_REF;
+    backref->b = list;
   }
   backref->backref_unset = (uint8_t)low->profile.backref_unset;
   if (low->fold != GRX_FOLD_NONE) {

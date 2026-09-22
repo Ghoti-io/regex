@@ -3779,12 +3779,21 @@ static GRX_Result pcre_check_quantifier_target(
           parser, GRX_DIAG_NOTHING_TO_REPEAT, offset, length);
 
     case GRX_NODE_CONTROL:
-      // `(*ACCEPT)*` compiles and every other verb repeated does not, which
-      // is not an inconsistency: `(*ACCEPT)` is the one verb that ends the
-      // match where it stands, so a quantifier on it is unreachable rather
-      // than meaningless. pcre2test reports error 109 for the other six,
-      // `(*MARK:x)*` and `(*:x)*` among them. Only FAIL was refused here
-      // until a corpus record asked about a repeated mark.
+      // perl quantifies every verb, as it quantifies every other zero-width
+      // thing: `(*FAIL)*`, `(*PRUNE)*`, `(*MARK:x)*` and the rest all
+      // compile in 5.40.1, and `a(*FAIL)*b` matches "ab" with the repeat
+      // taken zero times. The third case in this function with that shape,
+      // after `\K` and the anchors, and the one a generated pattern found
+      // rather than a corpus record.
+      if (flavour(parser) == FLAVOUR_PERL) {
+        return GRX_OK;
+      }
+      // pcre2 allows it on `(*ACCEPT)` alone, which is not an inconsistency:
+      // `(*ACCEPT)` is the one verb that ends the match where it stands, so
+      // a quantifier on it is unreachable rather than meaningless.
+      // pcre2test reports error 109 for the other six, `(*MARK:x)*` and
+      // `(*:x)*` among them. Only FAIL was refused here until a corpus
+      // record asked about a repeated mark.
       if (atom->a != (uint32_t)GRX_VERB_ACCEPT) {
         return grx_parse_fail(
             parser, GRX_DIAG_NOTHING_TO_REPEAT, offset, length);

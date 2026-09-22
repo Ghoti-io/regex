@@ -354,17 +354,52 @@ MUSL_CFLAGS := -std=c11 -O2 -w -Itools/oracle/musl-include \
 	-DCHARCLASS_NAME_MAX=14 -DRE_DUP_MAX=255 \
 	-Dregcomp=musl_regcomp -Dregexec=musl_regexec -Dregfree=musl_regfree
 
+# pcre2, linked rather than driven through pcre2test. Debian ships
+# libpcre2-8.so.0 without the -dev package's pcre2.h, so the header comes
+# from the release pinned in tools/corpus/VERSIONS, fetched with the corpus.
+# It is a configure template whose only open substitutions are four version
+# macros, which is what the rule below fills in - so the pinned corpus, the
+# header and the installed library are one version or the build says so.
+PCRE2_REF := $(shell awk '$$1 == "pcre2" { print $$2; exit }' tools/corpus/VERSIONS)
+PCRE2_SRC := third_party/pcre2/$(PCRE2_REF)
+PCRE2_HEADER_IN := $(PCRE2_SRC)/pcre2.h.in
+PCRE2_HEADER := $(GEN_DIR)/pcre2.h
+PCRE2_MATCH := $(APP_DIR)/tools/pcre2_match$(EXE_EXTENSION)
+
+# Where the shared library actually is. `-lpcre2-8` needs the `.so` symlink
+# that only the -dev package installs, so the versioned file is found instead
+# - through ldconfig where there is one, and by looking where a Debian
+# multiarch install puts it otherwise.
+PCRE2_LIB := $(shell { /sbin/ldconfig -p 2>/dev/null || ldconfig -p 2>/dev/null; } \
+	| awk '/libpcre2-8\.so/ { print $$NF; exit }')
+ifeq ($(PCRE2_LIB),)
+PCRE2_LIB := $(firstword $(wildcard /usr/lib/*/libpcre2-8.so.0 \
+	/usr/lib/libpcre2-8.so.0 /lib/*/libpcre2-8.so.0))
+endif
+
+# Joined to the tool list only when both halves are present, the way the musl
+# oracle is: a fresh clone that has not fetched, or a machine with no pcre2,
+# builds what it can and the checks that want this say they skipped.
+ifneq ($(wildcard $(PCRE2_HEADER_IN)),)
+ifneq ($(PCRE2_LIB),)
+PCRE2_AVAILABLE := 1
+endif
+endif
+
 # The oracle drivers: this library wrapped so that a conformance harness can
 # ask it the same question it asks a reference implementation. Built on
 # demand rather than by `all`, because they are development tools and are not
 # installed.
 TOOL_SOURCES := $(shell find tools -type f -name '*.c' -not -path 'tools/jsonschema/*' \
-	-not -name 'musl_match.c' 2>/dev/null)
+	-not -name 'musl_match.c' -not -name 'pcre2_match.c' 2>/dev/null)
 TOOLS := $(patsubst tools/%.c,$(APP_DIR)/tools/%$(EXE_EXTENSION),$(notdir $(TOOL_SOURCES)))
 TOOLS := $(patsubst tools/oracle/%.c,$(APP_DIR)/tools/%$(EXE_EXTENSION),$(TOOL_SOURCES))
 TOOLS := $(patsubst tools/limits/%.c,$(APP_DIR)/tools/%$(EXE_EXTENSION),$(TOOLS))
 ifdef MUSL_AVAILABLE
 TOOLS += $(MUSL_MATCH)
+endif
+ifdef PCRE2_AVAILABLE
+TOOLS += $(PCRE2_MATCH)
 endif
 
 # The JSON Schema suite runner links `text`, so it joins the list only when
@@ -544,6 +579,28 @@ $(MUSL_MATCH): tools/oracle/musl_match.c tools/oracle/musl-include/regex.h \
 	$(CC) $(MUSL_CFLAGS) -DGRX_MUSL_REF='"$(MUSL_REF)"' -o $@ \
 		tools/oracle/musl_match.c $(MUSL_UNITS)
 
+# pcre2's public header, from the pinned release's configure template. The
+# four substitutions are the whole of what configure does to it, and they are
+# version macros the driver prints so that a mismatch with the installed
+# library is visible in the run rather than inferred from a crash.
+$(PCRE2_HEADER): $(PCRE2_HEADER_IN)
+	@mkdir -p $(@D)
+	@sed -e 's/@PCRE2_MAJOR@/$(word 1,$(subst ., ,$(patsubst pcre2-%,%,$(PCRE2_REF))))/' \
+	     -e 's/@PCRE2_MINOR@/$(word 2,$(subst ., ,$(patsubst pcre2-%,%,$(PCRE2_REF))))/' \
+	     -e 's/@PCRE2_PRERELEASE@//' \
+	     -e 's/@PCRE2_DATE@/$(PCRE2_REF)/' $< > $@
+
+# Nothing of this library linked, for the reason musl_match links none: an
+# oracle answers for somebody else's implementation and must not be able to
+# reach this one. The shared library is named by path rather than by -l,
+# because the `.so` symlink -l needs belongs to a -dev package that is not
+# installed here.
+$(PCRE2_MATCH): tools/oracle/pcre2_match.c $(PCRE2_HEADER)
+	@printf "\n### Compiling Tool: pcre2_match ###\n"
+	@mkdir -p $(@D)
+	$(CC) -std=c17 -O2 -Wall -Wextra -I$(GEN_DIR) -o $@ \
+		tools/oracle/pcre2_match.c $(PCRE2_LIB)
+
 $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/limits/%.c $(APP_DIR)/$(STATIC_TARGET) \
 		| $(APP_DIR)/$(TARGET)
 	@printf "\n### Compiling Tool: $* ###\n"
@@ -636,10 +693,12 @@ check-oracle-numeric-properties: $(TOOLS)
 	python3 tools/oracle/numeric_property_diff.py \
 		--driver $(APP_DIR)/tools/grx_properties
 
-check-oracle-perl: ## Compare the Perl front end against perl, on generated patterns
+check-oracle-perl: ## Compare the Perl-family front ends against perl and pcre2
 # WP-20's missing half. The rates were measured against two imported corpora;
 # this generates the patterns instead, which is what found `(?^i:...)`
-# dropping the letter after the reset.
+# dropping the letter after the reset, a backreference to a duplicated name
+# resolving to a group that was never set, and perl's rule for quantifying a
+# control verb.
 check-oracle-perl: $(TOOLS)
 	@if ! command -v perl >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then \
 		printf "check-oracle-perl: skipped (no perl or no python3)\n"; \

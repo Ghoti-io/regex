@@ -13,6 +13,33 @@ test262 35d566604512cba908054eec49f85e64a59f3091
 # PhilipHazel/pcre2. testinput1 (Perl-compatible) and testinput2
 # (PCRE2-specific), from the release that matches the pcre2test on this
 # machine: 10.46.
+#
+# And src/pcre2.h.in, the public header, because tools/oracle/pcre2_match.c
+# links the installed libpcre2-8 and Debian 13 ships libpcre2-8.so.0 without
+# the -dev package's pcre2.h. It is a configure template whose only open
+# substitutions are four version macros; the Makefile fills them from this
+# ref, so the header, the installed library and the imported testinput files
+# are one version or the build is wrong in a way that says so.
+#
+# Why a driver at all when pcre2test is here: pcre2test reports the matched
+# *text* rather than byte offsets, and omits a trailing group that did not
+# participate rather than naming it. "Which span did group two get" is most
+# of what a match comparison asks and is not something it says.
+#
+# A defect in 10.46, found by tools/oracle/perl_diff.py and confirmed against
+# pcre2test itself, so it is the library and not the driver. A pattern
+# holding both a lookbehind and a `(?[...])` extended class whose body uses
+# an operator - `|`, `&`, `-`, `^` or `!` - fails to compile:
+#
+#   pcre2test <<< '/(?<=a)(?[ [a] | [b] ])/'
+#   # Failed: error 170 at offset 0: internal error: unknown meta code in
+#   # check_lookbehinds()
+#
+# A lookahead does not do it; an extended class with no operator does not do
+# it; the order of the two does not matter. This library compiles those
+# patterns and matches them, so the differential counts them as a known pcre2
+# defect and prints the count. Searched the tracker rather than reporting
+# anything, the way the perl entry below was handled.
 pcre2 pcre2-10.46
 
 # Perl/perl5. t/re/re_tests, from the release matching the perl on this

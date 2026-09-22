@@ -427,20 +427,49 @@ Also fixed there: `tools/oracle/grx_match.c` had no name for the bit-state
 engine and printed `?`, which is what turned the first run of the extended
 check into 1,304 spurious disagreements.
 
-### The Perl differential
+### The Perl-family differential
 
 `make check-oracle-perl` runs `tools/oracle/perl_diff.py`, which builds
-patterns from an atom vocabulary and puts them through
-`tools/corpus/perl_match.pl` and this library side by side. perl is the
-definition of `GRX_SYNTAX_PERL` the way glibc is the definition of `gnu-bre`,
-so one oracle decides and there is no agreement to take.
+patterns from an atom vocabulary and puts them through a reference and this
+library side by side. Each dialect has one definition, the way glibc is the
+definition of `gnu-bre`: perl decides `GRX_SYNTAX_PERL` and pcre2 decides
+`GRX_SYNTAX_PCRE`, so there is no agreement to take and the vocabularies are
+separate - `(?J)` is PCRE2's and perl refuses it, the charset modifiers are
+perl's and PCRE2 has no letter for them.
+
+perl is driven through `tools/corpus/perl_match.pl`. pcre2 is driven through
+`tools/oracle/pcre2_match.c`, which links the installed libpcre2-8 through
+the pinned release's public header, because `pcre2test` reports matched text
+rather than offsets and omits a trailing unset group - see
+`tools/corpus/VERSIONS`.
 
 It exists because a corpus is a set of questions somebody already knew to
 ask. The POSIX differential is the standing example - the corpus was at 100%
 while `a|ab` against "ab" answered 0-1 in four shipped dialects, because
-every alternation in it happened to have branches of the same length. This
-one found `(?^i:...)` dropping the letter after the reset, a construct that
-appears in neither `testinput1`, `testinput2` nor `re_tests`.
+every alternation in it happened to have branches of the same length.
+
+Three defects of this library so far, none of them reachable from the
+imported corpora:
+
+- `(?^i:...)` applied the reset and dropped the letter after it, so every
+  `(?^<letters>...)` silently meant `(?^:...)`. `(?^` appears in none of
+  `testinput1`, `testinput2` or `re_tests`.
+- A backreference to a name belonging to several groups resolved to one
+  group at lowering time, so `(?(DEFINE)(?<n>a))(?<n>b)\k<n>` could never
+  match - the first group of that name never participates. Both references
+  take the first group that is *set*, which is the rule
+  `grx_match_group_named()` already followed. `GRX_IR_AMBIGUOUS_REF` had
+  recorded the situation since it was written and only the analyser read it.
+- perl quantifies every control verb, as it quantifies `\K` and the anchors.
+  The rule had pcre2's half only, which refuses everything but `(*ACCEPT)*`.
+
+And two defects of the *references*, each excluded by name and counted in
+the run so the exclusion cannot go quiet: perl 5.40.1's branch-reset
+regression (Perl/perl5#24577) and a pcre2 10.46 internal error on a
+lookbehind beside an extended class. Both are described in
+`tools/corpus/VERSIONS`, and the perl exclusion applies to the perl run
+only - the same family is still compared against pcre2, which has it
+right.
 
 The vocabulary includes ill-formed atoms for the reason
 [posix_diff.py](../tools/oracle/posix_diff.py) does: without them nothing is

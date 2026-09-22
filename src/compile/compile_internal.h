@@ -212,6 +212,27 @@ typedef enum {
 #define GRX_INST_KEEP_CAPTURES GRX_BIT(2)
 
 /**
+ * @brief BACKREF: `x` is a scan list, not a group number.
+ *
+ * A name may belong to several groups - `(?J)` in PCRE2, and nothing at all
+ * in perl, which allows it by default - and a reference written with that
+ * name means *the first of them that is set*. Both references agree on the
+ * rule and it is the same one grx_match_group_named() follows:
+ * `(?(DEFINE)(?<n>a))(?<n>b)\k<n>` matches "abb" because the DEFINE's group
+ * never ran, while `(?<n>a)(?<n>b)\k<n>` does not, because the first group
+ * did run and captured "a".
+ *
+ * Without this the reference resolved to one group at lowering time and the
+ * engine compared against that group alone, so a name whose first group was
+ * unset could never match anything. GRX_IR_AMBIGUOUS_REF had recorded the
+ * situation since it was written and only the analyser read it - the same
+ * unread-constant shape `escaped_specials` and GRX_PREFER_LEFTMOST_LONGEST
+ * were, and found the same way, by generating patterns rather than reading
+ * the grammar.
+ */
+#define GRX_INST_AMBIGUOUS_REF GRX_BIT(3)
+
+/**
  * @brief One compiled instruction.
  *
  * Twelve bytes and fixed-size, so that a program is one array a jump can
