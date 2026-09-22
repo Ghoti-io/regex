@@ -1288,12 +1288,22 @@ syntax.
 ## 9. The gates are themselves tested
 
 A gate nobody has tried to fail is a gate that might not work, and this suite
-has already shipped two that did not: `make test` carried only the *last* test
-binary's exit status, so a failure in any earlier one printed and was
-discarded; and UBSan is recoverable by default, so a violation printed
-`runtime error: ...` and the run still reported "suite clean". Both were found
-by deliberately breaking something and noticing the build stayed green - not
-by reading the Makefile, which looked right.
+has already shipped three that did not: `make test` carried only the *last*
+test binary's exit status, so a failure in any earlier one printed and was
+discarded; UBSan is recoverable by default, so a violation printed
+`runtime error: ...` and the run still reported "suite clean"; and
+`-fsanitize=undefined` under **gcc** does not include `float-cast-overflow`,
+where clang's does, so converting a float too large for its integer type was
+undefined behaviour nothing was watching for. All three were found by
+deliberately breaking something and noticing the build stayed green - not by
+reading the Makefile, which looked right each time.
+
+The third has a second half worth keeping, because it is the first two
+combined: turning the check *on* without also naming it in
+`-fno-sanitize-recover=` makes it print the diagnostic and exit 0. Measured
+all three ways - off: prints nothing, exits 0; on and recoverable: prints,
+exits 0; on and named in both: exits 1. `UBSAN_CHECKS` in the Makefile is one
+list feeding both flags so the halves cannot drift apart again.
 
 So each gate has a known way to make it fail, and that is exercised by hand
 when the gate changes:
@@ -1304,6 +1314,7 @@ when the gate changes:
 | `make test-valgrind` | a `malloc` never freed, in the first binary | non-zero, naming the suite |
 | `make test-asan` | a write past a heap allocation | non-zero, ASan report |
 | `make test-asan` | a signed integer overflow | non-zero, UBSan report, no "clean" line |
+| `make test-asan` | `(int)1e30`, a float cast that does not fit | non-zero, UBSan report |
 | `make fuzz-run-<h>` | a `__builtin_trap()` on a reachable input | non-zero, crash artifact written |
 | `make fuzz-run-<h>` | a signed integer overflow on a reachable input | non-zero, UBSan report |
 | `check-symbols` | an exported function with no `namespace.h` entry | non-zero, naming the symbol |

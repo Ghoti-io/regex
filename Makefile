@@ -1332,7 +1332,26 @@ endif
 # about four times slower, so a wall clock bound that is right for a release
 # build fails here for a reason that is not a defect. The tests that care
 # scale their budget by it rather than being loosened for everybody.
-ASAN_UBSAN_FLAGS := -fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer -g -DGRX_SANITIZERS=1
+#
+# UBSAN_CHECKS is one list feeding both `-fsanitize=` and
+# `-fno-sanitize-recover=`, because those two are the halves of one decision
+# and writing them separately is how they drift: a check that is *on* and
+# still recoverable prints its diagnostic and exits 0, which is the failure
+# this block already exists to prevent, wearing a different name.
+#
+# `float-cast-overflow` is named because gcc's `undefined` group does not
+# contain it and clang's does. Converting a float that does not fit an
+# integer is undefined behaviour, and under gcc - which is what builds
+# `make test-asan` here - nothing was watching for it. Measured rather than
+# read: `(int)1e30` with the old flags printed -2147483648 and exited 0;
+# with the check on but only `-fno-sanitize-recover=undefined` it printed
+# the diagnostic and *still* exited 0; with both halves naming it, it exits
+# 1. `bounds-strict` and `pointer-overflow` are already inside gcc 14.2's
+# `undefined` and add nothing. `float-divide-by-zero` is deliberately left
+# out: IEEE defines it, and it would fire on correct code that records an
+# infinity.
+UBSAN_CHECKS := undefined,float-cast-overflow
+ASAN_UBSAN_FLAGS := -fsanitize=address,$(UBSAN_CHECKS) -fno-sanitize-recover=$(UBSAN_CHECKS) -fno-omit-frame-pointer -g -DGRX_SANITIZERS=1
 ASAN_BUILD_DIR := ./build/$(BUILD)-asan
 ASAN_OBJ_DIR := $(ASAN_BUILD_DIR)/objects
 ASAN_APP_DIR := $(ASAN_BUILD_DIR)/apps
@@ -1431,7 +1450,10 @@ FUZZ_CC_OK := $(shell which $(FUZZ_CC) 2>/dev/null)
 # libFuzzer prints it once, keeps going, writes no artifact and exits 0. A
 # fuzzer that finds undefined behaviour and discards it is worse than no
 # fuzzer. Verified by injecting a signed overflow on a reachable input.
-FUZZ_SAN := -fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer -g -O1
+# The same list, so the fuzzer and the suite cannot disagree about what
+# counts as undefined. clang already has `float-cast-overflow` inside
+# `undefined`, so naming it changes nothing here and keeps one definition.
+FUZZ_SAN := -fsanitize=address,$(UBSAN_CHECKS) -fno-sanitize-recover=$(UBSAN_CHECKS) -fno-omit-frame-pointer -g -O1
 FUZZ_LIB_FLAGS := $(FUZZ_SAN) -fsanitize=fuzzer-no-link
 FUZZ_BIN_FLAGS := $(FUZZ_SAN) -fsanitize=fuzzer
 FUZZ_DIR := $(BUILD_DIR)/fuzz
