@@ -1534,6 +1534,44 @@ TEST(Perl, TheSecondAOfSlashAaCutsEveryFoldOrbitAtAscii) {
   EXPECT_EQ(compile_result("A\\K*", GRX_SYNTAX_PCRE), GRX_ERR_SYNTAX);
 }
 
+TEST(Perl, ANamedCodePointIsASyntaxErrorBecauseWeCannotTellWhichKindItIs) {
+  // core.h draws a line: GRX_ERR_SYNTAX is "this dialect rejects this text",
+  // GRX_ERR_UNSUPPORTED is "this dialect accepts it and this library does
+  // not yet". `\N{name}` looks like it belongs on the UNSUPPORTED side -
+  // Perl has the construct, and with `use charnames`
+  // /\N{LATIN SMALL LETTER A}/ matches "a" - and dialects.md section 6 said
+  // so for years.
+  //
+  // It does not, and the reason is that Perl accepts only a name it *knows*.
+  // `/abc\N{def}/` is a syntax error in Perl, and `re_tests` carries four
+  // such rows. Telling one from the other needs UnicodeData.txt's Name
+  // field, which this library does not generate - the "both name resolvers"
+  // in the README are the strict and loose resolvers for *property* names,
+  // which is a different table.
+  //
+  // So the honest answer for every `\N{...}` is the one that matches the
+  // reference on every case anyone can currently produce: SYNTAX. Claiming
+  // UNSUPPORTED would assert "Perl accepts this" for inputs where it does
+  // not. Changing it back breaks re_tests.rxt lines 6549, 6577, 6585 and
+  // 6589, which is how this test came to exist.
+  EXPECT_EQ(compile_result("\\N{LATIN SMALL LETTER A}", GRX_SYNTAX_PERL),
+      GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("abc\\N{def}", GRX_SYNTAX_PERL), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("\\N{LATIN SMALL LETTER A}", GRX_SYNTAX_PCRE),
+      GRX_ERR_SYNTAX);
+
+  // The spellings both dialects do have keep working. `(*UTF)` because
+  // pcre2 makes `\N{U+hh}` UTF-only - "\N{U+dddd} is supported only in
+  // Unicode (UTF) mode" - and refuses it without, exactly as this library
+  // does; Perl's subject is always text, so its row needs no directive.
+  EXPECT_EQ(span_of("\\N{U+0041}", "A", GRX_SYNTAX_PERL), "0-1");
+  EXPECT_EQ(span_of("(*UTF)\\N{U+0041}", "A", GRX_SYNTAX_PCRE), "0-1");
+  EXPECT_EQ(compile_result("\\N{U+0041}", GRX_SYNTAX_PCRE), GRX_ERR_SYNTAX);
+  EXPECT_EQ(span_of("\\N", "a", GRX_SYNTAX_PERL), "0-1");
+  EXPECT_EQ(span_of("\\N", "\n", GRX_SYNTAX_PCRE), "nomatch");
+  EXPECT_EQ(span_of("a\\N{2}b", "axyb", GRX_SYNTAX_PERL), "0-4");
+}
+
 TEST(Perl, AnIterationThatConsumedNothingStopsTheLoopRatherThanFailing) {
   // documentation/dialects.md section 5.5's BREAK_ON_EMPTY. `(a*)*` against
   // "b" reports group 1 as the empty string in perl and in pcre2test, and as

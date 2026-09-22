@@ -973,7 +973,8 @@ to be complete for every shipped tier.
 | ECMAScript | Repeat counts are limited (the grammar admits 2^53 - 1) | as above | `GRX_ERR_LIMIT` |
 | ECMAScript | **The subject is code points, not UTF-16 code units, in *both* modes** | see below | - |
 | ECMAScript | A match cannot begin or end between the halves of a surrogate pair | as above | - |
-| Perl | `(?{ })`, `(??{ })`, `\N{name}` by name | code execution; name table size | `GRX_ERR_UNSUPPORTED` |
+| Perl | `(?{ })`, `(??{ })` | code execution | `GRX_ERR_UNSUPPORTED` |
+| Perl | `\N{name}` by name | Perl accepts only a name it *knows* - `/abc\N{def}/` is a syntax error there, and `re_tests` carries four such rows - so telling "a name Perl has and we lack" from "not a name at all" needs UnicodeData.txt's Name field, which is not generated here. The README's "both name resolvers" are the strict and loose resolvers for *property* names, a different table. Reporting UNSUPPORTED would assert "Perl accepts this" for inputs where it does not | `GRX_ERR_SYNTAX` |
 | PCRE2 | `(?{ })` is not a construct it has at all | pcre2test: "unrecognized character after (? or (?-" | `GRX_ERR_SYNTAX` |
 | Perl | `(?[ ])` is PCRE2's grammar only | Perl's nests and takes different operands; a shared reader would accept neither exactly | `GRX_ERR_SYNTAX` |
 | Perl | Where a failed negative lookaround's body stopped *part way through an iteration*, the group reports the last value an iteration **finished** | §5.17 is followed as written - Perl keeps, ECMAScript and PCRE2 discard - but "what the body last wrote" is only well defined if the body failed between iterations, and Perl states no rule for the rest: it decides on the width of the repeated body, answering `(?!(a){2}$)` and `(?!(aa){2}$)` against "aaa" as unset and 0-2. The rule here answers them 1-2 and 0-2, so the two agree wherever Perl is self-consistent and differ on the narrow case where it is not | - |
