@@ -43,7 +43,7 @@ Phase 3  PCRE2 and Perl           WP-18 .. WP-22      → M3
 Phase 4  POSIX and GNU            WP-23 .. WP-26      → M4: tier 1 complete
 Phase 5  Tier 2                   WP-30 .. WP-33
 Phase 6  Tier 3                   WP-34 .. WP-35
-Phase 7  Tier 4                   WP-36 .. WP-38
+Phase 7  Tier 4                   WP-36 .. WP-38, WP-44, WP-45
 Phase 8  Performance, translation WP-40 .. WP-43
 ```
 
@@ -594,8 +594,50 @@ path was abandoned and left the *shadow* spans - the ones a backreference
 reads - where the body had written them, so `(?=(a))$|(a)\1` matched "aa"
 here, "a" in node, and nothing at all in pcre2test.
 
+**Finished 2026-09-23**, when the deviations it had left were closed one at
+a time: `\ze`, `\%[...]` over real atoms, `\%V`, `\%#` and the three
+`\%23l` forms, the byte column `\%23c`, the screen column `\%23v`, the
+byte bound on `\@123<=`, and the `:s` replacement with its six case
+markers. Four of the five sets behind `\i`, `\k`, `\f` and `\p` had been
+*sampled* and three were wrong; every one of the 52 class spellings is now
+enumerated against vim a code point at a time, and so are its seven own
+`[:name:]` classes, the display-width table `\%23v` needs, and the word
+set `\<` and `\>` read - which is 'iskeyword' and not `\w`, and was five
+ranges ending `{0xC0, 0x10FFFF}` and wrong by 5,464 code points.
+
+Two rules remain unbuilt and are in [dialects.md](dialects.md) §6 with
+their measurements, because each is a matching model rather than a
+construct: **a base and the combining marks after it are one character** in
+vim - which is the machinery `\Z` needs too - and **`\<` and `\>` hold
+where its character class changes**, of which it has nine. Both were found
+by widening the differential's subjects, which is where they had never
+looked, and the subjects that expose them are out again so that one
+unbuilt rule does not bury the rest. They are WP-44 and WP-45 below.
+
 **WP-37 Tcl** (the `TCL_ARE` match preference is an engine mode, *engines,
 M*), **WP-38 Emacs**.
+
+**WP-44 Vim's composing clusters** (*parser and lowering, M*). A base and
+the combining marks after it are one character to vim: `.` over "a" U+0301
+is 0-3 there and 0-1 here, `[a]`, `\w` and `[[:alpha:]]` take the whole
+cluster, a literal `a` matches none of it, `..` finds one character in it,
+and `\%2c` holds nowhere inside it. The set of marks is already here - it
+is the zero-cell column of `src/unicode/display.c` - so the work is the
+rule rather than the data: every consuming node becomes "the node, then
+any number of marks", a literal run gains "and no mark follows", and a
+match may not begin inside a cluster. `\Z` is the same machinery with the
+marks made optional, so the two ship together. The differential's subjects
+hold no composing character until this lands.
+
+**WP-45 Vim's word classes** (*lowering and the two engines, S*). `\<` and
+`\>` hold where vim's character *class* changes and not merely where a
+word begins - `\>` holds between U+65E5 and "x" there and nowhere here,
+because both are 'iskeyword' characters. Nine classes over 418 ranges,
+measured by signature against ten probe characters. `\<` at the start of a
+word is right either way, the keyword set and "class two or more" being
+the same 1,106,472 code points, so what this changes is the boundary
+*between* two word characters. A flag on the word-boundary instruction and
+a class table beside the width one.
 
 ### Phase 8: performance and translation
 
@@ -623,11 +665,13 @@ hold:
 4. The pattern fuzzer has run eight hours clean with the dialect selected.
 5. `grx_options_parse()` accepts its alphabet and its replacement template
    grammar is implemented.
-6. `examples/` has one example in the dialect. Five of them so far:
+6. `examples/` has one example in the dialect. Six of them so far:
    `regex_info` and the two JSON Schema programs are ECMAScript's,
    `posix_stream` is a grep and a sed across the four POSIX and GNU rows,
-   and `perl_extract` is PCRE2's and Perl's - the same pattern under both,
-   because the place they part is the template rather than the pattern.
+   `perl_extract` is PCRE2's and Perl's - the same pattern under both,
+   because the place they part is the template rather than the pattern -
+   and `vim_substitute` is a `:s` over a string, where the grammar is
+   chosen inside the pattern and the replacement changes case.
 
 ## 5. What "done" means for the first stable release
 

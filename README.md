@@ -85,8 +85,9 @@ make help       # every target
 call: `regex_info` prints what a dialect has and tries a pattern in it,
 `posix_stream` is a grep and a sed over the four POSIX and GNU rows,
 `perl_extract` puts one named-group pattern to both PCRE2 and Perl to show
-where their templates part, and the two `json_schema_*` programs are the
-`text` seam.
+where their templates part, `vim_substitute` is a `:s` over a string - the
+four magic levels, `\zs`, and a replacement that changes case - and the two
+`json_schema_*` programs are the `text` seam.
 
 The only dependency is [`ghoti.io-cutil`](../cutil), found through pkg-config
 and nothing else. Build the suite into a local prefix first:
@@ -185,7 +186,7 @@ Nothing is allocated for the caller to free on a failing call.
 | PCRE2 and Perl front ends | working - verbs, conditionals, recursion, branch reset, `\Q..\E`, extended modes, the leading directives (PCRE2's alone; Perl has none of them), Perl's `\N{NAME}` against the full character-name table, `(*LIMIT_MATCH=n)` applied rather than parsed and dropped, script runs `(*sr:`/`(*asr:` against UTS #39's augmented script sets, `(?[ ])` extended classes in **both** dialects, and the six newline conventions `(*CR)` and kin |
 | POSIX and GNU front ends | working - one reader for `posix-bre`, `posix-ere`, `gnu-bre` and `gnu-ere`; both halves of `REG_NEWLINE`, as `GRX_OPT_MULTILINE` and `GRX_OPT_NEWLINE_TERMINATES` |
 | Python front end | working - CPython 3.13's grammar, which is the Perl family's with a closed escape alphabet, `(?P<n>)` as the only named spelling, no `(*...)` construct, a reference that must name a group that has *closed*, and global flags only at the start |
-| Vim front end | working - all four magic levels, chosen inside the pattern; postfix lookaround `\@=` and kin; `\&`; the `\%` family; `\zs`; eleven named classes with their `\_` forms. Its replacement template is **not** built (dialects.md section 6) |
+| Vim front end | working - all four magic levels, chosen inside the pattern; postfix lookaround `\@=` and kin, with the byte bound `\@123<=` applied; `\&`; `\zs` and `\ze`; `\%[...]` over atoms; the whole `\%` family including the byte column `\%23c` and the screen column `\%23v`; its named classes and its seven own `[:name:]` classes, all enumerated against vim one code point at a time; and its `:s` replacement with the six case markers. Two of its rules are **not** built and are measured in dialects.md section 6: a base and the combining marks after it are one character there, and `\<`/`\>` hold where its character *class* changes |
 | Every dialect but those nine | named, `GRX_ERR_UNSUPPORTED` |
 | Lowering, analysis and code generation | working |
 | Pike VM | working - the regular subset, in linear time |
