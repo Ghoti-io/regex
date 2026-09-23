@@ -510,9 +510,9 @@ saving is one fork for a *run* rather than one per case: vim reads a file of
 cases and writes a file of answers, which is what makes tens of thousands of
 rows possible against a reference `probe.py` was starting a process per case
 for. `make check-oracle-vim` runs it with `--strict`. Current standing:
-**1,080,000 rows over thirty seeds, no disagreements** - with 657 rows
-excluded as vim artifacts, 1,352 where its two engines disagree and `set
-re=1` gives this library's answer, and 34 where they disagree and neither
+**1,080,000 rows over thirty seeds, no disagreements** - with 801 rows
+excluded as vim artifacts, 1,407 where its two engines disagree and `set
+re=1` gives this library's answer, and 21 where they disagree and neither
 does, which are printed.
 
 **The subject is a string, not a buffer**, and that is a decision the tool
@@ -595,6 +595,11 @@ visible:
   `\%23l\{-}`, `\%23l\{0,1}`, `\(\%23l\)*` and the very magic
   `%23l*` all match the empty string there. Only the bare `*`, only
   outside very magic, only after an `l` form, and both engines alike.
+  Three answers come out of it and the tool looks at its own as well as
+  vim's: vim finds nothing where this matches empty, vim finds a longer
+  match because another branch won, and vim *compiles* `\%23l\v*` where
+  this refuses it - a marker between an atom and a bare `*` being "E871"
+  in vim after every atom but an `l` form.
 - **A group inside `\%[...]`.** `a\%[\(bc\)]`, `a\%[\%(bc\)]` and a
   nested `a\%[b\%[cd]]` are "E54: Unmatched \(" under `set re=1` and
   compile under `re=2`. Every other member vim's help calls an atom is

@@ -124,6 +124,10 @@ ATOMS = [
 # vocabulary rather than left out, because a differential that only generates
 # what both sides accept never tests a rejection - `differential-needs-
 # invalid-input`, and the reason `python_diff.py` injects one row in eight.
+# `\%23l` and its comparisons, any level or case markers, then a bare
+# multi. See is_line_number_star().
+LINE_NUMBER_STAR = re.compile(r"\\%[<>]?[0-9]+l(?:\\[vmMVcCZ])*(?:\*|\\\{1\})")
+
 REFUSED = [
     "\\z(a\\)", "\\z1", "\\1", "a\\{2", "\\(a", "a\\)", "a**", "\\@=",
     "\\%(a", "a\\{1}\\+", "\\v+a", "\\v?a", "\\v@a",
@@ -470,40 +474,46 @@ def is_very_magic_line_start_repeat(pattern, them, us):
 
 
 def is_line_number_star(pattern, them, us):
-    """`\\%23l*` matches nothing at all in vim, and there is no rule in it.
+    """`\\%23l*` means nothing at all in vim, and there is no rule in it.
 
     `\\%23l` names a buffer line and never matches over a string, so a `*`
     on it should leave the empty match a zero-iteration repeat always has -
     and vim agrees five ways: `\\%23l\\{}`, `\\%23l\\{-}`,
     `\\%23l\\{0,1}`, `\\(\\%23l\\)*` and the very magic `%23l*` all
     match the empty string there. Only the bare `*`, only outside very
-    magic, only after the `l` forms - `\\%V*` and `\\%2c*` match the empty
-    string - and both engines alike. The same shape as
-    is_very_magic_line_start_repeat() above, and excluded for the same
-    reason.
+    magic, only after an `l` form, and both engines alike.
+
+    Three answers come out of it, which is why this looks at ours as well:
+
+      - vim finds nothing where this library matches the empty string;
+      - vim finds a *longer* match, another branch having won because the
+        first offers nothing - `\\%23l*\\|\\x` over "a" is 0-1 there and
+        0-0 here;
+      - and vim *compiles* a spelling this library refuses. A marker
+        between the `l` and the `*` is "E871: Can't have a multi follow a
+        multi" after every other atom - `\\%23c\\v*` and `a\\v*` are
+        both refused in vim too - and after an `l` form vim takes it.
+
+    The same shape as is_very_magic_line_start_repeat() below, and excluded
+    for the same reason.
     """
+    # The `l` form, any markers, then the bare multi. A marker between is
+    # what `\%23l\v*` is, and a plain substring test misses it.
+    if not LINE_NUMBER_STAR.search(pattern):
+        return False
+    if us.startswith("compile"):
+        # vim compiled it; this library did not.
+        return them.startswith("nomatch") or them.startswith("match ")
     if not us.startswith("match "):
         return False
-    if not them.startswith("nomatch"):
-        # Or vim found a *longer* match than the empty one this library
-        # takes from the repeat: `\%23l*\|\x` over "a" is 0-1 there,
-        # the second branch having won because the first offers nothing,
-        # and 0-0 here. The same artifact seen through an alternation.
-        fields = us.split()
-        if len(fields) < 2 or ":" not in fields[1]:
-            return False
-        low, high = fields[1].split(":")
-        if low != high:
-            return False
-    for form in ("l*", "l\\{1}"):
-        where = pattern.find(form)
-        while where > 0:
-            head = pattern[:where]
-            mark = head.rfind("\\%")
-            if mark >= 0 and head[mark + 2:].lstrip("<>").isdigit():
-                return True
-            where = pattern.find(form, where + 1)
-    return False
+    if them.startswith("nomatch"):
+        return True
+    # Ours is the empty match the repeat gives and vim's is not.
+    fields = us.split()
+    if len(fields) < 2 or ":" not in fields[1]:
+        return False
+    low, high = fields[1].split(":")
+    return low == high
 
 
 def is_leading_star_artifact(pattern, them, us):
