@@ -281,6 +281,14 @@ CFLAGS := -pedantic-errors -Wall -Wextra -Werror -Wno-error=unused-function -Wfa
 # No -DGRX_TEST_BUILD: the shipped library exports its public API and nothing
 # else. Tests reach the internals by linking the static archive, which a static
 # link can do even for hidden symbols.
+ifeq ($(OS_NAME), Windows)
+# Everything built here but the library itself links the static archive, so
+# the headers must not say dllimport to it: an archive has no __imp_ thunks.
+# The library's own objects also get GRX_BUILD, which the header tests first.
+# See GRX_API in macros.h.
+CFLAGS += -DGRX_STATIC
+CXXFLAGS += -DGRX_STATIC
+endif
 LIB_CFLAGS := $(CFLAGS) -fvisibility=hidden -DGRX_BUILD $(EXTRA_CFLAGS)
 LDFLAGS := -L /usr/lib -lstdc++ -lm $(EXTRA_LDFLAGS)
 ifdef PREFIX
