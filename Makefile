@@ -187,10 +187,15 @@ CXXFLAGS := -pedantic-errors -Wall -Wextra -Werror -Wno-error=unused-function -W
 CC := cc
 # $(OPT_CFLAGS), set beside the BUILD=debug rename above: -O2 for a release
 # build and -O0 for a debug one. It is set there rather than here because
-# `BUILD` still holds the caller's raw value at that point - the platform
-# prefix (`BUILD := linux/$(BUILD)`) is added further down, and a `BUILD` that
-# came from the command line ignores that assignment anyway, so testing it
-# here would be reading a value whose spelling depends on where it came from.
+# `BUILD` still holds the caller's raw value at that point; by this line the
+# platform prefix has been added and it reads `linux/debug`, so a test for
+# `debug` here would be false.
+#
+# It used also to be true that a command-line `BUILD` escaped that prefix
+# entirely, because a plain assignment loses to a command-line variable. The
+# four platform assignments carry `override` now, so `make BUILD=release` and
+# a bare `make` are the same tree - they were not, and that is worth knowing
+# when reading anything in this file written before that change.
 #
 # This was a literal -O0 for both builds until 2026-09-23, and nobody chose
 # it: early repos in this suite were written when the production build doubled
@@ -1920,20 +1925,24 @@ clean: ## Remove all contents of the build directories.
 # can reach the 22,584 accumulated inputs. Checked before this line was
 # written rather than after.
 	-@rm -rvf $(FUZZ_DIR)
-# The debug tree, which this target could not reach on its own. `BUILD` given
-# on the command line overrides the `BUILD := linux/$(BUILD)` assignment
-# further up - a command-line variable beats a plain one - so `make
-# BUILD=debug` writes to ./build/debug, a *sibling of* ./build/linux rather
-# than a child, and the four globs above name only the current BUILD's
-# directories. A plain `make clean` after a debug build therefore left 38
-# objects and a complete linkable library sitting at the wrong optimisation
-# level, where a later build could link them.
+# The debug tree, which this target cannot reach on its own: the four globs
+# above name only the *current* BUILD's directories, and a debug build is a
+# different one. After a `make BUILD=debug`, a plain `make clean` left 38
+# objects and a complete linkable library behind, at -O0 where everything
+# else in the tree is now -O2 - read out of the objects' own DW_AT_producer
+# rather than inferred.
 #
-# Harmless until 2026-09-23, because release and debug were both -O0 and the
-# leftovers were indistinguishable from what belonged there. Naming the
-# directory is the fix; `make clean BUILD=debug` also works and is the thing
-# nobody remembers to type.
-	-@rm -rvf ./build/debug
+# Harmless until 2026-09-23, when the two build modes stopped sharing an
+# optimisation level and the leftovers stopped being indistinguishable from
+# what belonged there.
+#
+# Derived from BUILD_DIR rather than spelled out. This line named
+# `./build/debug` when it was written, which was correct then and silently
+# wrong ten commits later: `override` on the platform assignments made a
+# command-line `BUILD=debug` become `linux/debug`, so the tree moved to
+# ./build/linux/debug and a hard-coded path went on naming a directory
+# nothing creates. A dead `rm` looks exactly like a live one.
+	-@rm -rvf $(dir $(BUILD_DIR))debug
 
 help: ## Display this help
 	@grep -E '^[ a-zA-Z_-]+:.*?## .*$$' Makefile | sort | sed 's/\\([^:]*\\):.*## \\(.*\\)/\\1:\\2/' | awk -F: '{printf "%-20s %s\n", $$1, $$2}' | sed "s/(SUITE)/$(SUITE)/g; s/(PROJECT)/$(PROJECT)/g; s/(BRANCH)/$(BRANCH)/g"
