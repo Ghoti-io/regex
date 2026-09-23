@@ -189,20 +189,24 @@ typedef enum {
   GRX_SHORTHANDS_ECMASCRIPT, ///< ASCII `\w` and `\d`; ECMAScript's wider `\s`.
   GRX_SHORTHANDS_UNICODE,    ///< UTS #18: `\p{Word}`, `\p{Nd}`, `\p{White_Space}`.
   /**
-   * ASCII, with the word set widened to every code point from U+00C0 up.
+   * ASCII, with the word set taken from Vim's 'iskeyword'.
    *
-   * Vim's, and read by nothing but its word boundaries: `\<` and `\>` are
-   * defined from 'iskeyword' there, whose default takes in every character
-   * above Latin-1's punctuation. The other two columns stay ASCII, which is
-   * why this is not GRX_SHORTHANDS_UNICODE - that value would widen the
-   * POSIX bracket classes too, and vim's `[[:alpha:]]` does not match "é".
+   * Read by nothing but its word boundaries: `\<` and `\>` are defined
+   * from 'iskeyword' there and *not* from `\w`, which is the ASCII four -
+   * so `\w` matching "0" and `\>` holding after it are two different
+   * questions, and U+2028 answers them differently. The other two columns
+   * stay ASCII, which is why this is not GRX_SHORTHANDS_UNICODE: that
+   * value would widen the POSIX bracket classes too, and vim's
+   * `[[:alpha:]]` does not match "é".
+   *
+   * The set is GRX_SET_VIM_KEYWORD, enumerated rather than described. It
+   * was "every code point from U+00C0 up" here until it was measured.
    *
    * Vim's own `\w`, `\d` and `\s` do not come through this enum at all:
-   * its front end writes each of its eleven named classes out as explicit
-   * ranges, because vim's `\s` is space and tab alone and no value here
-   * says that.
+   * its front end writes each of its named classes out as explicit ranges,
+   * because vim's `\s` is space and tab alone and no value here says that.
    */
-  GRX_SHORTHANDS_ASCII_PLUS_HIGH,
+  GRX_SHORTHANDS_VIM_KEYWORD,
   GRX_SHORTHANDS_COUNT       ///< Closes the enum; not a definition.
 } GRX_ShorthandSet;
 
@@ -387,6 +391,20 @@ typedef enum {
 #define GRX_TMPL_UNSET_ERROR GRX_BIT(19)
 
 #define GRX_TMPL_BACKSLASH_ESCAPE GRX_BIT(11)
+
+/**
+ * @brief Vim's replacement escapes: the four controls and the case markers.
+ *
+ * `\n`, `\r`, `\t` and `\b` decode to U+000A, U+000D, U+0009 and
+ * U+0008 - over a *string*, which is the subject this library has; in a
+ * buffer `:s` writes a line break for `\r` and a NUL for `\n`, which is
+ * the same two characters seen through a different container. `\u`, `\l`,
+ * `\U`, `\L`, `\E` and `\e` change the case of what follows. Every
+ * other escape falls through to GRX_TMPL_ESCAPE_ANY, which vim also has:
+ * `\q` is a `q` there. Enumerated over the whole printable alphabet, and
+ * these ten are the entire list.
+ */
+#define GRX_TMPL_VIM_ESCAPES GRX_BIT(22)
 
 /** @brief What a reference to a group the pattern does not have does. */
 typedef enum {

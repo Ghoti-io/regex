@@ -1576,6 +1576,22 @@ extern const size_t grx_unicode_es_legacy_orbit_count;
 extern const uint32_t grx_unicode_es_legacy_orbit_members[];
 extern const size_t grx_unicode_es_legacy_orbit_member_count;
 
+/**
+ * Simple_Uppercase_Mapping and Simple_Lowercase_Mapping.
+ *
+ * UnicodeData.txt fields 12 and 13, one code point to one code point and
+ * absent where there is none. Neither a folding nor the ECMAScript
+ * canonicalisation above: U+00DF has no simple uppercase, where its *full*
+ * uppercase is "SS" and its fold shares an orbit with U+1E9E, and U+01F3
+ * uppercases to U+01F1 rather than to the titlecase U+01F2. That is what a
+ * replacement template asking for "the next character in upper case" means
+ * - Vim's `\\u` and `\\U`.
+ */
+extern const GRX_UnicodeCaseMap grx_unicode_simple_upper_map[];
+extern const size_t grx_unicode_simple_upper_map_count;
+extern const GRX_UnicodeCaseMap grx_unicode_simple_lower_map[];
+extern const size_t grx_unicode_simple_lower_map_count;
+
 /** Character names for `\\N{NAME}`: the word dictionary, then the names.
  *
  * A name is a run of tokens in `grx_unicode_name_tokens`, from its entry in
@@ -1840,6 +1856,15 @@ def write_case(out_dir, tables):
         emit_full_folds(out, tables["full_folds"])
         emit_orbits(out, "grx_unicode_fold_orbit", tables["fold_orbits"])
         emit_map(out, "grx_unicode_es_legacy_map", tables["es_map"])
+        # Simple_Uppercase_Mapping and Simple_Lowercase_Mapping, straight
+        # from UnicodeData.txt fields 12 and 13. Both were read here from
+        # the start and spent only on the ECMAScript canonicalisation above;
+        # Vim's `:s` replacement needs them as themselves, because `\u` and
+        # `\U` there apply the *simple* mapping - U+01F3 uppercases to
+        # U+01F1 and not to the titlecase U+01F2, and U+00DF and U+FB01 have
+        # no simple uppercase and are left alone.
+        emit_map(out, "grx_unicode_simple_upper_map", tables["simple_upper"])
+        emit_map(out, "grx_unicode_simple_lower_map", tables["simple_lower"])
         emit_orbits(
             out, "grx_unicode_es_legacy_orbit", tables["es_orbits"])
 

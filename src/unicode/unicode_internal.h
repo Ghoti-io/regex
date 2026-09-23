@@ -148,6 +148,59 @@ size_t grx_unicode_utf8_encode(uint32_t codepoint, char * buffer);
 uint32_t grx_unicode_fold_simple(uint32_t codepoint);
 
 /**
+ * @brief How many terminal cells a character occupies. Vim's, not Unicode's.
+ *
+ * Measured with vim 9.1's `strdisplaywidth()` over every code point; see
+ * src/unicode/display.c for what the four answers are and why the set is
+ * written out rather than named after a property.
+ *
+ * @param codepoint The code point.
+ * @param first Non-zero when nothing precedes it, which is what makes a
+ *   combining character one cell rather than none.
+ * @return The number of cells, one for everything not in the table.
+ */
+uint32_t grx_display_cell_width(uint32_t codepoint, int first);
+
+/**
+ * @brief The screen column a character leaves the cursor in.
+ *
+ * Columns count from one. Everything but the tab is
+ * grx_display_cell_width() added on; the tab reaches the next multiple of
+ * `tabstop`, which is why this exists at all.
+ *
+ * @param codepoint The code point.
+ * @param column The column it starts in, counting from one.
+ * @param tabstop Columns per tab stop; zero makes a tab an ordinary
+ *   character.
+ * @param first Non-zero when nothing precedes it.
+ * @return The column the next character starts in.
+ */
+size_t grx_display_column_after(
+    uint32_t codepoint, size_t column, size_t tabstop, int first);
+
+/**
+ * @brief Simple_Uppercase_Mapping, or the code point where there is none.
+ *
+ * One code point to one code point: U+01F3 gives U+01F1 and not the
+ * titlecase U+01F2, and U+00DF and U+FB01 give themselves, where their
+ * *full* uppercase mappings are two characters. That is the mapping a
+ * replacement template's "upper case the next character" wants, and it is
+ * neither a folding nor a canonicalisation.
+ *
+ * @param codepoint The code point.
+ * @return Its simple uppercase, or the input where it has none.
+ */
+uint32_t grx_unicode_upper_simple(uint32_t codepoint);
+
+/**
+ * @brief Simple_Lowercase_Mapping, or the code point where there is none.
+ *
+ * @param codepoint The code point.
+ * @return Its simple lowercase, or the input where it has none.
+ */
+uint32_t grx_unicode_lower_simple(uint32_t codepoint);
+
+/**
  * @brief Every code point whose simple fold equals this one's.
  *
  * What a caseless literal becomes, and what a caseless class is closed

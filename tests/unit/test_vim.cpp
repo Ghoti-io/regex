@@ -547,14 +547,37 @@ TEST(Vim, OnlyTheOptionalMultiMayFollowAMark) {
 TEST(Vim, TheConstructsItRefusesAndWhy) {
   // Each of these is a deviation recorded in documentation/dialects.md
   // section 6, and each is refused rather than guessed at.
-  EXPECT_EQ(why("a~"), GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED);   // last `:s`
+  // `~` is the last `:s` replacement, and there has never been one - which
+  // is the state vim answers "E33" in, so this refusal is vim's own answer
+  // and not a deviation. `\~` is the literal tilde in both.
+  EXPECT_EQ(why("a~"), GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED);
+  EXPECT_EQ(span("a\\~", "a~"), "0-2");
+  EXPECT_EQ(span("\\M~", "a~"), "1-2");
   EXPECT_EQ(why("\\Za"), GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED); // combining
-  // The screen column, which needs a tabstop and a cell-width table.
-  EXPECT_EQ(why("\\%23v"), GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED);
-  EXPECT_EQ(why("\\%<4v"), GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED);
   // These two vim refuses itself, outside a syntax file.
   EXPECT_EQ(why("\\z(a\\)"), GRX_DIAG_NOT_IN_DIALECT);
   EXPECT_EQ(why("\\z1"), GRX_DIAG_NOT_IN_DIALECT);
+}
+
+TEST(Vim, ALookbehindsCountBoundsHowFarBackItMayStart) {
+  // `\@123<=`: the match may start at most that many *bytes* back, so a
+  // body that cannot fit inside the bound is one the assertion can never
+  // satisfy - and zero means no bound, which is what an unwritten number
+  // leaves too.
+  EXPECT_EQ(span("\\(ab\\)\\@<=c", "abc"), "2-3");
+  EXPECT_EQ(span("\\(ab\\)\\@2<=c", "abc"), "2-3");
+  EXPECT_EQ(span("\\(ab\\)\\@0<=c", "abc"), "2-3");
+  EXPECT_EQ(span("\\(ab\\)\\@1<=c", "abc"), "nomatch");
+  // Bytes, not characters: U+00E9 is two of them.
+  EXPECT_EQ(span("\\(\u00e9\\)\\@2<=x", "\u00e9x"), "2-3");
+  EXPECT_EQ(span("\\(\u00e9\\)\\@1<=x", "\u00e9x"), "nomatch");
+  // The bound makes a variable-length body finite, so a dialect whose
+  // lookbehind is otherwise unbounded still runs this one forwards.
+  EXPECT_EQ(span("\\(\\w\\+\\)\\@1<=c", "abc"), "2-3");
+  // And the negative form: a body that cannot fit inside the bound cannot
+  // be found, so the assertion holds.
+  EXPECT_EQ(span("\\(ab\\)\\@1<!c", "abc"), "2-3");
+  EXPECT_EQ(span("\\(ab\\)\\@2<!c", "abc"), "nomatch");
 }
 
 TEST(Vim, TheBufferPositionsAreBuiltAndThreeOfThemNeverMatch) {
@@ -588,19 +611,143 @@ TEST(Vim, TheBufferPositionsAreBuiltAndThreeOfThemNeverMatch) {
   EXPECT_EQ(span("\\%<1c", "abc"), "nomatch");
 }
 
-TEST(Vim, TheReplacementGrammarIsNotBuilt) {
-  // vim's `:s` replacement has two rules nothing else here has - `\r`
-  // inserts a line break where `\n` inserts a NUL, and `\u`, `\U`, `\l`,
-  // `\L`, `\e` and `\E` change the case of what follows - so the row is
-  // left zeroed and grx_regex_replace() refuses it rather than applying
-  // sed's grammar and getting both wrong.
-  Attempt attempt = compile("a", GRX_SYNTAX_VIM);
-  ASSERT_EQ(attempt.result, GRX_OK);
+/** Replace every match, as a string, or "error". */
+std::string replaced(const std::string & pattern, const std::string & subject,
+    const std::string & templ) {
+  Attempt attempt = compile(pattern, GRX_SYNTAX_VIM);
+  if (attempt.result != GRX_OK) {
+    grx_regex_free(attempt.regex);
+    return "error";
+  }
   GRX_Text out;
-  EXPECT_EQ(grx_regex_replace(attempt.regex, "a", 1, "b", 1, 0, nullptr,
-                nullptr, nullptr, &out),
-      GRX_ERR_UNSUPPORTED);
+  memset(&out, 0, sizeof(out));
+  std::string answer = "error";
+  if (grx_regex_replace(attempt.regex, subject.data(), subject.size(),
+          templ.data(), templ.size(), GRX_REPLACE_GLOBAL, nullptr, nullptr,
+          nullptr, &out)
+      == GRX_OK) {
+    answer = std::string(out.data, out.length);
+    grx_text_free(&out);
+  }
   grx_regex_free(attempt.regex);
+  return answer;
+}
+
+TEST(Vim, TheScreenColumnCountsCellsAndTheByteColumnCountsBytes) {
+  // `\%23v` is the *screen* column: a tab reaches the next multiple of
+  // the tabstop, a wide character takes two cells and a combining one
+  // takes none. Every number here was asked of vim 9.1 first.
+  EXPECT_EQ(span("\\%1v", "a\tb"), "0-0");
+  EXPECT_EQ(span("\\%2v", "a\tb"), "1-1");
+  EXPECT_EQ(span("\\%5v", "a\tb"), "nomatch");  // inside the tab
+  EXPECT_EQ(span("\\%9v", "a\tb"), "2-2");
+  EXPECT_EQ(span("\\%10v", "a\tb"), "3-3");
+  // U+65E5 is two cells and three bytes, which is what tells the two
+  // columns apart.
+  EXPECT_EQ(span("\\%3v", "\u65e5x"), "3-3");
+  EXPECT_EQ(span("\\%2v", "\u65e5x"), "nomatch");
+  EXPECT_EQ(span("\\%4c", "\u65e5x"), "3-3");
+  // A combining character has no column of its own: `\%2v` holds at the
+  // "x" and not at the mark, though both are column 2 by arithmetic.
+  EXPECT_EQ(span("\\%2v", "a\u0301x"), "3-3");
+  // A line break is two cells, because vim draws it as "^J".
+  EXPECT_EQ(span("\\%3v", "ab\ncd"), "2-2");
+  EXPECT_EQ(span("\\%4v", "ab\ncd"), "nomatch");
+  EXPECT_EQ(span("\\%5v", "ab\ncd"), "3-3");
+  // The comparisons, and the two ranges with nothing in them.
+  EXPECT_EQ(span("a\\%<3vb", "abc"), "0-2");
+  EXPECT_EQ(span("\\%>3v", "abc"), "3-3");
+  EXPECT_EQ(span("\\%>0v", "abc"), "0-0");
+  EXPECT_EQ(span("\\%0v", "abc"), "nomatch");
+  EXPECT_EQ(span("\\%<1v", "abc"), "nomatch");
+}
+
+TEST(Vim, TheReplacementTemplateIsVimsOwn) {
+  // `&` is the whole match and `\&` a literal one; `\0` is the whole
+  // match again and `\1` to `\9` name groups a digit at a time; `~` is a
+  // literal tilde, there having been no previous substitution; and a
+  // reference to a group the pattern has not got substitutes nothing.
+  EXPECT_EQ(replaced("\\(a\\)\\(b\\)", "ab", "&"), "ab");
+  EXPECT_EQ(replaced("\\(a\\)\\(b\\)", "ab", "\\&"), "&");
+  EXPECT_EQ(replaced("\\(a\\)\\(b\\)", "ab", "\\0"), "ab");
+  EXPECT_EQ(replaced("\\(a\\)\\(b\\)", "ab", "\\2\\1"), "ba");
+  EXPECT_EQ(replaced("\\(a\\)\\(b\\)", "ab", "\\9"), "");
+  EXPECT_EQ(replaced("\\(a\\)\\(b\\)", "ab", "~"), "~");
+  EXPECT_EQ(replaced("\\(a\\)\\(b\\)", "ab", "\\q"), "q");
+  // Four escapes decode. Over a *string*, which is the subject here: in a
+  // buffer `:s` writes a line break for `\r` and a NUL for `\n`.
+  EXPECT_EQ(replaced("a", "a", "\\n"), "\n");
+  EXPECT_EQ(replaced("a", "a", "\\r"), "\r");
+  EXPECT_EQ(replaced("a", "a", "\\t"), "\t");
+  EXPECT_EQ(replaced("a", "a", "\\b"), "\b");
+}
+
+TEST(Vim, TheReplacementCaseMarkers) {
+  // `\u` and `\l` take the next character; `\U` and `\L` run until
+  // `\E` or `\e`. A one-character modifier *suspends* a run for one
+  // character and the run resumes: "ABcD", measured.
+  EXPECT_EQ(replaced("x", "x", "\\uabc"), "Abc");
+  EXPECT_EQ(replaced("x", "x", "\\Uabc"), "ABC");
+  EXPECT_EQ(replaced("x", "x", "\\LABC"), "abc");
+  EXPECT_EQ(replaced("x", "x", "\\Uab\\lcd"), "ABcD");
+  EXPECT_EQ(replaced("x", "x", "\\Uab\\Ecd"), "ABcd");
+  EXPECT_EQ(replaced("x", "x", "\\Uab\\ecd"), "ABcd");
+  // `\E` clears a pending one-shot as well as the run.
+  EXPECT_EQ(replaced("x", "x", "\\u\\Ex"), "x");
+  // The one-shot is spent on the next character whatever it is, so the tab
+  // takes it and the "x" after it is left alone.
+  EXPECT_EQ(replaced("x", "x", "\\u\\tx"), "\tx");
+  // It applies to what a group substitutes, not only to literal text.
+  EXPECT_EQ(replaced("\\(a\\)\\(b\\)", "ab", "\\u\\1\\2"), "Ab");
+  EXPECT_EQ(replaced("\\(a\\)\\(b\\)", "ab", "\\U\\1\\E\\2"), "Ab");
+  // The *simple* mapping, which is what vim applies: U+00DF has none and
+  // U+01F3 uppercases to U+01F1 rather than to the titlecase U+01F2.
+  EXPECT_EQ(replaced("x", "x", "\\u\u00e9y"), "\u00c9y");
+  EXPECT_EQ(replaced("x", "x", "\\u\u00df"), "\u00df");
+  EXPECT_EQ(replaced("x", "x", "\\u\u01f3"), "\u01f1");
+}
+
+TEST(Vim, ASearchLoopAdvancesAfterAnEmptyMatchAndStopsAtTheEnd) {
+  // Two clauses, and vim differs from node, perl and `re` on both. After
+  // an empty match it advances rather than retrying without one...
+  EXPECT_EQ(replaced("\\|a", "aab", "<>"), "<>a<>a<>b<>");
+  // ...and a match reaching the end of the subject ends the loop, so the
+  // empty match that would otherwise follow it is not reported. Every
+  // other reference here answers "<>a<><>".
+  EXPECT_EQ(replaced("b*", "ab", "<>"), "<>a<>");
+  EXPECT_EQ(replaced("b*", "abX", "<>"), "<>a<><>X<>");
+}
+
+TEST(Vim, AnEmptyFirstIterationRunsAndItsMarkSticks) {
+  // The empty-iteration cell had never been probed and so read
+  // ECMA-262's, where an iteration that consumed nothing fails. In vim it
+  // runs while the repeat still stands where it began, and what it wrote
+  // stays: `a\%(\zs\)*b` is 1-2 there, in both engines, and would be
+  // 0-2 under the rule this row used to carry. `matchlist()` cannot show
+  // it - a group that did not take part and one that matched empty are
+  // both "" there - so the mark is the only probe that can.
+  EXPECT_EQ(span("a\\%(\\zs\\)*b", "ab"), "1-2");
+  EXPECT_EQ(span("a\\(\\zs\\)*", "ab"), "1-1");
+  EXPECT_EQ(span("a\\%[\\zsb]*", "aaab"), "1-1");
+  // And a trailing empty iteration, after one has consumed, does not run.
+  EXPECT_EQ(span("\\%(\\zsa\\)*", "aa"), "1-2");
+}
+
+TEST(Vim, AMarkMakesTheAdvanceAboutWhatWasWalked) {
+  // The four shapes an empty-span test gets wrong. What decides is whether
+  // the next attempt would start where this one began, and the pair that
+  // answers it is the *walked* start against the *reported* end.
+  //
+  // `a\zs` reports 1-1 having walked 0-1, so it arrived there and the
+  // loop goes on from 1 without advancing.
+  EXPECT_EQ(replaced("a\\zs", "aab", "X"), "aXaXb");
+  // `\zea` reports 1-1 having walked 1-2: still where it began, so the
+  // loop advances. Without that this pattern never terminates.
+  EXPECT_EQ(replaced("\\zea", "xaby", "X"), "xXaby");
+  EXPECT_EQ(replaced("\\zea", "aaa", "X"), "XaXaXa");
+  EXPECT_EQ(replaced("\\zeab", "abab", "X"), "XabXab");
+  // And one that walked nothing at all, which advances as it always did.
+  EXPECT_EQ(replaced("\\(b\\)\\@<=", "abcb", "X"), "abXcbX");
 }
 
 TEST(Vim, TheFlagAlphabetIsEmptyBecauseTheFlagsAreInThePattern) {

@@ -100,6 +100,16 @@ uint32_t grx_unicode_fold_simple(uint32_t codepoint) {
       grx_unicode_fold_map, grx_unicode_fold_map_count, codepoint);
 }
 
+uint32_t grx_unicode_upper_simple(uint32_t codepoint) {
+  return map_lookup(grx_unicode_simple_upper_map,
+      grx_unicode_simple_upper_map_count, codepoint);
+}
+
+uint32_t grx_unicode_lower_simple(uint32_t codepoint) {
+  return map_lookup(grx_unicode_simple_lower_map,
+      grx_unicode_simple_lower_map_count, codepoint);
+}
+
 size_t grx_unicode_fold_orbit(
     uint32_t codepoint, uint32_t out[GRX_FOLD_ORBIT_MAX]) {
   if (!out) {

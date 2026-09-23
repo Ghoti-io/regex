@@ -482,6 +482,19 @@ static int assertion_holds(
       // after a line break.
       return position >= inst->x && position <= inst->y;
 
+    case GRX_ASSERT_SCREEN_COLUMN: {
+      // Vim's `\%23v`. The column of every offset was computed once before
+      // the search - see GRX_ExecRequest::columns - so this is a lookup and
+      // not a walk. Zero means "no column of its own", which is an offset
+      // inside a character or at a combining one, and no `\%Nv` holds
+      // there whatever N is.
+      if (!request->columns || position > request->length) {
+        return 0;
+      }
+      uint32_t column = request->columns[position];
+      return column != 0 && column >= inst->x && column <= inst->y;
+    }
+
     case GRX_ASSERT_NEVER:
       // `\%V`, `\%#`, `\%23l`: compiled, and never true over a subject
       // that is not a buffer.

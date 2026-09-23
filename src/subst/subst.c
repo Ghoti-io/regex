@@ -456,6 +456,45 @@ static size_t braced_reference(const GRX_TemplateSpec * spec,
       out_group, out_name_at, out_name_length);
 }
 
+/**
+ * Which piece vim's replacement spells with this letter, or GRX_TPL_COUNT.
+ *
+ * Enumerated against vim 9.1's `substitute()` over the whole printable
+ * alphabet: these ten letters mean something and every other escape is the
+ * bare character, which GRX_TMPL_ESCAPE_ANY already gives.
+ */
+static GRX_TemplateOpKind vim_escape(char c) {
+  switch (c) {
+    case 'n': case 'r': case 't': case 'b':
+      return GRX_TPL_CODEPOINT;
+    case 'u': case 'l': case 'U': case 'L': case 'E': case 'e':
+      return GRX_TPL_CASE;
+    default:
+      return GRX_TPL_COUNT;
+  }
+}
+
+/** The code point one of vim's four control escapes stands for. */
+static uint32_t vim_control(char c) {
+  switch (c) {
+    case 'n': return 0x0A;
+    case 'r': return 0x0D;
+    case 't': return 0x09;
+    default: return 0x08;
+  }
+}
+
+/** The case change one of vim's six markers asks for. */
+static GRX_TemplateCase vim_case(char c) {
+  switch (c) {
+    case 'u': return GRX_TPL_CASE_UPPER_ONE;
+    case 'l': return GRX_TPL_CASE_LOWER_ONE;
+    case 'U': return GRX_TPL_CASE_UPPER_RUN;
+    case 'L': return GRX_TPL_CASE_LOWER_RUN;
+    default: return GRX_TPL_CASE_NONE;
+  }
+}
+
 GRX_Result grx_template_parse(const GRX_TemplateSpec * spec,
     const GRX_Regex * regex, const char * text, size_t length,
     const GRX_Allocator * allocator, GRX_Error * out_error,
@@ -695,6 +734,13 @@ GRX_Result grx_template_parse(const GRX_TemplateSpec * spec,
           grx_template_clear(out_template);
           return fail(out_error, GRX_DIAG_TEMPLATE_UNKNOWN_GROUP, start, 2);
         }
+        else if (spec->missing == GRX_TMPL_MISSING_EMPTY) {
+          // vim: `\9` in a pattern with two groups substitutes nothing and
+          // consumes the digit. sed is the ERROR row above and never
+          // reaches this; without it the digit stood as text.
+          kind = GRX_TPL_NOTHING;
+          consumed = 1;
+        }
       }
       else if (c >= '0' && c <= '9' && (spec->features & GRX_TMPL_NUMBER)
           && !((spec->features & GRX_TMPL_PYTHON_ESCAPES)
@@ -765,6 +811,28 @@ GRX_Result grx_template_parse(const GRX_TemplateSpec * spec,
           return fail(out_error, GRX_DIAG_OUT_OF_MEMORY, start, 2);
         }
         i = after + taken;
+        literal_from = i;
+        continue;
+      }
+      else if ((spec->features & GRX_TMPL_VIM_ESCAPES)
+          && vim_escape(c) != GRX_TPL_COUNT) {
+        // Before GRX_TMPL_ESCAPE_ANY, which vim also has and which would
+        // otherwise make `\n` an "n". Ten characters, enumerated over the
+        // whole printable alphabet; everything else falls through.
+        GRX_TemplateOpKind vim_kind = vim_escape(c);
+        GRX_Result result = emit_literal(out_template, literal_from,
+            start - literal_from);
+        if (result == GRX_OK) {
+          result = emit(out_template, vim_kind,
+              vim_kind == GRX_TPL_CODEPOINT ? vim_control(c)
+                                            : (uint32_t)vim_case(c),
+              0, 0);
+        }
+        if (result != GRX_OK) {
+          grx_template_clear(out_template);
+          return fail(out_error, GRX_DIAG_OUT_OF_MEMORY, start, 2);
+        }
+        i = after + 1;
         literal_from = i;
         continue;
       }
@@ -873,6 +941,82 @@ static GRX_Result push(GRX_Arena * out, const char * bytes, size_t length) {
   return GRX_OK;
 }
 
+
+/**
+ * @brief The case state a template's `\u`, `\U` and kin leave behind.
+ *
+ * Two fields because vim keeps two: a one-character modifier suspends a run
+ * for exactly one character and the run resumes after it - `\Uab\lcd` is
+ * "ABcD" there. Both are cleared together by `\E` and `\e`.
+ */
+typedef struct CaseState {
+  uint8_t run; ///< GRX_TemplateCase: UPPER_RUN, LOWER_RUN, or NONE.
+  uint8_t one; ///< GRX_TemplateCase: UPPER_ONE, LOWER_ONE, or NONE.
+} CaseState;
+
+/**
+ * Append bytes, changing the case of what passes through.
+ *
+ * Character by character, because the modifiers count characters: the
+ * one-shot is spent on the first code point whatever it is, so `\u\tx` is
+ * a tab and then a lowercase "x" in vim - the tab consumed the `\u`. The
+ * mapping is the *simple* one, which is what vim applies: U+00DF stays
+ * U+00DF under `\u` where its full uppercase would be "SS".
+ *
+ * With no state set this is push() with a decode in front of it, so every
+ * dialect that has no case markers pays nothing: expand() calls this only
+ * where the template held one.
+ */
+static GRX_Result push_cased(CaseState * state, GRX_Arena * out,
+    const char * bytes, size_t length) {
+  if (!state->run && !state->one) {
+    // Nothing in force, which is every dialect but Vim and every byte of a
+    // Vim template before its first marker.
+    return push(out, bytes, length);
+  }
+  size_t at = 0;
+  while (at < length) {
+    uint32_t codepoint = 0;
+    size_t width
+        = grx_unicode_utf8_decode(bytes + at, length - at, &codepoint);
+    if (!width) {
+      // Not valid UTF-8, so there is no character here to change the case
+      // of. Passed through as the byte it is, which is what every other
+      // path in this file does with the subject's bytes.
+      GRX_Result result = push(out, bytes + at, 1);
+      if (result != GRX_OK) {
+        return result;
+      }
+      at++;
+      continue;
+    }
+    uint8_t apply = state->one ? state->one : state->run;
+    state->one = GRX_TPL_CASE_NONE;
+    uint32_t written = codepoint;
+    if (apply == GRX_TPL_CASE_UPPER_ONE || apply == GRX_TPL_CASE_UPPER_RUN) {
+      written = grx_unicode_upper_simple(codepoint);
+    }
+    else if (apply == GRX_TPL_CASE_LOWER_ONE
+        || apply == GRX_TPL_CASE_LOWER_RUN) {
+      written = grx_unicode_lower_simple(codepoint);
+    }
+    GRX_Result result;
+    if (written == codepoint) {
+      result = push(out, bytes + at, width);
+    }
+    else {
+      char encoded[4];
+      size_t encoded_width = grx_unicode_utf8_encode(written, encoded);
+      result = push(out, encoded, encoded_width);
+    }
+    if (result != GRX_OK) {
+      return result;
+    }
+    at += width;
+  }
+  return GRX_OK;
+}
+
 /** Apply a parsed template to one match. */
 static GRX_Result expand(const GRX_Template * tmpl, const GRX_Match * match,
     const char * subject, size_t end, int unset_is_error, GRX_Arena * out) {
@@ -881,30 +1025,54 @@ static GRX_Result expand(const GRX_Template * tmpl, const GRX_Match * match,
     return GRX_ERR_INTERNAL;
   }
 
+  // Zero until a GRX_TPL_CASE piece sets it, and then read by every piece
+  // that emits text. Per match, which is what vim does: a `\U` does not
+  // reach across to the next one.
+  CaseState cased = {GRX_TPL_CASE_NONE, GRX_TPL_CASE_NONE};
+
   for (size_t i = 0; i < tmpl->ops.count; i++) {
     const GRX_TemplateOp * op
         = GRX_ARENA_AT(const GRX_TemplateOp, &tmpl->ops, i);
     GRX_Result result = GRX_OK;
     switch ((GRX_TemplateOpKind)op->kind) {
       case GRX_TPL_LITERAL:
-        result = push(out, tmpl->text + op->offset, op->length);
+        result = push_cased(
+            &cased, out, tmpl->text + op->offset, op->length);
+        break;
+      case GRX_TPL_CASE:
+        // Substitutes nothing and changes what the rest of the template
+        // writes. A run replaces a run and a one-shot replaces a one-shot,
+        // so `\U\Labc` is "abc" and `\u\labc` is "abc"; `\E` and `\e`
+        // clear both, so `\u\Ex` is "x".
+        if (op->a == GRX_TPL_CASE_NONE) {
+          cased.run = GRX_TPL_CASE_NONE;
+          cased.one = GRX_TPL_CASE_NONE;
+        }
+        else if (op->a == GRX_TPL_CASE_UPPER_RUN
+            || op->a == GRX_TPL_CASE_LOWER_RUN) {
+          cased.run = (uint8_t)op->a;
+        }
+        else {
+          cased.one = (uint8_t)op->a;
+        }
         break;
       case GRX_TPL_CODEPOINT: {
         // The one piece whose bytes are in neither the template nor the
         // subject: a decoded escape. See GRX_TPL_CODEPOINT.
         char encoded[4];
         size_t width = grx_unicode_utf8_encode(op->a, encoded);
-        result = push(out, encoded, width);
+        result = push_cased(&cased, out, encoded, width);
         break;
       }
       case GRX_TPL_WHOLE:
-        result = push(out, subject + whole.start, whole.end - whole.start);
+        result = push_cased(
+            &cased, out, subject + whole.start, whole.end - whole.start);
         break;
       case GRX_TPL_PREFIX:
-        result = push(out, subject, whole.start);
+        result = push_cased(&cased, out, subject, whole.start);
         break;
       case GRX_TPL_SUFFIX:
-        result = push(out, subject + whole.end, end - whole.end);
+        result = push_cased(&cased, out, subject + whole.end, end - whole.end);
         break;
       case GRX_TPL_GROUP_NAMED: {
         // Resolved now rather than when the template was read, because one
@@ -921,8 +1089,8 @@ static GRX_Result expand(const GRX_Template * tmpl, const GRX_Match * match,
         GRX_Capture capture = {GRX_NPOS, GRX_NPOS};
         if (grx_match_group_named(match, name, &capture) == GRX_OK
             && capture.start != GRX_NPOS) {
-          result = push(
-              out, subject + capture.start, capture.end - capture.start);
+          result = push_cased(&cased, out, subject + capture.start,
+              capture.end - capture.start);
         }
         else if (unset_is_error) {
           return GRX_ERR_SYNTAX;
@@ -934,14 +1102,14 @@ static GRX_Result expand(const GRX_Template * tmpl, const GRX_Match * match,
         // between them already call the subject: the prefix starts at 0 and
         // the suffix stops at the window's end, so `$_` spanning both is the
         // same stretch and not a third opinion about where the subject is.
-        result = push(out, subject, end);
+        result = push_cased(&cased, out, subject, end);
         break;
       case GRX_TPL_GROUP: {
         GRX_Capture capture = {GRX_NPOS, GRX_NPOS};
         if (grx_match_group(match, op->a, &capture) == GRX_OK
             && capture.start != GRX_NPOS) {
-          result = push(
-              out, subject + capture.start, capture.end - capture.start);
+          result = push_cased(&cased, out, subject + capture.start,
+              capture.end - capture.start);
         }
         else if (unset_is_error) {
           // PCRE2's default: "requested value is not set". The one template

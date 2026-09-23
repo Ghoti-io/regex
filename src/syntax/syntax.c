@@ -750,6 +750,23 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     // `\s` refuses a newline and `\_s` accepts one.
     .dollar = GRX_DOLLAR_END_ONLY,
     .newlines = GRX_NEWLINES_NONE,
+    // Measured, where this cell had never been probed either. An empty
+    // iteration that is the loop's *first* runs in vim and its writes
+    // stick: `a\%(\zs\)*b` over "ab" is 1-2 there, in both engines, and
+    // would be 0-2 under ECMA-262's rule - which is what a zeroed cell
+    // gave. A trailing one, after an iteration has consumed, is where
+    // vim's two engines part: `\%(a\|\zs\)*` over "aa" is 2-2 under
+    // `re=2` and 0-2 under `re=1`, and the old engine is the one whose
+    // answer BREAK_FIRST is.
+    .empty_loop = GRX_EMPTY_LOOP_BREAK_FIRST,
+    // Measured, where this cell had never been probed and so read Perl's.
+    // Two clauses, and vim differs from every other reference here on both:
+    // after an empty match it *advances* rather than retrying without one -
+    // `substitute("aab", '\\|a', "<>", "g")` is "<>a<>a<>b<>" there and
+    // would be "<><><><><>b<>" under Perl's rule - and a match that reaches
+    // the end of the subject ends the loop, so `b*` over "ab" is "<>a<>"
+    // and not node's, perl's and `re`'s "<>a<><>".
+    .iteration = GRX_ITERATE_ADVANCE_ONE_STOP_AT_END,
     // Read only by `\<`, `\>` and the POSIX classes: vim's eleven named
     // classes are built out as explicit sets by the front end, because
     // three of them have a counterpart here and all three differ - vim's
@@ -757,8 +774,8 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     // boundaries* need: they are defined from 'iskeyword', whose default
     // takes in U+00C0 and everything above it, so `\<` does not hold
     // between "a" and "é". Measured.
-    .shorthands = GRX_SHORTHANDS_ASCII_PLUS_HIGH,
-    .shorthands_wide = GRX_SHORTHANDS_ASCII_PLUS_HIGH,
+    .shorthands = GRX_SHORTHANDS_VIM_KEYWORD,
+    .shorthands_wide = GRX_SHORTHANDS_VIM_KEYWORD,
     // SIMPLE, where this row said ASCII. Measured: `\cÉ` matches "é" in
     // vim 9.1, so the folding is Unicode and the page that said otherwise
     // was describing a version of vim without multibyte support.
@@ -768,12 +785,27 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     // `[[:lower:]]` matches "é" and `[[:upper:]]` matches "É", where
     // `[[:alpha:]]` matches neither. Measured; see the field.
     .posix_case_classes_wide = 1,
-    // No template_spec. vim's `:s` replacement has two rules nothing else
-    // here has - `\r` inserts a line break where `\n` inserts a NUL, and
-    // `\u`, `\U`, `\l`, `\L`, `\e` and `\E` change the case of what
-    // follows - and a row claiming the sed grammar would get both wrong
-    // rather than leave them unbuilt. grx_regex_replace() refuses a zeroed
-    // row, which is the honest answer until the grammar is written.
+    // Probed against vim 9.1's `substitute()`, which is the string form of
+    // `:s` and so the one this library can be: `&` is the whole match,
+    // `\&` a literal one, `\0` the whole match again, `\1` to `\9` name
+    // groups one digit at a time, and a reference to a group the pattern
+    // has not got substitutes nothing rather than failing. `~` is a literal
+    // tilde, there having been no previous substitution.
+    //
+    // The two rules nothing else here has are both real and neither is what
+    // this row used to say they were. Over a *buffer* `\r` writes a line
+    // break and `\n` a NUL; over a string they are U+000D and U+000A, and
+    // `\t` and `\b` join them - four decoded escapes, GRX_TMPL_VIM_ESCAPES.
+    // And `\u`, `\l`, `\U`, `\L`, `\E` and `\e` change the case of what
+    // follows, which is the same feature bit and the only construct in
+    // section 5.11 that emits nothing and still changes the answer.
+    .template_spec = {
+      .sigil = '\\',
+      .features = GRX_TMPL_NUMBER_SINGLE | GRX_TMPL_WHOLE_ZERO
+          | GRX_TMPL_WHOLE_BARE | GRX_TMPL_VIM_ESCAPES
+          | GRX_TMPL_ESCAPE_ANY,
+      .missing = GRX_TMPL_MISSING_EMPTY,
+    },
   },
   [GRX_SYNTAX_EMACS] = {
     .lookbehind = GRX_LOOKBEHIND_NONE,

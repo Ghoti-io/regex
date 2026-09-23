@@ -58,7 +58,10 @@
  *
  * What is refused, and why each is a refusal rather than a guess:
  * `~` (the last substitute string - there is no previous substitution
- * here), `\Z` (ignore combining characters), `\z(` and
+ * here, and **this is not a deviation**: vim answers "E33: No previous
+ * substitute regular expression" in exactly the state this library is
+ * always in, so `~` is an error in both and `\~` is a literal tilde in
+ * both, measured), `\Z` (ignore combining characters), `\z(` and
  * `\z1` (vim itself refuses them outside a syntax file), and the buffer
  * positions `\%V`, `\%#`, `\%23l`, `\%23c` and `\%23v`, which name a window,
  * a cursor and a buffer that a library matching a string has not got.
@@ -628,6 +631,43 @@ static const VimRange * vim_named_set(char c, size_t * out_count,
 // --------------------------------------------------------------------------
 
 /**
+ * Whether the `[` before `at` opens a collection that closes.
+ *
+ * Vim reads a `[` that opens nothing as the character, so this is the
+ * difference between `[]a` - three literals - and `[]a]`, a collection.
+ * A `]` first is a member and not the close, and an escape takes the
+ * character after it whatever that is.
+ *
+ * Text and offsets rather than a GRX_Parser, because **two scans ask this
+ * question and only one of them has a parser**. vim_initial_options()
+ * runs before parsing to find a `\c` anywhere in the pattern, and it had
+ * its own copy of the rule with this clause missing: `[]a\cb` left it
+ * inside a collection for the rest of the pattern and the `\c` was never
+ * seen, so the pattern matched case-sensitively. That is the third defect
+ * in that one function and all three are the same defect - a second
+ * reader of a grammar, written from memory. There is one reader now.
+ */
+static int collection_closes(const char * text, size_t length, size_t at) {
+  size_t i = at;
+  if (i < length && text[i] == '^') {
+    i++;
+  }
+  if (i < length && text[i] == ']') {
+    i++; // A `]` first is the character, not the close.
+  }
+  for (; i < length; i++) {
+    if (text[i] == '\\' && i + 1 < length) {
+      i++;
+      continue;
+    }
+    if (text[i] == ']') {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+/**
  * Settle caseless matching before anything is read.
  *
  * `\c` and `\C` are not scoped and not positional: either one anywhere in
@@ -681,7 +721,12 @@ static uint32_t vim_initial_options(
       first_in_class = 0;
       continue;
     }
-    if (c == '[' && (level == VIM_MAGIC || level == VIM_VERY_MAGIC)) {
+    if (c == '[' && (level == VIM_MAGIC || level == VIM_VERY_MAGIC)
+        && collection_closes(text, length, i + 1)) {
+      // The same predicate the reader uses, and not a second copy of it:
+      // a `[` that opens nothing is the character, so `[]a\cb` is five
+      // literals and a case marker rather than an unterminated collection
+      // that swallows the marker.
       in_class = 1;
       first_in_class = 1;
       if (i + 1 < length && text[i + 1] == '^') {
@@ -919,23 +964,7 @@ static GRX_Result read_class_item(
  * shape as GRX_Quantifier::is_quantifier, and for the same reason.
  */
 static int collection_is_well_formed(const GRX_Parser * parser) {
-  size_t i = parser->position;
-  if (i < parser->length && parser->text[i] == '^') {
-    i++;
-  }
-  if (i < parser->length && parser->text[i] == ']') {
-    i++; // A `]` first is the character, not the close.
-  }
-  for (; i < parser->length; i++) {
-    if (parser->text[i] == '\\' && i + 1 < parser->length) {
-      i++;
-      continue;
-    }
-    if (parser->text[i] == ']') {
-      return 1;
-    }
-  }
-  return 0;
+  return collection_closes(parser->text, parser->length, parser->position);
 }
 
 /**
@@ -1443,36 +1472,37 @@ static GRX_Result read_position(
   if (which != 'l' && which != 'c' && which != 'v') {
     return grx_parse_fail(parser, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, start, 3);
   }
-  if (which == 'v') {
-    return grx_parse_fail(
-        parser, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, start, scan + 1);
-  }
   parser->position += scan + 1;
   if (which == 'l') {
     return anchor_node(parser, GRX_ANCHOR_NEVER, start, out_node);
   }
 
-  // Column N is offset N-1, so the three comparisons become one range. A
-  // range whose low bound is above its high bound never holds, which is
-  // what `\%0c` and `\%<1c` are.
   // The node's bounds are 32 bits wide, so an unbounded high end is
-  // UINT32_MAX rather than GRX_NPOS. A byte column past four billion is
-  // past every subject this library will compile a program for.
+  // UINT32_MAX rather than GRX_NPOS. A column past four billion is past
+  // every subject this library will compile a program for.
+  //
+  // `c` is a byte column and column N is offset N-1, so the three
+  // comparisons become one range of offsets; `v` is a screen column and
+  // the range is of columns, counted from one at both ends. A range whose
+  // low bound is above its high bound never holds, which is what `\%0c`
+  // and `\%<1c` are.
+  size_t bias = which == 'c' ? 1u : 0u;
   size_t low = 0;
   size_t high = GRX_NPOS;
   if (compare == '=') {
-    low = number ? number - 1 : GRX_NPOS;
-    high = number ? number - 1 : 0;
+    low = number ? number - bias : GRX_NPOS;
+    high = number ? number - bias : 0;
   }
   else if (compare == '<') {
-    high = number >= 2 ? number - 2 : 0;
-    low = number >= 2 ? 0 : GRX_NPOS;
+    high = number >= 1 + bias ? number - 1 - bias : 0;
+    low = number >= 1 + bias ? 0 : GRX_NPOS;
   }
   else {
-    low = number;
+    low = number + 1 - bias;
   }
-  GRX_Result result
-      = anchor_node(parser, GRX_ANCHOR_BYTE_COLUMN, start, out_node);
+  GRX_Result result = anchor_node(parser,
+      which == 'c' ? GRX_ANCHOR_BYTE_COLUMN : GRX_ANCHOR_SCREEN_COLUMN,
+      start, out_node);
   if (result != GRX_OK) {
     return result;
   }
@@ -2052,7 +2082,15 @@ static GRX_Result vim_postfix_atom(GRX_Parser * parser, uint32_t * node) {
       at = 2;
     }
 
+    // `\@123<=` bounds how far back the match may start, in bytes.
+    // Saturating rather than wrapping: a bound larger than any subject is
+    // no bound, which is the same answer the arithmetic would give if it
+    // did not overflow first.
+    size_t bound = 0;
     while (is_digit(byte_at(parser, at))) {
+      if (bound < GRX_NPOS / 16) {
+        bound = bound * 10 + (size_t)(byte_at(parser, at) - '0');
+      }
       at++;
     }
 
@@ -2108,6 +2146,13 @@ static GRX_Result vim_postfix_atom(GRX_Parser * parser, uint32_t * node) {
     }
     else {
       built->a = (uint32_t)look;
+      // Zero is vim's "no bound" - `\(ab\)\@0<=c` matches where
+      // `\(ab\)\@1<=c` does not - which is also what an unwritten
+      // number leaves here.
+      if (look == GRX_LOOK_BEHIND_POSITIVE
+          || look == GRX_LOOK_BEHIND_NEGATIVE) {
+        built->min = (uint32_t)(bound > UINT32_MAX ? UINT32_MAX : bound);
+      }
     }
     if (grx_pattern_add_child(parser->pattern, wrapper, *node) != GRX_OK) {
       return grx_parse_fail(parser, GRX_DIAG_OUT_OF_MEMORY, start, 0);

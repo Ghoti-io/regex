@@ -75,6 +75,36 @@ struct GRX_Match {
    * wrong, which is what a caller reading it after a plain non-match sees.
    */
   GRX_Error error;
+
+  /**
+   * What the last attempt actually walked, which is not always what it
+   * reports.
+   *
+   * `\K` moves the reported start and Vim's `\ze` moves the reported end,
+   * so a match can report an empty span having consumed text -
+   * `a\zs` over "aab" reports 1-1 and walked 0-1. Vim's search loop
+   * distinguishes them: it advances a character after a match that
+   * consumed *nothing*, and `substitute("aab", 'a\zs', "X", "g")` is
+   * "aXaXb" there rather than the "aXab" an empty-span test gives.
+   *
+   * GRX_NPOS when the engine did not say, which means "the same as capture
+   * zero" - every engine but the backtracker, and the backtracker for every
+   * program without a mark in it.
+   */
+  GRX_Capture consumed;
+
+  /**
+   * Where the last attempt was told to start looking.
+   *
+   * Read by Vim's iteration rule and by nothing else. The loop there has to
+   * know whether a match *moved*, and the reported end alone cannot say:
+   * `\ze` can pin it back to where the search began, so `\zea` over "aaa"
+   * reports 0-0 three times running and vim advances a character each time,
+   * where `a\zs` reports 1-1 from a search that began at 0 and vim does
+   * not. Without this the second shape is right and the first is a loop
+   * that never ends.
+   */
+  size_t searched_from;
 };
 
 /**
@@ -131,6 +161,21 @@ typedef struct GRX_ExecRequest {
   int memoize;              ///< Run the backtracker with a visited bitmap.
   GRX_CalloutFn callout;    ///< Called at each `(?C...)`. May be NULL.
   void * callout_data;      ///< Passed to `callout` untouched.
+  /**
+   * @brief The screen column of every byte offset, or NULL.
+   *
+   * `length + 1` entries, built once per search and only for a program
+   * carrying GRX_PROGRAM_HAS_SCREEN_COLUMN - Vim's `\%23v` and nothing
+   * else. Zero at an offset that has no column of its own, which is one
+   * inside a character and one at a combining character that follows
+   * something; columns themselves count from one, so zero cannot collide
+   * with a real answer.
+   *
+   * Here rather than computed by the assertion because the assertion is
+   * reached at arbitrary positions in arbitrary order, and a walk from the
+   * start at each of them would be quadratic in the subject.
+   */
+  const uint32_t * columns;
 } GRX_ExecRequest;
 
 /**

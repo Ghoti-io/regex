@@ -37,20 +37,26 @@ pcre2api says NO_START_OPTIMIZE changes what `(*COMMIT)`, `(*SKIP)` and
 `(*PRUNE)` do, so a row containing one would be comparing two different
 patterns.
 
-**One shape disagrees, and it is classified rather than hidden.** A callout
-written *where the condition goes* - `(?(?C9)(?=a)b|c)` - is dropped by the
-parser, because a conditional's children are the condition and the branches
-positionally and there is no fourth slot to carry it in. Our trace is empty
-where pcre2's has the callout, and the match is identical. Anything else
-fails the run.
+**Nothing is excluded, and two shapes used to be.**
 
-There were two. The other was a callout *inside* an assertion condition:
-lowering rewrote `(?(?=A)X|Y)` as `(?:(?=A)X|(?!A)Y)`, which is exact and
-compiles the assertion twice, so a callout in it fired twice where pcre2
-fires it once. This gate is what turned that rewrite's documented cost -
-"time and not meaning" - into a visible one, and it is gone: the condition
-is now one `GRX_INST_COND_ELSE` assertion that chooses a branch instead of
-failing.
+A callout written *where the condition goes* - `(?(?C9)(?=a)b|c)` - was
+dropped by the parser, because a conditional's children are the condition
+and the branches positionally and there was no fourth slot to carry it in.
+Our trace was empty where pcre2's had the callout, 150 rows in 25,600, and
+the match was identical throughout - which is exactly the kind of
+difference only a gate like this one can see. The parser keeps them now and
+lowering hoists them in front of the conditional, which is where pcre2test
+prints them.
+
+The other was a callout *inside* an assertion condition: lowering rewrote
+`(?(?=A)X|Y)` as `(?:(?=A)X|(?!A)Y)`, which is exact and compiles the
+assertion twice, so a callout in it fired twice where pcre2 fires it once.
+This gate is what turned that rewrite's documented cost - "time and not
+meaning" - into a visible one, and it is gone: the condition is now one
+`GRX_INST_COND_ELSE` assertion that chooses a branch instead of failing.
+
+So a run with any disagreement in it is a defect, and the corpus check
+below is what says the shape that used to fail is still being generated.
 
 Usage:
     tools/oracle/callout_diff.py [--examples N]
@@ -157,20 +163,6 @@ def parts(line):
     return fields[1], fields[3:]
 
 
-def classify(pattern, them, us):
-    """Which known divergence this row is, or None if it is not one."""
-    their_outcome, theirs = parts(them)
-    our_outcome, ours = parts(us)
-    if theirs is None or ours is None or their_outcome != our_outcome:
-        return None
-
-    # A callout where the condition goes: dropped by the parser, so our
-    # trace is empty and pcre2's is not. The match has to agree, which the
-    # outcome test above is.
-    if "(?(?C" in pattern and not ours and theirs:
-        return "condition-position"
-
-    return None
 
 
 def main(argv):
@@ -194,8 +186,12 @@ def main(argv):
 
     disagreements = []
     skipped = 0
-    known = {"condition-position": 0}
+    # The shape that used to be excluded, counted so that a corpus which
+    # stopped producing it cannot read as agreement.
+    in_condition = 0
     for (flags, pattern, subject), us, them in zip(cases, mine, reference):
+        if "(?(?C" in pattern:
+            in_condition += 1
         if them.startswith("skip") or us == "unsupported":
             # pcre2 declining to answer, or a program no engine here runs.
             # Counted rather than hidden: a corpus that quietly stopped
@@ -204,10 +200,6 @@ def main(argv):
             continue
         if normalise(us) == normalise(them):
             continue
-        divergence = classify(pattern, them, us)
-        if divergence:
-            known[divergence] += 1
-            continue
         disagreements.append((flags, pattern, subject, them, us))
 
     for flags, pattern, subject, them, us in disagreements[:args.examples]:
@@ -215,15 +207,15 @@ def main(argv):
         print("       pcre2=%s" % them)
         print("       ours =%s" % us)
     print("callouts: %d patterns x %d subjects = %d rows, %d skipped, "
-          "%d a callout in a condition's position (dropped), "
-          "%d disagreements"
+          "%d with a callout where the condition goes, %d disagreements"
           % (len(cases) // len(SUBJECTS), len(SUBJECTS), len(cases), skipped,
-             known["condition-position"], len(disagreements)))
-    # A run that found *none* of the classified shape would mean the corpus
-    # stopped producing it, which is the shape a gate takes when it has
-    # quietly stopped asking rather than when it has been satisfied.
-    if not known["condition-position"]:
-        print("  the classified shape is missing: the corpus changed")
+             in_condition, len(disagreements)))
+    # A run that produced *none* of the shape that used to fail would be a
+    # gate that had quietly stopped asking rather than one that had been
+    # satisfied.
+    if not in_condition:
+        print("  no row put a callout where the condition goes: "
+              "the corpus changed")
         return 2
     return 1 if disagreements else 0
 

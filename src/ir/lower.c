@@ -1160,6 +1160,11 @@ static GRX_Result lower_anchor(
       kind = GRX_ASSERT_NEVER;
       break;
 
+    case GRX_ANCHOR_SCREEN_COLUMN:
+      kind = GRX_ASSERT_SCREEN_COLUMN;
+      low->ir->flags |= GRX_PROGRAM_HAS_SCREEN_COLUMN;
+      break;
+
     case GRX_ANCHOR_COUNT:
     default:
       return fail(low, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, node);
@@ -1184,7 +1189,7 @@ static GRX_Result lower_anchor(
   GRX_IRNode * assertion = grx_ir_node(low->ir, *out_node);
   assertion->mode = (uint8_t)kind;
   assertion->a = class_index;
-  if (kind == GRX_ASSERT_BYTE_COLUMN) {
+  if (kind == GRX_ASSERT_BYTE_COLUMN || kind == GRX_ASSERT_SCREEN_COLUMN) {
     // The one assertion with a payload instead of a class: `a` and `b` are
     // the inclusive range of offsets, which the parser wrote on the node.
     assertion->a = node->min;
@@ -1707,7 +1712,25 @@ static GRX_Result lower_conditional(
 
   // For GRX_COND_ASSERTION the first child is the condition and the branches
   // follow it; for every other kind the children are the branches alone.
+  //
+  // Except that a callout may be written where the condition goes -
+  // `(?(?C9)(?=a)b|c)` - and the parser keeps those as children *before*
+  // the condition. They are hoisted here, in front of the whole
+  // conditional, which is where pcre2test prints them: the result is
+  // `(?C9)(?(?=a)b|c)`, and nothing below this point learns a fourth kind
+  // of child.
   uint32_t first = node->first_child;
+  uint32_t leading = GRX_INDEX_NONE;
+  while (kind == GRX_COND_ASSERTION && first != GRX_INDEX_NONE) {
+    const GRX_Node * part = grx_pattern_node(low->pattern, first);
+    if (!part || part->kind != GRX_NODE_CALLOUT) {
+      break;
+    }
+    if (leading == GRX_INDEX_NONE) {
+      leading = first;
+    }
+    first = part->next_sibling;
+  }
 
   if (kind == GRX_COND_STATIC) {
     // Already decided. The branch that was not chosen is dropped rather than
@@ -1734,6 +1757,30 @@ static GRX_Result lower_conditional(
       if (!name || resolve_name(low, name, &group, NULL) != GRX_OK) {
         return fail(low, GRX_DIAG_UNKNOWN_GROUP_NAME, node);
       }
+    }
+  }
+
+  // The hoisted callouts, and the concatenation that holds them in front
+  // of the conditional. Built before the GRX_IR_COND so that the order in
+  // the IR is the order they run in.
+  uint32_t sequence = GRX_INDEX_NONE;
+  if (leading != GRX_INDEX_NONE) {
+    GRX_Result hoisted = add(low, GRX_IR_CONCAT, node, &sequence);
+    for (uint32_t child = leading;
+        hoisted == GRX_OK && child != first && child != GRX_INDEX_NONE;) {
+      const GRX_Node * part = grx_pattern_node(low->pattern, child);
+      if (!part) {
+        return fail(low, GRX_DIAG_INTERNAL, node);
+      }
+      uint32_t lowered = GRX_INDEX_NONE;
+      hoisted = lower_node(low, child, &lowered);
+      if (hoisted == GRX_OK) {
+        hoisted = attach(low, sequence, lowered);
+      }
+      child = part->next_sibling;
+    }
+    if (hoisted != GRX_OK) {
+      return hoisted;
     }
   }
 
@@ -1772,6 +1819,15 @@ static GRX_Result lower_conditional(
     child = part->next_sibling;
   }
 
+  if (sequence != GRX_INDEX_NONE) {
+    // The callouts first, then the conditional, and the concatenation is
+    // what the caller gets.
+    result = attach(low, sequence, conditional);
+    if (result != GRX_OK) {
+      return result;
+    }
+    *out_node = sequence;
+  }
   return GRX_OK;
 }
 
@@ -1980,7 +2036,18 @@ static GRX_Result lower_look(
   int behind = kind == GRX_LOOK_BEHIND_POSITIVE
       || kind == GRX_LOOK_BEHIND_NEGATIVE
       || kind == GRX_LOOK_BEHIND_NON_ATOMIC;
-  int forward = behind && look_runs_forward(low, kind);
+  // A lookbehind written with a byte bound runs forwards whatever the
+  // profile says, because the bound is exactly what the forward strategy
+  // needs: it enumerates candidate starts over a known span, and vim's
+  // `\@123<=` is that span. Without it an unbounded profile would run the
+  // body in reverse, where there is nowhere to put the limit.
+  // `min` and not `b`: every front end's group_open() hook leaves `b` as
+  // GRX_INDEX_NONE on a lookaround, so a bound read from there would be
+  // four billion for every dialect but this one. `min` is zero on a
+  // LOOKAROUND node and nothing else writes it.
+  uint32_t bound = behind && kind != GRX_LOOK_BEHIND_NON_ATOMIC
+      ? node->min : 0u;
+  int forward = behind && (look_runs_forward(low, kind) || bound > 0);
 
   GRX_Result result = add(low, GRX_IR_LOOK, node, out_node);
   if (result != GRX_OK) {
@@ -1998,6 +2065,7 @@ static GRX_Result lower_look(
     // analysis pass's job, and the subtree does not exist until below. What
     // is set here is the claim that it will be measured.
     look->a = GRX_INDEX_NONE;
+    look->b = bound;
   }
 
   // Inside a reverse lookbehind every node is marked reverse, and its

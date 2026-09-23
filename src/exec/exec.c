@@ -108,6 +108,62 @@ GRX_Result grx_match_create(const GRX_Regex * regex,
  * only in what they put in the options, and there is one place where a search
  * can be got wrong.
  */
+/**
+ * The screen column of every byte offset, counting from one.
+ *
+ * Vim's `\%23v` is what wants it. Zero where an offset has no column of
+ * its own: inside a character, and at a combining character that follows
+ * something - `\%2v` against "a" U+0301 "x" holds at the "x" and not at
+ * the combining character, which is measured. A real column is never zero,
+ * so the two cannot be confused.
+ *
+ * The tabstop is eight, which is vim's default for the option the answer
+ * depends on; see documentation/dialects.md section 6.
+ */
+static uint32_t * build_columns(const GRX_Regex * regex,
+    const char * subject, size_t end, const GRX_Limits * limits) {
+  (void)limits;
+  size_t slots = end + 1;
+  if (slots > GRX_NPOS / sizeof(uint32_t)) {
+    return NULL;
+  }
+  uint32_t * columns
+      = gcu_allocator_calloc(regex->allocator, slots, sizeof(uint32_t));
+  if (!columns) {
+    return NULL;
+  }
+
+  size_t column = 1;
+  size_t at = 0;
+  int first = 1;
+  while (at <= end) {
+    columns[at] = column > UINT32_MAX ? UINT32_MAX : (uint32_t)column;
+    if (at == end) {
+      break;
+    }
+    uint32_t codepoint = 0;
+    size_t width = grx_unicode_utf8_decode(subject + at, end - at, &codepoint);
+    if (!width) {
+      // Not a character, so it is drawn as the byte it is. One cell, which
+      // is what vim shows for a stray byte too.
+      codepoint = (uint32_t)(unsigned char)subject[at];
+      width = 1;
+    }
+    size_t next = grx_display_column_after(codepoint, column, 8, first);
+    if (next == column) {
+      // A combining character: the offsets it spans have no column, and
+      // the one after it keeps the column its base had.
+      for (size_t skip = at; skip < at + width; skip++) {
+        columns[skip] = 0;
+      }
+    }
+    column = next;
+    at += width;
+    first = 0;
+  }
+  return columns;
+}
+
 static GRX_Result exec(const GRX_Regex * regex, const char * subject,
     size_t length, const GRX_SearchOptions * options, int anchored,
     GRX_EmptyMatchRule empty_rule, size_t search_start, GRX_Match * match,
@@ -262,6 +318,8 @@ static GRX_Result exec(const GRX_Regex * regex, const char * subject,
     match->matched = 0;
     match->steps = 0;
     match->mark = GRX_INDEX_NONE;
+    match->consumed = (GRX_Capture) {GRX_NPOS, GRX_NPOS};
+    match->searched_from = options->begin;
     grx_error_clear(&match->error);
   }
 
@@ -286,11 +344,30 @@ static GRX_Result exec(const GRX_Regex * regex, const char * subject,
     // decides whether callouts are live is one place to get it wrong.
     .callout = options->callout,
     .callout_data = options->callout_data,
+    .columns = NULL,
   };
+
+  // Vim's `\%23v`, and only ever that: the screen column of every offset,
+  // computed once here because the assertion is reached at arbitrary
+  // positions in arbitrary order and a walk from the start at each of them
+  // would be quadratic in the subject.
+  uint32_t * columns = NULL;
+  if (regex->program.flags & GRX_PROGRAM_HAS_SCREEN_COLUMN) {
+    columns = build_columns(regex, subject, end, limits);
+    if (!columns) {
+      if (match) {
+        grx_error_set(&match->error, GRX_ERR_OOM, GRX_DIAG_OUT_OF_MEMORY,
+            GRX_NPOS, 0);
+      }
+      return GRX_ERR_OOM;
+    }
+    request.columns = columns;
+  }
 
   GRX_Result result = engine == GRX_ENGINE_PIKE
       ? grx_exec_pike(&request, out_matched)
       : grx_exec_backtrack(&request, out_matched);
+  gcu_allocator_free(regex->allocator, columns);
 
   if (match) {
     match->steps = steps;
@@ -415,6 +492,23 @@ GRX_Result grx_regex_search_next(const GRX_Regex * regex,
   }
   GRX_Capture previous = match->captures[0];
   int was_empty = previous.start == previous.end;
+  // What the attempt *walked*, which a `\K` or a `\ze` can make different
+  // from what it reported. Only Vim's rule below asks, and only the engine
+  // that can run those two ever fills it in; GRX_NPOS means "the same".
+  GRX_Capture walked = match->consumed;
+  if (walked.start == GRX_NPOS || walked.end == GRX_NPOS) {
+    walked = previous;
+  }
+  // "The next attempt would start where this one began." The test is the
+  // *walked* start against the *reported* end, which is the only pair that
+  // answers it once `\zs` and `\ze` can move the two apart: a match that
+  // consumed nothing has them equal, and so does one whose `\ze` pinned
+  // the end back to where the match began. A match that arrived at its
+  // reported end - `a\zs`, which walked "a" to get to 1 - has them
+  // different and does not stand still. Nothing else can loop: where they
+  // differ the reported end is past the walked start, which is at or past
+  // where the search began.
+  int stood_still = walked.start == previous.end;
 
   // The subject was validated by the search that produced the previous
   // match, and this call is documented to run against the same bytes. Paying
@@ -461,6 +555,30 @@ GRX_Result grx_regex_search_next(const GRX_Regex * regex,
               ? previous.end : GRX_NPOS,
           match, out_matched);
     }
+
+    case GRX_ITERATE_ADVANCE_ONE_STOP_AT_END:
+      // Vim's, and it differs from ADVANCE_ONE twice over.
+      //
+      // The loop ends when a match reaches the end of the subject, so the
+      // empty match that would otherwise follow a non-empty one there is
+      // not reported: `b*` over "ab" is "<>a<>" in vim and "<>a<><>" in
+      // node, perl and `re` alike.
+      //
+      // And the character-advance is decided by what the match *walked*
+      // rather than by what it reported, which is the only place in this
+      // file the two come apart. `a\zs` over "aab" reports an empty span
+      // at 1 having consumed the "a" before it, and vim goes on from 1
+      // without advancing - "aXaXb", where an empty-span test gives
+      // "aXab". Every other dialect here has no `\zs`, and `\K` is
+      // Perl's, whose rule is the first case above.
+      if (previous.end >= end) {
+        return no_further_match(match, out_matched);
+      }
+      resolved.begin = stood_still
+          ? advance_one(regex, subject, end, previous.end)
+          : previous.end;
+      return grx_regex_search_ex(regex, subject, length, &resolved, match,
+          out_matched);
 
     case GRX_ITERATE_ADVANCE_ONE:
       // ECMAScript sets lastIndex to the end of the match and advances by one

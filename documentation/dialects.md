@@ -380,6 +380,17 @@ inlined rather than run as a sub-match — that is what makes it non-atomic —
 and a candidate-start loop has nowhere to put the backtrack points it has to
 leave live.
 
+**Vim bounds a lookbehind one assertion at a time**, which is the one case
+where the axis is not the whole answer. `\@123<=` says the match may start
+at most 123 *bytes* back — `\(ab\)\@1<=c` does not match "abc" there and
+`\(ab\)\@2<=c` does, and `\(é\)\@1<=x` does not match "éx", which is
+what says bytes rather than characters. So the dialect is `UNBOUNDED` and an
+assertion carrying a number runs *forwards* all the same, over the span its
+own bound allows: a variable-length body becomes finite for that assertion
+alone. Zero is vim's "no bound" and is what an unwritten number leaves.
+Where the bound is smaller than the body's shortest match the assertion can
+never hold, and that is a pattern vim compiles rather than refuses.
+
 ### 5.5 Empty iterations and captures in loops
 
 The two rules that make `(a*)*` against `b` report different things:
@@ -388,7 +399,7 @@ The two rules that make `(a*)*` against `b` report different things:
 | --- | --- | --- |
 | Empty iteration | `FAIL_IF_EMPTY_AFTER_MIN`: an iteration that consumes nothing, once `min` is satisfied, fails (22.2.2.3.1 RepeatMatcher step 2.b) | ECMAScript |
 | | `BREAK_ON_EMPTY`: the iteration succeeds and the loop stops | Perl, PCRE2, Python, Java (**probe**), .NET (**probe**), Ruby (**probe**), RE2, Rust |
-| | `BREAK_IF_UNMOVED`: the iteration succeeds and the loop stops, but only while the *repeat* has consumed nothing; once it has, the empty iteration does not run at all | POSIX, GNU |
+| | `BREAK_IF_UNMOVED`: the iteration succeeds and the loop stops, but only while the *repeat* has consumed nothing; once it has, the empty iteration does not run at all | POSIX, GNU, Vim |
 | | `LONGEST`: irrelevant; the match is the longest, and an empty iteration adds nothing | Tcl |
 | Capture reset | `RESET_EACH_ITERATION`: captures inside the group are cleared at the **start** of every iteration (RepeatMatcher step 4) | ECMAScript |
 | | `RESET_AFTER_EACH_ITERATION`: an iteration clears, on the way **out**, the ones it did not itself set | **Perl** (probed) |
@@ -403,6 +414,16 @@ so once an iteration has consumed, a trailing empty one does *not* run -
 which is what plain `BREAK_ON_EMPTY` gives, the empty body having written its
 captures before the loop exited. Both halves are the same rule seen from two
 sides, and the thing that divides them is where the repeat began.
+
+**Vim is here too, and it took `\zs` to see it.** The cell had never been
+probed, so it read ECMAScript's - and an empty iteration's *writes* are what
+show the difference, which no group span in `matchlist()` can: it returns
+the text of a group and "" for one that did not take part. `a\%(\zs\)*b`
+against "ab" is 1-2 in both of vim's engines and would be 0-2 under
+`FAIL_IF_EMPTY_AFTER_MIN`, so the empty first iteration runs and its mark
+sticks. The trailing case is where vim's two engines part - `\%(a\|\zs\)*`
+against "aa" is 2-2 under `re=2` and 0-2 under `re=1` - and the old engine's
+answer is this row's.
 
 "The repeat", not "its optional tail", is the whole of the distinction.
 `(b+|(c)*)+` against `"b"` has one mandatory copy, which consumes the `b`; if
@@ -617,7 +638,7 @@ reads bytes until `PCRE2_UTF` says otherwise.
 | RE2 | ASCII | ASCII | `[\t\n\f\r ]` | `\pL`, `\p{Greek}`: categories and scripts, exact case |
 | Rust | Unicode (UTS #18); ASCII under `(?-u)` | `Nd` | `White_Space` | loose (UAX #44) |
 | Tcl | Unicode `[[:alnum:]_]` | Unicode `[[:digit:]]` | Unicode `[[:space:]]` | none |
-| Vim | `[0-9A-Za-z_]` | `[0-9]` | `[ \t]` - space and tab alone | none |
+| Vim | `[0-9A-Za-z_]` - and `\<`/`\>` are *not* defined from it, but from 'iskeyword' | `[0-9]` | `[ \t]` - space and tab alone | none |
 | Emacs | syntax table: word constituents (**deviation:** treated as `[[:word:]]` = Unicode letters and digits) | none | `\s-` (syntax class), not `\s` | none |
 
 **`UCP` widens the shorthands and `UTF` widens the folding**, and they are
@@ -690,6 +711,35 @@ from.
 | `RETRY_NONEMPTY_THEN_ADVANCE` | at the same position, retry refusing an empty match; if that fails, advance one character | Perl, PCRE2 (its documented `NOTEMPTY_ATSTART` loop), Python 3.7+ |
 | `ADVANCE_ONE` | advance one code point (one code unit without `u`) and search again; an empty match immediately after a non-empty one is reported | ECMAScript (`RegExpBuiltinExec` / `AdvanceStringIndex`), Java (**probe**), .NET (**probe**), Ruby (**probe**) |
 | `ADVANCE_ONE_SKIP_ABUTTING` | as above, but an empty match abutting the previous match is not reported | Go (`regexp` documentation: "empty matches abutting a preceding match are ignored"); Rust (**probe**) |
+| `ADVANCE_ONE_STOP_AT_END` | as `ADVANCE_ONE`, with two changes: a match reaching the end of the subject ends the loop, and the character-advance is taken when the match's *walked start* is its reported end | Vim |
+
+**Vim's row is its own and both halves are measured.** `substitute("ab",
+"b*", "<>", "g")` is `"<>a<>"` there and `"<>a<><>"` in node, perl and `re`
+alike: every other reference reports the empty match at the end that follows
+a non-empty one reaching it.
+
+The second half is the only place in this library where the span a match
+*reports* and the text it *walked* have to be told apart, which is what
+GRX_Match::consumed is for. An empty-span test gets three of these four
+wrong:
+
+| | reported | walked | vim advances? |
+| --- | --- | --- | --- |
+| `\|a` over "aab" | 0-0 | 0-0 | yes |
+| `a\zs` over "aab" | 1-1 | 0-1 | **no** - it walked "a" to get to 1 |
+| `\zea` over "xaby" | 1-1 | 1-2 | yes - it is still where it began |
+| `\(b\)\@<=` over "abcb" | 2-2 | 2-2 | yes |
+
+So the question is whether the next attempt would start where this one
+began, and the pair that answers it is the walked *start* against the
+reported *end*. `substitute("aab", 'a\zs', "X", "g")` is `"aXaXb"` in vim
+and would be `"aXab"` under the span test; `substitute("xaby", '\zea', "X",
+"g")` is `"xXaby"` and would be a loop that never ends.
+
+The cell had never been probed and read Perl's
+`RETRY_NONEMPTY_THEN_ADVANCE` until it was: under that rule
+`substitute("aab", '\|a', "<>", "g")` would be `"<><><><><>b<>"` where vim
+answers `"<>a<>a<>b<>"`.
 
 **What `\G` asserts is a second axis**, independent of the rule above, and
 Perl and PCRE2 share the first row and differ on this one:
@@ -764,7 +814,7 @@ at all.
 | Go, Rust | `$n`, `${n}` | `$name`, `${name}` - the name is parsed greedily, so `$1x` is the group named `1x` | none | `$$` | empty | empty | none |
 | POSIX BRE/ERE | `\1`-`\9`, one digit | none | `&` | `\&`, `\\`, and `\c` for any other `c` | error | empty | none |
 | GNU BRE/ERE | as POSIX, plus `\0` for the whole match | none | `&`, `\0` | as POSIX | error | empty | none - see below |
-| Vim (`:s`) | `\n` | none | `&`, `\0` | `\&`, `\\` | empty | empty | `\u \U \l \L \e \E` - **not built**; see §6 |
+| Vim (`substitute()`) | `\1`-`\9`, one digit | none | `&`, `\0` | `\&`, `\~`, `\\`, and `\c` for any other `c`; `\n`, `\r`, `\t` and `\b` decode | empty | empty | `\u \U \l \L \e \E` - built; the only case-changing row here that is not Perl's |
 | Tcl (`regsub`) | `\n` | none | `&`, `\0` | `\\`, `\&` | empty | empty | none |
 | Emacs (`replace-match`) | `\n` | none | `\&` | `\\` | error | empty | none |
 
@@ -1165,6 +1215,17 @@ dialect names. A deviation has a reason and, where it is a restriction, a
 diagnostic. This list is the one that §4's answer 3 refers to; it is meant
 to be complete for every shipped tier.
 
+**Three rows record something that is not a difference**, and they are kept
+because each is a question a reader of this page will ask: `(*BSR_ANYCRLF)`
+and its pair say "built", because they were unbuilt once; what an extended
+class ignores says "and is followed", because the two references differ
+from *each other* and each is followed exactly; and PCRE2's `(?{ })` says
+what that spelling does in the dialect that has no such construct, beside
+the row for the dialect that does. A row is a deviation unless its reason
+says otherwise. `~` used to be a fourth and was simply wrong: vim answers
+"E33" in the only state a library is ever in, so refusing it is vim's own
+answer.
+
 | Dialect | Deviation | Reason | Reported as |
 | --- | --- | --- | --- |
 | all | Offsets are UTF-8 byte offsets | [design.md](design.md) §2 | - |
@@ -1180,7 +1241,6 @@ to be complete for every shipped tier.
 | Perl | `(?[ ])` accepts one unmatched `)` after a complete operand; this does not | `(?[ [a]) ])` compiles in perl 5.40.1 and is an error in pcre2test. Perl refuses two of them, a leading one, and an unmatched `(` - so it is one stray close parenthesis and no more, which is an off-by-one in its accounting rather than a rule to follow. Everything else about the two grammars is the same, which is not what this row used to say: it claimed Perl's "nests and takes different operands", and perl refuses a textual `(?[ (?[ [a] ]) ])` - what it nests is an *interpolated* `qr//`, which a pattern arriving as text cannot be. Compared over 13,440 generated rows | `GRX_ERR_SYNTAX` |
 | Perl, PCRE2 | What an extended class **ignores** differs, and is followed | Perl skips all of `Pattern_White_Space` - all eleven code points probed - and takes `#` comments to the next **line feed**, which CR, VT and U+2028 do not end; pcre2test refuses a literal newline inside `(?[ ])` with error 216 and refuses `#` outright. U+00A0 is ignored by neither, which is the case that says the rule is the property and not a notion of "space" | - |
 | Perl | Where a failed negative lookaround's body stopped *part way through an iteration*, the group reports the last value an iteration **finished** | §5.17 is followed as written - Perl keeps, ECMAScript and PCRE2 discard - but "what the body last wrote" is only well defined if the body failed between iterations, and Perl states no rule for the rest: it decides on the width of the repeated body, answering `(?!(a){2}$)` and `(?!(aa){2}$)` against "aaa" as unset and 0-2. The rule here answers them 1-2 and 0-2, so the two agree wherever Perl is self-consistent and differ on the narrow case where it is not | - |
-| PCRE2 | A callout written where a conditional's **condition** goes is dropped | `(?(?C9)(?=a)b\|c)` prints callout 9 in pcre2test and prints nothing here. A conditional's children are the condition and the branches positionally, and there is no fourth slot to carry a callout in. The *match* is identical, and only a caller watching the trace can tell. 150 of 25,600 rows of `callout_diff.py` | - |
 | PCRE2 | A script run may mix Han with **two** of Hiragana/Katakana, Hangul and Bopomofo | pcre2 10.46 accepts the mixture its own manual denies. pcre2unicode says a run may hold "a mixture of Hiragana, Katakana, and Han, or a mixture of Hangul and Han, or a mixture of Bopomofo and Han, but not, for example, a mixture of Hangul and Bopomofo and Han", and pcre2test matches that last one. All twenty two- and three-way combinations of U+6F22, U+304B, U+30AB, U+D55C and U+3105 were put to both references: they agree on fourteen - including `Hiragana+Hangul`, which both refuse, so it is not that Han lets anything through - and differ on exactly the six that mix two families. perl 5.40.1 refuses all six, which is UTS #39 section 5.1, and so does this library | - |
 | PCRE2, Perl | `\C`, one code unit | the subject here is code points, and a construct that can land inside a character has no honest approximation | `GRX_ERR_UNSUPPORTED` |
 | PCRE2 | `(*BSR_ANYCRLF)`, `(*BSR_UNICODE)` | built: `\R` is an alternation the parser writes and a directive may only lead the pattern, so the flag is set before the `\R` it governs. `(*BSR_ANYCRLF)\R` refuses a vertical tab and plain `\R` takes one, in pcre2test and here | - |
@@ -1202,14 +1262,12 @@ to be complete for every shipped tier.
 | .NET | Culture-sensitive folding is invariant; balancing groups deferred | §5.8; [design.md](design.md) §2 | `GRX_ERR_UNSUPPORTED` for balancing groups |
 | Emacs | Syntax classes (`\s-`, `\w`) use fixed Unicode definitions, not a syntax table | no syntax table | - |
 | Vim | The subject is a string, not a buffer | vim's help describes matching against a *buffer*, where `.` refuses the line break. `matchstrpos()` over a string is what this library can be, and what its differential asks: there `a.b` matches "a\nb", `[^x]` matches the break, and `^`, `$`, `\_^` and `\_$` hold at the two ends only. The `\_` forms are still distinct, because `\s` refuses a break and `\_s` accepts one | - |
-| Vim | `~` and `\~` (the last `:s` replacement) | there has been no previous substitution; vim itself answers "E33: No previous substitute regular expression" when there has not | `GRX_ERR_UNSUPPORTED` |
-| Vim | `\Z` (ignore combining characters) | a rule about normalisation, which this library does not do | `GRX_ERR_UNSUPPORTED` |
-| Vim | `\%23v`, `\%<23v`, `\%>23v` | the *screen* column, which is a window's measure and not the text's: it counts display cells, so a tab reaches the next multiple of 'tabstop', a wide character takes two and a combining one takes none - `\%3v` holds after U+65E5 where `\%3c` does not. It needs an option and a cell-width table that are vim's own rather than Unicode's. The rest of the family is built: `\%V`, `\%#` and the three `l` forms never match over a string, which is vim's own answer, and `\%23c` is the byte column counted from one | `GRX_ERR_UNSUPPORTED` |
-| Vim | `\@123<=` accepts the count and ignores it | in vim the number bounds how far back the match may start, which is an efficiency limit with a visible effect. This library's lookbehind is unbounded (§5.4) | - |
+| Vim | **A base and the combining marks after it are one character there and several here** | vim matches a *composing cluster*: `.` against "a" U+0301 is 0-3 there and 0-1 here, `[a]`, `\w` and `[[:alpha:]]` all take the whole cluster, a literal `a` matches **none** of it, `..` finds only one character in it, and `\%2c` holds nowhere inside it. Measured over 114 rows, and the set of marks is the one this library already carries for `\%23v` - a character of zero display cells. It is not built because it is a matching model rather than a construct: every consuming instruction, in both directions, plus the rule that a match may not begin inside a cluster - and it is the same machinery `\Z` needs. `tools/oracle/vim_diff.py` generates no subject holding one, and says so | - |
+| Vim | **`\<` and `\>` hold where vim's character *class* changes, not merely where a word begins** | vim has more than one word class - `\>` holds between U+65E5 and "x" there and nowhere here, because both are 'iskeyword' characters and this library's boundary is "word on one side, not on the other". Nine distinct classes over 418 ranges, measured by signature against ten probe characters. Not built for the same reason as the row above: it is a second classification of every code point rather than the set the shared assertion carries, and `\<` at the *start* of a word is right either way - the keyword set and "class two or more" are the same 1,106,472 code points. No subject in the differential holds a character outside Latin's class | - |
+| Vim | `\Z` (ignore combining characters) | a rule about normalisation, and the machinery is the composing-cluster row above: `\Z` is that rule with the marks made optional rather than required | `GRX_ERR_UNSUPPORTED` |
 | Vim | `\i`, `\k`, `\f` and `\p` are vim's *defaults* | those four are the options 'isident', 'iskeyword', 'isfname' and 'isprint', and a user who has changed one has a dialect this library does not read. Measured at the defaults, and measured by enumeration: every one of the 1,114,112 code points put to vim for each of the 52 class spellings, which is what a set whose members are decided one at a time needs. They had been *sampled* instead, and three of the four were wrong - `\i` and `\k` both missed U+00B5, and `\k` took in 5,463 code points vim excludes | - |
 | Vim | An unknown `[:name:]` is refused | vim compiles a collection holding one into a pattern that can never match anything at all - `[[:foo:]]*a` does not match "a" - which is a degenerate answer rather than a rule | `GRX_ERR_SYNTAX` |
-| Vim | The replacement template is not built | vim's `:s` right-hand side has two rules nothing else here has: `\r` inserts a line break where `\n` inserts a NUL, and `\u`, `\U`, `\l`, `\L`, `\e` and `\E` change the case of what follows. A row claiming sed's grammar would get both wrong rather than leave them unbuilt, so the row is zeroed and `grx_regex_replace()` refuses it | `GRX_ERR_UNSUPPORTED` |
-| Vim | Eight answers of vim's are not followed, each measured against a second reference | (1) a forward backreference is refused, where vim accepts one *if a lookbehind follows it* - every other spelling is "E65: Illegal back reference" in both of its engines; (2) an abandoned `\@>` group's captures are discarded, where vim keeps them and pcre2test does not; (3) a capture around a postfix assertion followed by a repeat is kept, where vim loses it and pcre2test does not; (4) a postfix lookbehind with a backreference after it follows pcre2test: `\(a\)\@<=\(a\)\1\l` reports 1:4 where vim reports 1:3 in both engines and names text that does not satisfy its own pattern, and `\v\D(a)@<=\m\(a\)\1\(a\+\)\@>` reports no match where vim reports 0:3 with a group the match has no room for; (5) `\v\_^*` matches the empty string, where vim matches nothing at all in either engine - and `\m\_^*`, `\v\_$*`, `\v\_^{0,1}` and `\v(\_^)*` all match it there, so the one spelling that fails is an accident of its parser and not a rule; (6) **a group inside `\%[...]` is refused**, where the default engine takes one - `a\%[\(bc\)]`, `a\%[\%(bc\)]` and a nested `a\%[b\%[cd]]` are all "E54" under `set re=1` and all compile under `re=2`. Every other member is built: a class, a collection, `\%d98`, `\zs`, `\<`, `\_s` and a backreference are atoms and vim's help says so, and the seven escapes that are the bare letter only in there (`\v`, `\m`, `\M`, `\V`, `\c`, `\C`, `\Z` - enumerated one letter at a time over all fifty-two) are read that way; (7) **`\%23l*` matches the empty string**, where vim matches nothing at all in either engine - the same shape as (5), since `\%23l\{}`, `\%23l\{-}`, `\%23l\{0,1}`, `\(\%23l\)*` and the very magic `%23l*` all match it there, so it is the bare `*` outside very magic after an `l` form and nothing else; (8) **`\zs` and `\ze` inside an assertion or an atomic group still count**, which is `set re=1`, where vim's default engine mostly makes them inert. Measured over 140 patterns putting each of four marker bodies inside each of `\@=`, `\@!`, `\@<=`, `\@<!`, `\@>` and `\&` with five tails: the old engine answers all 140 the way one mark register does, the new one agrees with it on 110, and the 30 left have no rule behind them - `\(ab\zec\)\@=a` against "abc" is 0-2 old and 0-1 new, while `x\(ab\zec\)\@=` against "xabc" is 0-3 in *both*, so the same character consumed outside the same assertion decides differently by which side of it it was written; `a\zeb` is 0-1 everywhere, so later text does not overwrite a mark either; and the new engine drops a `\zs` where it keeps a `\ze`. `tools/oracle/vim_diff.py` counts each of these rather than dropping it, and a ninth class - where vim's two engines simply disagree without either being incoherent - is settled by *asking* `set re=1` rather than by guessing | - |
+| Vim | Nine answers of vim's are not followed, each measured against a second reference | (1) a forward backreference is refused, where vim accepts one *if a lookbehind follows it* - every other spelling is "E65: Illegal back reference" in both of its engines; (2) the captures an abandoned path wrote are discarded, where vim keeps them and pcre2test does not - `\(a\)\@>x\|\A` and `\(a\)\@=a$\|b` both report group one as "a" there, and `\(a\)\@=ax\|b` does not, so what decides is whether the abandoned branch died at an assertion or at a character; node and pcre2test both report it unset; (3) a capture around a postfix assertion followed by a repeat is kept, where vim loses it and pcre2test does not; (4) a postfix lookbehind with a backreference after it follows pcre2test: `\(a\)\@<=\(a\)\1\l` reports 1:4 where vim reports 1:3 in both engines and names text that does not satisfy its own pattern, and `\v\D(a)@<=\m\(a\)\1\(a\+\)\@>` reports no match where vim reports 0:3 with a group the match has no room for; (5) `\v\_^*` matches the empty string, where vim matches nothing at all in either engine - and `\m\_^*`, `\v\_$*`, `\v\_^{0,1}` and `\v(\_^)*` all match it there, so the one spelling that fails is an accident of its parser and not a rule; (6) **a group inside `\%[...]` is refused**, where the default engine takes one - `a\%[\(bc\)]`, `a\%[\%(bc\)]` and a nested `a\%[b\%[cd]]` are all "E54" under `set re=1` and all compile under `re=2`. Every other member is built: a class, a collection, `\%d98`, `\zs`, `\<`, `\_s` and a backreference are atoms and vim's help says so, and the seven escapes that are the bare letter only in there (`\v`, `\m`, `\M`, `\V`, `\c`, `\C`, `\Z` - enumerated one letter at a time over all fifty-two) are read that way; (7) **`\%23l*` matches the empty string**, where vim matches nothing at all in either engine - the same shape as (5), since `\%23l\{}`, `\%23l\{-}`, `\%23l\{0,1}`, `\(\%23l\)*` and the very magic `%23l*` all match it there, so it is the bare `*` outside very magic after an `l` form and nothing else. A marker between the two is the same artifact seen from the other side: `\%23l\v*` compiles in vim and is refused here, where `\%23c\v*` and `a\v*` are "E871" in vim too; (8) **a bare `*` with nothing to repeat is the literal asterisk wherever it stands**, where vim refuses two spellings out of the set: `^\m*` is an error and `^*` matches, `\(\m*\)` matches and `^\m\+` is an error here too - so the marker loses the caret for the `*` alone; and `\%(*\)` is an error where `\(*\)`, `\v%(*)` and `\M\%(*\)` all match, the same construct in four spellings refused in one. Both engines alike; (9) **`\zs` and `\ze` inside an assertion or an atomic group still count**, which is `set re=1`, where vim's default engine mostly makes them inert. Measured over 140 patterns putting each of four marker bodies inside each of `\@=`, `\@!`, `\@<=`, `\@<!`, `\@>` and `\&` with five tails: the old engine answers all 140 the way one mark register does, the new one agrees with it on 110, and the 30 left have no rule behind them - `\(ab\zec\)\@=a` against "abc" is 0-2 old and 0-1 new, while `x\(ab\zec\)\@=` against "xabc" is 0-3 in *both*, so the same character consumed outside the same assertion decides differently by which side of it it was written; `a\zeb` is 0-1 everywhere, so later text does not overwrite a mark either; and the new engine drops a `\zs` where it keeps a `\ze`. `tools/oracle/vim_diff.py` counts each of these rather than dropping it, and a tenth class - where vim's two engines simply disagree without either being incoherent - is settled by *asking* `set re=1` rather than by guessing | - |
 
 ### 6.1 ECMAScript and the unit of a subject
 

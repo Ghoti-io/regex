@@ -149,6 +149,16 @@ extern "C" {
 #define GRX_PROGRAM_HAS_CALLOUT GRX_BIT(5)
 
 /**
+ * @brief The pattern asks for a screen column.
+ *
+ * Vim's `\%23v`, and read in one place: the search, which builds the
+ * column of every offset once before it starts. The assertion cannot do
+ * that walk itself without being quadratic in the subject, and every
+ * pattern that does not hold one pays nothing for the ones that do.
+ */
+#define GRX_PROGRAM_HAS_SCREEN_COLUMN GRX_BIT(6)
+
+/**
  * @brief A zero-width assertion.
  *
  * The line and boundary kinds are parameterised by a character class - the
@@ -255,6 +265,26 @@ typedef enum {
    * `a\%Vb` is a pattern that compiles and finds nothing.
    */
   GRX_ASSERT_NEVER,
+  /**
+   * The *screen* column is between `x` and `y`, counting from one.
+   *
+   * Vim's `\%23v`, `\%<23v` and `\%>23v`, and the one assertion here
+   * whose answer is a property of how the subject would be *drawn*: a tab
+   * reaches the next multiple of the tabstop, a wide character takes two
+   * cells and a combining one takes none. src/unicode/display.c is the
+   * table, measured from vim rather than from the UCD.
+   *
+   * It never holds at a position inside a cluster - a combining character
+   * that follows something has no column of its own - which is measured:
+   * `\%2v` against "a" U+0301 "x" holds at the "x" and not at the
+   * combining character, though both would be column 2 by arithmetic.
+   *
+   * The column at every offset is computed once per search, because an
+   * assertion that walked the subject would be quadratic in it. The
+   * program carries GRX_PROGRAM_HAS_SCREEN_COLUMN so that every other
+   * pattern pays nothing.
+   */
+  GRX_ASSERT_SCREEN_COLUMN,
   GRX_ASSERT_COUNT              ///< Closes the enum; not an assertion.
 } GRX_AssertKind;
 
@@ -413,6 +443,18 @@ typedef enum {
   GRX_ITERATE_RETRY_THEN_ADVANCE = 0, ///< Perl, PCRE2, Python.
   GRX_ITERATE_ADVANCE_ONE,            ///< ECMAScript.
   GRX_ITERATE_ADVANCE_SKIP_ABUTTING,  ///< Go.
+  /**
+   * As ADVANCE_ONE, and a match reaching the end of the subject ends it.
+   *
+   * Vim's, and the only rule here that looks at *where* a match ended
+   * rather than at whether it was empty. `substitute("ab", "b*", "<>", "g")`
+   * is "<>a<>" there and "<>a<><>" in node, perl and `re` alike: every
+   * other reference reports the empty match at the end that follows a
+   * non-empty one reaching it, and vim stops instead. Measured against
+   * `substitute()`, which is `:s` over a string and so the form this
+   * library can be.
+   */
+  GRX_ITERATE_ADVANCE_ONE_STOP_AT_END,
   GRX_ITERATE_COUNT                   ///< Closes the enum; not a rule.
 } GRX_IterationRule;
 

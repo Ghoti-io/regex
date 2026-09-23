@@ -510,7 +510,10 @@ saving is one fork for a *run* rather than one per case: vim reads a file of
 cases and writes a file of answers, which is what makes tens of thousands of
 rows possible against a reference `probe.py` was starting a process per case
 for. `make check-oracle-vim` runs it with `--strict`. Current standing:
-**1,305,000 rows over thirty seeds, no disagreements.**
+**1,080,000 rows over thirty seeds, no disagreements** - with 801 rows
+excluded as vim artifacts, 1,407 where its two engines disagree and `set
+re=1` gives this library's answer, and 21 where they disagree and neither
+does, which are printed.
 
 **The subject is a string, not a buffer**, and that is a decision the tool
 makes rather than a detail of it. vim's help describes matching against a
@@ -529,7 +532,7 @@ comparison folds ours the same way, and the unset axis is stated by
 `\(a\)\?\1` matches the empty string against "b", which a dialect that
 failed on an unset reference could not do.
 
-**Eight classes of disagreement are vim disagreeing with something**, and the
+**Nine classes of disagreement are vim disagreeing with something**, and the
 tool counts each rather than dropping it, so that the number moving is
 visible:
 
@@ -543,13 +546,13 @@ visible:
   Most turn on a single axis and `set re=1` gives exactly this library's
   answer. A few turn on *two*, and then neither engine gives it: this
   library follows the old engine where a mark sits inside an assertion and
-  the new one where `\c` meets `[[:lower:]]`, each time because that engine
-  is the one whose answers can be stated as a rule, so a pattern holding
-  both agrees with neither. About one row in 35,000 -
-  `\c[[:lower:]]\|\(a\zsb\)\@=` against "ABC" is the shape - and the
-  tool *prints* each of them with both engines' answers beside its own,
-  because a defect of this library's could hide in that set and a person
-  looking at it is the only defence there is.
+  the new one where `\c` meets `[[:lower:]]` or an abandoned `\@>` group's
+  captures are read, each time because that engine is the one whose answer
+  can be stated as a rule, so a pattern touching two of them agrees with
+  neither. 29 rows in 1,044,885 - `\c[[:lower:]]\|\(a\zsb\)\@=`
+  against "ABC" is the shape - and the tool *prints* each of them with both
+  engines' answers beside its own, because a defect of this library's could
+  hide in that set and a person looking at it is the only defence there is.
 - **A forward backreference with a lookbehind after it.** `\1\(a\)\@<!`
   is accepted where `\1\(a\)`, `\(a\1\)`, `\1\(a\)\@=`,
   `\1\(a\)\@>` and `\1\%(a\)` are all "E65: Illegal back reference" in
@@ -579,12 +582,24 @@ visible:
   nothing at all in vim, while `\m\_^*`, `\v\_$*`, `\v\_^{0,1}` and
   `\v(\_^)*` all match the empty string there. Only the very magic level,
   only `\_^`, only the `*` spelling, and both engines alike.
+- **A bare `*` with nothing to repeat.** It is the literal asterisk at
+  every level, which is a basic RE's rule and vim's - `*a`, `\m*`, `^*`,
+  `\(*\)`, `x\|*`, `\&*`, `\v%(*)` and `\M\%(*\)` all match one -
+  and two spellings out of that set are refused instead. `^\m*` is an
+  error where `^*` matches and `\(\m*\)` matches, so a marker between
+  the caret and the star loses the caret; and `\%(*\)` is an error where
+  the same construct spelled three other ways is not. Both engines alike.
 - **`\%23l*`.** `\%23l` names a buffer line and never matches over a
   string, so a `*` on it should leave the empty match a zero-iteration
   repeat always has - and vim agrees five ways: `\%23l\{}`,
   `\%23l\{-}`, `\%23l\{0,1}`, `\(\%23l\)*` and the very magic
   `%23l*` all match the empty string there. Only the bare `*`, only
   outside very magic, only after an `l` form, and both engines alike.
+  Three answers come out of it and the tool looks at its own as well as
+  vim's: vim finds nothing where this matches empty, vim finds a longer
+  match because another branch won, and vim *compiles* `\%23l\v*` where
+  this refuses it - a marker between an atom and a bare `*` being "E871"
+  in vim after every atom but an `l` form.
 - **A group inside `\%[...]`.** `a\%[\(bc\)]`, `a\%[\%(bc\)]` and a
   nested `a\%[b\%[cd]]` are "E54: Unmatched \(" under `set re=1` and
   compile under `re=2`. Every other member vim's help calls an atom is
@@ -604,6 +619,18 @@ visible:
   keeps a `\ze`. This library follows the engine that can be written down,
   and every such row reaches the engine-split count above rather than being
   recognised from the pattern's shape.
+
+**Two kinds of character are deliberately absent from its subjects**, and
+each is a rule vim has that this library does not - found by putting such a
+subject in, and taken back out so that one unbuilt rule does not bury
+everything else the tool finds. Both are in [dialects.md](dialects.md) §6
+with their measurements. A base and the combining marks after it are *one
+character* in vim, so `.` over "a" U+0301 is 0-3 there and 0-1 here; and
+`\<` and `\>` hold where vim's character *class* changes rather than
+merely where a word begins, so `\>` holds between U+65E5 and "x" there and
+nowhere here. Neither is a construct that could be refused - they are how
+vim reads every subject - which is why the narrowing is in the subjects and
+not in the vocabulary.
 
 **The vocabulary carries what vim refuses**, at one row in eight - `\z(`,
 `\z1`, `\1` with no group, `a\{2`, `\(a`, `a**`, `\v+a`, `\v@a` and
@@ -982,15 +1009,20 @@ library has neither. The backtracking control verbs are absent from the
 skeletons for the same reason: pcre2api says `NO_START_OPTIMIZE` changes
 what `(*COMMIT)` and `(*SKIP)` do.
 
-The classified shape is a callout written where a conditional's
-*condition* goes, which the parser drops; it is in
-[dialects.md](dialects.md) §6, and the match is identical. It is checked
-rather than waved through - the outcomes have to agree and our trace has
-to be empty where pcre2's is not - and a run that finds none of it exits
-2, because a gate that has quietly stopped producing its own known case
-has quietly stopped asking.
+**Nothing is excluded any more, and two shapes were.** The first was a
+callout written where a conditional's *condition* goes - `(?(?C9)(?=a)b|c)`
+- which the parser dropped, because a conditional's children are the
+condition and the branches positionally. Our trace was empty where pcre2's
+had the callout, 150 rows in 25,600, and the match was identical
+throughout, which is the kind of difference only a trace gate can see. The
+parser keeps them now and lowering hoists them in front of the whole
+conditional, which is where pcre2test prints them; asking that question
+also found that pcre2 takes exactly *one* there and refuses two, where
+this library had taken any number. A run that produces none of the shape
+still exits 2, because a gate that has quietly stopped producing its own
+hard case has quietly stopped asking.
 
-There were two, and the second is gone. A callout *inside* an assertion
+The second is gone too. A callout *inside* an assertion
 condition fired twice, because `(?(?=A)X|Y)` was lowered as
 `(?:(?=A)X|(?!A)Y)` - exact, and two copies of A. This gate is what turned
 that rewrite's documented cost, "time and not meaning", into a visible
@@ -1343,6 +1375,24 @@ Run by `make test` alongside `check-symbols`:
   reads, and `lower.c` is where the dialect is spent.
   **To check the gate itself:** put `GRX_Syntax x;` in `codegen.c`, or
   `regex->syntax` in `exec_pike.c`. Both must fail the build.
+- **A dump's name table is as long as its enum.** Every dump here turns an
+  enumerator into a word through a positional table sized by the enum's
+  `_COUNT`, and a name left out does not leave a hole at the end - it
+  shifts every name after it onto its neighbour. The compiler cannot see
+  it: the array is sized and the missing tail is NULL, and every lookup
+  guards and returns `"?"`, so nothing crashes and nothing warns.
+  **Built:** `make check-dump-names`, in `TEST_GATES`.
+  **Seven of twenty-eight tables were short when it was written**, and only
+  one of the seven printed anything obviously wrong - `iterate=(null)`,
+  from a rule added that afternoon. The other six printed a *neighbour's*
+  name: the IR's assertions had been dumping one place out since
+  `word-start` and `word-end` were added, three copies of the conditional
+  kinds had no name for `static`, and the IR's capture-reset table had none
+  for Perl's `after-each`. It finds the enum by the block its `_COUNT`
+  closes rather than by a prefix, because `GRX_REPEAT_MODE_COUNT` closes
+  `GRX_RepeatMode`, whose members begin `GRX_REPEAT_`.
+  **To check the gate itself:** delete a name from the middle of any table,
+  or add an enumerator before a `_COUNT`. Both must fail; both were tried.
 - **The strict-aliasing warning is still armed.** `-fstrict-aliasing
   -Wstrict-aliasing=1` ride every C compile line, under `-Werror`, so a real
   violation fails the build and no sweep is needed. A *disarmed* warning

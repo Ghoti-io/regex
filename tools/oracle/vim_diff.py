@@ -44,6 +44,7 @@ import binascii
 import json
 import os
 import random
+import re
 import subprocess
 import sys
 import tempfile
@@ -86,6 +87,10 @@ ATOMS = [
     "\\(a\\+\\)\\@>", "(a)@=", "(a)@!", "(a)@<=", "(a)@<!", "(a+)@>",
     "\\(a\\zsb\\)\\@>", "\\(a\\zeb\\)\\@>", "\\(a\\zsb\\)\\@=",
     "\\(a\\zeb\\)\\@=", "\\(a\\zeb\\)\\@<=",
+    # The byte bound on a lookbehind, which is a restriction and so needs a
+    # body that can overrun it as well as one that cannot.
+    "\\(a\\)\\@1<=", "\\(ab\\)\\@1<=", "\\(ab\\)\\@2<=",
+    "\\(\\w\\+\\)\\@2<=", "\\(ab\\)\\@1<!", "(a|ab)@2<=",
     # Repeats, in both spellings and both modes.
     "a*", "a\\+", "a\\=", "a\\?", "a\\{2}", "a\\{2,3}", "a\\{,2}",
     "a\\{2,}", "a\\{}", "a\\{-}", "a\\{-1,}", "a\\{-2,3}",
@@ -101,12 +106,15 @@ ATOMS = [
     # The buffer positions. `l`, `V` and `#` never match over a string and
     # `c` is the byte column, so all four are built rather than refused.
     "\\%V", "\\%#", "\\%23l", "\\%1l", "\\%2c", "\\%<3c", "\\%>2c",
-    "\\%1c", "\\v%2c",
+    "\\%1c", "\\v%2c", "\\%2v", "\\%<4v", "\\%>2v", "\\%9v",
+    "\\%1v", "\\v%3v",
     # The two that move the reported match, and the level markers themselves.
     # `\\=` after a mark is the one multi vim allows there, and it is the
     # case that separates the spelling from the bounds: `\\zs\\{0,1}` is
     # E888 and asks for the same repeat.
     "\\zs", "\\ze", "\\zs\\=", "\\ze\\?", "\\v\\zs=",
+    # The last-substitute spellings, which both sides refuse and read alike.
+    "~", "\\~", "\\M~",
     "\\v", "\\m", "\\M", "\\V", "\\c", "\\C",
     # The branch operator, which is a grammar level rather than an atom.
     "\\&", "&",
@@ -116,6 +124,10 @@ ATOMS = [
 # vocabulary rather than left out, because a differential that only generates
 # what both sides accept never tests a rejection - `differential-needs-
 # invalid-input`, and the reason `python_diff.py` injects one row in eight.
+# `\%23l` and its comparisons, any level or case markers, then a bare
+# multi. See is_line_number_star().
+LINE_NUMBER_STAR = re.compile(r"\\%[<>]?[0-9]+l(?:\\[vmMVcCZ])*(?:\*|\\\{1\})")
+
 REFUSED = [
     "\\z(a\\)", "\\z1", "\\1", "a\\{2", "\\(a", "a\\)", "a**", "\\@=",
     "\\%(a", "a\\{1}\\+", "\\v+a", "\\v?a", "\\v@a",
@@ -129,17 +141,17 @@ REFUSED = [
 # times the generator happened to spell it - it would put a floor under the
 # disagreement count and hide the next real one under it.
 #
-# Each is a documented deviation in documentation/dialects.md section 6, and
-# each has a test in tests/unit/test_vim.cpp asserting the refusal, which is
-# where a regression that started accepting one would be caught:
+# One entry left, where there were eight. `\Z` asks for the composing rule
+# that dialects.md section 6 records as unbuilt, and it is a documented
+# deviation with a test in tests/unit/test_vim.cpp asserting the refusal -
+# which is where a regression that started accepting it would be caught.
 #
-#   \Z           ignore Unicode combining characters
-#   \%23v        the *screen* column: a tabstop and a cell-width table
-#   ~ and \~     the text of the last `:s` replacement
-#   \%V \%#      the Visual area and the cursor: not in a string
-#   \%23l \%23c  a buffer line and a byte column: no assertion kind for them
+# `~` and `\~` are *not* here any more, and that is the correction rather
+# than the omission: this library refuses `~` and reads `\~` as a literal
+# tilde, and so does vim, because "the last `:s` replacement" is E33 in the
+# only state a library ever has. They are generated like anything else.
 NOT_IMPLEMENTED = [
-    "\\Z", "~", "\\~", "\\%23v", "\\%<4v",
+    "\\Z",
 ]
 
 # The four levels, written as the prefix that selects one. The empty string
@@ -148,6 +160,28 @@ LEVELS = ["", "\\v", "\\m", "\\M", "\\V"]
 
 SUBJECTS = [
     "", "a", "ab", "aaab", "abc", "ABC", "a b", "a\tb", "a\nb", "\n",
+    # A tab run, so that `\%23v` can be told from `\%23c`: it counts
+    # display cells, and a subject of one-cell characters answers both the
+    # same way.
+    #
+    # **Two kinds of character are deliberately not here**, and both are
+    # narrowings with a reason rather than oversights. Each is a rule vim
+    # has that this library does not, each was found by putting such a
+    # subject in, and each is written up in documentation/dialects.md
+    # section 6 with its measurement. Generating them would report the
+    # same two gaps thousands of times over and bury whatever else this
+    # tool found, which is the floor `[[:foo:]]` is kept out for.
+    #
+    #   - **A composing character.** In vim a base and the marks after it
+    #     are *one character*: `.` over "a" U+0301 is 0-3 there and 0-1
+    #     here, `[a]` takes the whole cluster, a literal `a` matches none
+    #     of it, and `\%2c` holds nowhere inside it.
+    #   - **A character outside Latin's word class.** `\<` and `\>` hold
+    #     where vim's character *class* changes and not merely where a
+    #     word starts, and it has more than one word class: `\>` holds
+    #     between U+65E5 and "x" there and nowhere here, because both are
+    #     'iskeyword' characters.
+    "\t\tx",
     "abcabc", "xayaz", "[a]", "a*b", "a+b", "a.c", "(a)", "a|b", "read",
     "rea", "r", "A", "0", "_", "é", "É", "aéb", "~", "^a$",
 ]
@@ -328,6 +362,15 @@ def is_postfix_capture_artifact(pattern, them, us):
       set it failed and the match came from the other one. Without the
       `\\@>` vim reports it unset, so it is the atomic group committing its
       writes; pcre2test answers `(?>(a))x|[^[:alpha:]]` with group one unset.
+
+      The atomic operator is not the only way in, which is what a
+      thirty-seed run found: `\\(a\\)\\@=a$\\|b` against "ab" keeps
+      group one as "a" too, and `\\(a\\)\\@=ax\\|b` does not. The
+      difference is whether the abandoned branch died at an *assertion* or
+      at a character, which is not a rule anyone could follow - and both
+      pcre2test and node report the group unset for
+      `(?=(a))a$|b`. So the shape allowed below is "vim kept one, and the
+      pattern has both a postfix operator and an alternation".
     - **A capture that vanished.** `\\(a\\)\\(a\\)\\@=a\\{2,}`
       against "aaab" reports group one as empty in vim and "a" in pcre2test;
       drop the trailing repeat and vim reports "a" too.
@@ -335,9 +378,16 @@ def is_postfix_capture_artifact(pattern, them, us):
     The two directions are not treated alike. vim *losing* a capture is
     allowed for any of the `\\@` operators, because a defect of this
     library's would be the same loss and would still be reported - the
-    comparison only stops seeing vim's. vim *gaining* one is allowed only
-    where the atomic operator is written, which is the one shape it was
-    measured in.
+    comparison only stops seeing vim's. vim *gaining* one is allowed where
+    the atomic operator is written, and where a postfix operator meets an
+    alternation - the two shapes it has been measured in, both of them
+    against pcre2test as well.
+
+    That second clause is a real narrowing and worth saying out loud: a
+    defect of this library's that *lost* a capture inside a `\\@` operator
+    on one side of a `\\|` would not be reported. Nothing narrower will
+    do, because what separates vim's two answers is where in the abandoned
+    branch the failure happened, which the pattern text cannot say.
     """
     if not (them.startswith("match ") and us.startswith("match ")):
         return False
@@ -360,6 +410,8 @@ def is_postfix_capture_artifact(pattern, them, us):
             continue        # vim lost one: allowed for any `\@` operator.
         if our_group == '""' and "@>" in pattern:
             continue        # vim kept one an atomic group had written.
+        if our_group == '""' and "@" in pattern and "|" in pattern:
+            continue        # vim kept one an abandoned branch had written.
         return False
     return True
 
@@ -422,28 +474,83 @@ def is_very_magic_line_start_repeat(pattern, them, us):
 
 
 def is_line_number_star(pattern, them, us):
-    """`\\%23l*` matches nothing at all in vim, and there is no rule in it.
+    """`\\%23l*` means nothing at all in vim, and there is no rule in it.
 
     `\\%23l` names a buffer line and never matches over a string, so a `*`
     on it should leave the empty match a zero-iteration repeat always has -
     and vim agrees five ways: `\\%23l\\{}`, `\\%23l\\{-}`,
     `\\%23l\\{0,1}`, `\\(\\%23l\\)*` and the very magic `%23l*` all
     match the empty string there. Only the bare `*`, only outside very
-    magic, only after the `l` forms - `\\%V*` and `\\%2c*` match the empty
-    string - and both engines alike. The same shape as
-    is_very_magic_line_start_repeat() above, and excluded for the same
-    reason.
+    magic, only after an `l` form, and both engines alike.
+
+    Three answers come out of it, which is why this looks at ours as well:
+
+      - vim finds nothing where this library matches the empty string;
+      - vim finds a *longer* match, another branch having won because the
+        first offers nothing - `\\%23l*\\|\\x` over "a" is 0-1 there and
+        0-0 here;
+      - and vim *compiles* a spelling this library refuses. A marker
+        between the `l` and the `*` is "E871: Can't have a multi follow a
+        multi" after every other atom - `\\%23c\\v*` and `a\\v*` are
+        both refused in vim too - and after an `l` form vim takes it.
+
+    The same shape as is_very_magic_line_start_repeat() below, and excluded
+    for the same reason.
     """
-    if not them.startswith("nomatch") or not us.startswith("match "):
+    # The `l` form, any markers, then the bare multi. A marker between is
+    # what `\%23l\v*` is, and a plain substring test misses it.
+    if not LINE_NUMBER_STAR.search(pattern):
         return False
-    for form in ("l*", "l\\{1}"):
-        where = pattern.find(form)
-        while where > 0:
-            head = pattern[:where]
-            mark = head.rfind("\\%")
-            if mark >= 0 and head[mark + 2:].lstrip("<>").isdigit():
+    if us.startswith("compile"):
+        # vim compiled it; this library did not.
+        return them.startswith("nomatch") or them.startswith("match ")
+    if not us.startswith("match "):
+        return False
+    if them.startswith("nomatch"):
+        return True
+    # Ours is the empty match the repeat gives and vim's is not.
+    fields = us.split()
+    if len(fields) < 2 or ":" not in fields[1]:
+        return False
+    low, high = fields[1].split(":")
+    return low == high
+
+
+def is_leading_star_artifact(pattern, them, us):
+    """A bare `*` with no atom before it, where vim's answer is the spelling.
+
+    A `*` that has nothing to repeat is the literal asterisk at every level,
+    which is a POSIX basic RE's rule and vim's: `*a`, `\\m*`, `^*`,
+    `\\(*\\)`, `x\\|*`, `\\&*`, `\\v%(*)` and `\\M\\%(*\\)` all
+    match one. Two spellings out of that set are refused instead, and
+    neither difference is a rule:
+
+      - `^\\m*` is "E866" where `^*` matches and `\\(\\m*\\)` matches,
+        so a level or case marker between the caret and the star loses the
+        caret - and `^\\m\\+` is refused here too, which is the same
+        answer, so it is only the star that parts company.
+      - `\\%(*\\)` is refused where `\\(*\\)` matches, and where the
+        very magic `\\v%(*)` and the nomagic `\\M\\%(*\\)` both match:
+        the same construct in three spellings, refused in one.
+
+    Both engines answer alike, which is what says it is the parser rather
+    than either engine.
+    """
+    if not them.startswith("compile") or us.startswith("compile"):
+        return False
+    for i, c in enumerate(pattern):
+        if c != "*" or i == 0:
+            continue
+        head = pattern[:i]
+        # `\%(` immediately before, at a level that spells it that way.
+        if head.endswith("\\%("):
+            return True
+        # A caret with markers between, and nothing else.
+        while head[-2:] in ("\\v", "\\m", "\\M", "\\V", "\\c",
+                "\\C"):
+            head = head[:-2]
+            if head.endswith("^"):
                 return True
-            where = pattern.find(form, where + 1)
     return False
 
 
@@ -469,7 +576,10 @@ def is_lookbehind_backreference_artifact(pattern, them, us):
     rather than folded into one of the others. A regression of this
     library's inside that shape would not be reported.
     """
-    if "@<" not in pattern:
+    # `\@<=` and `\@<!`, and the byte-bounded `\@123<=` forms too - the
+    # count sits between the `@` and the `<`, so a plain substring test
+    # misses them, which a thirty-seed run found once the bound was built.
+    if not re.search(r"@[0-9]*<", pattern):
         return False
     return any("\\%d" % n in pattern for n in range(1, 10))
 
@@ -536,7 +646,8 @@ def main():
                 or is_postfix_capture_artifact(case[0], them, us)
                 or is_lookbehind_backreference_artifact(case[0], them, us)
                 or is_very_magic_line_start_repeat(case[0], them, us)
-                or is_line_number_star(case[0], them, us)):
+                or is_line_number_star(case[0], them, us)
+                or is_leading_star_artifact(case[0], them, us)):
             artifacts += 1
             continue
         candidates.append((case, them, us))
@@ -552,8 +663,9 @@ def main():
     # turn on one axis and `set re=1` gives exactly this library's answer.
     # The rest turn on *two*: this library follows the old engine where a
     # mark sits inside an assertion and the new one where `\c` meets
-    # `[[:lower:]]`, each because that engine is the one whose answers can
-    # be stated as a rule, so a pattern holding both agrees with neither.
+    # `[[:lower:]]` or an abandoned `\@>` group's captures are read, each
+    # because that engine is the one whose answer can be stated as a rule,
+    # so a pattern touching two of them agrees with neither.
     # Those are printed rather than swallowed - a defect of this library's
     # could hide among them, and the only defence is that a person can see
     # them.

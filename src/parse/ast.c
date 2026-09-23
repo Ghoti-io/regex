@@ -152,6 +152,8 @@ static const char * anchor_name(uint32_t kind) {
       return "byte-column";
     case GRX_ANCHOR_NEVER:
       return "never";
+    case GRX_ANCHOR_SCREEN_COLUMN:
+      return "screen-column";
     case GRX_ANCHOR_COUNT:
     default:
       return "?";
@@ -195,6 +197,7 @@ static const char * verb_name(uint32_t kind) {
 static const char * cond_name(uint32_t kind) {
   static const char * const names[GRX_COND_COUNT] = {
     "group-set", "recursion-any", "recursion-group", "assertion", "define",
+    "static",
   };
   return kind < GRX_COND_COUNT ? names[kind] : "?";
 }

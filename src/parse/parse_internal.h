@@ -119,6 +119,15 @@ typedef enum {
    * than refusing a pattern vim accepts.
    */
   GRX_ANCHOR_NEVER,
+  /**
+   * Vim's `\%23v` and its two comparisons: the screen column.
+   *
+   * `min` and `max` on the node hold the inclusive range, exactly as
+   * GRX_ANCHOR_BYTE_COLUMN's do - but these are columns and not offsets,
+   * and they are counted from one at both ends, because a column of zero
+   * is not a position a subject has.
+   */
+  GRX_ANCHOR_SCREEN_COLUMN,
   GRX_ANCHOR_COUNT            ///< Closes the enum; not an anchor.
 } GRX_AnchorKind;
 
@@ -275,8 +284,8 @@ typedef struct GRX_ClassItem {
  * | GROUP | group number, 0 when not capturing | name offset, or GRX_INDEX_NONE | CAPTURING, ATOMIC, NAMED |
  * | BACKREF | group number | name offset | NAMED, RELATIVE |
  * | ANCHOR | GRX_AnchorKind | - | - |
- * | LOOKAROUND | GRX_LookKind | - | one child |
- * | CONDITIONAL | GRX_CondKind | group number or name offset | HAS_ELSE; children are the condition (for ASSERTION), then, else |
+ * | LOOKAROUND | GRX_LookKind | - | `min` is a byte bound on a lookbehind, 0 for none; one child |
+ * | CONDITIONAL | GRX_CondKind | group number or name offset | HAS_ELSE; children are any callouts written where the condition goes, then the condition (for ASSERTION), then, else |
  * | RECURSE | target group number, 0 for the whole pattern | name offset when NAMED, else the definition's own byte offset or GRX_INDEX_NONE | NAMED, RELATIVE |
  * | CONTROL | GRX_VerbKind | argument name offset, or GRX_INDEX_NONE | - |
  * | OPTIONS | options to set | options to clear | SCOPED; one child when scoped |

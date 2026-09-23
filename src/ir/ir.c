@@ -66,7 +66,7 @@ static const char * assert_name(uint8_t kind) {
     "word-seg-boundary", "not-word-seg-boundary",
     "sentence-boundary", "not-sentence-boundary",
     "line-boundary", "not-line-boundary", "look-length",
-    "byte-column", "never",
+    "byte-column", "never", "screen-column",
   };
   return kind < GRX_ASSERT_COUNT ? names[kind] : "?";
 }
@@ -99,7 +99,7 @@ static const char * empty_loop_name(uint8_t mode) {
 /** The name of a capture-reset rule, for the dump. */
 static const char * capture_reset_name(uint8_t mode) {
   static const char * const names[GRX_CAPTURE_RESET_COUNT] = {
-    "keep", "each",
+    "keep", "each", "after-each",
   };
   return mode < GRX_CAPTURE_RESET_COUNT ? names[mode] : "?";
 }
@@ -116,6 +116,7 @@ static const char * backref_unset_name(uint8_t mode) {
 static const char * cond_name(uint8_t kind) {
   static const char * const names[GRX_COND_COUNT] = {
     "group-set", "recursion-any", "recursion-group", "assertion", "define",
+    "static",
   };
   return kind < GRX_COND_COUNT ? names[kind] : "?";
 }
@@ -608,7 +609,8 @@ static void dump_node(
 /** The name of an iteration rule, for the dump header. */
 static const char * iteration_name(GRX_IterationRule iteration) {
   static const char * const names[GRX_ITERATE_COUNT] = {
-    "retry-then-advance", "advance-one", "advance-skip-abutting"};
+    "retry-then-advance", "advance-one", "advance-skip-abutting",
+    "advance-one-stop-at-end"};
   return (unsigned)iteration < GRX_ITERATE_COUNT ? names[iteration] : "?";
 }
 
