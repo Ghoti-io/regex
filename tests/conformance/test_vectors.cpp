@@ -667,7 +667,7 @@ TEST(Conformance, EveryVectorAgreesAgainWhenEveryArenaMoves) {
   for (const std::string & failure : failures) {
     ADD_FAILURE() << "with a moving allocator: " << failure;
   }
-  printf("\nmoving allocator: %zu passed, %zu failed, %zu blocks relocated\n",
+  printf("\nmoving allocator: %zu passed, %zu failed, %ld blocks relocated\n",
       total.passed, total.failed, allocator.moves());
 
   EXPECT_GT(total.passed + total.failed, 0u);
