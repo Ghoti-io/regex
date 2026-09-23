@@ -35,9 +35,14 @@ TEST(Compile, NullArgumentsAreInvalid) {
   EXPECT_EQ(regex, nullptr);
 }
 
+// A dialect this library names and has not built. Named once so that
+// building the next one changes this line rather than four call sites: these
+// said POSIX until WP-23 built it and Python until WP-30 did.
+static const GRX_Syntax kUnbuiltDialect = GRX_SYNTAX_JAVA;
+
 TEST(Compile, OutputIsNullOnFailure) {
   GRX_Regex * regex = (GRX_Regex *)0x1;
-  EXPECT_NE(grx_regex_compile("a", GRX_SYNTAX_PYTHON, GRX_OPT_NONE, &regex),
+  EXPECT_NE(grx_regex_compile("a", kUnbuiltDialect, GRX_OPT_NONE, &regex),
       GRX_OK);
   EXPECT_EQ(regex, nullptr);
 }
@@ -49,7 +54,7 @@ TEST(Compile, ReportsThePositionOfTheFailure) {
   GRX_Error error;
   GRX_Regex * regex = nullptr;
   GRX_Result result = grx_regex_compile_with_allocator("a", 1,
-      GRX_SYNTAX_PYTHON, GRX_OPT_NONE, nullptr, nullptr, &error, &regex);
+      kUnbuiltDialect, GRX_OPT_NONE, nullptr, nullptr, &error, &regex);
 
   ASSERT_NE(result, GRX_OK);
   EXPECT_EQ(error.code, result);
@@ -57,15 +62,15 @@ TEST(Compile, ReportsThePositionOfTheFailure) {
 }
 
 TEST(Compile, ADialectThatIsNotBuiltSaysSo) {
-  // design.md section 4: a dialect that accepts everything is a bug.
-  // Python's front end is plan.md WP-30; until then a Python pattern is
-  // refused rather than read with somebody else's rules and pronounced
-  // valid. `a` is a valid pattern in every dialect here, so the only thing
-  // that can refuse it is the absence of a front end. This named POSIX until
-  // WP-23 built it, which is the shape of staleness the test below guards.
+  // design.md section 4: a dialect that accepts everything is a bug. A
+  // pattern of an unbuilt dialect is refused rather than read with somebody
+  // else's rules and pronounced valid. `a` is a valid pattern in every
+  // dialect here, so the only thing that can refuse it is the absence of a
+  // front end. This named POSIX until WP-23 built it and Python until WP-30
+  // did, which is the shape of staleness the test below guards.
   GRX_Regex * regex = nullptr;
   GRX_Error error;
-  EXPECT_EQ(grx_regex_compile_with_allocator("a", 1, GRX_SYNTAX_PYTHON,
+  EXPECT_EQ(grx_regex_compile_with_allocator("a", 1, kUnbuiltDialect,
                 GRX_OPT_NONE, nullptr, nullptr, &error, &regex),
       GRX_ERR_UNSUPPORTED);
   EXPECT_EQ(error.diag, GRX_DIAG_DIALECT_NOT_IMPLEMENTED);
@@ -126,7 +131,7 @@ TEST(Compile, AllocatesNothingOnAFailedCompile) {
   grxtest::CountingAllocator allocator;
 
   GRX_Regex * regex = nullptr;
-  (void)grx_regex_compile_with_allocator("a", 1, GRX_SYNTAX_PYTHON,
+  (void)grx_regex_compile_with_allocator("a", 1, kUnbuiltDialect,
       GRX_OPT_NONE, nullptr, allocator.get(), nullptr, &regex);
 
   EXPECT_EQ(allocator.live(), 0);

@@ -59,6 +59,16 @@ typedef enum {
   GRX_TPL_SUBJECT,     ///< The whole subject, match and all.
   GRX_TPL_GROUP_NAMED, ///< A group named by `offset`/`length` in the text.
   GRX_TPL_NOTHING,     ///< Substitutes the empty string.
+  /**
+   * @brief The code point in `a`, encoded as UTF-8.
+   *
+   * Every other piece of a template is either a slice of the template text
+   * or a slice of the subject. Python's is the first grammar here whose
+   * escapes *decode*: `\n` in a `re.sub` template is a newline and not the
+   * letter, and the byte it stands for is in neither string. The dialects
+   * with a `$` sigil have no such escape, and sed's `\n` is the letter n.
+   */
+  GRX_TPL_CODEPOINT,
   GRX_TPL_COUNT        ///< Closes the enum; not a piece.
 } GRX_TemplateOpKind;
 

@@ -39,12 +39,17 @@ UNPRODUCED = {
     # the match object beside grx_match_steps(), because a match-time failure
     # has no offset into the pattern and belongs with the other facts about
     # an attempt rather than in an out-parameter on seven entry points.
-    # Constructs that turned out not to be errors anywhere this library
-    # implements. A forward backreference is legal in every Perl-family
-    # dialect - `(\2two|(one))+` compiles in perl and in pcre2test - and an
-    # unterminated `\Q` runs to the end of the pattern rather than failing.
-    # They are candidates for removal rather than for a code path.
-    "GRX_DIAG_FORWARD_BACKREFERENCE": "no dialect makes this an error",
+    # GRX_DIAG_FORWARD_BACKREFERENCE was here, on the ground that a forward
+    # backreference is legal in every Perl-family dialect - `(\2two|(one))+`
+    # compiles in perl and in pcre2test - and it was listed as a candidate
+    # for *removal*. WP-30 gave it a producer: CPython refuses a reference
+    # to a group that has not closed, so `(a\1)` and `(?P=n)(?P<n>a)` are
+    # both errors there. The entry was true of the dialects this library had
+    # and stopped being true when it gained one more, which is the argument
+    # against removing an enumerator because nothing currently reaches it.
+    #
+    # An unterminated `\Q` runs to the end of the pattern rather than
+    # failing, in both dialects that have `\Q` at all.
     "GRX_DIAG_UNTERMINATED_QUOTE": "an unterminated \\Q runs to the end",
     # Reached through grx_error_set() with a code rather than a diagnostic,
     # so the enumerator is spelled nowhere. Worth a look when the error

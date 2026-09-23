@@ -514,11 +514,50 @@ conformance rate with every deviation listed; the invariants of
 ### Phase 5: tier 2
 
 One package per dialect, each *front ends, S-M* plus *conformance, S*:
-**WP-30 Python** (`re_tests.py`; oracle available), **WP-31 Java**,
-**WP-32 .NET**, **WP-33 Ruby**. Each is: the probe cells for the dialect
-resolved, the hooks, the profile row, the template grammar, vectors from
-the oracle, the README row. .NET balancing groups are a separate,
-optional *engines, M* package.
+**WP-30 Python** - **Built.** **WP-31 Java**, **WP-32 .NET**,
+**WP-33 Ruby**. Each is: the probe cells for the dialect resolved, the
+hooks, the profile row, the template grammar, vectors from the oracle, the
+README row. .NET balancing groups are a separate, optional *engines, M*
+package.
+
+WP-30 landed without the corpus this line used to name: CPython removed
+`Lib/test/re_tests.py` and Debian's `python3.13` ships no `test` package, so
+the generator is the whole of the gate. That turned out to be the better
+half anyway, because `re` is *importable* by the tool that writes the cases -
+600,000 rows in under four seconds, where every other oracle here costs a
+fork per batch.
+
+**What it found, and where.** The profile row and the spec row had both been
+written from reading, years of sessions ago, and the probe contradicted them
+at once: `empty_loop` was silently taking ECMAScript's answer, exactly the
+defect WP-21 had found and fixed on Perl's row; the template grammar was
+absent; and the split rule was neither of the two values the enum had.
+
+Four of the defects were in code Python does not own, and every one of them
+had been reachable by an older differential for as long as that differential
+had existed:
+
+- **The prescan lost its group count** after any class holding an escape.
+  `[\d](a)\1` was an invalid backreference in `perl` and `pcre` as well as
+  in `python`; ECMAScript was immune only because `allow_empty_class` makes
+  the test it is part of vacuous.
+- **`GRX_LOOKBEHIND_FIXED` was read by nothing.** It chose an execution
+  model and bounded nothing, so every variable-width lookbehind compiled
+  under it. The Python differential could not see this either until its
+  vocabulary was widened - it had been written on the assumption that the
+  rule already held, which is a gate narrowed to match a belief.
+- **`GRX_FEATURE_QUOTING` was read by nothing**, for the same reason: both
+  dialects that reached the `\Q` code had the feature.
+- **`digits_naming_a_group()` always fell back** to a shorter reading, which
+  is ECMAScript's rule and not Python's.
+
+And one enumerator changed status rather than behaviour.
+`GRX_DIAG_FORWARD_BACKREFERENCE` was on `check_diagnostics.py`'s unproduced
+list as a candidate for *removal*, on the ground that no dialect here made a
+forward reference an error. Python does - a reference must name a group that
+has **closed** - so the entry is gone and the diagnostic has a producer. It
+is the argument against removing a public enumerator because nothing
+currently reaches it.
 
 ### Phase 6: tier 3
 

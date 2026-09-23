@@ -178,6 +178,15 @@ static const GRX_SyntaxSpec spec_table[GRX_SYNTAX_COUNT] = {
   [GRX_SYNTAX_PYTHON] = {
     .features = ALT | REP | LAZY | POSS | NCAP | NAME | BREF | LAH | LBH
         | ATOM | COND | FLAG | CMNT | WORD | ANCH | HEX | OCT,
+    // A `str` pattern is Unicode in every mode: the subject is a sequence
+    // of code points, `\N{...}` is available, and `.` matches a character
+    // rather than a byte. `(?a)` does not take this away - it narrows the
+    // shorthands and the folding and nothing else, which is why it is
+    // GRX_OPT_ASCII_CLASSES and not the absence of this.
+    .default_options = GRX_OPT_UTF,
+    // `a*(?#c)?` and `(?x)a* ?` are both "multiple repeat" in `re`, where
+    // perl reads each as a lazy `a*`. See the field's own comment.
+    .quantifier_suffix_is_adjacent = 1,
   },
   [GRX_SYNTAX_JAVA] = {
     .features = ALT | REP | LAZY | POSS | NCAP | NAME | BREF | LAH | LBH
@@ -578,13 +587,66 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
   },
 
   [GRX_SYNTAX_PYTHON] = {
-    .caret_after_final_newline = 1,
+    // BREAK, not the FAIL a silent row gets. `(a*)*` against "b" reports
+    // group 1 as the empty string in CPython 3.13, as it does in perl and
+    // pcre2test, and as unset in ECMAScript - and this row said nothing, so
+    // it took ECMAScript's answer. Exactly the defect the Perl row carried
+    // until WP-21 probed it, still sitting here because nothing had ever
+    // run a Python pattern to notice.
+    .empty_loop = GRX_EMPTY_LOOP_BREAK,
+    // KEEP_LAST_SET, and probed rather than assumed: `((a)|b)+` against
+    // "ab" reports group 2 as "a" here and in pcre2test, and *unset* in
+    // perl 5.40. Python sides with PCRE2 on the axis where the two
+    // Perl-family references disagree.
+    .capture_reset = GRX_CAPTURE_KEEP_LAST_SET,
     .lookbehind = GRX_LOOKBEHIND_FIXED,
+    // Python's split is neither of the two rules this library had, which is
+    // why there is now a third. It keeps trailing empty fields and yields
+    // one empty piece from an empty subject, which is ECMAScript's half;
+    // its `maxsplit` counts *splits* and leaves the remainder as the last
+    // field, and zero means no limit at all, which is Perl's. Taking either
+    // whole would have been wrong in one direction or the other:
+    // `re.split(",", "a,b,c", maxsplit=1)` is `['a', 'b,c']` where
+    // ECMAScript's `"a,b,c".split(",", 1)` is `['a']`.
+    .split = GRX_SPLIT_PYTHON,
     .dollar = GRX_DOLLAR_BEFORE_FINAL_NEWLINE,
+    // Unicode in both columns: a `str` pattern's shorthands are Unicode
+    // whatever else is set, and `(?a)` narrows them with
+    // GRX_OPT_ASCII_CLASSES rather than by turning a widening flag off.
+    // Written the other way round first, with UCP on by default and `(?a)`
+    // clearing it - which narrowed the shorthands correctly and also
+    // stopped `.` matching a whole character and `\N{BULLET}` compiling,
+    // because those key on UTF and `re`'s ASCII mode touches neither.
     .shorthands = GRX_SHORTHANDS_UNICODE,
     .shorthands_wide = GRX_SHORTHANDS_UNICODE,
     .fold = GRX_FOLD_SIMPLE,
     .fold_utf = GRX_FOLD_SIMPLE,
+    // ...and the same flag narrows the folding, which is where Python and
+    // Perl's `/a` part company. See the field's own comment.
+    .ascii_classes_fold_ascii = 1,
+    .caret_after_final_newline = 1,
+    // `\B` alone: `re.search(r"\B", "")` is None where perl and Node both
+    // match at 0. See the field's own comment for the eight subjects that
+    // say the empty one is the whole of the difference.
+    .empty_subject_has_no_interior = 1,
+    // `re.sub`'s template grammar. The sigil is a backslash, as POSIX's is:
+    // `\1`, `\g<1>` and `\g<name>` are the three references, `\g<0>` is the
+    // whole match and `\0` is NUL rather than the whole match, and an
+    // unknown escape such as `\q` is an error rather than the literal.
+    .template_spec = {
+      .sigil = '\\',
+      // SIGIL_STRICT for the one spelling the escape reader cannot see: a
+      // backslash at the very end of the template, where there is no next
+      // character to classify. `re` calls it "bad escape (end of pattern)".
+      .features = GRX_TMPL_NUMBER | GRX_TMPL_G_ANGLE
+          | GRX_TMPL_PYTHON_ESCAPES | GRX_TMPL_SIGIL_STRICT,
+      .missing = GRX_TMPL_MISSING_ERROR,
+    },
+    // The subject of `re` is a sequence of code points in every mode. A
+    // `bytes` pattern is a separate API rather than a flag, and not one this
+    // library models, so the decoding here is unconditional the way
+    // ECMAScript's is - and `(?a)` moves the *rules*, not the decoding.
+    .subject_is_text = 1,
   },
   [GRX_SYNTAX_JAVA] = {
     .lookbehind = GRX_LOOKBEHIND_BOUNDED,
@@ -838,12 +900,17 @@ static const FlagRow perl_flags[] = {
 };
 
 static const FlagRow python_flags[] = {
-  {'a', FLAG_UNSUPPORTED, 0, 0, 0}, // re.ASCII; WP-30.
+  // `a` and `u` are one choice written two ways, so they share a group:
+  // `re.compile(p, re.A | re.U)` is "ASCII and UNICODE flags are
+  // incompatible". `u` sets nothing because Unicode is the dialect's
+  // default (see its default_options); it is here so that writing it is
+  // accepted and so that `au` is caught as the conflict it is.
+  {'a', FLAG_OPTION, GRX_OPT_ASCII_CLASSES, 1, 0}, // re.ASCII.
   {'i', FLAG_OPTION, GRX_OPT_CASELESS, 0, 0},
   {'L', FLAG_UNSUPPORTED, 0, 0, 0}, // re.LOCALE; there is no locale here.
   {'m', FLAG_OPTION, GRX_OPT_MULTILINE, 0, 0},
   {'s', FLAG_OPTION, GRX_OPT_DOTALL, 0, 0},
-  {'u', FLAG_OPTION, GRX_OPT_UTF, 0, 0},
+  {'u', FLAG_NO_EFFECT, 0, 1, 0}, // re.UNICODE; already the default.
   {'x', FLAG_OPTION, GRX_OPT_EXTENDED, 0, 0},
   {0, FLAG_OPTION, 0, 0, 0},
 };

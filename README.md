@@ -8,23 +8,27 @@ that is linear in the subject length, a backtracking engine for the constructs
 no lockstep simulation can express, and a bit-state engine that is the
 backtracker with a memo and the linear bound back.
 
-**Status: under construction.** Seven dialects parse, compile and match on
+**Status: under construction.** Eight dialects parse, compile and match on
 all three engines: ECMAScript in its legacy, `u` and `v` modes, checked
-against Node 22; PCRE2 and Perl against pcre2 10.46 and perl 5.40.1; and
-`posix-bre`, `posix-ere`, `gnu-bre` and `gnu-ere` against glibc and musl.
+against Node 22; PCRE2 and Perl against pcre2 10.46 and perl 5.40.1;
+`posix-bre`, `posix-ere`, `gnu-bre` and `gnu-ere` against glibc and musl; and
+Python against CPython 3.13.
 `text` validates JSON Schema's `pattern` and `patternProperties` through
 this library. Of 37,212 conformance vectors, **every dialect passes 100%**,
 Perl over the 5,975 of its 5,983 whose expectation is sound: the other eight
 are defects in Perl itself, excluded from the denominator and each named in
 `tests/data/vectors/known-gaps.txt` with the reproduction that demonstrates
-it. There are no gaps left in that file. The other nine dialects are named
-and report `GRX_ERR_UNSUPPORTED`. See [Status](#status) below for exactly what
+it. There are no gaps left in that file. Python has no corpus - CPython
+removed `re_tests.py` and Debian does not ship it - so its gate is a
+generator alone, over 4.2 million rows against `re` itself. The other eight
+dialects are named and report `GRX_ERR_UNSUPPORTED`. See [Status](#status) below for exactly what
 works today.
 
 (This paragraph has been wrong twice, both times by lagging: first it said
 the compiler and the engines were stubs, after they had stopped being stubs;
 then it quoted 90.9% and 94.7% for PCRE2 and Perl, and named twelve
-unsupported dialects, after four more had front ends. A status line that is
+unsupported dialects, after four more had front ends; then it said nine
+unsupported, after Python made it eight. A status line that is
 wrong in the *safe* direction is still wrong, and it sits above a table that
 contradicts it. It is checked against a fresh `make test` when it changes,
 which is the only thing that has ever kept it honest.)
@@ -180,23 +184,26 @@ Nothing is allocated for the caller to free on a failing call.
 | ECMAScript UnicodeSets (`v`) mode | working - set operations, string disjunctions, the seven properties of strings |
 | PCRE2 and Perl front ends | working - verbs, conditionals, recursion, branch reset, `\Q..\E`, extended modes, the leading directives (PCRE2's alone; Perl has none of them), Perl's `\N{NAME}` against the full character-name table, `(*LIMIT_MATCH=n)` applied rather than parsed and dropped, script runs `(*sr:`/`(*asr:` against UTS #39's augmented script sets, `(?[ ])` extended classes in **both** dialects, and the six newline conventions `(*CR)` and kin |
 | POSIX and GNU front ends | working - one reader for `posix-bre`, `posix-ere`, `gnu-bre` and `gnu-ere`; both halves of `REG_NEWLINE`, as `GRX_OPT_MULTILINE` and `GRX_OPT_NEWLINE_TERMINATES` |
-| Every dialect but those seven | named, `GRX_ERR_UNSUPPORTED` |
+| Python front end | working - CPython 3.13's grammar, which is the Perl family's with a closed escape alphabet, `(?P<n>)` as the only named spelling, no `(*...)` construct, a reference that must name a group that has *closed*, and global flags only at the start |
+| Every dialect but those eight | named, `GRX_ERR_UNSUPPORTED` |
 | Lowering, analysis and code generation | working |
 | Pike VM | working - the regular subset, in linear time |
 | Backtracking engine | working - backreferences, lookaround, atomic and possessive |
 | Conditionals, recursion and subroutine calls, `\K`, the control verbs | working - on the backtracking engine, which is the only one that can run them |
 | Bit-state engine | working - the backtracker with a memo, and the linear bound back |
 | Search window, NOTBOL/NOTEOL/NOTEMPTY, `grx_regex_search_next()` | working - generated against pcre2 and against perl's own loop |
-| `grx_regex_replace()` and `grx_regex_split()` | working - ECMAScript's, PCRE2's, Perl's and sed's template grammars; splitting is a per-dialect axis, perl's own and ECMAScript's for the rest (dialects.md section 5.16) |
+| `grx_regex_replace()` and `grx_regex_split()` | working - ECMAScript's, PCRE2's, Perl's, sed's and Python's template grammars; splitting is a per-dialect axis with three values, ECMAScript's, perl's and Python's (dialects.md section 5.16) |
 | `grx_pattern_lint()`, the JSON Schema subset check | working |
 | Limits | measured, not guessed; dialects.md section 7 |
 | The `text` seam for JSON Schema | working - `pattern` and `patternProperties` validate through this library |
 
-**Conformance.** Fifteen differential checks, each against whichever
+**Conformance.** Sixteen differential checks, each against whichever
 implementation *defines* the thing it asks about: Node 22 for ECMAScript,
 pcre2 10.46 and perl 5.40.1 for the Perl family, glibc and musl for POSIX and
-GNU, and GNU sed for the POSIX replacement grammar. `make check-oracles` runs
-all fifteen. A few are described below; [testing.md](documentation/testing.md)
+GNU, GNU sed for the POSIX replacement grammar, and CPython 3.13 for Python -
+that last one running *in-process* rather than as a subprocess, which is why
+it asks 600,000 rows in under four seconds where the others ask tens of
+thousands. `make check-oracles` runs all sixteen. A few are described below; [testing.md](documentation/testing.md)
 §5 has every one, and says for each what was broken on purpose to prove the
 check can fail.
 

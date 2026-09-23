@@ -757,7 +757,7 @@ check-oracles: ## Run every differential check against the reference implementat
 check-oracles: check-oracle-syntax check-oracle-match check-oracle-properties \
 	check-oracle-numeric-properties check-oracle-string-properties \
 	check-oracle-posix check-oracle-submatch \
-	check-oracle-perl check-oracle-perl-syntax \
+	check-oracle-perl check-oracle-perl-syntax check-oracle-python \
 	check-oracle-script-runs check-oracle-newlines check-oracle-callouts \
 	check-oracle-sed \
 	check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
@@ -872,10 +872,37 @@ check-oracle-submatch: $(TOOLS)
 	fi; \
 	python3 tools/oracle/submatch_diff.py --strict
 
+check-oracle-python: ## Compare the Python front end against CPython's `re`
+# The only oracle here that runs in-process: `re` is importable by the tool
+# that generates the cases, so a run costs a function call per row instead of
+# a fork per batch. That is worth a note because it changed what the gate
+# could find - 600,000 rows in under four seconds, against the tens of
+# thousands the subprocess differentials manage in the same time - and every
+# defect WP-30 found after the first build came out of scaling it up rather
+# than out of reading the `re` documentation more carefully.
+#
+# Two of those defects were in code this dialect does not own: the prescan
+# lost its group count after any class containing an escape, which made
+# `[\d](a)\1` an invalid backreference in perl and pcre as well, and
+# GRX_LOOKBEHIND_FIXED was in the profile and read by nothing.
+check-oracle-python: $(TOOLS)
+	@if ! command -v python3 >/dev/null 2>&1; then \
+		printf "check-oracle-python: skipped (no python3)\n"; \
+		exit 0; \
+	fi; \
+	python3 tools/oracle/python_diff.py --strict
+
 check-oracle-replace: ## Compare the ECMAScript and PCRE2 templates against node and pcre2
 # WP-16 and WP-22's missing generator. sed_diff.py did this for the POSIX and
 # GNU rows; nothing did it for the two largest template grammars, and it
 # found six defects in the pcre row alone.
+# Three dialects now: `--dialect all` covers ecmascript, pcre and python.
+# Python's arm earned its place at once. Its template grammar had twelve
+# hand-written tests that all passed, and the generator found six rules they
+# had missed - `\u`, `\U`, `\N{...}` and `\x` are pattern escapes there and
+# errors in a template, a backslash before a non-alphanumeric keeps *both*
+# characters, three octal digits outrank a group reference, and `\12` against
+# two groups is an error rather than group 1 followed by "2".
 check-oracle-replace: $(TOOLS)
 	@if ! command -v node >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then \
 		printf "check-oracle-replace: skipped (no node or no python3)\n"; \
@@ -907,6 +934,12 @@ check-oracle-split: $(TOOLS)
 		exit 0; \
 	fi; \
 	python3 tools/oracle/split_diff.py --dialect perl --seed $(ORACLE_SEED)
+	@# Python's is a third rule and not a blend of the other two, so it needs
+	@# its own arm: the empty-subject and trailing-field halves are
+	@# ECMAScript's, `maxsplit` is perl's, and every match separates - which
+	@# neither of the others does. Six hand-written cases in tests/unit
+	@# agreed with `re` while 1,848 generated rows did not.
+	python3 tools/oracle/split_diff.py --dialect python --seed $(ORACLE_SEED)
 
 check-oracle-window: ## Compare the search window and its flags against pcre2
 # The six fields of GRX_SearchOptions that decide an answer - begin, end and

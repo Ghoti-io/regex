@@ -74,11 +74,33 @@ WELL_FORMED = [
     "$&", "$$", "$1",
 ]
 
+# Python's, which shares only the plain text: every reference form above is
+# introduced by `$`, and `$` is an ordinary character in a `re.sub` template.
+PYTHON_WELL_FORMED = ["X", "-", "", "ab", " ", "$1", "$&", "X", "-", " "]
+
+# Spellings `re` refuses. Its template alphabet is closed the way its pattern
+# alphabet is, so an unknown escape is "bad escape" rather than the letter -
+# the difference from sed's rule, which this library had been applying.
+PYTHON_MALFORMED = [
+    "\\q", "\\x41", "\\e", "\\c", "\\g1", "\\g<", "\\g<>", "\\g<-1>",
+    "\\3", "\\12", "\\99", "\\g<nosuch>", "\\", "\\u00",
+    # `\U` and `\N{...}` are pattern escapes in Python and errors in a
+    # template. They are here, among the malformed, for exactly that reason.
+    "\\U00000041", "\\N{BULLET}",
+]
+
 # Forms one dialect has and the other does not, or that mean different
 # things. Kept apart so a run can say which side it is asking about.
 DIALECT_FORMS = {
     "ecmascript": ["$`", "$'", "$<n>", "$<m>", "$3", "$9"],
     "pcre": ["$`", "$'", "$_", "$<n>", "${n}", "$n", "${1}", "$0", "${0}"],
+    # Python's sigil is a backslash and its alphabet is closed, so its forms
+    # share nothing with the other two: `$1` is two literal characters here
+    # and `\\1` is the group. The escapes are in the list because they are
+    # the half of this grammar that *decodes* - `\\n` is a newline, not the
+    # letter - which no other dialect's template does.
+    "python": ["\\1", "\\2", "\\g<1>", "\\g<n>", "\\g<0>", "\\0", "\\\\",
+               "\\n", "\\t", "\\101", "\\g<01>"],
 }
 
 # Spellings that begin like a form and are not one, or name something that is
@@ -111,7 +133,17 @@ NAMED_PATTERNS = [
 FLAG_SETS = {
     "ecmascript": ("", "u", "i", "m", "iu", "s"),
     "pcre": ("", "i", "m", "s", "x", "im"),
+    "python": ("", "i", "m", "s", "im"),
 }
+
+
+# The same list in Python's spelling: `(?<n>...)` is "unknown extension"
+# there, and a reference to `\g<n>` needs a group actually named `n`.
+PYTHON_NAMED_PATTERNS = [
+    "(?P<n>a)", "(?P<n>a)(?P<m>b)", "(?P<n>a)(b)", "(a)(?P<n>b)",
+    "(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)(k)(l)",
+    "(a)", "(a)(b)", "(a)(b)(c)",
+]
 
 
 def find(name):
@@ -131,10 +163,15 @@ def make_template(dialect, rng):
     is enough for every run to ask the accept-or-refuse question many times
     over without spending the budget on it.
     """
-    pieces = WELL_FORMED + DIALECT_FORMS[dialect]
+    if dialect == "python":
+        pieces = PYTHON_WELL_FORMED + DIALECT_FORMS[dialect]
+        malformed = PYTHON_MALFORMED
+    else:
+        pieces = WELL_FORMED + DIALECT_FORMS[dialect]
+        malformed = MALFORMED
     out = []
     for _ in range(rng.randint(1, 4)):
-        source = MALFORMED if rng.randrange(6) == 0 else pieces
+        source = malformed if rng.randrange(6) == 0 else pieces
         out.append(rng.choice(source))
     return "".join(out)
 
@@ -151,6 +188,13 @@ def make_pattern(dialect, rng):
     """
     if dialect == "ecmascript":
         return match_diff.make_pattern(rng)
+    if dialect == "python":
+        # python_diff's vocabulary, which is the one `re` accepts. Its named
+        # groups use the `(?P<n>...)` spelling, so NAMED_PATTERNS below is
+        # replaced for this dialect rather than shared.
+        import python_diff
+        return "".join(rng.choice(python_diff.ATOMS)
+                       for _ in range(rng.randint(1, 3)))
     atoms = perl_diff.ATOMS["pcre"]
     return "".join(rng.choice(atoms) for _ in range(rng.randint(1, 3)))
 
@@ -185,6 +229,43 @@ def parse_driver(line):
     if line.startswith("skip"):
         return "error"
     return line.split()[0]
+
+
+def ask_python(rows):
+    """CPython's `re.sub`, in the driver's output shape.
+
+    In-process, for the same reason python_diff.py is. `re` parses the
+    template up front, the way this library does, so a bad template is
+    "syntax" whether or not the pattern matched - which is the one thing
+    that made the pcre arm of this file so hard to compare.
+    """
+    import re as _re
+    out = []
+    for flags, pattern, subject, template in rows:
+        bits = 0
+        for letter in flags:
+            bits |= {"i": _re.IGNORECASE, "m": _re.MULTILINE,
+                     "s": _re.DOTALL}.get(letter, 0)
+        try:
+            compiled = _re.compile(pattern, bits)
+        except Exception:
+            # "syntax" is what parse_driver() calls a refused *pattern*, so
+            # that the harness's `rejected` counter sees it. A refused
+            # *template* is "template" below. `re` raises the same exception
+            # type for both, which is why the two have to be told apart here
+            # rather than from the message.
+            out.append("syntax")
+            continue
+        try:
+            out.append(compiled.sub(template, subject))
+        except Exception:
+            # The driver spells its template refusal "template"; `re` has one
+            # exception type for all of them. Folded to the driver's word so
+            # that a refusal can be compared as agreement rather than read as
+            # a disagreement about wording - the mistake posix_diff.py made
+            # with `compile 42` against `compile`.
+            out.append("template")
+    return out
 
 
 def ask_node(rows):
@@ -252,6 +333,8 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
         # rest still explores shapes nobody chose.
         if i % 2:
             pattern = make_pattern(dialect, rng)
+        elif dialect == "python":
+            pattern = rng.choice(PYTHON_NAMED_PATTERNS)
         else:
             pattern = rng.choice(NAMED_PATTERNS)
         flags = rng.choice(FLAG_SETS[dialect])
@@ -266,6 +349,8 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
         # because ECMAScript has no template error to report; the count is
         # only needed where one side parses the template lazily.
         theirs = [(answer, 1) for answer in ask_node(rows)]
+    elif dialect == "python":
+        theirs = [(answer, 1) for answer in ask_python(rows)]
     else:
         theirs = ask_pcre2(reference, rows)
     mine = ask_library(driver, dialect, rows)
@@ -366,7 +451,7 @@ def main(argv):
         sys.stderr.write("run `make tools` first\n")
         return 2
 
-    dialects = ("ecmascript", "pcre") if args.dialect == "all" \
+    dialects = ("ecmascript", "pcre", "python") if args.dialect == "all" \
         else (args.dialect,)
     total = 0
     for dialect in dialects:

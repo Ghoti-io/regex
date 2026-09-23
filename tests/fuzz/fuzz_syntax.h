@@ -32,6 +32,12 @@
  * Named rather than derived: a dialect joins this list when it has a reader,
  * and a list that walked GRX_SYNTAX_COUNT would quietly spend most of the
  * run on dialects that refuse every pattern at the first call.
+ *
+ * The cost of naming it is that the list can go stale in the other
+ * direction, which is a campaign silently not covering a dialect that does
+ * have a reader. WP-30 added GRX_SYNTAX_PYTHON here in the same commit that
+ * built it; a front end landing without this line is a front end no soak
+ * ever fuzzes.
  */
 static const GRX_Syntax kBuiltSyntaxes[] = {
   GRX_SYNTAX_ECMASCRIPT,
@@ -41,6 +47,7 @@ static const GRX_Syntax kBuiltSyntaxes[] = {
   GRX_SYNTAX_POSIX_ERE,
   GRX_SYNTAX_GNU_BRE,
   GRX_SYNTAX_GNU_ERE,
+  GRX_SYNTAX_PYTHON,
 };
 static const size_t kBuiltSyntaxCount
     = sizeof(kBuiltSyntaxes) / sizeof(kBuiltSyntaxes[0]);

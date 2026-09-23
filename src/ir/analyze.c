@@ -108,6 +108,23 @@ typedef struct {
   int has_script_run;
   size_t max_lookbehind;
   size_t max_variable_lookbehind;
+  /**
+   * Non-zero while measuring a lookbehind body, so that a backreference
+   * reports the width it *declares* rather than the width it may match.
+   *
+   * group_span() zeroes a reference's minimum because a reference to a
+   * group that did not participate matches the empty string in ECMAScript
+   * and fails in the Perl family - neither of which is "at least what the
+   * group was". That is the right answer for the pattern's minimum match
+   * length and the wrong one for "is this lookbehind one length", where
+   * every reference would then read as variable.
+   *
+   * CPython settles it the same way: `(x)?(?<=\1a)` compiles there even
+   * though group 1 may be unset, and `(x|yz)(?<=\1)` does not, because the
+   * group itself is two widths. The question is about the group's spelling,
+   * not about whether it took part.
+   */
+  size_t measuring_look_width;
   size_t depth;
   /**
    * The groups whose length is being measured, innermost last.
@@ -328,7 +345,9 @@ static Span group_span(Analysis * analysis, uint32_t group) {
   Span span = walk(analysis, body);
   analysis->resolving_count--;
 
-  span.min_length = 0;
+  if (!analysis->measuring_look_width) {
+    span.min_length = 0;
+  }
   span.anchored_start = 0;
   span.anchored_end = 0;
   return span;
@@ -491,7 +510,26 @@ static Span walk(Analysis * analysis, uint32_t node_index) {
     case GRX_IR_LOOK: {
       analysis->has_lookaround = 1;
       analysis->is_regular = 0;
+      // Counted rather than set, because lookarounds nest and the inner one
+      // must not clear the outer one's claim on the way back out.
+      //
+      // Only where the dialect's bound is *zero* - where the body must be
+      // one length, which is what FIXED means and what keying on the bound
+      // says without a second copy of the profile reaching this pass.
+      // PCRE2 and perl allow a body to vary and cap how much by, and there
+      // the zeroed minimum is load-bearing: pcre2test refuses
+      // `(X{65535})(?<=\1{32770})`, and it is refused here because a
+      // reference whose group may not participate reads as varying from
+      // nothing up to the group's length, which exceeds the cap. Calling
+      // that body fixed made this library accept a pattern the reference
+      // rejects, and the conformance corpus said so.
+      int behind_here = (node->mode == GRX_LOOK_BEHIND_POSITIVE
+                            || node->mode == GRX_LOOK_BEHIND_NEGATIVE
+                            || node->mode == GRX_LOOK_BEHIND_NON_ATOMIC)
+          && analysis->ir->max_variable_lookbehind == 0;
+      analysis->measuring_look_width += behind_here ? 1u : 0u;
       Span body = walk(analysis, node->first_child);
+      analysis->measuring_look_width -= behind_here ? 1u : 0u;
       // GRX_NPOS is kept rather than skipped. An unbounded body - `(?<=a+)`
       // - used to leave this at zero, which reads as "no lookbehind" and is
       // the opposite of the truth: that is the one lookbehind that may need
@@ -682,6 +720,7 @@ GRX_Result grx_analyze_ir(GRX_IR * ir, GRX_Facts * out_facts) {
     .has_script_run = 0,
     .max_lookbehind = 0,
     .max_variable_lookbehind = 0,
+    .measuring_look_width = 0,
     .depth = 0,
     .resolving = {0},
     .resolving_count = 0,

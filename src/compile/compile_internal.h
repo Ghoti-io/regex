@@ -310,6 +310,24 @@ typedef enum {
 #define GRX_INST_COND_ELSE GRX_BIT(6)
 
 /**
+ * @brief ASSERT: this assertion also requires a non-empty subject.
+ *
+ * Python's `\B`, and only it. `\B` asks whether a position is *not* a word
+ * boundary, and every other dialect answers yes for position 0 of "": there
+ * is no word character on either side, so there is no boundary there.
+ * CPython answers no - `re.search(r"\B", "")` is None where perl and Node
+ * both match - and it is the one position where the three disagree. Probed
+ * over eight subjects: `''`, `'a'`, `'ab'`, `' '`, `'  '`, `'-'`, `'a b'`
+ * and `'--'`, on which `re` and perl name the same positions everywhere
+ * except the empty one.
+ *
+ * A flag rather than a rule in the engines, because the profile is spent by
+ * the time a program exists (documentation/design.md section 9): lowering
+ * reads the dialect and writes this, and an engine reads only the bit.
+ */
+#define GRX_INST_NEEDS_SUBJECT GRX_BIT(7)
+
+/**
  * @brief One compiled instruction.
  *
  * Twelve bytes and fixed-size, so that a program is one array a jump can

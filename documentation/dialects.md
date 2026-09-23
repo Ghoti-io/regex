@@ -44,7 +44,7 @@ this design was written on; a CI job installs the rest
 | Perl | `perl` | Perl 5.40.1 | `perlre`, `perlrebackslash`, `perlrecharclass` for 5.40 | `perl` (available); `t/re/re_tests` |
 | PCRE2 | `pcre` | PCRE2 10.46 | `pcre2pattern(3)`, `pcre2syntax(3)` for 10.46 | `pcre2test` 10.46 (available); `testdata/testinput1`, `testinput2` |
 | ECMAScript | `ecmascript` | ECMA-262 16th edition (ES2025) | clause 22.2 *RegExp (Regular Expression) Objects*; Annex B.1.2 *Regular Expressions Patterns* | Node 22.23 / V8 12.4, Unicode 17.0 (available); test262 |
-| Python | `python` | CPython 3.13 | `re` module documentation, 3.13 | `python3` (available); `Lib/test/re_tests.py` |
+| Python | `python` | CPython 3.13.5 | `re` module documentation, 3.13 | `python3` (available), **in-process**; no corpus - see below |
 | Java | `java` | JDK 21 | `java.util.regex.Pattern` javadoc, 21 | OpenJDK (install) |
 | .NET | `dotnet` | .NET 8 | "Regular Expression Language - Quick Reference"; "Regular expression options" | .NET SDK (install) |
 | Ruby | `ruby` | Ruby 3.3 / Onigmo 6.2 | Onigmo `doc/RE`; Ruby `Regexp` documentation | `ruby` (install) |
@@ -53,6 +53,28 @@ this design was written on; a CI job installs the rest
 | Tcl | `tcl` | Tcl 8.6 | `re_syntax(n)` | `tclsh` (install) |
 | Vim | `vim` | Vim 9.1 | `:help pattern` | `vim -es` with `matchlist()` (available) |
 | Emacs | `emacs` | GNU Emacs 29 | Elisp Reference Manual, "Regular Expressions" | `emacs --batch` (install) |
+
+### 2.1 Python's oracle is the only one that is not a subprocess
+
+Every other reference here is driven by spawning it: `pcre2test`, `perl`,
+`node`, a `grep`, a small C program linked against glibc or musl. CPython's
+`re` is importable by the Python program that generates the cases, so a row
+costs a function call rather than a fork. `tools/oracle/python_diff.py` runs
+600,000 rows in under four seconds; the subprocess differentials manage tens
+of thousands in the same time.
+
+That is not a footnote about speed. Every defect WP-30 found after the first
+build came out of scaling the run up, and two of them were in code this
+dialect does not own - the prescan lost its group count after a class
+containing an escape, and `GRX_LOOKBEHIND_FIXED` was in the profile and read
+by nothing. Both had been reachable by the Perl-family differentials for as
+long as they had existed.
+
+**There is no Python corpus.** The plan named `Lib/test/re_tests.py`, which
+CPython removed and which Debian's `python3.13` does not ship in any case -
+`/usr/lib/python3.13/test/` holds `libregrtest` and nothing else. The
+generator is therefore the whole of the gate for this dialect, which is the
+arrangement `posix_diff.py`'s note recommends anyway.
 
 ## 3. Features: which constructs exist
 
@@ -685,6 +707,19 @@ backreference is (section 5.17). And PCRE2's rule for a group that exists and
 did not participate is an error, which is not knowable until there is a match
 to ask: `(a)?b` with `$1` substitutes against "ab" and fails against "b".
 
+**And the Python row was wrong in six places until the same generator was
+pointed at it** (WP-30). Its twelve hand-written tests all passed while the
+generator found that `\u`, `\U`, `\N{...}` and `\x` are *pattern* escapes in
+Python and errors in a template - one dialect with two closed alphabets, the
+template's being the smaller; that a backslash before a non-alphanumeric
+keeps both characters, where sed's rule drops the backslash and Perl's drops
+it too; that three octal digits outrank a group reference, so `\101` is "A"
+and `\1234` is "S4" while `\12` is group 12; and that `\12` against a
+two-group pattern is an error rather than group 1 followed by a literal "2",
+because Python does not fall back to a shorter reading the way ECMAScript
+does. The row said "other C escapes processed", which was true and was not
+the question.
+
 **The PCRE2 row above was wrong in four places until a generator was pointed
 at it** (`tools/oracle/replace_diff.py`, testing.md section 8). It said PCRE2
 had no whole-match or context forms and it has six; it did not have
@@ -700,7 +735,7 @@ at all.
 | ECMAScript (`String.prototype.replace`) | `$n`, `$nn` (1-99) | `$<name>` (only if the regex has named groups) | `$&`, `` $` ``, `$'` | `$$` | literal `$n` | empty | none |
 | PCRE2 (`pcre2_substitute`) | `$n`, `${n}` - every digit, no fallback | `$name`, `${name}`, `$<name>` | `$&`, `$0`, `${0}`, `` $` ``, `$'`, `$_` (the whole subject) | `$$` | error | error, or empty with `SUBSTITUTE_UNSET_EMPTY` (exposed as an option) | extended mode: `\U \L \E \u \l`, and `${n:+a:b}`, `${n:-d}` |
 | Perl (interpolation subset) | `$n`, `${n}`, `\n` (deprecated) | `$+{name}` | `$&`, `` $` ``, `$'` | `\$`, `\\` | empty (undef) | empty | `\U \L \E \u \l \Q` |
-| Python (`re.sub`) | `\n`, `\g<n>` | `\g<name>` | `\g<0>` | `\\`; other C escapes processed | error | empty | none |
+| Python (`re.sub`) | `\n`, `\nn` (1-99, no fallback) | `\g<name>`, `\g<n>` | `\g<0>` only | `\\`, `\a \b \f \n \r \t \v`, octal; `\` before a non-alphanumeric keeps **both**; every other letter is an error | error | empty | none |
 | Java (`appendReplacement`) | `$n` (longest valid prefix) | `${name}` | none | `\` quotes the next character | error | empty (**probe**) | none |
 | .NET | `$n`, `${n}` | `${name}` | `$&`, `` $` ``, `$'`, `$+`, `$_` | `$$` | literal | empty | none |
 | Ruby (`sub`) | `\n` | `\k<name>` | `\0`, `\&`, `` \` ``, `\'` | `\\` | empty | empty | none |
@@ -829,7 +864,7 @@ not be adjacent, so `(?aia:s)` is `/aa`. What each chooses:
 | Perl | `msixxnpadlu` | `xx` is extended-more; `n` is no-capture; `a`, `d`, `l`, `u` are the charset modifiers and exclude each other, and `a` twice is `/aa` |
 | PCRE2 | `imsxnUJ` and the `(*...)` leading directives | `U` ungreedy, `J` dupnames |
 | ECMAScript | `dgimsuvy` | `u` and `v` exclusive; `g`/`y` rejected here |
-| Python | `aiLmsux` | `L` (locale) rejected as unsupported; `a` is ASCII |
+| Python | `aimsux` | `a` and `u` are one choice written two ways and share an exclusion group; `a` narrows the shorthands *and* the folding (§5.9, §5.8), which perl's `/a` does not; `L` (locale) rejected as unsupported; **no `n`**, and an unscoped `(?i)` may stand only in a run at the very start of the pattern |
 | Java | `idmsuxU` (embedded) | `U` is `UNICODE_CHARACTER_CLASS` |
 | .NET | `imnsx` | `n` explicit capture |
 | Ruby | `imx` | `m` is dot-all |
@@ -842,13 +877,40 @@ Default options per dialect: Ruby `MULTILINE`; Rust and Perl and Python
 `UTF` (their subjects are Unicode strings); ECMAScript none (the caller adds
 `UTF` for `u`); everything else none.
 
+Python's `(?a)` is spelled as `GRX_OPT_ASCII_CLASSES` - a *narrowing* flag -
+rather than as the absence of a widening one, and that is not a matter of
+taste. Written the other way round, with `UCP` and `UTF` on by default and
+`(?a)` clearing them, the shorthands narrowed correctly and `(?a).` stopped
+matching a character whole while `(?a)\N{BULLET}` stopped compiling: both of
+those key on `UTF`, and `re`'s ASCII mode touches neither. The profile's
+`ascii_classes_fold_ascii` carries the other half, which is where Python and
+perl's `/a` part company.
+
 ### 5.16 Splitting
 
 `grx_regex_split()` divides a subject at every match, and **how it divides is
 a per-dialect axis** - `GRX_SplitRule` in the profile, the way §5.5's
 capture-reset cell is. Perl splits the way perl does; ECMAScript the way
-ECMA-262 does. PCRE2, POSIX and GNU define no split at all, so they take
-ECMAScript's, which is the library's default rather than a claim about them.
+ECMA-262 does; Python the way `re.split` does. PCRE2, POSIX and GNU define no
+split at all, so they take ECMAScript's, which is the library's default
+rather than a claim about them.
+
+**Three values, not two.** Python's is a genuine third rule and not a blend
+either of the others can be bent into: its empty-subject and trailing-field
+behaviour is ECMAScript's, its `maxsplit` is perl's - counting splits, not
+pieces, and leaving the unsplit remainder as the last field, with zero
+meaning no limit rather than no pieces - and *every match separates*, which
+neither of the others does. `split("x*", "")` is the shortest question the
+function has and the three references answer it three ways:
+
+| | `split("x*", "")` | `split(",", "a,b,c", 1)` | `split("x*", "abc")` |
+| --- | --- | --- | --- |
+| ECMAScript | `[]` | `["a"]` | `["", "a", "b", "c", ""]` |
+| perl | `()` | `("a,b,c")` | `("", "a", "b", "c")` |
+| Python | `['', '']` | `['a', 'b,c']` | `['', 'a', 'b', 'c', '']` |
+
+Six hand-written cases agreed with `re` on all of this while 1,848 generated
+rows did not; `tools/oracle/split_diff.py --dialect python` is the gate.
 
 Unlike every other axis on this page this one is a fact about a *library
 function* rather than about a grammar, which is why the languages below
@@ -1113,6 +1175,8 @@ to be complete for every shipped tier.
 | GNU BRE, GNU ERE | Group spans follow glibc, which is not POSIX | §2 makes glibc the definition of these two rows, and it answers `(a\|aa)(a\|)` against "aa" with group 1 taking the shorter branch where POSIX's rule takes the longer. Following the standard here would mean leaving the reference these rows are named for, so the axis is per-dialect: `FIRST_PATH` for these two and `POSIX` for the other two. The two answers differ on 470 of the 15,246 generated `posix-ere` rows | - |
 | POSIX BRE | A pattern with a backreference keeps the first-path division, not POSIX's | the comparison costs the short-circuit that ends the search when a match reaches the end of the window, and without it `\(a*\)*\1` against twenty characters runs out of steps where it used to answer at once. There is also nothing to be exact against: musl refuses a basic RE with a backreference outright, so no two references can decide such a row. The rule therefore applies to a program the Pike VM could also run - every POSIX ERE, and every basic RE without a backreference - which is also what keeps the two engines answering alike | - |
 | POSIX, GNU | `(\<)*` reports the group as having matched empty where glibc reports it unset | the references disagree, so there is no rule to follow: glibc says a zero-width iteration did not happen, musl says it did, and this library says it did. Left where musl is, because the alternative is to special-case an iteration that consumed nothing *and* wrote nothing, which neither reference describes and only glibc does | - |
+| Python | `\N{NAME}` resolves against UCD 17.0.0 rather than against CPython's own table | this library has one Unicode version and names come from it ([unicode.md](unicode.md) §2). A name added or renamed between CPython's table and UCD 17.0.0 would resolve differently; no such case has been found, and the differential would report one as a disagreement | - |
+| Python | `bytes` patterns are not modelled: a `str` pattern is the whole of this dialect | `re` has two subjects, `str` and `bytes`, selected by the *type of the pattern object* rather than by a flag - a distinction a C API taking a byte string cannot make. The `str` half is the one with rules of its own; the `bytes` half is a narrower ASCII mode of it. `(?L)` is refused for the same reason it is refused in `re` for a `str` pattern | `GRX_ERR_UNSUPPORTED` for `L` |
 | .NET | Culture-sensitive folding is invariant; balancing groups deferred | §5.8; [design.md](design.md) §2 | `GRX_ERR_UNSUPPORTED` for balancing groups |
 | Emacs | Syntax classes (`\s-`, `\w`) use fixed Unicode definitions, not a syntax table | no syntax table | - |
 | Vim | `\%[...]`, `\%d123`, `\z(`, `\=` in replacements | later tier | `GRX_ERR_UNSUPPORTED` |

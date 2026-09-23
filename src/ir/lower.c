@@ -1154,6 +1154,13 @@ static GRX_Result lower_anchor(
   if (line_anchor) {
     assertion->flags |= GRX_IR_LINE_ANCHOR;
   }
+  // Python's `\B`, spent here so that no engine has to know which dialect
+  // it is running. Only `\B`: `\b` agrees with every other reference on the
+  // empty subject, both answering that there is no boundary there.
+  if (kind == GRX_ASSERT_NOT_WORD_BOUNDARY
+      && low->profile.empty_subject_has_no_interior) {
+    assertion->flags |= GRX_IR_NEEDS_SUBJECT;
+  }
   // Only the assertions that read the newline set care, and only when the
   // convention makes a CR LF pair one terminator. Set here rather than in
   // the engines because it is a property of the pattern's convention, and
@@ -1279,6 +1286,14 @@ static void adopt_options(Lowering * low, uint32_t options) {
     // GRX_FOLD_FULL_ASCII_APART means and full_fold_allowed() decides. `ß`
     // stops matching "ss" - its fold is ASCII - while `U+0390` goes on
     // matching `U+03B9 U+0308 U+0301`, none of which is.
+    // Python's `(?a)`, which narrows the folding as well as the classes.
+    // Before the `/aa` branch below, and not beside it: this is the whole
+    // orbit cut to ASCII, where ASCII_FOLD_SEPARATE keeps the orbits that
+    // have no ASCII member in them.
+    if ((options & GRX_OPT_ASCII_CLASSES)
+        && low->profile.ascii_classes_fold_ascii) {
+      low->fold = GRX_FOLD_ASCII;
+    }
     if (options & GRX_OPT_ASCII_FOLD_SEPARATE) {
       if (low->fold == GRX_FOLD_SIMPLE) {
         low->fold = GRX_FOLD_SIMPLE_ASCII_APART;
@@ -2986,12 +3001,30 @@ GRX_Result grx_lower_pattern(const GRX_Pattern * pattern,
         out_error, result, GRX_DIAG_OUT_OF_MEMORY, GRX_NPOS, 0);
   }
 
-  // PCRE2's default max_varlookbehind, which Perl shares. A dialect whose
-  // lookbehind is unbounded (ECMAScript) sets no cap at all, and one with no
-  // lookbehind never reaches the check because the parser refuses the
-  // construct first.
+  // What each dialect allows a lookbehind body to vary by.
+  //
+  // BOUNDED is PCRE2's default max_varlookbehind, which Perl shares. FIXED
+  // is zero: the body must match one length, so any variation at all is a
+  // syntax error - `(?<=a+)c`, `(?<=ab|c)d`, `(?<=a{2,4})c` and
+  // `(|a)(?<=\1a)` are all "look-behind requires fixed-width pattern" in
+  // CPython. A dialect whose lookbehind is unbounded (ECMAScript) sets no
+  // cap, and one with no lookbehind never reaches the check because the
+  // parser refuses the construct first.
+  //
+  // FIXED had been folded in with the unbounded case and so was never
+  // enforced - the profile named it, nothing read it, and the differential
+  // could not see it because its lookbehind vocabulary was written on the
+  // assumption that the rule already held.
+  //
+  // FIXED_PER_BRANCH (Ruby, Tcl) is deliberately not here: it needs each
+  // *branch* measured rather than the body, which this analysis does not
+  // do, and neither dialect is built. It takes the unbounded answer, which
+  // is the same answer it had before - a gap to close with those dialects
+  // rather than a rule to guess at now.
   low.ir->max_variable_lookbehind
-      = low.profile.lookbehind == GRX_LOOKBEHIND_BOUNDED ? 255 : GRX_NPOS;
+      = low.profile.lookbehind == GRX_LOOKBEHIND_BOUNDED ? 255
+      : low.profile.lookbehind == GRX_LOOKBEHIND_FIXED   ? 0
+                                                         : GRX_NPOS;
   low.ir->preference = low.profile.preference;
   low.ir->submatch = low.profile.submatch;
   low.ir->iteration = low.profile.iteration;

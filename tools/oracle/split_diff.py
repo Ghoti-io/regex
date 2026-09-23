@@ -105,12 +105,13 @@ def make_subject(rng, unicode_mode):
 FLAG_SETS = {
     "ecmascript": match_diff.FLAG_SETS,
     "perl": ("", "i", "m", "s", "im", "ims"),
+    "python": ("", "i", "m", "s", "im", "ims"),
 }
 
 
 def make_pattern(rng, unicode_sets, dialect):
     """Half from the split vocabulary, half from the matching one."""
-    if dialect == "perl":
+    if dialect in ("perl", "python"):
         # The split vocabulary only. What this file measures is the *walk* -
         # where a piece ends, what a limit counts, which empties survive - and
         # that turns on the separator, not on how exotic the atom is.
@@ -143,6 +144,36 @@ def ask_library(driver, rows, dialect):
     finished = subprocess.run([driver, dialect], input=wire(rows),
         capture_output=True, text=True, check=True)
     return finished.stdout.splitlines()
+
+
+def ask_python(rows):
+    """CPython's `re.split`, in grx_split's output shape.
+
+    In-process, like tools/oracle/python_diff.py and for the same reason.
+    `maxsplit` has no "absent" spelling - the parameter's default *is* zero
+    and zero means no limit - so a row with no limit and a row with a limit
+    of zero are the same question here, where they are opposite questions in
+    ECMAScript.
+    """
+    import re as _re
+    out = []
+    for flags, pattern, subject, limit in rows:
+        bits = 0
+        for letter in flags:
+            bits |= {"i": _re.IGNORECASE, "m": _re.MULTILINE,
+                     "s": _re.DOTALL}.get(letter, 0)
+        try:
+            compiled = _re.compile(pattern, bits)
+        except Exception:
+            out.append("compile")
+            continue
+        try:
+            pieces = compiled.split(subject, 0 if limit is None else limit)
+        except Exception:
+            out.append("error")
+            continue
+        out.append(pieces)
+    return out
 
 
 def ask_perl(rows):
@@ -183,7 +214,7 @@ def main(argv):
     parser.add_argument("--examples", type=int, default=8)
     parser.add_argument("--driver", default=None)
     parser.add_argument("--dialect", default="ecmascript",
-        choices=("ecmascript", "perl"))
+        choices=("ecmascript", "perl", "python"))
     args = parser.parse_args(argv[1:])
 
     driver = args.driver
@@ -215,8 +246,10 @@ def main(argv):
     if len(ours) != len(rows):
         sys.stderr.write("the driver did not answer every row\n")
         return 2
-    oracle = "node" if args.dialect == "ecmascript" else "perl"
+    oracle = {"ecmascript": "node", "perl": "perl",
+              "python": "python3"}[args.dialect]
     reference = (ask_node(rows) if args.dialect == "ecmascript"
+                 else ask_python(rows) if args.dialect == "python"
                  else ask_perl(rows))
     if len(reference) != len(rows):
         sys.stderr.write("the oracle did not answer every row\n")

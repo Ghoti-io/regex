@@ -36,12 +36,19 @@ TEST(Parse, UnknownDialectIsInvalid) {
   EXPECT_EQ(pattern, nullptr);
 }
 
+// A dialect this library names and has not built, for the tests that need
+// one. Naming it once means building the next dialect changes this line
+// rather than hunting for every test that happened to pick the same example:
+// these said POSIX until WP-23, Python until WP-30, and Java until whenever
+// WP-31 lands.
+static const GRX_Syntax kUnbuiltDialect = GRX_SYNTAX_JAVA;
+
 TEST(Parse, OutputIsNullOnFailure) {
   // Nothing is allocated for the caller to free on a failing call
   // (CONVENTIONS.md section 5), so the output pointer has to be cleared even
   // when it arrived holding something.
   GRX_Pattern * pattern = (GRX_Pattern *)0x1;
-  EXPECT_NE(grx_pattern_parse("a", GRX_SYNTAX_PYTHON, GRX_OPT_NONE, &pattern),
+  EXPECT_NE(grx_pattern_parse("a", kUnbuiltDialect, GRX_OPT_NONE, &pattern),
       GRX_OK);
   EXPECT_EQ(pattern, nullptr);
 }
@@ -72,16 +79,20 @@ TEST(Parse, ErrorIsClearedBeforeTheAttempt) {
   // Whatever the outcome, the caller never reads a position left over from a
   // previous call.
   EXPECT_LT(std::strlen(error.message), sizeof(error.message));
+  // Freed because "whatever the outcome" now includes success: this named an
+  // unbuilt dialect and could not produce a pattern, so the discard was safe
+  // until WP-30 built it. LeakSanitizer is what said so.
+  grx_pattern_free(pattern);
 }
 
 TEST(Parse, ADialectWithNoFrontEndIsRefusedRatherThanApproximated) {
-  // Python's front end is plan.md WP-30. Until it exists, reading a Python
-  // pattern with somebody else's grammar would tell a caller their pattern
-  // is valid for an engine that rejects it (design.md section 4). This
-  // named POSIX until WP-23 built it.
+  // Reading a pattern of an unbuilt dialect with somebody else's grammar
+  // would tell a caller their pattern is valid for an engine that rejects it
+  // (design.md section 4). This named POSIX until WP-23 built it and Python
+  // until WP-30 did.
   GRX_Pattern * pattern = nullptr;
   GRX_Error error;
-  EXPECT_EQ(grx_pattern_parse_with_allocator("a", 1, GRX_SYNTAX_PYTHON,
+  EXPECT_EQ(grx_pattern_parse_with_allocator("a", 1, kUnbuiltDialect,
                 GRX_OPT_NONE, nullptr, nullptr, &error, &pattern),
       GRX_ERR_UNSUPPORTED);
   EXPECT_EQ(error.diag, GRX_DIAG_DIALECT_NOT_IMPLEMENTED);
@@ -103,7 +114,7 @@ TEST(Parse, AllocatesNothingOnAFailedParse) {
   grxtest::CountingAllocator allocator;
 
   GRX_Pattern * pattern = nullptr;
-  (void)grx_pattern_parse_with_allocator("a", 1, GRX_SYNTAX_PYTHON,
+  (void)grx_pattern_parse_with_allocator("a", 1, kUnbuiltDialect,
       GRX_OPT_NONE, nullptr, allocator.get(), nullptr, &pattern);
 
   EXPECT_EQ(allocator.live(), 0);

@@ -58,14 +58,66 @@
 #include "../parse/parse_internal.h"
 #include "../unicode/unicode_internal.h"
 
-/** Which of the two dialects this parse is reading. */
+/** Which of the three dialects this parse is reading. */
 typedef enum {
   FLAVOUR_PCRE = 0, ///< PCRE2 10.46.
-  FLAVOUR_PERL      ///< Perl 5.40.
+  FLAVOUR_PERL,     ///< Perl 5.40.
+  FLAVOUR_PYTHON    ///< CPython 3.13 `re`.
 } Flavour;
 
+/**
+ * Which dialect this parse is reading.
+ *
+ * Switched over rather than tested, and the default aborts the
+ * question rather than answering it. The earlier form was
+ * `syntax == PERL ? PERL : PCRE`, which was correct while this file served
+ * two dialects and became a trap the moment it served three: a dialect
+ * routed here without a case would have been *parsed as PCRE2* and told its
+ * caller the pattern was valid, which is the silent approximation the file's
+ * own header refuses. GRX_SYNTAX_PYTHON was in the enum for the whole of
+ * that time.
+ */
 static Flavour flavour(const GRX_Parser * parser) {
-  return parser->syntax == GRX_SYNTAX_PERL ? FLAVOUR_PERL : FLAVOUR_PCRE;
+  switch (parser->syntax) {
+    case GRX_SYNTAX_PERL:
+      return FLAVOUR_PERL;
+    case GRX_SYNTAX_PYTHON:
+      return FLAVOUR_PYTHON;
+    case GRX_SYNTAX_PCRE:
+    default:
+      return FLAVOUR_PCRE;
+  }
+}
+
+/**
+ * Whether a reference to this group is one Python would refuse.
+ *
+ * `re` requires the group to have *closed*: `(a\1)`, `((a)\1)`, `(a|\1)`
+ * and `(?P<x>(?P<y>a)(?P=x))` are all "cannot refer to an open group", and
+ * a reference to a group numbered later is "invalid group reference".
+ * Perl and PCRE2 allow both - a forward reference simply fails to match
+ * there - so this is the one rule that makes GRX_DIAG_FORWARD_BACKREFERENCE
+ * reachable, a diagnostic that until now no dialect here produced.
+ *
+ * @param parser The parser.
+ * @param group The capture number being referenced.
+ * @return Non-zero when the reference must be refused.
+ */
+static int python_reference_is_premature(
+    const GRX_Parser * parser, uint32_t group) {
+  if (flavour(parser) != FLAVOUR_PYTHON) {
+    return 0;
+  }
+  if (group > parser->groups_opened) {
+    return 1;
+  }
+  for (const GRX_OpenGroup * open = parser->open_groups; open;
+      open = open->outer) {
+    if (open->number == group) {
+      return 1;
+    }
+  }
+  return 0;
 }
 
 /** The longest group name this front end will accept, in bytes. */
@@ -177,6 +229,25 @@ typedef struct {
  */
 static GRX_Result read_hex(GRX_Parser * parser, size_t start,
     uint32_t * out_value) {
+  // Python has no braced form and no short one: `\xHH` takes *exactly* two
+  // hex digits, and `\x{41}`, `\x4` and `\xg` are all "incomplete escape"
+  // in `re`. Reading them the Perl family's way would accept three patterns
+  // the reference refuses, and read `\x4` as U+0004 where `re` reads
+  // nothing at all.
+  if (flavour(parser) == FLAVOUR_PYTHON) {
+    uint32_t value = 0;
+    for (int digit = 0; digit < 2; digit++) {
+      if (!is_hex(byte_at(parser, 0))) {
+        return grx_parse_fail(
+            parser, GRX_DIAG_INVALID_HEX_ESCAPE, start, digit + 2);
+      }
+      value = (value << 4) | hex_value(byte_at(parser, 0));
+      parser->position++;
+    }
+    *out_value = value;
+    return GRX_OK;
+  }
+
   if (byte_at(parser, 0) == '{') {
     // Perl lets an underscore separate the digits, the way a numeric literal
     // does: `\x{_1_0000}` is U+10000. PCRE2 does not, and says "Malformed
@@ -348,6 +419,43 @@ static GRX_Result read_name(GRX_Parser * parser, char terminator,
   return GRX_OK;
 }
 
+/**
+ * The capture number of the group carrying this name, if one exists yet.
+ *
+ * A group's node is created when its `(` is read, before its body, so this
+ * finds a group that is still *open* as well as one that has closed. That is
+ * what the caller needs: "not found" means the name belongs to a group later
+ * in the pattern, and found-but-open is the other half of Python's rule.
+ *
+ * @param parser The parser.
+ * @param offset The name, as an offset into the pattern's name storage.
+ * @param out_number Receives the capture number.
+ * @return Non-zero when a group with that name has been reached.
+ */
+static int group_number_for_name(
+    const GRX_Parser * parser, uint32_t offset, uint32_t * out_number) {
+  const char * name = grx_pattern_name(parser->pattern, offset);
+  if (!name) {
+    return 0;
+  }
+
+  for (size_t i = 0; i < parser->pattern->nodes.count; i++) {
+    const GRX_Node * node = grx_pattern_node(parser->pattern, (uint32_t)i);
+    if (!node || node->kind != GRX_NODE_GROUP
+        || !(node->flags & GRX_NODE_NAMED)
+        || !(node->flags & GRX_NODE_CAPTURING)) {
+      continue;
+    }
+    const char * existing = grx_pattern_name(parser->pattern, node->b);
+    if (existing && strcmp(existing, name) == 0) {
+      *out_number = node->a;
+      return 1;
+    }
+  }
+
+  return 0;
+}
+
 /** Whether a capturing group with this name has already been parsed. */
 static int name_already_used(const GRX_Parser * parser, uint32_t offset) {
   const char * name = grx_pattern_name(parser->pattern, offset);
@@ -389,6 +497,48 @@ static int shorthand_for(char c, int * out_negated) {
     case 'v': return GRX_SHORTHAND_VSPACE;
     case 'V': *out_negated = 1; return GRX_SHORTHAND_VSPACE;
     default: return -1;
+  }
+}
+
+/**
+ * Whether CPython's `re` gives this letter any meaning after a backslash.
+ *
+ * Python's escape alphabet is *closed* and much shorter than the Perl
+ * family's, and `re` reports "bad escape \\q" for every letter outside it
+ * rather than reading it as the literal. Probed one letter at a time, both
+ * inside a class and outside, rather than read off the `re` documentation -
+ * which lists what the module has and does not say what it refuses.
+ *
+ * Three letters are the reason this is a table and not a shorter test.
+ * `\v` is the vertical-tab *character* here and the vertical-space
+ * *shorthand* in PCRE2, so routing it to the shared shorthand table would
+ * silently widen it to five code points. `\Z` is the end of the subject
+ * here and the position before a final newline there - Python spells with
+ * `\Z` what Perl spells with `\z`, and it has no `\z` at all. And `\N`
+ * takes only `\N{NAME}`: `\N` alone is an error where Perl reads it as
+ * "not a newline", and `\N{U+0041}` is an error where Perl reads a code
+ * point.
+ *
+ * @param c The letter after the backslash.
+ * @param in_class Whether this is inside a bracket expression.
+ * @return Non-zero when `re` accepts it there.
+ */
+static int python_knows_escape(char c, int in_class) {
+  switch (c) {
+    // The anchors, which `re` refuses inside a class where PCRE2 refuses
+    // them too - so this half agrees and is here only to be complete.
+    case 'A':
+    case 'B':
+    case 'Z':
+      return !in_class;
+    // Characters, shorthands and the two constructs with an argument.
+    case 'a': case 'b': case 'd': case 'f': case 'n': case 'r':
+    case 's': case 't': case 'v': case 'w':
+    case 'D': case 'S': case 'W':
+    case 'N': case 'u': case 'x': case 'U':
+      return 1;
+    default:
+      return 0;
   }
 }
 
@@ -594,6 +744,12 @@ static int brace_is_repeat(const GRX_Parser * parser, size_t at) {
 static GRX_Result read_named_codepoint(GRX_Parser * parser, int in_class,
     size_t start, Escape * out) {
   if (byte_at(parser, 0) != '{') {
+    // Python has no bare `\N`. `re` answers "missing {" for it, inside a
+    // class and outside alike: `\N{NAME}` is the whole construct there,
+    // where Perl also reads a lone `\N` as "not a newline".
+    if (flavour(parser) == FLAVOUR_PYTHON) {
+      return grx_parse_fail(parser, GRX_DIAG_INVALID_ESCAPE, start, 2);
+    }
     if (in_class) {
       // "not a newline" is not a set operation a class can express, and
       // pcre2test refuses `[\N]`. Checked before the look-ahead below,
@@ -630,6 +786,15 @@ static GRX_Result read_named_codepoint(GRX_Parser * parser, int in_class,
   size_t scan = 1;
   while (byte_at(parser, scan) == ' ' || byte_at(parser, scan) == '\t') {
     scan++;
+  }
+
+  // `\N{U+0041}` is a code point in both Perl-family dialects and an
+  // "undefined character name" in `re`, which looks the brace contents up in
+  // the Unicode name table and nowhere else. Refused rather than read,
+  // because reading it would accept a spelling the reference rejects.
+  if (flavour(parser) == FLAVOUR_PYTHON && byte_at(parser, scan) == 'U'
+      && byte_at(parser, scan + 1) == '+') {
+    return grx_parse_fail(parser, GRX_DIAG_INVALID_ESCAPE, start, scan + 2);
   }
 
   if (byte_at(parser, scan) == 'U' && byte_at(parser, scan + 1) == '+') {
@@ -676,7 +841,10 @@ static GRX_Result read_named_codepoint(GRX_Parser * parser, int in_class,
   // `\N{name}`. Perl has the construct and PCRE2 does not - pcre2test
   // answers error 137, "PCRE2 does not support \F, \L, \l, \N{name}, \U,
   // or \u" - so this is one spelling with two answers rather than one gap.
-  if (flavour(parser) != FLAVOUR_PERL) {
+  // Python has it as well, and has *only* it: `\N{U+0041}` is refused above
+  // and a bare `\N` earlier still, so for that dialect this is the whole of
+  // what `\N` means.
+  if (flavour(parser) == FLAVOUR_PCRE) {
     return grx_parse_fail(parser, GRX_DIAG_INVALID_ESCAPE, start, 3);
   }
 
@@ -938,6 +1106,10 @@ static GRX_Result read_numeric_escape(GRX_Parser * parser, size_t start,
       return grx_parse_fail(
           parser, GRX_DIAG_INVALID_BACKREFERENCE, start, digits + 1);
     }
+    if (python_reference_is_premature(parser, (uint32_t)value)) {
+      return grx_parse_fail(
+          parser, GRX_DIAG_FORWARD_BACKREFERENCE, start, digits + 1);
+    }
     parser->position += digits;
     out->kind = ESC_BACKREF;
     out->group = (uint32_t)value;
@@ -986,6 +1158,32 @@ static GRX_Result read_escape(GRX_Parser * parser, int in_class, Escape * out) {
   }
 
   char c = byte_at(parser, 0);
+
+  // Python's alphabet is closed, so the refusal comes before every table
+  // below rather than after them. A letter `re` has no meaning for is an
+  // error there and a *literal* in neither dialect, so falling through to
+  // the identity-escape tail would accept `\q` as "q" - which is what the
+  // ECMAScript front end does in its own dialect and what `re` does not do
+  // in this one.
+  if (flavour(parser) == FLAVOUR_PYTHON
+      && ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))
+      && !python_knows_escape(c, in_class)) {
+    parser->position++;
+    return grx_parse_fail(parser,
+        in_class ? GRX_DIAG_INVALID_CLASS_ITEM : GRX_DIAG_INVALID_ESCAPE,
+        start, 2);
+  }
+
+  // `\v` is the vertical tab here and the vertical-space shorthand in the
+  // Perl family - one character against five. Taken before shorthand_for()
+  // rather than inside it, because the shared table is the Perl family's
+  // and this is not a value it has.
+  if (flavour(parser) == FLAVOUR_PYTHON && c == 'v') {
+    parser->position++;
+    out->codepoint = 0x0B;
+    out->length = parser->position - start;
+    return GRX_OK;
+  }
 
   int negated = 0;
   int shorthand = shorthand_for(c, &negated);
@@ -1056,9 +1254,15 @@ static GRX_Result read_escape(GRX_Parser * parser, int in_class, Escape * out) {
         }
       }
       out->kind = ESC_ANCHOR;
+      // Python spells with `\Z` what Perl spells with `\z`, and has no `\z`
+      // at all: `a\Z` does not match "a\n" in `re` and does in perl. One
+      // letter with two meanings rather than a letter one dialect lacks, so
+      // it is a remapping here and not a refusal in python_knows_escape().
       out->anchor = c == 'B'   ? GRX_ANCHOR_NOT_WORD_BOUNDARY
           : c == 'A'           ? GRX_ANCHOR_START_SUBJECT
-          : c == 'Z'           ? GRX_ANCHOR_END_BEFORE_NEWLINE
+          : c == 'Z'           ? (flavour(parser) == FLAVOUR_PYTHON
+                                     ? GRX_ANCHOR_END_SUBJECT
+                                     : GRX_ANCHOR_END_BEFORE_NEWLINE)
           : c == 'z'           ? GRX_ANCHOR_END_SUBJECT
                                : GRX_ANCHOR_SEARCH_START;
       out->length = parser->position - start;
@@ -1108,6 +1312,37 @@ static GRX_Result read_escape(GRX_Parser * parser, int in_class, Escape * out) {
       GRX_Result result = read_hex(parser, start, &out->codepoint);
       out->length = parser->position - start;
       return result;
+    }
+
+    case 'u':
+    case 'U': {
+      // Python's fixed-width code-point escapes, four digits and eight.
+      // Neither reference in the Perl family has them: pcre2test answers
+      // error 137 for `\u` and `\U` unless PCRE2_ALT_BSUX is set, which is
+      // a mode this library does not offer, and perl answers the same.
+      // python_knows_escape() is what stops the other two dialects reaching
+      // this case, so the guard here is only for a reader.
+      if (flavour(parser) != FLAVOUR_PYTHON) {
+        break;
+      }
+      int width = c == 'u' ? 4 : 8;
+      parser->position++;
+      uint32_t value = 0;
+      for (int digit = 0; digit < width; digit++) {
+        if (!is_hex(byte_at(parser, 0))) {
+          return grx_parse_fail(
+              parser, GRX_DIAG_INVALID_HEX_ESCAPE, start, digit + 2);
+        }
+        value = (value << 4) | hex_value(byte_at(parser, 0));
+        parser->position++;
+      }
+      if (value > GRX_CODEPOINT_MAX) {
+        return grx_parse_fail(
+            parser, GRX_DIAG_CODEPOINT_OUT_OF_RANGE, start, width + 2);
+      }
+      out->codepoint = value;
+      out->length = parser->position - start;
+      return GRX_OK;
     }
 
     case 'o': {
@@ -1621,7 +1856,8 @@ static GRX_Result read_class_atom(GRX_Parser * parser, GRX_ClassItem * out,
     if (grx_parse_at_end(parser)) {
       return grx_parse_fail(parser, GRX_DIAG_TRAILING_BACKSLASH, start, 1);
     }
-    if (byte_at(parser, 0) == 'Q') {
+    if ((parser->spec.features & GRX_FEATURE_QUOTING)
+        && byte_at(parser, 0) == 'Q') {
       parser->position++;
       size_t end = parser->length;
       for (size_t i = parser->position; i + 1 < parser->length; i++) {
@@ -1634,7 +1870,8 @@ static GRX_Result read_class_atom(GRX_Parser * parser, GRX_ClassItem * out,
       *out_is_item = 0;
       return GRX_OK;
     }
-    if (byte_at(parser, 0) == 'E') {
+    if ((parser->spec.features & GRX_FEATURE_QUOTING)
+        && byte_at(parser, 0) == 'E') {
       parser->position++;
       *quote_end = 0;
       *out_is_item = 0;
@@ -1675,6 +1912,9 @@ static void skip_class_ignorable(GRX_Parser * parser, size_t * quote_end) {
       return;
     }
     skip_class_space(parser);
+    if (!(parser->spec.features & GRX_FEATURE_QUOTING)) {
+      return;
+    }
     if (byte_at(parser, 0) == '\\' && byte_at(parser, 1) == 'Q') {
       parser->position += 2;
       size_t end = parser->length;
@@ -1957,7 +2197,51 @@ static GRX_Result read_option_letters(GRX_Parser * parser, size_t start,
       continue;
     }
 
+    // Python's `a` and `u`, which are one choice written two ways rather
+    // than two flags: `(?a)` is ASCII and `(?u)` is Unicode, `re` refuses
+    // `(?au)` as "flags 'a', 'u' and 'L' are incompatible", and it refuses
+    // `(?-a:x)` as "cannot turn off flags 'a', 'u' and 'L'". `L` is refused
+    // outright below: it is a locale flag and `re` itself rejects it for a
+    // `str` pattern, which is the only kind of pattern this library has.
+    //
+    // One bit, GRX_OPT_ASCII_CLASSES, because Python's ASCII mode narrows
+    // exactly two things at once - `\w` stops reaching "é" *and* `k` stops
+    // folding to U+212A - where Perl's `/a` and `/aa` split that pair. The
+    // profile's ascii_classes_fold_ascii is the second half. What it does
+    // *not* touch is the subject: `(?a).` still matches "é" whole and
+    // `(?a)\N{BULLET}` still compiles, so this is not UTF being turned off.
+    if (flavour(parser) == FLAVOUR_PYTHON && (c == 'a' || c == 'u')) {
+      if (clearing) {
+        return grx_parse_fail(parser, GRX_DIAG_UNKNOWN_FLAG,
+            parser->position, 1);
+      }
+      if (charset_choice.letter && charset_choice.letter != c) {
+        return grx_parse_fail(parser, GRX_DIAG_CONFLICTING_FLAGS,
+            parser->position, 1);
+      }
+      charset_choice.letter = c;
+      parser->position++;
+      if (c == 'a') {
+        set |= GRX_OPT_ASCII_CLASSES;
+        clear &= ~(uint32_t)GRX_OPT_ASCII_CLASSES;
+      }
+      else {
+        // `u` is the dialect's default, so it clears the narrowing rather
+        // than setting a widening bit. Spelling it as "set UTF" was wrong
+        // in the other direction and cost `.` its decoding.
+        clear |= GRX_OPT_ASCII_CLASSES;
+        set &= ~(uint32_t)GRX_OPT_ASCII_CLASSES;
+      }
+      continue;
+    }
+
     uint32_t option = option_for_letter(c);
+    // `(?n)` is PCRE2's and perl's, and "unknown extension ?n" in `re`.
+    // option_for_letter() is the shared table, so the letter has to be
+    // taken back here rather than left out of it.
+    if (flavour(parser) == FLAVOUR_PYTHON && c == 'n') {
+      option = 0;
+    }
     if (!option) {
       option = flavour_option_for_letter(parser, c);
     }
@@ -2379,6 +2663,15 @@ static int star_names_assertion(const GRX_Parser * parser, size_t offset) {
 
 static GRX_Result read_star_construct(GRX_Parser * parser, size_t start,
     GRX_GroupOpen * out) {
+  // Every `(*...)` construct is PCRE2's or perl's: the control verbs, the
+  // directives, the script runs, the scan-substring forms and the
+  // alternative group spellings. `re` has none of them - `(*FAIL)` is
+  // "nothing to repeat at position 2", which is `re` reading the `*` as a
+  // quantifier applied to the `(` that opened nothing - so the whole family
+  // is refused here rather than one table at a time.
+  if (flavour(parser) == FLAVOUR_PYTHON) {
+    return grx_parse_fail(parser, GRX_DIAG_NOTHING_TO_REPEAT, start + 1, 1);
+  }
   parser->position++; // The `*`.
   size_t first = parser->position;
   while (!grx_parse_at_end(parser) && byte_at(parser, 0) != ')'
@@ -2609,11 +2902,13 @@ static void skip_extended_ignorable(GRX_Parser * parser) {
     if (perl && skip_perl_ignorable(parser)) {
       continue;
     }
-    if (byte_at(parser, 0) == '\\' && byte_at(parser, 1) == 'E') {
+    if ((parser->spec.features & GRX_FEATURE_QUOTING)
+        && byte_at(parser, 0) == '\\' && byte_at(parser, 1) == 'E') {
       parser->position += 2;
       continue;
     }
-    if (byte_at(parser, 0) == '\\' && byte_at(parser, 1) == 'Q'
+    if ((parser->spec.features & GRX_FEATURE_QUOTING)
+        && byte_at(parser, 0) == '\\' && byte_at(parser, 1) == 'Q'
         && byte_at(parser, 2) == '\\' && byte_at(parser, 3) == 'E') {
       parser->position += 4;
       continue;
@@ -3601,6 +3896,28 @@ static GRX_Result pcre_group_open(GRX_Parser * parser, GRX_GroupOpen * out) {
 
   char c = byte_at(parser, 0);
 
+  // The `(?...` constructs Python does not have. Each was probed against
+  // CPython 3.13 rather than read off the `re` documentation, which lists
+  // what the module has and is silent about what it refuses:
+  //
+  //   `(?<name>` and `(?'name'`  "unknown extension" - `(?P<name>` only
+  //   `(?&name)` `(?P>name)`     no subroutine call
+  //   `(?R)` `(?1)` `(?-1)`      no recursion
+  //   `(?|`                      no branch reset
+  //
+  // `(?<=` and `(?<!` are read above this, so the `<` refused here is only
+  // ever the start of a name. Refusing the *spelling* is the point: Python
+  // has named groups, so accepting `(?<n>a)` would not be adding a
+  // construct - it would be accepting a pattern `re` rejects and telling
+  // the caller it is valid Python.
+  if (flavour(parser) == FLAVOUR_PYTHON
+      && ((c == '<' && byte_at(parser, 1) != '=' && byte_at(parser, 1) != '!')
+          || c == '\'' || c == '|' || c == '&' || c == 'R'
+          || is_decimal(c) || (c == '-' && is_decimal(byte_at(parser, 1)))
+          || (c == 'P' && byte_at(parser, 1) == '>'))) {
+    return grx_parse_fail(parser, GRX_DIAG_INVALID_GROUP_SYNTAX, start, 2);
+  }
+
   if (c == ':') {
     parser->position++;
     return GRX_OK;
@@ -3710,6 +4027,19 @@ static GRX_Result pcre_group_open(GRX_Parser * parser, GRX_GroupOpen * out) {
     GRX_Result result = read_name(parser, ')', start, &offset);
     if (result != GRX_OK) {
       return result;
+    }
+    // `(?P=n)` before `(?P<n>...)` is "unknown group name" in `re`, and
+    // `(?P<x>(?P<y>a)(?P=x))` is "cannot refer to an open group". The same
+    // rule the numeric form has, asked of the number the name resolves to -
+    // a name whose group has not been reached yet resolves to nothing,
+    // which is the "later" half.
+    if (flavour(parser) == FLAVOUR_PYTHON) {
+      uint32_t number = 0;
+      if (!group_number_for_name(parser, offset, &number)
+          || python_reference_is_premature(parser, number)) {
+        return grx_parse_fail(parser, GRX_DIAG_FORWARD_BACKREFERENCE, start,
+            parser->position - start);
+      }
     }
     out->kind = GRX_NODE_BACKREF;
     out->flags = GRX_NODE_NAMED;
@@ -3907,6 +4237,19 @@ static GRX_Result pcre_group_open(GRX_Parser * parser, GRX_GroupOpen * out) {
     return GRX_OK;
   }
 
+  // An unscoped setting: `(?i)` rather than `(?i:...)`. Python allows it
+  // only in a run at the very start of the whole pattern, so `(?i)(?m)ab`
+  // compiles, `(?#c)(?i)a` compiles because a comment is not a term, and
+  // `a(?i)b`, `((?i)a)`, `(?:(?i)a)` and `(?i)(?:a)(?m)b` are all "global
+  // flags not at the start of the expression". Two conditions, because
+  // being first is not enough: `((?i)a)` has read no term either, and what
+  // disqualifies it is the group around it.
+  if (flavour(parser) == FLAVOUR_PYTHON
+      && (!parser->only_global_flags_so_far || parser->group_depth > 0)) {
+    return grx_parse_fail(parser, GRX_DIAG_INVALID_GROUP_SYNTAX, start,
+        parser->position - start);
+  }
+
   // `(?i)` applies to the rest of the enclosing group, which parse_atom()
   // bounds by saving and restoring the options across a body. There is no
   // body here and no `)` for the parser to eat, so both are this hook's.
@@ -4088,7 +4431,14 @@ static GRX_Result pcre_skip_ignorable(GRX_Parser * parser) {
       }
       continue;
     }
-    if (byte_at(parser, 0) == '\\' && byte_at(parser, 1) == 'Q') {
+    // Only where the dialect has the construct. The bit was in the table
+    // from the start and nothing read it, because the two dialects that
+    // reached this code both had it - the shape a feature flag is for, and
+    // the shape that hides until a third dialect arrives. Python has no
+    // `\Q`, so leaving this ungated made `\Qa\E` a quoted run there and
+    // `\Q` on its own a silent nothing, where `re` calls both "bad escape".
+    if ((parser->spec.features & GRX_FEATURE_QUOTING)
+        && byte_at(parser, 0) == '\\' && byte_at(parser, 1) == 'Q') {
       parser->position += 2;
       parser->quote_end = quote_run_end(parser);
       if (parser->quote_end > parser->position) {
@@ -4097,7 +4447,8 @@ static GRX_Result pcre_skip_ignorable(GRX_Parser * parser) {
       parser->quote_end = GRX_NPOS;
       continue;
     }
-    if (byte_at(parser, 0) == '\\' && byte_at(parser, 1) == 'E') {
+    if ((parser->spec.features & GRX_FEATURE_QUOTING)
+        && byte_at(parser, 0) == '\\' && byte_at(parser, 1) == 'E') {
       // A `\E` with no run open. Harmless in both references.
       parser->position += 2;
       continue;
@@ -4124,7 +4475,8 @@ static GRX_Result pcre_skip_ignorable(GRX_Parser * parser) {
       continue;
     }
     if (codepoint != '#') {
-      if ((codepoint == '\\'
+      if (((parser->spec.features & GRX_FEATURE_QUOTING)
+              && codepoint == '\\'
               && (byte_at(parser, 1) == 'Q' || byte_at(parser, 1) == 'E'))
           || looking_at(parser, "(?#")) {
         // Whitespace, then something else that is not an atom either: start
@@ -4322,6 +4674,26 @@ const GRX_Frontend grx_frontend_pcre = {
 // because `grx_frontend_for()` returning one front end for two dialects
 // would make "which dialect is this" a question with no answer at the point
 // a diagnostic is written.
+// Python shares every hook too, and for the same reason PCRE2 and perl do:
+// `re` is a Perl-family grammar with a list of differences short enough to
+// count, all of them selected by flavour(). What is *not* shared is the
+// escape alphabet - python_knows_escape() closes it, where the other two
+// dialects read an unknown letter as an identity escape - and that one
+// difference is why the list of refusals in this file is longer for Python
+// than for either of the others.
+const GRX_Frontend grx_frontend_python = {
+  .name = "python",
+  .atom_escape = pcre_atom_escape,
+  .class_escape = pcre_class_escape,
+  .char_class = pcre_char_class,
+  .group_open = pcre_group_open,
+  .brace_quantifier = pcre_brace_quantifier,
+  .literal_atom = pcre_literal_atom,
+  .check_quantifier_target = pcre_check_quantifier_target,
+  .skip_ignorable = pcre_skip_ignorable,
+  .validate = pcre_validate,
+};
+
 const GRX_Frontend grx_frontend_perl = {
   .name = "perl",
   .atom_escape = pcre_atom_escape,

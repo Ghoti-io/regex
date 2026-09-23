@@ -160,6 +160,20 @@ typedef enum {
    * field is the unsplit remainder, and zero means no limit.
    */
   GRX_SPLIT_PERL,
+  /**
+   * CPython `re.split`. A hybrid, and the reason this enum has three values
+   * rather than two: the empty-subject and trailing-field rules are
+   * ECMAScript's - `re.split(",", "")` is `['']` and `re.split(",", "a,b,,")`
+   * keeps both trailing empties - while `maxsplit` is Perl's, counting
+   * *splits* rather than pieces and leaving the unsplit remainder as the
+   * last field, with zero meaning no limit instead of no pieces.
+   *
+   * Neither existing value was within rounding distance of it in both
+   * halves at once: `re.split(",", "a,b,c", maxsplit=1)` is `['a', 'b,c']`
+   * where `"a,b,c".split(",", 1)` is `['a']` and perl's `split` drops the
+   * trailing empties ECMAScript keeps.
+   */
+  GRX_SPLIT_PYTHON,
   GRX_SPLIT_COUNT              ///< Closes the enum; not a rule.
 } GRX_SplitRule;
 
@@ -214,6 +228,38 @@ typedef enum {
 #define GRX_TMPL_NAME_BARE GRX_BIT(9)
 /** @brief Perl's `$+{name}`, the named-capture hash. */
 #define GRX_TMPL_NAME_PLUS_BRACE GRX_BIT(10)
+/**
+ * @brief Python's `\g<...>`, which takes a name *or* a number.
+ *
+ * `re.sub` spells both kinds of reference through one form: `\g<name>`,
+ * `\g<1>` and `\g<0>` are all it, and `\g<0>` is the whole match where a
+ * bare `\0` is NUL. No other bit here fits, because every other spelling
+ * decides between a name and a number by which bracket it uses - and
+ * because this one is introduced by a *letter* after the sigil rather than
+ * by a bracket, so a reader looking only at the next character would read
+ * `\g` as an unknown escape.
+ *
+ * A number here is not the same as GRX_TMPL_NUMBER's: `\g<01>` is group 1,
+ * where a leading zero is the whole match in the dialects with
+ * GRX_TMPL_WHOLE_ZERO.
+ */
+#define GRX_TMPL_G_ANGLE GRX_BIT(20)
+/**
+ * @brief Python's template escapes: the C ones, octal, and an error.
+ *
+ * `re.sub` reads a template with the same closed-alphabet discipline the
+ * pattern has. `\n`, `\t`, `\r`, `\f`, `\v`, `\a` and `\b` are the control
+ * characters they name; `\\` is a backslash; `\0`, `\01` and `\012` are
+ * octal, so `\0` is NUL where `\g<0>` is the whole match; `A`,
+ * `\U00000041` and `\N{NAME}` are code points; and every other letter is
+ * "bad escape", not the letter itself.
+ *
+ * That last clause is why this is not GRX_TMPL_ESCAPE_ANY, which is sed's
+ * rule that anything after the backslash stands for itself. Under sed's
+ * rule `\n` is the letter n and `\q` is a q; under Python's the first is a
+ * newline and the second is an error.
+ */
+#define GRX_TMPL_PYTHON_ESCAPES GRX_BIT(21)
 /**
  * @brief A backslash escapes the next character, rather than a doubled sigil.
  *
@@ -393,6 +439,21 @@ typedef struct GRX_Profile {
    * with no UCP anywhere.
    */
   GRX_ShorthandSet shorthands_wide;
+  /**
+   * GRX_OPT_ASCII_CLASSES makes the folding ASCII-only as well.
+   *
+   * Python's `(?a)` against Perl's `/a`, which is the whole of the
+   * difference between them. Both narrow `\w`, `\d` and `\s` to ASCII.
+   * Perl leaves the folding alone - `/ai` still matches `s` against U+017F,
+   * and only the second `a` of `/aa` cuts the orbit at U+0080. CPython's
+   * one flag does both, and does it harder than `/aa` does: under `(?ai)`
+   * U+00C0 does not match U+00E0, where `/aai` still matches them because
+   * neither is ASCII.
+   *
+   * Not spelled as a second option bit, because a caller does not choose it
+   * - it is what the dialect's single ASCII flag means.
+   */
+  int ascii_classes_fold_ascii;
   GRX_FoldKind fold;                ///< Caseless folding without UTF.
   GRX_FoldKind fold_utf;            ///< Caseless folding with UTF.
   GRX_PropertyMatch property_match; ///< How `\p{...}` names are spelled.
@@ -408,6 +469,18 @@ typedef struct GRX_Profile {
    */
   int recursion_is_atomic;
   int multiline_by_default;         ///< Ruby: `^`/`$` are always line anchors.
+  /**
+   * `\B` does not match when the subject is empty.
+   *
+   * Python's, and Python's alone among the references installed here.
+   * Position 0 of "" has no word character on either side, so it is not a
+   * word boundary and `\B` holds there - which is what perl and Node both
+   * answer. CPython answers that it does not, and `re.search(r"\B", "")` is
+   * None. Everywhere else the three agree exactly, over `'a'`, `'ab'`,
+   * `' '`, `'  '`, `'-'`, `'a b'` and `'--'`: the empty subject is the
+   * whole of the difference, which is why this is a flag and not a mode.
+   */
+  int empty_subject_has_no_interior;
   /**
    * `^` with multiline matches after a newline that ends the subject.
    *

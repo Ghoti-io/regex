@@ -478,6 +478,24 @@ const uint32_t * grx_pattern_string(const GRX_Pattern * pattern,
  * only when the pattern has a named group *anywhere*, including after the
  * reference. ECMA-262 does the same two-pass reading for the same reason.
  */
+/**
+ * @brief One capturing group whose body the parser is currently inside.
+ *
+ * A linked list down the C stack, innermost first, so that "is group N still
+ * open" costs no allocation and is bounded by the nesting the parse already
+ * has. Python is the dialect that asks: `re` refuses a reference to a group
+ * that has not *closed* yet - `(a\1)` and `((a)\1)` are both "cannot refer
+ * to an open group" - where perl and PCRE2 allow both.
+ *
+ * A high-water mark of the highest group closed so far cannot answer it.
+ * `((a)\1)` closes group 2 before the reference and leaves group 1 open, so
+ * a mark would stand at 2 and accept a reference to 1 that `re` rejects.
+ */
+typedef struct GRX_OpenGroup {
+  uint32_t number;                    ///< Its capture number.
+  const struct GRX_OpenGroup * outer; ///< The group around it, or NULL.
+} GRX_OpenGroup;
+
 typedef struct GRX_Parser {
   const char * text;               ///< The pattern text.
   size_t length;                   ///< Its length in bytes.
@@ -502,6 +520,22 @@ typedef struct GRX_Parser {
    * GRX_SyntaxSpec::unmatched_close_is_literal turns on.
    */
   size_t group_depth;
+  /** Capturing groups whose bodies enclose the current position. */
+  const GRX_OpenGroup * open_groups;
+  /**
+   * Nothing but global option settings has been read yet.
+   *
+   * Python is the dialect that asks. `re` accepts `(?i)ab` and
+   * `(?i)(?m)ab` and refuses `a(?i)b`, `((?i)a)` and `(?i)(?:a)(?m)b` with
+   * "global flags not at the start of the expression" - an unscoped `(?i)`
+   * may stand only in a run at the very beginning, with comments allowed
+   * among them because a comment is not a term.
+   *
+   * Cleared by parse_term() when a term that is not one of those is read,
+   * which is what makes a comment transparent without a rule of its own:
+   * skip_ignorable() eats it before a term is ever built.
+   */
+  int only_global_flags_so_far;
   int named_groups;                ///< Non-zero if the pattern names a group.
   int in_lookbehind;               ///< Non-zero inside a lookbehind body.
   /**
@@ -730,6 +764,9 @@ extern const GRX_Frontend grx_frontend_pcre;
 
 /** @brief The Perl front end: the PCRE2 rules, less what Perl spells apart. */
 extern const GRX_Frontend grx_frontend_perl;
+
+/** @brief CPython's `re`: the Perl-family rules, less what Python lacks. */
+extern const GRX_Frontend grx_frontend_python;
 
 /** @brief POSIX and GNU, basic and extended. */
 extern const GRX_Frontend grx_frontend_posix_bre;

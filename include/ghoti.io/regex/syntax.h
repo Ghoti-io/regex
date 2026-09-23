@@ -242,6 +242,20 @@ typedef struct GRX_SyntaxSpec {
    */
   int allow_impossible_repeat;
   /**
+   * Non-zero when a lazy or possessive suffix must touch its quantifier.
+   *
+   * `a*?` is a lazy repeat in every dialect that has one, but the dialects
+   * disagree about what may stand between the `*` and the `?`. Perl and
+   * PCRE2 let the suffix be written apart from the rest - extended mode
+   * makes `a + +` a possessive repeat, and a comment is invisible, so
+   * `a*(?#c)?` is lazy. CPython requires adjacency: `a*?` is lazy, `a*+` is
+   * possessive, and `a*(?#c)?` and `(?x)a* ?` are both "multiple repeat".
+   *
+   * A flag rather than a hook because the shared parser is what skips the
+   * ignorable run, and the question is only whether to skip it here.
+   */
+  int quantifier_suffix_is_adjacent;
+  /**
    * Non-zero when a `)` with no `(` is an ordinary character.
    *
    * POSIX's own test set calls this one out - "gag me with a right

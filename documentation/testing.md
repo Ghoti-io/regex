@@ -30,7 +30,7 @@ and built by the conformance lane ([plan.md](plan.md)).
 | Node 22.23 (V8, Unicode 17.0) | ECMAScript | `tools/oracle/node.js`: `new RegExp(p, flags).exec(s)` with `d` for indices; converts UTF-16 indices to UTF-8 byte offsets | `GRX_ORACLE_NODE` |
 | Perl 5.40 | Perl | `tools/oracle/perl.pl`: `@-`/`@+`, `%+` | `GRX_ORACLE_PERL` |
 | pcre2test 10.46 | PCRE2 | `tools/oracle/pcre2.py` writing pcre2test input and reading its output; `grep -P` is not enough (line-oriented, no spans) | `GRX_ORACLE_PCRE2TEST` |
-| Python 3.13 | Python | `tools/oracle/python.py`: `re.search`, `m.regs` | `GRX_ORACLE_PYTHON` |
+| CPython 3.13.5 | Python | **no driver process**: `tools/oracle/python_diff.py` imports `re` and calls it directly, converting CPython's character offsets to UTF-8 byte offsets the way `node_match.mjs` converts UTF-16 ones. `split_diff.py` and `replace_diff.py` do the same for `re.split` and `re.sub` | available |
 | glibc 2.41 `regcomp` | GNU BRE/ERE | `tools/oracle/posix_match.c`, built by the Makefile when present | `GRX_ORACLE_POSIX` |
 | musl 1.2.6 `regcomp` | POSIX BRE/ERE, with glibc | `tools/oracle/musl_match.c`: musl's own regex sources, fetched by `tools/corpus/fetch.sh musl` and compiled into the driver. Hosted on glibc, so it declines a NUL (musl has no `REG_STARTEND`) and any byte >= 0x80 (the host's `mbtowc`). Never decides alone - see below | `GRX_ORACLE_MUSL` |
 | GNU grep 3.11, sed 4.9 | GNU BRE/ERE (single-line subjects) | `tools/oracle/gnu.sh` | `GRX_ORACLE_GNU` |
@@ -502,6 +502,63 @@ the atoms have gone stale and fails. That guard fired on its first run, when
 look like a clean result: POSIX basic REs have no alternation, so the
 empty-branch half of this question cannot be spelled in one. Its cases ask
 the other half, two quantified groups next to each other.
+
+### The Python differential
+
+`tools/oracle/python_diff.py`, WP-30's gate, and the only one here whose
+reference is not a subprocess. CPython's `re` is importable by the tool that
+generates the cases, so a row costs a function call: **600,000 rows in under
+four seconds**, against the tens of thousands a fork-per-batch oracle manages
+in the same time. `make check-oracle-python` runs it with `--strict`.
+
+That difference is the finding, not a footnote about speed. The front end was
+built, the first run of 1,200 rows drove it from 85% disagreement down to
+three, and then **every remaining defect came from turning the dial up** -
+600,000 rows and seven seeds, 4.2 million rows in all. None of them came from
+reading the `re` documentation more carefully.
+
+The tool reports what the *reference* answered beside the disagreement count:
+
+```
+python_diff: 600000 rows (146460 compile, 180716 match, 272824 nomatch), 0 disagreements
+```
+
+A run whose `match` share collapses has stopped asking the question even
+though its disagreement count is still zero. That line is there because
+"0 disagreements" over rows the oracle refused outright is a gate agreeing
+about nothing - the shape `posix_diff.py` and `sed_diff.py` were each blind
+to in turn.
+
+**Its vocabulary carries what Python refuses**, not only what it accepts. A
+front end's refusals are code too: `\p{L}`, `\G`, `(?R)`, `(*FAIL)`,
+`(?<n>a)`, `a*(?#c)?` and two dozen more are generated at one row in eight,
+and a row where this library accepts one is a pattern it calls valid Python
+that `re` rejects. That half found the `(*...)` family and the
+global-flag-placement rule, both of which the accepting vocabulary had no way
+to reach.
+
+**And the vocabulary was narrowed to match a belief, once.** Its lookbehind
+atoms were all fixed-width, with a comment saying "lookbehind is fixed-width
+here, so every one generated is" - which described the dialect correctly and
+made the gate unable to ask whether *this library* enforced it. It did not:
+`GRX_LOOKBEHIND_FIXED` had been in the profile since the table was written
+and was read by nothing. Four variable-width atoms later, the gate found it
+in one run. A generator written from what the reference does is a generator
+that cannot find where the implementation diverges.
+
+Two other defects it found were in shared code and had been reachable by the
+Perl-family differentials for as long as those had existed: the prescan lost
+its group count after any class holding an escape (`[\d](a)\1` was an invalid
+backreference in `perl` and `pcre` too), and `GRX_FEATURE_QUOTING` was read
+by nothing because both dialects that reached the `\Q` code had it.
+
+The split and template halves have arms of their own -
+`split_diff.py --dialect python` and `replace_diff.py --dialect python`, both
+also in-process - and both earned their place immediately. Six hand-written
+split cases passed while 1,848 generated rows did not; twelve hand-written
+template cases passed while the generator found six rules they had missed,
+including that `\u`, `\U`, `\N{...}` and `\x` are *pattern* escapes in Python
+and errors in a template. One dialect, two closed alphabets.
 
 ### The cross-engine check
 

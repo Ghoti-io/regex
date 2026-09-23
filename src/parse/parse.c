@@ -385,6 +385,14 @@ static void prescan(GRX_Parser * parser) {
           && parser->text[i + 1] == '(') {
         parser->group_count++;
       }
+      // An escape inside a class is a *member* of it, so the `]` after it is
+      // no longer the one that may be a literal. Without this the flag stayed
+      // set across `[\d]`, the closing bracket was read as a literal, the
+      // class never ended, and every group after it went uncounted:
+      // `[\d](a)\1` was "invalid backreference" in perl, pcre and python
+      // where all three references compile it. ECMAScript was immune only
+      // because allow_empty_class makes the test it is part of vacuous.
+      first_in_class = 0;
       i++; // Skip whatever it escapes, including `[`, `]` and `(`.
       continue;
     }
@@ -541,9 +549,15 @@ static GRX_Result parse_quantifier(
 
   // The suffix is part of the quantifier, and extended mode lets it be
   // written apart from the rest: `a + +` is `a++`, and is in the corpus.
-  GRX_Result skipped_suffix = skip_ignorable(parser);
-  if (skipped_suffix != GRX_OK) {
-    return skipped_suffix;
+  // Not everywhere, though - CPython wants the suffix adjacent, and reads
+  // anything that intervenes as starting a second quantifier, which is an
+  // error. Skipping here would make `a*(?#c)?` a lazy repeat where `re`
+  // refuses the pattern outright.
+  if (!parser->spec.quantifier_suffix_is_adjacent) {
+    GRX_Result skipped_suffix = skip_ignorable(parser);
+    if (skipped_suffix != GRX_OK) {
+      return skipped_suffix;
+    }
   }
 
   // The lazy suffix is only read by a dialect that has one. Where there is
@@ -649,6 +663,17 @@ static GRX_Result parse_atom(GRX_Parser * parser, uint32_t * out_node) {
       }
       parser->depth++;
       parser->group_depth++;
+      // Pushed for every capturing group, read only by the dialects that
+      // refuse a reference into one that has not closed. The frame lives on
+      // this C stack frame, which is exactly as long as the body it spans.
+      const GRX_OpenGroup * outer_open = parser->open_groups;
+      GRX_OpenGroup this_group = {
+        .number = open.a,
+        .outer = outer_open,
+      };
+      if (open.flags & GRX_NODE_CAPTURING) {
+        parser->open_groups = &this_group;
+      }
       int outer_lookbehind = parser->in_lookbehind;
       int outer_lookaround = parser->in_lookaround;
       if (open.kind == GRX_NODE_LOOKAROUND) {
@@ -675,6 +700,7 @@ static GRX_Result parse_atom(GRX_Parser * parser, uint32_t * out_node) {
       }
       parser->depth--;
       parser->group_depth--;
+      parser->open_groups = outer_open;
       parser->in_lookbehind = outer_lookbehind;
       parser->in_lookaround = outer_lookaround;
       parser->options = outer_options;
@@ -760,6 +786,15 @@ static GRX_Result parse_term(GRX_Parser * parser, uint32_t * out_node) {
   GRX_Result result = parse_atom(parser, out_node);
   if (result != GRX_OK) {
     return result;
+  }
+
+  // A term has been read, so a later unscoped option setting is no longer at
+  // the start of the pattern - unless this term *was* one. Only the
+  // dialects that care ever read the flag; see its declaration.
+  const GRX_Node * term = grx_pattern_node(parser->pattern, *out_node);
+  if (!term || term->kind != GRX_NODE_OPTIONS
+      || (term->flags & GRX_NODE_SCOPED)) {
+    parser->only_global_flags_so_far = 0;
   }
 
   int applied = 0;
@@ -1011,6 +1046,8 @@ GRX_Result grx_parse_pattern(const char * pattern, size_t length,
     .depth = 0,
     .group_count = 0,
     .group_depth = 0,
+    .open_groups = NULL,
+    .only_global_flags_so_far = 1,
     .groups_opened = 0,
     .named_groups = 0,
     .in_lookbehind = 0,

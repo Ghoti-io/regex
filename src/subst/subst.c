@@ -40,6 +40,7 @@
 
 #include "../compile/compile_internal.h"
 #include "../core/core_internal.h"
+#include "../unicode/unicode_internal.h"
 #include "subst_internal.h"
 
 // --------------------------------------------------------------------------
@@ -135,9 +136,25 @@ static int has_named_groups(const GRX_Regex * regex) {
  * @return Digits consumed, or 0 when no group is named.
  */
 static size_t digits_naming_a_group(const char * text, size_t length,
-    size_t at, size_t captures, uint32_t * out_group) {
+    size_t at, size_t captures, int fallback, uint32_t * out_group) {
   size_t available = length - at;
+  // How many digits are actually *there*, up to two. Not the window: `\1X`
+  // has one digit in a window of two, and a rule written on the window would
+  // refuse it.
+  size_t digits = 0;
+  while (digits < 2 && digits < available && text[at + digits] >= '0'
+      && text[at + digits] <= '9') {
+    digits++;
+  }
   for (size_t take = available < 2 ? available : 2; take >= 1; take--) {
+    // Python does not fall back to a shorter reading. `\12` against a
+    // two-group pattern is "invalid group reference 12" in `re`, where
+    // ECMAScript reads it as group 1 and a literal "2" - so the reference's
+    // width is decided by the digits present, and if that group does not
+    // exist there is no shorter reference to try.
+    if (!fallback && take != digits) {
+      continue;
+    }
     uint32_t value = 0;
     size_t i = 0;
     for (; i < take; i++) {
@@ -209,6 +226,123 @@ static size_t named_reference(const GRX_Regex * regex, const char * text,
     *out_kind = GRX_TPL_NOTHING;
   }
   return name_length + 2;
+}
+
+/**
+ * Read one of Python's template escapes, the backslash already located.
+ *
+ * `re.sub`'s alphabet is closed the way its pattern alphabet is, so an
+ * unknown letter is an error rather than the letter. The numeric forms are
+ * not here: `\1` is a group and is read by the caller's GRX_TMPL_NUMBER
+ * branch, and only a *leading zero* makes a digit run octal, which is what
+ * lets `\0` be NUL while `\g<0>` is the whole match.
+ *
+ * @param text The template.
+ * @param length Its length.
+ * @param after The offset just past the backslash.
+ * @param out_codepoint Receives the code point the escape denotes.
+ * @return Bytes consumed from `after` onwards, or 0 when this is not one.
+ */
+/**
+ * How many digits after a backslash Python reads as *octal* rather than as a
+ * group number, or 0 when they are a group reference.
+ *
+ * Two shapes, probed against CPython 3.13 with twelve groups in the pattern
+ * so that both readings were available for every case:
+ *
+ *   `\0`, `\01`, `\012`   a leading zero is octal, up to three digits
+ *   `\101`                three octal digits are octal - `\1234` is "S4"
+ *   `\1`, `\12`, `\18`    one or two digits otherwise are a group
+ *   `\108`                `8` is not octal, so this is group 10 then "8"
+ *
+ * The three-digit case is why this cannot be a test on the first digit
+ * alone: `\12` is group 12 and `\123` is a code point.
+ *
+ * @param text The template.
+ * @param length Its length.
+ * @param after The offset just past the backslash.
+ * @return Digits to consume as octal, or 0 for "this is a group".
+ */
+static size_t python_octal_run(
+    const char * text, size_t length, size_t after) {
+  if (after >= length) {
+    return 0;
+  }
+  int octal_digit = text[after] >= '0' && text[after] <= '7';
+  if (text[after] == '0') {
+    size_t taken = 0;
+    while (taken < 3 && after + taken < length
+        && text[after + taken] >= '0' && text[after + taken] <= '7') {
+      taken++;
+    }
+    return taken;
+  }
+  if (!octal_digit || after + 2 >= length) {
+    return 0;
+  }
+  for (size_t digit = 1; digit < 3; digit++) {
+    if (text[after + digit] < '0' || text[after + digit] > '7') {
+      return 0;
+    }
+  }
+  return 3;
+}
+
+static size_t python_escape(const char * text, size_t length, size_t after,
+    uint32_t * out_codepoint, int * out_verbatim) {
+  *out_verbatim = 0;
+  if (after >= length) {
+    return 0;
+  }
+
+  // A backslash before anything that is not a letter or a digit keeps *both*
+  // characters: `re.sub("(a)", r"\$", "a")` is `\$`, two characters, where
+  // sed's rule would give `$` and Perl's would give `$`. So the error case
+  // below is only ever an unknown *alphanumeric*.
+  {
+    char c = text[after];
+    int alnum = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+        || (c >= '0' && c <= '9');
+    if (!alnum && c != '\\') {
+      *out_verbatim = 1;
+      return 1;
+    }
+  }
+  switch (text[after]) {
+    case 'n': *out_codepoint = 0x0A; return 1;
+    case 't': *out_codepoint = 0x09; return 1;
+    case 'r': *out_codepoint = 0x0D; return 1;
+    case 'f': *out_codepoint = 0x0C; return 1;
+    case 'v': *out_codepoint = 0x0B; return 1;
+    case 'a': *out_codepoint = 0x07; return 1;
+    case 'b': *out_codepoint = 0x08; return 1;
+    case '\\': *out_codepoint = '\\'; return 1;
+    default: break;
+  }
+
+  size_t octal = python_octal_run(text, length, after);
+  if (octal) {
+    uint32_t value = 0;
+    for (size_t digit = 0; digit < octal; digit++) {
+      value = value * 8 + (uint32_t)(text[after + digit] - '0');
+    }
+    if (value > 0377u) {
+      // `re`: "octal escape value \777 outside of range 0-0o377". A byte,
+      // not a code point, which is what "octal" means in both references
+      // that have it.
+      return 0;
+    }
+    *out_codepoint = value;
+    return octal;
+  }
+
+  // Nothing else. `\u`, `\U`, `\N{NAME}` and `\x` are all *pattern* escapes
+  // in Python and all "bad escape" in a template - the two alphabets are
+  // closed separately, and the template's is the smaller. This file
+  // implemented the pattern's set here first, on the reasonable-looking
+  // assumption that one dialect has one alphabet, and
+  // tools/oracle/replace_diff.py's python arm is what said otherwise.
+  return 0;
 }
 
 /**
@@ -452,6 +586,61 @@ GRX_Result grx_template_parse(const GRX_TemplateSpec * spec,
               1 + consumed);
         }
       }
+      else if (c == 'g' && (spec->features & GRX_TMPL_G_ANGLE)
+          && after + 1 < length && text[after + 1] == '<') {
+        // Python's `\g<...>`, the one spelling that takes either kind of
+        // reference. A number is tried first and a name second, because
+        // `re` resolves it that way: a group *named* `1` cannot be written
+        // in a Python pattern - `(?P<1>x)` is "bad character in group name"
+        // - so there is no case where the two readings compete.
+        size_t close = after + 2;
+        while (close < length && text[close] != '>') {
+          close++;
+        }
+        if (close >= length) {
+          // `re`: "missing >, unterminated name". An unterminated `\g<` is
+          // an error and not a literal run - leaving `consumed` at zero here
+          // let the whole thing stand as text, because this branch had
+          // already been taken and the escape branch below could not see it.
+          grx_template_clear(out_template);
+          return fail(out_error, GRX_DIAG_TEMPLATE_UNKNOWN_GROUP, start,
+              length - start);
+        }
+        {
+          size_t inner = after + 2;
+          size_t inner_length = close - inner;
+          int numeric = inner_length > 0;
+          uint32_t value = 0;
+          for (size_t digit = 0; digit < inner_length; digit++) {
+            if (text[inner + digit] < '0' || text[inner + digit] > '9') {
+              numeric = 0;
+              break;
+            }
+            value = value * 10 + (uint32_t)(text[inner + digit] - '0');
+          }
+          if (numeric) {
+            // `\g<0>` is the whole match, where a bare `\0` is NUL.
+            kind = value == 0 ? GRX_TPL_WHOLE
+                : value <= captures ? GRX_TPL_GROUP
+                                    : GRX_TPL_NOTHING;
+            group = value;
+            consumed = close - after + 1;
+          }
+          else {
+            consumed = named_reference(regex, text, length, after + 1, '<',
+                '>', &kind, &group, &name_at, &name_length);
+            if (consumed) {
+              consumed += 1;
+            }
+          }
+          if (consumed && kind == GRX_TPL_NOTHING
+              && spec->missing == GRX_TMPL_MISSING_ERROR) {
+            grx_template_clear(out_template);
+            return fail(out_error, GRX_DIAG_TEMPLATE_UNKNOWN_GROUP, start,
+                1 + consumed);
+          }
+        }
+      }
       else if (c == '+' && (spec->features & GRX_TMPL_NAME_PLUS_BRACE)
           && after + 1 < length && text[after + 1] == '{') {
         // Perl's `$+{name}`: the named-capture hash, spelled as a lookup.
@@ -507,9 +696,16 @@ GRX_Result grx_template_parse(const GRX_TemplateSpec * spec,
           return fail(out_error, GRX_DIAG_TEMPLATE_UNKNOWN_GROUP, start, 2);
         }
       }
-      else if (c >= '0' && c <= '9' && (spec->features & GRX_TMPL_NUMBER)) {
-        consumed
-            = digits_naming_a_group(text, length, after, captures, &group);
+      else if (c >= '0' && c <= '9' && (spec->features & GRX_TMPL_NUMBER)
+          && !((spec->features & GRX_TMPL_PYTHON_ESCAPES)
+              && python_octal_run(text, length, after))) {
+        // The octal exclusion is Python's: a leading zero, or three octal
+        // digits, is a code point there rather than a group - `\0` is NUL,
+        // `\012` is a newline and `\101` is "A", while `\1` and `\12` are
+        // groups. Without it this branch claimed all of them as group
+        // numbers and reported the ones with no such group as missing.
+        consumed = digits_naming_a_group(text, length, after, captures,
+            !(spec->features & GRX_TMPL_PYTHON_ESCAPES), &group);
         if (consumed) {
           kind = GRX_TPL_GROUP;
         }
@@ -539,6 +735,38 @@ GRX_Result grx_template_parse(const GRX_TemplateSpec * spec,
           grx_template_clear(out_template);
           return fail(out_error, GRX_DIAG_TEMPLATE_UNKNOWN_GROUP, start, 2);
         }
+      }
+      else if (spec->features & GRX_TMPL_PYTHON_ESCAPES) {
+        // Before the fallback below and after every reference form above,
+        // so that `\1` is still a group and `\g<1>` is still a group. What
+        // reaches here is a backslash that no reference claimed.
+        uint32_t codepoint = 0;
+        int verbatim = 0;
+        size_t taken
+            = python_escape(text, length, after, &codepoint, &verbatim);
+        if (!taken) {
+          // "bad escape \\q": an unknown *alphanumeric* is an error here,
+          // which is the whole difference from GRX_TMPL_ESCAPE_ANY. A
+          // non-alphanumeric never reaches this - it is verbatim above.
+          grx_template_clear(out_template);
+          return fail(out_error, GRX_DIAG_INVALID_ESCAPE, start, 2);
+        }
+        GRX_Result result = emit_literal(out_template, literal_from,
+            start - literal_from);
+        if (result == GRX_OK) {
+          // Verbatim keeps the backslash too, so the run named here is two
+          // characters of the template rather than one decoded code point.
+          result = verbatim
+              ? emit_literal(out_template, start, 2)
+              : emit(out_template, GRX_TPL_CODEPOINT, codepoint, 0, 0);
+        }
+        if (result != GRX_OK) {
+          grx_template_clear(out_template);
+          return fail(out_error, GRX_DIAG_OUT_OF_MEMORY, start, 2);
+        }
+        i = after + taken;
+        literal_from = i;
+        continue;
       }
       else if (spec->features & GRX_TMPL_ESCAPE_ANY) {
         // Last, so that every rule above claims its character first. What is
@@ -661,6 +889,14 @@ static GRX_Result expand(const GRX_Template * tmpl, const GRX_Match * match,
       case GRX_TPL_LITERAL:
         result = push(out, tmpl->text + op->offset, op->length);
         break;
+      case GRX_TPL_CODEPOINT: {
+        // The one piece whose bytes are in neither the template nor the
+        // subject: a decoded escape. See GRX_TPL_CODEPOINT.
+        char encoded[4];
+        size_t width = grx_unicode_utf8_encode(op->a, encoded);
+        result = push(out, encoded, width);
+        break;
+      }
       case GRX_TPL_WHOLE:
         result = push(out, subject + whole.start, whole.end - whole.start);
         break;
@@ -916,6 +1152,13 @@ GRX_Result grx_regex_split(const GRX_Regex * regex, const char * subject,
     return GRX_ERR_INVALID;
   }
   const int perl_rule = profile.split == GRX_SPLIT_PERL;
+  // Python's, which is a third rule and not a blend that either of the other
+  // two can be bent into. It is the plain walk: every match separates,
+  // including an empty one, with no special case for an empty subject and
+  // none for a trailing empty field. `re.split("x*", "")` is `['', '']`
+  // where ECMAScript's `"".split(/x*/)` is `[]` and perl's is `()` - three
+  // references, three answers, for the shortest question the function has.
+  const int python_rule = profile.split == GRX_SPLIT_PYTHON;
 
   // perlfunc: a split pattern of `/^/` "is treated as if the /m modifier
   // were supplied". Which patterns count is not what that sentence suggests,
@@ -976,15 +1219,19 @@ GRX_Result grx_regex_split(const GRX_Regex * regex, const char * subject,
   // same spelling for the opposite thing.
   const int drop_trailing
       = perl_rule && (limit == 0 || limit == GRX_NPOS);
+  // Python's `maxsplit` counts splits and not pieces, and zero means no
+  // limit - perl's spelling, against ECMAScript's, where zero means no
+  // pieces at all. The field count below is what makes the *remainder*
+  // stand as the last field, which is the half Python takes from perl.
   const size_t field_limit
-      = (perl_rule && limit == 0) ? GRX_NPOS : limit;
+      = ((perl_rule || python_rule) && limit == 0) ? GRX_NPOS : limit;
 
   GRX_Arena pieces;
   grx_arena_init(&pieces, allocator, sizeof(GRX_Capture), 0,
       GRX_DIAG_OUT_OF_MEMORY);
 
   GRX_Result result = GRX_OK;
-  if (!perl_rule && !limit) {
+  if (!perl_rule && !python_rule && !limit) {
     // ECMAScript's `split(re, 0)`: no pieces, whatever the subject is.
     goto publish_pieces;
   }
@@ -1010,7 +1257,11 @@ GRX_Result grx_regex_split(const GRX_Regex * regex, const char * subject,
     // The empty subject is its own rule, and the two dialects disagree
     // flatly: ECMAScript yields one empty piece unless the pattern matches
     // the empty string, and perl yields nothing whatever the pattern does.
-    if (resolved.begin == end) {
+    // Python has no empty-subject rule of its own: the walk below answers
+    // it. An empty subject with a pattern that does not match yields the one
+    // empty piece the final-field step emits, and one that matches empty
+    // yields two - the piece before the separator and the piece after it.
+    if (resolved.begin == end && !python_rule) {
       if (!perl_rule) {
         GRX_SearchOptions probe = resolved;
         result = grx_regex_search_ex(regex, subject, length, &probe, match,
@@ -1040,11 +1291,18 @@ GRX_Result grx_regex_split(const GRX_Regex * regex, const char * subject,
       // trailing-empty drop removes the field again - which is why the
       // twenty-four hand-written probe cases missed it and the generator
       // found it.
-      if (whole.start >= end && !perl_rule) {
+      if (whole.start >= end && !perl_rule && !python_rule) {
         break;
       }
-      if (whole.end == piece_start) {
+      if (whole.end == piece_start && !python_rule) {
         // An empty match where this piece begins. Not a separator; step on.
+        //
+        // ECMA-262 22.2.6.14's rule, and perl's. Python has no such rule
+        // since 3.7: every match separates, so `re.split("x*", "abc")` is
+        // `['', 'a', 'b', 'c', '']` with a leading empty piece that the
+        // other two do not produce, and `re.split("x*", "")` is `['', '']`
+        // rather than one piece or none. The loop still terminates because
+        // grx_regex_search_next() is what advances past an empty match.
         result = grx_regex_search_next(regex, subject, length, &resolved,
             match, &matched);
         continue;
@@ -1054,12 +1312,28 @@ GRX_Result grx_regex_split(const GRX_Regex * regex, const char * subject,
       // the last field it produces is the whole unsplit remainder rather than
       // a truncation. So it stops one short and falls out to the trailing
       // piece below, where ECMAScript stops dead at `limit` pieces.
+      // Python counts splits the way perl counts fields, and leaves the
+      // remainder whole for the same reason, so it takes this break too.
+      // perl's LIMIT is a count of *fields*, so it stops one short and lets
+      // the trailing piece below be the remainder. Python's `maxsplit` is a
+      // count of *splits*, which is the same remainder reached one field
+      // later: `re.split(",", "a,b,c", maxsplit=1)` is `['a', 'b,c']` where
+      // `split /,/, "a,b,c", 1` is `("a,b,c")`.
       if (perl_rule && field_limit != GRX_NPOS && fields + 1 >= field_limit) {
+        break;
+      }
+      if (python_rule && field_limit != GRX_NPOS && fields >= field_limit) {
         break;
       }
 
       result = add_piece(&pieces, piece_start, whole.start);
-      if (result != GRX_OK || (!perl_rule && pieces.count >= limit)) {
+      // The `pieces.count >= limit` stop is ECMAScript's alone: its `limit`
+      // counts the *pieces* produced, captures among them, and truncates.
+      // Python's counts splits and has already been spent above, and with
+      // `limit` zero meaning "no limit" there this test would have stopped
+      // the walk after the very first piece - which is what it did.
+      if (result != GRX_OK
+          || (!perl_rule && !python_rule && pieces.count >= limit)) {
         goto done;
       }
       fields++;
@@ -1068,7 +1342,8 @@ GRX_Result grx_regex_split(const GRX_Regex * regex, const char * subject,
         GRX_Capture capture = {GRX_NPOS, GRX_NPOS};
         grx_match_group(match, group, &capture);
         result = grx_arena_append(&pieces, &capture, NULL);
-        if (result != GRX_OK || (!perl_rule && pieces.count >= limit)) {
+        if (result != GRX_OK
+            || (!perl_rule && !python_rule && pieces.count >= limit)) {
           goto done;
         }
       }
