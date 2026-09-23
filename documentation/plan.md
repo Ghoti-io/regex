@@ -480,8 +480,32 @@ what POSIX requires and what **neither** glibc nor musl gives. Six such
 patterns are carried by name in `tools/oracle/submatch_diff.py`, with the
 answer each must produce, so the exemption cannot hide a defect.
 
-**What it costs.** About 7% on the POSIX rows for the same work, and one
-boundary: a program only the backtracker can run - a basic RE with a
+**What it costs.** Measured on the same patterns compiled for each rule,
+with compilation and process start outside the clock, against an -O0 build
+(this library's `CFLAGS` carries `-O0` in both build modes, so only the
+ratio means anything):
+
+| workload | steps | time per search |
+| --- | --- | --- |
+| dense with ties, `gnu-ere` | 3,580 | 4.47 us |
+| dense with ties, `posix-ere` | 3,640 (+1.7%) | 6.01 us (+35%) |
+| no ties at all, `gnu-ere` | 3,261 | 3.05 us |
+| no ties at all, `posix-ere` | 3,261 (+0%) | 4.31 us (+41%) |
+
+The rule itself does almost no work: steps - what `max_steps` counts - rise
+1.7% where divisions actually compete and **not at all** where none do, so
+the relaxation hardly ever fires. What the time is paying for is fixed
+overhead on every search under the rule, which is why the workload with
+nothing to compare is hit *harder* than the one with plenty. It is the
+retained `best` state the Pike VM holds at every program counter: that
+reference makes each thread's state shared, so the next `SAVE` takes
+`state_for_write`'s copy rather than mutating in place. Two ways out are
+open and neither is taken yet - a program with no capture group can have no
+division to compare and could skip the rule outright, and only a program
+counter with more than one predecessor can ever be arrived at twice, which
+is a compile-time property.
+
+And one boundary: a program only the backtracker can run - a basic RE with a
 backreference - keeps the first-path division, because the comparison costs
 the short-circuit that stops `\(a*\)*\1` walking an exponential tree and
 musl refuses such patterns outright, so no two references could decide the
