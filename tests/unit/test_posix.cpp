@@ -288,6 +288,50 @@ TEST(Posix, AnEmptyIterationRunsOnlyWhileTheRepeatHasNotMoved) {
   EXPECT_EQ(group("(a*)*", "bc", GRX_SYNTAX_ECMASCRIPT, 1), "unset");
 }
 
+TEST(Posix, AnEmptyAlternativeYieldsToTheBranchBesideIt) {
+  // The tie POSIX answers and this library's engines do not. `(|a)(a|)`
+  // against "a" can put the `a` in either group and finish at the same
+  // place; both engines take whichever path they reach first, and with the
+  // empty branch written first that is the one giving group 1 nothing.
+  // glibc and musl both give it the `a`, so this is not glibc's habit.
+  //
+  // What the rule is, exactly, was read off tools/oracle/submatch_diff.py:
+  // an alternative with nothing in it is considered after the one beside
+  // it. Not moved to the end - one position - and not a rule about matching
+  // empty. See documentation/dialects.md section 6.
+  EXPECT_EQ(group("(|a)(a|)", "a", kEre, 1), "0-1");
+  EXPECT_EQ(group("(|a)(a|)", "a", kEre, 2), "1-1");
+  EXPECT_EQ(group("(|ab)([ab]*)", "ab", kEre, 1), "0-2");
+  EXPECT_EQ(group("(|a)a?", "a", kEre, 1), "0-1");
+  EXPECT_EQ(group("\\(\\|a\\)\\(a\\|\\)", "a", kBre, 1), "0-1");
+
+  // "Nothing in it" is about what the branch generates, not how it is
+  // spelled: a repeat that runs zero times leaves no instruction behind,
+  // and both references treat such a branch as the empty one it is - even
+  // when it holds a group, which stays unset either way.
+  EXPECT_EQ(group("(a{0}|a)(a|)", "a", kEre, 1), "0-1");
+  EXPECT_EQ(group("(a{0}b{0}|a)(a|)", "a", kEre, 1), "0-1");
+  EXPECT_EQ(group("((a){0}|a)(a|)", "a", kEre, 1), "0-1");
+  EXPECT_EQ(group("((a){0}|a)(a|)", "a", kEre, 2), "unset");
+
+  // And not about what a branch *can* match. `b*` and `()` can both match
+  // nothing, and both references leave them exactly where they were - so
+  // group 1 keeps the empty match here.
+  EXPECT_EQ(group("(b*|a)(a|)", "a", kEre, 1), "0-0");
+  EXPECT_EQ(group("(()|a)(a|)", "a", kEre, 1), "0-0");
+
+  // One position, not a sort. `(|b|a)` against "a" becomes `(b||a)`, whose
+  // first branch fails and whose second matches nothing, so group 1 is
+  // still empty. musl answers 0-1 here; glibc answers this, and where the
+  // two references differ this library follows glibc. That set is WP-26.
+  EXPECT_EQ(group("(|b|a)(a|)", "a", kEre, 1), "0-0");
+
+  // The first-match dialects are untouched, because there the order the
+  // branches are written in is the whole of the meaning.
+  EXPECT_EQ(group("(|a)(a|)", "a", GRX_SYNTAX_ECMASCRIPT, 1), "0-0");
+  EXPECT_EQ(group("(|a)(a|)", "a", GRX_SYNTAX_PERL, 1), "0-0");
+}
+
 TEST(Posix, TheReplacementTemplateIsSedsBecausePosixHasNone) {
   // POSIX's regular expressions say nothing about substitution, so the
   // reference for these four rows is sed's `s` command rather than a regex

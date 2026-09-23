@@ -703,7 +703,8 @@ tools: $(APP_DIR)/$(TARGET) $(TOOLS)
 check-oracles: ## Run every differential check against the reference implementation
 check-oracles: check-oracle-syntax check-oracle-match check-oracle-properties \
 	check-oracle-numeric-properties check-oracle-string-properties \
-	check-oracle-posix check-oracle-perl check-oracle-perl-syntax \
+	check-oracle-posix check-oracle-submatch \
+	check-oracle-perl check-oracle-perl-syntax \
 	check-oracle-script-runs check-oracle-newlines check-oracle-callouts \
 	check-oracle-sed \
 	check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
@@ -801,6 +802,20 @@ check-oracle-posix: $(TOOLS)
 		exit 0; \
 	fi; \
 	python3 tools/oracle/posix_diff.py
+
+check-oracle-submatch: ## Compare which spans the groups get, against glibc and musl
+# posix_diff.py asks whether the same text matched; this asks which group got
+# which part of it when more than one answer fits. Nothing asked that before:
+# Spencer's vectors contain no case where two assignments share one extent,
+# and posix_diff's patterns reach one only by accident. Built on purpose out
+# of ambiguous pieces it found 316 cases across three dialects at once, all
+# of one rule - see documentation/dialects.md section 6.
+check-oracle-submatch: $(TOOLS)
+	@if ! command -v python3 >/dev/null 2>&1; then \
+		printf "check-oracle-submatch: skipped (no python3)\n"; \
+		exit 0; \
+	fi; \
+	python3 tools/oracle/submatch_diff.py --strict
 
 check-oracle-replace: ## Compare the ECMAScript and PCRE2 templates against node and pcre2
 # WP-16 and WP-22's missing generator. sed_diff.py did this for the POSIX and

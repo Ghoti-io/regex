@@ -438,6 +438,54 @@ the driver spells options as a dialect's flag letters, of which these
 dialects have none. `REG_ICASE` and `REG_NEWLINE` are covered by the
 imported vectors, which carry `options:` instead.
 
+### The submatch differential
+
+`make check-oracle-submatch` asks the question underneath the POSIX
+differential. That one asks whether the same *text* matched; this asks which
+group got which part of it, in the cases where more than one answer fits the
+same extent.
+
+The difference is the generator. The POSIX differential builds patterns for
+construct coverage - one entry per construct the dialect has - so a case
+where two group assignments share one extent arises only by accident. This
+one builds patterns out of ambiguous pieces on purpose: groups whose
+branches overlap (`(a|ab)`, `(a|aa)`), groups that can match empty (`(|a)`,
+`(a?)`, `(a{0}|a)`), and quantified groups side by side, two per pattern.
+Almost every case has two answers to choose between.
+
+That was the whole of its value on the first run. Spencer's imported vectors
+contain no such case at all - not one of the 809 POSIX and GNU rows - and
+the POSIX differential had been reporting zero disagreements for as long as
+it had existed. Built to ask, this reported **1,050** across three dialects
+immediately, every one of them the same rule: an alternative with nothing in
+it was being tried before the branch beside it, where both references try it
+after. [dialects.md](dialects.md) §5.1 states the rule and §6 records what
+is still not followed.
+
+Who decides is the POSIX differential's arrangement, with one addition.
+glibc alone decides `gnu-bre` and `gnu-ere`; for `posix-bre` and
+`posix-ere` the standard is glibc and musl agreeing. Where the two
+references differ, this tool does not merely skip the row - it counts it and
+says which side this library came down on, because that set *is* the open
+question of plan.md's WP-26: 1,326 of 8,993 generated `posix-ere` rows, in
+every one of which musl answers as POSIX's rule says and glibc does not, and
+in every one of which this library answers as glibc does. `--strict`, which
+is what the Makefile runs, fails if that set ever empties - a claim about an
+open question should not outlive the question.
+
+`posix-bre` is the thin row and the tool says so rather than leaving it to
+look like a clean result: POSIX basic REs have no alternation, so the
+empty-branch half of this question cannot be spelled in one. Its cases ask
+the other half, two quantified groups next to each other.
+
+Both halves of the rule were proven by planting. Removing the rewrite makes
+this report the 1,050 rows again; narrowing it to a branch that is literally
+empty - so that `(a{0}|a)` no longer counts - makes it report 692. The
+second plant is the more useful one, because `a{0}` is *how the axis was
+missed the first time*: the atom lists had no branch that generates nothing
+without being written as nothing, and the tool passed against a rule that
+was wrong for every such spelling.
+
 ### The cross-engine check
 
 `make check-engine-equivalence` runs the same rows through every engine that

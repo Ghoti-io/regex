@@ -1971,6 +1971,95 @@ static GRX_Result lower_look(
   return attach(low, *out_node, body);
 }
 
+/**
+ * Whether this branch puts nothing at all into the program.
+ *
+ * `(a{0}|a)` is the case that says this has to be a walk rather than a test
+ * for one node kind. A repeat that runs zero times reaches codegen as a
+ * GRX_IR_REPEAT and leaves no instruction behind, so the branch is empty in
+ * every sense that matters and is spelled with four tokens; both references
+ * treat it as the empty branch it is, including when it holds a group -
+ * `((a){0}|a)` swaps, and group 2 stays unset either way.
+ *
+ * Deliberately not "can match empty": `(b*|a)` and `(()|a)` are branches
+ * that *may* consume nothing and both references leave them where they are.
+ * The line is what the branch generates, not what it can match.
+ */
+static int branch_is_nothing(const Lowering * low, uint32_t index) {
+  const GRX_IRNode * node = grx_ir_node(low->ir, index);
+  if (!node) {
+    return 0;
+  }
+  if (node->kind == GRX_IR_EMPTY) {
+    return 1;
+  }
+  if (node->kind == GRX_IR_REPEAT) {
+    return node->max == 0;
+  }
+  if (node->kind != GRX_IR_CONCAT) {
+    return 0;
+  }
+  for (uint32_t child = node->first_child; child != GRX_INDEX_NONE;) {
+    const GRX_IRNode * inner = grx_ir_node(low->ir, child);
+    if (!inner || !branch_is_nothing(low, child)) {
+      return 0;
+    }
+    child = inner->next_sibling;
+  }
+
+  return 1;
+}
+
+/**
+ * Give an empty first alternative up to the branch written next to it.
+ *
+ * Only in leftmost-longest mode, where the order the branches are written
+ * in carries no meaning. POSIX asks for the longest match at the leftmost
+ * start, and among the matches of that length it says which spans the
+ * subexpressions get - not which path an engine reached first. Both engines
+ * here answer that tie by first arrival, so `(|a)(a|)` against "a" hands
+ * group 1 the empty match, where glibc and musl both hand it the `a`.
+ *
+ * The rule below is theirs: an alternative with nothing in it is considered
+ * after the one beside it. It was read off 7,360 generated rows in which it
+ * reproduced glibc exactly and never once contradicted a case musl agreed
+ * with.
+ *
+ * It is not the whole of POSIX's rule. Where both branches are non-empty
+ * and the shorter is written first - `(a|aa)(a|)` against "aa" - glibc and
+ * musl disagree with each other, and this library answers as glibc does.
+ * See documentation/dialects.md section 6, and WP-26 in plan.md for the
+ * tagged-transition work that would settle it.
+ */
+static void empty_branch_yields(Lowering * low, uint32_t alternation) {
+  if (low->profile.preference != GRX_PREFER_LEFTMOST_LONGEST) {
+    return;
+  }
+
+  GRX_IRNode * parent = grx_ir_node(low->ir, alternation);
+  if (!parent) {
+    return;
+  }
+  GRX_IRNode * first = grx_ir_node(low->ir, parent->first_child);
+  if (!first || first->next_sibling == GRX_INDEX_NONE
+      || !branch_is_nothing(low, parent->first_child)) {
+    return;
+  }
+  uint32_t second_index = first->next_sibling;
+  GRX_IRNode * second = grx_ir_node(low->ir, second_index);
+  if (!second) {
+    return;
+  }
+
+  uint32_t first_index = parent->first_child;
+  first->next_sibling = second->next_sibling;
+  second->next_sibling = first_index;
+  parent->first_child = second_index;
+  if (parent->last_child == second_index) {
+    parent->last_child = first_index;
+  }
+}
+
 /** Lower a concatenation or an alternation: the same shape, a different kind. */
 static GRX_Result lower_sequence(Lowering * low, const GRX_Node * node,
     GRX_IRKind kind, uint32_t * out_node) {
@@ -2061,6 +2150,10 @@ static GRX_Result lower_sequence(Lowering * low, const GRX_Node * node,
       return result;
     }
     child = next;
+  }
+
+  if (kind == GRX_IR_ALTERNATE) {
+    empty_branch_yields(low, *out_node);
   }
 
   return GRX_OK;

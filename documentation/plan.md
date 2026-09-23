@@ -451,15 +451,39 @@ of a rule stated in a comment and implemented for a subset.
 Laurikari TNFA disambiguation in the Pike VM's longest mode. Scheduled
 after M4 unless a consumer needs it.
 
-**Still unbuilt, and no longer the reason for anything.** The ten
-`known-gaps.txt` rows filed under "POSIX subexpression disambiguation" were
-read as this package's work and were not: they were one empty-iteration rule
+**Still unbuilt, and now with a boundary.** The ten `known-gaps.txt` rows
+filed under "POSIX subexpression disambiguation" were read as this package's
+work and were not: they were one empty-iteration rule
 ([dialects.md](dialects.md) §5.5), which glibc and musl agree on and which
-`GRX_EMPTY_LOOP_BREAK_FIRST` now implements. All ten pass, the four POSIX and
-GNU rows are at 100%, and no case reached by either corpus or the
-differential needs a tagged transition. That does not prove none exists - it
-says the ones that were being pointed at were something else, and that this
-package is now speculative rather than owed.
+`GRX_EMPTY_LOOP_BREAK_FIRST` now implements. All ten pass and the four POSIX
+and GNU rows are at 100%.
+
+What this paragraph used to say next was that no case reached by either
+corpus or the differential needs a tagged transition. That was true and
+meant less than it read: **nothing was asking.** Spencer's vectors contain
+no case where two group assignments share one extent, and `posix_diff.py`
+builds its patterns for construct coverage, so it reaches one only by
+accident. `tools/oracle/submatch_diff.py` asks on purpose - groups whose
+branches overlap, groups that can match empty, quantified groups side by
+side - and the first run found 1,050 disagreements across three dialects.
+
+They were all one shape, and it is now fixed and is *not* this package: an
+alternative with nothing in it was being tried before the branch beside it,
+where both references try it after ([dialects.md](dialects.md) §5.1). What
+is left is genuinely WP-26 and is now measured rather than hypothesised:
+where two non-empty branches tie and the shorter is written first,
+`(a|aa)(a|)` against "aa", musl answers as POSIX's rule says and glibc does
+not, and this library answers as glibc does - 1,326 of 8,993 generated
+`posix-ere` rows, all of them glibc's way.
+
+So the package is no longer speculative; it is **optional, and in tension
+with the dialect table.** Tagged transitions would make `posix-bre` and
+`posix-ere` follow the standard they are named for, and would move
+`gnu-bre` and `gnu-ere` off glibc, which §2 of [dialects.md](dialects.md)
+makes their definition. Doing it means a profile axis - POSIX's rule for
+the POSIX rows, glibc's for the GNU ones - not one engine change, and that
+is a decision about what those two rows promise rather than a defect to
+repair.
 
 **M4 - tier 1 complete.** Every tier-1 dialect at its published
 conformance rate with every deviation listed; the invariants of
