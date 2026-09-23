@@ -1812,8 +1812,11 @@ Three workloads, because one number hides what is worth knowing: patterns
 with several ways to divide the same extent, patterns with one way and
 groups to fill, and patterns with no capture group at all.
 
-Best of five runs of each, the C sources at `-O0` (what `CFLAGS` says today)
-and at `-O3`:
+Best of five runs of each, the C sources at `-O0` and at `-O3`. **`-O0` is
+no longer what a release build compiles at** - see the note below the table
+- so these rows are kept because the `-O0` column is what every earlier
+figure in this repository was measured against, and removing it would leave
+those figures without a scale:
 
 | | ambiguous | plain | no groups |
 | --- | --- | --- | --- |
@@ -1843,17 +1846,75 @@ simulation carrying a capture array per thread, and it pays for that on
 every search. Nothing here has been optimised for speed yet, and the gap is
 the size one would expect from that.
 
-**`-O3` is about 2.2x `-O0`**, and the library is correct there: all 539
-tests and the full 37,212-row conformance corpus pass against an `-O3`
-build. `CFLAGS` carries `-O0` for the C sources in both build modes today,
-so every absolute figure this repository quotes is an `-O0` figure unless it
-says otherwise.
+**The release build moved from `-O0` to `-O2` on 2026-09-23**, as part of a
+suite-wide change. `CFLAGS` had carried a literal `-O0` in *both* build
+modes since the file was written, and nobody chose it: early repositories in
+this suite were written when the production build doubled as the debugging
+build, and newer ones copied what already existed. So the release build was
+unoptimised and the debug build was correct by accident.
+
+`$(OPT_CFLAGS)` now carries `-O2` for a release build and `-O0` for
+`BUILD=debug`, which fixes both halves. What it cost, measured on this
+benchmark over regex's own code:
+
+| workload | dialect | `-O0` | `-O2` | ratio |
+| --- | --- | --- | --- | --- |
+| ambiguous | `posix-ere` | 5.931 us | 2.487 us | 2.38x |
+| ambiguous | `gnu-ere` | 4.462 us | 1.761 us | 2.53x |
+| plain | `posix-ere` | 3.198 us | 1.370 us | 2.33x |
+| plain | `gnu-ere` | 3.042 us | 1.266 us | 2.40x |
+| no groups | `posix-ere` | 3.156 us | 1.359 us | 2.32x |
+| no groups | `gnu-ere` | 3.155 us | 1.350 us | 2.34x |
+
+Median **2.38x**, three runs each side, minimum of three, on a quiet
+machine. Confirmed a second way, because a benchmark on a shared machine is
+not trustworthy on its own: five *interleaved* rounds of both builds, with
+glibc's binary run in each round as a load witness, gave 2.19x, 2.34x and
+2.40x on the three workloads. The witness is the check that makes that
+usable - glibc's code is identical in both legs, so its own timing says
+whether the two legs met the same machine. Its minima across the legs
+differed by 4.5%, which is what "equally loaded" looks like; its *absolute*
+figure over the same period ranged from 0.86 to 2.18 us, which is what the
+machine was doing while nothing in the output mentioned it.
+
+Two methods, 2.19x-2.53x, and no reading outside that band.
+
+**The figure measures this library and nothing else**, which is worth
+checking rather than assuming: regex links cutil, and a benchmark whose hot
+path ran through a dependency would be reporting that dependency's
+optimisation level. Counted with an `LD_PRELOAD` interposer over a full run:
+16 `malloc`, 63-78 `calloc`, 96-138 `realloc` - a few hundred allocations
+across tens of thousands of searches, all of them in setup. The timed loop
+allocates nothing, so cutil is not in it at all. An allocation count settles
+in one run what reading the call graph does not; image nearly reported
+*compress's* optimisation level as its own, because deflate sits inside its
+PNG encode path.
+
+Every absolute figure elsewhere in this repository that predates that date
+is an `-O0` figure. Two comparisons that are easy to substitute for each
+other and are not the same: **`-O0` to `-O2` is 2.38x**, and **`-O0` to
+`-O3` is about 2.2x**. `-O3` over `-O2` has not been measured here and the
+suite's policy requires a recorded figure before moving to it.
 
 Build into a directory of its own when changing flags:
 
 ```
 make bench BUILD=o3 EXTRA_CFLAGS=-O3 CUTIL_PC=ghoti.io-cutil-0
 ```
+
+And do not benchmark a loaded machine - or if you cannot have an idle one,
+interleave the legs and carry a witness. The `-O2` rows above were first
+measured while `make test-asan` was compiling in another process: the same
+build reported 5.609 and then 3.526 us on a workload where a quiet machine
+gives 2.487. **Nothing in the output says the machine was busy.**
+
+The witness is the cheap fix, and it is one extra binary per round: run a
+reference implementation whose code did not change, and read *its* number.
+glibc moving from 0.86 to 2.18 us between runs is not a finding about glibc;
+it is the machine telling you that everything measured alongside it is
+inflated by about the same factor. Absolute figures from such a run are
+worthless and interleaved *ratios* survive, because drift lands on both legs
+instead of on one.
 
 `BUILD`, because make does not track the flags an object was built with, so
 `-O3` objects left in the release tree are invisible to a later `make test`

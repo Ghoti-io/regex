@@ -482,7 +482,10 @@ answer each must produce, so the exemption cannot hide a defect.
 
 **What it costs.** `make bench` and [testing.md](testing.md) §13 carry the
 table and the method. In short, against the same patterns compiled for the
-other rule:
+other rule. The two optimisation columns predate the release build's move
+from `-O0` to `-O2` on 2026-09-23 and are kept as measured; the ratios
+between the two rules are what this table is for, and those are unaffected
+by which level either column was taken at:
 
 | workload | steps | -O0 | -O3 |
 | --- | --- | --- | --- |

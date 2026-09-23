@@ -37,6 +37,9 @@ endif
 ifeq ($(BUILD),debug)
     override BRANCH := $(BRANCH)-debug
     override VERSION_STRING := $(VERSION_STRING)-debug
+    OPT_CFLAGS := -O0
+else
+    OPT_CFLAGS := -O2
 endif
 
 BASE_NAME := lib$(SUITE)-$(PROJECT)$(BRANCH).so
@@ -168,9 +171,29 @@ PKG_CONFIG_LOOKUP_PATH := $(if $(PKG_CONFIG_PATH_ENV),$(PKG_CONFIG_PATH_ENV):)$(
 
 
 CXX := g++
+# The C++ side is the tests and the two link steps, and it does *not* follow
+# OPT_CFLAGS: it stays at -O1 whatever BUILD says. That is deliberate only in
+# the sense that it is not this library's call - every library in the suite
+# compiles its C++ tests at a fixed -O1, so `make BUILD=debug` gives a
+# steppable library and tests that are still optimised. Left as it is, and
+# written down, rather than settled here alone.
 CXXFLAGS := -pedantic-errors -Wall -Wextra -Werror -Wno-error=unused-function -Wfatal-errors -std=c++20 -O1 -g $(EXTRA_CXXFLAGS)
 CC := cc
-CFLAGS := -pedantic-errors -Wall -Wextra -Werror -Wno-error=unused-function -Wfatal-errors -std=c17 -O0 -g $(EXTRA_CFLAGS)
+# $(OPT_CFLAGS), set beside the BUILD=debug rename above: -O2 for a release
+# build and -O0 for a debug one. It is set there rather than here because
+# `BUILD` still holds the caller's raw value at that point - the platform
+# prefix (`BUILD := linux/$(BUILD)`) is added further down, and a `BUILD` that
+# came from the command line ignores that assignment anyway, so testing it
+# here would be reading a value whose spelling depends on where it came from.
+#
+# This was a literal -O0 for both builds until 2026-09-23, and nobody chose
+# it: early repos in this suite were written when the production build doubled
+# as the debugging build, and newer ones copied what already existed. The
+# release build was therefore unoptimised and the debug build was correct by
+# accident. Measured cost of the -O0: 2.32x-2.53x on tools/bench, median
+# 2.38x, over regex's own code - the timed loop allocates nothing, so no part
+# of that figure is cutil's.
+CFLAGS := -pedantic-errors -Wall -Wextra -Werror -Wno-error=unused-function -Wfatal-errors -std=c17 $(OPT_CFLAGS) -g $(EXTRA_CFLAGS)
 # Library-specific compile flags (export symbols on Windows, PIC on Linux)
 # GRX_BUILD enables DLL export on Windows (checked by GRX_API macro)
 # GRX_TEST_BUILD enables export of internal functions for testing (checked by GRX_INTERNAL_API macro)
@@ -1537,6 +1560,30 @@ ASAN_TEST_HELPER_OBJ := $(patsubst tests/%.cpp,$(ASAN_OBJ_DIR)/tests/%.o,$(TEST_
 ASAN_TARGET := $(BASE_NAME_PREFIX)-asan.$(LIB_EXTENSION)
 ASAN_REGEXLIBRARY := -L $(ASAN_APP_DIR) -l$(SUITE)-$(PROJECT)$(BRANCH)-asan
 
+# The sanitizer gate *inherits* $(CFLAGS), so it moved from -O0 to -O2 with
+# the release build on 2026-09-23 rather than by anyone deciding it should.
+# Measured after the move: 38 C translation units at -O2, 32 C++ at -O1, 70
+# compile lines, counts summing to the line count.
+#
+# Left inherited rather than pinned, because the change asked for was the
+# release level and pinning would be a second, unasked-for decision. Two
+# things a later reader should weigh before leaving it that way:
+#
+#   - The fuzz build pins its own -O1 (see FUZZ_SAN), so after this change
+#     the sanitizer gate and the fuzzers no longer run on the same codegen.
+#     A finding in one need not reproduce in the other.
+#   - Inheriting was argued for on the ground that latent UB is inert at -O0
+#     and live at -O2, so the gate should run at what ships. That is true of
+#     the *optimizer* and says nothing about what the sanitizer detects:
+#     text measured gcc 14.2 catching heap-use-after-free, stack overflow,
+#     signed overflow and float-cast overflow at both -O1 and -O2, and
+#     strict-aliasing violations at neither. Aliasing was the named hazard,
+#     and no level of this toolchain's sanitizers sees it.
+#
+# If this is ever pinned, remove $(ASAN_BUILD_DIR) by hand in the same
+# change: nothing in the sanitizer flags is a prerequisite of these objects,
+# so editing ASAN_UBSAN_FLAGS alone would relink objects built at the old
+# level. Editing *this file* is covered - every object rule depends on it.
 ASAN_CFLAGS := $(CFLAGS) $(ASAN_UBSAN_FLAGS) -DGRX_BUILD -DGRX_TEST_BUILD
 ASAN_CXXFLAGS := $(CXXFLAGS) $(ASAN_UBSAN_FLAGS)
 ASAN_LDFLAGS := $(LDFLAGS) $(ASAN_UBSAN_FLAGS)
@@ -1864,6 +1911,20 @@ clean: ## Remove all contents of the build directories.
 # can reach the 22,584 accumulated inputs. Checked before this line was
 # written rather than after.
 	-@rm -rvf $(FUZZ_DIR)
+# The debug tree, which this target could not reach on its own. `BUILD` given
+# on the command line overrides the `BUILD := linux/$(BUILD)` assignment
+# further up - a command-line variable beats a plain one - so `make
+# BUILD=debug` writes to ./build/debug, a *sibling of* ./build/linux rather
+# than a child, and the four globs above name only the current BUILD's
+# directories. A plain `make clean` after a debug build therefore left 38
+# objects and a complete linkable library sitting at the wrong optimisation
+# level, where a later build could link them.
+#
+# Harmless until 2026-09-23, because release and debug were both -O0 and the
+# leftovers were indistinguishable from what belonged there. Naming the
+# directory is the fix; `make clean BUILD=debug` also works and is the thing
+# nobody remembers to type.
+	-@rm -rvf ./build/debug
 
 help: ## Display this help
 	@grep -E '^[ a-zA-Z_-]+:.*?## .*$$' Makefile | sort | sed 's/\\([^:]*\\):.*## \\(.*\\)/\\1:\\2/' | awk -F: '{printf "%-20s %s\n", $$1, $$2}' | sed "s/(SUITE)/$(SUITE)/g; s/(PROJECT)/$(PROJECT)/g; s/(BRANCH)/$(BRANCH)/g"
