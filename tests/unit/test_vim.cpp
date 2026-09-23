@@ -713,6 +713,21 @@ TEST(Vim, ASearchLoopAdvancesAfterAnEmptyMatchAndStopsAtTheEnd) {
   EXPECT_EQ(replaced("b*", "abX", "<>"), "<>a<><>X<>");
 }
 
+TEST(Vim, AnEmptyFirstIterationRunsAndItsMarkSticks) {
+  // The empty-iteration cell had never been probed and so read
+  // ECMA-262's, where an iteration that consumed nothing fails. In vim it
+  // runs while the repeat still stands where it began, and what it wrote
+  // stays: `a\%(\zs\)*b` is 1-2 there, in both engines, and would be
+  // 0-2 under the rule this row used to carry. `matchlist()` cannot show
+  // it - a group that did not take part and one that matched empty are
+  // both "" there - so the mark is the only probe that can.
+  EXPECT_EQ(span("a\\%(\\zs\\)*b", "ab"), "1-2");
+  EXPECT_EQ(span("a\\(\\zs\\)*", "ab"), "1-1");
+  EXPECT_EQ(span("a\\%[\\zsb]*", "aaab"), "1-1");
+  // And a trailing empty iteration, after one has consumed, does not run.
+  EXPECT_EQ(span("\\%(\\zsa\\)*", "aa"), "1-2");
+}
+
 TEST(Vim, AMarkMakesTheAdvanceAboutWhatWasWalked) {
   // The four shapes an empty-span test gets wrong. What decides is whether
   // the next attempt would start where this one began, and the pair that

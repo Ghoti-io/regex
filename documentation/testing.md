@@ -510,7 +510,10 @@ saving is one fork for a *run* rather than one per case: vim reads a file of
 cases and writes a file of answers, which is what makes tens of thousands of
 rows possible against a reference `probe.py` was starting a process per case
 for. `make check-oracle-vim` runs it with `--strict`. Current standing:
-**1,305,000 rows over thirty seeds, no disagreements.**
+**1,080,000 rows over thirty seeds, no disagreements** - with 657 rows
+excluded as vim artifacts, 1,352 where its two engines disagree and `set
+re=1` gives this library's answer, and 34 where they disagree and neither
+does, which are printed.
 
 **The subject is a string, not a buffer**, and that is a decision the tool
 makes rather than a detail of it. vim's help describes matching against a

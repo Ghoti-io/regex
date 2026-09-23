@@ -750,6 +750,15 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     // `\s` refuses a newline and `\_s` accepts one.
     .dollar = GRX_DOLLAR_END_ONLY,
     .newlines = GRX_NEWLINES_NONE,
+    // Measured, where this cell had never been probed either. An empty
+    // iteration that is the loop's *first* runs in vim and its writes
+    // stick: `a\%(\zs\)*b` over "ab" is 1-2 there, in both engines, and
+    // would be 0-2 under ECMA-262's rule - which is what a zeroed cell
+    // gave. A trailing one, after an iteration has consumed, is where
+    // vim's two engines part: `\%(a\|\zs\)*` over "aa" is 2-2 under
+    // `re=2` and 0-2 under `re=1`, and the old engine is the one whose
+    // answer BREAK_FIRST is.
+    .empty_loop = GRX_EMPTY_LOOP_BREAK_FIRST,
     // Measured, where this cell had never been probed and so read Perl's.
     // Two clauses, and vim differs from every other reference here on both:
     // after an empty match it *advances* rather than retrying without one -

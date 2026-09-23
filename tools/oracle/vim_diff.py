@@ -44,6 +44,7 @@ import binascii
 import json
 import os
 import random
+import re
 import subprocess
 import sys
 import tempfile
@@ -354,6 +355,15 @@ def is_postfix_capture_artifact(pattern, them, us):
       set it failed and the match came from the other one. Without the
       `\\@>` vim reports it unset, so it is the atomic group committing its
       writes; pcre2test answers `(?>(a))x|[^[:alpha:]]` with group one unset.
+
+      The atomic operator is not the only way in, which is what a
+      thirty-seed run found: `\\(a\\)\\@=a$\\|b` against "ab" keeps
+      group one as "a" too, and `\\(a\\)\\@=ax\\|b` does not. The
+      difference is whether the abandoned branch died at an *assertion* or
+      at a character, which is not a rule anyone could follow - and both
+      pcre2test and node report the group unset for
+      `(?=(a))a$|b`. So the shape allowed below is "vim kept one, and the
+      pattern has both a postfix operator and an alternation".
     - **A capture that vanished.** `\\(a\\)\\(a\\)\\@=a\\{2,}`
       against "aaab" reports group one as empty in vim and "a" in pcre2test;
       drop the trailing repeat and vim reports "a" too.
@@ -361,9 +371,16 @@ def is_postfix_capture_artifact(pattern, them, us):
     The two directions are not treated alike. vim *losing* a capture is
     allowed for any of the `\\@` operators, because a defect of this
     library's would be the same loss and would still be reported - the
-    comparison only stops seeing vim's. vim *gaining* one is allowed only
-    where the atomic operator is written, which is the one shape it was
-    measured in.
+    comparison only stops seeing vim's. vim *gaining* one is allowed where
+    the atomic operator is written, and where a postfix operator meets an
+    alternation - the two shapes it has been measured in, both of them
+    against pcre2test as well.
+
+    That second clause is a real narrowing and worth saying out loud: a
+    defect of this library's that *lost* a capture inside a `\\@` operator
+    on one side of a `\\|` would not be reported. Nothing narrower will
+    do, because what separates vim's two answers is where in the abandoned
+    branch the failure happened, which the pattern text cannot say.
     """
     if not (them.startswith("match ") and us.startswith("match ")):
         return False
@@ -386,6 +403,8 @@ def is_postfix_capture_artifact(pattern, them, us):
             continue        # vim lost one: allowed for any `\@` operator.
         if our_group == '""' and "@>" in pattern:
             continue        # vim kept one an atomic group had written.
+        if our_group == '""' and "@" in pattern and "|" in pattern:
+            continue        # vim kept one an abandoned branch had written.
         return False
     return True
 
@@ -460,8 +479,19 @@ def is_line_number_star(pattern, them, us):
     is_very_magic_line_start_repeat() above, and excluded for the same
     reason.
     """
-    if not them.startswith("nomatch") or not us.startswith("match "):
+    if not us.startswith("match "):
         return False
+    if not them.startswith("nomatch"):
+        # Or vim found a *longer* match than the empty one this library
+        # takes from the repeat: `\%23l*\|\x` over "a" is 0-1 there,
+        # the second branch having won because the first offers nothing,
+        # and 0-0 here. The same artifact seen through an alternation.
+        fields = us.split()
+        if len(fields) < 2 or ":" not in fields[1]:
+            return False
+        low, high = fields[1].split(":")
+        if low != high:
+            return False
     for form in ("l*", "l\\{1}"):
         where = pattern.find(form)
         while where > 0:
@@ -533,7 +563,10 @@ def is_lookbehind_backreference_artifact(pattern, them, us):
     rather than folded into one of the others. A regression of this
     library's inside that shape would not be reported.
     """
-    if "@<" not in pattern:
+    # `\@<=` and `\@<!`, and the byte-bounded `\@123<=` forms too - the
+    # count sits between the `@` and the `<`, so a plain substring test
+    # misses them, which a thirty-seed run found once the bound was built.
+    if not re.search(r"@[0-9]*<", pattern):
         return False
     return any("\\%d" % n in pattern for n in range(1, 10))
 
