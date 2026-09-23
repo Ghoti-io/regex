@@ -295,6 +295,13 @@ ifdef PREFIX
 # So that a library, a test or an example finds its Ghoti.io dependencies in the
 # prefix at run time without LD_LIBRARY_PATH.
 LDFLAGS += -Wl,-rpath,$(LIB_INSTALL_PATH)/$(SUITE)
+ifeq ($(OS_NAME), Windows)
+# Windows has no rpath: a program finds its DLLs through PATH. Putting the
+# prefix's bin/ on it for everything make runs is the equivalent, so that a
+# test, a tool or a Python oracle driving one finds cutil without the caller
+# arranging it. Without this they die before main() with 0xC0000135.
+export PATH := $(BIN_INSTALL_PATH):$(PATH)
+endif
 endif
 
 BUILD_DIR := ./build/$(BUILD)
@@ -910,7 +917,7 @@ check-oracle-properties: $(TOOLS)
 		exit 0; \
 	fi; \
 	python3 tools/oracle/property_diff.py \
-		--driver $(APP_DIR)/tools/grx_properties
+		--driver $(APP_DIR)/tools/grx_properties$(EXE_EXTENSION)
 
 check-oracle-numeric-properties: ## Compare the Numeric_Value tables against perl
 check-oracle-numeric-properties: $(TOOLS)
@@ -919,7 +926,7 @@ check-oracle-numeric-properties: $(TOOLS)
 		exit 0; \
 	fi; \
 	python3 tools/oracle/numeric_property_diff.py \
-		--driver $(APP_DIR)/tools/grx_properties
+		--driver $(APP_DIR)/tools/grx_properties$(EXE_EXTENSION)
 
 check-oracle-perl: ## Compare the Perl-family front ends against perl and pcre2
 # WP-20's missing half. The rates were measured against two imported corpora;
@@ -1194,7 +1201,7 @@ vectors-posix: $(TOOLS)
 		exit 0; \
 	fi; \
 	python3 tools/corpus/import_rxspencer.py \
-		--driver $(APP_DIR)/tools/posix_match
+		--driver $(APP_DIR)/tools/posix_match$(EXE_EXTENSION)
 
 vectors-perl: ## Re-import Perl's re_tests corpus (needs perl)
 	@if ! command -v perl >/dev/null 2>&1; then \
@@ -1243,7 +1250,7 @@ check-json-schema-suite:
 	fi; \
 	files=""; \
 	for f in $(JSON_SCHEMA_FILES); do files="$$files $$dir/$$f.json"; done; \
-	$(APP_DIR)/tools/grx_json_schema --expect-passed $(JSON_SCHEMA_EXPECT) $$files
+	$(APP_DIR)/tools/grx_json_schema$(EXE_EXTENSION) --expect-passed $(JSON_SCHEMA_EXPECT) $$files
 
 # Where tools/jsonschema/fetch.sh puts the corpus, and which draft's files are
 # run. The suite is not committed - it is somebody else's, and a copy here
@@ -1279,8 +1286,8 @@ check-limits: $(TOOLS)
 		exit 0; \
 	fi; \
 	python3 tools/limits/measure.py \
-		--driver $(APP_DIR)/tools/grx_limits \
-		--matcher $(APP_DIR)/tools/grx_match
+		--driver $(APP_DIR)/tools/grx_limits$(EXE_EXTENSION) \
+		--matcher $(APP_DIR)/tools/grx_match$(EXE_EXTENSION)
 
 check-engine-equivalence: ## Fail if two engines disagree about one program
 # Only the one driver, not $(TOOLS): this check consults no reference
@@ -1291,7 +1298,7 @@ check-engine-equivalence: $(APP_DIR)/tools/grx_match$(EXE_EXTENSION)
 		exit 0; \
 	fi; \
 	python3 tools/oracle/engine_diff.py --seed $(ORACLE_SEED) \
-		--patterns $(ORACLE_PATTERNS) --driver $(APP_DIR)/tools/grx_match
+		--patterns $(ORACLE_PATTERNS) --driver $(APP_DIR)/tools/grx_match$(EXE_EXTENSION)
 
 check-oracle-match: ## Compare what patterns match against the reference implementation
 check-oracle-match: $(TOOLS)
@@ -1300,7 +1307,7 @@ check-oracle-match: $(TOOLS)
 		exit 0; \
 	fi; \
 	python3 tools/oracle/match_diff.py --seed $(ORACLE_SEED) \
-		--patterns $(ORACLE_PATTERNS) --driver $(APP_DIR)/tools/grx_match
+		--patterns $(ORACLE_PATTERNS) --driver $(APP_DIR)/tools/grx_match$(EXE_EXTENSION)
 
 check-oracle-syntax: ## Compare accept/reject against the reference implementation
 check-oracle-syntax: $(TOOLS)
@@ -1313,7 +1320,7 @@ check-oracle-syntax: $(TOOLS)
 		exit 0; \
 	fi; \
 	python3 tools/oracle/syntax_diff.py --seed $(ORACLE_SEED) \
-		--count $(ORACLE_COUNT) --driver $(APP_DIR)/tools/grx_syntax
+		--count $(ORACLE_COUNT) --driver $(APP_DIR)/tools/grx_syntax$(EXE_EXTENSION)
 
 examples: ## Build all examples
 examples: $(APP_DIR)/$(TARGET) $(EXAMPLES)
