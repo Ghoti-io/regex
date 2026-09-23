@@ -398,7 +398,7 @@ TESTFLAGS := `PKG_CONFIG_PATH=$(PKG_CONFIG_LOOKUP_PATH) pkg-config --libs --cfla
 # not: a command-line assignment is recursively expanded, so a TEST_GATES
 # that names itself is a recursion error rather than a subtraction.
 ALL_TEST_GATES := check-symbols check-layering check-aliasing \
-	check-unicode-tables \
+	check-unicode-tables check-dump-names \
 	check-diagnostics check-engine-equivalence check-json-schema-suite
 TEST_GATES ?= $(ALL_TEST_GATES)
 
@@ -791,7 +791,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 ####################################################################
 
 # General commands
-.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-oracle-syntax check-oracle-match check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-perl-syntax check-oracle-script-runs check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
+.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-dump-names check-oracle-syntax check-oracle-match check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-perl-syntax check-oracle-script-runs check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
 	check-oracle-properties check-oracle-numeric-properties \
 	check-oracle-string-properties check-oracle-posix check-oracle-sed \
 	check-oracles \
@@ -1396,6 +1396,20 @@ check-layering: ## Fail if an engine knows which dialect it is running
 UCD_VERSION := $(shell cat tools/unicode/UCD_VERSION 2>/dev/null)
 UCD_DIR := third_party/ucd/$(UCD_VERSION)
 UNICODE_TABLES := src/unicode/tables
+
+check-dump-names: ## Fail if a dump's name table is shorter than its enum
+# Every dump here turns an enumerator into a word through a positional
+# table, and a name left out does not leave a hole at the end - it shifts
+# every name after it onto its neighbour. The compiler cannot see it (the
+# array is sized by the COUNT and the tail is NULL) and the lookups all
+# guard and return "?", so nothing warns. Seven of twenty-eight tables were
+# short when this was written, one of them for long enough that every IR
+# assertion dumped under the wrong name.
+	@if ! command -v python3 >/dev/null 2>&1; then \
+		printf "check-dump-names: skipped (no python3)\n"; \
+		exit 0; \
+	fi; \
+	python3 tools/check_dump_names.py
 
 check-unicode-tables: ## Fail if the committed Unicode tables are not what the generator produces
 	@if ! command -v python3 >/dev/null 2>&1; then \

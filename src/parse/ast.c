@@ -197,6 +197,7 @@ static const char * verb_name(uint32_t kind) {
 static const char * cond_name(uint32_t kind) {
   static const char * const names[GRX_COND_COUNT] = {
     "group-set", "recursion-any", "recursion-group", "assertion", "define",
+    "static",
   };
   return kind < GRX_COND_COUNT ? names[kind] : "?";
 }

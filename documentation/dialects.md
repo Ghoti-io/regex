@@ -1215,6 +1215,17 @@ dialect names. A deviation has a reason and, where it is a restriction, a
 diagnostic. This list is the one that §4's answer 3 refers to; it is meant
 to be complete for every shipped tier.
 
+**Three rows record something that is not a difference**, and they are kept
+because each is a question a reader of this page will ask: `(*BSR_ANYCRLF)`
+and its pair say "built", because they were unbuilt once; what an extended
+class ignores says "and is followed", because the two references differ
+from *each other* and each is followed exactly; and PCRE2's `(?{ })` says
+what that spelling does in the dialect that has no such construct, beside
+the row for the dialect that does. A row is a deviation unless its reason
+says otherwise. `~` used to be a fourth and was simply wrong: vim answers
+"E33" in the only state a library is ever in, so refusing it is vim's own
+answer.
+
 | Dialect | Deviation | Reason | Reported as |
 | --- | --- | --- | --- |
 | all | Offsets are UTF-8 byte offsets | [design.md](design.md) §2 | - |

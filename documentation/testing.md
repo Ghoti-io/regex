@@ -1370,6 +1370,24 @@ Run by `make test` alongside `check-symbols`:
   reads, and `lower.c` is where the dialect is spent.
   **To check the gate itself:** put `GRX_Syntax x;` in `codegen.c`, or
   `regex->syntax` in `exec_pike.c`. Both must fail the build.
+- **A dump's name table is as long as its enum.** Every dump here turns an
+  enumerator into a word through a positional table sized by the enum's
+  `_COUNT`, and a name left out does not leave a hole at the end - it
+  shifts every name after it onto its neighbour. The compiler cannot see
+  it: the array is sized and the missing tail is NULL, and every lookup
+  guards and returns `"?"`, so nothing crashes and nothing warns.
+  **Built:** `make check-dump-names`, in `TEST_GATES`.
+  **Seven of twenty-eight tables were short when it was written**, and only
+  one of the seven printed anything obviously wrong - `iterate=(null)`,
+  from a rule added that afternoon. The other six printed a *neighbour's*
+  name: the IR's assertions had been dumping one place out since
+  `word-start` and `word-end` were added, three copies of the conditional
+  kinds had no name for `static`, and the IR's capture-reset table had none
+  for Perl's `after-each`. It finds the enum by the block its `_COUNT`
+  closes rather than by a prefix, because `GRX_REPEAT_MODE_COUNT` closes
+  `GRX_RepeatMode`, whose members begin `GRX_REPEAT_`.
+  **To check the gate itself:** delete a name from the middle of any table,
+  or add an enumerator before a `_COUNT`. Both must fail; both were tried.
 - **The strict-aliasing warning is still armed.** `-fstrict-aliasing
   -Wstrict-aliasing=1` ride every C compile line, under `-Werror`, so a real
   violation fails the build and no sweep is needed. A *disarmed* warning

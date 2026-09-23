@@ -631,6 +631,43 @@ static const VimRange * vim_named_set(char c, size_t * out_count,
 // --------------------------------------------------------------------------
 
 /**
+ * Whether the `[` before `at` opens a collection that closes.
+ *
+ * Vim reads a `[` that opens nothing as the character, so this is the
+ * difference between `[]a` - three literals - and `[]a]`, a collection.
+ * A `]` first is a member and not the close, and an escape takes the
+ * character after it whatever that is.
+ *
+ * Text and offsets rather than a GRX_Parser, because **two scans ask this
+ * question and only one of them has a parser**. vim_initial_options()
+ * runs before parsing to find a `\c` anywhere in the pattern, and it had
+ * its own copy of the rule with this clause missing: `[]a\cb` left it
+ * inside a collection for the rest of the pattern and the `\c` was never
+ * seen, so the pattern matched case-sensitively. That is the third defect
+ * in that one function and all three are the same defect - a second
+ * reader of a grammar, written from memory. There is one reader now.
+ */
+static int collection_closes(const char * text, size_t length, size_t at) {
+  size_t i = at;
+  if (i < length && text[i] == '^') {
+    i++;
+  }
+  if (i < length && text[i] == ']') {
+    i++; // A `]` first is the character, not the close.
+  }
+  for (; i < length; i++) {
+    if (text[i] == '\\' && i + 1 < length) {
+      i++;
+      continue;
+    }
+    if (text[i] == ']') {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+/**
  * Settle caseless matching before anything is read.
  *
  * `\c` and `\C` are not scoped and not positional: either one anywhere in
@@ -684,7 +721,12 @@ static uint32_t vim_initial_options(
       first_in_class = 0;
       continue;
     }
-    if (c == '[' && (level == VIM_MAGIC || level == VIM_VERY_MAGIC)) {
+    if (c == '[' && (level == VIM_MAGIC || level == VIM_VERY_MAGIC)
+        && collection_closes(text, length, i + 1)) {
+      // The same predicate the reader uses, and not a second copy of it:
+      // a `[` that opens nothing is the character, so `[]a\cb` is five
+      // literals and a case marker rather than an unterminated collection
+      // that swallows the marker.
       in_class = 1;
       first_in_class = 1;
       if (i + 1 < length && text[i + 1] == '^') {
@@ -922,23 +964,7 @@ static GRX_Result read_class_item(
  * shape as GRX_Quantifier::is_quantifier, and for the same reason.
  */
 static int collection_is_well_formed(const GRX_Parser * parser) {
-  size_t i = parser->position;
-  if (i < parser->length && parser->text[i] == '^') {
-    i++;
-  }
-  if (i < parser->length && parser->text[i] == ']') {
-    i++; // A `]` first is the character, not the close.
-  }
-  for (; i < parser->length; i++) {
-    if (parser->text[i] == '\\' && i + 1 < parser->length) {
-      i++;
-      continue;
-    }
-    if (parser->text[i] == ']') {
-      return 1;
-    }
-  }
-  return 0;
+  return collection_closes(parser->text, parser->length, parser->position);
 }
 
 /**
