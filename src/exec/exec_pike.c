@@ -150,6 +150,12 @@ typedef struct {
   size_t best_end;       ///< its end, for the longest-match comparison.
   int longest;           ///< Whether the dialect wants leftmost-longest.
   int posix;             ///< ...and POSIX's division of it, not first arrival.
+  /**
+   * One byte per instruction: whether a thread can arrive there twice in
+   * one step, and so whether a state has to be kept for the comparison.
+   * NULL when `posix` is off, which is every other dialect.
+   */
+  uint8_t * contested;
   size_t steps;          ///< Instructions executed, against max_steps.
   size_t memory;         ///< Bytes handed out, against max_match_memory.
   int utf;               ///< Whether a step is a code point or a byte.
@@ -582,6 +588,151 @@ static uint64_t stall_mask(
 }
 
 /**
+ * Where an instruction can hand a thread next, within one step.
+ *
+ * The epsilon edges plus the one a consuming instruction leaves behind when
+ * the next position's list is seeded from it, which for this purpose is the
+ * same kind of edge: both are ways of arriving somewhere. MATCH ends a
+ * thread and has none.
+ *
+ * Only the opcodes this engine runs appear. program_is_runnable() has
+ * already refused the rest, and the `default` arm says so by refusing to
+ * answer rather than by guessing an edge count.
+ */
+static int successors(const GRX_Inst * inst, uint32_t pc, uint32_t * out) {
+  switch ((GRX_Opcode)inst->op) {
+    case GRX_OP_MATCH:
+      return 0;
+    case GRX_OP_JMP:
+      out[0] = inst->x;
+      return 1;
+    case GRX_OP_SPLIT:
+      out[0] = inst->x;
+      out[1] = inst->y;
+      return 2;
+    case GRX_OP_PROGRESS_CHECK:
+      // Both arms: the rule decides between them at run time, and either
+      // may be the one taken.
+      out[0] = pc + 1;
+      out[1] = inst->y;
+      return 2;
+    case GRX_OP_CHAR:
+    case GRX_OP_CLASS:
+    case GRX_OP_ANY:
+    case GRX_OP_ANY_NL:
+    case GRX_OP_SAVE:
+    case GRX_OP_ASSERT:
+    case GRX_OP_PROGRESS_SET:
+    case GRX_OP_RESET:
+    case GRX_OP_RESET_STALE:
+    case GRX_OP_CALLOUT:
+      out[0] = pc + 1;
+      return 1;
+    default:
+      return -1;
+  }
+}
+
+/**
+ * Mark the program counters a thread can arrive at twice in one step.
+ *
+ * Only those need a state kept for POSIX's comparison, and keeping one
+ * everywhere is what the rule costs: the reference makes a thread's slots
+ * shared, so its next GRX_OP_SAVE copies them instead of writing in place.
+ * On a program with nothing to compare that is the whole of the expense,
+ * which is why a search with no ambiguity in it was paying *more* than one
+ * full of ties.
+ *
+ * Two in-edges is the obvious half. The other half is that a replacement is
+ * walked onwards from, so everything downstream of a contested instruction
+ * is reached a second time too - marking only the join points would leave
+ * the improvement unable to travel, and the answer would depend on where a
+ * program happened to branch. So: two in-edges, then forward closure.
+ *
+ * Instruction 0 is deliberately *not* counted as contested for being seeded
+ * at every position. A seed arriving where a thread already sits always
+ * begins later than that thread, and a later start loses outright, so the
+ * comparison there has only one answer and does not need a state to reach
+ * it - the seed is dropped exactly as it would be under first-path.
+ *
+ * Conservative on the way out: an opcode `successors()` will not answer for
+ * marks the whole program, so a future instruction cannot quietly make this
+ * under-approximate.
+ */
+static int contested_init(Pike * pike) {
+  size_t count = pike->program->insts.count;
+  pike->contested = gcu_allocator_malloc(pike->allocator, count);
+  if (!pike->contested) {
+    pike->failure = GRX_ERR_OOM;
+    return 0;
+  }
+  memset(pike->contested, 0, count);
+
+  uint8_t * seen = gcu_allocator_malloc(pike->allocator, count);
+  if (!seen) {
+    pike->failure = GRX_ERR_OOM;
+    return 0;
+  }
+  memset(seen, 0, count);
+
+  for (size_t pc = 0; pc < count; pc++) {
+    const GRX_Inst * inst
+        = GRX_ARENA_AT(const GRX_Inst, &pike->program->insts, pc);
+    uint32_t next[2];
+    int edges = inst ? successors(inst, (uint32_t)pc, next) : -1;
+    if (edges < 0) {
+      memset(pike->contested, 1, count);
+      gcu_allocator_free(pike->allocator, seen);
+      return 1;
+    }
+    for (int i = 0; i < edges; i++) {
+      if (next[i] < count && seen[next[i]]++) {
+        pike->contested[next[i]] = 1;
+      }
+    }
+  }
+
+  // Forward closure, over the same edges, using `seen` again as the visited
+  // set so that no second allocation is needed.
+  memset(seen, 0, count);
+  for (size_t start = 0; start < count; start++) {
+    if (!pike->contested[start] || seen[start]) {
+      continue;
+    }
+    // A stack of program counters, borrowed from the walk's own.
+    if (!stack_reserve(pike, count)) {
+      gcu_allocator_free(pike->allocator, seen);
+      return 0;
+    }
+    size_t depth = 0;
+    pike->stack[depth++].pc = (uint32_t)start;
+    seen[start] = 1;
+    while (depth) {
+      uint32_t pc = pike->stack[--depth].pc;
+      pike->contested[pc] = 1;
+      const GRX_Inst * inst
+          = GRX_ARENA_AT(const GRX_Inst, &pike->program->insts, pc);
+      uint32_t next[2];
+      int edges = inst ? successors(inst, pc, next) : -1;
+      if (edges < 0) {
+        memset(pike->contested, 1, count);
+        gcu_allocator_free(pike->allocator, seen);
+        return 1;
+      }
+      for (int i = 0; i < edges; i++) {
+        if (next[i] < count && !seen[next[i]]) {
+          seen[next[i]] = 1;
+          pike->stack[depth++].pc = next[i];
+        }
+      }
+    }
+  }
+
+  gcu_allocator_free(pike->allocator, seen);
+  return 1;
+}
+
+/**
  * Whether `candidate` should displace `held` at one program counter.
  *
  * The two threads are at the same instruction at the same position, so
@@ -605,7 +756,10 @@ static uint64_t stall_mask(
 static int closure_better(
     const Pike * pike, const PikeState * candidate, const PikeState * held) {
   if (!held) {
-    return 1;
+    // An uncontested program counter kept no state, so there is nothing to
+    // displace and the first arrival stands - which is also the answer
+    // contested_init() proves is the only one reachable here.
+    return 0;
   }
   if (candidate->slots[0] != held->slots[0]) {
     if (candidate->slots[0] == GRX_NPOS) {
@@ -657,7 +811,7 @@ static void add_thread(
       // order over finitely many vectors, so no pair can displace each other
       // forever. It is not free, though, which is why it is counted against
       // max_steps like everything else this engine does.
-      if (!pike->posix
+      if (!pike->posix || !pike->contested[current_pc]
           || !closure_better(pike, current,
                  list->threads[occupant].best)) {
         state_release(pike, current);
@@ -698,7 +852,8 @@ static void add_thread(
       list->threads[list->count].state = NULL;
       list->threads[list->count].stalls = stalls;
       list->threads[list->count].best
-          = pike->posix ? state_retain(current) : NULL;
+          = pike->posix && pike->contested[current_pc]
+          ? state_retain(current) : NULL;
       list->count++;
       slot = list->count - 1;
     }
@@ -972,7 +1127,12 @@ GRX_Result grx_exec_pike(const GRX_ExecRequest * request, int * out_matched) {
     .best_start = GRX_NPOS,
     .best_end = GRX_NPOS,
     .longest = program->preference == GRX_PREFER_LEFTMOST_LONGEST,
-    .posix = program->submatch == GRX_SUBMATCH_POSIX,
+    // A pattern with no capture group has no division to report and so
+    // none to compare: grx_exec_submatch_better() reads group ends, of
+    // which there are none, and can only ever answer "no preference". Off
+    // rather than inert, so such a search pays nothing for the rule.
+    .posix = program->submatch == GRX_SUBMATCH_POSIX
+        && request->regex->capture_count > 0,
     .steps = 0,
     .memory = 0,
     .utf = (program->flags & GRX_PROGRAM_UTF) != 0,
@@ -996,8 +1156,10 @@ GRX_Result grx_exec_pike(const GRX_ExecRequest * request, int * out_matched) {
   // than being code that only a pathological one would ever reach.
   pike.stack = NULL;
   pike.stack_capacity = 0;
+  pike.contested = NULL;
   if (!stack_reserve(&pike, 32) || !list_init(&pike, &pike.current, size)
-      || !list_init(&pike, &pike.next, size)) {
+      || !list_init(&pike, &pike.next, size)
+      || (pike.posix && !contested_init(&pike))) {
     result = pike.failure != GRX_OK ? pike.failure : GRX_ERR_OOM;
     goto done;
   }
@@ -1200,6 +1362,7 @@ done:
   list_free(&pike, &pike.current);
   list_free(&pike, &pike.next);
   gcu_allocator_free(pike.allocator, pike.stack);
+  gcu_allocator_free(pike.allocator, pike.contested);
   return result;
 }
 

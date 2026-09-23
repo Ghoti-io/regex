@@ -480,30 +480,26 @@ what POSIX requires and what **neither** glibc nor musl gives. Six such
 patterns are carried by name in `tools/oracle/submatch_diff.py`, with the
 answer each must produce, so the exemption cannot hide a defect.
 
-**What it costs.** Measured on the same patterns compiled for each rule,
-with compilation and process start outside the clock, against an -O0 build
-(this library's `CFLAGS` carries `-O0` in both build modes, so only the
-ratio means anything):
+**What it costs.** `make bench` and [testing.md](testing.md) §13 carry the
+table and the method. In short, against the same patterns compiled for the
+other rule:
 
-| workload | steps | time per search |
-| --- | --- | --- |
-| dense with ties, `gnu-ere` | 3,580 | 4.47 us |
-| dense with ties, `posix-ere` | 3,640 (+1.7%) | 6.01 us (+35%) |
-| no ties at all, `gnu-ere` | 3,261 | 3.05 us |
-| no ties at all, `posix-ere` | 3,261 (+0%) | 4.31 us (+41%) |
+| workload | steps | -O0 | -O3 |
+| --- | --- | --- | --- |
+| divisions compete | +1.7% | +32.6% | +42.7% |
+| one way to match | +0% | +6.6% | +2.7% |
+| no capture group | +0% | none | none |
 
-The rule itself does almost no work: steps - what `max_steps` counts - rise
-1.7% where divisions actually compete and **not at all** where none do, so
-the relaxation hardly ever fires. What the time is paying for is fixed
-overhead on every search under the rule, which is why the workload with
-nothing to compare is hit *harder* than the one with plenty. It is the
-retained `best` state the Pike VM holds at every program counter: that
-reference makes each thread's state shared, so the next `SAVE` takes
-`state_for_write`'s copy rather than mutating in place. Two ways out are
-open and neither is taken yet - a program with no capture group can have no
-division to compare and could skip the rule outright, and only a program
-counter with more than one predecessor can ever be arrived at twice, which
-is a compile-time property.
+The rule itself does almost no work - engine steps, which are what
+`max_steps` counts, barely move, and do not move at all where nothing
+competes. What it charges is a per-arrival overhead, and two things keep it
+off searches that cannot use it: a pattern with no capture group has no
+division to compare and switches the rule off outright, and inside the Pike
+VM the comparison state is kept only at instructions a thread can arrive at
+twice - two in-edges, then forward closure, because a replacement is walked
+onwards from. Without that second analysis the middle row was **41%** and
+the bottom row was worse than the top one, which is what an unconditional
+overhead looks like.
 
 And one boundary: a program only the backtracker can run - a basic RE with a
 backreference - keeps the first-path division, because the comparison costs

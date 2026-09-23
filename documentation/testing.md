@@ -1734,3 +1734,71 @@ tests remain one file per module, as scaffolded, and test the module's own
 contract - the class algebra against a bitmap model, the arena's growth,
 the diagnostics' offsets - while the conformance runner tests the library's
 behaviour. A unit test that could be a vector is a vector.
+
+## 13. The benchmark
+
+`make bench` times this library against glibc and musl on one workload,
+compiled three ways from `tools/bench/regex_bench.c` so that the loop being
+timed is the same source on every side. Compilation is outside the clock,
+every side is asked for the same capture slots, and the figure is a
+best-of-seven minimum.
+
+It exists because of a number that was wrong in this repository for a day.
+"About 7%" for what the POSIX submatch rule costs was whole-process wall
+clock over a `grx_match` run: process start, stdin, hex decoding and
+compiling a thousand patterns were all in the denominator, so the thing
+being measured was a minority of what was timed and the ratio read as a
+statement about matching. It is not a rounding error - the real figure on an
+ambiguous workload is six times larger.
+
+Three workloads, because one number hides what is worth knowing: patterns
+with several ways to divide the same extent, patterns with one way and
+groups to fill, and patterns with no capture group at all.
+
+Best of five runs of each, the C sources at `-O0` (what `CFLAGS` says today)
+and at `-O3`:
+
+| | ambiguous | plain | no groups |
+| --- | --- | --- | --- |
+| ours -O0, `posix-ere` | 5.92 us | 3.23 us | 3.13 us |
+| ours -O0, `gnu-ere` | 4.47 us | 3.04 us | 3.18 us |
+| ours -O3, `posix-ere` | 2.72 us | 1.46 us | 1.44 us |
+| ours -O3, `gnu-ere` | 1.90 us | 1.42 us | 1.47 us |
+| glibc 2.41 | 0.88 us | 0.32 us | 0.33 us |
+| musl 1.2.6 | 0.50 us | 0.44 us | 0.53 us |
+
+**What POSIX's submatch rule costs**, which is the pair of rows to read
+against each other: **+42.7%** where divisions compete, **+2.7%** where
+there is one way to match, and **nothing** where there is no group to
+divide - 1.44 against 1.47 us is the noise floor, and the rule is switched
+off outright for such a pattern. Engine steps, which are deterministic, rise
+1.7% on the first workload and not at all on the other two: the rule does
+almost no extra work, and what it charges is a per-arrival overhead that the
+`contested` analysis in `exec_pike.c` now confines to the instructions where
+a second arrival is actually possible. Before that analysis the third column
+was **41%** worse rather than level.
+
+**Where this library stands**, which is a separate question and not WP-26's
+doing, since the `gnu-ere` row is no faster: **three to four and a half
+times glibc, and three to five times musl.** glibc has a DFA to fall back
+on and musl is a TNFA with a compiled tag program; this is a thread-set
+simulation carrying a capture array per thread, and it pays for that on
+every search. Nothing here has been optimised for speed yet, and the gap is
+the size one would expect from that.
+
+**`-O3` is about 2.2x `-O0`**, and the library is correct there: all 539
+tests and the full 37,212-row conformance corpus pass against an `-O3`
+build. `CFLAGS` carries `-O0` for the C sources in both build modes today,
+so every absolute figure this repository quotes is an `-O0` figure unless it
+says otherwise.
+
+Build into a directory of its own when changing flags:
+
+```
+make bench BUILD=o3 EXTRA_CFLAGS=-O3 CUTIL_PC=ghoti.io-cutil-0
+```
+
+`BUILD`, because make does not track the flags an object was built with, so
+`-O3` objects left in the release tree are invisible to a later `make test`
+and would be linked into it silently. `CUTIL_PC`, because a non-default
+`BUILD` renames the `.pc` file the Makefile looks for.

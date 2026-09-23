@@ -700,6 +700,59 @@ tools: ## Build the oracle drivers used by the conformance harnesses
 tools: $(APP_DIR)/$(TARGET) $(TOOLS)
 	@printf "\nOracle drivers are in: $(APP_DIR)/tools/\n"
 
+BENCH_DIR := $(APP_DIR)/bench
+ifneq ($(wildcard $(MUSL_SRC)/regcomp.c),)
+BENCH_MUSL_BIN := $(BENCH_DIR)/musl
+$(BENCH_DIR)/musl: tools/bench/regex_bench.c $(MUSL_UNITS)
+	@printf "\n### Compiling Benchmark: musl ###\n"
+	@mkdir -p $(BENCH_DIR)
+	$(CC) $(MUSL_CFLAGS) -DBENCH_MUSL -o $@ $< $(MUSL_UNITS)
+else
+BENCH_MUSL_BIN :=
+endif
+
+BENCH_BINS := $(BENCH_DIR)/ours $(BENCH_DIR)/glibc
+
+bench: ## Time this library against glibc and musl on the same workload
+# A number about this library needs something beside it, and the one this
+# replaced was whole-process wall clock over a CLI run - so start-up, stdin
+# and compiling a thousand patterns were all in the denominator, and it read
+# as a statement about matching. This compiles once and times the searches.
+#
+# Built at whatever CFLAGS say, which today is -O0 for the C sources, so the
+# absolute figures are not this library's and only the ratios are worth
+# reading. For what an optimised build does, build into a directory of its
+# own rather than over the release one:
+#
+#     make bench BUILD=o3 EXTRA_CFLAGS=-O3 CUTIL_PC=ghoti.io-cutil-0
+#
+# BUILD, because make does not track the flags an object was built with: -O3
+# objects left in the release tree are invisible to a later `make test`,
+# which will link them and report on a library nobody asked for. CUTIL_PC,
+# because a non-default BUILD renames the .pc this looks for.
+bench: $(BENCH_BINS) $(BENCH_MUSL_BIN)
+	@printf "\n"
+	@for load in a p n; do \
+		$(BENCH_DIR)/ours 400 $$load posix-ere; \
+		$(BENCH_DIR)/ours 400 $$load gnu-ere; \
+		$(BENCH_DIR)/glibc 400 $$load; \
+		if [ -x $(BENCH_DIR)/musl ]; then \
+			$(BENCH_DIR)/musl 400 $$load; \
+		fi; \
+		printf "\n"; \
+	done
+
+$(BENCH_DIR)/ours: tools/bench/regex_bench.c $(APP_DIR)/$(STATIC_TARGET)
+	@printf "\n### Compiling Benchmark: ours ###\n"
+	@mkdir -p $(BENCH_DIR)
+	$(CC) $(CFLAGS) -DBENCH_OURS $(INCLUDE) -o $@ $< $(LDFLAGS) $(REGEXLIBRARY)
+
+$(BENCH_DIR)/glibc: tools/bench/regex_bench.c
+	@printf "\n### Compiling Benchmark: glibc ###\n"
+	@mkdir -p $(BENCH_DIR)
+	$(CC) $(CFLAGS) -DBENCH_GLIBC -o $@ $<
+
+
 check-oracles: ## Run every differential check against the reference implementation
 check-oracles: check-oracle-syntax check-oracle-match check-oracle-properties \
 	check-oracle-numeric-properties check-oracle-string-properties \
