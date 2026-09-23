@@ -465,22 +465,40 @@ TEST(Callout, InsideAnAssertionConditionFiresOnce) {
       (std::vector<std::pair<uint32_t, size_t>>{{1, 0}}));
 }
 
-TEST(Callout, InAConditionsPositionIsNotReported) {
-  // The one place this library knows it differs from pcre2test's trace.
-  // `(?(?C9)(?=a)b|c)` prints callout 9 there; here the callout is dropped
-  // by the parser, because a conditional's children are the condition and
-  // the branches positionally and there is no fourth slot to put it in. The
-  // *match* is unaffected, which is what the second half of this checks.
-  //
-  // Pinned rather than left to chance: if the parser ever does carry it
-  // through, this test is the record of what changed.
+TEST(Callout, InAConditionsPositionIsHoistedInFrontOfIt) {
+  // A callout may be written where the condition goes, and a conditional's
+  // children are the condition and the branches positionally - so the
+  // parser keeps it as a *leading* child and lowering hoists it out in
+  // front of the whole conditional. `(?(?C9)(?=a)ab|c)` becomes
+  // `(?C9)(?(?=a)ab|c)`, which is where pcre2test prints callout 9 too.
+  // It was dropped here until `callout_diff.py` said so, and the match was
+  // identical throughout - a difference only a trace can see.
   Regex regex("(?(?C9)(?=a)ab|c)");
   ASSERT_EQ(regex.result(), GRX_OK);
   Recorder recorder;
   int matched = 0;
   ASSERT_EQ(search(regex, "ab", &recorder, &matched), GRX_OK);
   EXPECT_TRUE(matched);
-  EXPECT_TRUE(recorder.reports.empty());
+  EXPECT_EQ(trace(recorder),
+      (std::vector<std::pair<uint32_t, size_t>>{{9, 0}}));
+
+  // It fires whichever branch is taken, because it is in front of the
+  // choice rather than inside it.
+  Recorder other;
+  matched = 0;
+  ASSERT_EQ(search(regex, "c", &other, &matched), GRX_OK);
+  EXPECT_TRUE(matched);
+  EXPECT_EQ(trace(other),
+      (std::vector<std::pair<uint32_t, size_t>>{{9, 0}}));
+}
+
+TEST(Callout, OnlyOneMayStandWhereTheConditionGoes) {
+  // pcre2 takes one and refuses two - "assertion expected after (?( or
+  // (?(?C)" - where comments are unlimited. Any number was accepted here.
+  Regex two("(?(?C1)(?C2)(?=a)ab|c)");
+  EXPECT_NE(two.result(), GRX_OK);
+  Regex comments("(?(?#x)(?#y)(?C1)(?=a)ab|c)");
+  EXPECT_EQ(comments.result(), GRX_OK);
 }
 
 // --------------------------------------------------------------------------

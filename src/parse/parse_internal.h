@@ -276,7 +276,7 @@ typedef struct GRX_ClassItem {
  * | BACKREF | group number | name offset | NAMED, RELATIVE |
  * | ANCHOR | GRX_AnchorKind | - | - |
  * | LOOKAROUND | GRX_LookKind | - | `min` is a byte bound on a lookbehind, 0 for none; one child |
- * | CONDITIONAL | GRX_CondKind | group number or name offset | HAS_ELSE; children are the condition (for ASSERTION), then, else |
+ * | CONDITIONAL | GRX_CondKind | group number or name offset | HAS_ELSE; children are any callouts written where the condition goes, then the condition (for ASSERTION), then, else |
  * | RECURSE | target group number, 0 for the whole pattern | name offset when NAMED, else the definition's own byte offset or GRX_INDEX_NONE | NAMED, RELATIVE |
  * | CONTROL | GRX_VerbKind | argument name offset, or GRX_INDEX_NONE | - |
  * | OPTIONS | options to set | options to clear | SCOPED; one child when scoped |

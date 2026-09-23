@@ -989,15 +989,20 @@ library has neither. The backtracking control verbs are absent from the
 skeletons for the same reason: pcre2api says `NO_START_OPTIMIZE` changes
 what `(*COMMIT)` and `(*SKIP)` do.
 
-The classified shape is a callout written where a conditional's
-*condition* goes, which the parser drops; it is in
-[dialects.md](dialects.md) §6, and the match is identical. It is checked
-rather than waved through - the outcomes have to agree and our trace has
-to be empty where pcre2's is not - and a run that finds none of it exits
-2, because a gate that has quietly stopped producing its own known case
-has quietly stopped asking.
+**Nothing is excluded any more, and two shapes were.** The first was a
+callout written where a conditional's *condition* goes - `(?(?C9)(?=a)b|c)`
+- which the parser dropped, because a conditional's children are the
+condition and the branches positionally. Our trace was empty where pcre2's
+had the callout, 150 rows in 25,600, and the match was identical
+throughout, which is the kind of difference only a trace gate can see. The
+parser keeps them now and lowering hoists them in front of the whole
+conditional, which is where pcre2test prints them; asking that question
+also found that pcre2 takes exactly *one* there and refuses two, where
+this library had taken any number. A run that produces none of the shape
+still exits 2, because a gate that has quietly stopped producing its own
+hard case has quietly stopped asking.
 
-There were two, and the second is gone. A callout *inside* an assertion
+The second is gone too. A callout *inside* an assertion
 condition fired twice, because `(?(?=A)X|Y)` was lowered as
 `(?:(?=A)X|(?!A)Y)` - exact, and two copies of A. This gate is what turned
 that rewrite's documented cost, "time and not meaning", into a visible

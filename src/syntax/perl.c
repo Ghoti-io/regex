@@ -3249,7 +3249,8 @@ static GRX_Result pcre_skip_ignorable(GRX_Parser * parser);
  * depth accounting is repeated here because the parser's own copy runs in
  * parse_atom(), which this path does not go through.
  */
-static GRX_Result read_group_atom(GRX_Parser * parser, uint32_t * out_node) {
+static GRX_Result read_group_atom(
+    GRX_Parser * parser, uint32_t conditional, uint32_t * out_node) {
   size_t start = parser->position;
   GRX_GroupOpen open = {
     .kind = GRX_NODE_GROUP,
@@ -3258,18 +3259,18 @@ static GRX_Result read_group_atom(GRX_Parser * parser, uint32_t * out_node) {
   };
 
   // `(?(?C9)(?=a)b|c)` puts callouts before the condition, and `(?(?#x)(?=a)`
-  // puts a comment there. Both are skipped here rather than being made
-  // children of a conditional that has no place for them: its children are
-  // the condition and the branches, positionally, and a fourth would change
-  // a shape lowering and codegen both read.
+  // puts a comment there.
   //
-  // For the comment that is exact. For the callout it is the one place this
-  // library does not report one that pcre2test does - `(?(?C9)(?=a)b|c)`
-  // prints callout 9 there, at the same positions a callout written just
-  // before the conditional would print it. The *match* is identical, and
-  // only a caller watching the sequence can tell. Recorded in
-  // documentation/dialects.md section 6 and pinned by
-  // CalloutInAConditionsPositionIsNotReported in tests/unit/test_callout.cpp.
+  // The comment is skipped, which is exact. The callouts are *kept*, as the
+  // conditional's leading children, and lowering hoists them out in front
+  // of it - `(?(?C9)(?=a)b|c)` becomes `(?C9)(?(?=a)b|c)`, which is where
+  // pcre2test prints callout 9 too. They were dropped here until this
+  // library reported a trace pcre2test did not, 150 rows in 25,600 of
+  // `callout_diff.py`; a conditional's children are the condition and the
+  // branches positionally, and what makes this work is that the hoisting
+  // happens before the IR is built, so nothing below the AST sees a fourth
+  // kind of child.
+  int callouts = 0;
   for (;;) {
     GRX_Result skipped = pcre_skip_ignorable(parser);
     if (skipped != GRX_OK) {
@@ -3283,8 +3284,39 @@ static GRX_Result read_group_atom(GRX_Parser * parser, uint32_t * out_node) {
     if (result != GRX_OK) {
       return result;
     }
-    if (!open.has_body
-        && (open.kind == GRX_NODE_EMPTY || open.kind == GRX_NODE_CALLOUT)) {
+    if (!open.has_body && open.kind == GRX_NODE_CALLOUT) {
+      if (callouts) {
+        // pcre2 takes one and refuses two: `(?(?C1)(?C2)(?=a)b|c)` is
+        // "assertion expected after (?( or (?(?C)". Measured; this was any
+        // number here, which accepted a pattern the reference does not.
+        return grx_parse_fail(parser, GRX_DIAG_INVALID_CONDITION, start,
+            parser->position - start);
+      }
+      callouts++;
+      uint32_t reported = GRX_INDEX_NONE;
+      result = grx_pattern_add_node(parser->pattern, GRX_NODE_CALLOUT, start,
+          parser->position - start, &reported);
+      if (result != GRX_OK) {
+        return grx_parse_fail(parser, GRX_DIAG_OUT_OF_MEMORY, start, 0);
+      }
+      GRX_Node * callout = grx_pattern_node(parser->pattern, reported);
+      callout->a = open.a;
+      callout->b = open.b;
+      callout->min = open.min;
+      callout->max = open.max;
+      if (grx_pattern_add_child(parser->pattern, conditional, reported)
+          != GRX_OK) {
+        return grx_parse_fail(parser, GRX_DIAG_OUT_OF_MEMORY, start, 0);
+      }
+      open = (GRX_GroupOpen) {
+        .kind = GRX_NODE_GROUP, .b = GRX_INDEX_NONE, .has_body = 1,
+      };
+      continue;
+    }
+    if (!open.has_body && open.kind == GRX_NODE_EMPTY) {
+      open = (GRX_GroupOpen) {
+        .kind = GRX_NODE_GROUP, .b = GRX_INDEX_NONE, .has_body = 1,
+      };
       continue;
     }
     break;
@@ -3356,7 +3388,7 @@ static GRX_Result read_conditional_body(GRX_Parser * parser, uint32_t node) {
 
   if (assertion) {
     uint32_t condition = GRX_INDEX_NONE;
-    GRX_Result result = read_group_atom(parser, &condition);
+    GRX_Result result = read_group_atom(parser, node, &condition);
     if (result != GRX_OK) {
       return result;
     }
