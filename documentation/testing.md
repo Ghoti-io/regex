@@ -450,41 +450,58 @@ construct coverage - one entry per construct the dialect has - so a case
 where two group assignments share one extent arises only by accident. This
 one builds patterns out of ambiguous pieces on purpose: groups whose
 branches overlap (`(a|ab)`, `(a|aa)`), groups that can match empty (`(|a)`,
-`(a?)`, `(a{0}|a)`), and quantified groups side by side, two per pattern.
-Almost every case has two answers to choose between.
+`(a?)`, `(a{0}|a)`), quantified groups side by side, and groups with
+*untagged* material in front of them (`a*(a|)`, `[ab]a*(a|)`). Almost every
+case has two answers to choose between.
 
 That was the whole of its value on the first run. Spencer's imported vectors
 contain no such case at all - not one of the 809 POSIX and GNU rows - and
 the POSIX differential had been reporting zero disagreements for as long as
 it had existed. Built to ask, this reported **1,050** across three dialects
-immediately, every one of them the same rule: an alternative with nothing in
-it was being tried before the branch beside it, where both references try it
-after. [dialects.md](dialects.md) §5.1 states the rule and §6 records what
-is still not followed.
+immediately, every one of them one rule, and that rule is now
+[dialects.md](dialects.md) §5.1's `FIRST_PATH` rewrite.
 
-Who decides is the POSIX differential's arrangement, with one addition.
+It then earned its place a second time as the gate for WP-26, and the way it
+did is the reason the atom lists look the way they do. Three wrong versions
+of POSIX's comparison were written, and **the first tool to catch each one
+was a different tool**:
+
+- comparing group *starts* as well as ends - caught here, 1,098 rows;
+- letting a group only one candidate entered decide - caught by the
+  conformance corpus (`a(b+|((c)*))+d`), and **not** by this, whose atoms
+  had no empty-iteration shape in them at all;
+- shortening a subexpression with no group around it - caught by
+  `posix_diff.py` (`[ab]a*(a|)`), the wrong tool having to find it.
+
+Both of those gaps are closed: `(b+|((c)*))+` and the untagged-prefix pieces
+are atoms now, and re-planting each mistake makes this report 264 and 880
+rows respectively. A gate that was clean on two of the three questions it
+exists to ask was clean because it could not spell them.
+
+Who decides is the POSIX differential's arrangement, with two additions.
 glibc alone decides `gnu-bre` and `gnu-ere`; for `posix-bre` and
-`posix-ere` the standard is glibc and musl agreeing. Where the two
-references differ, this tool does not merely skip the row - it counts it and
-says which side this library came down on, because that set *is* the open
-question of plan.md's WP-26: 1,326 of 8,993 generated `posix-ere` rows, in
-every one of which musl answers as POSIX's rule says and glibc does not, and
-in every one of which this library answers as glibc does. `--strict`, which
-is what the Makefile runs, fails if that set ever empties - a claim about an
-open question should not outlive the question.
+`posix-ere` the standard is glibc and musl agreeing.
+
+The first addition is that their *disagreements* are counted and named
+rather than skipped, with the side this library came down on, because that
+set is the measurable part of what §5.1's two values differ about: 470 of
+15,246 generated `posix-ere` rows. `--strict`, which is what the Makefile
+runs, fails if it ever empties.
+
+The second addition is the harder one. Since WP-26 the POSIX rows follow the
+*standard*, so a row where both references agree and both are wrong is a
+row this library must fail the consensus on. There are six, all Fowler's
+`(a|ab)(c|bcd)(d*)` shape, and they are listed by pattern **with the answer
+each must give** - an exemption that still checks the result, so a defect
+inside the class fails like any other. The list is guarded in both
+directions: if a listed row stops being generated, the tool says the list or
+the atoms have gone stale and fails. That guard fired on its first run, when
+"abcd" turned out not to be in the subject list.
 
 `posix-bre` is the thin row and the tool says so rather than leaving it to
 look like a clean result: POSIX basic REs have no alternation, so the
 empty-branch half of this question cannot be spelled in one. Its cases ask
 the other half, two quantified groups next to each other.
-
-Both halves of the rule were proven by planting. Removing the rewrite makes
-this report the 1,050 rows again; narrowing it to a branch that is literally
-empty - so that `(a{0}|a)` no longer counts - makes it report 692. The
-second plant is the more useful one, because `a{0}` is *how the axis was
-missed the first time*: the atom lists had no branch that generates nothing
-without being written as nothing, and the tool passed against a rule that
-was wrong for every such spelling.
 
 ### The cross-engine check
 

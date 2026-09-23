@@ -194,26 +194,64 @@ match - so naming `GRX_ENGINE_BITSTATE` for one of these dialects is
 `GRX_ERR_UNSUPPORTED` rather than a quiet answer from the wrong rule.
 `GRX_ENGINE_AUTO` never selects it there.
 
-**Which spans the *groups* get** is a second question, and §5.1 does not
-answer it. POSIX specifies not only the longest overall match but, among the
-ways of matching that same extent, which one the subexpressions divide; both
-engines here take whichever path they reach first instead, which is their
-own alternation order. `(|a)(a|)` against "a" is the smallest case: either
-group can have the `a` and the match ends at 1 either way, and reaching the
-empty branch first hands group 1 nothing.
+**Which spans the *groups* get** is a second question, and the preference
+above does not answer it. POSIX specifies not only the longest overall match
+but, among the ways of matching that same extent, how the subexpressions
+divide it. POSIX.1 §9.4.8 requires each subpattern, taken from left to
+right, to match the longest string it can while the whole match stays the
+longest one at the leftmost start. `(|a)(a|)` against "a" is the
+smallest case - either group can have the `a` and the match ends at 1 either
+way.
 
-One part of POSIX's rule *is* implemented, because it is the part both
-references agree on: **an alternative with nothing in it is considered after
-the one written beside it.** One position, not a sort - `(|b|a)` behaves as
-`(b||a)` - and it is about what a branch generates rather than what it can
-match, so `(a{0}|a)` counts and `(b*|a)` and `(()|a)` do not. The rule was
-read off glibc and musl with `tools/oracle/submatch_diff.py`: over 7,360
-generated rows it reproduced glibc exactly, with no exceptions, and it never
-once contradicted a case musl agreed with. Removing it makes that tool
-report 1,050 disagreements across three dialects.
+The four leftmost-longest dialects do **not** agree about this, so it is an
+axis of its own:
 
-The rest of POSIX's rule is not implemented, and §6 says what this library
-answers instead.
+| Value | Meaning |
+| --- | --- |
+| `FIRST_PATH` | whichever division the engine reached first, which is its own alternation order |
+| `POSIX` | the division POSIX's rule asks for, compared rather than stumbled upon |
+
+POSIX BRE/ERE: `POSIX`. GNU BRE/ERE: `FIRST_PATH`, because §2 makes glibc
+their definition and glibc does not implement the standard's rule here.
+Every leftmost-first dialect is `FIRST_PATH` by construction: there the
+first path *is* the answer, so there is no second candidate to compare.
+
+**What `POSIX` compares.** Each group's *end*, in group-number order -
+which is POSIX's own order, since groups are numbered by their opening
+parenthesis, so an enclosing group comes before the groups inside it and a
+left one before a right one. The first group where two candidates differ
+decides, and the later end wins.
+
+Ends only, and that is a correction rather than a shortcut. Preferring an
+earlier *start* looks like preferring a longer group and is really
+preferring a shorter something to its left - and that something may have no
+group around it, and so nothing here to be compared. `[ab]a*(a|)` against
+"aab" is the case: `a*` is the leftmost subexpression and takes the second
+"a", so group 1 gets the empty match at 2, and comparing starts would hand
+it 1-2 instead by shortening an `a*` that has no tag to defend itself with.
+A group's start belongs to whatever precedes it, which the engines settle by
+their own order; the length is what this decides. A group only one candidate
+entered is skipped rather than preferred either way, or an iteration that
+lost reports its spans: `a(b+|((c)*))+d` against "abd" leaves group 2 unset.
+
+**What `FIRST_PATH` does instead**, and it is not simply "whatever
+happens": lowering makes an empty alternative yield to the branch written
+beside it, which is the one part of POSIX's rule glibc does follow. One
+position, not a sort - `(|b|a)` behaves as `(b||a)` - and it is about what a
+branch generates rather than what it can match, so `(a{0}|a)` counts and
+`(b*|a)` and `(()|a)` do not. Read off glibc and musl over 7,360 generated
+rows, where it reproduced glibc exactly and never contradicted a case musl
+agreed with.
+
+**Both engines implement `POSIX`**, which is what keeps them
+interchangeable: the Pike VM compares two arrivals at one program counter
+and keeps the better, walking on from it again so the improvement reaches
+everything downstream; the backtracker compares two finished candidates of
+the same extent. The one place the backtracker does not is a program only it
+can run - a backreference - where the comparison costs the short-circuit
+that stops `\(a*\)*\1` walking an exponential tree, and no reference can
+decide the answer anyway because musl refuses a basic RE with a
+backreference outright. §6 carries that as a deviation.
 
 ### 5.2 Newlines and `.`
 
@@ -1071,7 +1109,9 @@ to be complete for every shipped tier.
 | Perl | `\p{nv=1/1}` and its kin resolve; perl refuses a fraction that reduces to an integer | UAX #44 §5.9.2 says numeric values match by "numeric equivalencies", and `1/1` is `1`. Perl keys its table by the *spelling* instead, so `1/1`, `2/2` and `0/3` are errors there while `2/4` and `9/12` resolve. Following the stated rule accepts a spelling perl rejects and never changes a match set | - |
 | Perl | `/l` asks for the locale's semantics and gets the C locale's | there is no other locale here (section 6), and the C locale's word characters are the ASCII ones | - |
 | POSIX | `[[.ch.]]`: a collating element of more than one character | no collation, and none is needed for the rest. `[[.a.]]` and `[[=e=]]` are *built* and answer as glibc 2.41 does in the C locale - each names the one character inside it, so `[[=a=]]` does not match "A" - which is the only locale this library has (§7 of [unicode.md](unicode.md)). What is refused is a name glibc also refuses there: `[[.ch.]]` and `[[.hyphen.]]` are errors in both. Row corrected 2026-09-22 after probing; it had said `[[=e=]]` was refused, and had named the wrong result code | `GRX_ERR_SYNTAX`, as glibc; **`GRX_ERR_SYNTAX`** in Perl and PCRE2 too, which do not have the construct at all — pcre2test raises error 113 and perl calls the syntax "reserved for future extensions", so a pattern using one there is not valid rather than not built |
-| POSIX, GNU | POSIX's "every subexpression takes the longest match consistent with the whole" is not implemented as a rule | the engines implement leftmost-longest for the *whole* match (§5.1) and answer a tie between two ways of matching the same extent by which one they reached first. The ten rows once filed under this heading were an empty-iteration question (§5.5) and all pass now; what remained was not "no case has been found" but "nothing had looked". `tools/oracle/submatch_diff.py` looks, by building patterns out of ambiguous pieces on purpose, and it found the rule in §5.1 - 1,050 rows across three dialects, all of one shape, now followed. What is left is the shape the two references themselves disagree about: where both branches are non-empty and the shorter is written first, `(a\|aa)(a\|)` against "aa", musl gives group 1 the longer span as POSIX's rule does and glibc gives it the shorter. **This library answers as glibc does**, in all 1,326 of the 8,993 generated `posix-ere` rows where they differ and in none of them as musl. Settling it POSIX's way needs the tagged transitions of plan.md's WP-26, and would move the two GNU rows off their own reference | - |
+| POSIX BRE, POSIX ERE | **Group spans follow POSIX where glibc and musl agree with each other and are both wrong** | §5.1's `POSIX` submatch rule is implemented, and these two rows are held to the standard rather than to an implementation. `(a\|ab)(c\|bcd)(d*)` against "abcd" is Fowler's case: group 1 can be "ab" with the whole match still reaching 4, so POSIX requires "ab", and both references give it the single "a". This library answers `0-4 0-2 2-3 3-4`. Six patterns, 6 of 15,246 generated `posix-ere` rows, each carried by name in `tools/oracle/submatch_diff.py` with the answer it must give - an exempt row whose *answer* is still checked, so a defect inside the class still fails the gate | - |
+| GNU BRE, GNU ERE | Group spans follow glibc, which is not POSIX | §2 makes glibc the definition of these two rows, and it answers `(a\|aa)(a\|)` against "aa" with group 1 taking the shorter branch where POSIX's rule takes the longer. Following the standard here would mean leaving the reference these rows are named for, so the axis is per-dialect: `FIRST_PATH` for these two and `POSIX` for the other two. The two answers differ on 470 of the 15,246 generated `posix-ere` rows | - |
+| POSIX BRE | A pattern with a backreference keeps the first-path division, not POSIX's | the comparison costs the short-circuit that ends the search when a match reaches the end of the window, and without it `\(a*\)*\1` against twenty characters runs out of steps where it used to answer at once. There is also nothing to be exact against: musl refuses a basic RE with a backreference outright, so no two references can decide such a row. The rule therefore applies to a program the Pike VM could also run - every POSIX ERE, and every basic RE without a backreference - which is also what keeps the two engines answering alike | - |
 | POSIX, GNU | `(\<)*` reports the group as having matched empty where glibc reports it unset | the references disagree, so there is no rule to follow: glibc says a zero-width iteration did not happen, musl says it did, and this library says it did. Left where musl is, because the alternative is to special-case an iteration that consumed nothing *and* wrote nothing, which neither reference describes and only glibc does | - |
 | .NET | Culture-sensitive folding is invariant; balancing groups deferred | §5.8; [design.md](design.md) §2 | `GRX_ERR_UNSUPPORTED` for balancing groups |
 | Emacs | Syntax classes (`\s-`, `\w`) use fixed Unicode definitions, not a syntax table | no syntax table | - |

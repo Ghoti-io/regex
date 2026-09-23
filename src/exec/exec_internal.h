@@ -161,6 +161,66 @@ static inline int grx_exec_accepts(
 }
 
 /**
+ * @brief Whether `candidate` divides a match better than `best` does, under
+ *   POSIX's rule.
+ *
+ * The comparison GRX_SUBMATCH_POSIX is made of. Both arrays hold the same
+ * groups of the same pattern over the same extent, and differ only in where
+ * the boundaries between the groups fell.
+ *
+ * POSIX's rule is recursive - each subexpression takes the longest span
+ * consistent with the whole match and with the subexpressions before it -
+ * and group *number* is the order that recursion visits in, because groups
+ * are numbered by their opening parenthesis: an enclosing group has a lower
+ * number than the groups inside it, and a group to the left a lower number
+ * than one to its right. So the rule is a scan, and the first group where
+ * the two differ decides.
+ *
+ * **Ends only.** The scan reads each group's end and prefers the later one;
+ * it never looks at a start, and never at group 0. That is not a
+ * simplification, it is the correction: preferring an earlier start looks
+ * like preferring a longer group and is really preferring a *shorter*
+ * something to its left, and the something to its left may have no group
+ * around it and so no slot here to be compared. `[ab]a*(a|)` against "aab"
+ * is the case that says so. Both references give group 1 the empty match at
+ * 2, because `a*` is the leftmost subexpression and takes what it can;
+ * comparing starts hands group 1 the span 1-2 instead, which is longer and
+ * wrong, and shortens an `a*` that has no tag to defend itself with. A
+ * group's start belongs to whatever precedes it, which the engines already
+ * settle by their own priority order - greedy first - so it is the length,
+ * and only the length, that this decides.
+ *
+ * A group only one of the two entered is skipped rather than preferred
+ * either way: a subexpression that did not participate has no length to
+ * compare, and letting it decide reports spans from an iteration that lost.
+ * `a(b+|((c)*))+d` against "abd" is that case, where treating a set group as
+ * beating an unset one reports group 2 as 1-1 where both references leave it
+ * unset.
+ *
+ * What is left when nothing here decides is the engines' own order, which
+ * is why this returns 0 for "no preference" rather than a three-way answer.
+ *
+ * @param candidate The newly finished division. Never NULL.
+ * @param best The one currently held. Never NULL.
+ * @param captures How many slots each array holds: two per group, group 0
+ *   included.
+ * @return Non-zero when `candidate` should displace `best`.
+ */
+static inline int grx_exec_submatch_better(const size_t * candidate,
+    const size_t * best, size_t captures) {
+  for (size_t slot = 3; slot < captures; slot += 2) {
+    size_t mine = candidate[slot];
+    size_t theirs = best[slot];
+    if (mine == theirs || mine == GRX_NPOS || theirs == GRX_NPOS) {
+      continue;
+    }
+    return mine > theirs;
+  }
+
+  return 0;
+}
+
+/**
  * @brief Whether a program uses a construct the Pike VM cannot run.
  *
  * A backreference, a lookaround, an atomic group or a recursion each need

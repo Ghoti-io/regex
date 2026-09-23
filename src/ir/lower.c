@@ -2025,14 +2025,15 @@ static int branch_is_nothing(const Lowering * low, uint32_t index) {
  * reproduced glibc exactly and never once contradicted a case musl agreed
  * with.
  *
- * It is not the whole of POSIX's rule. Where both branches are non-empty
- * and the shorter is written first - `(a|aa)(a|)` against "aa" - glibc and
- * musl disagree with each other, and this library answers as glibc does.
- * See documentation/dialects.md section 6, and WP-26 in plan.md for the
- * tagged-transition work that would settle it.
+ * It is not the whole of POSIX's rule, only the part glibc follows, so it
+ * belongs to GRX_SUBMATCH_FIRST_PATH alone. Under GRX_SUBMATCH_POSIX the
+ * engines compare the divisions themselves and the order they meet them in
+ * decides nothing, which makes this rewrite both unnecessary and a lie
+ * about what the program means. See documentation/dialects.md section 5.1.
  */
 static void empty_branch_yields(Lowering * low, uint32_t alternation) {
-  if (low->profile.preference != GRX_PREFER_LEFTMOST_LONGEST) {
+  if (low->profile.preference != GRX_PREFER_LEFTMOST_LONGEST
+      || low->profile.submatch != GRX_SUBMATCH_FIRST_PATH) {
     return;
   }
 
@@ -2992,6 +2993,7 @@ GRX_Result grx_lower_pattern(const GRX_Pattern * pattern,
   low.ir->max_variable_lookbehind
       = low.profile.lookbehind == GRX_LOOKBEHIND_BOUNDED ? 255 : GRX_NPOS;
   low.ir->preference = low.profile.preference;
+  low.ir->submatch = low.profile.submatch;
   low.ir->iteration = low.profile.iteration;
   low.ir->search_start = low.profile.search_start;
   low.ir->capture_count = pattern->capture_count;

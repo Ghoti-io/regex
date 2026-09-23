@@ -83,6 +83,18 @@ typedef struct {
   PikeState * state;
   uint64_t stalls;   ///< Which progress registers equal this position.
   uint32_t next;     ///< The next thread at this pc, or PIKE_NO_THREAD.
+  /**
+   * What this program counter was reached with, under GRX_SUBMATCH_POSIX.
+   *
+   * `state` is only set where a thread *rests* - a consuming instruction or
+   * MATCH - and the epsilon closure walks through everything else without
+   * leaving one behind. POSIX's rule needs the walk to be able to compare a
+   * second arrival against the first, at every program counter and not only
+   * the resting ones, so this holds a retained copy of whatever reached
+   * here. NULL under GRX_SUBMATCH_FIRST_PATH, where arrival order decides
+   * and nothing is compared.
+   */
+  PikeState * best;
 } PikeThread;
 
 #define PIKE_NO_THREAD ((uint32_t)-1)
@@ -137,6 +149,7 @@ typedef struct {
   size_t best_start;     ///< Its start, and
   size_t best_end;       ///< its end, for the longest-match comparison.
   int longest;           ///< Whether the dialect wants leftmost-longest.
+  int posix;             ///< ...and POSIX's division of it, not first arrival.
   size_t steps;          ///< Instructions executed, against max_steps.
   size_t memory;         ///< Bytes handed out, against max_match_memory.
   int utf;               ///< Whether a step is a code point or a byte.
@@ -276,6 +289,7 @@ static int list_reserve(Pike * pike, PikeList * list) {
 static void list_clear(Pike * pike, PikeList * list) {
   for (size_t i = 0; i < list->count; i++) {
     state_release(pike, list->threads[i].state);
+    state_release(pike, list->threads[i].best);
   }
   list->count = 0;
 }
@@ -288,16 +302,17 @@ static void list_free(Pike * pike, PikeList * list) {
   list->threads = NULL;
 }
 
-static int list_contains(
+/** Which thread holds this program counter and stall mask, if any. */
+static uint32_t list_find(
     const PikeList * list, uint32_t pc, uint64_t stalls) {
   uint32_t index = list->sparse[pc];
   while (index < list->count && list->threads[index].pc == pc) {
     if (list->threads[index].stalls == stalls) {
-      return 1;
+      return index;
     }
     index = list->threads[index].next;
   }
-  return 0;
+  return PIKE_NO_THREAD;
 }
 
 // --------------------------------------------------------------------------
@@ -566,6 +581,46 @@ static uint64_t stall_mask(
   return mask;
 }
 
+/**
+ * Whether `candidate` should displace `held` at one program counter.
+ *
+ * The two threads are at the same instruction at the same position, so
+ * their futures are identical and only one of them need live - which makes
+ * this the question of which prefix POSIX prefers.
+ *
+ * The start comes first and is not part of the shared comparison, because
+ * the shared one is written for two finished matches over a settled extent
+ * and these two have settled nothing. In leftmost-longest mode this engine
+ * keeps a thread alive for every start at once, so two arrivals at one
+ * program counter may have begun in different places; the earlier start
+ * wins outright, which is the outermost of POSIX's criteria and is what the
+ * first-path rule was getting for free from the order the starts are seeded
+ * in. Losing that was worth four cross-engine disagreements: without it
+ * `(a)a|aa(a|ab)` against "aaaa" reported 0-2 on this engine and 0-3 on the
+ * other, which is not a disagreement about the groups at all.
+ *
+ * The end is nobody's business here - it is unset on both until MATCH - so
+ * what remains is the groups, in POSIX's order.
+ */
+static int closure_better(
+    const Pike * pike, const PikeState * candidate, const PikeState * held) {
+  if (!held) {
+    return 1;
+  }
+  if (candidate->slots[0] != held->slots[0]) {
+    if (candidate->slots[0] == GRX_NPOS) {
+      return 0;
+    }
+    if (held->slots[0] == GRX_NPOS) {
+      return 1;
+    }
+    return candidate->slots[0] < held->slots[0];
+  }
+
+  return grx_exec_submatch_better(
+      candidate->slots, held->slots, pike->captures);
+}
+
 static void add_thread(
     Pike * pike, PikeList * list, uint32_t pc, PikeState * state,
     size_t position) {
@@ -580,33 +635,73 @@ static void add_thread(
     PikeState * current = pike->stack[depth].state;
 
     uint64_t stalls = stall_mask(pike, current, position);
-    if (current_pc >= pike->program->insts.count
-        || list_contains(list, current_pc, stalls)) {
+    if (current_pc >= pike->program->insts.count) {
       state_release(pike, current);
       continue;
     }
 
-    if (!list_reserve(pike, list)) {
-      state_release(pike, current);
-      continue;
+    size_t slot;
+    uint32_t occupant = list_find(list, current_pc, stalls);
+    if (occupant != PIKE_NO_THREAD) {
+      // Under GRX_SUBMATCH_FIRST_PATH the first arrival stays and this one
+      // dies: a program counter reached twice at one position with the same
+      // stall mask keeps the higher-priority arrival, and that is what makes
+      // the result leftmost-first.
+      //
+      // Under GRX_SUBMATCH_POSIX arrival order decides nothing. The two
+      // arrivals are compared, and if this one divides the text the way
+      // POSIX asks for it replaces what is here and is walked onwards from
+      // again - so every program counter downstream is offered the better
+      // division too. That is a relaxation and it settles: each replacement
+      // strictly improves the vector at one program counter under a total
+      // order over finitely many vectors, so no pair can displace each other
+      // forever. It is not free, though, which is why it is counted against
+      // max_steps like everything else this engine does.
+      if (!pike->posix
+          || !closure_better(pike, current,
+                 list->threads[occupant].best)) {
+        state_release(pike, current);
+        continue;
+      }
+      pike->steps++;
+      if (pike->request->limits->max_steps
+          && pike->steps > pike->request->limits->max_steps) {
+        pike->failure = GRX_ERR_LIMIT;
+        pike->failure_diag = GRX_DIAG_LIMIT_STEPS;
+        state_release(pike, current);
+        continue;
+      }
+      state_release(pike, list->threads[occupant].best);
+      list->threads[occupant].best = state_retain(current);
+      // Whatever it was resting with is no longer the answer at this
+      // program counter; the walk below re-decides that.
+      state_release(pike, list->threads[occupant].state);
+      list->threads[occupant].state = NULL;
+      slot = occupant;
     }
+    else {
+      if (!list_reserve(pike, list)) {
+        state_release(pike, current);
+        continue;
+      }
 
-    // Occupied now, before the walk goes on: a program counter reached twice
-    // at one position with the same stall mask keeps the first arrival, which
-    // is the higher-priority one, and that is what makes the result
-    // leftmost-first. A second arrival with a different mask is a different
-    // thread and is chained behind this one.
-    uint32_t previous = list->sparse[current_pc];
-    list->threads[list->count].next
-        = (previous < list->count && list->threads[previous].pc == current_pc)
-        ? previous
-        : PIKE_NO_THREAD;
-    list->sparse[current_pc] = (uint32_t)list->count;
-    list->threads[list->count].pc = current_pc;
-    list->threads[list->count].state = NULL;
-    list->threads[list->count].stalls = stalls;
-    list->count++;
-    size_t slot = list->count - 1;
+      // Occupied now, before the walk goes on. A second arrival with a
+      // different mask is a different thread and is chained behind this one.
+      uint32_t previous = list->sparse[current_pc];
+      list->threads[list->count].next
+          = (previous < list->count
+                && list->threads[previous].pc == current_pc)
+          ? previous
+          : PIKE_NO_THREAD;
+      list->sparse[current_pc] = (uint32_t)list->count;
+      list->threads[list->count].pc = current_pc;
+      list->threads[list->count].state = NULL;
+      list->threads[list->count].stalls = stalls;
+      list->threads[list->count].best
+          = pike->posix ? state_retain(current) : NULL;
+      list->count++;
+      slot = list->count - 1;
+    }
 
     const GRX_Inst * inst
         = GRX_ARENA_AT(const GRX_Inst, &pike->program->insts, current_pc);
@@ -877,6 +972,7 @@ GRX_Result grx_exec_pike(const GRX_ExecRequest * request, int * out_matched) {
     .best_start = GRX_NPOS,
     .best_end = GRX_NPOS,
     .longest = program->preference == GRX_PREFER_LEFTMOST_LONGEST,
+    .posix = program->submatch == GRX_SUBMATCH_POSIX,
     .steps = 0,
     .memory = 0,
     .utf = (program->flags & GRX_PROGRAM_UTF) != 0,
@@ -1022,7 +1118,14 @@ GRX_Result grx_exec_pike(const GRX_ExecRequest * request, int * out_matched) {
             // lose to an earlier one no matter when it arrives.
             size_t start = state->slots[0];
             int better = !pike.matched || start < pike.best_start
-                || (start == pike.best_start && position > pike.best_end);
+                || (start == pike.best_start && position > pike.best_end)
+                // Same extent, divided differently: under
+                // GRX_SUBMATCH_POSIX that is still a question, and the
+                // comparison is the same one add_thread() uses.
+                || (pike.posix && start == pike.best_start
+                    && position == pike.best_end
+                    && grx_exec_submatch_better(
+                        state->slots, pike.matched->slots, pike.captures));
             if (better) {
               state_release(&pike, pike.matched);
               pike.matched = state;

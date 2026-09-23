@@ -132,6 +132,12 @@ std::string group(const std::string & pattern, const std::string & subject,
 const GRX_Syntax kBre = GRX_SYNTAX_GNU_BRE;
 const GRX_Syntax kEre = GRX_SYNTAX_GNU_ERE;
 
+// The two rows held to POSIX itself rather than to glibc. Named separately
+// because the difference between these and the pair above is now visible in
+// an answer: documentation/dialects.md section 5.1.
+const GRX_Syntax kPosixBre = GRX_SYNTAX_POSIX_BRE;
+const GRX_Syntax kPosixEre = GRX_SYNTAX_POSIX_ERE;
+
 } // namespace
 
 TEST(Posix, TheOperatorsABasicReSpellsWithABackslash) {
@@ -330,6 +336,68 @@ TEST(Posix, AnEmptyAlternativeYieldsToTheBranchBesideIt) {
   // branches are written in is the whole of the meaning.
   EXPECT_EQ(group("(|a)(a|)", "a", GRX_SYNTAX_ECMASCRIPT, 1), "0-0");
   EXPECT_EQ(group("(|a)(a|)", "a", GRX_SYNTAX_PERL, 1), "0-0");
+}
+
+TEST(Posix, PosixSaysWhichSubexpressionGetsWhichText) {
+  // plan.md's WP-26. POSIX.1 section 9.4.8 asks each subpattern, left to
+  // right, for the longest string it can take while the whole match stays
+  // the longest one at the leftmost start. The extent is section 5.1's job;
+  // this is the rest of it, and it is a profile axis
+  // because the four leftmost-longest dialects do not agree on it - the
+  // POSIX rows follow the standard and the GNU rows follow glibc, which
+  // does not.
+  //
+  // Against "aa" the whole match is 0-2 either way, and the only question is
+  // where the boundary between the two groups falls.
+  EXPECT_EQ(group("(a|aa)(a|)", "aa", kPosixEre, 1), "0-2");
+  EXPECT_EQ(group("(a|aa)(a|)", "aa", kPosixEre, 2), "2-2");
+  EXPECT_EQ(group("(a|aa)(a|)", "aa", kEre, 1), "0-1");
+  EXPECT_EQ(group("(a|aa)(a|)", "aa", kEre, 2), "1-2");
+
+  // The same split in a basic RE - in GNU's, which has `\\|`. POSIX's basic
+  // RE has no alternation at all, so this half of the question cannot be
+  // spelled in `posix-bre`: the pattern below is a *syntax error* there, and
+  // no pattern that dialect can spell has been found that separates the two
+  // rules. Its row in tools/oracle/submatch_diff.py is thin for the same
+  // reason and says so.
+  EXPECT_EQ(group("\\(a\\|aa\\)\\(a\\|\\)", "aa", kBre, 1), "0-1");
+  EXPECT_EQ(compile_result("\\(a\\|aa\\)", kPosixBre), GRX_ERR_SYNTAX);
+
+  // Fowler's case, and the one that says this is POSIX's rule rather than
+  // musl's: group 1 can be "ab" with the whole match still reaching 4, so
+  // "ab" is what POSIX requires - and glibc and musl *both* give it the
+  // single "a". Two references agreeing is usually the strongest evidence
+  // this machine can offer; here the standard is explicit and they are both
+  // wrong. tools/oracle/submatch_diff.py carries the row by name.
+  EXPECT_EQ(group("(a|ab)(c|bcd)(d*)", "abcd", kPosixEre, 1), "0-2");
+  EXPECT_EQ(group("(a|ab)(c|bcd)(d*)", "abcd", kPosixEre, 2), "2-3");
+  EXPECT_EQ(group("(a|ab)(c|bcd)(d*)", "abcd", kPosixEre, 3), "3-4");
+  EXPECT_EQ(group("(a|ab)(c|bcd)(d*)", "abcd", kEre, 1), "0-1");
+
+  // A subexpression with no group around it still has a claim, and it is
+  // the earlier one. `a*` takes the second "a", so group 1 gets the empty
+  // match at 2 and not the span 1-2 that would be longer for it alone.
+  // Both references agree, and so does every dialect here.
+  EXPECT_EQ(group("[ab]a*(a|)", "aab", kPosixEre, 1), "2-2");
+  EXPECT_EQ(group("[ab]a*(a|)", "aab", kEre, 1), "2-2");
+
+  // A group only one of the candidates entered decides nothing, or an
+  // iteration that lost would report its spans: here the loop's first pass
+  // takes `b+`, and the empty `((c)*)` pass that could have preceded it
+  // must not leave 1-1 behind.
+  EXPECT_EQ(group("a(b+|((c)*))+d", "abd", kPosixEre, 1), "1-2");
+  EXPECT_EQ(group("a(b+|((c)*))+d", "abd", kPosixEre, 2), "unset");
+
+  // Where POSIX's rule and glibc's agree, both rows answer the same: an
+  // empty alternative loses to the branch beside it either way, the first
+  // by comparison and the second by the rewrite in lower.c.
+  EXPECT_EQ(group("(|a)(a|)", "a", kPosixEre, 1), "0-1");
+  EXPECT_EQ(group("(|a)(a|)", "a", kEre, 1), "0-1");
+
+  // And the first-match dialects are untouched: there the first path *is*
+  // the answer, so there is no second candidate to compare it with.
+  EXPECT_EQ(group("(a|aa)(a|)", "aa", GRX_SYNTAX_ECMASCRIPT, 1), "0-1");
+  EXPECT_EQ(group("(a|ab)(c|bcd)(d*)", "abcd", GRX_SYNTAX_PERL, 1), "0-1");
 }
 
 TEST(Posix, TheReplacementTemplateIsSedsBecausePosixHasNone) {

@@ -276,6 +276,7 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
   // ASCII (a deviation, recorded in dialects.md section 6).
   [GRX_SYNTAX_POSIX_BRE] = {
     .preference = GRX_PREFER_LEFTMOST_LONGEST,
+    .submatch = GRX_SUBMATCH_POSIX,
     // BREAK rather than ALLOW. ALLOW means "nothing special; the longest
     // match decides", which presumes a leftmost-longest engine; until
     // plan.md's WP-24 builds one, a backtracker given ALLOW repeats an empty
@@ -315,6 +316,7 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
   },
   [GRX_SYNTAX_POSIX_ERE] = {
     .preference = GRX_PREFER_LEFTMOST_LONGEST,
+    .submatch = GRX_SUBMATCH_POSIX,
     // BREAK rather than ALLOW. ALLOW means "nothing special; the longest
     // match decides", which presumes a leftmost-longest engine; until
     // plan.md's WP-24 builds one, a backtracker given ALLOW repeats an empty

@@ -349,6 +349,7 @@ typedef struct GRX_IR {
   uint32_t root;                   ///< Root node, or GRX_INDEX_NONE.
   uint32_t flags;                  ///< GRX_PROGRAM_* bits.
   GRX_MatchPreference preference;  ///< Which match a search reports.
+  GRX_SubmatchRule submatch;  ///< Which division of it the groups get.
   GRX_IterationRule iteration;     ///< Search-all after an empty match.
   GRX_SearchStartRule search_start; ///< What `\G` asserts while iterating.
   GRX_Arena nodes;                 ///< GRX_IRNode.

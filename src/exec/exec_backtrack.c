@@ -196,6 +196,13 @@ typedef struct {
    * the Pike VM does the same job in linear time.
    */
   int longest;
+  /**
+   * Which division of that match the groups get: documentation/dialects.md
+   * section 5.1. GRX_SUBMATCH_FIRST_PATH keeps the first path to reach the
+   * greatest end, which is this engine's own alternation order;
+   * GRX_SUBMATCH_POSIX compares the two and keeps the one POSIX asks for.
+   */
+  GRX_SubmatchRule submatch;
   size_t best_end;       ///< End of the best match at this start, or NPOS.
   size_t * best_slots;   ///< Its captures; `slot_count` of them.
 
@@ -1976,21 +1983,43 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
           break;
         }
         if (toplevel && bt->longest) {
-          // Strictly longer only: the first path to reach a given end is the
-          // one whose captures the documented approximation reports, and a
-          // later path of the same length must not displace it.
-          if (bt->best_end == GRX_NPOS || position > bt->best_end) {
+          int posix = bt->submatch == GRX_SUBMATCH_POSIX;
+          int longer = bt->best_end == GRX_NPOS || position > bt->best_end;
+          // Under GRX_SUBMATCH_FIRST_PATH, strictly longer only: the first
+          // path to reach a given end is the one that dialect reports, and a
+          // later path of the same length must not displace it. Under
+          // GRX_SUBMATCH_POSIX a path of the *same* length is still a
+          // candidate, because which of the two divides it correctly is the
+          // question that rule exists to answer.
+          if (longer
+              || (posix && position == bt->best_end
+                  && grx_exec_submatch_better(
+                      bt->slots, bt->best_slots, bt->captures))) {
             bt->best_end = position;
             for (size_t i = 0; i < bt->slot_count; i++) {
               bt->best_slots[i] = bt->slots[i];
             }
-            if (position >= bt->window_end) {
+            if (!posix && position >= bt->window_end) {
               // Nothing can be longer than everything. Worth the branch:
               // without it `\(a*\)*\1` against twenty characters walks the
               // whole tree to prove there is no longer match than the one
               // that already reached the end, and hits max_steps doing it.
               // With it the answer comes back at once, and both references
               // answer this shape at once too.
+              //
+              // Not available under GRX_SUBMATCH_POSIX, and this is what
+              // that rule costs here: another path reaching the same end may
+              // still divide it better, so reaching the end of the window is
+              // no longer a reason to stop looking. `bt->submatch` is
+              // therefore GRX_SUBMATCH_POSIX only for a program the Pike VM
+              // could also run, where this engine is a cross-check of a
+              // linear-time answer and the cost is a test's to pay. A
+              // program that needs *this* engine - a backreference, under
+              // these dialects - keeps the short-circuit: without it
+              // `\(a*\)*\1` against twenty characters runs out of steps
+              // where it used to answer at once, and there is no reference to
+              // be exact against anyway, since musl refuses a basic RE with a
+              // backreference outright.
               *out_end = position;
               return 1;
             }
@@ -2251,6 +2280,11 @@ GRX_Result grx_exec_backtrack(
     .failure = GRX_OK,
     .failure_diag = GRX_DIAG_NONE,
     .longest = program->preference == GRX_PREFER_LEFTMOST_LONGEST,
+    // Exact for a program the Pike VM could also run, and first-path for
+    // one it could not: see the GRX_OP_MATCH case, which says what the
+    // difference buys and what it would otherwise cost.
+    .submatch = request->regex && request->regex->facts.is_regular
+        ? program->submatch : GRX_SUBMATCH_FIRST_PATH,
     .best_end = GRX_NPOS,
     .best_slots = NULL,
     .visited = NULL,

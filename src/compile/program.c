@@ -103,6 +103,12 @@ static const char * verb_name(uint8_t kind) {
   return kind < GRX_VERB_COUNT ? names[kind] : "?";
 }
 
+/** The name of a submatch rule, for the disassembly header. */
+static const char * submatch_name(GRX_SubmatchRule submatch) {
+  static const char * names[GRX_SUBMATCH_COUNT] = {"first-path", "posix"};
+  return (unsigned)submatch < GRX_SUBMATCH_COUNT ? names[submatch] : "?";
+}
+
 /** The name of a match preference, for the disassembly header. */
 static const char * preference_name(GRX_MatchPreference preference) {
   static const char * const names[GRX_PREFER_COUNT] = {
@@ -131,6 +137,7 @@ void grx_program_init(GRX_Program * program, const GRX_Allocator * allocator,
   program->flags = 0;
   program->register_count = 0;
   program->preference = GRX_PREFER_LEFTMOST_FIRST;
+  program->submatch = GRX_SUBMATCH_FIRST_PATH;
   program->iteration = GRX_ITERATE_RETRY_THEN_ADVANCE;
   program->search_start = GRX_SEARCH_START_ATTEMPT;
 }
@@ -281,6 +288,9 @@ GRX_Result grx_program_dump(const GRX_Program * program, FILE * out) {
       program->flags, preference_name(program->preference),
       iteration_name(program->iteration), program->insts.count,
       grx_class_table_count(&program->classes), program->register_count);
+  if (program->preference == GRX_PREFER_LEFTMOST_LONGEST) {
+    fprintf(out, "  submatch=%s\n", submatch_name(program->submatch));
+  }
 
   for (size_t i = 0; i < program->insts.count; i++) {
     const GRX_Inst * inst

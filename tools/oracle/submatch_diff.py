@@ -13,6 +13,14 @@ whose branches overlap, groups that can match empty, and quantified groups
 next to each other, so that almost every generated case has two or more
 assignments to choose between.
 
+Some of the pieces are not a group at all but a group with untagged material
+in front of it - `a*(a|)`, `[ab]a*(a|)`. Those say that a subexpression with
+no capture around it still has a claim on the text: an implementation that
+compares capture positions will cheerfully shorten an `a*` that has no
+position of its own to be shortened in, and both references refuse to. That
+half of the axis was missing here at first and `posix_diff.py` caught it
+instead, which is the wrong tool having to find it.
+
 The oracles and who decides are `posix_diff.py`'s - glibc alone is the
 definition of `gnu-bre` and `gnu-ere`, and for `posix-bre` and `posix-ere`
 what counts is glibc and musl agreeing. The difference here is that their
@@ -61,25 +69,68 @@ GROUPS = {
                   "(a|ab)", "(ab|a)", "(a|aa)", "(aa|a)", "(a*)", "(a?)",
                   "(a+)", "([ab]*)", "(a|b)", "(()|a)", "(b*|a)",
                   "(a{0,2})", "((a)|(ab))", "(a*b*)",
-                  "(a{0}|a)", "(a{0}b{0}|a)", "((a){0}|a)"],
+                  "(a{0}|a)", "(a{0}b{0}|a)", "((a){0}|a)",
+                  "a*(a|)", "[ab]a*(a|)", "a+(ab|a)", ".*(a|)",
+                  "(b+|((c)*))+", "(a+|(b)*)+"],
     "posix-bre": ["\\(a*\\)", "\\(aa*\\)", "\\(a\\{0,1\\}\\)",
                   "\\(a\\{0,2\\}\\)", "\\([ab]*\\)", "\\(a*b*\\)",
-                  "\\(\\(a\\)*\\)", "\\(b*a*\\)"],
+                  "\\(\\(a\\)*\\)", "\\(b*a*\\)",
+                  "a*\\(a*\\)", "[ab]a*\\(a*\\)"],
     "gnu-ere": ["(|a)", "(a|)", "(|ab)", "(ab|)", "(|b|a)", "(a|b|)",
                 "(a|ab)", "(ab|a)", "(a|aa)", "(aa|a)", "(a*)", "(a?)",
                 "(a+)", "([ab]*)", "(a|b)", "(()|a)", "(b*|a)",
                 "(a{0,2})", "((a)|(ab))", "(a*b*)",
-                "(a{0}|a)", "(a{0}b{0}|a)", "((a){0}|a)"],
+                "(a{0}|a)", "(a{0}b{0}|a)", "((a){0}|a)",
+                "a*(a|)", "[ab]a*(a|)", "a+(ab|a)", ".*(a|)",
+                "(b+|((c)*))+", "(a+|(b)*)+"],
     "gnu-bre": ["\\(\\|a\\)", "\\(a\\|\\)", "\\(\\|b\\|a\\)",
                 "\\(a\\|ab\\)", "\\(ab\\|a\\)", "\\(a\\|aa\\)",
                 "\\(a*\\)", "\\(a\\?\\)", "\\(a\\+\\)",
                 "\\([ab]*\\)", "\\(a\\|b\\)", "\\(\\(\\)\\|a\\)",
                 "\\(b*\\|a\\)", "\\(a\\{0,2\\}\\)", "\\(a*b*\\)",
-                "\\(a\\{0\\}\\|a\\)", "\\(\\(a\\)\\{0\\}\\|a\\)"],
+                "\\(a\\{0\\}\\|a\\)", "\\(\\(a\\)\\{0\\}\\|a\\)",
+                "a*\\(a\\|\\)", "[ab]a*\\(a\\|\\)",
+                "\\(b\\+\\|\\(\\(c\\)*\\)\\)\\+"],
+}
+
+# Whole patterns rather than pieces, because the shape that separates this
+# library from *both* references needs three groups and generating every
+# triple would cost twenty-four times the run for one family.
+#
+# These are Fowler's canonical POSIX cases. POSIX.1 section 9.4.8 asks each
+# subpattern, left to right, for the longest string it can take while the
+# whole match stays the longest at the leftmost start - and against "abcd"
+# group 1 can be "ab" with the whole match still reaching 4, so "ab" is what
+# it must be. glibc and musl both
+# give group 1 the single "a". They agree, and they are both wrong; see
+# POSIX_EXACT below.
+EXTRA = {
+    "posix-ere": ["(a|ab)(c|bcd)(d*)", "(a|ab)(c|bcd)(d|.*)",
+                  "(a|ab)(c|bcd)(.*)", "(a|ab)(bcd|c)(d*)",
+                  "(a|ab)(bcd|c)(d|.*)", "(a|ab)(bcd|c)(.*)"],
+    "gnu-ere": ["(a|ab)(c|bcd)(d*)", "(a|ab)(c|bcd)(d|.*)",
+                "(a|ab)(c|bcd)(.*)", "(a|ab)(bcd|c)(d*)",
+                "(a|ab)(bcd|c)(d|.*)", "(a|ab)(bcd|c)(.*)"],
+    "posix-bre": [],
+    "gnu-bre": ["\\(a\\|ab\\)\\(c\\|bcd\\)\\(d*\\)",
+                "\\(a\\|ab\\)\\(bcd\\|c\\)\\(d*\\)"],
+}
+
+# The rows where this library deliberately answers something both references
+# refuse, with the answer it must give. Not a blanket exemption: a wrong
+# answer inside this class still fails, because what is recorded is the
+# span list and not merely "differs".
+POSIX_EXACT = {
+    ("posix-ere", "(a|ab)(c|bcd)(d*)", "abcd"): "match 0:4 0:2 2:3 3:4",
+    ("posix-ere", "(a|ab)(c|bcd)(d|.*)", "abcd"): "match 0:4 0:2 2:3 3:4",
+    ("posix-ere", "(a|ab)(c|bcd)(.*)", "abcd"): "match 0:4 0:2 2:3 3:4",
+    ("posix-ere", "(a|ab)(bcd|c)(d*)", "abcd"): "match 0:4 0:2 2:3 3:4",
+    ("posix-ere", "(a|ab)(bcd|c)(d|.*)", "abcd"): "match 0:4 0:2 2:3 3:4",
+    ("posix-ere", "(a|ab)(bcd|c)(.*)", "abcd"): "match 0:4 0:2 2:3 3:4",
 }
 
 SUBJECTS = ["", "a", "b", "aa", "ab", "ba", "bb", "aaa", "aab", "aba",
-            "abb", "baa", "bab", "abab", "aabb", "abc", "aabc"]
+            "abb", "baa", "bab", "abab", "aabb", "abc", "aabc", "abcd"]
 
 DECIDED_BY = {
     "gnu-ere": ("glibc",),
@@ -129,18 +180,20 @@ def compare(dialect, examples):
     if not drivers["glibc"] or not ours:
         sys.stderr.write("run `make tools` first\n")
         return None
-    wanted = DECIDED_BY[dialect]
-    if "musl" in wanted and not drivers["musl"]:
+    oracles = DECIDED_BY[dialect]
+    if "musl" in oracles and not drivers["musl"]:
         print("%s: skipped (no musl_match; run tools/corpus/fetch.sh musl "
               "and `make tools`)" % dialect)
         return (0, 0)
 
     patterns = ["".join(pair)
                 for pair in itertools.product(GROUPS[dialect], repeat=2)]
+    patterns += EXTRA[dialect]
     flag = BASIC_FLAG[dialect]
     cases = [(flag, pattern, subject)
              for pattern in patterns for subject in SUBJECTS]
-    answers = {name: ask([drivers[name]], cases) for name in wanted}
+    answers = {name: ask([drivers[name]], cases)
+               for name in oracles}
     mine = ask([ours, dialect], cases)
     if any(len(rows) != len(cases) for rows in answers.values()) \
             or len(mine) != len(cases):
@@ -149,10 +202,11 @@ def compare(dialect, examples):
 
     disagreements = []
     splits = []
+    exact = []
     compared = 0
     declined = 0
     for index, (case, us) in enumerate(zip(cases, mine)):
-        theirs = [answers[name][index] for name in wanted]
+        theirs = [answers[name][index] for name in oracles]
         if any(answer.startswith("skip") for answer in theirs):
             declined += 1
             continue
@@ -164,26 +218,42 @@ def compare(dialect, examples):
                 normalise_ours(us)))
             continue
         compared += 1
-        if theirs[0] != normalise_ours(us):
-            disagreements.append(
-                (case[1], case[2], theirs[0], normalise_ours(us)))
+        mine = normalise_ours(us)
+        if theirs[0] == mine:
+            continue
+        wanted = POSIX_EXACT.get((dialect, case[1], case[2]))
+        if wanted is not None:
+            # Both references agree and both are wrong. Counted, and still
+            # checked: the answer has to be the one POSIX's rule gives.
+            if wanted == mine:
+                exact.append((case[1], case[2]))
+                continue
+        disagreements.append((case[1], case[2], theirs[0], mine))
 
     for pattern, subject, them, us in disagreements[:examples]:
         print("  %-26s on %-8s oracle=%-24s ours=%s"
               % (repr(pattern), repr(subject), them, us))
     tally = ""
+    if exact:
+        tally += (", %d where both references agree and POSIX says otherwise"
+                  % len(exact))
     if splits:
         sided = sum(1 for row in splits if row[4] == row[2])
         other = sum(1 for row in splits if row[4] == row[3])
-        tally = (", %d the two references answer differently (ours sides "
+        tally += (", %d the two references answer differently (ours sides "
                  "with glibc %d, with musl %d, with neither %d)"
                  % (len(splits), sided, other,
                     len(splits) - sided - other))
     print("%s: %d patterns x %d subjects = %d cases, %d compared against "
           "%s, %d disagreements%s"
           % (dialect, len(patterns), len(SUBJECTS), len(cases), compared,
-             " and ".join(wanted), len(disagreements), tally))
-    return (len(disagreements), len(splits))
+             " and ".join(oracles), len(disagreements), tally))
+    missing = len(
+        [key for key in POSIX_EXACT if key[0] == dialect]) - len(exact)
+    if missing:
+        sys.stderr.write("%s: %d of the POSIX_EXACT rows were not produced; "
+            "the list or the atoms have gone stale\n" % (dialect, missing))
+    return (len(disagreements) + missing, len(splits))
 
 
 def main(argv):

@@ -362,6 +362,7 @@ typedef struct GRX_TemplateSpec {
  */
 typedef struct GRX_Profile {
   GRX_MatchPreference preference;   ///< Which match a search reports.
+  GRX_SubmatchRule submatch;        ///< Which division of it the groups get.
   GRX_EmptyLoopMode empty_loop;     ///< An iteration that consumed nothing.
   GRX_CaptureResetMode capture_reset; ///< Captures between iterations.
   GRX_BackrefUnsetMode backref_unset; ///< A reference to an unset group.

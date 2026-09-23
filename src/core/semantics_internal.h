@@ -434,6 +434,41 @@ typedef enum {
   GRX_PREFER_COUNT               ///< Closes the enum; not a preference.
 } GRX_MatchPreference;
 
+/**
+ * @brief Which of several ways of matching the same text is reported.
+ *
+ * A second question under GRX_MatchPreference, and independent of it: once
+ * the extent is settled, two paths may divide it between the groups
+ * differently. POSIX says which division it wants; an engine left to itself
+ * answers with whichever path it happened to reach first.
+ *
+ * Separate from the preference because the dialects do not pair up.
+ * `posix-bre` and `posix-ere` are held to the standard, `gnu-bre` and
+ * `gnu-ere` to glibc, and glibc does not implement the standard's rule -
+ * see documentation/dialects.md section 5.1. All four are
+ * GRX_PREFER_LEFTMOST_LONGEST, so one enum could not have said that.
+ */
+typedef enum {
+  /**
+   * @brief Whichever path the engine reached first.
+   *
+   * glibc's answer, and every leftmost-first dialect's by construction.
+   * Not arbitrary: lowering makes an empty alternative yield to the branch
+   * beside it (documentation/dialects.md section 5.1), which is the one
+   * part of POSIX's rule glibc does follow.
+   */
+  GRX_SUBMATCH_FIRST_PATH = 0,
+  /**
+   * @brief POSIX's rule, carried as tags and compared.
+   *
+   * Each subexpression in turn, outermost and leftmost first, takes the
+   * earliest start and then the longest span consistent with the whole
+   * match and with the subexpressions before it.
+   */
+  GRX_SUBMATCH_POSIX,
+  GRX_SUBMATCH_COUNT             ///< Closes the enum; not a rule.
+} GRX_SubmatchRule;
+
 #ifdef __cplusplus
 }
 #endif

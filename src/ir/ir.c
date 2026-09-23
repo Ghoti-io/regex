@@ -123,6 +123,12 @@ static const char * verb_name(uint8_t kind) {
   return kind < GRX_VERB_COUNT ? names[kind] : "?";
 }
 
+/** The name of a submatch rule, for the dump. */
+static const char * submatch_name(GRX_SubmatchRule submatch) {
+  static const char * names[GRX_SUBMATCH_COUNT] = {"first-path", "posix"};
+  return (unsigned)submatch < GRX_SUBMATCH_COUNT ? names[submatch] : "?";
+}
+
 /** The name of a match preference, for the dump. */
 static const char * preference_name(GRX_MatchPreference preference) {
   static const char * const names[GRX_PREFER_COUNT] = {
@@ -167,6 +173,7 @@ GRX_Result grx_ir_create(const GRX_Allocator * allocator,
   ir->root = GRX_INDEX_NONE;
   ir->flags = 0;
   ir->preference = GRX_PREFER_LEFTMOST_FIRST;
+  ir->submatch = GRX_SUBMATCH_FIRST_PATH;
   ir->iteration = GRX_ITERATE_RETRY_THEN_ADVANCE;
   ir->search_start = GRX_SEARCH_START_ATTEMPT;
   ir->capture_count = 0;
@@ -611,6 +618,9 @@ GRX_Result grx_ir_dump(const GRX_IR * ir, FILE * out) {
       ir->flags, preference_name(ir->preference),
       iteration_name(ir->iteration), ir->nodes.count, ir->capture_count,
       grx_class_table_count(&ir->classes));
+  if (ir->preference == GRX_PREFER_LEFTMOST_LONGEST) {
+    fprintf(out, "  submatch=%s\n", submatch_name(ir->submatch));
+  }
 
   if (ir->root != GRX_INDEX_NONE) {
     dump_node(out, ir, ir->root, 1);

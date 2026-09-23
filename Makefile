@@ -808,8 +808,10 @@ check-oracle-submatch: ## Compare which spans the groups get, against glibc and 
 # which part of it when more than one answer fits. Nothing asked that before:
 # Spencer's vectors contain no case where two assignments share one extent,
 # and posix_diff's patterns reach one only by accident. Built on purpose out
-# of ambiguous pieces it found 316 cases across three dialects at once, all
-# of one rule - see documentation/dialects.md section 6.
+# of ambiguous pieces it found 1,050 cases across three dialects at once, all
+# of one rule, and it is now WP-26's gate as well - including the six rows
+# where both references agree and POSIX says otherwise. See
+# documentation/dialects.md sections 5.1 and 6.
 check-oracle-submatch: $(TOOLS)
 	@if ! command -v python3 >/dev/null 2>&1; then \
 		printf "check-oracle-submatch: skipped (no python3)\n"; \
