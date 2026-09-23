@@ -1140,6 +1140,39 @@ static uint32_t ambiguous_group(const Backtrack * bt, const GRX_Inst * inst) {
   return groups[0];
 }
 
+/**
+ * Copy out the spans an assertion must be able to put back.
+ *
+ * The capture slots *and* the shadow spans, which is the half that was
+ * missing. A shadow span is what a backreference reads
+ * (backref_matches()), so an assertion that restored only the live captures
+ * left its body's writes where a later reference could still find them:
+ * `(?=(a))$|(a)\1` matched "aa" here and "a" in node and pcre2test,
+ * because the `\1` of the second branch read what the *first* branch's
+ * assertion had written on its way to failing. The live captures were right
+ * throughout - group one was reported unset either way - so the only
+ * visible symptom was the width of the match, which is why no conformance
+ * vector caught it.
+ *
+ * Found by the Vim differential, and reachable from every dialect that has
+ * both a lookaround and a backreference.
+ *
+ * Registers are copied and deliberately not restored: they are a repeat's
+ * own bookkeeping, and the callers put back exactly what this pair names.
+ */
+static void snapshot_spans(const Backtrack * bt, size_t * out) {
+  memcpy(out, bt->slots, bt->slot_count * sizeof(size_t));
+}
+
+/** Put back what snapshot_spans() took. */
+static void restore_spans(Backtrack * bt, const size_t * before) {
+  memcpy(bt->slots, before, bt->captures * sizeof(size_t));
+  if (bt->shadow) {
+    memcpy(bt->slots + bt->shadow, before + bt->shadow,
+        (bt->slot_count - bt->shadow) * sizeof(size_t));
+  }
+}
+
 static int backref_matches(const Backtrack * bt, const GRX_Inst * inst,
     size_t position, int reverse, size_t * out_width) {
   uint32_t group = (inst->flags & GRX_INST_AMBIGUOUS_REF)
@@ -1422,7 +1455,7 @@ static int look_behind_forward(Backtrack * bt, uint32_t body, size_t position,
   size_t floor = bt->depth;
   int matched = 0;
   for (size_t back = reach;; back--) {
-    memcpy(bt->slots, before, bt->captures * sizeof(size_t));
+    restore_spans(bt, before);
     bt->depth = floor;
     matched = run(bt, body, position - back, floor, 0, out_end);
     bt->depth = floor;
@@ -1445,7 +1478,7 @@ static int look_behind_forward(Backtrack * bt, uint32_t body, size_t position,
   bt->memo_after = outer_memo_after;
   bt->look_end = outer_look_end;
   if (!matched) {
-    memcpy(bt->slots, before, bt->captures * sizeof(size_t));
+    restore_spans(bt, before);
   }
   return matched;
 }
@@ -1745,12 +1778,12 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
         // the caller's stack so that backtracking past the whole lookaround
         // still puts them back.
         size_t * before = gcu_allocator_malloc(
-            bt->allocator, bt->captures * sizeof(size_t));
+            bt->allocator, bt->slot_count * sizeof(size_t));
         if (!before) {
           bt->failure = GRX_ERR_OOM;
           return 0;
         }
-        memcpy(before, bt->slots, bt->captures * sizeof(size_t));
+        snapshot_spans(bt, before);
 
         size_t body_floor = bt->depth;
         size_t end = 0;
@@ -1794,7 +1827,7 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
           return 0;
         }
         if (verb_escapes_assertion(bt, negative)) {
-          memcpy(bt->slots, before, bt->captures * sizeof(size_t));
+          restore_spans(bt, before);
           gcu_allocator_free(bt->allocator, keep_last);
           gcu_allocator_free(bt->allocator, before);
           return 0;
@@ -1804,7 +1837,7 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
           // A positive lookaround whose body failed, or a negative one whose
           // body succeeded. Either way the construct fails and the captures
           // go back to what they were.
-          memcpy(bt->slots, before, bt->captures * sizeof(size_t));
+          restore_spans(bt, before);
           gcu_allocator_free(bt->allocator, keep_last);
           gcu_allocator_free(bt->allocator, before);
           ok = 0;
@@ -1826,7 +1859,7 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
           // Perl does not - see GRX_INST_KEEP_CAPTURES - and there the
           // writes fall through to the same bookkeeping a positive
           // lookaround's do.
-          memcpy(bt->slots, before, bt->captures * sizeof(size_t));
+          restore_spans(bt, before);
         }
         else {
           // The body failed and its writes stand. What stands is the last
@@ -1853,19 +1886,29 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
               }
             }
           }
-          for (size_t i = 0; i < bt->captures; i++) {
-            if (bt->slots[i] == before[i]) {
-              continue;
+          // The shadow spans as well as the live ones, for the reason
+          // snapshot_spans() gives: they are what a backreference reads, so
+          // a path abandoned later has to put them back too.
+          for (size_t pass = 0; pass < 2; pass++) {
+            if (pass == 1 && !bt->shadow) {
+              break;
             }
-            size_t old = before[i];
-            size_t current = bt->slots[i];
-            bt->slots[i] = old;
-            if (!save_slot(bt, i)) {
-              gcu_allocator_free(bt->allocator, keep_last);
-              gcu_allocator_free(bt->allocator, before);
-              return 0;
+            size_t first = pass == 0 ? 0 : bt->shadow;
+            size_t last = pass == 0 ? bt->captures : bt->slot_count;
+            for (size_t i = first; i < last; i++) {
+              if (bt->slots[i] == before[i]) {
+                continue;
+              }
+              size_t old = before[i];
+              size_t current = bt->slots[i];
+              bt->slots[i] = old;
+              if (!save_slot(bt, i)) {
+                gcu_allocator_free(bt->allocator, keep_last);
+                gcu_allocator_free(bt->allocator, before);
+                return 0;
+              }
+              bt->slots[i] = current;
             }
-            bt->slots[i] = current;
           }
         }
         gcu_allocator_free(bt->allocator, keep_last);
@@ -1912,12 +1955,12 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
         }
 
         size_t * before = gcu_allocator_malloc(
-            bt->allocator, bt->captures * sizeof(size_t));
+            bt->allocator, bt->slot_count * sizeof(size_t));
         if (!before) {
           bt->failure = GRX_ERR_OOM;
           return 0;
         }
-        memcpy(before, bt->slots, bt->captures * sizeof(size_t));
+        snapshot_spans(bt, before);
 
         size_t outer_start = bt->window_start;
         size_t outer_end = bt->window_end;
@@ -1937,13 +1980,13 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
           return 0;
         }
         if (verb_escapes_assertion(bt, 0)) {
-          memcpy(bt->slots, before, bt->captures * sizeof(size_t));
+          restore_spans(bt, before);
           gcu_allocator_free(bt->allocator, before);
           return 0;
         }
 
         if (!body_matched) {
-          memcpy(bt->slots, before, bt->captures * sizeof(size_t));
+          restore_spans(bt, before);
           gcu_allocator_free(bt->allocator, before);
           ok = 0;
           break;

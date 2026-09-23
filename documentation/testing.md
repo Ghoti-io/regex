@@ -34,7 +34,7 @@ and built by the conformance lane ([plan.md](plan.md)).
 | glibc 2.41 `regcomp` | GNU BRE/ERE | `tools/oracle/posix_match.c`, built by the Makefile when present | `GRX_ORACLE_POSIX` |
 | musl 1.2.6 `regcomp` | POSIX BRE/ERE, with glibc | `tools/oracle/musl_match.c`: musl's own regex sources, fetched by `tools/corpus/fetch.sh musl` and compiled into the driver. Hosted on glibc, so it declines a NUL (musl has no `REG_STARTEND`) and any byte >= 0x80 (the host's `mbtowc`). Never decides alone - see below | `GRX_ORACLE_MUSL` |
 | GNU grep 3.11, sed 4.9 | GNU BRE/ERE (single-line subjects) | `tools/oracle/gnu.sh` | `GRX_ORACLE_GNU` |
-| Vim 9.1 | Vim | `tools/oracle/vim.sh`: `vim -es` with `matchlist()` and `match()` | `GRX_ORACLE_VIM` |
+| Vim 9.1 | Vim | `tools/oracle/vim_diff.py`: **one** `vim -es` for a whole run, reading a file of cases and writing a file of answers, through `matchstrpos()` and `matchlist()`. It asks vim's *other* engine (`set re=1`) about the rows that came back different, because vim ships two and they do not always agree | available |
 | OpenJDK 21, .NET 8, Ruby 3.3, Go 1.22, Rust `regex` 1.10, Tcl 8.6, Emacs 29 | tiers 2-4 | one driver each, same output form | one gate each |
 
 Every driver reads a pattern, a flag string and a subject from a JSON line
@@ -502,6 +502,98 @@ the atoms have gone stale and fails. That guard fired on its first run, when
 look like a clean result: POSIX basic REs have no alternation, so the
 empty-branch half of this question cannot be spelled in one. Its cases ask
 the other half, two quantified groups next to each other.
+
+### The Vim differential
+
+`tools/oracle/vim_diff.py`, WP-36's gate. vim cannot be imported, so the
+saving is one fork for a *run* rather than one per case: vim reads a file of
+cases and writes a file of answers, which is what makes tens of thousands of
+rows possible against a reference `probe.py` was starting a process per case
+for. `make check-oracle-vim` runs it with `--strict`. Current standing:
+**1,305,000 rows over thirty seeds, no disagreements.**
+
+**The subject is a string, not a buffer**, and that is a decision the tool
+makes rather than a detail of it. vim's help describes matching against a
+buffer, where `.` refuses the line break; `matchstrpos()` over a string is
+the question this library can answer, and there the break is an ordinary
+character. Driving a buffer oracle instead would measure a dialect this
+library does not offer. The profile row follows the measurement, which is
+why it reads GRX_NEWLINES_NONE where vim's own documentation reads the
+opposite - see [dialects.md](dialects.md) §6.
+
+**What it cannot see, and what is done about it.** `matchlist()` returns the
+*text* of each group and returns "" for a group that did not participate, so
+an unset group and one that matched empty are one answer there. The
+comparison folds ours the same way, and the unset axis is stated by
+`tests/unit/test_vim.cpp` instead, from the one probe that separates them:
+`\(a\)\?\1` matches the empty string against "b", which a dialect that
+failed on an unset reference could not do.
+
+**Five classes of disagreement are vim disagreeing with something**, and the
+tool counts each rather than dropping it, so that the number moving is
+visible:
+
+- **vim's two engines.** `\%^\|a\?` against "a" is the empty match at 0
+  under `set re=1` and "a" under the default `re=2`. This is not recognised
+  from the shape of the pattern - it is *asked*: every row that came back
+  different is put to the old engine, and one where that engine gives this
+  library's answer is reported as an engine split. A row where both of vim's
+  engines agree with each other and not with this library is a defect here.
+- **A forward backreference with a lookbehind after it.** `\1\(a\)\@<!`
+  is accepted where `\1\(a\)`, `\(a\1\)`, `\1\(a\)\@=`,
+  `\1\(a\)\@>` and `\1\%(a\)` are all "E65: Illegal back reference" in
+  both engines. A construct that is legal only when a *later* part of the
+  pattern takes a particular shape is an artifact of how vim compiles a
+  lookbehind, not a rule a second implementation could follow.
+- **A capture that outlived its branch**, and **a capture that vanished**:
+  vim keeps what an abandoned `\@>` group wrote and loses one written
+  before a `\@=` that a repeat follows. pcre2test disagrees with vim in both
+  directions. The two are not treated alike - vim *losing* a capture is
+  excluded for any `\@` operator, because a defect of this library's would
+  be the same loss and would still be reported; vim *gaining* one is
+  excluded only where the atomic operator is written.
+- **A postfix lookbehind with a backreference after it.** Two measured
+  instances, pcre2test agreeing with this library in both:
+  `\(a\)\@<=\(a\)\1\l` against "aaab" is "aa" at 1:3 in both of vim's
+  engines - text with nothing in it for the trailing `\l` to have matched -
+  where `(?<=(a))(a)\1[a-z]` is 1:4 in pcre2test; and
+  `\v\D(a)@<=\m\(a\)\1\(a\+\)\@>` is 0:3 in both engines with a
+  third group the match has no room for, where the pcre2 equivalent is no
+  match at all. Drop the atomic group from the second and vim's two engines
+  stop agreeing with *each other* - 0:2 under `re=1`, 0:3 under `re=2`.
+  This one is excluded whatever the disagreement looks like, which is a real
+  narrowing: a regression of this library's inside that shape would not be
+  reported. It is written out in the tool for that reason.
+- **One spelling out of four that means nothing.** `\v\_^*` matches
+  nothing at all in vim, while `\m\_^*`, `\v\_$*`, `\v\_^{0,1}` and
+  `\v(\_^)*` all match the empty string there. Only the very magic level,
+  only `\_^`, only the `*` spelling, and both engines alike.
+
+**The vocabulary carries what vim refuses**, at one row in eight - `\z(`,
+`\z1`, `\1` with no group, `a\{2`, `\(a`, `a**`, `\v+a`, `\v@a` and
+more. It is spliced *between atoms* rather than at a random byte offset,
+which is a narrowing with a reason: a byte offset lands inside a construct
+as often as not, and vim compiles a collection with a corrupted
+`[[:name:]]` into a pattern that can never match anything at all -
+`[[:foo:]]*a` does not match "a". Thousands of those would put a floor under
+the disagreement count and hide the next real one under it.
+
+**Two defects it found were not in this dialect.** A lookaround restored the
+live capture slots when its body's path was abandoned and left the *shadow*
+spans - the ones a backreference reads - where the body had written them, so
+`(?=(a))$|(a)\1` matched "aa" here, "a" in node, and nothing in pcre2test;
+the live captures were right throughout, so the only visible symptom was the
+width of the match and no conformance vector had caught it. And the Vim
+front end's own `\c` scan repeated a defect the shared prescan had carried
+until WP-30 - a `]` after an escape inside a collection was read as a
+member, so the collection never ended and a later `\c` was read as being
+inside one. The same mistake, written a second time in a second scan, four
+hours apart.
+
+**A trap for anyone editing its vocabulary:** Python's raw strings still
+decode `\u`, so `r"\u0041"` is three characters and not six. Every atom in
+the generator is an ordinary string with the backslashes doubled for that
+reason.
 
 ### The Python differential
 
@@ -1664,6 +1756,7 @@ when the gate changes:
 | `check-layering` | a `GRX_SYNTAX_` mention under `src/exec/` | non-zero, naming the file |
 | `check-aliasing` | `EXTRA_CFLAGS=-Wstrict-aliasing=3`, a later explicit level | non-zero, naming the effective level |
 | `check-aliasing` | `CC=clang`, which implements no such diagnostic | non-zero, naming the compiler rather than the flags |
+| `check-oracle-vim` | widen one of vim's eleven named classes by a single code point - `\s` to include the line break | non-zero; the run reports the rows where the two now differ |
 
 **The first binary, not the last**, is the point of the first two rows: the
 defect they guard against is invisible if the fault is injected at the end.

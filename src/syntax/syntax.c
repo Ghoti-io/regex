@@ -218,9 +218,25 @@ static const GRX_SyntaxSpec spec_table[GRX_SYNTAX_COUNT] = {
         | WORD | ANCH | HEX | OCT,
   },
   [GRX_SYNTAX_VIM] = {
+    // No FLAG: vim has no `(?i)`. Its `\c` is not an inline flag either -
+    // it decides caseless matching for the whole pattern from wherever it
+    // stands, which GRX_Frontend::initial_options is what reads. No CMNT,
+    // no NAME, no COND, no RECU, no QUOT, no UPRP, no CSET, no POSS. OCT
+    // and HEX are `\%o40` and `\%x2a`, which are spelled inside the `\%`
+    // family rather than as `\x` - `\x` alone is the hex-digit *class*.
     .features = ALT | REP | LAZY | NCAP | BREF | LAH | LBH | ATOM | PCLS
-        | WORD | ANCH | HEX,
+        | WORD | ANCH | HEX | OCT,
+    // The subject is text: `\%u00e9` matches the two bytes of "é", and `.`
+    // takes a whole character rather than one of them.
+    .default_options = GRX_OPT_UTF,
+    // Read only by the prescan here, the operator spellings being the front
+    // end's own per-position answer: four magic levels cannot be a flag.
+    // It is still the right value for the prescan, whose one job is to
+    // count `\(`.
     .escaped_specials = 1,
+    // `\\&`, the only dialect here with a second joining operator: it is a
+    // grammar level between `\\|` and concatenation, not a construct.
+    .branch_and_operator = 1,
   },
   [GRX_SYNTAX_EMACS] = {
     .features = ALT | REP | LAZY | NCAP | BREF | PCLS | WORD | ANCH,
@@ -714,13 +730,50 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     .fold_utf = GRX_FOLD_SIMPLE,
   },
   [GRX_SYNTAX_VIM] = {
+    // KEEP_LAST_SET, measured: `\v(a|b)*` against "ab" reports group 1 as
+    // "b", so an iteration that does not write does not clear either.
+    .capture_reset = GRX_CAPTURE_KEEP_LAST_SET,
+    // MATCH_EMPTY, measured: `\(a\)\?\1` matches the empty string
+    // against "b", where a dialect that fails on an unset reference would
+    // report no match. documentation/dialects.md section 5.6 had this cell
+    // marked **probe**; this is the probe.
+    .backref_unset = GRX_BACKREF_UNSET_EMPTY,
     .lookbehind = GRX_LOOKBEHIND_UNBOUNDED,
-    .dollar = GRX_DOLLAR_ALWAYS_LINE,
-    .multiline_by_default = 1,
-    .shorthands = GRX_SHORTHANDS_ASCII,
-    .shorthands_wide = GRX_SHORTHANDS_ASCII,
-    .fold = GRX_FOLD_ASCII,
-    .fold_utf = GRX_FOLD_ASCII,
+    // END_ONLY and no lines, where this row said ALWAYS_LINE and multiline.
+    // Both were written from vim's help, which describes matching against a
+    // *buffer*. The subject this library has is a string, and over a string
+    // vim answers differently and consistently: `a.b` matches "a\nb",
+    // `[^x]` matches the newline, `^b` does not match "a\nb" and neither
+    // does `\_^b`. So the line break is an ordinary character at both ends
+    // of the question, which is GRX_NEWLINES_NONE and GRX_DOLLAR_END_ONLY.
+    // The `\_x` forms still differ from their plain spellings, because
+    // `\s` refuses a newline and `\_s` accepts one.
+    .dollar = GRX_DOLLAR_END_ONLY,
+    .newlines = GRX_NEWLINES_NONE,
+    // Read only by `\<`, `\>` and the POSIX classes: vim's eleven named
+    // classes are built out as explicit sets by the front end, because
+    // three of them have a counterpart here and all three differ - vim's
+    // `\s` is space and tab alone. ASCII_PLUS_HIGH is what the *word
+    // boundaries* need: they are defined from 'iskeyword', whose default
+    // takes in U+00C0 and everything above it, so `\<` does not hold
+    // between "a" and "é". Measured.
+    .shorthands = GRX_SHORTHANDS_ASCII_PLUS_HIGH,
+    .shorthands_wide = GRX_SHORTHANDS_ASCII_PLUS_HIGH,
+    // SIMPLE, where this row said ASCII. Measured: `\cÉ` matches "é" in
+    // vim 9.1, so the folding is Unicode and the page that said otherwise
+    // was describing a version of vim without multibyte support.
+    .fold = GRX_FOLD_SIMPLE,
+    .fold_utf = GRX_FOLD_SIMPLE,
+    .subject_is_text = 1,
+    // `[[:lower:]]` matches "é" and `[[:upper:]]` matches "É", where
+    // `[[:alpha:]]` matches neither. Measured; see the field.
+    .posix_case_classes_wide = 1,
+    // No template_spec. vim's `:s` replacement has two rules nothing else
+    // here has - `\r` inserts a line break where `\n` inserts a NUL, and
+    // `\u`, `\U`, `\l`, `\L`, `\e` and `\E` change the case of what
+    // follows - and a row claiming the sed grammar would get both wrong
+    // rather than leave them unbuilt. grx_regex_replace() refuses a zeroed
+    // row, which is the honest answer until the grammar is written.
   },
   [GRX_SYNTAX_EMACS] = {
     .lookbehind = GRX_LOOKBEHIND_NONE,

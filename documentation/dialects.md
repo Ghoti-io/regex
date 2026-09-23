@@ -159,7 +159,13 @@ references and worth recording now so nobody builds on the wrong row:
 - **Rust** has `&&`, `--`, `~~` and nested classes; it has no lookaround
   and no backreferences, like RE2.
 - **Vim** has lookaround as `\@=`, `\@!`, `\@<=`, `\@<!`, atomic as `\@>`,
-  and non-greedy as `\{-}`; none is spelled the Perl way.
+  and non-greedy as `\{-}`; none is spelled the Perl way, and all five of
+  the first group are *postfix* - `\(foo\)\@=` asserts over the group
+  written before it. It has eleven named classes of its own (`\a`, `\h`,
+  `\i`, `\k`, `\f`, `\p`, `\l`, `\u`, `\x`, `\o` and `\d`), each
+  with an uppercase complement, and a `\_` prefix that adds the line break
+  to any of them; its word boundaries are `\<` and `\>`, defined from
+  'iskeyword' rather than from `\w`.
 
 ## 4. What an absent construct does
 
@@ -288,7 +294,7 @@ backreference outright. §6 carries that as a deviation.
 | Ruby | `\n` | `\n` | **`m`** |
 | RE2, Rust | `\n` | `\n` | `s` |
 | Tcl | `\n` | `\n` under `(?n)`/`(?p)` only | default is dot-all; `(?n)` turns it off |
-| Vim | line-based: the subject is a line; `\n` matches a line break only via `\n`/`\_` forms | end of line | `\_.` |
+| Vim | **none, over a string**: the break is an ordinary character - `a.b` matches "a\nb" and `[^x]` matches the break. The `\_` forms still differ from their plain spellings (`\s` refuses a break, `\_s` accepts one) | n/a: `^` and `$` hold at the two ends only | `.` already does; `\_.` is the same set |
 | Emacs | `\n` | `\n` | none (`[^z-a]` idiom) |
 
 **PCRE2's newline conventions**, measured against pcre2test 10.46 and
@@ -336,7 +342,8 @@ each measured rather than derived:
 | Ruby | **always** a line anchor | **yes** | `\Z`, `\z` as Perl |
 | RE2, Rust | end only | no | `\z` (Rust: `\z`; Go: `\z`) |
 | Tcl | end only | `(?n)`/`(?w)` | `\Z` |
-| Vim, Emacs | end of line (the subject is a line) | n/a | Vim `\_$`; Emacs `` \` `` `\'` |
+| Vim | **end of the subject only**, measured over a string; `\%^` and `\%$` are the two edges | no | `\%^`, `\%$` |
+| Emacs | end of line (the subject is a line) | n/a | Emacs `` \` `` `\'` |
 
 ### 5.4 Lookbehind constraint
 
@@ -478,7 +485,7 @@ could follow.
 
 | Axis | Value | Dialects |
 | --- | --- | --- |
-| Unset group | `MATCH_EMPTY` | ECMAScript; PCRE2 with `PCRE2_MATCH_UNSET_BACKREF` (exposed as `GRX_OPT_MATCH_UNSET_BACKREF`); Vim (**probe**) |
+| Unset group | `MATCH_EMPTY` | ECMAScript; PCRE2 with `PCRE2_MATCH_UNSET_BACKREF` (exposed as `GRX_OPT_MATCH_UNSET_BACKREF`); Vim (`\(a\)\?\1` matches the empty string against "b") |
 | | `FAIL` | Perl, PCRE2, Python, Java, .NET, Ruby, GNU, Tcl (**probe**), Emacs (**probe**) |
 | Forward reference `\2(a)(b)` | allowed, behaves as unset | ECMAScript, Perl, PCRE2 |
 | | syntax error | Python ("invalid group reference"), Java (**probe**), RE2/Rust (no backreferences) |
@@ -518,10 +525,10 @@ already see changed. See `GRX_PROGRAM_SHADOW_CAPTURES`.
 
 | Value | Meaning | Dialects |
 | --- | --- | --- |
-| `SIMPLE_FOLD` | Unicode simple case folding; a caseless literal is its fold orbit ([unicode.md](unicode.md) §5) | PCRE2, Python (its `_sre` equivalence table is this), Java with `UNICODE_CASE`, RE2, Rust, Tcl, Ruby (**probe**: Onigmo can do multi-char folds), ECMAScript `u`/`v` |
+| `SIMPLE_FOLD` | Unicode simple case folding; a caseless literal is its fold orbit ([unicode.md](unicode.md) §5) | PCRE2, Python (its `_sre` equivalence table is this), Java with `UNICODE_CASE`, RE2, Rust, Tcl, Ruby (**probe**: Onigmo can do multi-char folds), ECMAScript `u`/`v`, Vim `\c` (`\cÉ` matches "é"; this row said ASCII-only until it was asked) |
 | `FULL_FOLD` | full folding, including length-changing (`ß` ~ `ss`) | Perl. Built; [design.md](design.md) §5.2 |
 | `ES_LEGACY` | ECMA-262 Canonicalize without `u`: simple uppercase mapping, rejected if it is multi-unit or maps non-ASCII to ASCII | ECMAScript without `u` |
-| `ASCII_ONLY` | A-Z only | Java without `UNICODE_CASE`; PCRE2 without UTF; POSIX and GNU (deviation: the locale is treated as C); Vim `\c`, Emacs (**probe**) |
+| `ASCII_ONLY` | A-Z only | Java without `UNICODE_CASE`; PCRE2 without UTF; POSIX and GNU (deviation: the locale is treated as C); Emacs (**probe**) |
 | `CULTURE` | .NET's culture-sensitive `ToLower`. **Deviation:** implemented as `SIMPLE_FOLD`, i.e. `CultureInvariant` | .NET |
 
 **Full folding is a property of a run, not of a character.** `ß` folds to
@@ -610,7 +617,7 @@ reads bytes until `PCRE2_UTF` says otherwise.
 | RE2 | ASCII | ASCII | `[\t\n\f\r ]` | `\pL`, `\p{Greek}`: categories and scripts, exact case |
 | Rust | Unicode (UTS #18); ASCII under `(?-u)` | `Nd` | `White_Space` | loose (UAX #44) |
 | Tcl | Unicode `[[:alnum:]_]` | Unicode `[[:digit:]]` | Unicode `[[:space:]]` | none |
-| Vim | `[0-9A-Za-z_]` | `[0-9]` | `[ \t]` | none |
+| Vim | `[0-9A-Za-z_]` | `[0-9]` | `[ \t]` - space and tab alone | none |
 | Emacs | syntax table: word constituents (**deviation:** treated as `[[:word:]]` = Unicode letters and digits) | none | `\s-` (syntax class), not `\s` | none |
 
 **`UCP` widens the shorthands and `UTF` widens the folding**, and they are
@@ -625,8 +632,14 @@ shorthands are Unicode with no flag, so `/a` is the interesting direction
 there.
 
 POSIX bracket classes (`[:alpha:]` and the other eleven) are ASCII in POSIX
-and GNU (C locale), Unicode in Perl, PCRE2 under `UCP`, Ruby, Tcl, Rust,
-Vim; RE2 is ASCII. `\b` is defined from `\w` in every dialect; Perl's
+and GNU (C locale), Unicode in Perl, PCRE2 under `UCP`, Ruby, Tcl and Rust;
+RE2 is ASCII. **Vim is neither**: `[[:lower:]]` matches "é" and
+`[[:upper:]]` matches "É" while `[[:alpha:]]`, `[[:alnum:]]`, `[[:punct:]]`,
+`[[:graph:]]` and `[[:word:]]` refuse them, because vim answers the case
+classes from its own Unicode tables and the rest from the C library's ASCII
+predicates. That is GRX_Profile::posix_case_classes_wide, a flag beside the
+width rather than a third value of it. Measured; this paragraph listed Vim
+among the Unicode dialects until it was. `\b` is defined from `\w` in every dialect; Perl's
 `\b{wb}` and its relatives are built. Perl accepts exactly five spellings -
 `\b{gcb}`, `\b{g}` (an alias for it), `\b{wb}`, `\b{sb}` and `\b{lb}`, each
 with a `\B{...}` negation and optional blanks inside the braces - and they
@@ -742,7 +755,7 @@ at all.
 | Go, Rust | `$n`, `${n}` | `$name`, `${name}` - the name is parsed greedily, so `$1x` is the group named `1x` | none | `$$` | empty | empty | none |
 | POSIX BRE/ERE | `\1`-`\9`, one digit | none | `&` | `\&`, `\\`, and `\c` for any other `c` | error | empty | none |
 | GNU BRE/ERE | as POSIX, plus `\0` for the whole match | none | `&`, `\0` | as POSIX | error | empty | none - see below |
-| Vim (`:s`) | `\n` | none | `&`, `\0` | `\&`, `\\` | empty | empty | `\u \U \l \L \e \E` |
+| Vim (`:s`) | `\n` | none | `&`, `\0` | `\&`, `\\` | empty | empty | `\u \U \l \L \e \E` - **not built**; see §6 |
 | Tcl (`regsub`) | `\n` | none | `&`, `\0` | `\\`, `\&` | empty | empty | none |
 | Emacs (`replace-match`) | `\n` | none | `\&` | `\\` | error | empty | none |
 
@@ -870,7 +883,7 @@ not be adjacent, so `(?aia:s)` is `/aa`. What each chooses:
 | Ruby | `imx` | `m` is dot-all |
 | RE2, Rust | `imsU` (Rust adds `u`, `x`, `R`) | `U` ungreedy |
 | Tcl | `bceimnpqstwx` | `b` (BRE) and `e` (ERE) switch dialect: rejected here, since the dialect is the caller's choice |
-| Vim | `\c`, `\C`, `\v`, `\m`, `\M`, `\V` in the pattern | magic level is a hook concern |
+| Vim | none: `\c`, `\C`, `\v`, `\m`, `\M` and `\V` are pattern syntax | `\c` and `\C` decide the *whole* pattern's caseless matching from wherever they stand and are read before parsing; the magic level is a per-position hook answer |
 | Emacs | none | `case-fold-search` is `GRX_OPT_CASELESS` |
 
 Default options per dialect: Ruby `MULTILINE`; Rust and Perl and Python
@@ -1179,7 +1192,18 @@ to be complete for every shipped tier.
 | Python | `bytes` patterns are not modelled: a `str` pattern is the whole of this dialect | `re` has two subjects, `str` and `bytes`, selected by the *type of the pattern object* rather than by a flag - a distinction a C API taking a byte string cannot make. The `str` half is the one with rules of its own; the `bytes` half is a narrower ASCII mode of it. `(?L)` is refused for the same reason it is refused in `re` for a `str` pattern | `GRX_ERR_UNSUPPORTED` for `L` |
 | .NET | Culture-sensitive folding is invariant; balancing groups deferred | §5.8; [design.md](design.md) §2 | `GRX_ERR_UNSUPPORTED` for balancing groups |
 | Emacs | Syntax classes (`\s-`, `\w`) use fixed Unicode definitions, not a syntax table | no syntax table | - |
-| Vim | `\%[...]`, `\%d123`, `\z(`, `\=` in replacements | later tier | `GRX_ERR_UNSUPPORTED` |
+| Vim | The subject is a string, not a buffer | vim's help describes matching against a *buffer*, where `.` refuses the line break. `matchstrpos()` over a string is what this library can be, and what its differential asks: there `a.b` matches "a\nb", `[^x]` matches the break, and `^`, `$`, `\_^` and `\_$` hold at the two ends only. The `\_` forms are still distinct, because `\s` refuses a break and `\_s` accepts one | - |
+| Vim | `~` and `\~` (the last `:s` replacement) | there has been no previous substitution; vim itself answers "E33: No previous substitute regular expression" when there has not | `GRX_ERR_UNSUPPORTED` |
+| Vim | `\Z` (ignore combining characters) | a rule about normalisation, which this library does not do | `GRX_ERR_UNSUPPORTED` |
+| Vim | `\ze` | GRX_NODE_KEEP moves the reported *start* and there is no node for the end. `a\zeb` is `a(?=b)` and could be built as one, but only by rewriting the concatenation it sits in, which the atom reader is not holding. `\zs` is built | `GRX_ERR_UNSUPPORTED` |
+| Vim | `\%V`, `\%#`, `\%23l`, `\%23c`, `\%23v` | each names something outside the subject - the Visual area, the cursor, a buffer line or a screen column. vim compiles them and, over a string, `\%23l` and `\%V` simply never match while `\%23c` asserts a byte column; there is no assertion kind for the last | `GRX_ERR_UNSUPPORTED` |
+| Vim | `\%[...]` takes literal characters only | vim's help calls the members "atoms", and an atom there can be a group or a class. `r\%[ead]` is what the construct is for; a sequence of anything but literals has no known use and would need the whole atom reader | `GRX_ERR_UNSUPPORTED` |
+| Vim | `\@123<=` accepts the count and ignores it | in vim the number bounds how far back the match may start, which is an efficiency limit with a visible effect. This library's lookbehind is unbounded (§5.4) | - |
+| Vim | `\i`, `\k`, `\f` and `\p` are vim's *defaults* | those four are the options 'isident', 'iskeyword', 'isfname' and 'isprint', and a user who has changed one has a dialect this library does not read. Measured at the defaults, one code point at a time | - |
+| Vim | `[[:print:]]` is ASCII | vim widens it from `utf_printable()`, which is neither a property nor a range - U+200B is not printable there and U+2028 is. `[[:lower:]]` and `[[:upper:]]` *are* widened, being Unicode properties (§5.9) | - |
+| Vim | An unknown `[:name:]` is refused | vim compiles a collection holding one into a pattern that can never match anything at all - `[[:foo:]]*a` does not match "a" - which is a degenerate answer rather than a rule | `GRX_ERR_SYNTAX` |
+| Vim | The replacement template is not built | vim's `:s` right-hand side has two rules nothing else here has: `\r` inserts a line break where `\n` inserts a NUL, and `\u`, `\U`, `\l`, `\L`, `\e` and `\E` change the case of what follows. A row claiming sed's grammar would get both wrong rather than leave them unbuilt, so the row is zeroed and `grx_regex_replace()` refuses it | `GRX_ERR_UNSUPPORTED` |
+| Vim | Five answers of vim's are not followed, each measured against a second reference | (1) a forward backreference is refused, where vim accepts one *if a lookbehind follows it* - every other spelling is "E65: Illegal back reference" in both of its engines; (2) an abandoned `\@>` group's captures are discarded, where vim keeps them and pcre2test does not; (3) a capture around a postfix assertion followed by a repeat is kept, where vim loses it and pcre2test does not; (4) a postfix lookbehind with a backreference after it follows pcre2test: `\(a\)\@<=\(a\)\1\l` reports 1:4 where vim reports 1:3 in both engines and names text that does not satisfy its own pattern, and `\v\D(a)@<=\m\(a\)\1\(a\+\)\@>` reports no match where vim reports 0:3 with a group the match has no room for; (5) `\v\_^*` matches the empty string, where vim matches nothing at all in either engine - and `\m\_^*`, `\v\_$*`, `\v\_^{0,1}` and `\v(\_^)*` all match it there, so the one spelling that fails is an accident of its parser and not a rule. `tools/oracle/vim_diff.py` counts each of these rather than dropping it, and a sixth class - where vim's two engines simply disagree - is settled by *asking* `set re=1` rather than by guessing | - |
 
 ### 6.1 ECMAScript and the unit of a subject
 

@@ -1788,7 +1788,7 @@ static GRX_Result es_literal_atom(GRX_Parser * parser, uint32_t codepoint,
       // quantifier. `/{2,3}/` is a SyntaxError in Node even without `u`,
       // because the brace does begin one and there is nothing to repeat.
       size_t resume = parser->position;
-      GRX_Quantifier probe = {0, GRX_REPEAT_INF, 0};
+      GRX_Quantifier probe = {0, GRX_REPEAT_INF, 0, GRX_REPEAT_GREEDY};
       GRX_Result result = es_brace_quantifier(parser, &probe);
       parser->position = resume;
       if (result != GRX_OK) {

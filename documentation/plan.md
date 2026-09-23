@@ -570,7 +570,30 @@ and a test that says so.
 
 ### Phase 7: tier 4
 
-**WP-36 Vim** (oracle available; the magic-level hook is the work),
+**WP-36 Vim**: built 2026-09-23. The magic-level hook was indeed the work,
+and it needed four new front-end hooks rather than one, because the four
+levels move the line between operator and literal one character at a time
+and the level is chosen *inside* the pattern:
+
+- `operator_is_escaped()` generalises `GRX_SyntaxSpec::escaped_specials`
+  from a whole-dialect flag to a per-operator, per-position answer;
+- `read_repeat()` lets a dialect read repeats the shared four cannot
+  describe - vim's lazy form is `\{-n,m}`, a minus *inside* the brace;
+- `postfix_atom()` exists because vim's lookaround is postfix, which
+  nothing else here is: `\(foo\)\@=` asserts over the group before it;
+- `initial_options()` settles an option the pattern can set *backwards* -
+  `\c` anywhere makes the whole pattern caseless, so `x\ca` matches "XA".
+
+`GRX_SyntaxSpec::branch_and_operator` is a fifth addition and a grammar
+level rather than a hook: vim's `\&` joins concatenations between `\|`
+and concatenation, and `A\&B\&C` is built as `(?=A)(?=B)C`.
+
+It found one defect in shared engine code, which is the second time a new
+front end has. A lookaround restored the live capture slots when its body's
+path was abandoned and left the *shadow* spans - the ones a backreference
+reads - where the body had written them, so `(?=(a))$|(a)\1` matched "aa"
+here, "a" in node, and nothing at all in pcre2test.
+
 **WP-37 Tcl** (the `TCL_ARE` match preference is an engine mode, *engines,
 M*), **WP-38 Emacs**.
 

@@ -62,6 +62,16 @@ extern "C" {
 typedef enum {
   GRX_SET_ASCII_DIGIT = 0,  ///< `[0-9]`.
   GRX_SET_ASCII_WORD,       ///< `[0-9A-Za-z_]`.
+  /**
+   * `[0-9A-Za-z_]` and every code point from U+00C0 up.
+   *
+   * Vim's 'iskeyword' at its default, which is what `\<` and `\>` are
+   * defined from there. Measured one code point at a time: U+00BF is not a
+   * keyword character and U+00C0 is, and everything above U+00FF is - a
+   * CJK ideograph and an emoji included, which is why the range runs to the
+   * top rather than stopping at Latin-1.
+   */
+  GRX_SET_ASCII_WORD_AND_HIGH,
   GRX_SET_ASCII_SPACE,      ///< `[ \t\n\v\f\r]`.
   GRX_SET_ES_SPACE,         ///< ECMA-262 WhiteSpace plus LineTerminator.
   GRX_SET_UNICODE_DIGIT,    ///< `\p{Nd}`.

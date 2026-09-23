@@ -4302,7 +4302,7 @@ static GRX_Result pcre_brace_quantifier(
   uint64_t min = 0;
   int min_digits = 0;
 
-  *out = (GRX_Quantifier) {0, GRX_REPEAT_INF, 0};
+  *out = (GRX_Quantifier) {0, GRX_REPEAT_INF, 0, GRX_REPEAT_GREEDY};
 
   skip_quantifier_space(parser, &scan);
   while (is_decimal(byte_at(parser, scan)) && min < 0xFFFFFFFFu) {
@@ -4357,7 +4357,7 @@ static GRX_Result pcre_literal_atom(GRX_Parser * parser, uint32_t codepoint,
   // character has no operator meaning *at the start of an atom*.
   if (codepoint == '{') {
     size_t resume = parser->position;
-    GRX_Quantifier bounds = {0, GRX_REPEAT_INF, 0};
+    GRX_Quantifier bounds = {0, GRX_REPEAT_INF, 0, GRX_REPEAT_GREEDY};
     GRX_Result probe = pcre_brace_quantifier(parser, &bounds);
     parser->position = resume;
     if (probe == GRX_OK && bounds.is_quantifier) {

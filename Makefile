@@ -791,7 +791,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 ####################################################################
 
 # General commands
-.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-oracle-syntax check-oracle-match check-engine-equivalence check-oracle-perl check-oracle-perl-syntax check-oracle-script-runs check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
+.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-oracle-syntax check-oracle-match check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-perl-syntax check-oracle-script-runs check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
 	check-oracle-properties check-oracle-numeric-properties \
 	check-oracle-string-properties check-oracle-posix check-oracle-sed \
 	check-oracles \
@@ -889,6 +889,7 @@ check-oracles: check-oracle-syntax check-oracle-match check-oracle-properties \
 	check-oracle-numeric-properties check-oracle-string-properties \
 	check-oracle-posix check-oracle-submatch \
 	check-oracle-perl check-oracle-perl-syntax check-oracle-python \
+	check-oracle-vim \
 	check-oracle-script-runs check-oracle-newlines check-oracle-callouts \
 	check-oracle-sed \
 	check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
@@ -1022,6 +1023,29 @@ check-oracle-python: $(TOOLS)
 		exit 0; \
 	fi; \
 	python3 tools/oracle/python_diff.py --strict
+
+check-oracle-vim: ## Compare the Vim front end against vim itself
+# One vim process for the whole run, not one per case: vim reads a file of
+# cases and writes a file of answers, which is what makes a differential
+# possible against a reference that cannot be imported. `probe.py`'s vim
+# driver starts a process per case and is fine for the eighty rows that page
+# fills; this asks tens of thousands.
+#
+# It found a defect in code this dialect does not own, which is the second
+# time a new front end has: a lookaround restored the live capture slots when
+# its body's path was abandoned and left the *shadow* spans - the ones a
+# backreference reads - where the body had written them. `(?=(a))$|(a)\1`
+# matched "aa" here and "a" in node, and pcre2test refused it outright.
+check-oracle-vim: $(TOOLS)
+	@if ! command -v vim >/dev/null 2>&1; then \
+		printf "check-oracle-vim: skipped (no vim)\n"; \
+		exit 0; \
+	fi; \
+	if ! command -v python3 >/dev/null 2>&1; then \
+		printf "check-oracle-vim: skipped (no python3)\n"; \
+		exit 0; \
+	fi; \
+	python3 tools/oracle/vim_diff.py --strict
 
 check-oracle-replace: ## Compare the ECMAScript and PCRE2 templates against node and pcre2
 # WP-16 and WP-22's missing generator. sed_diff.py did this for the POSIX and

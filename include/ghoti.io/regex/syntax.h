@@ -264,6 +264,23 @@ typedef struct GRX_SyntaxSpec {
    * which is why this is a flag and not the shared parser's default.
    */
   int unmatched_close_is_literal;
+  /**
+   * Non-zero when the dialect has a second joining operator between `|` and
+   * concatenation.
+   *
+   * Vim's `\&`, and nothing else here. `foo\&..` matches where *both*
+   * concatenations match at the same position and reports the last one's
+   * text, so it is an "and" to `\|`'s "or" and sits one level tighter:
+   * `a\|b\&c` is `a` or (`b` and `c`). It is a grammar level rather than
+   * a construct, which is why it is a flag here and not a GRX_Feature bit -
+   * a feature bit says a spelling exists, and this says the grammar has a
+   * rule the other dialects' grammars do not.
+   *
+   * What it means is not a second axis: `A\&B\&C` is exactly
+   * `(?=A)(?=B)C`, which is how the parser builds it, so nothing below the
+   * AST learns a new node kind.
+   */
+  int branch_and_operator;
 } GRX_SyntaxSpec;
 
 /**

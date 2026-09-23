@@ -146,23 +146,59 @@ int grx_parse_eat(GRX_Parser * parser, char expected) {
  * Only the operators that *nest or join* invert. `*` is bare in a BRE as
  * well, which is why this is asked per operator rather than once.
  */
-static int operators_are_escaped(const GRX_Parser * parser) {
+static int operator_is_escaped(const GRX_Parser * parser, char op) {
+  // Per operator and per position where a dialect says so. The flag answers
+  // for the whole dialect at once, which is right for a basic RE and cannot
+  // describe Vim: there `.` and `[` are bare at one magic level and escaped
+  // at the next while `(`, `)` and `|` are escaped at both, and the level is
+  // chosen inside the pattern rather than by the dialect.
+  if (parser->frontend->operator_is_escaped) {
+    return parser->frontend->operator_is_escaped(parser, op);
+  }
+  // `*`, `.` and `[` are bare in every dialect that has no hook, a basic RE
+  // included: what `escaped_specials` names is the operators that *nest or
+  // join*, and these three do none of it. Answering the flag for them here
+  // made `a.c` a literal dot and `a\*c` a repeat in the two BRE rows, which
+  // the rxspencer vectors catch at once.
+  if (op == '*' || op == '.' || op == '[') {
+    return 0;
+  }
+  return parser->spec.escaped_specials != 0;
+}
+
+/**
+ * Whether a bare `op` standing where an *atom* is expected is the dialect's
+ * to read rather than this file's.
+ *
+ * A different question from the spelling one above, and the two part company
+ * on `*`: a basic RE's `*` is the bare repeat operator, so the spelling
+ * question answers "not escaped", while a `*` with no atom before it is a
+ * literal asterisk there and so is the front end's. Both were one flag test
+ * for as long as one flag could answer both.
+ *
+ * The same hook answers both, because a dialect that has one answers per
+ * character and per position and so can distinguish what a flag cannot.
+ */
+static int bare_operator_is_dialects(const GRX_Parser * parser, char op) {
+  if (parser->frontend->operator_is_escaped) {
+    return parser->frontend->operator_is_escaped(parser, op);
+  }
   return parser->spec.escaped_specials != 0;
 }
 
 /** Whether `op`, spelled the way this dialect spells it, stands here. */
 static int at_operator(const GRX_Parser * parser, char op) {
   size_t at = parser->position;
-  if (operators_are_escaped(parser)) {
+  if (operator_is_escaped(parser, op)) {
     return at + 1 < parser->length && parser->text[at] == '\\'
         && parser->text[at + 1] == op;
   }
   return at < parser->length && parser->text[at] == op;
 }
 
-/** How many bytes this dialect's spelling of an operator takes. */
-static size_t operator_width(const GRX_Parser * parser) {
-  return operators_are_escaped(parser) ? 2u : 1u;
+/** How many bytes this dialect's spelling of `op` takes. */
+static size_t operator_width(const GRX_Parser * parser, char op) {
+  return operator_is_escaped(parser, op) ? 2u : 1u;
 }
 
 /** Consume `op` if it stands here, and say whether it did. */
@@ -170,7 +206,7 @@ static int eat_operator(GRX_Parser * parser, char op) {
   if (!at_operator(parser, op)) {
     return 0;
   }
-  parser->position += operator_width(parser);
+  parser->position += operator_width(parser, op);
   return 1;
 }
 
@@ -490,26 +526,57 @@ static GRX_Result parse_quantifier(
     return GRX_OK;
   }
 
+  GRX_RepeatMode mode = GRX_REPEAT_GREEDY;
+
+  // A dialect whose repeat operators are not the shared four reads them
+  // itself. Everything after this block - whether the atom may be repeated,
+  // the repeat limits, the node - is the same either way, which is the point
+  // of putting the hook here rather than giving the dialect a second
+  // parse_term().
+  if (parser->frontend->read_repeat) {
+    GRX_Quantifier repeat_read = {0, GRX_REPEAT_INF, 0, GRX_REPEAT_GREEDY};
+    GRX_Result read = parser->frontend->read_repeat(parser, &repeat_read);
+    if (read != GRX_OK) {
+      return read;
+    }
+    if (!repeat_read.is_quantifier) {
+      return GRX_OK;
+    }
+    if (repeat_read.min > repeat_read.max
+        && !parser->spec.allow_impossible_repeat) {
+      return grx_parse_fail(parser, GRX_DIAG_QUANTIFIER_OUT_OF_ORDER, start,
+          parser->position - start);
+    }
+    if (parser->limits->max_repeat_count
+        && (repeat_read.max != GRX_REPEAT_INF
+            && repeat_read.max > parser->limits->max_repeat_count)) {
+      return grx_parse_fail(parser, GRX_DIAG_LIMIT_REPEAT_COUNT, start,
+          parser->position - start);
+    }
+    min = repeat_read.min;
+    max = repeat_read.max;
+    mode = repeat_read.mode;
+  }
   // `*` is bare in every dialect, a BRE included. `+`, `?` and `{` are the
   // ones a BRE spells with a backslash, which is why each is asked for
   // rather than switched on the character here.
-  if (parser->text[parser->position] == '*') {
-    parser->position++;
+  else if (at_operator(parser, '*')) {
+    parser->position += operator_width(parser, '*');
   }
   else if (at_operator(parser, '+')) {
     min = 1;
-    parser->position += operator_width(parser);
+    parser->position += operator_width(parser, '+');
   }
   else if (at_operator(parser, '?')) {
     max = 1;
-    parser->position += operator_width(parser);
+    parser->position += operator_width(parser, '?');
   }
   else if (at_operator(parser, '{')) {
     if (!(parser->spec.features & GRX_FEATURE_BOUNDED_REPEAT)) {
       return GRX_OK;
     }
-    parser->position += operator_width(parser);
-    GRX_Quantifier bounds = {0, GRX_REPEAT_INF, 0};
+    parser->position += operator_width(parser, '{');
+    GRX_Quantifier bounds = {0, GRX_REPEAT_INF, 0, GRX_REPEAT_GREEDY};
     GRX_Result result
         = parser->frontend->brace_quantifier(parser, &bounds);
     if (result != GRX_OK) {
@@ -566,12 +633,17 @@ static GRX_Result parse_quantifier(
   // double quantifier would refuse a pattern the reference accepts, and
   // would report it at the wrong place for the dialects that do refuse it.
   // parse_term() is where a second quantifier is judged.
-  GRX_RepeatMode mode = GRX_REPEAT_GREEDY;
-  if ((parser->spec.features & GRX_FEATURE_NON_GREEDY)
+  // Not where the dialect read the repeat itself: it has already said what
+  // the mode is, and there is no suffix to find. Vim spells its lazy repeat
+  // `\{-n,m}` and reports `a\{1,2}\?` as a second quantifier, so reading
+  // the `?` here would turn an error into a lazy repeat.
+  if (!parser->frontend->read_repeat
+      && (parser->spec.features & GRX_FEATURE_NON_GREEDY)
       && grx_parse_eat(parser, '?')) {
     mode = GRX_REPEAT_LAZY;
   }
-  else if ((parser->spec.features & GRX_FEATURE_POSSESSIVE)
+  else if (!parser->frontend->read_repeat
+      && (parser->spec.features & GRX_FEATURE_POSSESSIVE)
       && grx_parse_eat(parser, '+')) {
     mode = GRX_REPEAT_POSSESSIVE;
   }
@@ -629,7 +701,7 @@ static GRX_Result parse_atom(GRX_Parser * parser, uint32_t * out_node) {
   // Asked before the `\\` dispatch below, because in a BRE the group opener
   // *is* a backslash sequence and must not be handed to atom_escape.
   if (at_operator(parser, '(')) {
-    parser->position += operator_width(parser);
+    parser->position += operator_width(parser, '(');
     // Saved before the hook runs, not after: a hook that reads `(?i:` sets
     // the options as part of reading it, and a save taken afterwards would
     // restore the value it had just written. `^a(?i:b)c$` matching "aBC" is
@@ -719,7 +791,11 @@ static GRX_Result parse_atom(GRX_Parser * parser, uint32_t * out_node) {
     return GRX_OK;
   }
 
-  if (c == '[') {
+  // `[` and `.` are bare operators in every dialect but Vim's two nomagic
+  // levels, where the collection is `\[` and any-character is `\.` and the
+  // bare characters are literals. Both were unconditional here, which is
+  // exactly as long as no dialect spelled them the other way.
+  if (c == '[' && !operator_is_escaped(parser, '[')) {
     parser->position++;
     return parser->frontend->char_class(parser, out_node);
   }
@@ -732,7 +808,7 @@ static GRX_Result parse_atom(GRX_Parser * parser, uint32_t * out_node) {
     return parser->frontend->atom_escape(parser, out_node);
   }
 
-  if (c == '.') {
+  if (c == '.' && !operator_is_escaped(parser, '.')) {
     parser->position++;
     return add_node(parser, GRX_NODE_ANY, start, 1, out_node);
   }
@@ -744,29 +820,34 @@ static GRX_Result parse_atom(GRX_Parser * parser, uint32_t * out_node) {
   // whose whole purpose is that "this character has no operator meaning
   // here" is a dialect's call - and the front end turns the two anchors back
   // into anchors where they are ones.
-  if (!operators_are_escaped(parser)) {
-    if (c == '^' || c == '$') {
-      parser->position++;
-      GRX_Result result
-          = add_node(parser, GRX_NODE_ANCHOR, start, 1, out_node);
-      if (result != GRX_OK) {
-        return result;
-      }
-      grx_pattern_node(parser->pattern, *out_node)->a
-          = c == '^' ? GRX_ANCHOR_CARET : GRX_ANCHOR_DOLLAR;
-      return GRX_OK;
+  //
+  // Asked per character rather than once, because a dialect can put the line
+  // between two of them: in Vim's `\m` the anchors are bare and positional
+  // while `(` is `\(`, so one answer for the group would be the wrong
+  // answer for the caret.
+  if ((c == '^' || c == '$') && !bare_operator_is_dialects(parser, c)) {
+    parser->position++;
+    GRX_Result result
+        = add_node(parser, GRX_NODE_ANCHOR, start, 1, out_node);
+    if (result != GRX_OK) {
+      return result;
     }
+    grx_pattern_node(parser->pattern, *out_node)->a
+        = c == '^' ? GRX_ANCHOR_CARET : GRX_ANCHOR_DOLLAR;
+    return GRX_OK;
+  }
 
-    if (c == '*' || c == '+' || c == '?') {
-      // A quantifier with nothing before it. Reported here rather than in
-      // parse_quantifier() because at this point there is provably no atom -
-      // the caller only calls this when it is about to read one.
-      return grx_parse_fail(parser, GRX_DIAG_NOTHING_TO_REPEAT, start, 1);
-    }
+  if ((c == '*' || c == '+' || c == '?')
+      && !bare_operator_is_dialects(parser, c)) {
+    // A quantifier with nothing before it. Reported here rather than in
+    // parse_quantifier() because at this point there is provably no atom -
+    // the caller only calls this when it is about to read one.
+    return grx_parse_fail(parser, GRX_DIAG_NOTHING_TO_REPEAT, start, 1);
+  }
 
-    if (c == ')' && !parser->spec.unmatched_close_is_literal) {
-      return grx_parse_fail(parser, GRX_DIAG_UNMATCHED_CLOSE_PAREN, start, 1);
-    }
+  if (c == ')' && !bare_operator_is_dialects(parser, ')')
+      && !parser->spec.unmatched_close_is_literal) {
+    return grx_parse_fail(parser, GRX_DIAG_UNMATCHED_CLOSE_PAREN, start, 1);
   }
 
   uint32_t codepoint = 0;
@@ -795,6 +876,17 @@ static GRX_Result parse_term(GRX_Parser * parser, uint32_t * out_node) {
   if (!term || term->kind != GRX_NODE_OPTIONS
       || (term->flags & GRX_NODE_SCOPED)) {
     parser->only_global_flags_so_far = 0;
+  }
+
+  // Before any repeat, because it changes what the atom *is*. Vim's
+  // `\(a\)\@=` is a lookahead over the group written before it, and
+  // `\(a\)\@=*` would then be a repeat of the assertion rather than an
+  // assertion over the repeat.
+  if (parser->frontend->postfix_atom && !in_quote(parser)) {
+    result = parser->frontend->postfix_atom(parser, out_node);
+    if (result != GRX_OK) {
+      return result;
+    }
   }
 
   int applied = 0;
@@ -863,6 +955,10 @@ GRX_Result grx_parse_concatenation(
     if (!in_quote(parser) && at_operator(parser, '|')) {
       break;
     }
+    if (!in_quote(parser) && parser->spec.branch_and_operator
+        && at_operator(parser, '&')) {
+      break;
+    }
     // A `)` ends a branch when there is a group for it to close. Where the
     // dialect makes an unmatched one an ordinary character, at the top level
     // it is not a terminator at all and the atom reader takes it.
@@ -872,7 +968,7 @@ GRX_Result grx_parse_concatenation(
     // matches a lone `)` - so the two questions are about two different
     // spellings and only the bare one is ever a literal.
     if (!in_quote(parser) && at_operator(parser, ')')
-        && (parser->group_depth > 0 || operators_are_escaped(parser)
+        && (parser->group_depth > 0 || operator_is_escaped(parser, ')')
             || !parser->spec.unmatched_close_is_literal)) {
       break;
     }
@@ -920,6 +1016,79 @@ GRX_Result grx_parse_concatenation(
   return GRX_OK;
 }
 
+/**
+ * Read one branch: concatenations joined by the dialect's "and" operator.
+ *
+ * Vim's `\&` is the only one. `A\&B\&C` holds where every concatenation
+ * matches at this position and reports the *last* one's text, which is
+ * `(?=A)(?=B)C` and is built as exactly that - so the difference is a
+ * grammar level and not a node kind, and nothing below the AST hears about
+ * it. The assertions are synthesised after their bodies are parsed, which is
+ * why they are built here rather than by a hook: a hook is handed one atom,
+ * and this operator joins whole concatenations.
+ *
+ * Where the dialect has no such operator this is grx_parse_concatenation()
+ * and costs one flag test.
+ */
+static GRX_Result parse_branch(GRX_Parser * parser, uint32_t * out_node) {
+  size_t start = parser->position;
+  GRX_Result result = grx_parse_concatenation(parser, out_node);
+  if (result != GRX_OK) {
+    return result;
+  }
+  if (!parser->spec.branch_and_operator || in_quote(parser)
+      || !at_operator(parser, '&')) {
+    return GRX_OK;
+  }
+
+  uint32_t concat = GRX_INDEX_NONE;
+  result = add_node(parser, GRX_NODE_CONCAT, start, 0, &concat);
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  uint32_t previous = *out_node;
+  while (eat_operator(parser, '&')) {
+    // Everything but the last concatenation becomes an assertion. Done a
+    // step behind the loop because which one is last is not known until the
+    // `\&` that is not there.
+    uint32_t look = GRX_INDEX_NONE;
+    result = add_node(parser, GRX_NODE_LOOKAROUND, start, 0, &look);
+    if (result != GRX_OK) {
+      return result;
+    }
+    grx_pattern_node(parser->pattern, look)->a = GRX_LOOK_AHEAD_POSITIVE;
+    result = add_child(parser, look, previous);
+    if (result != GRX_OK) {
+      return result;
+    }
+    result = add_child(parser, concat, look);
+    if (result != GRX_OK) {
+      return result;
+    }
+    if (parser->limits->max_nesting_depth
+        && parser->depth + 1 > parser->limits->max_nesting_depth) {
+      return grx_parse_fail(
+          parser, GRX_DIAG_LIMIT_NESTING_DEPTH, parser->position, 1);
+    }
+    parser->depth++;
+    previous = GRX_INDEX_NONE;
+    result = grx_parse_concatenation(parser, &previous);
+    parser->depth--;
+    if (result != GRX_OK) {
+      return result;
+    }
+  }
+
+  result = add_child(parser, concat, previous);
+  if (result != GRX_OK) {
+    return result;
+  }
+  grx_pattern_node(parser->pattern, concat)->length = parser->position - start;
+  *out_node = concat;
+  return GRX_OK;
+}
+
 GRX_Result grx_parse_alternation(GRX_Parser * parser, uint32_t * out_node) {
   if (!parser || !out_node) {
     return GRX_ERR_INVALID;
@@ -927,7 +1096,7 @@ GRX_Result grx_parse_alternation(GRX_Parser * parser, uint32_t * out_node) {
 
   size_t start = parser->position;
   uint32_t first = GRX_INDEX_NONE;
-  GRX_Result result = grx_parse_concatenation(parser, &first);
+  GRX_Result result = parse_branch(parser, &first);
   if (result != GRX_OK) {
     return result;
   }
@@ -959,7 +1128,7 @@ GRX_Result grx_parse_alternation(GRX_Parser * parser, uint32_t * out_node) {
     }
     parser->depth++;
     uint32_t branch = GRX_INDEX_NONE;
-    result = grx_parse_concatenation(parser, &branch);
+    result = parse_branch(parser, &branch);
     parser->depth--;
     if (result != GRX_OK) {
       return result;
@@ -1065,6 +1234,15 @@ GRX_Result grx_parse_pattern(const char * pattern, size_t length,
   }
   // The dialect's own default options are the floor; the caller adds to them.
   parser.options |= parser.spec.default_options;
+
+  // And then the pattern itself, for a dialect that can set one backwards.
+  // Before grx_pattern_create(), which is what fixes the options a pattern
+  // is compiled with - after it they would be set on the parser and read by
+  // nobody.
+  if (frontend->initial_options) {
+    parser.options
+        = frontend->initial_options(pattern, length, parser.options);
+  }
 
   result = grx_pattern_create(
       allocator, syntax, parser.options, limits, &parser.pattern);

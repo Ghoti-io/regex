@@ -190,6 +190,12 @@ static GRX_Result posix_class_set(Lowering * low, const GRX_ClassItem * item,
       && ((low->options & GRX_OPT_UCP)
           || low->profile.shorthands == GRX_SHORTHANDS_UNICODE);
 
+  // Two names a dialect may widen on their own. See the profile field.
+  if (!wide && low->profile.posix_case_classes_wide
+      && (strcmp(name, "lower") == 0 || strcmp(name, "upper") == 0)) {
+    wide = 1;
+  }
+
   struct Range { uint32_t lo; uint32_t hi; };
   static const struct Range ascii_only[] = {{0x00, 0x7F}};
   static const struct Range blank[] = {{0x09, 0x09}, {0x20, 0x20}};
@@ -410,10 +416,17 @@ static GRX_Result exclude_line_terminators(
  */
 static GRX_Result evaluate_class(
     Lowering * low, const GRX_Node * node, GRX_CharClass * out) {
+  // The items the dialect does not fold, kept apart until the closure has
+  // run. Empty for every dialect but vim, where a class costs one more empty
+  // set and one union of it.
+  GRX_CharClass unfolded;
+  grx_charclass_init(&unfolded, out->allocator);
+
   for (uint32_t i = 0; i < node->b; i++) {
     const GRX_ClassItem * item = GRX_ARENA_AT(
         const GRX_ClassItem, &low->pattern->class_items, node->a + i);
     if (!item) {
+      grx_charclass_clear(&unfolded);
       return fail(low, GRX_DIAG_INTERNAL, node);
     }
 
@@ -437,16 +450,28 @@ static GRX_Result evaluate_class(
       result = grx_charclass_complement(&piece, low->limits);
     }
     if (result == GRX_OK) {
-      result = grx_charclass_union(out, &piece, low->limits);
+      // An item the dialect does not fold goes into a second set that the
+      // closure below does not see, and is unioned in afterwards. See
+      // GRX_CLASS_ITEM_NO_FOLD: in vim the same set written as `[a-z]` and
+      // as `[[:lower:]]` answers differently under `\c`, so the choice
+      // cannot be made once for the class.
+      result = grx_charclass_union(
+          (item->flags & GRX_CLASS_ITEM_NO_FOLD) ? &unfolded : out, &piece,
+          low->limits);
     }
     grx_charclass_clear(&piece);
 
     if (result != GRX_OK) {
+      grx_charclass_clear(&unfolded);
       return storage_failed(low, result, node);
     }
   }
 
   GRX_Result result = grx_charclass_fold_closure(out, low->fold, low->limits);
+  if (result == GRX_OK) {
+    result = grx_charclass_union(out, &unfolded, low->limits);
+  }
+  grx_charclass_clear(&unfolded);
   if (result != GRX_OK) {
     return storage_failed(low, result, node);
   }

@@ -188,6 +188,21 @@ typedef enum {
   GRX_SHORTHANDS_ASCII = 0,  ///< `[A-Za-z0-9_]`, `[0-9]`, `[ \t\n\v\f\r]`.
   GRX_SHORTHANDS_ECMASCRIPT, ///< ASCII `\w` and `\d`; ECMAScript's wider `\s`.
   GRX_SHORTHANDS_UNICODE,    ///< UTS #18: `\p{Word}`, `\p{Nd}`, `\p{White_Space}`.
+  /**
+   * ASCII, with the word set widened to every code point from U+00C0 up.
+   *
+   * Vim's, and read by nothing but its word boundaries: `\<` and `\>` are
+   * defined from 'iskeyword' there, whose default takes in every character
+   * above Latin-1's punctuation. The other two columns stay ASCII, which is
+   * why this is not GRX_SHORTHANDS_UNICODE - that value would widen the
+   * POSIX bracket classes too, and vim's `[[:alpha:]]` does not match "é".
+   *
+   * Vim's own `\w`, `\d` and `\s` do not come through this enum at all:
+   * its front end writes each of its eleven named classes out as explicit
+   * ranges, because vim's `\s` is space and tab alone and no value here
+   * says that.
+   */
+  GRX_SHORTHANDS_ASCII_PLUS_HIGH,
   GRX_SHORTHANDS_COUNT       ///< Closes the enum; not a definition.
 } GRX_ShorthandSet;
 
@@ -505,6 +520,24 @@ typedef struct GRX_Profile {
    * a closer approximation of ECMA-262 than decoding is; it is a worse one.
    */
   int subject_is_text;
+  /**
+   * `[[:lower:]]` and `[[:upper:]]` are Unicode where the other ten are not.
+   *
+   * Vim's, and measured rather than read: `[[:lower:]]` matches "é" and
+   * `[[:upper:]]` matches "É", while `[[:alpha:]]`, `[[:alnum:]]`,
+   * `[[:punct:]]`, `[[:graph:]]` and `[[:word:]]` all refuse them. The
+   * split is not arbitrary - vim answers the case classes from its own
+   * Unicode tables and the rest from the C library's ASCII predicates - but
+   * it is a split no single width can express, which is why this is a flag
+   * beside the width rather than a third value of it.
+   *
+   * `[[:print:]]` is the third class vim widens and is deliberately not
+   * here: its members are vim's `utf_printable()` table, which is neither
+   * a property nor a range - U+200B is not printable there and U+2028 is -
+   * and a flag that claimed it would be claiming something else.
+   * documentation/dialects.md section 6.
+   */
+  int posix_case_classes_wide;
 } GRX_Profile;
 
 /**

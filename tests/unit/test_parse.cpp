@@ -584,7 +584,8 @@ TEST(Parse, AnUnbuiltDialectSaysSoRatherThanGuessing) {
     if (syntax == GRX_SYNTAX_ECMASCRIPT || syntax == GRX_SYNTAX_PCRE
         || syntax == GRX_SYNTAX_PERL || syntax == GRX_SYNTAX_POSIX_BRE
         || syntax == GRX_SYNTAX_POSIX_ERE || syntax == GRX_SYNTAX_GNU_BRE
-        || syntax == GRX_SYNTAX_GNU_ERE || syntax == GRX_SYNTAX_PYTHON) {
+        || syntax == GRX_SYNTAX_GNU_ERE || syntax == GRX_SYNTAX_PYTHON
+        || syntax == GRX_SYNTAX_VIM) {
       continue;
     }
     GRX_Pattern * parsed = nullptr;

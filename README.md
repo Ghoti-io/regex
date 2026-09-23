@@ -185,7 +185,8 @@ Nothing is allocated for the caller to free on a failing call.
 | PCRE2 and Perl front ends | working - verbs, conditionals, recursion, branch reset, `\Q..\E`, extended modes, the leading directives (PCRE2's alone; Perl has none of them), Perl's `\N{NAME}` against the full character-name table, `(*LIMIT_MATCH=n)` applied rather than parsed and dropped, script runs `(*sr:`/`(*asr:` against UTS #39's augmented script sets, `(?[ ])` extended classes in **both** dialects, and the six newline conventions `(*CR)` and kin |
 | POSIX and GNU front ends | working - one reader for `posix-bre`, `posix-ere`, `gnu-bre` and `gnu-ere`; both halves of `REG_NEWLINE`, as `GRX_OPT_MULTILINE` and `GRX_OPT_NEWLINE_TERMINATES` |
 | Python front end | working - CPython 3.13's grammar, which is the Perl family's with a closed escape alphabet, `(?P<n>)` as the only named spelling, no `(*...)` construct, a reference that must name a group that has *closed*, and global flags only at the start |
-| Every dialect but those eight | named, `GRX_ERR_UNSUPPORTED` |
+| Vim front end | working - all four magic levels, chosen inside the pattern; postfix lookaround `\@=` and kin; `\&`; the `\%` family; `\zs`; eleven named classes with their `\_` forms. Its replacement template is **not** built (dialects.md section 6) |
+| Every dialect but those nine | named, `GRX_ERR_UNSUPPORTED` |
 | Lowering, analysis and code generation | working |
 | Pike VM | working - the regular subset, in linear time |
 | Backtracking engine | working - backreferences, lookaround, atomic and possessive |

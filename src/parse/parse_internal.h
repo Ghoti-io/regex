@@ -188,6 +188,20 @@ typedef enum {
 /** @brief The item is negated: `[:^alpha:]`, `\P{...}`, `\D`. */
 #define GRX_CLASS_ITEM_NEGATED GRX_BIT(0)
 
+/**
+ * @brief Caseless matching does not fold this item.
+ *
+ * Vim is the dialect that needs it, and the rule is about *spelling*: its
+ * named classes and its POSIX bracket classes are predicates and are not
+ * folded, while an explicit collection is a set of code points and is.
+ * Measured against vim 9.1 - `\c[a-z]` matches "A" and `\c[[:lower:]]`,
+ * `\c\l` and `\c\L` do not, so the same set written two ways gets two
+ * answers and no class-level rule can give both.
+ *
+ * Set by the front end, which is what knows which spelling it read.
+ */
+#define GRX_CLASS_ITEM_NO_FOLD GRX_BIT(1)
+
 /** @brief One item inside a character class, as written. */
 typedef struct GRX_ClassItem {
   GRX_ClassItemKind kind; ///< What this item is.
@@ -577,6 +591,22 @@ typedef struct GRX_Parser {
    * the first `\R` can be read and there is no ordering question to answer.
    */
   int bsr_anycrlf;
+  /**
+   * The dialect's own lexical state, meaningless to the shared parser.
+   *
+   * Vim is why it exists: its *magic level* decides which characters are
+   * operators, it is set inside the pattern by `\v`, `\m`, `\M` and
+   * `\V`, and it is not scoped to anything - `\v(a\m)b` is "unmatched
+   * \(" in vim 9.1, because the `\m` makes the `)` an ordinary character
+   * before the group it would have closed is closed.
+   *
+   * Kept here rather than in a static or in the front end's own struct
+   * because the parser is the thing that has a lifetime: one parse, one
+   * value, and nothing shared between two parses running at once. The
+   * shared parser never reads it; it only passes the parser to the hook
+   * that does.
+   */
+  int dialect_mode;
 } GRX_Parser;
 
 /**
@@ -590,6 +620,17 @@ typedef struct GRX_Quantifier {
   uint32_t min;      ///< Lower bound.
   uint32_t max;      ///< Upper bound, or GRX_REPEAT_INF.
   int is_quantifier; ///< 0 when the `{` is a literal after all.
+  /**
+   * Greedy, lazy or possessive, for a dialect that says so in the operator.
+   *
+   * Only GRX_Frontend::read_repeat fills this. The shared reading takes the
+   * mode from a suffix - `a*?` - which is a second token, and leaves this
+   * at GRX_REPEAT_GREEDY. Vim is the dialect that needs it: its lazy repeat
+   * is `\{-n,m}`, a minus *inside* the brace, so by the time the operator
+   * has been read the mode is already known and there is no suffix to look
+   * for.
+   */
+  GRX_RepeatMode mode;
 } GRX_Quantifier;
 
 /**
@@ -744,6 +785,89 @@ typedef struct GRX_Frontend {
    */
   GRX_Result (*skip_ignorable)(GRX_Parser * parser);
 
+  /**
+   * Whether `op` is written with a leading backslash here. May be NULL.
+   *
+   * The generalisation of GRX_SyntaxSpec::escaped_specials, which answers
+   * the same question for a whole dialect at once: a basic RE spells every
+   * operator that nests or joins with a backslash, and an extended one
+   * spells none of them that way. Two things that flag cannot say, and Vim
+   * says both. Its four *magic levels* move the line one operator at a
+   * time - `.` and `[` are bare in `\m` and escaped in `\M`, while `(`,
+   * `)` and `|` are escaped in both and bare only in `\v` - and the level
+   * is chosen *inside the pattern*, by `\v`, `\m`, `\M` and `\V`, so it
+   * is not a property of the dialect at all but of the position.
+   *
+   * Hence the two parameters. `op` is the operator in its bare spelling,
+   * one of `( ) | . [ ^ $ * + ? { &`; the position is the parser's own.
+   * Answering non-zero means the operator is `\` followed by that
+   * character here, and that the bare character is something else -
+   * usually a literal, which is what the dialect's literal_atom() then
+   * makes of it.
+   *
+   * NULL is "this dialect does not vary", and the spec flag decides.
+   */
+  int (*operator_is_escaped)(const GRX_Parser * parser, char op);
+
+  /**
+   * Read a repeat operator standing here, instead of the shared reading.
+   * May be NULL.
+   *
+   * The shared reading knows `*`, `+`, `?` and `{m,n}` and takes the lazy
+   * or possessive mode from a suffix. Vim's repeats are a different set of
+   * tokens - `*`, `\+`, `\=`, `\?`, `\{n,m}` - and its lazy form is
+   * `\{-n,m}`, which is neither a suffix nor a second token. A dialect
+   * whose operators do not fit the shared shape reads them here and leaves
+   * everything after the operator - whether the atom may be repeated, the
+   * repeat limits, the node - to the parser, which is the half that is the
+   * same everywhere.
+   *
+   * Sets `out->is_quantifier` to 0, having consumed nothing, when no repeat
+   * stands here.
+   */
+  GRX_Result (*read_repeat)(GRX_Parser * parser, GRX_Quantifier * out);
+
+  /**
+   * Let the dialect rewrite the atom just read, from what follows it.
+   * May be NULL.
+   *
+   * Vim's lookaround is *postfix*: `\(foo\)\@=` is a positive lookahead
+   * whose body is the group written before it, and `\@!`, `\@<=`, `\@<!`
+   * and `\@>` are the other four. Nothing else here is shaped that way -
+   * every other dialect writes the assertion as a group opener, where the
+   * body has not been read yet - so it cannot be a group_open() hook, and
+   * it is not a quantifier either: it changes what the atom *is* rather
+   * than how many times it runs.
+   *
+   * Called after the atom and before any repeat, with `node` the atom the
+   * operator would rewrite. A hook that finds no operator leaves `node`
+   * alone and returns GRX_OK.
+   */
+  GRX_Result (*postfix_atom)(GRX_Parser * parser, uint32_t * node);
+
+  /**
+   * Settle the options before a byte is read. May be NULL.
+   *
+   * For an option a pattern can set that applies to text the reader has
+   * already passed. Vim's `\c` and `\C` are the case: either one anywhere
+   * in the pattern decides caseless matching for the *whole* of it, so
+   * `x\ca` matches "XA" in vim 9.1 and `\Ca\cb` matches "AB" - the `\c`
+   * wins over an earlier `\C`, and both reach backwards.
+   *
+   * An option set while reading cannot do that: the pattern's options are
+   * fixed when it is created, and a node built before the setting was seen
+   * has already been built. So this is handed the raw text instead, before
+   * the parser exists, and returns the options to start from.
+   *
+   * @param text The pattern text. Not NUL-terminated.
+   * @param length Its length in bytes.
+   * @param options The options so far - the caller's, plus the dialect's
+   *   defaults.
+   * @return The options to parse with.
+   */
+  uint32_t (*initial_options)(
+      const char * text, size_t length, uint32_t options);
+
   /** Check what only the finished pattern can show. May be NULL. */
   GRX_Result (*validate)(GRX_Parser * parser);
 } GRX_Frontend;
@@ -767,6 +891,9 @@ extern const GRX_Frontend grx_frontend_perl;
 
 /** @brief CPython's `re`: the Perl-family rules, less what Python lacks. */
 extern const GRX_Frontend grx_frontend_python;
+
+/** @brief Vim's four magic levels. */
+extern const GRX_Frontend grx_frontend_vim;
 
 /** @brief POSIX and GNU, basic and extended. */
 extern const GRX_Frontend grx_frontend_posix_bre;

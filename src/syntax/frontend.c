@@ -54,6 +54,8 @@ const GRX_Frontend * grx_frontend_for(GRX_Syntax syntax) {
       return &grx_frontend_perl;
     case GRX_SYNTAX_PYTHON:
       return &grx_frontend_python;
+    case GRX_SYNTAX_VIM:
+      return &grx_frontend_vim;
     case GRX_SYNTAX_POSIX_BRE:
       return &grx_frontend_posix_bre;
     case GRX_SYNTAX_POSIX_ERE:

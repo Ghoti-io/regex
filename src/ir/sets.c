@@ -92,6 +92,8 @@ static const GRX_CharRange newlines_es[]
     = {{0x000A, 0x000A}, {0x000D, 0x000D}, {0x2028, 0x2029}};
 static const GRX_CharRange newlines_unicode[]
     = {{0x000A, 0x000D}, {0x0085, 0x0085}, {0x2028, 0x2029}};
+static const GRX_CharRange ascii_word_and_high[]
+    = {{'0', '9'}, {'A', 'Z'}, {'_', '_'}, {'a', 'z'}, {0xC0, 0x10FFFF}};
 static const GRX_CharRange newlines_cr[] = {{0x0D, 0x0D}};
 static const GRX_CharRange newlines_crlf[] = {{0x0A, 0x0A}, {0x0D, 0x0D}};
 static const GRX_CharRange newlines_nul[] = {{0x00, 0x00}};
@@ -121,6 +123,9 @@ GRX_Result grx_named_set(
   static const FixedSet fixed[GRX_SET_COUNT] = {
     [GRX_SET_ASCII_DIGIT] = {ascii_digit, sizeof(ascii_digit) / sizeof(*ascii_digit)},
     [GRX_SET_ASCII_WORD] = {ascii_word, sizeof(ascii_word) / sizeof(*ascii_word)},
+    [GRX_SET_ASCII_WORD_AND_HIGH]
+        = {ascii_word_and_high,
+            sizeof(ascii_word_and_high) / sizeof(*ascii_word_and_high)},
     [GRX_SET_ASCII_SPACE] = {ascii_space, sizeof(ascii_space) / sizeof(*ascii_space)},
     [GRX_SET_ES_SPACE] = {es_space, sizeof(es_space) / sizeof(*es_space)},
     [GRX_SET_ASCII_HSPACE] = {ascii_hspace, sizeof(ascii_hspace) / sizeof(*ascii_hspace)},
@@ -198,6 +203,9 @@ GRX_Result grx_shorthand_set(GRX_CharClass * cls, GRX_ShorthandSet shorthands,
       // different set: they are what closing this set under simple folding
       // produces, and the caller closes it (ECMA-262 22.2.2.9.3, whose
       // definition is exactly that closure).
+      if (shorthands == GRX_SHORTHANDS_ASCII_PLUS_HIGH) {
+        return grx_named_set(cls, GRX_SET_ASCII_WORD_AND_HIGH, limits);
+      }
       return grx_named_set(cls,
           unicode ? GRX_SET_UNICODE_WORD : GRX_SET_ASCII_WORD, limits);
 
