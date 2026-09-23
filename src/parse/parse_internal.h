@@ -119,6 +119,15 @@ typedef enum {
    * than refusing a pattern vim accepts.
    */
   GRX_ANCHOR_NEVER,
+  /**
+   * Vim's `\%23v` and its two comparisons: the screen column.
+   *
+   * `min` and `max` on the node hold the inclusive range, exactly as
+   * GRX_ANCHOR_BYTE_COLUMN's do - but these are columns and not offsets,
+   * and they are counted from one at both ends, because a column of zero
+   * is not a position a subject has.
+   */
+  GRX_ANCHOR_SCREEN_COLUMN,
   GRX_ANCHOR_COUNT            ///< Closes the enum; not an anchor.
 } GRX_AnchorKind;
 

@@ -612,6 +612,18 @@ visible:
   and every such row reaches the engine-split count above rather than being
   recognised from the pattern's shape.
 
+**Two kinds of character are deliberately absent from its subjects**, and
+each is a rule vim has that this library does not - found by putting such a
+subject in, and taken back out so that one unbuilt rule does not bury
+everything else the tool finds. Both are in [dialects.md](dialects.md) §6
+with their measurements. A base and the combining marks after it are *one
+character* in vim, so `.` over "a" U+0301 is 0-3 there and 0-1 here; and
+`\<` and `\>` hold where vim's character *class* changes rather than
+merely where a word begins, so `\>` holds between U+65E5 and "x" there and
+nowhere here. Neither is a construct that could be refused - they are how
+vim reads every subject - which is why the narrowing is in the subjects and
+not in the vocabulary.
+
 **The vocabulary carries what vim refuses**, at one row in eight - `\z(`,
 `\z1`, `\1` with no group, `a\{2`, `\(a`, `a**`, `\v+a`, `\v@a` and
 more. It is spliced *between atoms* rather than at a random byte offset,

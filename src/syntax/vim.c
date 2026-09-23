@@ -1443,36 +1443,37 @@ static GRX_Result read_position(
   if (which != 'l' && which != 'c' && which != 'v') {
     return grx_parse_fail(parser, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, start, 3);
   }
-  if (which == 'v') {
-    return grx_parse_fail(
-        parser, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, start, scan + 1);
-  }
   parser->position += scan + 1;
   if (which == 'l') {
     return anchor_node(parser, GRX_ANCHOR_NEVER, start, out_node);
   }
 
-  // Column N is offset N-1, so the three comparisons become one range. A
-  // range whose low bound is above its high bound never holds, which is
-  // what `\%0c` and `\%<1c` are.
   // The node's bounds are 32 bits wide, so an unbounded high end is
-  // UINT32_MAX rather than GRX_NPOS. A byte column past four billion is
-  // past every subject this library will compile a program for.
+  // UINT32_MAX rather than GRX_NPOS. A column past four billion is past
+  // every subject this library will compile a program for.
+  //
+  // `c` is a byte column and column N is offset N-1, so the three
+  // comparisons become one range of offsets; `v` is a screen column and
+  // the range is of columns, counted from one at both ends. A range whose
+  // low bound is above its high bound never holds, which is what `\%0c`
+  // and `\%<1c` are.
+  size_t bias = which == 'c' ? 1u : 0u;
   size_t low = 0;
   size_t high = GRX_NPOS;
   if (compare == '=') {
-    low = number ? number - 1 : GRX_NPOS;
-    high = number ? number - 1 : 0;
+    low = number ? number - bias : GRX_NPOS;
+    high = number ? number - bias : 0;
   }
   else if (compare == '<') {
-    high = number >= 2 ? number - 2 : 0;
-    low = number >= 2 ? 0 : GRX_NPOS;
+    high = number >= 1 + bias ? number - 1 - bias : 0;
+    low = number >= 1 + bias ? 0 : GRX_NPOS;
   }
   else {
-    low = number;
+    low = number + 1 - bias;
   }
-  GRX_Result result
-      = anchor_node(parser, GRX_ANCHOR_BYTE_COLUMN, start, out_node);
+  GRX_Result result = anchor_node(parser,
+      which == 'c' ? GRX_ANCHOR_BYTE_COLUMN : GRX_ANCHOR_SCREEN_COLUMN,
+      start, out_node);
   if (result != GRX_OK) {
     return result;
   }

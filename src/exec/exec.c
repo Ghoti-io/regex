@@ -108,6 +108,62 @@ GRX_Result grx_match_create(const GRX_Regex * regex,
  * only in what they put in the options, and there is one place where a search
  * can be got wrong.
  */
+/**
+ * The screen column of every byte offset, counting from one.
+ *
+ * Vim's `\%23v` is what wants it. Zero where an offset has no column of
+ * its own: inside a character, and at a combining character that follows
+ * something - `\%2v` against "a" U+0301 "x" holds at the "x" and not at
+ * the combining character, which is measured. A real column is never zero,
+ * so the two cannot be confused.
+ *
+ * The tabstop is eight, which is vim's default for the option the answer
+ * depends on; see documentation/dialects.md section 6.
+ */
+static uint32_t * build_columns(const GRX_Regex * regex,
+    const char * subject, size_t end, const GRX_Limits * limits) {
+  (void)limits;
+  size_t slots = end + 1;
+  if (slots > GRX_NPOS / sizeof(uint32_t)) {
+    return NULL;
+  }
+  uint32_t * columns
+      = gcu_allocator_calloc(regex->allocator, slots, sizeof(uint32_t));
+  if (!columns) {
+    return NULL;
+  }
+
+  size_t column = 1;
+  size_t at = 0;
+  int first = 1;
+  while (at <= end) {
+    columns[at] = column > UINT32_MAX ? UINT32_MAX : (uint32_t)column;
+    if (at == end) {
+      break;
+    }
+    uint32_t codepoint = 0;
+    size_t width = grx_unicode_utf8_decode(subject + at, end - at, &codepoint);
+    if (!width) {
+      // Not a character, so it is drawn as the byte it is. One cell, which
+      // is what vim shows for a stray byte too.
+      codepoint = (uint32_t)(unsigned char)subject[at];
+      width = 1;
+    }
+    size_t next = grx_display_column_after(codepoint, column, 8, first);
+    if (next == column) {
+      // A combining character: the offsets it spans have no column, and
+      // the one after it keeps the column its base had.
+      for (size_t skip = at; skip < at + width; skip++) {
+        columns[skip] = 0;
+      }
+    }
+    column = next;
+    at += width;
+    first = 0;
+  }
+  return columns;
+}
+
 static GRX_Result exec(const GRX_Regex * regex, const char * subject,
     size_t length, const GRX_SearchOptions * options, int anchored,
     GRX_EmptyMatchRule empty_rule, size_t search_start, GRX_Match * match,
@@ -288,11 +344,30 @@ static GRX_Result exec(const GRX_Regex * regex, const char * subject,
     // decides whether callouts are live is one place to get it wrong.
     .callout = options->callout,
     .callout_data = options->callout_data,
+    .columns = NULL,
   };
+
+  // Vim's `\%23v`, and only ever that: the screen column of every offset,
+  // computed once here because the assertion is reached at arbitrary
+  // positions in arbitrary order and a walk from the start at each of them
+  // would be quadratic in the subject.
+  uint32_t * columns = NULL;
+  if (regex->program.flags & GRX_PROGRAM_HAS_SCREEN_COLUMN) {
+    columns = build_columns(regex, subject, end, limits);
+    if (!columns) {
+      if (match) {
+        grx_error_set(&match->error, GRX_ERR_OOM, GRX_DIAG_OUT_OF_MEMORY,
+            GRX_NPOS, 0);
+      }
+      return GRX_ERR_OOM;
+    }
+    request.columns = columns;
+  }
 
   GRX_Result result = engine == GRX_ENGINE_PIKE
       ? grx_exec_pike(&request, out_matched)
       : grx_exec_backtrack(&request, out_matched);
+  gcu_allocator_free(regex->allocator, columns);
 
   if (match) {
     match->steps = steps;

@@ -1160,6 +1160,11 @@ static GRX_Result lower_anchor(
       kind = GRX_ASSERT_NEVER;
       break;
 
+    case GRX_ANCHOR_SCREEN_COLUMN:
+      kind = GRX_ASSERT_SCREEN_COLUMN;
+      low->ir->flags |= GRX_PROGRAM_HAS_SCREEN_COLUMN;
+      break;
+
     case GRX_ANCHOR_COUNT:
     default:
       return fail(low, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, node);
@@ -1184,7 +1189,7 @@ static GRX_Result lower_anchor(
   GRX_IRNode * assertion = grx_ir_node(low->ir, *out_node);
   assertion->mode = (uint8_t)kind;
   assertion->a = class_index;
-  if (kind == GRX_ASSERT_BYTE_COLUMN) {
+  if (kind == GRX_ASSERT_BYTE_COLUMN || kind == GRX_ASSERT_SCREEN_COLUMN) {
     // The one assertion with a payload instead of a class: `a` and `b` are
     // the inclusive range of offsets, which the parser wrote on the node.
     assertion->a = node->min;

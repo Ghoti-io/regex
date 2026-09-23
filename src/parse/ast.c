@@ -152,6 +152,8 @@ static const char * anchor_name(uint32_t kind) {
       return "byte-column";
     case GRX_ANCHOR_NEVER:
       return "never";
+    case GRX_ANCHOR_SCREEN_COLUMN:
+      return "screen-column";
     case GRX_ANCHOR_COUNT:
     default:
       return "?";

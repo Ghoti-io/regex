@@ -105,7 +105,8 @@ ATOMS = [
     # The buffer positions. `l`, `V` and `#` never match over a string and
     # `c` is the byte column, so all four are built rather than refused.
     "\\%V", "\\%#", "\\%23l", "\\%1l", "\\%2c", "\\%<3c", "\\%>2c",
-    "\\%1c", "\\v%2c",
+    "\\%1c", "\\v%2c", "\\%2v", "\\%<4v", "\\%>2v", "\\%9v",
+    "\\%1v", "\\v%3v",
     # The two that move the reported match, and the level markers themselves.
     # `\\=` after a mark is the one multi vim allows there, and it is the
     # case that separates the spelling from the bounds: `\\zs\\{0,1}` is
@@ -138,12 +139,11 @@ REFUSED = [
 # where a regression that started accepting one would be caught:
 #
 #   \Z           ignore Unicode combining characters
-#   \%23v        the *screen* column: a tabstop and a cell-width table
 #   ~ and \~     the text of the last `:s` replacement
 #   \%V \%#      the Visual area and the cursor: not in a string
 #   \%23l \%23c  a buffer line and a byte column: no assertion kind for them
 NOT_IMPLEMENTED = [
-    "\\Z", "~", "\\~", "\\%23v", "\\%<4v",
+    "\\Z", "~", "\\~",
 ]
 
 # The four levels, written as the prefix that selects one. The empty string
@@ -152,6 +152,28 @@ LEVELS = ["", "\\v", "\\m", "\\M", "\\V"]
 
 SUBJECTS = [
     "", "a", "ab", "aaab", "abc", "ABC", "a b", "a\tb", "a\nb", "\n",
+    # A tab run, so that `\%23v` can be told from `\%23c`: it counts
+    # display cells, and a subject of one-cell characters answers both the
+    # same way.
+    #
+    # **Two kinds of character are deliberately not here**, and both are
+    # narrowings with a reason rather than oversights. Each is a rule vim
+    # has that this library does not, each was found by putting such a
+    # subject in, and each is written up in documentation/dialects.md
+    # section 6 with its measurement. Generating them would report the
+    # same two gaps thousands of times over and bury whatever else this
+    # tool found, which is the floor `[[:foo:]]` is kept out for.
+    #
+    #   - **A composing character.** In vim a base and the marks after it
+    #     are *one character*: `.` over "a" U+0301 is 0-3 there and 0-1
+    #     here, `[a]` takes the whole cluster, a literal `a` matches none
+    #     of it, and `\%2c` holds nowhere inside it.
+    #   - **A character outside Latin's word class.** `\<` and `\>` hold
+    #     where vim's character *class* changes and not merely where a
+    #     word starts, and it has more than one word class: `\>` holds
+    #     between U+65E5 and "x" there and nowhere here, because both are
+    #     'iskeyword' characters.
+    "\t\tx",
     "abcabc", "xayaz", "[a]", "a*b", "a+b", "a.c", "(a)", "a|b", "read",
     "rea", "r", "A", "0", "_", "é", "É", "aéb", "~", "^a$",
 ]

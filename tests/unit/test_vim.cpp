@@ -549,9 +549,6 @@ TEST(Vim, TheConstructsItRefusesAndWhy) {
   // section 6, and each is refused rather than guessed at.
   EXPECT_EQ(why("a~"), GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED);   // last `:s`
   EXPECT_EQ(why("\\Za"), GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED); // combining
-  // The screen column, which needs a tabstop and a cell-width table.
-  EXPECT_EQ(why("\\%23v"), GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED);
-  EXPECT_EQ(why("\\%<4v"), GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED);
   // These two vim refuses itself, outside a syntax file.
   EXPECT_EQ(why("\\z(a\\)"), GRX_DIAG_NOT_IN_DIALECT);
   EXPECT_EQ(why("\\z1"), GRX_DIAG_NOT_IN_DIALECT);
@@ -629,6 +626,35 @@ std::string replaced(const std::string & pattern, const std::string & subject,
   }
   grx_regex_free(attempt.regex);
   return answer;
+}
+
+TEST(Vim, TheScreenColumnCountsCellsAndTheByteColumnCountsBytes) {
+  // `\%23v` is the *screen* column: a tab reaches the next multiple of
+  // the tabstop, a wide character takes two cells and a combining one
+  // takes none. Every number here was asked of vim 9.1 first.
+  EXPECT_EQ(span("\\%1v", "a\tb"), "0-0");
+  EXPECT_EQ(span("\\%2v", "a\tb"), "1-1");
+  EXPECT_EQ(span("\\%5v", "a\tb"), "nomatch");  // inside the tab
+  EXPECT_EQ(span("\\%9v", "a\tb"), "2-2");
+  EXPECT_EQ(span("\\%10v", "a\tb"), "3-3");
+  // U+65E5 is two cells and three bytes, which is what tells the two
+  // columns apart.
+  EXPECT_EQ(span("\\%3v", "\u65e5x"), "3-3");
+  EXPECT_EQ(span("\\%2v", "\u65e5x"), "nomatch");
+  EXPECT_EQ(span("\\%4c", "\u65e5x"), "3-3");
+  // A combining character has no column of its own: `\%2v` holds at the
+  // "x" and not at the mark, though both are column 2 by arithmetic.
+  EXPECT_EQ(span("\\%2v", "a\u0301x"), "3-3");
+  // A line break is two cells, because vim draws it as "^J".
+  EXPECT_EQ(span("\\%3v", "ab\ncd"), "2-2");
+  EXPECT_EQ(span("\\%4v", "ab\ncd"), "nomatch");
+  EXPECT_EQ(span("\\%5v", "ab\ncd"), "3-3");
+  // The comparisons, and the two ranges with nothing in them.
+  EXPECT_EQ(span("a\\%<3vb", "abc"), "0-2");
+  EXPECT_EQ(span("\\%>3v", "abc"), "3-3");
+  EXPECT_EQ(span("\\%>0v", "abc"), "0-0");
+  EXPECT_EQ(span("\\%0v", "abc"), "nomatch");
+  EXPECT_EQ(span("\\%<1v", "abc"), "nomatch");
 }
 
 TEST(Vim, TheReplacementTemplateIsVimsOwn) {

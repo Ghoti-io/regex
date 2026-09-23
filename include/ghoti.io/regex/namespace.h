@@ -303,6 +303,8 @@
 #define grx_unicode_es_legacy_orbit GHOTIIO_REGEX(grx_unicode_es_legacy_orbit)
 #define grx_unicode_fold_orbit GHOTIIO_REGEX(grx_unicode_fold_orbit)
 #define grx_unicode_fold_simple GHOTIIO_REGEX(grx_unicode_fold_simple)
+#define grx_display_cell_width GHOTIIO_REGEX(grx_display_cell_width)
+#define grx_display_column_after GHOTIIO_REGEX(grx_display_column_after)
 #define grx_unicode_upper_simple GHOTIIO_REGEX(grx_unicode_upper_simple)
 #define grx_unicode_lower_simple GHOTIIO_REGEX(grx_unicode_lower_simple)
 #define grx_unicode_property_lookup GHOTIIO_REGEX(grx_unicode_property_lookup)

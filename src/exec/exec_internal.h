@@ -161,6 +161,21 @@ typedef struct GRX_ExecRequest {
   int memoize;              ///< Run the backtracker with a visited bitmap.
   GRX_CalloutFn callout;    ///< Called at each `(?C...)`. May be NULL.
   void * callout_data;      ///< Passed to `callout` untouched.
+  /**
+   * @brief The screen column of every byte offset, or NULL.
+   *
+   * `length + 1` entries, built once per search and only for a program
+   * carrying GRX_PROGRAM_HAS_SCREEN_COLUMN - Vim's `\%23v` and nothing
+   * else. Zero at an offset that has no column of its own, which is one
+   * inside a character and one at a combining character that follows
+   * something; columns themselves count from one, so zero cannot collide
+   * with a real answer.
+   *
+   * Here rather than computed by the assertion because the assertion is
+   * reached at arbitrary positions in arbitrary order, and a walk from the
+   * start at each of them would be quadratic in the subject.
+   */
+  const uint32_t * columns;
 } GRX_ExecRequest;
 
 /**
