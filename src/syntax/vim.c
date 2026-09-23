@@ -58,7 +58,10 @@
  *
  * What is refused, and why each is a refusal rather than a guess:
  * `~` (the last substitute string - there is no previous substitution
- * here), `\Z` (ignore combining characters), `\z(` and
+ * here, and **this is not a deviation**: vim answers "E33: No previous
+ * substitute regular expression" in exactly the state this library is
+ * always in, so `~` is an error in both and `\~` is a literal tilde in
+ * both, measured), `\Z` (ignore combining characters), `\z(` and
  * `\z1` (vim itself refuses them outside a syntax file), and the buffer
  * positions `\%V`, `\%#`, `\%23l`, `\%23c` and `\%23v`, which name a window,
  * a cursor and a buffer that a library matching a string has not got.

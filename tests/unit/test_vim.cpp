@@ -547,7 +547,12 @@ TEST(Vim, OnlyTheOptionalMultiMayFollowAMark) {
 TEST(Vim, TheConstructsItRefusesAndWhy) {
   // Each of these is a deviation recorded in documentation/dialects.md
   // section 6, and each is refused rather than guessed at.
-  EXPECT_EQ(why("a~"), GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED);   // last `:s`
+  // `~` is the last `:s` replacement, and there has never been one - which
+  // is the state vim answers "E33" in, so this refusal is vim's own answer
+  // and not a deviation. `\~` is the literal tilde in both.
+  EXPECT_EQ(why("a~"), GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED);
+  EXPECT_EQ(span("a\\~", "a~"), "0-2");
+  EXPECT_EQ(span("\\M~", "a~"), "1-2");
   EXPECT_EQ(why("\\Za"), GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED); // combining
   // These two vim refuses itself, outside a syntax file.
   EXPECT_EQ(why("\\z(a\\)"), GRX_DIAG_NOT_IN_DIALECT);

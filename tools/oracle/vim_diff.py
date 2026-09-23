@@ -113,6 +113,8 @@ ATOMS = [
     # case that separates the spelling from the bounds: `\\zs\\{0,1}` is
     # E888 and asks for the same repeat.
     "\\zs", "\\ze", "\\zs\\=", "\\ze\\?", "\\v\\zs=",
+    # The last-substitute spellings, which both sides refuse and read alike.
+    "~", "\\~", "\\M~",
     "\\v", "\\m", "\\M", "\\V", "\\c", "\\C",
     # The branch operator, which is a grammar level rather than an atom.
     "\\&", "&",
@@ -135,16 +137,17 @@ REFUSED = [
 # times the generator happened to spell it - it would put a floor under the
 # disagreement count and hide the next real one under it.
 #
-# Each is a documented deviation in documentation/dialects.md section 6, and
-# each has a test in tests/unit/test_vim.cpp asserting the refusal, which is
-# where a regression that started accepting one would be caught:
+# One entry left, where there were eight. `\Z` asks for the composing rule
+# that dialects.md section 6 records as unbuilt, and it is a documented
+# deviation with a test in tests/unit/test_vim.cpp asserting the refusal -
+# which is where a regression that started accepting it would be caught.
 #
-#   \Z           ignore Unicode combining characters
-#   ~ and \~     the text of the last `:s` replacement
-#   \%V \%#      the Visual area and the cursor: not in a string
-#   \%23l \%23c  a buffer line and a byte column: no assertion kind for them
+# `~` and `\~` are *not* here any more, and that is the correction rather
+# than the omission: this library refuses `~` and reads `\~` as a literal
+# tilde, and so does vim, because "the last `:s` replacement" is E33 in the
+# only state a library ever has. They are generated like anything else.
 NOT_IMPLEMENTED = [
-    "\\Z", "~", "\\~",
+    "\\Z",
 ]
 
 # The four levels, written as the prefix that selects one. The empty string
