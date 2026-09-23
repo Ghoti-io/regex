@@ -77,9 +77,15 @@ ATOMS = [
     # Groups and alternation, in both spellings.
     "\\(a\\)", "\\(a\\|b\\)", "\\%(ab\\)", "\\(a\\)\\1",
     "(a)", "(a|b)", "%(ab)", "(a)\\1",
-    # The postfix assertions.
+    # The postfix assertions. The four that carry a mark are here because a
+    # marker inside an assertion or an atomic group is inert, and a
+    # vocabulary whose group bodies were all plain atoms could not spell the
+    # question: `\\(a\\zsb\\)\\@>c` was answered 1-3 here and 0-3 by vim
+    # for as long as this file had no way to generate it.
     "\\(a\\)\\@=", "\\(a\\)\\@!", "\\(a\\)\\@<=", "\\(a\\)\\@<!",
     "\\(a\\+\\)\\@>", "(a)@=", "(a)@!", "(a)@<=", "(a)@<!", "(a+)@>",
+    "\\(a\\zsb\\)\\@>", "\\(a\\zeb\\)\\@>", "\\(a\\zsb\\)\\@=",
+    "\\(a\\zeb\\)\\@=", "\\(a\\zeb\\)\\@<=",
     # Repeats, in both spellings and both modes.
     "a*", "a\\+", "a\\=", "a\\?", "a\\{2}", "a\\{2,3}", "a\\{,2}",
     "a\\{2,}", "a\\{}", "a\\{-}", "a\\{-1,}", "a\\{-2,3}",
@@ -87,8 +93,21 @@ ATOMS = [
     # The `\\%` family, and the word boundaries.
     "\\%^", "\\%$", "\\%d65", "\\%x41", "\\%o101", "\\%u0041", "\\%[abc]",
     "a\\%[bc]", "\\<", "\\>", "<", ">",
+    # `\%[...]`'s members are atoms, not characters, so the vocabulary has
+    # to spell one that is not a literal: a class, a collection, a mark and
+    # the seven escapes that are bare letters only in here.
+    "a\\%[\\d\\w]", "a\\%[[bc]d]", "a\\%[\\zsb]", "a\\%[\\vb]",
+    "a\\%[\\%d98]", "a\\%[\\_s]", "\\v%[\\db]",
+    # The buffer positions. `l`, `V` and `#` never match over a string and
+    # `c` is the byte column, so all four are built rather than refused.
+    "\\%V", "\\%#", "\\%23l", "\\%1l", "\\%2c", "\\%<3c", "\\%>2c",
+    "\\%1c", "\\v%2c",
     # The two that move the reported match, and the level markers themselves.
-    "\\zs", "\\v", "\\m", "\\M", "\\V", "\\c", "\\C",
+    # `\\=` after a mark is the one multi vim allows there, and it is the
+    # case that separates the spelling from the bounds: `\\zs\\{0,1}` is
+    # E888 and asks for the same repeat.
+    "\\zs", "\\ze", "\\zs\\=", "\\ze\\?", "\\v\\zs=",
+    "\\v", "\\m", "\\M", "\\V", "\\c", "\\C",
     # The branch operator, which is a grammar level rather than an atom.
     "\\&", "&",
 ]
@@ -100,6 +119,8 @@ ATOMS = [
 REFUSED = [
     "\\z(a\\)", "\\z1", "\\1", "a\\{2", "\\(a", "a\\)", "a**", "\\@=",
     "\\%(a", "a\\{1}\\+", "\\v+a", "\\v?a", "\\v@a",
+    "\\zs*", "\\ze\\+", "\\zs\\{0,1}", "\\v\\ze{2}",
+    "a\\%[b*]", "a\\%[b\\|c]", "a\\%[]", "a\\%[b\\=]",
 ]
 
 # Constructs vim *accepts* and this library refuses, listed here and
@@ -112,13 +133,13 @@ REFUSED = [
 # each has a test in tests/unit/test_vim.cpp asserting the refusal, which is
 # where a regression that started accepting one would be caught:
 #
-#   \ze          moving the reported match *end*; there is no node for it
 #   \Z           ignore Unicode combining characters
+#   \%23v        the *screen* column: a tabstop and a cell-width table
 #   ~ and \~     the text of the last `:s` replacement
 #   \%V \%#      the Visual area and the cursor: not in a string
 #   \%23l \%23c  a buffer line and a byte column: no assertion kind for them
 NOT_IMPLEMENTED = [
-    "\\ze", "\\Z", "~", "\\~", "\\%V", "\\%#", "\\%23l", "\\%23c",
+    "\\Z", "~", "\\~", "\\%23v", "\\%<4v",
 ]
 
 # The four levels, written as the prefix that selects one. The empty string
@@ -400,6 +421,32 @@ def is_very_magic_line_start_repeat(pattern, them, us):
     return where > 0 and "\\v" in pattern[:where]
 
 
+def is_line_number_star(pattern, them, us):
+    """`\\%23l*` matches nothing at all in vim, and there is no rule in it.
+
+    `\\%23l` names a buffer line and never matches over a string, so a `*`
+    on it should leave the empty match a zero-iteration repeat always has -
+    and vim agrees five ways: `\\%23l\\{}`, `\\%23l\\{-}`,
+    `\\%23l\\{0,1}`, `\\(\\%23l\\)*` and the very magic `%23l*` all
+    match the empty string there. Only the bare `*`, only outside very
+    magic, only after the `l` forms - `\\%V*` and `\\%2c*` match the empty
+    string - and both engines alike. The same shape as
+    is_very_magic_line_start_repeat() above, and excluded for the same
+    reason.
+    """
+    if not them.startswith("nomatch") or not us.startswith("match "):
+        return False
+    for form in ("l*", "l\\{1}"):
+        where = pattern.find(form)
+        while where > 0:
+            head = pattern[:where]
+            mark = head.rfind("\\%")
+            if mark >= 0 and head[mark + 2:].lstrip("<>").isdigit():
+                return True
+            where = pattern.find(form, where + 1)
+    return False
+
+
 def is_lookbehind_backreference_artifact(pattern, them, us):
     """vim mis-accounts a postfix lookbehind when a backreference follows.
 
@@ -488,19 +535,30 @@ def main():
         if (is_forward_reference_artifact(case[0], them, us)
                 or is_postfix_capture_artifact(case[0], them, us)
                 or is_lookbehind_backreference_artifact(case[0], them, us)
-                or is_very_magic_line_start_repeat(case[0], them, us)):
+                or is_very_magic_line_start_repeat(case[0], them, us)
+                or is_line_number_star(case[0], them, us)):
             artifacts += 1
             continue
         candidates.append((case, them, us))
 
     # Ask vim's other engine about what is left, rather than guessing from
     # the shape of the pattern which disagreements are vim arguing with
-    # itself. A row where `set re=1` gives this library's answer is one
-    # where vim ships two answers and this library picked one of them; a row
-    # where both engines agree with each other and not with us is ours to
-    # fix. Only the rows that came back different are asked, so the second
-    # process costs nothing on a clean run.
+    # itself. A row where the two engines disagree is a row vim has no one
+    # answer for; a row where they agree with each other and not with us is
+    # ours to fix. Only the rows that came back different are asked, so the
+    # second process costs nothing on a clean run.
+    #
+    # Two counts, because they are not equally informative. Most split rows
+    # turn on one axis and `set re=1` gives exactly this library's answer.
+    # The rest turn on *two*: this library follows the old engine where a
+    # mark sits inside an assertion and the new one where `\c` meets
+    # `[[:lower:]]`, each because that engine is the one whose answers can
+    # be stated as a rule, so a pattern holding both agrees with neither.
+    # Those are printed rather than swallowed - a defect of this library's
+    # could hide among them, and the only defence is that a person can see
+    # them.
     engine_split = 0
+    both_axes = []
     if candidates:
         second = ask_old_engine([case for case, _, _ in candidates])
         if len(second) != len(candidates):
@@ -508,8 +566,12 @@ def main():
                 % (len(second), len(candidates)))
             return 2
         for (case, them, us), old in zip(candidates, second):
-            if normalise_theirs(old, case[1]) == us:
+            older = normalise_theirs(old, case[1])
+            if older == us:
                 engine_split += 1
+                continue
+            if older != them:
+                both_axes.append((case, them, us, older))
                 continue
             disagreements.append((case, them, us))
 
@@ -527,6 +589,9 @@ def main():
     if engine_split:
         notes.append("%d excluded (vim's two engines disagree; `set re=1` "
             "gives this library's answer)" % engine_split)
+    if both_axes:
+        notes.append("%d excluded (vim's two engines disagree and neither "
+            "gives it; listed below)" % len(both_axes))
     print("vim_diff: %d rows (%s), %d disagreements%s"
         % (len(cases), shape, len(disagreements),
             "".join(", " + note for note in notes)))
@@ -536,6 +601,14 @@ def main():
         print("    ours: %s" % us)
     if len(disagreements) > args.examples:
         print("  ... and %d more" % (len(disagreements) - args.examples))
+    for (pattern, subject), them, us, older in both_axes[:args.examples]:
+        print("  [both axes] /%s/ on %r" % (pattern, subject))
+        print("     re=2: %s" % them)
+        print("     re=1: %s" % older)
+        print("     ours: %s" % us)
+    if len(both_axes) > args.examples:
+        print("  ... and %d more two-axis rows"
+            % (len(both_axes) - args.examples))
     if args.strict and disagreements:
         return 1
     return 0

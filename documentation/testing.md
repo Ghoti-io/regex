@@ -529,16 +529,27 @@ comparison folds ours the same way, and the unset axis is stated by
 `\(a\)\?\1` matches the empty string against "b", which a dialect that
 failed on an unset reference could not do.
 
-**Five classes of disagreement are vim disagreeing with something**, and the
+**Eight classes of disagreement are vim disagreeing with something**, and the
 tool counts each rather than dropping it, so that the number moving is
 visible:
 
 - **vim's two engines.** `\%^\|a\?` against "a" is the empty match at 0
   under `set re=1` and "a" under the default `re=2`. This is not recognised
   from the shape of the pattern - it is *asked*: every row that came back
-  different is put to the old engine, and one where that engine gives this
-  library's answer is reported as an engine split. A row where both of vim's
-  engines agree with each other and not with this library is a defect here.
+  different is put to the old engine. A row where both of vim's engines
+  agree with each other and not with this library is a defect here.
+
+  The count is split in two, because the rows are not equally informative.
+  Most turn on a single axis and `set re=1` gives exactly this library's
+  answer. A few turn on *two*, and then neither engine gives it: this
+  library follows the old engine where a mark sits inside an assertion and
+  the new one where `\c` meets `[[:lower:]]`, each time because that engine
+  is the one whose answers can be stated as a rule, so a pattern holding
+  both agrees with neither. About one row in 35,000 -
+  `\c[[:lower:]]\|\(a\zsb\)\@=` against "ABC" is the shape - and the
+  tool *prints* each of them with both engines' answers beside its own,
+  because a defect of this library's could hide in that set and a person
+  looking at it is the only defence there is.
 - **A forward backreference with a lookbehind after it.** `\1\(a\)\@<!`
   is accepted where `\1\(a\)`, `\(a\1\)`, `\1\(a\)\@=`,
   `\1\(a\)\@>` and `\1\%(a\)` are all "E65: Illegal back reference" in
@@ -568,6 +579,31 @@ visible:
   nothing at all in vim, while `\m\_^*`, `\v\_$*`, `\v\_^{0,1}` and
   `\v(\_^)*` all match the empty string there. Only the very magic level,
   only `\_^`, only the `*` spelling, and both engines alike.
+- **`\%23l*`.** `\%23l` names a buffer line and never matches over a
+  string, so a `*` on it should leave the empty match a zero-iteration
+  repeat always has - and vim agrees five ways: `\%23l\{}`,
+  `\%23l\{-}`, `\%23l\{0,1}`, `\(\%23l\)*` and the very magic
+  `%23l*` all match the empty string there. Only the bare `*`, only
+  outside very magic, only after an `l` form, and both engines alike.
+- **A group inside `\%[...]`.** `a\%[\(bc\)]`, `a\%[\%(bc\)]` and a
+  nested `a\%[b\%[cd]]` are "E54: Unmatched \(" under `set re=1` and
+  compile under `re=2`. Every other member vim's help calls an atom is
+  built - a class, a collection, `\%d98`, `\zs`, `\<`, `\_s`, a
+  backreference - so the refusal is this one shape and not the member
+  grammar.
+- **A `\zs` or a `\ze` inside an assertion**, where the default engine's
+  answers cannot be stated as a rule. 140 patterns put each of four marker
+  bodies inside each of `\@=`, `\@!`, `\@<=`, `\@<!`, `\@>` and `\&`
+  with five tails: `set re=1` answers every one of them the way a single
+  mark register does, and `re=2` agrees with it on 110. The 30 left are not
+  a second rule. `\(ab\zec\)\@=a` against "abc" is 0-2 old and 0-1 new,
+  while `x\(ab\zec\)\@=` against "xabc" is 0-3 in *both* - one character
+  consumed outside the same assertion, and the answer turning on which side
+  of it the character was written. `a\zeb` is 0-1 everywhere, so it is not
+  that later text overwrites a mark. And `re=2` drops a `\zs` where it
+  keeps a `\ze`. This library follows the engine that can be written down,
+  and every such row reaches the engine-split count above rather than being
+  recognised from the pattern's shape.
 
 **The vocabulary carries what vim refuses**, at one row in eight - `\z(`,
 `\z1`, `\1` with no group, `a\{2`, `\(a`, `a**`, `\v+a`, `\v@a` and

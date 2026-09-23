@@ -40,7 +40,7 @@ const char * grx_opcode_name(GRX_Opcode op) {
     "assert", "progress-set", "reset", "reset-stale", "progress-check",
     "backref", "look",
     "scan", "rewind", "atomic-begin", "atomic-end", "cond", "call", "ret",
-    "keep", "verb", "script-run", "callout",
+    "keep", "keep-end", "verb", "script-run", "callout",
   };
   // NULL-checked for the reason ir_kind_name() is: an opcode added without
   // a mnemonic is a zeroed slot, and a disassembler that crashes hides the
@@ -58,6 +58,7 @@ static const char * assert_name(uint8_t kind) {
     "word-seg-boundary", "not-word-seg-boundary",
     "sentence-boundary", "not-sentence-boundary",
     "line-boundary", "not-line-boundary", "look-length",
+    "byte-column", "never",
   };
   return kind < GRX_ASSERT_COUNT ? names[kind] : "?";
 }

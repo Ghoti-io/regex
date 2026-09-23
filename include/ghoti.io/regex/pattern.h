@@ -112,6 +112,17 @@ typedef enum {
    * what it matches unless a caller asks them to.
    */
   GRX_NODE_CALLOUT,
+  /**
+   * `\ze`: the reported match *end* is here, whatever is consumed after it.
+   *
+   * The mirror of @ref GRX_NODE_KEEP, and Vim's alone. The text after it
+   * still has to match - `a\zeb` does not match "a" - and the span reported
+   * stops where the marker stands. Where a later @ref GRX_NODE_KEEP moves
+   * the start past it, the end reported is the start: vim's `matchend()`
+   * answers 3 for `ab\zec\zsd` against "abcd", so the empty span is its
+   * own answer rather than this library rounding one.
+   */
+  GRX_NODE_KEEP_END,
   GRX_NODE_COUNT        ///< Closes the enum; not a node kind.
 } GRX_NodeKind;
 

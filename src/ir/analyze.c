@@ -650,6 +650,7 @@ static Span walk(Analysis * analysis, uint32_t node_index) {
     }
 
     case GRX_IR_KEEP:
+    case GRX_IR_KEEP_END:
     case GRX_IR_VERB:
       analysis->is_regular = 0;
       span = (Span) {0, 0, 0, 0, 0, 0};

@@ -475,6 +475,18 @@ static int assertion_holds(
     }
 
 
+    case GRX_ASSERT_BYTE_COLUMN:
+      // Vim's `\%23c` and kin, as an inclusive range of offsets. The
+      // subject's start is where the count begins, not the line's: over a
+      // string vim has one line, and `\%1c` holds at offset 0 and nowhere
+      // after a line break.
+      return position >= inst->x && position <= inst->y;
+
+    case GRX_ASSERT_NEVER:
+      // `\%V`, `\%#`, `\%23l`: compiled, and never true over a subject
+      // that is not a buffer.
+      return 0;
+
     // The four segmentation boundaries. Each reads the subject itself, so
     // the instruction carries no class and the window is not consulted: a
     // boundary is a fact about the text, and `(*scs:` narrowing what may be
@@ -1073,6 +1085,7 @@ static int program_is_runnable(const GRX_Program * program) {
       case GRX_OP_CALL:
       case GRX_OP_RET:
       case GRX_OP_KEEP:
+      case GRX_OP_KEEP_END:
       case GRX_OP_VERB:
       case GRX_OP_SCAN:
       case GRX_OP_REWIND:

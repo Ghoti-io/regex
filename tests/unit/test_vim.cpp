@@ -435,6 +435,43 @@ TEST(Vim, TheOptionalSequenceIsOptionalAllTheWayDown) {
   EXPECT_EQ(span("\\%[abc]*", "abc"), "0-3");
 }
 
+TEST(Vim, AnOptionalSequencesMembersAreAtoms) {
+  // vim's help calls them atoms and means it: a class, a collection, a
+  // `\%` escape, a mark and the underscore forms are all members.
+  EXPECT_EQ(span("a\\%[\\d\\w]", "a5x"), "0-3");
+  EXPECT_EQ(span("a\\%[[bc]d]", "abd"), "0-3");
+  EXPECT_EQ(span("a\\%[\\%d98]", "ab"), "0-2");
+  EXPECT_EQ(span("a\\%[\\_s]", "a\n"), "0-2");
+  EXPECT_EQ(span("a\\%[\\<b]", "ab"), "0-1");
+  // A zero-width member still counts, which is why the expansion is an
+  // alternation and not a repeat: a repeat discards an iteration that
+  // consumed nothing and this one would lose the mark.
+  EXPECT_EQ(span("a\\%[\\zsb]", "rea"), "3-3");
+  // Seven escapes are the bare letter in here and nowhere else. `\vb` is
+  // "v" then "b", so this matches "av" and not "ab".
+  EXPECT_EQ(span("a\\%[\\vb]", "av"), "0-2");
+  EXPECT_EQ(span("a\\%[\\vb]", "ab"), "0-1");
+  EXPECT_EQ(span("a\\%[\\Z]", "aZ"), "0-2");
+}
+
+TEST(Vim, WhatAnOptionalSequenceMemberMayNotBe) {
+  // No multi, in either spelling, and vim counts its postfix operators as
+  // multis for this rule too.
+  EXPECT_EQ(why("a\\%[b*]"), GRX_DIAG_NOTHING_TO_REPEAT);
+  EXPECT_EQ(why("a\\%[b\\=]"), GRX_DIAG_NOTHING_TO_REPEAT);
+  EXPECT_EQ(why("a\\%[b\\{2}]"), GRX_DIAG_NOTHING_TO_REPEAT);
+  EXPECT_EQ(why("\\va%[b+]"), GRX_DIAG_NOTHING_TO_REPEAT);
+  // No alternation, no branch operator, and no group - the last of which
+  // is `set re=1`; the default engine takes one. dialects.md section 6.
+  EXPECT_EQ(why("a\\%[b\\|c]"), GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED);
+  EXPECT_EQ(why("a\\%[b\\&c]"), GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED);
+  EXPECT_EQ(why("a\\%[\\(bc\\)]"), GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED);
+  EXPECT_EQ(why("a\\%[\\%(bc\\)]"), GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED);
+  EXPECT_EQ(why("a\\%[b\\%[cd]]"), GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED);
+  // And not empty, where a collection's `[]` is two characters.
+  EXPECT_EQ(why("a\\%[]"), GRX_DIAG_EMPTY_CLASS);
+}
+
 TEST(Vim, AStringSubjectHasNoLines) {
   // vim's help is written for a buffer, where `.` refuses the line break.
   // Over a *string* - which is the subject this library has, and what
@@ -450,6 +487,59 @@ TEST(Vim, KeepMovesTheReportedStart) {
   EXPECT_EQ(span("a\\zsb", "ab"), "1-2");
 }
 
+TEST(Vim, KeepEndMovesTheReportedEnd) {
+  // `\ze`: the text after it still has to match and the span stops here.
+  EXPECT_EQ(span("a\\zeb", "ab"), "0-1");
+  EXPECT_EQ(span("a\\zeb", "a"), "nomatch");
+  EXPECT_EQ(span("a*\\zeb", "aab"), "0-2");
+  // The last one reached on the winning path decides, which is what a
+  // repeat makes visible: two iterations, and the second one's mark.
+  EXPECT_EQ(span("a\\zeb\\zec", "abc"), "0-2");
+  EXPECT_EQ(span("\\%(a\\zeb\\)\\{2}", "abab"), "0-3");
+  // A mark on a branch that was abandoned leaves nothing behind.
+  EXPECT_EQ(span("\\(a\\zex\\|ab\\)c", "abc"), "0-3");
+}
+
+TEST(Vim, AMarkInsideAnAssertionStillCounts) {
+  // A mark writes one register for the whole pattern, and an assertion or
+  // an atomic group does not take it back. This follows `set re=1`: vim's
+  // two engines disagree here and only the old one can be stated as a rule
+  // - see documentation/dialects.md section 6, deviation (6).
+  EXPECT_EQ(span("\\(a\\zeb\\)\\@=ab", "ab"), "0-1");
+  EXPECT_EQ(span("\\(a\\zsb\\)\\@=ab", "ab"), "1-2");
+  EXPECT_EQ(span("\\(a\\zeb\\)\\@>c", "abc"), "0-1");
+  EXPECT_EQ(span("\\(a\\zsb\\)\\@>c", "abc"), "1-3");
+  // `\&` reaches it the same way, because A\&B is built as (?=A)B.
+  EXPECT_EQ(span("a\\zeb\\&abc", "abc"), "0-1");
+  EXPECT_EQ(span("a\\zsb\\&abc", "abc"), "1-3");
+  // An assertion at the end of the pattern is the one case the *new*
+  // engine agrees about, which is what says this is not a question vim
+  // leaves open: both answer 0-1 here, and only the register rule does.
+  EXPECT_EQ(span("\\(a\\zeb\\)\\@=", "ab"), "0-1");
+}
+
+TEST(Vim, AnEndBeforeTheStartIsTheEmptySpanAtTheStart) {
+  // The two marks are independent and either may come last. vim's own
+  // `matchend()` answers 3 for this pattern against "abcd", so the empty
+  // span is its answer and not a repair of one.
+  EXPECT_EQ(span("ab\\zec\\zsd", "abcd"), "3-3");
+  EXPECT_EQ(span("a\\zeb\\zsc", "abc"), "2-2");
+}
+
+TEST(Vim, OnlyTheOptionalMultiMayFollowAMark) {
+  // "E888: Can not repeat \zs or \ze" takes `*`, `\+` and every brace
+  // form - `\{0,1}` included, which is what says the rule is about the
+  // spelling and not about the bounds it asks for.
+  EXPECT_EQ(why("a\\zs*b"), GRX_DIAG_NOTHING_TO_REPEAT);
+  EXPECT_EQ(why("a\\ze*b"), GRX_DIAG_NOTHING_TO_REPEAT);
+  EXPECT_EQ(why("a\\ze\\{0,1}b"), GRX_DIAG_NOTHING_TO_REPEAT);
+  EXPECT_EQ(why("\\va\\zs+b"), GRX_DIAG_NOTHING_TO_REPEAT);
+  // `\=` and `\?` are accepted, and the mark still counts under them.
+  EXPECT_EQ(span("a\\zs\\=b", "ab"), "1-2");
+  EXPECT_EQ(span("a\\ze\\?b", "ab"), "0-1");
+  EXPECT_EQ(span("\\va\\zs?b", "ab"), "1-2");
+}
+
 // --------------------------------------------------------------------------
 // What it refuses
 // --------------------------------------------------------------------------
@@ -459,12 +549,43 @@ TEST(Vim, TheConstructsItRefusesAndWhy) {
   // section 6, and each is refused rather than guessed at.
   EXPECT_EQ(why("a~"), GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED);   // last `:s`
   EXPECT_EQ(why("\\Za"), GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED); // combining
-  EXPECT_EQ(why("a\\zeb"), GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED); // match end
-  EXPECT_EQ(why("\\%V"), GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED); // Visual area
-  EXPECT_EQ(why("\\%23l"), GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED); // buffer line
+  // The screen column, which needs a tabstop and a cell-width table.
+  EXPECT_EQ(why("\\%23v"), GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED);
+  EXPECT_EQ(why("\\%<4v"), GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED);
   // These two vim refuses itself, outside a syntax file.
   EXPECT_EQ(why("\\z(a\\)"), GRX_DIAG_NOT_IN_DIALECT);
   EXPECT_EQ(why("\\z1"), GRX_DIAG_NOT_IN_DIALECT);
+}
+
+TEST(Vim, TheBufferPositionsAreBuiltAndThreeOfThemNeverMatch) {
+  // `\%V`, `\%#` and the three `l` forms name something a subject has
+  // not got. vim compiles them all and none of them matches over a
+  // string, so that is what is built - a pattern that compiles and finds
+  // nothing, not a refusal of a pattern vim accepts.
+  EXPECT_EQ(span("a\\%Vb", "ab"), "nomatch");
+  EXPECT_EQ(span("\\%#", "ab"), "nomatch");
+  EXPECT_EQ(span("\\%1l", "ab"), "nomatch");
+  EXPECT_EQ(span("\\%<9l", "ab"), "nomatch");
+  EXPECT_EQ(span("\\%>0l", "ab"), "nomatch");
+  // A zero-iteration repeat of one still matches the empty string, which
+  // is `\%V*` in vim as well.
+  EXPECT_EQ(span("\\%V*", "ab"), "0-0");
+
+  // `\%23c` is the *byte* column, counted from one: `\%4c` holds after a
+  // three-byte character and `\%2c` holds nowhere in that subject.
+  EXPECT_EQ(span("\\%1c", "abc"), "0-0");
+  EXPECT_EQ(span("a\\%2cb", "abc"), "0-2");
+  EXPECT_EQ(span("\\%4c", "\u65e5x"), "3-3");
+  EXPECT_EQ(span("\\%2c", "\u65e5x"), "nomatch");
+  // A line break does not reset it: over a string there is one line.
+  EXPECT_EQ(span("\\%1c", "ab\ncd"), "0-0");
+  EXPECT_EQ(span("\\%4c", "ab\ncd"), "3-3");
+  // The comparisons, and the two ranges with nothing in them.
+  EXPECT_EQ(span("a\\%<3cb", "abc"), "0-2");
+  EXPECT_EQ(span("\\%>2c", "abc"), "2-2");
+  EXPECT_EQ(span("\\%>0c", "abc"), "0-0");
+  EXPECT_EQ(span("\\%0c", "abc"), "nomatch");
+  EXPECT_EQ(span("\\%<1c", "abc"), "nomatch");
 }
 
 TEST(Vim, TheReplacementGrammarIsNotBuilt) {

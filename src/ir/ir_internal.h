@@ -104,6 +104,7 @@ typedef enum {
    */
   GRX_IR_RECURSE,
   GRX_IR_KEEP,       ///< Reset the reported start of the match.
+  GRX_IR_KEEP_END,   ///< Pin the reported end of the match to here.
   GRX_IR_VERB,       ///< A backtracking control verb; `mode` says which.
   GRX_IR_SCAN,       ///< Match the one child against the substring `a` names.
   /**
@@ -302,7 +303,7 @@ typedef enum {
  *
  * | Kind | `a` | `b` | `mode` | other |
  * | --- | --- | --- | --- | --- |
- * | EMPTY, KEEP | - | - | - | - |
+ * | EMPTY, KEEP, KEEP_END | - | - | - | - |
  * | CHAR | the code point | - | - | - |
  * | CLASS | class index | - | - | - |
  * | ANY | class index of the excluded set, or GRX_INDEX_NONE for everything | - | - | - |

@@ -100,6 +100,25 @@ typedef enum {
   GRX_ANCHOR_NOT_SENTENCE_BOUNDARY, ///< `\B{sb}`.
   GRX_ANCHOR_LINE_BOUNDARY,         ///< `\b{lb}`.
   GRX_ANCHOR_NOT_LINE_BOUNDARY,     ///< `\B{lb}`.
+  /**
+   * Vim's `\%23c`, `\%<23c` and `\%>23c`: the byte column.
+   *
+   * The one anchor with a payload: `min` and `max` on the node hold the
+   * inclusive range of byte offsets it accepts, already converted from
+   * vim's one-based column to this library's zero-based offset. Written
+   * as a range rather than a number and a comparison because that is one
+   * question for the engine to answer instead of three.
+   */
+  GRX_ANCHOR_BYTE_COLUMN,
+  /**
+   * Never holds: vim's `\%V`, `\%#` and `\%23l`.
+   *
+   * Each names something a *buffer* has and a subject has not - the Visual
+   * area, the cursor, a line number. vim compiles them all and none of
+   * them ever matches over a string, so this carries that answer rather
+   * than refusing a pattern vim accepts.
+   */
+  GRX_ANCHOR_NEVER,
   GRX_ANCHOR_COUNT            ///< Closes the enum; not an anchor.
 } GRX_AnchorKind;
 
@@ -607,7 +626,33 @@ typedef struct GRX_Parser {
    * that does.
    */
   int dialect_mode;
+
+  /**
+   * A second slot of the same kind, for lexical state that is not a level.
+   *
+   * Vim again, and for one construct: inside `\%[...]` the seven escapes
+   * `\v`, `\m`, `\M`, `\V`, `\c`, `\C` and `\Z` are the bare letters
+   * rather than what they mean anywhere else - measured one letter at a
+   * time over all fifty-two, and those seven are the whole of the list. A
+   * member is otherwise an ordinary atom, so the reader is
+   * grx_parse_atom() and this is what tells the escape hook where it is.
+   */
+  int dialect_state;
 } GRX_Parser;
+
+/**
+ * @brief Read one atom: no quantifier, no postfix operator.
+ *
+ * What parse_term() reads before it looks for a multi. Exposed because a
+ * dialect can have a construct whose members are atoms and nothing else -
+ * Vim's `\%[...]`, where `r\%[ead]` matches "r", "re", "rea" and "read"
+ * and a member may be a class or a collection but never a repeat.
+ *
+ * @param parser The parser.
+ * @param out_node Receives the node read.
+ * @return GRX_OK, or the failure the atom reader reported.
+ */
+GRX_Result grx_parse_atom(GRX_Parser * parser, uint32_t * out_node);
 
 /**
  * @brief What a `{` turned out to be.

@@ -232,6 +232,29 @@ typedef enum {
    * backtracker ever sees one, since a lookaround is what puts it there.
    */
   GRX_ASSERT_LOOK_LENGTH,
+  /**
+   * The offset is between `x` and `y` bytes from the start of the subject.
+   *
+   * Vim's `\%23c`, `\%<23c` and `\%>23c`: "the byte column is 23", "is
+   * less than 23", "is more than 23", counted from one. Measured, and it
+   * really is bytes - `\%4c` holds after a three-byte character, and
+   * `\%2c` holds nowhere in a subject whose first character is three bytes
+   * long. A line break does not reset it, which is the same answer as the
+   * rest of this dialect's profile: over a string there is one line.
+   *
+   * Zero-width and stateless, so every engine can run one.
+   */
+  GRX_ASSERT_BYTE_COLUMN,
+  /**
+   * Never holds, wherever it stands.
+   *
+   * Vim's `\%V` (the Visual area), `\%#` (the cursor) and `\%23l` (a
+   * buffer line), each of which names something a subject has not got. vim
+   * compiles all of them and none of them ever matches over a string, so
+   * this is the dialect's answer rather than a refusal dressed up as one:
+   * `a\%Vb` is a pattern that compiles and finds nothing.
+   */
+  GRX_ASSERT_NEVER,
   GRX_ASSERT_COUNT              ///< Closes the enum; not an assertion.
 } GRX_AssertKind;
 

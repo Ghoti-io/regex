@@ -1055,6 +1055,18 @@ static int assertion_holds(
       return remaining >= min && remaining <= max;
     }
 
+    case GRX_ASSERT_BYTE_COLUMN:
+      // Vim's `\%23c` and kin, as an inclusive range of offsets. The
+      // subject's start is where the count begins, not the line's: over a
+      // string vim has one line, and `\%1c` holds at offset 0 and nowhere
+      // after a line break.
+      return position >= inst->x && position <= inst->y;
+
+    case GRX_ASSERT_NEVER:
+      // `\%V`, `\%#`, `\%23l`: compiled, and never true over a subject
+      // that is not a buffer.
+      return 0;
+
     // The four segmentation boundaries. Each reads the subject itself, so
     // the instruction carries no class and the window is not consulted: a
     // boundary is a fact about the text, and `(*scs:` narrowing what may be
@@ -1583,6 +1595,16 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
         continue;
 
       case GRX_OP_SAVE:
+        // The program's closing save of group 0 carries
+        // GRX_INST_SAVE_IF_UNSET when a `\ze` is somewhere in the pattern,
+        // and then defers to whatever that marker left in the slot. Nothing
+        // else in a program ever wears the flag, so this is the one
+        // instruction it can change.
+        if ((inst->flags & GRX_INST_SAVE_IF_UNSET) && inst->x < bt->captures
+            && bt->slots[inst->x] != GRX_NPOS) {
+          pc++;
+          continue;
+        }
         if (!save_slot(bt, inst->x)) {
           return 0;
         }
@@ -2090,6 +2112,26 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
         pc++;
         continue;
 
+      case GRX_OP_KEEP_END:
+        // `\ze`, and the mirror of the case above: the reported *end* is
+        // here, and the rest of the pattern still has to match. Through the
+        // same undo stack, and for the same reason - vim answers
+        // `\(a\zex\|ab\)c` against "abc" with 0-3, so a marker on a
+        // branch that was abandoned leaves nothing behind.
+        //
+        // The last one reached on the winning path is the one that decides:
+        // `\%(a\zeb\)\{2}` against "abab" is 0-3 there, which is the
+        // second iteration's marker and not the first's. Writing the slot
+        // each time is exactly that rule.
+        if (1 < bt->captures) {
+          if (!save_slot(bt, 1)) {
+            return 0;
+          }
+          bt->slots[1] = position;
+        }
+        pc++;
+        continue;
+
       case GRX_OP_SCRIPT_RUN: {
         // The register holds where the body began. Inside a lookbehind the
         // body ran backwards, so it holds the *later* offset and the span
@@ -2171,7 +2213,9 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
                 bt->slots[i + 1] = position;
               }
             }
-            bt->slots[1] = position;
+            if (bt->slots[1] == GRX_NPOS) {
+              bt->slots[1] = position;
+            }
             *out_end = position;
             return 1;
 
@@ -2544,6 +2588,18 @@ GRX_Result grx_exec_backtrack(
 
   if (result == GRX_OK && *out_matched && request->match) {
     GRX_Match * match = request->match;
+    // A `\ze` can pin the end *before* a later `\zs` moves the start, and
+    // then the span reported is the empty one at the start. vim's own
+    // `matchend()` answers 3 for `ab\zec\zsd` against "abcd", so this is
+    // its answer and not a repair of one: the two markers are independent
+    // and the second one wins the ground they contest.
+    //
+    // GRX_OP_KEEP_END is the only instruction that can invert the pair, so
+    // for every other program this is a comparison that never fires.
+    if (bt.captures > 1 && bt.slots[0] != GRX_NPOS
+        && bt.slots[1] != GRX_NPOS && bt.slots[1] < bt.slots[0]) {
+      bt.slots[1] = bt.slots[0];
+    }
     for (size_t i = 0; i < match->count; i++) {
       size_t first = 2 * i;
       size_t second = first + 1;

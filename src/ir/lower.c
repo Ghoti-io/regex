@@ -1152,6 +1152,14 @@ static GRX_Result lower_anchor(
       needs_word = 1;
       break;
 
+    case GRX_ANCHOR_BYTE_COLUMN:
+      kind = GRX_ASSERT_BYTE_COLUMN;
+      break;
+
+    case GRX_ANCHOR_NEVER:
+      kind = GRX_ASSERT_NEVER;
+      break;
+
     case GRX_ANCHOR_COUNT:
     default:
       return fail(low, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, node);
@@ -1176,6 +1184,12 @@ static GRX_Result lower_anchor(
   GRX_IRNode * assertion = grx_ir_node(low->ir, *out_node);
   assertion->mode = (uint8_t)kind;
   assertion->a = class_index;
+  if (kind == GRX_ASSERT_BYTE_COLUMN) {
+    // The one assertion with a payload instead of a class: `a` and `b` are
+    // the inclusive range of offsets, which the parser wrote on the node.
+    assertion->a = node->min;
+    assertion->b = node->max;
+  }
   if (line_anchor) {
     assertion->flags |= GRX_IR_LINE_ANCHOR;
   }
@@ -2898,6 +2912,9 @@ static GRX_Result lower_node(
 
     case GRX_NODE_KEEP:
       return add(low, GRX_IR_KEEP, node, out_node);
+
+    case GRX_NODE_KEEP_END:
+      return add(low, GRX_IR_KEEP_END, node, out_node);
 
     case GRX_NODE_CALLOUT:
       return lower_callout(low, node, out_node);

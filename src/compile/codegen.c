@@ -67,6 +67,7 @@ typedef struct {
   GRX_Error * error;         ///< Where a failure is reported.
   uint32_t registers;        ///< Progress registers handed out so far.
   int no_memo;               ///< An opcode the bit-state memo cannot survive.
+  int has_keep_end;          ///< A `\ze` claimed the end; see the epilogue.
   /**
    * What is being emitted is the tail of a forward lookbehind body.
    *
@@ -164,6 +165,7 @@ static GRX_Result emit(Codegen * codegen, GRX_Opcode op, uint8_t mode,
     uint32_t x, uint32_t y, const GRX_IRNode * node, uint32_t * out_index) {
   switch (op) {
     case GRX_OP_KEEP:
+    case GRX_OP_KEEP_END:
     case GRX_OP_VERB:
     case GRX_OP_SCAN:
     case GRX_OP_REWIND:
@@ -1457,7 +1459,10 @@ static GRX_Result gen(Codegen * codegen, uint32_t node_index) {
     }
 
     case GRX_IR_ASSERT:
-      return emit(codegen, GRX_OP_ASSERT, node->mode, node->a, 0, node, NULL);
+      // `y` is only read by GRX_ASSERT_BYTE_COLUMN, which is the only
+      // assertion carrying two numbers; every other kind leaves `b` zero.
+      return emit(
+          codegen, GRX_OP_ASSERT, node->mode, node->a, node->b, node, NULL);
 
     case GRX_IR_LOOK:
       return gen_look(codegen, node);
@@ -1484,6 +1489,10 @@ static GRX_Result gen(Codegen * codegen, uint32_t node_index) {
 
     case GRX_IR_KEEP:
       return emit(codegen, GRX_OP_KEEP, 0, 0, 0, node, NULL);
+
+    case GRX_IR_KEEP_END:
+      codegen->has_keep_end = 1;
+      return emit(codegen, GRX_OP_KEEP_END, 0, 0, 0, node, NULL);
 
     case GRX_IR_VERB:
       return emit(codegen, GRX_OP_VERB, node->mode, node->a, 0, node, NULL);
@@ -1686,6 +1695,7 @@ GRX_Result grx_codegen_program(const GRX_IR * ir, const GRX_Limits * limits,
     .error = out_error,
     .registers = 0,
     .no_memo = 0,
+    .has_keep_end = 0,
     .called = {0},
     .called_definition = {0},
     .entry = {0},
@@ -1707,7 +1717,19 @@ GRX_Result grx_codegen_program(const GRX_IR * ir, const GRX_Limits * limits,
     result = gen(&codegen, ir->root);
   }
   if (result == GRX_OK) {
+    // Where a `\ze` is in the program, the closing save of group 0 defers
+    // to it: the marker writes slot 1 on its way past and this instruction
+    // leaves a slot that is already set alone. The flag is only set when
+    // there is a marker to defer to, so every other program keeps the
+    // unconditional write it has always had.
+    uint32_t closing = here(&codegen);
     result = emit(&codegen, GRX_OP_SAVE, 0, 1, 0, NULL, NULL);
+    if (result == GRX_OK && codegen.has_keep_end) {
+      GRX_Inst * inst = grx_program_at(codegen.program, closing);
+      if (inst) {
+        inst->flags |= GRX_INST_SAVE_IF_UNSET;
+      }
+    }
   }
   if (result == GRX_OK) {
     result = emit(&codegen, GRX_OP_MATCH, 0, 0, 0, NULL, NULL);

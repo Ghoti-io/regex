@@ -186,6 +186,18 @@ typedef enum {
   GRX_OP_CALL,         ///< Re-enter the program, or one group of it.
   GRX_OP_RET,          ///< Return from a CALL.
   GRX_OP_KEEP,         ///< Reset the reported start of the match.
+  /**
+   * Pin the reported end of the match to here.
+   *
+   * Vim's `\ze`, and the mirror of GRX_OP_KEEP: it writes slot 1 where
+   * KEEP writes slot 0, through the same undo stack, so a path abandoned
+   * after passing one puts the old value back. The program's closing
+   * `SAVE 1` then carries GRX_INST_SAVE_IF_UNSET, and so leaves a slot this
+   * instruction has already claimed alone - which is what makes the *last*
+   * one reached on the winning path the one that decides, with no flag to
+   * unwind beside the slot itself.
+   */
+  GRX_OP_KEEP_END,
   GRX_OP_VERB,         ///< A backtracking control verb.
   /**
    * Fail unless the text from register `x` to here is a script run.
@@ -248,6 +260,16 @@ typedef enum {
  * same event, and both references treat it the same way.
  */
 #define GRX_INST_KEEP_CAPTURES GRX_BIT(2)
+
+/**
+ * @brief SAVE: write the slot only where it is still unset.
+ *
+ * On the program's closing `SAVE 1` alone, and only where the program holds
+ * a GRX_OP_KEEP_END. Without it the epilogue would overwrite the end a
+ * `\ze` pinned, every time; with it the two cannot both claim the slot and
+ * the marker wins, because it ran first.
+ */
+#define GRX_INST_SAVE_IF_UNSET GRX_BIT(3)
 
 /**
  * @brief BACKREF: `x` is a scan list, not a group number.

@@ -679,7 +679,7 @@ static GRX_Result parse_quantifier(
 }
 
 /** Read one atom: a group, a class, a metacharacter, an escape or a literal. */
-static GRX_Result parse_atom(GRX_Parser * parser, uint32_t * out_node) {
+GRX_Result grx_parse_atom(GRX_Parser * parser, uint32_t * out_node) {
   size_t start = parser->position;
 
   if (in_quote(parser)) {
@@ -864,7 +864,7 @@ static GRX_Result parse_atom(GRX_Parser * parser, uint32_t * out_node) {
 
 /** Read one term: an atom and whatever quantifiers the dialect allows on it. */
 static GRX_Result parse_term(GRX_Parser * parser, uint32_t * out_node) {
-  GRX_Result result = parse_atom(parser, out_node);
+  GRX_Result result = grx_parse_atom(parser, out_node);
   if (result != GRX_OK) {
     return result;
   }

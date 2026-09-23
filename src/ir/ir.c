@@ -43,7 +43,7 @@ static const char * ir_kind_name(GRX_IRKind kind) {
   static const char * const names[GRX_IR_COUNT] = {
     "empty", "char", "class", "any", "concat", "alternate", "repeat",
     "capture", "backref", "assert", "look", "atomic", "cond", "recurse",
-    "keep", "verb", "scan", "script-run", "fold-run", "callout",
+    "keep", "keep-end", "verb", "scan", "script-run", "fold-run", "callout",
   };
   // The NULL test is not defensive padding: a kind added without a name
   // here is a zeroed slot, and returning it crashed testIr once already.
@@ -55,13 +55,18 @@ static const char * ir_kind_name(GRX_IRKind kind) {
 /** The name of an assertion, for the dump. */
 static const char * assert_name(uint8_t kind) {
   static const char * const names[GRX_ASSERT_COUNT] = {
+    // Positional, so a name left out shifts every name after it. Three were
+    // left out here - word-start, word-end and look-length - and every
+    // assertion from the eighth onwards dumped under its neighbour's name
+    // for as long as they were. testIr's names case is what says so now.
     "start-subject", "end-subject", "end-before-newline", "start-line",
     "start-line-interior", "end-line", "word-boundary",
-    "not-word-boundary", "search-start",
+    "not-word-boundary", "word-start", "word-end", "search-start",
     "grapheme-boundary", "not-grapheme-boundary",
     "word-seg-boundary", "not-word-seg-boundary",
     "sentence-boundary", "not-sentence-boundary",
-    "line-boundary", "not-line-boundary",
+    "line-boundary", "not-line-boundary", "look-length",
+    "byte-column", "never",
   };
   return kind < GRX_ASSERT_COUNT ? names[kind] : "?";
 }

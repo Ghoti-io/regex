@@ -97,6 +97,8 @@ const char * grx_node_kind_name(GRX_NodeKind kind) {
       return "grapheme";
     case GRX_NODE_CALLOUT:
       return "callout";
+    case GRX_NODE_KEEP_END:
+      return "keep-end";
     case GRX_NODE_COUNT:
     default:
       return "?";
@@ -146,6 +148,10 @@ static const char * anchor_name(uint32_t kind) {
       return "line-boundary";
     case GRX_ANCHOR_NOT_LINE_BOUNDARY:
       return "not-line-boundary";
+    case GRX_ANCHOR_BYTE_COLUMN:
+      return "byte-column";
+    case GRX_ANCHOR_NEVER:
+      return "never";
     case GRX_ANCHOR_COUNT:
     default:
       return "?";
