@@ -715,7 +715,7 @@ far matching had got, the pattern offset, pcre2's `capture_top`, and the
 string and mark it carried.
 
 Every callout spelling at every position of every skeleton, against every
-subject: **25,600 rows**, of which 330 are the two classified divergences
+subject: **25,600 rows**, of which 150 are the one classified divergence
 below and **no other disagreement**. Most of the insertions are syntax
 errors - `a(?C1)*b` has nothing to repeat - and those rows are kept,
 because that both sides refuse them is half of what "the same grammar"
@@ -732,13 +732,21 @@ library has neither. The backtracking control verbs are absent from the
 skeletons for the same reason: pcre2api says `NO_START_OPTIMIZE` changes
 what `(*COMMIT)` and `(*SKIP)` do.
 
-The two classified shapes are both inside `(?(...))`, both leave the match
-identical, and both are in [dialects.md](dialects.md) §6. Each is checked
-rather than waved through - the second by confirming that our trace is
-pcre2's with entries *repeated*, not merely that the pattern has that
-shape - and a run that finds none of either exits 2, because a gate that
-has quietly stopped producing its own known cases has quietly stopped
-asking.
+The classified shape is a callout written where a conditional's
+*condition* goes, which the parser drops; it is in
+[dialects.md](dialects.md) §6, and the match is identical. It is checked
+rather than waved through - the outcomes have to agree and our trace has
+to be empty where pcre2's is not - and a run that finds none of it exits
+2, because a gate that has quietly stopped producing its own known case
+has quietly stopped asking.
+
+There were two, and the second is gone. A callout *inside* an assertion
+condition fired twice, because `(?(?=A)X|Y)` was lowered as
+`(?:(?=A)X|(?!A)Y)` - exact, and two copies of A. This gate is what turned
+that rewrite's documented cost, "time and not meaning", into a visible
+one; the condition is now a single assertion that chooses a branch instead
+of failing, and `(?(?=[a-y]{20}x)A|y)` went from 55 instructions to 31 and
+from 204 steps to 128 on a subject that takes the else branch.
 
 It found three things on its first run, none of them in the classified
 list. Our `capture_top` was one too high wherever a callout stood inside an
@@ -751,7 +759,8 @@ an abandoned branch does not take back, where this library was reporting
 the narrower "still standing on this path" that `grx_match_mark()` answers
 with. And the assertion-condition rewrite's comment claimed its cost was
 "time and not meaning", which a side effect in the body is the exception
-to.
+to - the finding that became the single-run conditional, and with it a
+Perl capture rule that had been silently wrong.
 
 Proven by planting: `pattern_offset` off by one gives 9,165
 disagreements; the path-local mark gives 15. Both exit non-zero, and both

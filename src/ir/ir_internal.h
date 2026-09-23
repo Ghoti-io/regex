@@ -277,6 +277,18 @@ typedef enum {
 #define GRX_IR_NEWLINE_CRLF GRX_BIT(8)
 
 /**
+ * @brief LOOK: this assertion is a conditional's condition, not an atom.
+ *
+ * It does not *fail* when its body does - it chooses a branch. Everything
+ * else about it is an ordinary lookaround, which is why it is a flag and
+ * not a kind: the same sub-match, the same body, the same capture rules.
+ *
+ * Set on the one child of a GRX_IR_COND whose mode is GRX_COND_ASSERTION,
+ * and read only by codegen, which turns it into GRX_INST_COND_ELSE.
+ */
+#define GRX_IR_LOOK_CONDITION GRX_BIT(9)
+
+/**
  * @brief One node of the intermediate representation.
  *
  * `a`, `b`, `mode`, `min` and `max` are the kind-specific payload:
@@ -294,7 +306,12 @@ typedef enum {
  * | ASSERT | class index for the line or word set, else GRX_INDEX_NONE | - | GRX_AssertKind | - |
  * | LOOK | length-span offset, when LOOK_FORWARD | - | GRX_LookKind | LOOK_FORWARD, LOOK_KEEP_CAPTURES; one child |
  * | ATOMIC | - | - | - | one child |
- * | COND | group number | - | GRX_CondKind | HAS_ELSE; children |
+ * | COND | group number, unused for ASSERTION | - | GRX_CondKind | HAS_ELSE; children |
+ *
+ * COND's children are the branches, except under GRX_COND_ASSERTION where
+ * the *first* is the condition - a GRX_IR_LOOK carrying
+ * GRX_IR_LOOK_CONDITION - and the branches follow it. That is the shape
+ * the parser produced all along; lowering used to rewrite it away.
  * | RECURSE | target group number | the definition's byte offset, or GRX_INDEX_NONE | - | - |
  * | VERB | name offset, or GRX_INDEX_NONE | - | GRX_VerbKind | - |
  * | SCAN | scan-list offset | - | - | one child |

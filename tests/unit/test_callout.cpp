@@ -444,21 +444,17 @@ TEST(Callout, NoMarkIsNullRatherThanEmpty) {
   EXPECT_FALSE(recorder.reports[0].has_mark);
 }
 
-TEST(Callout, InsideAnAssertionConditionFiresTwice) {
-  // The second place this library's trace differs from pcre2test's, and it
-  // is lowering rather than parsing. `(?(?=A)X|Y)` is rewritten as
-  // `(?:(?=A)X|(?!A)Y)`, which is exact and compiles the assertion twice -
-  // so a callout inside A reports itself twice where pcre2 reports it
-  // once. lower.c's comment used to say the cost of that rewrite was
-  // "time and not meaning"; a side effect in the body is the exception,
-  // and the comment now names it.
+TEST(Callout, InsideAnAssertionConditionFiresOnce) {
+  // It fired twice until the single-run conditional was built.
+  // `(?(?=A)X|Y)` was lowered as `(?:(?=A)X|(?!A)Y)` - exact, and two
+  // copies of A, so a callout in A reported itself twice where pcre2test
+  // reports it once. A callout is the only construct that could tell,
+  // which is why this gate is the one that found it.
   //
-  // Pinned so that building the single-run conditional this wants is a
-  // change something notices.
   // The subject has to be one the condition *fails* on: where it holds,
-  // the positive copy matches and the negative one is never reached, and
-  // the two readings agree. "c" takes the else branch, which is the path
-  // that runs the assertion a second time.
+  // the positive copy matched and the negative one was never reached, so
+  // the two readings agreed. "c" takes the else branch, which under the
+  // rewrite was the path that ran the assertion again.
   Regex regex("(?(?=(?C1)a)ab|c)");
   ASSERT_EQ(regex.result(), GRX_OK);
   Recorder recorder;
@@ -466,7 +462,7 @@ TEST(Callout, InsideAnAssertionConditionFiresTwice) {
   ASSERT_EQ(search(regex, "c", &recorder, &matched), GRX_OK);
   EXPECT_TRUE(matched);
   EXPECT_EQ(trace(recorder),
-      (std::vector<std::pair<uint32_t, size_t>>{{1, 0}, {1, 0}}));
+      (std::vector<std::pair<uint32_t, size_t>>{{1, 0}}));
 }
 
 TEST(Callout, InAConditionsPositionIsNotReported) {

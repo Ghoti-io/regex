@@ -951,6 +951,92 @@ static GRX_Result gen_repeat_body(Codegen * codegen, const GRX_IRNode * node,
 
 /** Generate a lookaround: a sub-program run without consuming input. */
 /**
+ * Lay out a conditional whose condition is an assertion.
+ *
+ *     LOOK  x=span  y=t    mode = which assertion, flags |= COND_ELSE
+ *     <body>
+ *     MATCH
+ *   t:                     the condition held
+ *     JMP yes
+ *   t+1:                   it did not
+ *     JMP no
+ *   yes:
+ *     <then>
+ *     JMP end
+ *   no:
+ *     <else>
+ *   end:
+ *
+ * The two jumps are the price of the single run: a LOOK has `x` for its
+ * length span and `y` for one continuation, and this needs two. They sit
+ * adjacently so that the relation is local - the flag's own documentation
+ * is the only place that has to state it - and they keep the blocks in
+ * source order, which an else-branch inlined at `y + 1` would not.
+ *
+ * Two instructions, against a whole second copy of the assertion's body
+ * under the rewrite this replaces.
+ */
+static GRX_Result gen_cond_assertion(
+    Codegen * codegen, const GRX_IRNode * node) {
+  uint32_t condition = node->first_child;
+  const GRX_IRNode * look = grx_ir_node(codegen->ir, condition);
+  if (!look || look->kind != GRX_IR_LOOK) {
+    return fail(codegen, GRX_DIAG_INTERNAL, node);
+  }
+
+  // gen() on the condition emits the LOOK, its body and the body's MATCH,
+  // and patches the LOOK's `y` to here - so after it, `here()` is the
+  // first of the two jumps. Emitting it through gen() rather than by hand
+  // is what keeps a conditional's assertion the same assertion as any
+  // other: the span, the capture rules and the two lookbehind models are
+  // gen_look()'s, not a second copy of them.
+  GRX_Result result = gen(codegen, condition);
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  uint32_t held = GRX_INDEX_NONE;
+  result = emit(codegen, GRX_OP_JMP, 0, 0, 0, node, &held);
+  if (result != GRX_OK) {
+    return result;
+  }
+  uint32_t missed = GRX_INDEX_NONE;
+  result = emit(codegen, GRX_OP_JMP, 0, 0, 0, node, &missed);
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  uint32_t yes = look->next_sibling;
+  uint32_t no = GRX_INDEX_NONE;
+  patch_x(codegen, held, here(codegen));
+  if (yes != GRX_INDEX_NONE) {
+    const GRX_IRNode * taken = grx_ir_node(codegen->ir, yes);
+    no = taken ? taken->next_sibling : GRX_INDEX_NONE;
+    result = gen(codegen, yes);
+    if (result != GRX_OK) {
+      return result;
+    }
+  }
+
+  uint32_t skip = GRX_INDEX_NONE;
+  result = emit(codegen, GRX_OP_JMP, 0, 0, 0, node, &skip);
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  patch_x(codegen, missed, here(codegen));
+  if (no != GRX_INDEX_NONE) {
+    result = gen(codegen, no);
+    if (result != GRX_OK) {
+      return result;
+    }
+  }
+
+  patch_x(codegen, skip, here(codegen));
+  return GRX_OK;
+}
+
+/**
  * Lay out a conditional: the test, the true branch, the false branch.
  *
  *     COND  x=group  y=false     mode = what is being tested
@@ -962,8 +1048,15 @@ static GRX_Result gen_repeat_body(Codegen * codegen, const GRX_IRNode * node,
  *
  * The JMP is what makes it a conditional rather than an alternation: once the
  * test has chosen a branch, the other one is not reachable by backtracking.
+ *
+ * An assertion condition has no such cheap test - it has to run a
+ * sub-program - and is laid out by gen_cond_assertion() instead.
  */
 static GRX_Result gen_cond(Codegen * codegen, const GRX_IRNode * node) {
+  if (node->mode == GRX_COND_ASSERTION) {
+    return gen_cond_assertion(codegen, node);
+  }
+
   uint32_t test = GRX_INDEX_NONE;
   GRX_Result result
       = emit(codegen, GRX_OP_COND, node->mode, node->a, 0, node, &test);
@@ -1120,10 +1213,13 @@ static GRX_Result gen_look(Codegen * codegen, const GRX_IRNode * node) {
   if (result != GRX_OK) {
     return result;
   }
-  if (node->flags & GRX_IR_LOOK_KEEP_CAPTURES) {
+  if (node->flags & (GRX_IR_LOOK_KEEP_CAPTURES | GRX_IR_LOOK_CONDITION)) {
     GRX_Inst * marked = grx_program_at(codegen->program, look);
     if (marked) {
-      marked->flags |= GRX_INST_KEEP_CAPTURES;
+      marked->flags |= (node->flags & GRX_IR_LOOK_KEEP_CAPTURES)
+          ? GRX_INST_KEEP_CAPTURES : 0u;
+      marked->flags |= (node->flags & GRX_IR_LOOK_CONDITION)
+          ? GRX_INST_COND_ELSE : 0u;
     }
   }
 

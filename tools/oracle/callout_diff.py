@@ -37,25 +37,20 @@ pcre2api says NO_START_OPTIMIZE changes what `(*COMMIT)`, `(*SKIP)` and
 `(*PRUNE)` do, so a row containing one would be comparing two different
 patterns.
 
-**Two shapes disagree, both inside `(?(...))`, and both are classified
-rather than hidden.** They are the whole of what this gate found that was
-not fixed on the spot, and either one turning up outside its shape - or a
-row that is neither - fails the run.
+**One shape disagrees, and it is classified rather than hidden.** A callout
+written *where the condition goes* - `(?(?C9)(?=a)b|c)` - is dropped by the
+parser, because a conditional's children are the condition and the branches
+positionally and there is no fourth slot to carry it in. Our trace is empty
+where pcre2's has the callout, and the match is identical. Anything else
+fails the run.
 
-The first is a callout written *where the condition goes*:
-`(?(?C9)(?=a)b|c)`. The parser drops it, because a conditional's children
-are the condition and the branches positionally and there is no fourth slot
-to carry it in. Our trace is empty where pcre2's has the callout, and the
-match is identical.
-
-The second is a callout *inside* an assertion condition:
-`(?(?=(?C1)a)ab|c)`. Lowering rewrites `(?(?=A)X|Y)` as
-`(?:(?=A)X|(?!A)Y)`, which is exact and compiles the assertion twice, so a
-callout in it fires twice where pcre2 fires it once. lower.c's comment said
-the cost of that rewrite was "time and not meaning"; this gate is what
-showed the sentence has an exception, and the comment now names it. Our
-trace is pcre2's with entries repeated, which is what the classifier
-checks - not merely that the pattern has that shape.
+There were two. The other was a callout *inside* an assertion condition:
+lowering rewrote `(?(?=A)X|Y)` as `(?:(?=A)X|(?!A)Y)`, which is exact and
+compiles the assertion twice, so a callout in it fired twice where pcre2
+fires it once. This gate is what turned that rewrite's documented cost -
+"time and not meaning" - into a visible one, and it is gone: the condition
+is now one `GRX_INST_COND_ELSE` assertion that chooses a branch instead of
+failing.
 
 Usage:
     tools/oracle/callout_diff.py [--examples N]
@@ -151,10 +146,6 @@ def show(text):
         c if " " <= c <= "~" else "\\x%02x" % ord(c) for c in text)
 
 
-# The four spellings a conditional's assertion may be written in.
-LOOKAROUNDS = ("(?(?=", "(?(?!", "(?(?<=", "(?(?<!")
-
-
 def parts(line):
     """A trace line split into its outcome and its callouts."""
     # `trace <outcome> <count> <callout>...`, so the callouts begin at 3.
@@ -166,33 +157,18 @@ def parts(line):
     return fields[1], fields[3:]
 
 
-def collapse(callouts):
-    """Runs of the same callout, reduced to one."""
-    out = []
-    for callout in callouts:
-        if not out or out[-1] != callout:
-            out.append(callout)
-    return out
-
-
 def classify(pattern, them, us):
-    """Which known divergence this row is, or None if it is neither."""
+    """Which known divergence this row is, or None if it is not one."""
     their_outcome, theirs = parts(them)
     our_outcome, ours = parts(us)
     if theirs is None or ours is None or their_outcome != our_outcome:
         return None
 
     # A callout where the condition goes: dropped by the parser, so our
-    # trace is empty and pcre2's is not.
+    # trace is empty and pcre2's is not. The match has to agree, which the
+    # outcome test above is.
     if "(?(?C" in pattern and not ours and theirs:
         return "condition-position"
-
-    # A callout inside an assertion condition: the assertion is compiled
-    # twice, so ours is theirs with entries repeated. Checked by
-    # collapsing, not by the shape alone - a row of this shape that
-    # disagreed some *other* way must still fail.
-    if pattern.startswith(LOOKAROUNDS) and collapse(ours) == collapse(theirs):
-        return "assertion-compiled-twice"
 
     return None
 
@@ -218,7 +194,7 @@ def main(argv):
 
     disagreements = []
     skipped = 0
-    known = {"condition-position": 0, "assertion-compiled-twice": 0}
+    known = {"condition-position": 0}
     for (flags, pattern, subject), us, them in zip(cases, mine, reference):
         if them.startswith("skip") or us == "unsupported":
             # pcre2 declining to answer, or a program no engine here runs.
@@ -240,15 +216,14 @@ def main(argv):
         print("       ours =%s" % us)
     print("callouts: %d patterns x %d subjects = %d rows, %d skipped, "
           "%d a callout in a condition's position (dropped), "
-          "%d an assertion condition compiled twice, %d disagreements"
+          "%d disagreements"
           % (len(cases) // len(SUBJECTS), len(SUBJECTS), len(cases), skipped,
-             known["condition-position"], known["assertion-compiled-twice"],
-             len(disagreements)))
-    # The two classified shapes are the ones lower.c documents. A run that
-    # found *none* of either would mean the corpus stopped producing them,
-    # which is the shape a gate takes when it has quietly stopped asking.
-    if not known["condition-position"] or not known["assertion-compiled-twice"]:
-        print("  the classified shapes are missing: the corpus changed")
+             known["condition-position"], len(disagreements)))
+    # A run that found *none* of the classified shape would mean the corpus
+    # stopped producing it, which is the shape a gate takes when it has
+    # quietly stopped asking rather than when it has been satisfied.
+    if not known["condition-position"]:
+        print("  the classified shape is missing: the corpus changed")
         return 2
     return 1 if disagreements else 0
 

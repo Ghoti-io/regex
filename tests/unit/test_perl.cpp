@@ -523,6 +523,106 @@ TEST(Perl, AConditionalRunsOneBranchAndNeverTheOther) {
   grx_regex_free(three.regex);
 }
 
+TEST(Perl, AnAssertionConditionRunsOnce) {
+  // It used to run twice. `(?(?=A)X|Y)` was lowered as
+  // `(?:(?=A)X|(?!A)Y)` - exact, and two copies of A, so A ran again
+  // whenever it failed. The single-run form is one assertion that chooses
+  // a branch instead of failing (GRX_INST_COND_ELSE).
+  //
+  // The behaviour is unchanged and the *program* is the evidence, so this
+  // counts instructions: the body `abc` appears once, and a rewrite that
+  // duplicated it would show up here however the branches were laid out.
+  Attempt attempt = compile("(?(?=abc)x|y)");
+  ASSERT_EQ(attempt.result, GRX_OK);
+  GRX_Facts facts;
+  grx_facts_init(&facts);
+  ASSERT_EQ(grx_regex_facts(attempt.regex, &facts), GRX_OK);
+  // save, look, a, b, c, match, jmp, jmp, x, jmp, y, save, match.
+  EXPECT_EQ(facts.program_size, 13u);
+  grx_regex_free(attempt.regex);
+}
+
+TEST(Perl, AnAssertionConditionsFactsAreTheBranchesAndNotTheCondition) {
+  // The condition is zero-width where it stands, so the lengths are the
+  // *branches'* - and the condition is still walked, because what it
+  // contains reaches the facts. Both halves are here because the single-run
+  // conditional made the condition a child of the COND node rather than
+  // part of each branch, and an analysis that folded it in with the
+  // branches would answer every one of these too small.
+  struct {
+    const char * pattern;
+    size_t min;
+    size_t max;
+    size_t lookbehind;
+    bool can_be_empty;
+  } cases[] = {
+    {"(?(?=a)bbb|cc)", 2, 3, 0, false},
+    // No else-part, so one path through it is empty.
+    {"(?(?=a)b)", 0, 1, 0, true},
+    // A lookbehind *inside* the condition still has to be measured, or the
+    // one around it cannot be. This is the case `(void)walk()` exists for.
+    {"(?<=x(?(?=(?<=ab))c|d))z", 1, 1, 2, false},
+    {"(?(?=abc)xy|z)", 1, 2, 0, false},
+  };
+
+  for (const auto & test : cases) {
+    Attempt attempt = compile(test.pattern);
+    ASSERT_EQ(attempt.result, GRX_OK) << test.pattern;
+    GRX_Facts facts;
+    grx_facts_init(&facts);
+    ASSERT_EQ(grx_regex_facts(attempt.regex, &facts), GRX_OK) << test.pattern;
+    EXPECT_EQ(facts.min_length, test.min) << test.pattern << " min";
+    EXPECT_EQ(facts.max_length, test.max) << test.pattern << " max";
+    EXPECT_EQ(facts.max_lookbehind, test.lookbehind)
+        << test.pattern << " lookbehind";
+    EXPECT_EQ(facts.can_match_empty != 0, test.can_be_empty)
+        << test.pattern << " can match empty";
+    grx_regex_free(attempt.regex);
+  }
+
+  // Anchoring comes from the branches too, and holds only where every one
+  // of them says so. `\z` rather than `$`, because PCRE2's `$` also holds
+  // before a final newline and so anchors nothing.
+  Attempt anchored = compile("^(?(?=a)bbb|cc)");
+  ASSERT_EQ(anchored.result, GRX_OK);
+  GRX_Facts facts;
+  grx_facts_init(&facts);
+  ASSERT_EQ(grx_regex_facts(anchored.regex, &facts), GRX_OK);
+  EXPECT_TRUE(facts.anchored_start);
+  grx_regex_free(anchored.regex);
+}
+
+TEST(Perl, WhatAFailedAssertionConditionCapturedFollowsTheDialect) {
+  // The same split as section 5.17's negative lookaround, reached by a
+  // different route: when a conditional's assertion *fails*, what its body
+  // wrote is kept by Perl and discarded by PCRE2.
+  //
+  // `^(?(?=(a)b)x|a)` against "ay": the condition captures "a" into group
+  // one and then fails on the `b`, so the else-branch matches the `a`.
+  // perl 5.40.1 reports group one as "a"; pcre2test reports it unset, and
+  // prints `1: <unset>` in as many words for `^(?(?=(a)b)ab|a)(.*)`.
+  //
+  // This was wrong for Perl until the single-run conditional was built,
+  // and nothing noticed: the old rewrite carried the rule on the *second*
+  // copy of the assertion, which it made negative by flipping the mode
+  // after lowering - and lower_look() sets the keep-captures flag only for
+  // an assertion written negative. A flag set by the spelling and a mode
+  // changed afterwards is a pair that comes apart silently.
+  EXPECT_EQ(group_of("^(?(?=(a)b)x|a)", "ay", 1, GRX_SYNTAX_PERL), "0-1");
+  EXPECT_EQ(group_of("^(?(?=(a)b)x|a)", "ay", 1, GRX_SYNTAX_PCRE), "-");
+
+  // A condition written *negative* is the same question with the signs
+  // swapped, and both references answer it the same way: the body failed,
+  // so the dialect decides. `^(?(?!(a)b)a|x)` against "ay".
+  EXPECT_EQ(group_of("^(?(?!(a)b)a|x)", "ay", 1, GRX_SYNTAX_PERL), "0-1");
+  EXPECT_EQ(group_of("^(?(?!(a)b)a|x)", "ay", 1, GRX_SYNTAX_PCRE), "-");
+
+  // And where the condition *holds*, its writes stand in both: a positive
+  // assertion that matched keeps what it captured everywhere.
+  EXPECT_EQ(group_of("^(?(?=(a)b)ab|c)", "ab", 1, GRX_SYNTAX_PERL), "0-1");
+  EXPECT_EQ(group_of("^(?(?=(a)b)ab|c)", "ab", 1, GRX_SYNTAX_PCRE), "0-1");
+}
+
 TEST(Perl, ADefineBlockIsNeverEnteredInSequenceAndIsStillCallable) {
   // `(?(DEFINE)(a))b(?1)c` matches "bac" and not "abac": the body defines
   // group 1 and runs only when something calls it.

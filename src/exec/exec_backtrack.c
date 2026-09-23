@@ -1721,6 +1721,9 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
       case GRX_OP_LOOK: {
         int negative = inst->mode == GRX_LOOK_AHEAD_NEGATIVE
             || inst->mode == GRX_LOOK_BEHIND_NEGATIVE;
+        // A conditional's condition: it chooses a branch rather than
+        // failing, and `y` and `y + 1` are the two jumps that say which.
+        int choosing = (inst->flags & GRX_INST_COND_ELSE) != 0;
 
         // The body runs as its own sub-match above this point on the stack,
         // and everything it pushed is discarded afterwards: a lookaround
@@ -1743,7 +1746,11 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
         int body_matched;
         size_t * outer_keep_last = bt->keep_last;
         size_t * keep_last = NULL;
-        if (negative && (inst->flags & GRX_INST_KEEP_CAPTURES)) {
+        // Wanted whenever the *body* may fail and its writes are to
+        // survive. For a plain assertion that is the negative one; for a
+        // condition it is either sign, because the failure of the body is
+        // the else branch and not the failure of the construct.
+        if ((negative || choosing) && (inst->flags & GRX_INST_KEEP_CAPTURES)) {
           keep_last = gcu_allocator_malloc(
               bt->allocator, bt->captures * sizeof(size_t));
           if (!keep_last) {
@@ -1780,7 +1787,7 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
           return 0;
         }
 
-        if (body_matched == negative) {
+        if (!choosing && body_matched == negative) {
           // A positive lookaround whose body failed, or a negative one whose
           // body succeeded. Either way the construct fails and the captures
           // go back to what they were.
@@ -1791,7 +1798,16 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
           break;
         }
 
-        if (negative && !(inst->flags & GRX_INST_KEEP_CAPTURES)) {
+        // What the body wrote when the body *failed*: the dialect's
+        // negative-lookaround rule decides, and `keep_last` below is the
+        // whole of the keeping. For a plain assertion this is the same
+        // test as `negative`, because a positive one that reaches here
+        // matched; a condition reaches here either way, and both
+        // references still answer by what the body did.
+        // `^(?(?=(a)b)x|a)` against "ay" reports group one as "a" in perl
+        // 5.40.1 and unset in pcre2test, which is section 5.17's split
+        // arriving by another route.
+        if (!body_matched && !(inst->flags & GRX_INST_KEEP_CAPTURES)) {
           // ECMA-262 22.2.2.4: a negative lookaround leaves the captures as
           // they were, whatever its body touched on the way to failing.
           // Perl does not - see GRX_INST_KEEP_CAPTURES - and there the
@@ -1807,7 +1823,16 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
           // on where in the iteration the body ran out of paths.
           // NULL here for a *positive* lookaround, which reaches this same
           // bookkeeping with nothing to correct.
-          if (keep_last) {
+          //
+          // `!body_matched` because a condition reaches here on both
+          // outcomes and this rule is about a body that ran out of paths.
+          // A body that *matched* has its final values in the slots
+          // already, and `keep_last` may hold an earlier iteration's -
+          // `(?(?=((a)|b)+)x|y)` is the shape - so applying it there would
+          // report a group the last iteration cleared. A plain negative
+          // lookaround never reaches this with a matched body, so nothing
+          // that worked before changes.
+          if (keep_last && !body_matched) {
             for (size_t i = 1; i < bt->captures; i += 2) {
               if (keep_last[i] != GRX_NPOS) {
                 bt->slots[i - 1] = keep_last[i - 1];
@@ -1833,7 +1858,10 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
         gcu_allocator_free(bt->allocator, keep_last);
         gcu_allocator_free(bt->allocator, before);
 
-        pc = inst->y;
+        // `y` when the condition held and `y + 1` when it did not; both are
+        // jumps, so the branches stay in source order. For everything else
+        // `y` is simply where the outer program resumes.
+        pc = choosing && body_matched == negative ? inst->y + 1 : inst->y;
         continue;
       }
 

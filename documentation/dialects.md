@@ -901,6 +901,18 @@ A *positive* lookaround needs no axis. One that succeeded keeps what its body
 captured in every dialect, and one that failed takes the whole construct with
 it, so there is nothing left to disagree about.
 
+**A conditional's assertion is the same axis reached from the other side**,
+and it is the one place a *positive* assertion has the question: `(?(?=A)X|Y)`
+does not fail when A fails - it takes the else-branch - so A's writes survive
+the construct and the value decides what they are worth. `^(?(?=(a)b)x|a)`
+against "ay" reports group 1 as `"a"` in perl 5.40.1 and unset in pcre2test,
+which is the same split as `a(?!(b)c)` with the sign moved. So the rule is
+stated on the *body*: when a lookaround's body fails, this value says whether
+what it wrote stands. This library read it off the sign until 2026-09-22 and
+answered the conditional case wrongly for Perl in consequence - the old
+lowering carried the rule on a second, inverted copy of the assertion, and
+the flag that sets it is keyed on the spelling.
+
 Under `KEEP` the writes still become undo frames, so backtracking past the
 whole assertion puts them back; what the value changes is whether the
 assertion itself does. What it does *not* settle is what the last write was
@@ -1026,7 +1038,6 @@ to be complete for every shipped tier.
 | Perl, PCRE2 | What an extended class **ignores** differs, and is followed | Perl skips all of `Pattern_White_Space` - all eleven code points probed - and takes `#` comments to the next **line feed**, which CR, VT and U+2028 do not end; pcre2test refuses a literal newline inside `(?[ ])` with error 216 and refuses `#` outright. U+00A0 is ignored by neither, which is the case that says the rule is the property and not a notion of "space" | - |
 | Perl | Where a failed negative lookaround's body stopped *part way through an iteration*, the group reports the last value an iteration **finished** | §5.17 is followed as written - Perl keeps, ECMAScript and PCRE2 discard - but "what the body last wrote" is only well defined if the body failed between iterations, and Perl states no rule for the rest: it decides on the width of the repeated body, answering `(?!(a){2}$)` and `(?!(aa){2}$)` against "aaa" as unset and 0-2. The rule here answers them 1-2 and 0-2, so the two agree wherever Perl is self-consistent and differ on the narrow case where it is not | - |
 | PCRE2 | A callout written where a conditional's **condition** goes is dropped | `(?(?C9)(?=a)b\|c)` prints callout 9 in pcre2test and prints nothing here. A conditional's children are the condition and the branches positionally, and there is no fourth slot to carry a callout in. The *match* is identical, and only a caller watching the trace can tell. 150 of 25,600 rows of `callout_diff.py` | - |
-| PCRE2 | A callout **inside** an assertion condition fires twice | `(?(?=A)X\|Y)` is lowered as `(?:(?=A)X\|(?!A)Y)`, which is exact and compiles the assertion twice - so `(?(?=(?C1)a)ab\|c)` against "c" reports callout 1 once in pcre2test and twice here. The rewrite's own comment said the cost was "time and not meaning"; a side effect in the body is the exception it now names. 180 of 25,600 rows | - |
 | PCRE2 | A script run may mix Han with **two** of Hiragana/Katakana, Hangul and Bopomofo | pcre2 10.46 accepts the mixture its own manual denies. pcre2unicode says a run may hold "a mixture of Hiragana, Katakana, and Han, or a mixture of Hangul and Han, or a mixture of Bopomofo and Han, but not, for example, a mixture of Hangul and Bopomofo and Han", and pcre2test matches that last one. All twenty two- and three-way combinations of U+6F22, U+304B, U+30AB, U+D55C and U+3105 were put to both references: they agree on fourteen - including `Hiragana+Hangul`, which both refuse, so it is not that Han lets anything through - and differ on exactly the six that mix two families. perl 5.40.1 refuses all six, which is UTS #39 section 5.1, and so does this library | - |
 | PCRE2, Perl | `\C`, one code unit | the subject here is code points, and a construct that can land inside a character has no honest approximation | `GRX_ERR_UNSUPPORTED` |
 | PCRE2 | `(*BSR_ANYCRLF)`, `(*BSR_UNICODE)` | built: `\R` is an alternation the parser writes and a directive may only lead the pattern, so the flag is set before the `\R` it governs. `(*BSR_ANYCRLF)\R` refuses a vertical tab and plain `\R` takes one, in pcre2test and here | - |

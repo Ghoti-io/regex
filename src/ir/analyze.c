@@ -233,6 +233,29 @@ static Span walk_concat(Analysis * analysis, const GRX_IRNode * node) {
   return span;
 }
 
+/**
+ * Fold one more alternative into a running span.
+ *
+ * Written out because a conditional's branches are alternatives too and
+ * are not all of its children, so the loop below is not the only caller.
+ */
+static Span combine_alternative(Span span, Span part) {
+  if (part.min_length < span.min_length) {
+    span.min_length = part.min_length;
+  }
+  if (span.max_length != GRX_NPOS
+      && (part.max_length == GRX_NPOS || part.max_length > span.max_length)) {
+    span.max_length = part.max_length;
+  }
+  // A property holds for the alternation only if it holds for every branch:
+  // one branch that can start anywhere means the whole thing can.
+  span.anchored_start = span.anchored_start && part.anchored_start;
+  span.anchored_end = span.anchored_end && part.anchored_end;
+  span.unknown_length = span.unknown_length || part.unknown_length;
+  span.accepts = span.accepts || part.accepts;
+  return span;
+}
+
 /** The span of a node's children, as alternatives. */
 static Span walk_alternate(Analysis * analysis, const GRX_IRNode * node) {
   Span span = {GRX_NPOS, 0, 1, 1, 0, 0};
@@ -243,22 +266,8 @@ static Span walk_alternate(Analysis * analysis, const GRX_IRNode * node) {
     if (!child_node) {
       break;
     }
-    Span part = walk(analysis, child);
+    span = combine_alternative(span, walk(analysis, child));
     any = 1;
-
-    if (part.min_length < span.min_length) {
-      span.min_length = part.min_length;
-    }
-    if (span.max_length != GRX_NPOS
-        && (part.max_length == GRX_NPOS || part.max_length > span.max_length)) {
-      span.max_length = part.max_length;
-    }
-    // A property holds for the alternation only if it holds for every branch:
-    // one branch that can start anywhere means the whole thing can.
-    span.anchored_start = span.anchored_start && part.anchored_start;
-    span.anchored_end = span.anchored_end && part.anchored_end;
-    span.unknown_length = span.unknown_length || part.unknown_length;
-    span.accepts = span.accepts || part.accepts;
     child = child_node->next_sibling;
   }
 
@@ -560,10 +569,47 @@ static Span walk(Analysis * analysis, uint32_t node_index) {
       span = group_span(analysis, node->a);
       break;
 
-    case GRX_IR_COND:
+    case GRX_IR_COND: {
       analysis->is_regular = 0;
-      span = walk_alternate(analysis, node);
+      if (node->mode != GRX_COND_ASSERTION) {
+        span = walk_alternate(analysis, node);
+        break;
+      }
+      // Under GRX_COND_ASSERTION the first child is the *condition*, not a
+      // branch. It is walked - so that what it contains still reaches the
+      // facts, the way GRX_IR_SCAN's body does - and then discarded, being
+      // zero-width where it stands. `(?<=x(?(?=(?<=ab))c|d))` is the shape
+      // that says the walk matters: the lookbehind inside the condition
+      // has to be measured or the outer one cannot be.
+      uint32_t condition = node->first_child;
+      const GRX_IRNode * first = grx_ir_node(analysis->ir, condition);
+      if (!first) {
+        span = (Span) {0, 0, 0, 0, 0, 0};
+        break;
+      }
+      (void)walk(analysis, condition);
+      // The branches, as alternatives. A conditional with no else-part can
+      // take a zero-length path - `(?(?=a)b)` matches empty where `a` does
+      // not follow - so the absent branch is an alternative of length zero
+      // rather than no alternative at all. The old rewrite spelled that as
+      // an explicit empty node and this says it directly.
+      Span branches = {GRX_NPOS, 0, 1, 1, 0, 0};
+      int seen = 0;
+      for (uint32_t child = first->next_sibling; child != GRX_INDEX_NONE;) {
+        const GRX_IRNode * part = grx_ir_node(analysis->ir, child);
+        if (!part) {
+          break;
+        }
+        branches = combine_alternative(branches, walk(analysis, child));
+        seen++;
+        child = part->next_sibling;
+      }
+      if (seen < 2) {
+        branches = combine_alternative(branches, (Span) {0, 0, 1, 1, 0, 0});
+      }
+      span = seen ? branches : (Span) {0, 0, 0, 0, 0, 0};
       break;
+    }
 
     case GRX_IR_KEEP:
     case GRX_IR_VERB:

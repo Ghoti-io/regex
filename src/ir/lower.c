@@ -1568,118 +1568,45 @@ static GRX_Result lower_recurse(
   return attach(low, *out_node, call);
 }
 
-/** The lookaround that succeeds exactly where this one fails. */
-static GRX_LookKind opposite_look(GRX_LookKind kind) {
-  switch (kind) {
-    case GRX_LOOK_AHEAD_POSITIVE: return GRX_LOOK_AHEAD_NEGATIVE;
-    case GRX_LOOK_AHEAD_NEGATIVE: return GRX_LOOK_AHEAD_POSITIVE;
-    case GRX_LOOK_BEHIND_POSITIVE: return GRX_LOOK_BEHIND_NEGATIVE;
-    case GRX_LOOK_BEHIND_NEGATIVE:
-    default: return GRX_LOOK_BEHIND_POSITIVE;
-  }
-}
-
 /**
- * Lower `(?(?=A)X|Y)` as `(?:(?=A)X|(?!A)Y)`.
+ * Mark a lowered lookaround as a conditional's condition.
  *
- * The rewrite is exact, and it is a rewrite rather than a new opcode because
- * the two branches are mutually exclusive: no subject can take both, so the
- * alternation cannot backtrack from one into the other, which is the one
- * thing that would make a conditional and an alternation differ. `(?(?=a)b|c)`
- * against "ac" fails in both readings - the condition holds, `b` does not
- * match, and `c` is unreachable because `(?!a)` refuses the same position.
+ * Two flags, and the second is the whole reason this is not one line at the
+ * call site.
  *
- * The cost is that the assertion is compiled twice and, when it fails, run
- * twice. An assertion is zero-width and the second run answers the same
- * question at the same position, so for every construct that existed when
- * this was written, what is paid is time and not meaning.
+ * GRX_IR_LOOK_CONDITION says the assertion chooses a branch rather than
+ * failing, which is what codegen turns into GRX_INST_COND_ELSE.
  *
- * `(?C...)` is the exception, and it is the reason that sentence now has
- * one. A callout is a *side effect*, so a body run twice reports itself
- * twice: `(?(?=(?C1)a)ab|c)` fires callout 1 once in pcre2test and twice
- * here. The match is identical - the rewrite is still exact - and only a
- * caller watching the sequence can tell. tools/oracle/callout_diff.py
- * classifies it by checking that our trace is pcre2's with entries
- * repeated, and CalloutInsideAnAssertionConditionFiresTwice in
- * tests/unit/test_callout.cpp pins it, so that building the single-run
- * conditional this needs is a change something notices.
+ * GRX_IR_LOOK_KEEP_CAPTURES says what happens to what the *body* wrote when
+ * the body fails, and it is set here **whatever sign the condition was
+ * written with**. `(?(?=A)X|Y)` used to be rewritten as
+ * `(?:(?=A)X|(?!A)Y)`, and in that reading the failure path ran a
+ * *negative* lookaround - so the dialect's negative-lookaround rule decided
+ * what A's writes were worth, which is right and is what both references
+ * do: `^(?(?=(a)b)x|a)` against "ay" reports group one as "a" in perl
+ * 5.40.1 and unset in pcre2test. The single-run form has no second
+ * lookaround to carry that, so the flag says it instead.
+ *
+ * The old rewrite got this wrong, and nothing noticed: it flipped the
+ * copy's *mode* to the opposite kind after lowering, and lower_look() sets
+ * KEEP_CAPTURES only for a condition written negative - so a Perl pattern
+ * whose conditional assertion failed reported the capture unset, where perl
+ * keeps it. Fixed by construction here, because there is no second copy to
+ * forget to mark.
  */
-static GRX_Result lower_assertion_conditional(
-    Lowering * low, const GRX_Node * node, uint32_t * out_node) {
-  uint32_t condition_index = node->first_child;
-  const GRX_Node * condition = condition_index == GRX_INDEX_NONE
-      ? NULL
-      : grx_pattern_node(low->pattern, condition_index);
-  if (!condition || condition->kind != GRX_NODE_LOOKAROUND) {
+static GRX_Result mark_condition(
+    Lowering * low, const GRX_Node * node, uint32_t lowered) {
+  GRX_IRNode * look = grx_ir_node(low->ir, lowered);
+  if (!look || look->kind != GRX_IR_LOOK) {
+    // Unreachable through the parsers: pcre2 answers "atomic assertion
+    // expected after (?(" for anything else, and so does this library.
     return fail(low, GRX_DIAG_INTERNAL, node);
   }
-
-  uint32_t then_index = condition->next_sibling;
-  const GRX_Node * then_node = then_index == GRX_INDEX_NONE
-      ? NULL
-      : grx_pattern_node(low->pattern, then_index);
-  uint32_t else_index = then_node ? then_node->next_sibling : GRX_INDEX_NONE;
-
-  GRX_Result result = add(low, GRX_IR_ALTERNATE, node, out_node);
-  if (result != GRX_OK) {
-    return result;
+  look->flags |= GRX_IR_LOOK_CONDITION;
+  if (low->profile.negative_look == GRX_NEGATIVE_LOOK_KEEP) {
+    look->flags |= GRX_IR_LOOK_KEEP_CAPTURES;
   }
-  uint32_t alternation = *out_node;
-
-  // The true branch: the assertion as written, then the yes-part.
-  uint32_t taken = GRX_INDEX_NONE;
-  result = add(low, GRX_IR_CONCAT, node, &taken);
-  if (result == GRX_OK) {
-    uint32_t look = GRX_INDEX_NONE;
-    result = lower_node(low, condition_index, &look);
-    if (result == GRX_OK) {
-      result = attach(low, taken, look);
-    }
-  }
-  if (result == GRX_OK) {
-    uint32_t body = GRX_INDEX_NONE;
-    result = then_index != GRX_INDEX_NONE
-        ? lower_node(low, then_index, &body)
-        : add(low, GRX_IR_EMPTY, node, &body);
-    if (result == GRX_OK) {
-      result = attach(low, taken, body);
-    }
-  }
-  if (result == GRX_OK) {
-    result = attach(low, alternation, taken);
-  }
-  if (result != GRX_OK) {
-    return result;
-  }
-
-  // The false branch: the assertion inverted, then the else-part. Written
-  // even when there is no else-part, because `(?(?=a)b)` must still fail at a
-  // position where `a` follows and `b` does not.
-  uint32_t other = GRX_INDEX_NONE;
-  result = add(low, GRX_IR_CONCAT, node, &other);
-  if (result == GRX_OK) {
-    uint32_t look = GRX_INDEX_NONE;
-    result = lower_node(low, condition_index, &look);
-    if (result == GRX_OK) {
-      grx_ir_node(low->ir, look)->mode
-          = (uint8_t)opposite_look((GRX_LookKind)condition->a);
-      result = attach(low, other, look);
-    }
-  }
-  if (result == GRX_OK) {
-    uint32_t body = GRX_INDEX_NONE;
-    result = else_index != GRX_INDEX_NONE
-        ? lower_node(low, else_index, &body)
-        : add(low, GRX_IR_EMPTY, node, &body);
-    if (result == GRX_OK) {
-      result = attach(low, other, body);
-    }
-  }
-  if (result == GRX_OK) {
-    result = attach(low, alternation, other);
-  }
-
-  return result;
+  return GRX_OK;
 }
 
 /**
@@ -1691,6 +1618,13 @@ static GRX_Result lower_assertion_conditional(
  * the match starts are not among them: `(?(VERSION>=...))` was answered by
  * the parser, and `(?(DEFINE)...)` never runs at all, so both lower to
  * something with no test in it.
+ *
+ * GRX_COND_ASSERTION goes down the same path as the rest, which it did not
+ * until 2026-09-22: `(?(?=A)X|Y)` was rewritten as `(?:(?=A)X|(?!A)Y)`,
+ * exact and with two copies of A. Its condition is the only one that has
+ * to *run* something, so it keeps its lowered lookaround as the node's
+ * first child and codegen lays that out as one assertion that chooses a
+ * branch instead of failing (GRX_INST_COND_ELSE).
  */
 static GRX_Result lower_conditional(
     Lowering * low, const GRX_Node * node, uint32_t * out_node) {
@@ -1738,15 +1672,14 @@ static GRX_Result lower_conditional(
     return lower_node(low, chosen, out_node);
   }
 
-  if (kind == GRX_COND_ASSERTION) {
-    return lower_assertion_conditional(low, node, out_node);
-  }
-
-  uint32_t group = node->b;
-  if (node->flags & GRX_NODE_NAMED) {
-    const char * name = grx_pattern_name(low->pattern, node->b);
-    if (!name || resolve_name(low, name, &group, NULL) != GRX_OK) {
-      return fail(low, GRX_DIAG_UNKNOWN_GROUP_NAME, node);
+  uint32_t group = 0;
+  if (kind != GRX_COND_ASSERTION) {
+    group = node->b;
+    if (node->flags & GRX_NODE_NAMED) {
+      const char * name = grx_pattern_name(low->pattern, node->b);
+      if (!name || resolve_name(low, name, &group, NULL) != GRX_OK) {
+        return fail(low, GRX_DIAG_UNKNOWN_GROUP_NAME, node);
+      }
     }
   }
 
@@ -1771,6 +1704,12 @@ static GRX_Result lower_conditional(
     result = lower_node(low, child, &lowered);
     if (result != GRX_OK) {
       return result;
+    }
+    if (kind == GRX_COND_ASSERTION && child == first) {
+      result = mark_condition(low, node, lowered);
+      if (result != GRX_OK) {
+        return result;
+      }
     }
     result = attach(low, conditional, lowered);
     if (result != GRX_OK) {

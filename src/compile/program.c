@@ -294,6 +294,12 @@ GRX_Result grx_program_dump(const GRX_Program * program, FILE * out) {
     if (inst->flags & GRX_INST_REVERSE) {
       fputs("  reverse", out);
     }
+    if (inst->flags & GRX_INST_COND_ELSE) {
+      // Without this the two jumps after the body read as dead weight.
+      // With it, `next` names the first of the pair and the second is the
+      // one below it.
+      fputs("  condition", out);
+    }
     fputc('\n', out);
   }
 

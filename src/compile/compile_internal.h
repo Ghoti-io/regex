@@ -87,7 +87,7 @@ extern "C" {
  * | RESET_STALE | the register holding this iteration's start | one group's first slot | - |
  * | PROGRESS_CHECK | register | continuation when the loop must exit | GRX_EmptyLoopMode |
  * | BACKREF | group number | - | GRX_BackrefUnsetMode |
- * | LOOK | length-span offset, or GRX_INDEX_NONE | continuation after the body | GRX_LookKind |
+ * | LOOK | length-span offset, or GRX_INDEX_NONE | continuation after the body; with GRX_INST_COND_ELSE, the first of two jumps | GRX_LookKind |
  * | ATOMIC_BEGIN | matching ATOMIC_END | - | - |
  * | ATOMIC_END | - | - | - |
  * | COND | group number | continuation for the false branch | GRX_CondKind |
@@ -234,13 +234,18 @@ typedef enum {
 #define GRX_INST_ALTERNATION GRX_BIT(1)
 
 /**
- * @brief LOOK: a negative one keeps what its body captured before failing.
+ * @brief LOOK: keep what the body captured when the body *fails*.
  *
  * documentation/dialects.md section 5.17, resolved. Perl reports group 1 of
  * `a(?!(b)c)` against "abd" as "b"; pcre2test and Node report it unset,
  * which is what ECMA-262 22.2.2.4 requires. The writes still become undo
  * frames, so backtracking past the whole assertion puts them back - what the
  * flag changes is whether the assertion itself does.
+ *
+ * Stated in terms of the *body* rather than of a negative assertion because
+ * GRX_INST_COND_ELSE has the same question without a sign to hang it on: a
+ * conditional's assertion that fails is the branch-choosing form of the
+ * same event, and both references treat it the same way.
  */
 #define GRX_INST_KEEP_CAPTURES GRX_BIT(2)
 
@@ -283,6 +288,26 @@ typedef enum {
  * instruction ignores it.
  */
 #define GRX_INST_NEWLINE_CRLF GRX_BIT(5)
+
+/**
+ * @brief LOOK: this assertion chooses a branch instead of failing.
+ *
+ * A conditional whose condition is an assertion - `(?(?=A)X|Y)`. The
+ * instruction runs its body exactly as any other LOOK does; what changes
+ * is where it goes afterwards, and that it never reports failure.
+ *
+ * **`y` and `y + 1` are a pair of jumps.** The first is taken when the
+ * condition holds and the second when it does not, and codegen emits them
+ * adjacently and in that order - the same shape GRX_OP_RESET_STALE's
+ * register pair has, and for the same reason: two targets and one operand
+ * left. In a disassembly the pair reads as the branch it is.
+ *
+ * It replaces a rewrite. `(?(?=A)X|Y)` was lowered as `(?:(?=A)X|(?!A)Y)`,
+ * which is exact and compiles A twice - so A ran twice whenever it failed,
+ * and a `(?C...)` in A reported itself twice where pcre2test reports it
+ * once. What was paid was time for every pattern and meaning for that one.
+ */
+#define GRX_INST_COND_ELSE GRX_BIT(6)
 
 /**
  * @brief One compiled instruction.
