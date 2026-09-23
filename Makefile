@@ -1047,17 +1047,28 @@ check-oracle-vim: $(TOOLS)
 	fi; \
 	python3 tools/oracle/vim_diff.py --strict
 
-check-oracle-replace: ## Compare the ECMAScript and PCRE2 templates against node and pcre2
+check-oracle-replace: ## Compare every built template grammar against its reference
 # WP-16 and WP-22's missing generator. sed_diff.py did this for the POSIX and
 # GNU rows; nothing did it for the two largest template grammars, and it
 # found six defects in the pcre row alone.
-# Three dialects now: `--dialect all` covers ecmascript, pcre and python.
+# Four dialects now: `--dialect all` covers ecmascript, pcre, python and vim.
 # Python's arm earned its place at once. Its template grammar had twelve
 # hand-written tests that all passed, and the generator found six rules they
 # had missed - `\u`, `\U`, `\N{...}` and `\x` are pattern escapes there and
 # errors in a template, a backslash before a non-alphanumeric keeps *both*
 # characters, three octal digits outrank a group reference, and `\12` against
 # two groups is an error rather than group 1 followed by "2".
+#
+# Vim's arm earned its place the same way. It is the only grammar here whose
+# template can emit *nothing* and still change the answer - `\u`, `\U` and
+# their four relatives - and asking it over generated rows found two rules
+# that are not the template's at all: `\<` and `\>` are defined from
+# 'iskeyword' rather than from `\w`, and vim's search-all loop advances
+# after an empty match and stops at a match reaching the end.
+#
+# It drives `substitute()` rather than `:s`, for the reason vim_diff.py
+# drives `matchstrpos()`: the subject here is a string. Rows where vim's two
+# engines disagree are put to `set re=1`, as that tool does.
 check-oracle-replace: $(TOOLS)
 	@if ! command -v node >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then \
 		printf "check-oracle-replace: skipped (no node or no python3)\n"; \

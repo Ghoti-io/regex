@@ -529,7 +529,7 @@ comparison folds ours the same way, and the unset axis is stated by
 `\(a\)\?\1` matches the empty string against "b", which a dialect that
 failed on an unset reference could not do.
 
-**Eight classes of disagreement are vim disagreeing with something**, and the
+**Nine classes of disagreement are vim disagreeing with something**, and the
 tool counts each rather than dropping it, so that the number moving is
 visible:
 
@@ -543,13 +543,13 @@ visible:
   Most turn on a single axis and `set re=1` gives exactly this library's
   answer. A few turn on *two*, and then neither engine gives it: this
   library follows the old engine where a mark sits inside an assertion and
-  the new one where `\c` meets `[[:lower:]]`, each time because that engine
-  is the one whose answers can be stated as a rule, so a pattern holding
-  both agrees with neither. About one row in 35,000 -
-  `\c[[:lower:]]\|\(a\zsb\)\@=` against "ABC" is the shape - and the
-  tool *prints* each of them with both engines' answers beside its own,
-  because a defect of this library's could hide in that set and a person
-  looking at it is the only defence there is.
+  the new one where `\c` meets `[[:lower:]]` or an abandoned `\@>` group's
+  captures are read, each time because that engine is the one whose answer
+  can be stated as a rule, so a pattern touching two of them agrees with
+  neither. 29 rows in 1,044,885 - `\c[[:lower:]]\|\(a\zsb\)\@=`
+  against "ABC" is the shape - and the tool *prints* each of them with both
+  engines' answers beside its own, because a defect of this library's could
+  hide in that set and a person looking at it is the only defence there is.
 - **A forward backreference with a lookbehind after it.** `\1\(a\)\@<!`
   is accepted where `\1\(a\)`, `\(a\1\)`, `\1\(a\)\@=`,
   `\1\(a\)\@>` and `\1\%(a\)` are all "E65: Illegal back reference" in
@@ -579,6 +579,13 @@ visible:
   nothing at all in vim, while `\m\_^*`, `\v\_$*`, `\v\_^{0,1}` and
   `\v(\_^)*` all match the empty string there. Only the very magic level,
   only `\_^`, only the `*` spelling, and both engines alike.
+- **A bare `*` with nothing to repeat.** It is the literal asterisk at
+  every level, which is a basic RE's rule and vim's - `*a`, `\m*`, `^*`,
+  `\(*\)`, `x\|*`, `\&*`, `\v%(*)` and `\M\%(*\)` all match one -
+  and two spellings out of that set are refused instead. `^\m*` is an
+  error where `^*` matches and `\(\m*\)` matches, so a marker between
+  the caret and the star loses the caret; and `\%(*\)` is an error where
+  the same construct spelled three other ways is not. Both engines alike.
 - **`\%23l*`.** `\%23l` names a buffer line and never matches over a
   string, so a `*` on it should leave the empty match a zero-iteration
   repeat always has - and vim agrees five ways: `\%23l\{}`,

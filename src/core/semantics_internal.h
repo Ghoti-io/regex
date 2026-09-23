@@ -413,6 +413,18 @@ typedef enum {
   GRX_ITERATE_RETRY_THEN_ADVANCE = 0, ///< Perl, PCRE2, Python.
   GRX_ITERATE_ADVANCE_ONE,            ///< ECMAScript.
   GRX_ITERATE_ADVANCE_SKIP_ABUTTING,  ///< Go.
+  /**
+   * As ADVANCE_ONE, and a match reaching the end of the subject ends it.
+   *
+   * Vim's, and the only rule here that looks at *where* a match ended
+   * rather than at whether it was empty. `substitute("ab", "b*", "<>", "g")`
+   * is "<>a<>" there and "<>a<><>" in node, perl and `re` alike: every
+   * other reference reports the empty match at the end that follows a
+   * non-empty one reaching it, and vim stops instead. Measured against
+   * `substitute()`, which is `:s` over a string and so the form this
+   * library can be.
+   */
+  GRX_ITERATE_ADVANCE_ONE_STOP_AT_END,
   GRX_ITERATE_COUNT                   ///< Closes the enum; not a rule.
 } GRX_IterationRule;
 

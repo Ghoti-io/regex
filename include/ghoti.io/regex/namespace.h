@@ -303,6 +303,8 @@
 #define grx_unicode_es_legacy_orbit GHOTIIO_REGEX(grx_unicode_es_legacy_orbit)
 #define grx_unicode_fold_orbit GHOTIIO_REGEX(grx_unicode_fold_orbit)
 #define grx_unicode_fold_simple GHOTIIO_REGEX(grx_unicode_fold_simple)
+#define grx_unicode_upper_simple GHOTIIO_REGEX(grx_unicode_upper_simple)
+#define grx_unicode_lower_simple GHOTIIO_REGEX(grx_unicode_lower_simple)
 #define grx_unicode_property_lookup GHOTIIO_REGEX(grx_unicode_property_lookup)
 #define grx_unicode_property_name GHOTIIO_REGEX(grx_unicode_property_name)
 #define grx_unicode_property_ranges GHOTIIO_REGEX(grx_unicode_property_ranges)
@@ -335,6 +337,14 @@
 #define grx_unicode_es_legacy_map GHOTIIO_REGEX(grx_unicode_es_legacy_map)
 #define grx_unicode_es_legacy_map_count                                       \
   GHOTIIO_REGEX(grx_unicode_es_legacy_map_count)
+#define grx_unicode_simple_upper_map                                          \
+  GHOTIIO_REGEX(grx_unicode_simple_upper_map)
+#define grx_unicode_simple_upper_map_count                                    \
+  GHOTIIO_REGEX(grx_unicode_simple_upper_map_count)
+#define grx_unicode_simple_lower_map                                          \
+  GHOTIIO_REGEX(grx_unicode_simple_lower_map)
+#define grx_unicode_simple_lower_map_count                                    \
+  GHOTIIO_REGEX(grx_unicode_simple_lower_map_count)
 #define grx_unicode_es_legacy_orbit_member_count                              \
   GHOTIIO_REGEX(grx_unicode_es_legacy_orbit_member_count)
 #define grx_unicode_es_legacy_orbit_members                                   \

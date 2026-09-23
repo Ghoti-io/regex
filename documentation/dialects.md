@@ -380,6 +380,17 @@ inlined rather than run as a sub-match — that is what makes it non-atomic —
 and a candidate-start loop has nowhere to put the backtrack points it has to
 leave live.
 
+**Vim bounds a lookbehind one assertion at a time**, which is the one case
+where the axis is not the whole answer. `\@123<=` says the match may start
+at most 123 *bytes* back — `\(ab\)\@1<=c` does not match "abc" there and
+`\(ab\)\@2<=c` does, and `\(é\)\@1<=x` does not match "éx", which is
+what says bytes rather than characters. So the dialect is `UNBOUNDED` and an
+assertion carrying a number runs *forwards* all the same, over the span its
+own bound allows: a variable-length body becomes finite for that assertion
+alone. Zero is vim's "no bound" and is what an unwritten number leaves.
+Where the bound is smaller than the body's shortest match the assertion can
+never hold, and that is a pattern vim compiles rather than refuses.
+
 ### 5.5 Empty iterations and captures in loops
 
 The two rules that make `(a*)*` against `b` report different things:
@@ -617,7 +628,7 @@ reads bytes until `PCRE2_UTF` says otherwise.
 | RE2 | ASCII | ASCII | `[\t\n\f\r ]` | `\pL`, `\p{Greek}`: categories and scripts, exact case |
 | Rust | Unicode (UTS #18); ASCII under `(?-u)` | `Nd` | `White_Space` | loose (UAX #44) |
 | Tcl | Unicode `[[:alnum:]_]` | Unicode `[[:digit:]]` | Unicode `[[:space:]]` | none |
-| Vim | `[0-9A-Za-z_]` | `[0-9]` | `[ \t]` - space and tab alone | none |
+| Vim | `[0-9A-Za-z_]` - and `\<`/`\>` are *not* defined from it, but from 'iskeyword' | `[0-9]` | `[ \t]` - space and tab alone | none |
 | Emacs | syntax table: word constituents (**deviation:** treated as `[[:word:]]` = Unicode letters and digits) | none | `\s-` (syntax class), not `\s` | none |
 
 **`UCP` widens the shorthands and `UTF` widens the folding**, and they are
@@ -690,6 +701,35 @@ from.
 | `RETRY_NONEMPTY_THEN_ADVANCE` | at the same position, retry refusing an empty match; if that fails, advance one character | Perl, PCRE2 (its documented `NOTEMPTY_ATSTART` loop), Python 3.7+ |
 | `ADVANCE_ONE` | advance one code point (one code unit without `u`) and search again; an empty match immediately after a non-empty one is reported | ECMAScript (`RegExpBuiltinExec` / `AdvanceStringIndex`), Java (**probe**), .NET (**probe**), Ruby (**probe**) |
 | `ADVANCE_ONE_SKIP_ABUTTING` | as above, but an empty match abutting the previous match is not reported | Go (`regexp` documentation: "empty matches abutting a preceding match are ignored"); Rust (**probe**) |
+| `ADVANCE_ONE_STOP_AT_END` | as `ADVANCE_ONE`, with two changes: a match reaching the end of the subject ends the loop, and the character-advance is taken when the match's *walked start* is its reported end | Vim |
+
+**Vim's row is its own and both halves are measured.** `substitute("ab",
+"b*", "<>", "g")` is `"<>a<>"` there and `"<>a<><>"` in node, perl and `re`
+alike: every other reference reports the empty match at the end that follows
+a non-empty one reaching it.
+
+The second half is the only place in this library where the span a match
+*reports* and the text it *walked* have to be told apart, which is what
+GRX_Match::consumed is for. An empty-span test gets three of these four
+wrong:
+
+| | reported | walked | vim advances? |
+| --- | --- | --- | --- |
+| `\|a` over "aab" | 0-0 | 0-0 | yes |
+| `a\zs` over "aab" | 1-1 | 0-1 | **no** - it walked "a" to get to 1 |
+| `\zea` over "xaby" | 1-1 | 1-2 | yes - it is still where it began |
+| `\(b\)\@<=` over "abcb" | 2-2 | 2-2 | yes |
+
+So the question is whether the next attempt would start where this one
+began, and the pair that answers it is the walked *start* against the
+reported *end*. `substitute("aab", 'a\zs', "X", "g")` is `"aXaXb"` in vim
+and would be `"aXab"` under the span test; `substitute("xaby", '\zea', "X",
+"g")` is `"xXaby"` and would be a loop that never ends.
+
+The cell had never been probed and read Perl's
+`RETRY_NONEMPTY_THEN_ADVANCE` until it was: under that rule
+`substitute("aab", '\|a', "<>", "g")` would be `"<><><><><>b<>"` where vim
+answers `"<>a<>a<>b<>"`.
 
 **What `\G` asserts is a second axis**, independent of the rule above, and
 Perl and PCRE2 share the first row and differ on this one:
@@ -764,7 +804,7 @@ at all.
 | Go, Rust | `$n`, `${n}` | `$name`, `${name}` - the name is parsed greedily, so `$1x` is the group named `1x` | none | `$$` | empty | empty | none |
 | POSIX BRE/ERE | `\1`-`\9`, one digit | none | `&` | `\&`, `\\`, and `\c` for any other `c` | error | empty | none |
 | GNU BRE/ERE | as POSIX, plus `\0` for the whole match | none | `&`, `\0` | as POSIX | error | empty | none - see below |
-| Vim (`:s`) | `\n` | none | `&`, `\0` | `\&`, `\\` | empty | empty | `\u \U \l \L \e \E` - **not built**; see §6 |
+| Vim (`substitute()`) | `\1`-`\9`, one digit | none | `&`, `\0` | `\&`, `\~`, `\\`, and `\c` for any other `c`; `\n`, `\r`, `\t` and `\b` decode | empty | empty | `\u \U \l \L \e \E` - built; the only case-changing row here that is not Perl's |
 | Tcl (`regsub`) | `\n` | none | `&`, `\0` | `\\`, `\&` | empty | empty | none |
 | Emacs (`replace-match`) | `\n` | none | `\&` | `\\` | error | empty | none |
 
@@ -1205,11 +1245,9 @@ to be complete for every shipped tier.
 | Vim | `~` and `\~` (the last `:s` replacement) | there has been no previous substitution; vim itself answers "E33: No previous substitute regular expression" when there has not | `GRX_ERR_UNSUPPORTED` |
 | Vim | `\Z` (ignore combining characters) | a rule about normalisation, which this library does not do | `GRX_ERR_UNSUPPORTED` |
 | Vim | `\%23v`, `\%<23v`, `\%>23v` | the *screen* column, which is a window's measure and not the text's: it counts display cells, so a tab reaches the next multiple of 'tabstop', a wide character takes two and a combining one takes none - `\%3v` holds after U+65E5 where `\%3c` does not. It needs an option and a cell-width table that are vim's own rather than Unicode's. The rest of the family is built: `\%V`, `\%#` and the three `l` forms never match over a string, which is vim's own answer, and `\%23c` is the byte column counted from one | `GRX_ERR_UNSUPPORTED` |
-| Vim | `\@123<=` accepts the count and ignores it | in vim the number bounds how far back the match may start, which is an efficiency limit with a visible effect. This library's lookbehind is unbounded (§5.4) | - |
 | Vim | `\i`, `\k`, `\f` and `\p` are vim's *defaults* | those four are the options 'isident', 'iskeyword', 'isfname' and 'isprint', and a user who has changed one has a dialect this library does not read. Measured at the defaults, and measured by enumeration: every one of the 1,114,112 code points put to vim for each of the 52 class spellings, which is what a set whose members are decided one at a time needs. They had been *sampled* instead, and three of the four were wrong - `\i` and `\k` both missed U+00B5, and `\k` took in 5,463 code points vim excludes | - |
 | Vim | An unknown `[:name:]` is refused | vim compiles a collection holding one into a pattern that can never match anything at all - `[[:foo:]]*a` does not match "a" - which is a degenerate answer rather than a rule | `GRX_ERR_SYNTAX` |
-| Vim | The replacement template is not built | vim's `:s` right-hand side has two rules nothing else here has: `\r` inserts a line break where `\n` inserts a NUL, and `\u`, `\U`, `\l`, `\L`, `\e` and `\E` change the case of what follows. A row claiming sed's grammar would get both wrong rather than leave them unbuilt, so the row is zeroed and `grx_regex_replace()` refuses it | `GRX_ERR_UNSUPPORTED` |
-| Vim | Eight answers of vim's are not followed, each measured against a second reference | (1) a forward backreference is refused, where vim accepts one *if a lookbehind follows it* - every other spelling is "E65: Illegal back reference" in both of its engines; (2) an abandoned `\@>` group's captures are discarded, where vim keeps them and pcre2test does not; (3) a capture around a postfix assertion followed by a repeat is kept, where vim loses it and pcre2test does not; (4) a postfix lookbehind with a backreference after it follows pcre2test: `\(a\)\@<=\(a\)\1\l` reports 1:4 where vim reports 1:3 in both engines and names text that does not satisfy its own pattern, and `\v\D(a)@<=\m\(a\)\1\(a\+\)\@>` reports no match where vim reports 0:3 with a group the match has no room for; (5) `\v\_^*` matches the empty string, where vim matches nothing at all in either engine - and `\m\_^*`, `\v\_$*`, `\v\_^{0,1}` and `\v(\_^)*` all match it there, so the one spelling that fails is an accident of its parser and not a rule; (6) **a group inside `\%[...]` is refused**, where the default engine takes one - `a\%[\(bc\)]`, `a\%[\%(bc\)]` and a nested `a\%[b\%[cd]]` are all "E54" under `set re=1` and all compile under `re=2`. Every other member is built: a class, a collection, `\%d98`, `\zs`, `\<`, `\_s` and a backreference are atoms and vim's help says so, and the seven escapes that are the bare letter only in there (`\v`, `\m`, `\M`, `\V`, `\c`, `\C`, `\Z` - enumerated one letter at a time over all fifty-two) are read that way; (7) **`\%23l*` matches the empty string**, where vim matches nothing at all in either engine - the same shape as (5), since `\%23l\{}`, `\%23l\{-}`, `\%23l\{0,1}`, `\(\%23l\)*` and the very magic `%23l*` all match it there, so it is the bare `*` outside very magic after an `l` form and nothing else; (8) **`\zs` and `\ze` inside an assertion or an atomic group still count**, which is `set re=1`, where vim's default engine mostly makes them inert. Measured over 140 patterns putting each of four marker bodies inside each of `\@=`, `\@!`, `\@<=`, `\@<!`, `\@>` and `\&` with five tails: the old engine answers all 140 the way one mark register does, the new one agrees with it on 110, and the 30 left have no rule behind them - `\(ab\zec\)\@=a` against "abc" is 0-2 old and 0-1 new, while `x\(ab\zec\)\@=` against "xabc" is 0-3 in *both*, so the same character consumed outside the same assertion decides differently by which side of it it was written; `a\zeb` is 0-1 everywhere, so later text does not overwrite a mark either; and the new engine drops a `\zs` where it keeps a `\ze`. `tools/oracle/vim_diff.py` counts each of these rather than dropping it, and a ninth class - where vim's two engines simply disagree without either being incoherent - is settled by *asking* `set re=1` rather than by guessing | - |
+| Vim | Nine answers of vim's are not followed, each measured against a second reference | (1) a forward backreference is refused, where vim accepts one *if a lookbehind follows it* - every other spelling is "E65: Illegal back reference" in both of its engines; (2) an abandoned `\@>` group's captures are discarded, where vim keeps them and pcre2test does not; (3) a capture around a postfix assertion followed by a repeat is kept, where vim loses it and pcre2test does not; (4) a postfix lookbehind with a backreference after it follows pcre2test: `\(a\)\@<=\(a\)\1\l` reports 1:4 where vim reports 1:3 in both engines and names text that does not satisfy its own pattern, and `\v\D(a)@<=\m\(a\)\1\(a\+\)\@>` reports no match where vim reports 0:3 with a group the match has no room for; (5) `\v\_^*` matches the empty string, where vim matches nothing at all in either engine - and `\m\_^*`, `\v\_$*`, `\v\_^{0,1}` and `\v(\_^)*` all match it there, so the one spelling that fails is an accident of its parser and not a rule; (6) **a group inside `\%[...]` is refused**, where the default engine takes one - `a\%[\(bc\)]`, `a\%[\%(bc\)]` and a nested `a\%[b\%[cd]]` are all "E54" under `set re=1` and all compile under `re=2`. Every other member is built: a class, a collection, `\%d98`, `\zs`, `\<`, `\_s` and a backreference are atoms and vim's help says so, and the seven escapes that are the bare letter only in there (`\v`, `\m`, `\M`, `\V`, `\c`, `\C`, `\Z` - enumerated one letter at a time over all fifty-two) are read that way; (7) **`\%23l*` matches the empty string**, where vim matches nothing at all in either engine - the same shape as (5), since `\%23l\{}`, `\%23l\{-}`, `\%23l\{0,1}`, `\(\%23l\)*` and the very magic `%23l*` all match it there, so it is the bare `*` outside very magic after an `l` form and nothing else; (8) **a bare `*` with nothing to repeat is the literal asterisk wherever it stands**, where vim refuses two spellings out of the set: `^\m*` is an error and `^*` matches, `\(\m*\)` matches and `^\m\+` is an error here too - so the marker loses the caret for the `*` alone; and `\%(*\)` is an error where `\(*\)`, `\v%(*)` and `\M\%(*\)` all match, the same construct in four spellings refused in one. Both engines alike; (9) **`\zs` and `\ze` inside an assertion or an atomic group still count**, which is `set re=1`, where vim's default engine mostly makes them inert. Measured over 140 patterns putting each of four marker bodies inside each of `\@=`, `\@!`, `\@<=`, `\@<!`, `\@>` and `\&` with five tails: the old engine answers all 140 the way one mark register does, the new one agrees with it on 110, and the 30 left have no rule behind them - `\(ab\zec\)\@=a` against "abc" is 0-2 old and 0-1 new, while `x\(ab\zec\)\@=` against "xabc" is 0-3 in *both*, so the same character consumed outside the same assertion decides differently by which side of it it was written; `a\zeb` is 0-1 everywhere, so later text does not overwrite a mark either; and the new engine drops a `\zs` where it keeps a `\ze`. `tools/oracle/vim_diff.py` counts each of these rather than dropping it, and a tenth class - where vim's two engines simply disagree without either being incoherent - is settled by *asking* `set re=1` rather than by guessing | - |
 
 ### 6.1 ECMAScript and the unit of a subject
 

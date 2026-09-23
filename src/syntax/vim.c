@@ -2052,7 +2052,15 @@ static GRX_Result vim_postfix_atom(GRX_Parser * parser, uint32_t * node) {
       at = 2;
     }
 
+    // `\@123<=` bounds how far back the match may start, in bytes.
+    // Saturating rather than wrapping: a bound larger than any subject is
+    // no bound, which is the same answer the arithmetic would give if it
+    // did not overflow first.
+    size_t bound = 0;
     while (is_digit(byte_at(parser, at))) {
+      if (bound < GRX_NPOS / 16) {
+        bound = bound * 10 + (size_t)(byte_at(parser, at) - '0');
+      }
       at++;
     }
 
@@ -2108,6 +2116,13 @@ static GRX_Result vim_postfix_atom(GRX_Parser * parser, uint32_t * node) {
     }
     else {
       built->a = (uint32_t)look;
+      // Zero is vim's "no bound" - `\(ab\)\@0<=c` matches where
+      // `\(ab\)\@1<=c` does not - which is also what an unwritten
+      // number leaves here.
+      if (look == GRX_LOOK_BEHIND_POSITIVE
+          || look == GRX_LOOK_BEHIND_NEGATIVE) {
+        built->min = (uint32_t)(bound > UINT32_MAX ? UINT32_MAX : bound);
+      }
     }
     if (grx_pattern_add_child(parser->pattern, wrapper, *node) != GRX_OK) {
       return grx_parse_fail(parser, GRX_DIAG_OUT_OF_MEMORY, start, 0);

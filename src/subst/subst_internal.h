@@ -69,8 +69,32 @@ typedef enum {
    * with a `$` sigil have no such escape, and sed's `\n` is the letter n.
    */
   GRX_TPL_CODEPOINT,
+  /**
+   * @brief Change the case of what follows; `a` is a @ref GRX_TemplateCase.
+   *
+   * Vim's `\u`, `\U`, `\l`, `\L`, `\E` and `\e`, and the first piece
+   * here that substitutes nothing and still changes the result. Every other
+   * grammar in section 5.11 builds its output by concatenation alone.
+   */
+  GRX_TPL_CASE,
   GRX_TPL_COUNT        ///< Closes the enum; not a piece.
 } GRX_TemplateOpKind;
+
+/**
+ * @brief What a @ref GRX_TPL_CASE piece asks for.
+ *
+ * Two states rather than one, because vim keeps both at once and they are
+ * measured to compose: `\Uab\lcd` is "ABcD" there, so a one-character
+ * modifier *suspends* a run for one character rather than ending it. `\E`
+ * and `\e` clear both - `\u\Ex` is "x".
+ */
+typedef enum {
+  GRX_TPL_CASE_NONE = 0,  ///< `\E` and `\e`: clear the run and the one-shot.
+  GRX_TPL_CASE_UPPER_ONE, ///< `\u`: the next character only.
+  GRX_TPL_CASE_LOWER_ONE, ///< `\l`: the next character only.
+  GRX_TPL_CASE_UPPER_RUN, ///< `\U`: until a clear.
+  GRX_TPL_CASE_LOWER_RUN  ///< `\L`: until a clear.
+} GRX_TemplateCase;
 
 /**
  * @brief One instruction of a parsed template.

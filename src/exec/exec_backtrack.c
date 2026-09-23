@@ -2496,6 +2496,10 @@ GRX_Result grx_exec_backtrack(
 
   GRX_Result result = GRX_OK;
   size_t start = request->start;
+  // What the successful attempt walked, which a `\K` or a `\ze` can make
+  // different from what it reports. See GRX_Match::consumed.
+  size_t walked_start = GRX_NPOS;
+  size_t walked_end = GRX_NPOS;
   for (;;) {
     for (size_t i = 0; i < bt.slot_count; i++) {
       bt.slots[i] = GRX_NPOS;
@@ -2514,6 +2518,8 @@ GRX_Result grx_exec_backtrack(
     bt.attempt_start = start;
     if (run(&bt, 0, start, 0, 1, &end)) {
       *out_matched = 1;
+      walked_start = start;
+      walked_end = end;
       break;
     }
     if (bt.failure != GRX_OK) {
@@ -2529,6 +2535,8 @@ GRX_Result grx_exec_backtrack(
         bt.slots[i] = bt.best_slots[i];
       }
       *out_matched = 1;
+      walked_start = start;
+      walked_end = bt.best_end;
       break;
     }
     // A `(*THEN)` that reached the top with no alternative left is a
@@ -2612,6 +2620,7 @@ GRX_Result grx_exec_backtrack(
         match->captures[i] = (GRX_Capture) {GRX_NPOS, GRX_NPOS};
       }
     }
+    match->consumed = (GRX_Capture) {walked_start, walked_end};
   }
 
   if (request->out_diag) {

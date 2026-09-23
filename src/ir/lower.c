@@ -1980,7 +1980,18 @@ static GRX_Result lower_look(
   int behind = kind == GRX_LOOK_BEHIND_POSITIVE
       || kind == GRX_LOOK_BEHIND_NEGATIVE
       || kind == GRX_LOOK_BEHIND_NON_ATOMIC;
-  int forward = behind && look_runs_forward(low, kind);
+  // A lookbehind written with a byte bound runs forwards whatever the
+  // profile says, because the bound is exactly what the forward strategy
+  // needs: it enumerates candidate starts over a known span, and vim's
+  // `\@123<=` is that span. Without it an unbounded profile would run the
+  // body in reverse, where there is nowhere to put the limit.
+  // `min` and not `b`: every front end's group_open() hook leaves `b` as
+  // GRX_INDEX_NONE on a lookaround, so a bound read from there would be
+  // four billion for every dialect but this one. `min` is zero on a
+  // LOOKAROUND node and nothing else writes it.
+  uint32_t bound = behind && kind != GRX_LOOK_BEHIND_NON_ATOMIC
+      ? node->min : 0u;
+  int forward = behind && (look_runs_forward(low, kind) || bound > 0);
 
   GRX_Result result = add(low, GRX_IR_LOOK, node, out_node);
   if (result != GRX_OK) {
@@ -1998,6 +2009,7 @@ static GRX_Result lower_look(
     // analysis pass's job, and the subtree does not exist until below. What
     // is set here is the claim that it will be measured.
     look->a = GRX_INDEX_NONE;
+    look->b = bound;
   }
 
   // Inside a reverse lookbehind every node is marked reverse, and its

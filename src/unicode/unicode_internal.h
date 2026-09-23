@@ -148,6 +148,28 @@ size_t grx_unicode_utf8_encode(uint32_t codepoint, char * buffer);
 uint32_t grx_unicode_fold_simple(uint32_t codepoint);
 
 /**
+ * @brief Simple_Uppercase_Mapping, or the code point where there is none.
+ *
+ * One code point to one code point: U+01F3 gives U+01F1 and not the
+ * titlecase U+01F2, and U+00DF and U+FB01 give themselves, where their
+ * *full* uppercase mappings are two characters. That is the mapping a
+ * replacement template's "upper case the next character" wants, and it is
+ * neither a folding nor a canonicalisation.
+ *
+ * @param codepoint The code point.
+ * @return Its simple uppercase, or the input where it has none.
+ */
+uint32_t grx_unicode_upper_simple(uint32_t codepoint);
+
+/**
+ * @brief Simple_Lowercase_Mapping, or the code point where there is none.
+ *
+ * @param codepoint The code point.
+ * @return Its simple lowercase, or the input where it has none.
+ */
+uint32_t grx_unicode_lower_simple(uint32_t codepoint);
+
+/**
  * @brief Every code point whose simple fold equals this one's.
  *
  * What a caseless literal becomes, and what a caseless class is closed

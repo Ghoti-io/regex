@@ -312,7 +312,7 @@ typedef enum {
  * | CAPTURE | group number | name offset, or GRX_INDEX_NONE | - | one child |
  * | BACKREF | group number | - | - | `backref_unset`, CASELESS, AMBIGUOUS_REF |
  * | ASSERT | class index for the line or word set, else GRX_INDEX_NONE | - | GRX_AssertKind | - |
- * | LOOK | length-span offset, when LOOK_FORWARD | - | GRX_LookKind | LOOK_FORWARD, LOOK_KEEP_CAPTURES; one child |
+ * | LOOK | length-span offset, when LOOK_FORWARD | a byte bound on a lookbehind, 0 for none | GRX_LookKind | LOOK_FORWARD, LOOK_KEEP_CAPTURES; one child |
  * | ATOMIC | - | - | - | one child |
  * | COND | group number, unused for ASSERTION | - | GRX_CondKind | HAS_ELSE; children |
  *

@@ -41,6 +41,7 @@ import os
 import random
 import subprocess
 import sys
+import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
@@ -101,6 +102,14 @@ DIALECT_FORMS = {
     # letter - which no other dialect's template does.
     "python": ["\\1", "\\2", "\\g<1>", "\\g<n>", "\\g<0>", "\\0", "\\\\",
                "\\n", "\\t", "\\101", "\\g<01>"],
+    # Vim's. `&` is the whole match and `\&` a literal one, `\0` to `\9`
+    # name groups a digit at a time, `\n`, `\r`, `\t` and `\b` decode,
+    # and the six case markers are the half of this grammar no other
+    # dialect here has: they emit nothing and change what follows.
+    "vim": ["&", "\\&", "\\0", "\\1", "\\2", "\\9", "~", "\\~",
+            "\\n", "\\r", "\\t", "\\b", "\\\\", "\\q",
+            "\\u", "\\l", "\\U", "\\L", "\\E", "\\e",
+            "\\u\\1", "\\U\\1\\E\\2", "\\Uab\\lcd", "\\u&"],
 }
 
 # Spellings that begin like a form and are not one, or name something that is
@@ -134,6 +143,9 @@ FLAG_SETS = {
     "ecmascript": ("", "u", "i", "m", "iu", "s"),
     "pcre": ("", "i", "m", "s", "x", "im"),
     "python": ("", "i", "m", "s", "im"),
+    # Vim has no flag string at all: `\c`, `\v` and the rest are pattern
+    # syntax, so the alphabet is empty and the only valid value is "".
+    "vim": ("",),
 }
 
 
@@ -143,6 +155,13 @@ PYTHON_NAMED_PATTERNS = [
     "(?P<n>a)", "(?P<n>a)(?P<m>b)", "(?P<n>a)(b)", "(a)(?P<n>b)",
     "(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)(k)(l)",
     "(a)", "(a)(b)", "(a)(b)(c)",
+]
+
+# And in vim's, where a group is `\(...\)` and there are no names at all.
+VIM_NAMED_PATTERNS = [
+    "\\(a\\)", "\\(a\\)\\(b\\)", "\\(a\\)\\(b\\)\\(c\\)",
+    "\\(.\\)", "\\(\\w\\)\\(\\w\\)", "\\(a\\|b\\)",
+    "\\(a\\)\\(b\\)\\(c\\)\\(d\\)\\(e\\)\\(f\\)",
 ]
 
 
@@ -166,6 +185,12 @@ def make_template(dialect, rng):
     if dialect == "python":
         pieces = PYTHON_WELL_FORMED + DIALECT_FORMS[dialect]
         malformed = PYTHON_MALFORMED
+    elif dialect == "vim":
+        # No malformed list: vim's template alphabet is open the way sed's
+        # is - every escape it does not know is the bare character - so
+        # there is no spelling to refuse and nothing for one to measure.
+        pieces = ["X", "-", "", "ab", " "] + DIALECT_FORMS[dialect]
+        malformed = pieces
     else:
         pieces = WELL_FORMED + DIALECT_FORMS[dialect]
         malformed = MALFORMED
@@ -188,6 +213,12 @@ def make_pattern(dialect, rng):
     """
     if dialect == "ecmascript":
         return match_diff.make_pattern(rng)
+    if dialect == "vim":
+        # vim_diff's own generator, refused constructs and all: this run has
+        # to ask the accept-or-refuse question too, and vim's template
+        # alphabet has no ill-formed spelling to ask it with.
+        import vim_diff
+        return vim_diff.make_pattern(rng)
     if dialect == "python":
         # python_diff's vocabulary, which is the one `re` accepts. Its named
         # groups use the `(?P<n>...)` spelling, so NAMED_PATTERNS below is
@@ -275,6 +306,72 @@ def ask_node(rows):
     return json.loads(finished.stdout)
 
 
+VIM_SCRIPT = """
+let lines = readfile(g:in)
+let out = []
+for l in lines
+  let c = json_decode(l)
+  try
+    let r = substitute(c[1], c[0], c[2], 'g')
+    let hex = ''
+    for i in range(strlen(r))
+      let hex .= printf('%02x', char2nr(r[i]))
+    endfor
+    call add(out, 'ok ' . hex)
+  catch
+    call add(out, 'syntax')
+  endtry
+endfor
+call writefile(out, g:o)
+qa!
+"""
+
+
+def ask_vim(rows, engine=0):
+    """vim's answers: one process for the whole run, as vim_diff.py does.
+
+    `substitute()` and not `:s`, for the reason vim_diff.py drives
+    `matchstrpos()`: the subject here is a string, and `:s` works on a
+    buffer. Over a string vim's `\r` is U+000D and its `\n` is U+000A,
+    where in a buffer the first splits the line and the second writes a NUL
+    - the same two characters seen through a different container.
+    """
+    work = tempfile.mkdtemp(prefix="replace_diff.")
+    in_path = os.path.join(work, "cases.jsonl")
+    out_path = os.path.join(work, "answers.txt")
+    script_path = os.path.join(work, "run.vim")
+    with open(script_path, "w") as handle:
+        handle.write(VIM_SCRIPT)
+    with open(in_path, "w") as handle:
+        for _, pattern, subject, template in rows:
+            handle.write(json.dumps([pattern, subject, template]) + "\n")
+    command = ["vim", "-es", "-u", "NONE", "-i", "NONE",
+        "--cmd", "let g:in=%s" % json.dumps(in_path),
+        "--cmd", "let g:o=%s" % json.dumps(out_path)]
+    if engine:
+        # The old engine, for the reason vim_diff.py asks it: vim ships two
+        # and they disagree, and a row where `set re=1` gives this
+        # library's answer is one where this library picked one of vim's
+        # answers rather than one where it is wrong.
+        command += ["--cmd", "set re=%d" % engine]
+    subprocess.run(command + ["-c", "source " + script_path],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1800)
+    if not os.path.exists(out_path):
+        return []
+    answers = []
+    for line in open(out_path):
+        line = line.rstrip("\n")
+        if line.startswith("ok "):
+            try:
+                answers.append(bytes.fromhex(line[3:]).decode("utf-8"))
+            except (ValueError, UnicodeDecodeError):
+                answers.append("error")
+        else:
+            answers.append(line)
+    return answers
+
+
 def ask_library(driver, dialect, rows):
     lines = "".join("%s\t%s\t%s\t%s\n" % (
         flags, pattern.encode("utf-8").hex(), subject.encode("utf-8").hex(),
@@ -317,6 +414,11 @@ def splits_a_surrogate_pair(text):
 def compare(dialect, driver, seed, patterns, templates, subjects, examples):
     """One dialect against its reference. None means the run was not made."""
     reference = None
+    if dialect == "vim":
+        if subprocess.run(["which", "vim"],
+                capture_output=True).returncode != 0:
+            print("vim: skipped (vim is not installed)")
+            return 0
     if dialect == "pcre":
         pcre2 = find("pcre2_match")
         if not pcre2:
@@ -335,6 +437,8 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
             pattern = make_pattern(dialect, rng)
         elif dialect == "python":
             pattern = rng.choice(PYTHON_NAMED_PATTERNS)
+        elif dialect == "vim":
+            pattern = rng.choice(VIM_NAMED_PATTERNS)
         else:
             pattern = rng.choice(NAMED_PATTERNS)
         flags = rng.choice(FLAG_SETS[dialect])
@@ -351,6 +455,8 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
         theirs = [(answer, 1) for answer in ask_node(rows)]
     elif dialect == "python":
         theirs = [(answer, 1) for answer in ask_python(rows)]
+    elif dialect == "vim":
+        theirs = [(answer, 1) for answer in ask_vim(rows)]
     else:
         theirs = ask_pcre2(reference, rows)
     mine = ask_library(driver, dialect, rows)
@@ -414,6 +520,24 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
         if us != them:
             disagreements.append((flags, pattern, subject, template, them, us))
 
+    split = 0
+    if dialect == "vim" and disagreements:
+        # Every row left, put to vim's other engine. The two disagree about
+        # where a `\zs` or a `\ze` inside an assertion counts, and this
+        # library follows the one whose answers can be stated as a rule -
+        # so a replacement built on those spans differs from the default
+        # engine's and agrees with the old one's. Only the rows that came
+        # back different are asked.
+        older = ask_vim([(f, p, s, t) for f, p, s, t, _, _ in disagreements],
+            engine=1)
+        kept = []
+        for row, old_answer in zip(disagreements, older):
+            if old_answer == row[5]:
+                split += 1
+                continue
+            kept.append(row)
+        disagreements = kept
+
     for flags, pattern, subject, template, them, us in \
             disagreements[:examples]:
         print("  /%s/%s  %s on %s" % (pattern, flags, json.dumps(template),
@@ -424,9 +548,9 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
     print("%-11s %d rows, %d compared, %d the pattern was rejected, "
           "%d the reference declined, %d the surrogate-pair deviation, "
           "%d the template parsed up front, %d a known reference defect, "
-          "%d disagreements"
+          "%d vim's two engines disagree, %d disagreements"
           % (dialect + ":", len(rows), compared, rejected, declined,
-             deviation, lazy, defect, len(disagreements)))
+             deviation, lazy, defect, split, len(disagreements)))
     if not rejected:
         sys.stderr.write(
             "%s: no generated pattern was rejected, so the accept/reject "
@@ -451,8 +575,8 @@ def main(argv):
         sys.stderr.write("run `make tools` first\n")
         return 2
 
-    dialects = ("ecmascript", "pcre", "python") if args.dialect == "all" \
-        else (args.dialect,)
+    dialects = ("ecmascript", "pcre", "python", "vim") \
+        if args.dialect == "all" else (args.dialect,)
     total = 0
     for dialect in dialects:
         found = compare(dialect, driver, args.seed, args.patterns,

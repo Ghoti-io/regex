@@ -562,8 +562,20 @@ static Span walk(Analysis * analysis, uint32_t node_index) {
         // where the two meet.
         if (analysis->writable && (node->flags & GRX_IR_LOOK_FORWARD)) {
           uint32_t offset = GRX_INDEX_NONE;
+          // Vim's `\@123<=`: the match may start at most that many bytes
+          // back, so the span the engine enumerates is the body's own
+          // clipped to it. Both ends, because a body that cannot fit
+          // inside the bound is one the assertion can never satisfy -
+          // `\(ab\)\@1<=c` does not match "abc" in vim - and a minimum
+          // above the maximum is not a span at all.
+          size_t low_end = body.min_length;
+          size_t high_end = body.max_length;
+          if (node->b) {
+            high_end = high_end > node->b ? node->b : high_end;
+            low_end = low_end > high_end ? high_end : low_end;
+          }
           GRX_Result stored = grx_ir_look_span_set(
-              analysis->writable, &offset, body.min_length, body.max_length);
+              analysis->writable, &offset, low_end, high_end);
           if (stored != GRX_OK) {
             if (analysis->failure == GRX_OK) {
               analysis->failure = stored;

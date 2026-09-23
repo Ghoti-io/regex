@@ -86,6 +86,10 @@ ATOMS = [
     "\\(a\\+\\)\\@>", "(a)@=", "(a)@!", "(a)@<=", "(a)@<!", "(a+)@>",
     "\\(a\\zsb\\)\\@>", "\\(a\\zeb\\)\\@>", "\\(a\\zsb\\)\\@=",
     "\\(a\\zeb\\)\\@=", "\\(a\\zeb\\)\\@<=",
+    # The byte bound on a lookbehind, which is a restriction and so needs a
+    # body that can overrun it as well as one that cannot.
+    "\\(a\\)\\@1<=", "\\(ab\\)\\@1<=", "\\(ab\\)\\@2<=",
+    "\\(\\w\\+\\)\\@2<=", "\\(ab\\)\\@1<!", "(a|ab)@2<=",
     # Repeats, in both spellings and both modes.
     "a*", "a\\+", "a\\=", "a\\?", "a\\{2}", "a\\{2,3}", "a\\{,2}",
     "a\\{2,}", "a\\{}", "a\\{-}", "a\\{-1,}", "a\\{-2,3}",
@@ -447,6 +451,44 @@ def is_line_number_star(pattern, them, us):
     return False
 
 
+def is_leading_star_artifact(pattern, them, us):
+    """A bare `*` with no atom before it, where vim's answer is the spelling.
+
+    A `*` that has nothing to repeat is the literal asterisk at every level,
+    which is a POSIX basic RE's rule and vim's: `*a`, `\\m*`, `^*`,
+    `\\(*\\)`, `x\\|*`, `\\&*`, `\\v%(*)` and `\\M\\%(*\\)` all
+    match one. Two spellings out of that set are refused instead, and
+    neither difference is a rule:
+
+      - `^\\m*` is "E866" where `^*` matches and `\\(\\m*\\)` matches,
+        so a level or case marker between the caret and the star loses the
+        caret - and `^\\m\\+` is refused here too, which is the same
+        answer, so it is only the star that parts company.
+      - `\\%(*\\)` is refused where `\\(*\\)` matches, and where the
+        very magic `\\v%(*)` and the nomagic `\\M\\%(*\\)` both match:
+        the same construct in three spellings, refused in one.
+
+    Both engines answer alike, which is what says it is the parser rather
+    than either engine.
+    """
+    if not them.startswith("compile") or us.startswith("compile"):
+        return False
+    for i, c in enumerate(pattern):
+        if c != "*" or i == 0:
+            continue
+        head = pattern[:i]
+        # `\%(` immediately before, at a level that spells it that way.
+        if head.endswith("\\%("):
+            return True
+        # A caret with markers between, and nothing else.
+        while head[-2:] in ("\\v", "\\m", "\\M", "\\V", "\\c",
+                "\\C"):
+            head = head[:-2]
+            if head.endswith("^"):
+                return True
+    return False
+
+
 def is_lookbehind_backreference_artifact(pattern, them, us):
     """vim mis-accounts a postfix lookbehind when a backreference follows.
 
@@ -536,7 +578,8 @@ def main():
                 or is_postfix_capture_artifact(case[0], them, us)
                 or is_lookbehind_backreference_artifact(case[0], them, us)
                 or is_very_magic_line_start_repeat(case[0], them, us)
-                or is_line_number_star(case[0], them, us)):
+                or is_line_number_star(case[0], them, us)
+                or is_leading_star_artifact(case[0], them, us)):
             artifacts += 1
             continue
         candidates.append((case, them, us))
@@ -552,8 +595,9 @@ def main():
     # turn on one axis and `set re=1` gives exactly this library's answer.
     # The rest turn on *two*: this library follows the old engine where a
     # mark sits inside an assertion and the new one where `\c` meets
-    # `[[:lower:]]`, each because that engine is the one whose answers can
-    # be stated as a rule, so a pattern holding both agrees with neither.
+    # `[[:lower:]]` or an abandoned `\@>` group's captures are read, each
+    # because that engine is the one whose answer can be stated as a rule,
+    # so a pattern touching two of them agrees with neither.
     # Those are printed rather than swallowed - a defect of this library's
     # could hide among them, and the only defence is that a person can see
     # them.
