@@ -204,7 +204,77 @@ CC := cc
 # accident. Measured cost of the -O0: 2.32x-2.53x on tools/bench, median
 # 2.38x, over regex's own code - the timed loop allocates nothing, so no part
 # of that figure is cutil's.
-CFLAGS := -pedantic-errors -Wall -Wextra -Werror -Wno-error=unused-function -Wfatal-errors -std=c17 $(OPT_CFLAGS) -g $(EXTRA_CFLAGS)
+#
+# Strict aliasing, in two halves, because they travel to different places.
+#
+# This is the one undefined-behaviour class in the suite with no runtime gate
+# at all, so `make test-asan` and every fuzzer are blind to it however they
+# are compiled. Measured here rather than assumed, with a program that writes
+# 7 through an int32_t *, writes 1.0f through a float * aliasing the same
+# object, and reads the int back:
+#
+#   -O0, no sanitizers                        prints 1065353216
+#   -O2, no sanitizers                        prints 7
+#   -O1 and -O2, ASan+UBSan, gcc and clang    prints 7, exits 0, says nothing
+#
+# So the optimiser's answer already differs from the unoptimised one - the
+# violation is live at the level this library ships at - and four sanitizer
+# runs report no error at all. text measured the same blindness against
+# checks its sanitizers DO catch (heap-use-after-free, stack overflow, signed
+# overflow, float-cast overflow, all caught at -O1 and -O2), which is what
+# makes it a gap in the instrument rather than a quiet run.
+#
+# A static warning is therefore the only instrument there is, and it is
+# partial: it does not follow a violation laundered through a function
+# boundary, and no level catches punning through a void *.
+#
+# The ASSUME half names the optimiser assumption. It belongs in every tree
+# that compiles the library, including the ones where it is already on,
+# because the default differs by compiler and optimisation level and appeared
+# on no command line. Measured here by diffing emitted code against
+# -fno-strict-aliasing for a minimal pair, not read off a manual page:
+#
+#              -O0   -O1   -O2
+#   gcc 14.2   off   off   ON
+#   clang 19.1 off   ON    ON
+#
+# So the assumption this library ships under is one gcc picked at -O2 and
+# nobody wrote down, and the fuzz tree's clang had it from -O1 for a
+# different reason. Naming it changes nothing here today:
+# compiling all 38 library TUs with and without it, at -O2 and at -O0,
+# with -g0 so that the flag string in DW_AT_producer cannot masquerade as
+# codegen, gives 38 identical objects at both levels. At -O2 because the flag
+# was already on; at -O0 because -O0 does no alias-based optimisation to
+# change. So this is a statement of intent that the -O0 debug build compiles
+# under the same assumption as the shipped one, not a change to either.
+ALIASING_ASSUME_CFLAGS := -fstrict-aliasing
+#
+# The WARN half is the guard, and its LEVEL is named because -Wall already
+# sets one. `gcc -Q --help=warnings -Wall` reports -Wstrict-aliasing=3, and
+# level 3 is silent on shapes level 1 rejects - so -Wall at -O2 gives
+# -fstrict-aliasing the optimisation with no warning behind it: the
+# assumption armed and the guard absent. That was this library's state until
+# now.
+#
+# Precedence is not positional against -Wall. An explicit level beats -Wall's
+# implicit 3 from either side, so where $(ALIASING_CFLAGS) sits in the line
+# does not matter; "last one wins" holds only between two EXPLICIT levels.
+# The disarm vector is therefore a later explicit level, and CFLAGS ends with
+# $(EXTRA_CFLAGS): `make EXTRA_CFLAGS=-Wstrict-aliasing=3` builds at level 3
+# with every flag still present and every sentence here still true.
+# check-aliasing catches exactly that, because it compiles its control with
+# the real $(CFLAGS) and so sees the resolved level rather than the spelling.
+#
+# Level 1 rather than 3 costs this library nothing: all 38 TUs compile clean
+# at level 1 under -Werror, measured, 0 diagnostics. That is a property of
+# the code rather than a general truth. Measured next door for contrast:
+# libs/ctang's 61 source TUs give 588 diagnostics across 47 of them at the
+# same level, every one a downcast to a struct's initial member that C17
+# 6.7.2.1p15 makes well defined. Where that is the architecture this gate
+# cannot be coverage, only a statement that gcc's level 1 still works.
+ALIASING_WARN_CFLAGS := -Wstrict-aliasing=1
+ALIASING_CFLAGS := $(ALIASING_ASSUME_CFLAGS) $(ALIASING_WARN_CFLAGS)
+CFLAGS := -pedantic-errors -Wall -Wextra -Werror -Wno-error=unused-function -Wfatal-errors -std=c17 $(OPT_CFLAGS) $(ALIASING_CFLAGS) -g $(EXTRA_CFLAGS)
 # Library-specific compile flags (export symbols on Windows, PIC on Linux)
 # GRX_BUILD enables DLL export on Windows (checked by GRX_API macro)
 # GRX_TEST_BUILD enables export of internal functions for testing (checked by GRX_INTERNAL_API macro)
@@ -317,11 +387,18 @@ TESTFLAGS := `PKG_CONFIG_PATH=$(PKG_CONFIG_LOOKUP_PATH) pkg-config --libs --cfla
 # the count it must reach, because all three of "text is not installed", "the
 # suite was never fetched" and "the corpus is there but answered nothing"
 # used to exit 0.
+# check-aliasing is here because strict aliasing is the one undefined-
+# behaviour class nothing else in this library can see: the sanitizers do
+# not detect it at any optimisation level, so `make test-asan` and the
+# fuzzers are not covering it and never were. The static warning is the
+# only instrument, it now rides every C compile line, and this gate is what
+# says it is still armed. It costs one -fsyntax-only invocation.
 # Spelled as two variables so that dropping one gate is a thing you can say
 # on a command line. `TEST_GATES='$$(filter-out <gate>,$$(TEST_GATES))'` is
 # not: a command-line assignment is recursively expanded, so a TEST_GATES
 # that names itself is a recursion error rather than a subtraction.
-ALL_TEST_GATES := check-symbols check-layering check-unicode-tables \
+ALL_TEST_GATES := check-symbols check-layering check-aliasing \
+	check-unicode-tables \
 	check-diagnostics check-engine-equivalence check-json-schema-suite
 TEST_GATES ?= $(ALL_TEST_GATES)
 
@@ -714,7 +791,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 ####################################################################
 
 # General commands
-.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-diagnostics check-unicode-tables check-oracle-syntax check-oracle-match check-engine-equivalence check-oracle-perl check-oracle-perl-syntax check-oracle-script-runs check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
+.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-oracle-syntax check-oracle-match check-engine-equivalence check-oracle-perl check-oracle-perl-syntax check-oracle-script-runs check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
 	check-oracle-properties check-oracle-numeric-properties \
 	check-oracle-string-properties check-oracle-posix check-oracle-sed \
 	check-oracles \
@@ -1390,6 +1467,113 @@ else
 	@printf "check-symbols: skipped (Linux only)\n"
 endif
 
+check-aliasing: ## Fail if the strict-aliasing warning is no longer armed
+# $(ALIASING_CFLAGS) detects the violations; this proves it can still detect
+# one. The flags live in CFLAGS under -Werror, so a real violation fails the
+# build and no sweep is needed - but a DISARMED warning fails nothing and
+# looks exactly like a clean library. This library compiles clean at level 1
+# today, which means every single thing the gate has to say is said by
+# whether it can still refuse a violation it plants itself.
+#
+# Deliberately the real $(CFLAGS), not a copy. A control compiled with flags
+# written out beside it proves those flags work, which is not the question.
+#
+# THE SHAPE OF THE CONTROL IS LOAD-BEARING. What each level diagnoses depends
+# on the violation, and only some shapes separate level 1 from the rest.
+# Measured here with this tree's cc (Debian gcc 14.2.0) at -O2, counts of the
+# diagnostic:
+#
+#                                              L0  L1  L2  L3
+#   *(int *)&obj      known object, in place    0   1   1   1
+#   int *p = (int *)&obj; *p                    0   1   1   0
+#   int *p = (int *)f; *p   f a PARAMETER       0   1   0   0   <- this one
+#   punning through a void *                    0   0   0   0
+#
+# Two axes: taking the address of an object the compiler can see is what
+# level 2 needs, and routing the cast through a separate pointer variable is
+# what defeats level 3.
+#
+# THE REQUIREMENT, for anyone changing the level or the control: a control
+# for a gate at level N must be caught at N and MISSED at N+1. A control that
+# survives into the weaker level still passes after the gate has silently
+# fallen back to it, which is indistinguishable from working. This control is
+# a parameter cast through a variable - caught at 1, missed at 2 and 3 - so
+# it certifies level 1 specifically. Raise the level and it must be
+# respelled, or the gate passes green while asserting nothing. The row to
+# respell it to is the second: the known object through a pointer variable is
+# the only shape that certifies "2 and not 3". The first row is useless as a
+# probe at any level, because it fires from 1 upward and so distinguishes
+# nothing - which is the trap, since it is also the most natural way to write
+# a type pun. The last row is the standing limit: no level catches punning
+# through a void *, so a clean build is not evidence about that class at all.
+#
+# The warning is a gcc diagnostic. clang accepts -Wstrict-aliasing=0, =1 and
+# =2 in silence and implements nothing behind them - measured here: the
+# control passes clang at every level it accepts, and =3 it rejects outright
+# as an unknown option. So `make CC=clang` reaches this gate with the
+# aliasing flags on every compile line and no aliasing coverage behind them.
+# That is a true failure and the gate reports it, but the cause is the
+# compiler rather than the flags, so the message separates the two.
+check-aliasing: $(LIBVER_GEN)
+	@mkdir -p $(BUILD_DIR)
+	@printf '%s\n' \
+		'#include <stdint.h>' \
+		'int32_t grx_alias_control(float * f) {' \
+		'  int32_t * p = (int32_t *)f;' \
+		'  *f = 1.0f;' \
+		'  return *p;' \
+		'}' > $(BUILD_DIR)/alias_control.c
+# qrc below is read on the same line the compiler runs on, and must stay
+# there. Any $(...) evaluated in between - including one building the very
+# message that reports the status - replaces $? with the subshell's, and the
+# clang branch stops being selected. Adding a substitution to the lines above
+# it looks like editing prose.
+	@if $(CC) $(CFLAGS) $(INCLUDE) -fsyntax-only \
+			$(BUILD_DIR)/alias_control.c 2> $(BUILD_DIR)/alias_control.log; then \
+		qout=$$($(CC) -Q --help=warnings $(CFLAGS) 2>/dev/null); qrc=$$?; \
+		lvl=$$(printf '%s\n' "$$qout" \
+			| awk '/-Wstrict-aliasing=<0,3>/ { print $$2 }'); \
+		printf "\033[0;31mcheck-aliasing: %s accepted a planted type-punning violation, so this build has no aliasing coverage.\033[0m\n" "$$($(CC) --version 2>/dev/null | head -1)" >&2; \
+		if [ -z "$$lvl" ] && [ "$$qrc" = "0" ]; then \
+			printf '%s\n' \
+				'  -Q --help=warnings succeeded and named no -Wstrict-aliasing level at all, which is' \
+				'  neither compiler behaviour seen here. Do NOT read this as the clang case: check what' \
+				'  CFLAGS was actually passed before concluding anything about the warning.' >&2; \
+		elif [ -z "$$lvl" ]; then \
+			printf '%s\n' \
+				'  This compiler would not report an effective -Wstrict-aliasing level, which gcc gives' \
+				'  through -Q --help=warnings. Expect clang: it accepts -fstrict-aliasing' \
+				'  -Wstrict-aliasing=1 in silence and implements no such diagnostic, so the flags ride' \
+				'  every compile line of a clang build while detecting nothing. regex aliasing coverage' \
+				'  is gcc-only, and a clang run does not have it.' >&2; \
+		elif [ "$$lvl" = "1" ]; then \
+			printf '%s\n' \
+				'  The effective level is 1, which is the level that catches this violation. So the' \
+				'  flags are right and the compiler is not implementing them - that is clang, which' \
+				'  accepts -Wstrict-aliasing=1 in silence. regex aliasing coverage is gcc-only.' >&2; \
+		else \
+			printf '  The effective -Wstrict-aliasing level is %s, and only level 1 diagnoses this control.\n' "$$lvl" >&2; \
+			printf '%s\n' \
+				'  Levels 0, 2 and 3 are all silent on it, measured against this same file - so the' \
+				'  warning is at the WRONG LEVEL rather than missing, and ALIASING_CFLAGS is likely' \
+				'  untouched. What overrides it is a later EXPLICIT level, since an explicit level beats' \
+				'  the 3 that -Wall implies from either side. CFLAGS ends with EXTRA_CFLAGS, so' \
+				'  EXTRA_CFLAGS=-Wstrict-aliasing=3 does exactly this. Note that 3 is also what -Wall' \
+				'  implies on its own, so a level of 3 is equally what removing ALIASING_CFLAGS looks' \
+				'  like; 0 and 2 can only have been asked for.' >&2; \
+		fi; \
+		exit 1; \
+	fi
+# A compile that failed for some other reason - a missing header, a typo in
+# the printf above - would otherwise read as the gate passing, since the
+# `if` only asks whether the compiler was happy.
+	@if ! grep -q 'strict-aliasing' $(BUILD_DIR)/alias_control.log; then \
+		printf "\033[0;31mcheck-aliasing: the control failed to compile, but not for aliasing - so this says nothing about whether the warning is armed:\033[0m\n" >&2; \
+		cat $(BUILD_DIR)/alias_control.log >&2; \
+		exit 1; \
+	fi
+	@printf "\033[0;32mA planted type-punning violation is still refused by the library's own flags.\033[0m\n"
+
 test: ## Make and run the unit tests
 # The loop used to end with the test run itself, so the recipe exited with the
 # status of the LAST binary and every failure before it printed and was
@@ -1689,7 +1873,14 @@ FUZZ_CC_OK := $(shell which $(FUZZ_CC) 2>/dev/null)
 # The same list, so the fuzzer and the suite cannot disagree about what
 # counts as undefined. clang already has `float-cast-overflow` inside
 # `undefined`, so naming it changes nothing here and keeps one definition.
-FUZZ_SAN := -fsanitize=address,$(UBSAN_CHECKS) -fno-sanitize-recover=$(UBSAN_CHECKS) -fno-omit-frame-pointer -g -O1
+# $(ALIASING_ASSUME_CFLAGS) so that the fuzz tree compiles the library under
+# the same optimiser assumption the shipped one does. Only the assume half:
+# the fuzz compile line carries -w, so it is not a warning gate and the
+# -Wstrict-aliasing level would be discarded. FUZZ_CC is overridable and
+# clang defaults the assumption on from -O1, so naming it changes nothing
+# for the default clang tree and everything for a fuzz tree someone points
+# at gcc, which is off at -O1. The name is what makes that not matter.
+FUZZ_SAN := -fsanitize=address,$(UBSAN_CHECKS) -fno-sanitize-recover=$(UBSAN_CHECKS) -fno-omit-frame-pointer -g -O1 $(ALIASING_ASSUME_CFLAGS)
 FUZZ_LIB_FLAGS := $(FUZZ_SAN) -fsanitize=fuzzer-no-link
 FUZZ_BIN_FLAGS := $(FUZZ_SAN) -fsanitize=fuzzer
 FUZZ_DIR := $(BUILD_DIR)/fuzz

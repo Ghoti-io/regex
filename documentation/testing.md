@@ -1215,6 +1215,75 @@ Run by `make test` alongside `check-symbols`:
   reads, and `lower.c` is where the dialect is spent.
   **To check the gate itself:** put `GRX_Syntax x;` in `codegen.c`, or
   `regex->syntax` in `exec_pike.c`. Both must fail the build.
+- **The strict-aliasing warning is still armed.** `-fstrict-aliasing
+  -Wstrict-aliasing=1` ride every C compile line, under `-Werror`, so a real
+  violation fails the build and no sweep is needed. A *disarmed* warning
+  fails nothing and looks exactly like a clean library, which is what
+  `make check-aliasing` is for: it compiles a planted type-punning violation
+  with the library's own `$(CFLAGS)` and fails if the compiler accepts it.
+  **Built:** in `TEST_GATES`, one `-fsyntax-only` invocation.
+
+  This is the one undefined-behaviour class with no runtime instrument at
+  all, so `make test-asan` and every fuzzer are blind to it however they are
+  compiled. Measured rather than assumed, with a program that writes 7
+  through an `int32_t *`, writes `1.0f` through a `float *` aliasing the same
+  object, and reads the int back:
+
+  | build | result |
+  | --- | --- |
+  | `-O0`, no sanitizers | prints `1065353216` |
+  | `-O2`, no sanitizers | prints `7` |
+  | `-O1` and `-O2`, ASan+UBSan, gcc **and** clang | prints `7`, exits 0, says nothing |
+
+  The optimiser's answer already differs from the unoptimised one - the
+  violation is live at the level this library ships at - and four sanitizer
+  runs report no error at all. `text` measured the same blindness against
+  checks those sanitizers *do* catch (heap-use-after-free, stack overflow,
+  signed overflow, float-cast overflow, all caught at `-O1` and `-O2`),
+  which is what makes it a gap in the instrument rather than a quiet run.
+
+  The static warning is partial too: it does not follow a violation laundered
+  through a function boundary, and no level catches punning through a
+  `void *`.
+
+  The **level** is named because `-Wall` already sets one. `gcc -Q
+  --help=warnings -Wall` reports `-Wstrict-aliasing=3`, and level 3 is
+  silent on shapes level 1 rejects - so `-Wall` at `-O2` gave this library
+  the optimiser assumption with no warning behind it until the gate landed.
+  All 38 library translation units compile clean at level 1, measured; that
+  is a property of this code rather than a general one. For contrast,
+  `libs/ctang`'s 61 source translation units give 588 diagnostics across 47
+  of them at the same level, every one a downcast to a struct's initial
+  member that C17 6.7.2.1p15 makes well defined - where that is the
+  architecture, this gate could only ever say that level 1 still works.
+
+  **The shape of the control is load-bearing**, and the requirement for
+  anyone changing it is that a control for level N must be caught at N and
+  **missed at N+1** - one that survives into the weaker level still passes
+  after the gate has silently fallen back to it. Measured with this tree's
+  gcc 14.2 at `-O2`, counts of the diagnostic:
+
+  | control | L0 | L1 | L2 | L3 |
+  | --- | --- | --- | --- | --- |
+  | `*(int *)&obj`, a known object, in place | 0 | 1 | 1 | 1 |
+  | `int *p = (int *)&obj; *p` | 0 | 1 | 1 | 0 |
+  | `int *p = (int *)f; *p`, `f` a parameter - **this one** | 0 | 1 | 0 | 0 |
+  | punning through a `void *` | 0 | 0 | 0 | 0 |
+
+  The first row is useless as a probe at any level, because it fires from 1
+  upward and distinguishes nothing - which is the trap, since it is also the
+  most natural way to write a type pun. The last is the standing limit.
+
+  The warning is a gcc diagnostic: clang accepts `-Wstrict-aliasing=0`, `=1`
+  and `=2` in silence and implements nothing behind them, and rejects `=3`
+  as an unknown option. So `make CC=clang` reaches the gate with the flags
+  on every compile line and no coverage behind them; that is a true failure
+  and the message separates "the flags are wrong" from "the compiler does
+  not implement them".
+  **To check the gate itself:** `make check-aliasing
+  EXTRA_CFLAGS=-Wstrict-aliasing=3`. `CFLAGS` ends with `$(EXTRA_CFLAGS)`
+  and an explicit level beats `-Wall`'s implicit 3 from either side, so that
+  is the disarm vector, and it must fail.
 - **Every `GRX_Diag` has a string** and **some code path raises it**. The
   first half is `DiagnosticCatalogueIsComplete`, which is a statement about
   the table. The second is `make check-diagnostics`
@@ -1593,6 +1662,8 @@ when the gate changes:
 | `make fuzz-run-<h>` | a signed integer overflow on a reachable input | non-zero, UBSan report |
 | `check-symbols` | an exported function with no `namespace.h` entry | non-zero, naming the symbol |
 | `check-layering` | a `GRX_SYNTAX_` mention under `src/exec/` | non-zero, naming the file |
+| `check-aliasing` | `EXTRA_CFLAGS=-Wstrict-aliasing=3`, a later explicit level | non-zero, naming the effective level |
+| `check-aliasing` | `CC=clang`, which implements no such diagnostic | non-zero, naming the compiler rather than the flags |
 
 **The first binary, not the last**, is the point of the first two rows: the
 defect they guard against is invisible if the fault is injected at the end.
