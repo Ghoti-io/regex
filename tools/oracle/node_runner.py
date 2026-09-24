@@ -22,6 +22,13 @@ to where it lands in a batch - and a differential whose reference is
 order-dependent is not measuring anything it claims to. Every generator
 here therefore asks Node through this module.
 
+It is fixed in a later V8 and not in this one: the same reproducer run
+200 times in Chrome 153.0.8010.36 gives 1-4 every time, by a plain
+`.exec` and by a sticky one. Present in 12.4.254.21, gone by Chrome
+153's V8, and Node 22 carries the older branch. No public report
+matching it was found, so which change fixed it is unknown - the version
+boundary is measured, not read off a changelog.
+
 The defect itself is recorded in tools/corpus/VERSIONS and in
 documentation/dialects.md section 6, because a flag that quietly works
 around a reference bug is a fact about the reference that would otherwise

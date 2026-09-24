@@ -208,3 +208,15 @@ musl v1.2.6
 # says it measures. Every generator here asks Node through
 # tools/oracle/node_runner.py, which adds the flag and refuses to run
 # without it rather than falling back to a quietly order-dependent oracle.
+#
+# Fixed upstream, and not in the Node this tree pins. The same reproducer
+# run 200 times in Chrome 153.0.8010.36 - a much later V8 - gives 1-4 every
+# time, by a plain `.exec` and by a sticky one. So it is present in V8
+# 12.4.254.21 and gone by Chrome 153's V8, and Node 22 carries the older
+# branch. No public report matching it was found, so which change fixed it
+# is unknown; the version boundary is what was measured, not a changelog.
+#
+# That is the argument for the determinism gate rather than against the
+# flag: the flag stays needed for as long as the oracle is this Node, and
+# when Node moves to a V8 that has the fix the gate goes on passing and
+# nothing has to be remembered.
