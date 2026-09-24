@@ -2561,6 +2561,52 @@ TEST(Perl, AGraphemeClusterIsOneThingAndDoesNotComeApart) {
   EXPECT_EQ(span_of("\\X", "", GRX_SYNTAX_PERL), "nomatch");
 }
 
+TEST(Perl, AFalseRangeIsThreeMembersInPerlAndAnErrorInPcre2) {
+  // `[a-\d]` cannot be a range: one end is a set. Perl warns "False []
+  // range" and compiles it as three members - "a", a literal "-" and a
+  // digit - where pcre2test answers error 150, "invalid range in character
+  // class", and CPython raises "bad character range". Section 5.12 of
+  // documentation/dialects.md has carried that split since the table was
+  // written; the reader refused it for every dialect until a soak seed
+  // spelled `[a-\p{L}[[:alpha:]]`.
+  //
+  // Measured against perl 5.40.1 a member at a time, which is what says
+  // the `-` is really there and not swallowed.
+  EXPECT_EQ(span_of("[a-\\d]", "-", GRX_SYNTAX_PERL), "0-1");
+  EXPECT_EQ(span_of("[a-\\d]", "1", GRX_SYNTAX_PERL), "0-1");
+  EXPECT_EQ(span_of("[a-\\d]", "a", GRX_SYNTAX_PERL), "0-1");
+  EXPECT_EQ(span_of("[a-\\d]", "b", GRX_SYNTAX_PERL), "nomatch");
+
+  // Either end, and every spelling of a set: a class escape, a property
+  // and a POSIX class all do it, and so does a set at both ends.
+  EXPECT_EQ(span_of("[\\d-a]", "-", GRX_SYNTAX_PERL), "0-1");
+  EXPECT_EQ(span_of("[a-\\p{L}]", "-", GRX_SYNTAX_PERL), "0-1");
+  EXPECT_EQ(span_of("[a-\\p{L}]", "z", GRX_SYNTAX_PERL), "0-1");
+  EXPECT_EQ(span_of("[a-[:alpha:]]", "-", GRX_SYNTAX_PERL), "0-1");
+  EXPECT_EQ(span_of("[[:alpha:]-a]", "-", GRX_SYNTAX_PERL), "0-1");
+  EXPECT_EQ(span_of("[\\w-\\d]", "-", GRX_SYNTAX_PERL), "0-1");
+
+  // The row the seed spelled, which is a false range and a POSIX class in
+  // one collection.
+  EXPECT_EQ(span_of("[a-\\p{L}[[:alpha:]]", "a", GRX_SYNTAX_PERL), "0-1");
+  EXPECT_EQ(span_of("[a-\\p{L}[[:alpha:]]", "1", GRX_SYNTAX_PERL), "nomatch");
+
+  // PCRE2 and Python refuse every one of them, which is the other half of
+  // the rule and the reason this is a dialect flag rather than a change to
+  // the reader.
+  EXPECT_EQ(compile_result("[a-\\d]", GRX_SYNTAX_PCRE), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("[a-\\d]", GRX_SYNTAX_PYTHON), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("[a-\\p{L}]", GRX_SYNTAX_PCRE), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("[a-[:alpha:]]", GRX_SYNTAX_PCRE), GRX_ERR_SYNTAX);
+
+  // And a range that *is* one stays a range, in Perl as well: the flag is
+  // about an endpoint that is a set, not about the `-`. A reversed range
+  // is an error in perl too - "Invalid [] range" rather than the warning.
+  EXPECT_EQ(span_of("[a-z]", "b", GRX_SYNTAX_PERL), "0-1");
+  EXPECT_EQ(span_of("[a-z]", "-", GRX_SYNTAX_PERL), "nomatch");
+  EXPECT_EQ(compile_result("[z-a]", GRX_SYNTAX_PERL), GRX_ERR_SYNTAX);
+}
+
 int main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

@@ -1989,6 +1989,7 @@ static GRX_Result pcre_char_class(GRX_Parser * parser, uint32_t * out_node) {
     }
     if (parser->position >= quote_end && byte_at(parser, 0) == '-'
         && parser->position + 1 < parser->length) {
+      size_t dash = parser->position;
       parser->position++;
       skip_class_ignorable(parser, &quote_end);
       if (parser->position >= quote_end
@@ -2012,9 +2013,31 @@ static GRX_Result pcre_char_class(GRX_Parser * parser, uint32_t * out_node) {
       if (!high_is_item || !is_single(&low) || !is_single(&high)) {
         // pcre2test: "invalid range in character class". Both ends must be
         // single characters, which is where PCRE2 and Perl differ - Perl
-        // warns and takes the `-` as a literal.
-        return grx_parse_fail(parser, GRX_DIAG_CLASS_ESCAPE_IN_RANGE,
-            low.offset, parser->position - low.offset);
+        // warns "False [] range" and takes the `-` as a literal, so the
+        // three become members of their own. `high_is_item` is the other
+        // question and is not this one: nothing was read, so there is no
+        // third member to add and no endpoint to be false about.
+        if (!high_is_item || !parser->spec.false_range_is_union) {
+          return grx_parse_fail(parser, GRX_DIAG_CLASS_ESCAPE_IN_RANGE,
+              low.offset, parser->position - low.offset);
+        }
+        GRX_ClassItem dash_item = {
+          .kind = GRX_CLASS_ITEM_SINGLE,
+          .flags = 0,
+          .lo = '-',
+          .hi = 0,
+          .a = 0,
+          .offset = dash,
+          .length = 1,
+        };
+        if ((result = grx_parse_class_add(parser, *out_node, &low)) != GRX_OK
+            || (result = grx_parse_class_add(parser, *out_node, &dash_item))
+                != GRX_OK
+            || (result = grx_parse_class_add(parser, *out_node, &high))
+                != GRX_OK) {
+          return result;
+        }
+        continue;
       }
       if (low.lo > high.lo) {
         return grx_parse_fail(parser, GRX_DIAG_INVALID_CLASS_RANGE, low.offset,

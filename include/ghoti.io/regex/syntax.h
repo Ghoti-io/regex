@@ -315,6 +315,25 @@ typedef struct GRX_SyntaxSpec {
    * and the question is one line of it.
    */
   int condition_group_may_be_absent;
+  /**
+   * Non-zero when a range endpoint that is a class makes the `-` a literal.
+   *
+   * `[a-\d]` is three members in Perl - "a", a literal "-" and a digit -
+   * and an error in PCRE2 and in Python. Perl warns "False [] range" and
+   * compiles; pcre2test answers error 150, "invalid range in character
+   * class". Every spelling of a multi-character endpoint does the same
+   * thing there: `\d`, `\s`, `\w` and their negations, `\p{L}`, and
+   * `[:alpha:]`, at either end or at both. It is ECMAScript's Annex B rule
+   * as well, where the `u` flag is what turns it back into an error, so
+   * the reader already had the path; this flag is what lets the shared
+   * Perl-family reader take it.
+   *
+   * It does not extend to a *reversed* range - `[z-a]` is an error in all
+   * of them - or to an endpoint that is a quote boundary: perl answers
+   * `[a-\E]` with "Invalid [] range", which is an error and not this
+   * warning.
+   */
+  int false_range_is_union;
 } GRX_SyntaxSpec;
 
 /**

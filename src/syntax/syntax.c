@@ -162,6 +162,13 @@ static const GRX_SyntaxSpec spec_table[GRX_SYNTAX_COUNT] = {
     // this row simply has it on - which is the whole of the difference, so
     // there is no second mechanism.
     .default_options = GRX_OPT_UTF | GRX_OPT_DUPLICATE_NAMES,
+    // `[a-\d]` is "a", a literal "-" and a digit in perl, which warns
+    // "False [] range" and compiles; pcre2test refuses the same pattern
+    // with error 150 and CPython raises "bad character range". Section
+    // 5.12 of documentation/dialects.md has said so since the table was
+    // written, and the reader refused it for every dialect until a soak
+    // seed spelled `[a-\p{L}[[:alpha:]]`.
+    .false_range_is_union = 1,
   },
   [GRX_SYNTAX_PCRE] = {
     // CSET is `(?[...])` here, not `&&` inside brackets: PCRE2 10.45 added
