@@ -947,21 +947,22 @@ check-oracle-soak: $(TOOLS)
 		exit 0; \
 	fi; \
 	status=0; \
+	out=$$(mktemp); \
 	last=$$(( $(SOAK_FROM) + $(SOAK_SEEDS) - 1 )); \
 	for seed in $$(seq $(SOAK_FROM) $$last); do \
 		for tool in match_diff perl_diff python_diff vim_diff posix_diff \
 				iterate_diff replace_diff split_diff window_diff \
 				engine_diff; do \
 			if ! python3 tools/oracle/$$tool.py --seed $$seed \
-					--patterns $(ORACLE_PATTERNS) > $(BUILD_DIR)/soak.out 2>&1; then \
+					--patterns $(ORACLE_PATTERNS) > $$out 2>&1; then \
 				printf "\033[0;31m### %s disagreed at seed %d ###\033[0m\n" \
 					"$$tool" "$$seed" >&2; \
-				cat $(BUILD_DIR)/soak.out >&2; \
+				cat $$out >&2; \
 				status=1; \
 			fi; \
 		done; \
 	done; \
-	rm -f $(BUILD_DIR)/soak.out; \
+	rm -f $$out; \
 	if [ $$status -eq 0 ]; then \
 		printf "The generating differentials agree over %d seeds.\n" \
 			"$(SOAK_SEEDS)"; \
