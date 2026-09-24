@@ -218,6 +218,40 @@ def is_glibc_backreference_defect(pattern, them, us):
         and any(a == "-" and b != "-" for a, b in zip(theirs, mine)))
 
 
+STACKED_PLUS = re.compile(r"(?:[*+?}]|\\[*+?}])\\?\+")
+
+
+def is_glibc_stacked_plus_defect(pattern, them, us):
+    """glibc keeps an empty final iteration under a stacked `+` and not
+    otherwise.
+
+    `(a|)?+` over "aaaa" is 0-4 in glibc with group one at **4-4**, the
+    empty span at the end. The same construct written out - `((a|)?)+` - is
+    0-4 with group one at 3-4 there, and so is `(a|)?*`, and so is
+    `(a|)+`. An extended RE stacks quantifiers freely and `a?+` *is*
+    `(a?)+`, so those are two spellings of one pattern and glibc answers
+    them differently.
+
+    This library answers every spelling the same way, which is the one
+    glibc gives for all but this one. The rule is narrow: the pattern holds
+    a quantifier stacked on a quantifier whose outer one is `+`, glibc put
+    the group at the empty span where the match ends, and this library put
+    it somewhere else.
+    """
+    if not STACKED_PLUS.search(pattern):
+        return False
+    if not them.startswith("match ") or not us.startswith("match "):
+        return False
+    theirs = them.split()
+    mine = us.split()
+    if len(theirs) < 2 or len(theirs) != len(mine) or theirs[1] != mine[1]:
+        return False
+    end = theirs[1].split(":")[1]
+    empty_at_end = "%s:%s" % (end, end)
+    return any(a == empty_at_end and a != b
+        for a, b in zip(theirs[2:], mine[2:]))
+
+
 def find(name):
     for platform in ("linux", "mac", "win64", "win32"):
         for build in ("release", "debug"):
@@ -284,6 +318,10 @@ def compare(dialect, seed, patterns, examples):
             known += 1
             continue
         if is_glibc_backreference_defect(
+                pattern, expected, normalise_ours(us)):
+            defect += 1
+            continue
+        if is_glibc_stacked_plus_defect(
                 pattern, expected, normalise_ours(us)):
             defect += 1
             continue
