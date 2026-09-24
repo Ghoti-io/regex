@@ -157,7 +157,19 @@ def compare(driver, syntax, rng, patterns, subjects, examples):
 
     disagreements = []
     compared = 0
-    single = 0
+    # Two causes, counted apart. They were one number under the label
+    # "refused, or only one engine can run them", and an aggregate covering
+    # two reasons reads the same whether or not both are still justified: a
+    # regression that started refusing patterns this library used to compile
+    # would shrink `compared`, grow this number, and leave "0 disagreements"
+    # standing over a smaller comparison, with a label that already explains
+    # it away. They are separate branches below, so the split costs nothing.
+    refused = 0
+    single_engine = 0
+    # A pattern either has a syntax error or it does not, so every engine
+    # should refuse it or none should. This counts the rows where that is
+    # untrue, which no counter here could previously express.
+    mixed_refusal = []
 
     for index, (flags, pattern, subject) in enumerate(rows):
         lines = {engine: answers[engine][index] for engine in ENGINES}
@@ -174,13 +186,21 @@ def compare(driver, syntax, rng, patterns, subjects, examples):
         # A pattern nobody could compile says nothing about any engine. A
         # program only one engine can run is not a program two engines can
         # both run, so the invariant says nothing about it either.
-        if any(line.startswith("compile") for line in lines.values()):
-            single += 1
+        refusing = [engine for engine, line in lines.items()
+                    if line.startswith("compile")]
+        if refusing:
+            # Counted apart so that "refused by every engine" is exactly
+            # true of the number printed under that name. A mixed row is
+            # not one of those and stops the run below.
+            if len(refusing) == len(ENGINES):
+                refused += 1
+            else:
+                mixed_refusal.append((flags, pattern, subject, lines))
             continue
         able = {engine: line for engine, line in lines.items()
                 if not line.startswith("unsupported")}
         if len(able) < 2:
-            single += 1
+            single_engine += 1
             continue
 
         compared += 1
@@ -209,9 +229,22 @@ def compare(driver, syntax, rng, patterns, subjects, examples):
           % (syntax + ":", len(rows), compared, len(disagreements)))
     print("%-11s ran: %s" % ("",
         ", ".join("%s %d" % (engine, ran[engine]) for engine in ENGINES)))
-    if single:
-        print("%-11s %d skipped: refused, or only one engine can run them"
-              % ("", single))
+    if refused or single_engine:
+        print("%-11s %d skipped: %d refused by every engine, %d runnable by "
+              "only one" % ("", refused + single_engine, refused,
+                            single_engine))
+    if mixed_refusal:
+        sys.stderr.write("%s: %d rows where some engines refused the pattern "
+            "and others compiled it. A syntax error does not depend on which "
+            "engine was asked, so this is a disagreement that used to be "
+            "counted as a skip.\n" % (syntax, len(mixed_refusal)))
+        for flags, pattern, subject, lines in mixed_refusal[:examples]:
+            sys.stderr.write("  /%s/%s on %s\n"
+                % (pattern, flags, json.dumps(subject)))
+            for engine in ENGINES:
+                sys.stderr.write("    %-10s %s\n"
+                    % (engine + ":", lines[engine]))
+        return None
     if sum(1 for engine in ENGINES if ran[engine]) < 2:
         sys.stderr.write(
             "%s: fewer than two engines ran anything, so nothing was "
