@@ -36,6 +36,11 @@ uint32_t flags_to_options(const std::string & flags) {
       case 'm': options |= GRX_OPT_MULTILINE; break;
       case 's': options |= GRX_OPT_DOTALL; break;
       case 'u': options |= GRX_OPT_UTF; break;
+      // Separate from `u`, because the shorthands and the POSIX classes
+      // widen on UCP and the folding widens on UTF. A letter this table
+      // does not know is silently ignored, so a test that wrote `uP` and
+      // meant it got `u` and passed for the wrong reason.
+      case 'P': options |= GRX_OPT_UCP; break;
       default: break;
     }
   }
@@ -431,6 +436,67 @@ TEST(Lower, OnlyECMAScriptWidensAShorthandByFolding) {
   EXPECT_EQ(spans(Compiled("[\\w]", "iu"), long_s), "0:2");
   EXPECT_EQ(spans(Compiled("x\\b", "iu"), "x" + kelvin), "nomatch");
   EXPECT_EQ(spans(Compiled("s\\b", "iu"), "s" + long_s), "1:3");
+}
+
+TEST(Lower, ACaselessModeCollapsesTheTwoPosixCaseClasses) {
+  // `[:lower:]` and `[:upper:]` name one set under a caseless flag, and no
+  // class named by a name is otherwise moved by folding. The collapse is a
+  // union of the two at the current width, not a closure of either, and
+  // U+05D0 is the subject that says so: alphabetic and uncased, refused by
+  // `(?i)[[:lower:]]` in perl and pcre2test where `[[:alpha:]]` takes it.
+  const std::string long_s = "\xC5\xBF";        // U+017F, Ll
+  const std::string kelvin = "\xE2\x84\xAA";    // U+212A, Lu
+  const std::string e_acute_upper = "\xC3\x89"; // U+00C9, Lu
+  const std::string alef = "\xD7\x90";          // U+05D0, Lo
+
+  // The collapse, at the ASCII width.
+  EXPECT_EQ(spans(Compiled("(?i)[[:lower:]]", "u", nullptr, GRX_SYNTAX_PCRE),
+      "A"), "0:1");
+  EXPECT_EQ(spans(Compiled("(?i)[[:upper:]]", "u", nullptr, GRX_SYNTAX_PCRE),
+      "a"), "0:1");
+  EXPECT_EQ(spans(Compiled("(?ai)[[:lower:]]", "", nullptr, GRX_SYNTAX_PERL),
+      "A"), "0:1");
+
+  // And no reach past it. `(?i)[[:alpha:]]` over U+017F is no match in
+  // pcre2test and in perl under `/ai`, and was 0-2 here.
+  EXPECT_EQ(spans(Compiled("(?i)[[:alpha:]]", "u", nullptr, GRX_SYNTAX_PCRE),
+      long_s), "nomatch");
+  EXPECT_EQ(spans(Compiled("(?i)[[:lower:]]", "u", nullptr, GRX_SYNTAX_PCRE),
+      long_s), "nomatch");
+  EXPECT_EQ(spans(Compiled("(?i)[[:lower:]]", "u", nullptr, GRX_SYNTAX_PCRE),
+      kelvin), "nomatch");
+  EXPECT_EQ(spans(Compiled("(?ai)[[:lower:]]", "", nullptr, GRX_SYNTAX_PERL),
+      long_s), "nomatch");
+
+  // At the Unicode width the same union is `Ll` with `Lu`, so every cased
+  // letter is in and U+05D0 is not. Measure perl for this with the subject
+  // upgraded: below U+0100 an unupgraded string gets ASCII semantics, which
+  // is perl's documented Unicode bug and which read U+00C9 as "no match"
+  // here until the strings were upgraded.
+  EXPECT_EQ(spans(Compiled("(?i)[[:lower:]]", "", nullptr, GRX_SYNTAX_PERL),
+      long_s), "0:2");
+  EXPECT_EQ(spans(Compiled("(?i)[[:lower:]]", "", nullptr, GRX_SYNTAX_PERL),
+      kelvin), "0:3");
+  EXPECT_EQ(spans(Compiled("(?i)[[:lower:]]", "", nullptr, GRX_SYNTAX_PERL),
+      e_acute_upper), "0:2");
+  EXPECT_EQ(spans(Compiled("(?i)[[:lower:]]", "", nullptr, GRX_SYNTAX_PERL),
+      alef), "nomatch");
+  EXPECT_EQ(spans(Compiled("[[:alpha:]]", "", nullptr, GRX_SYNTAX_PERL),
+      alef), "0:2");
+
+  // glibc and musl both collapse them too - `[[:lower:]]` under REG_ICASE
+  // matches "A" in each - so the POSIX rows follow the same rule.
+  EXPECT_EQ(spans(Compiled("[[:lower:]]", "i", nullptr, GRX_SYNTAX_POSIX_ERE),
+      "A"), "0:1");
+
+  // Without a caseless flag the two stay apart, which is the control: a
+  // change that simply unioned them would pass every line above.
+  EXPECT_EQ(spans(Compiled("[[:lower:]]", "u", nullptr, GRX_SYNTAX_PCRE),
+      "A"), "nomatch");
+  EXPECT_EQ(spans(Compiled("[[:upper:]]", "u", nullptr, GRX_SYNTAX_PCRE),
+      "a"), "nomatch");
+  EXPECT_EQ(spans(Compiled("[[:lower:]]", "", nullptr, GRX_SYNTAX_POSIX_ERE),
+      "A"), "nomatch");
 }
 
 TEST(Lower, TheWordSetIsReDerivedWhenAModifierMovesIt) {

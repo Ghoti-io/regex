@@ -174,13 +174,8 @@ static GRX_Result add_property_named(Lowering * low, const char * name,
  * `[[:graph:]]` that quietly means "printable ASCII" under `(*UCP)` is a
  * wrong answer wearing a right one's clothes.
  */
-static GRX_Result posix_class_set(Lowering * low, const GRX_ClassItem * item,
+static GRX_Result posix_class_named_set(Lowering * low, const char * name,
     const GRX_Node * node, GRX_CharClass * out) {
-  const char * name = grx_pattern_name(low->pattern, item->a);
-  if (!name) {
-    return fail(low, GRX_DIAG_INTERNAL, node);
-  }
-
   // Not `low->shorthands`, which UTF alone widens. pcre2pattern is explicit
   // that the POSIX classes use Unicode "only if PCRE2_UCP is set", so
   // `(*UTF)[[:alpha:]]` is ASCII and `(*UTF)(*UCP)[[:alpha:]]` is not. Perl
@@ -304,6 +299,61 @@ static GRX_Result posix_class_set(Lowering * low, const GRX_ClassItem * item,
     }
   }
 
+  return GRX_OK;
+}
+
+
+/**
+ * A POSIX class, with the case classes collapsed when the mode is caseless.
+ *
+ * `[:lower:]` and `[:upper:]` name one set under a caseless flag, and no
+ * class named by a name is otherwise moved by folding. The collapse is a
+ * union of the two classes *at the current width* and not a fold closure
+ * of either, which one subject settles: U+05D0, alphabetic and uncased,
+ * is refused by `(?i)[[:lower:]]` in perl and in pcre2test while
+ * `[[:alpha:]]` takes it, so the caseless class is not "the letters".
+ *
+ * | | "A" | U+017F `Ll` | U+212A `Lu` | U+00C9 `Lu` | U+05D0 `Lo` |
+ * | --- | --- | --- | --- | --- | --- |
+ * | perl `/ai`, ASCII width | match | no | no | no | no |
+ * | perl `/i`, Unicode width | match | match | match | match | no |
+ * | pcre2test `(?i)`, ASCII width | match | no | no | no | no |
+ *
+ * Every cell is lower-union-upper at that row's width. Measure perl with
+ * `utf8::upgrade` on the subject or not at all: below U+0100 an unupgraded
+ * string gets ASCII semantics, which is perl's documented Unicode bug and
+ * which made U+00C9 read as "no" here until the strings were upgraded.
+ *
+ * `(*UCP)(?i)[[:lower:]]` over "A" is where pcre2 parts from perl - no
+ * match there, match here and in perl. pcre2 collapses the two classes at
+ * its ASCII width and not at its Unicode one, which is its bitmap showing
+ * through rather than a rule a second implementation can take.
+ * documentation/dialects.md section 6 carries it.
+ */
+static GRX_Result posix_class_set(Lowering * low, const GRX_ClassItem * item,
+    const GRX_Node * node, GRX_CharClass * out) {
+  const char * name = grx_pattern_name(low->pattern, item->a);
+  if (!name) {
+    return fail(low, GRX_DIAG_INTERNAL, node);
+  }
+  GRX_Result result = posix_class_named_set(low, name, node, out);
+  if (result != GRX_OK || low->fold == GRX_FOLD_NONE
+      || (item->flags & GRX_CLASS_ITEM_NO_FOLD)) {
+    // Vim is the one dialect here that makes no collapse, and it already
+    // says so per item: `\c[a-z]` matches "A" and `\c[[:lower:]]` does
+    // not, a collection being a set of code points there and a named class
+    // a predicate. That is what GRX_CLASS_ITEM_NO_FOLD was written for, so
+    // it decides this too rather than a second field saying the same thing.
+    // glibc, musl, perl and pcre2 all collapse - `[[:lower:]]` under
+    // REG_ICASE matches "A" in both C libraries.
+    return result;
+  }
+  if (strcmp(name, "lower") == 0) {
+    return posix_class_named_set(low, "upper", node, out);
+  }
+  if (strcmp(name, "upper") == 0) {
+    return posix_class_named_set(low, "lower", node, out);
+  }
   return GRX_OK;
 }
 
@@ -473,7 +523,15 @@ static GRX_Result evaluate_class(
       // pcre2test, perl and CPython and was 0-2 here, while `(?i)[a-z]`
       // over the same character matches in all four, which is why the
       // route is the item's and not the class's.
+      //
+      // A POSIX class takes the same route always, and closes itself under
+      // ASCII folding instead - see posix_class_set. There is no dialect
+      // here where a caseless mode reaches past the name: `(?i)[[:alpha:]]`
+      // over U+017F is no match in pcre2test and in perl under `/ai`, and
+      // `(?i)[[:lower:]]` over U+00C9 is no match in perl with its classes
+      // Unicode, where a full closure would have taken it.
       const int unfolded_item = (item->flags & GRX_CLASS_ITEM_NO_FOLD)
+          || item->kind == GRX_CLASS_ITEM_POSIX
           || (item->kind == GRX_CLASS_ITEM_SHORTHAND
               && !low->profile.caseless_widens_shorthands);
       result = grx_charclass_union(unfolded_item ? &unfolded : out, &piece,

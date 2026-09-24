@@ -296,6 +296,15 @@ int main(int argc, char ** argv) {
         case 'm': options |= GRX_OPT_MULTILINE; break;
         case 's': options |= GRX_OPT_DOTALL; break;
         case 'u': options |= GRX_OPT_UTF; break;
+        // Perl's `/a` and Python's `re.ASCII`. Here because a letter this
+        // table does not know is *silently ignored*, so a generator that
+        // ever put one in a flag set would have this driver answering a
+        // different question from the reference - agreement and
+        // disagreement both meaning nothing. No generator spells it yet:
+        // perl_diff.py reaches the mode through `(?a)` inside the pattern,
+        // and it cannot go in a shared flag set while pcre2's side of that
+        // run has no `a` option built (WP-46).
+        case 'a': options |= GRX_OPT_ASCII_CLASSES; break;
         // Separate from `u`, because PCRE2 separates them and the pair is
         // the axis this library got wrong: `\w`, `\d` and `\s` widen on
         // UCP and the case folding widens on UTF.

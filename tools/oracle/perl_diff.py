@@ -50,6 +50,11 @@ SHARED_ATOMS = [
     "a", "b", ".", "\\.", "\\n", "\\t",
     # Classes, in all three spellings the dialect has.
     "[ab]", "[^a]", "[a-c]", "[]a]", "[[:alpha:]]", "[[:^digit:]]",
+    # A case class, which `[[:alpha:]]` cannot stand in for: a caseless
+    # mode makes `[:lower:]` and `[:upper:]` name one set, and whether it
+    # does so past ASCII is the question the two subjects above were added
+    # for. It is also where pcre2 and perl part - see reference_defect.
+    "[[:lower:]]",
     "\\d", "\\D", "\\w", "\\W", "\\s", "\\S",
     # Groups, named and not.
     "(a)", "(?:a)", "(?<n>a)", "(?'m'a)", "(a|b)", "(a|)", "()",
@@ -209,8 +214,17 @@ PCRE_ONLY = [
 ]
 
 
+# U+017F and U+212A are here for one question the other eighteen cannot
+# ask: whether a caseless mode widens a *shorthand* the way it widens a
+# literal. Both fold to an ASCII letter, so a `\w` closed under folding
+# reaches them and an unclosed one does not, and "x" U+212A puts the same
+# question to `\b` from the other side. Neither this gate nor the
+# conformance corpus held such a character, and the library widened the
+# shorthands in every dialect - ECMA-262's rule applied to perl, pcre2 and
+# CPython alike - with both gates green throughout.
 SUBJECTS = ["", "a", "b", "ab", "aab", "abc", "aaa", "a.b", "A", "AB", "aA",
-            "\n", "a\nb", "abab", "ababaaa", "aaaa", "a b", "é", "ab\n"]
+            "\n", "a\nb", "abab", "ababaaa", "aaaa", "a b", "é", "ab\n",
+            "\u017f", "x\u212a"]
 
 # `x` is left out on purpose: grx_match maps flag letters to GRX_Option bits
 # and has no GRX_OPT_EXTENDED among them, so a row with `x` would be asking
@@ -423,7 +437,8 @@ def library_deviation(pattern, them, us):
         and CALL_SPELLING.search(pattern) is not None)
 
 
-def reference_defect(dialect, pattern, them, subject=None, ours=None):
+def reference_defect(dialect, pattern, them, subject=None, ours=None,
+        flags=None):
     r"""Rows where the *reference* is known to be wrong.
 
     Counted and reported rather than silently dropped, and written as
@@ -483,6 +498,22 @@ def reference_defect(dialect, pattern, them, subject=None, ours=None):
         if boundary_end_of_subject(pattern, them, subject, ours):
             return True
         return "(?|" in pattern and ("\\g{-" in pattern or "(?(" in pattern)
+    if (flags and "P" in flags and "i" in flags
+            and ("[:lower:]" in pattern or "[:upper:]" in pattern)
+            and them == "nomatch" and ours and ours.startswith("match ")):
+        # pcre2 collapses `[:lower:]` and `[:upper:]` into one class under a
+        # caseless flag at its ASCII width and not at its Unicode one:
+        # `(?i)[[:lower:]]` matches "A" and `(*UCP)(?i)[[:lower:]]` does
+        # not, though `(*UCP)(?i)[[:lower:]]` does match U+017F, which is
+        # `Ll` on its own account. perl collapses them at both widths -
+        # `/ai` takes "A" and `/i` takes "A", U+017F, U+212A and U+00C9 -
+        # and refuses U+05D0 in both, so the collapse is a union of the two
+        # classes and not "the letters". A class that answers the same
+        # question two ways according to whether `UCP` is set is pcre2's
+        # ASCII bitmap showing through rather than a rule a second
+        # implementation can follow; this library is perl's here.
+        # documentation/dialects.md section 6.
+        return True
     return (them.startswith("compile") and "(?[" in pattern
         and ("(?<=" in pattern or "(?<!" in pattern or "(*nlb:" in pattern
             or "(*plb:" in pattern or "(*naplb:" in pattern))
@@ -561,7 +592,7 @@ def compare(dialect, ours, seed, patterns, examples):
         if trim_unset(normalise_ours(us)) == trim_unset(them):
             continue
         if reference_defect(dialect, pattern, them, subject,
-                trim_unset(normalise_ours(us))):
+                trim_unset(normalise_ours(us)), flags):
             known += 1
             continue
         if dialect == "perl" and holds_quoting(pattern):
