@@ -397,7 +397,7 @@ def write_file(path, dialect, corpus, oracle_line, note, records):
         "",
         "",
     ]
-    with open(path, "w", encoding="utf-8") as handle:
+    with open(path, "w", encoding="utf-8", newline="\n") as handle:
         handle.write("\n".join(header))
         handle.write("\n".join(records))
 

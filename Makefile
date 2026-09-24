@@ -419,7 +419,7 @@ TESTFLAGS := `PKG_CONFIG_PATH=$(PKG_CONFIG_LOOKUP_PATH) pkg-config --libs --cfla
 # not: a command-line assignment is recursively expanded, so a TEST_GATES
 # that names itself is a recursion error rather than a subtraction.
 ALL_TEST_GATES := check-symbols check-layering check-aliasing \
-	check-unicode-tables check-dump-names \
+	check-unicode-tables check-dump-names check-readme-example \
 	check-diagnostics check-engine-equivalence check-json-schema-suite
 TEST_GATES ?= $(ALL_TEST_GATES)
 
@@ -812,7 +812,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 ####################################################################
 
 # General commands
-.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-dump-names check-oracle-syntax check-oracle-match check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-perl-syntax check-oracle-script-runs check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
+.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-dump-names check-readme-example check-oracle-syntax check-oracle-match check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-perl-syntax check-oracle-script-runs check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
 	check-oracle-properties check-oracle-numeric-properties \
 	check-oracle-string-properties check-oracle-posix check-oracle-sed \
 	check-oracles \
@@ -1431,6 +1431,38 @@ check-dump-names: ## Fail if a dump's name table is shorter than its enum
 		exit 0; \
 	fi; \
 	python3 tools/check_dump_names.py
+
+check-readme-example: ## Fail if the README's example does not compile and run
+# tests/unit/test_docs.cpp asks whether the example's pattern and subject
+# still answer what the prose says, and it cannot ask whether the code
+# *compiles*: a test binary has no compiler in it. That was the half of the
+# check that was missing, and it is the half an API change breaks - a
+# renamed field or a changed signature leaves the page saying something
+# that has not built for months.
+#
+# Compiled against the tree rather than an installed prefix, which is the
+# one difference from what a reader would do: they would ask pkg-config,
+# and pkg-config would hand them these same headers.
+check-readme-example: $(APP_DIR)/$(STATIC_TARGET) | $(APP_DIR)/$(TARGET)
+	@mkdir -p $(BUILD_DIR)/docs
+	@awk '/^## Example/{found=1} found && /^```c$$/{copy=1; next} \
+		copy && /^```$$/{exit} copy' README.md > $(BUILD_DIR)/docs/readme_example.c
+	@if [ ! -s $(BUILD_DIR)/docs/readme_example.c ]; then \
+		printf "\033[0;31m\n### The README has no example to compile ###\033[0m\n" >&2; \
+		exit 1; \
+	fi
+	@$(CC) $(CFLAGS) $(INCLUDE) -o $(BUILD_DIR)/docs/readme_example \
+		$(BUILD_DIR)/docs/readme_example.c $(LDFLAGS) $(REGEXLIBRARY) \
+		$(CUTIL_LIBS) || { \
+		printf "\033[0;31m\n### The README's example does not compile ###\033[0m\n" >&2; \
+		exit 1; \
+	}
+	@out=$$(LD_LIBRARY_PATH="$(TEST_LD_PATH)" $(BUILD_DIR)/docs/readme_example); \
+	if [ "$$out" != "Corey" ]; then \
+		printf "\033[0;31m\n### The README's example printed %s, not Corey ###\033[0m\n" "$$out" >&2; \
+		exit 1; \
+	fi; \
+	printf "The README example compiles, runs and prints Corey.\n"
 
 check-unicode-tables: ## Fail if the committed Unicode tables are not what the generator produces
 	@if ! command -v python3 >/dev/null 2>&1; then \

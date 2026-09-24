@@ -284,7 +284,7 @@ def main(argv):
     path = args.out or os.path.join(ROOT, "tests", "data", "probe",
         "report.md")
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as out:
+    with open(path, "w", encoding="utf-8", newline="\n") as out:
         out.write(report)
 
     sys.stderr.write("%s: %d cases across %d implementations (%d skipped)\n"

@@ -366,7 +366,7 @@ def emit(out_dir, ref, verdict_cases, harvest_cases, stats, subject_count):
                         + "flags: " + flags + "\n"
                         + "expect: error syntax\n")
         path = os.path.join(out_dir, "test262_syntax.rxt")
-        with open(path, "w", encoding="utf-8") as out:
+        with open(path, "w", encoding="utf-8", newline="\n") as out:
             out.write(header)
             out.write("# oracle: %s\n" % version.replace("\n", "; "))
             out.write("#\n"
@@ -401,7 +401,7 @@ def emit(out_dir, ref, verdict_cases, harvest_cases, stats, subject_count):
         body.append(make_vectors.record_for(flags, pattern, subject, answer))
 
     path = os.path.join(out_dir, "test262_patterns.rxt")
-    with open(path, "w", encoding="utf-8") as out:
+    with open(path, "w", encoding="utf-8", newline="\n") as out:
         out.write(header)
         out.write("# oracle: %s\n" % version.replace("\n", "; "))
         out.write("#\n"

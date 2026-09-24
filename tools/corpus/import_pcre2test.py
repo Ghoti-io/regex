@@ -273,7 +273,7 @@ def main(argv):
         stats["accepted" if accepted else "rejected"] += 1
 
     path = os.path.join(out_dir, "testinput.rxt")
-    with open(path, "w", encoding="utf-8") as out:
+    with open(path, "w", encoding="utf-8", newline="\n") as out:
         out.write("# imported by tools/corpus/import_pcre2test.py\n")
         out.write("# corpus: PCRE2 %s, testdata/testinput1 and testinput2\n"
             % ref)

@@ -241,7 +241,7 @@ def main(argv):
         body.append("\n".join(record) + "\n")
 
     path = os.path.join(out_dir, "re_tests.rxt")
-    with open(path, "w", encoding="utf-8") as out:
+    with open(path, "w", encoding="utf-8", newline="\n") as out:
         out.write("# imported by tools/corpus/import_re_tests.py\n")
         out.write("# corpus: Perl %s, t/re/re_tests\n" % ref)
         out.write("# oracle: %s\n" % version.replace("\n", "; "))

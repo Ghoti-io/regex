@@ -1341,7 +1341,7 @@ def intersect(a, b):
 
 def write_header(out_dir, tables):
     path = os.path.join(out_dir, "tables_internal.h")
-    with open(path, "w", encoding="utf-8") as out:
+    with open(path, "w", encoding="utf-8", newline="\n") as out:
         out.write(HEADER_NOTICE % tables["version"])
         out.write("""
 #ifndef GHOTI_IO_GRX_SRC_UNICODE_TABLES_TABLES_INTERNAL_H
@@ -1743,7 +1743,7 @@ def write_ranges(out_dir, tables):
         + [(normalise_loose(name), KIND_NV, 0)
            for name in ("Numeric_Value", "nv")]))
 
-    with open(path, "w", encoding="utf-8") as out:
+    with open(path, "w", encoding="utf-8", newline="\n") as out:
         out.write(HEADER_NOTICE % tables["version"])
         out.write('\n#include "tables_internal.h"\n\n')
 
@@ -1849,7 +1849,7 @@ def write_case(out_dir, tables):
         out.write("const size_t grx_unicode_full_fold_count = %d;\n\n"
                   % len(full))
 
-    with open(path, "w", encoding="utf-8") as out:
+    with open(path, "w", encoding="utf-8", newline="\n") as out:
         out.write(HEADER_NOTICE % tables["version"])
         out.write('\n#include "tables_internal.h"\n\n')
         emit_map(out, "grx_unicode_fold_map", tables["folds"])
@@ -1872,7 +1872,7 @@ def write_case(out_dir, tables):
 def write_breaks(out_dir, tables):
     """The five break-property tables, one flat sorted array each."""
     path = os.path.join(out_dir, "tables_break.c")
-    with open(path, "w", encoding="utf-8") as out:
+    with open(path, "w", encoding="utf-8", newline="\n") as out:
         out.write(HEADER_NOTICE % tables["version"])
         out.write('\n#include "tables_internal.h"\n\n')
 
@@ -1923,7 +1923,7 @@ def write_names(out_dir, tables):
         blob.extend(word.encode("ascii"))
         blob.append(0)
 
-    with open(path, "w", encoding="utf-8") as out:
+    with open(path, "w", encoding="utf-8", newline="\n") as out:
         out.write(HEADER_NOTICE % tables["version"])
         out.write("""
 /*
@@ -2013,7 +2013,7 @@ def write_script_runs(out_dir, tables):
     if table["ranges"][0][0] != 0 or table["ranges"][-1][1] != 0x10FFFF:
         raise ValueError("the script table does not cover every code point")
 
-    with open(path, "w", encoding="utf-8") as out:
+    with open(path, "w", encoding="utf-8", newline="\n") as out:
         out.write(HEADER_NOTICE % tables["version"])
         out.write('\n#include "tables_internal.h"\n\n')
 
@@ -2072,7 +2072,7 @@ def write_strings(out_dir, tables):
         index.append((len(points), len(sequence)))
         points.extend(sequence)
 
-    with open(path, "w", encoding="utf-8") as out:
+    with open(path, "w", encoding="utf-8", newline="\n") as out:
         out.write(HEADER_NOTICE % tables["version"])
         out.write('\n#include "tables_internal.h"\n\n')
 

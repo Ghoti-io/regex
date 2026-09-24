@@ -340,9 +340,9 @@ def ask_vim(rows, engine=0):
     in_path = os.path.join(work, "cases.jsonl")
     out_path = os.path.join(work, "answers.txt")
     script_path = os.path.join(work, "run.vim")
-    with open(script_path, "w") as handle:
+    with open(script_path, "w", newline="\n") as handle:
         handle.write(VIM_SCRIPT)
-    with open(in_path, "w") as handle:
+    with open(in_path, "w", newline="\n") as handle:
         for _, pattern, subject, template in rows:
             handle.write(json.dumps([pattern, subject, template]) + "\n")
     command = ["vim", "-es", "-u", "NONE", "-i", "NONE",

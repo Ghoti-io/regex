@@ -415,7 +415,7 @@ class EmojiSequences(unittest.TestCase):
     def test_rgi_emoji_is_the_union_and_costs_no_copy(self):
         directory = tempfile.mkdtemp()
         with open(os.path.join(directory, "emoji-sequences.txt"), "w",
-                  encoding="utf-8") as handle:
+                  encoding="utf-8", newline="\n") as handle:
             handle.write(
                 "0041 ; Basic_Emoji ; a\n"
                 "0031 FE0F 20E3 ; Emoji_Keycap_Sequence ; k\n"
@@ -423,7 +423,7 @@ class EmojiSequences(unittest.TestCase):
                 "1F44D 1F3FB ; RGI_Emoji_Modifier_Sequence ; m\n"
                 "1F3F4 E0067 ; RGI_Emoji_Tag_Sequence ; t\n")
         with open(os.path.join(directory, "emoji-zwj-sequences.txt"), "w",
-                  encoding="utf-8") as handle:
+                  encoding="utf-8", newline="\n") as handle:
             handle.write("1F468 200D 1F466 ; RGI_Emoji_ZWJ_Sequence ; z\n")
 
         built = gen.build_string_sets(directory)
@@ -441,10 +441,10 @@ class EmojiSequences(unittest.TestCase):
     def test_a_missing_file_says_so_rather_than_emitting_nothing(self):
         directory = tempfile.mkdtemp()
         with open(os.path.join(directory, "emoji-sequences.txt"), "w",
-                  encoding="utf-8") as handle:
+                  encoding="utf-8", newline="\n") as handle:
             handle.write("0041 ; Basic_Emoji ; a\n")
         with open(os.path.join(directory, "emoji-zwj-sequences.txt"), "w",
-                  encoding="utf-8") as handle:
+                  encoding="utf-8", newline="\n") as handle:
             handle.write("")
         # An empty property would be a table that silently matches nothing,
         # which is worse than a build that stops.
