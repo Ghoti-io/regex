@@ -2100,6 +2100,12 @@ static uint32_t flavour_option_for_letter(const GRX_Parser * parser, char c) {
   switch (c) {
     case 'J': return GRX_OPT_DUPLICATE_NAMES;
     case 'U': return GRX_OPT_UNGREEDY;
+    // PCRE2's caseless-restrict. It is where PCRE2 keeps what Perl spells
+    // `/aa`, and it is the fold half of it alone: `(?r)\d` still takes
+    // U+0661 where `/aa\d` does not, because `/aa` is `a` twice and brings
+    // `a`'s narrowing with it. Perl has no `r`, so this stays behind the
+    // FLAVOUR_PCRE test above.
+    case 'r': return GRX_OPT_ASCII_FOLD_SEPARATE;
     default: return 0;
   }
 }
@@ -2275,6 +2281,10 @@ static GRX_Result read_option_letters(GRX_Parser * parser, size_t start,
       // `(?aW)`, `(?aP)` and `(?aT)`, each narrowing one thing to ASCII,
       // and it refuses `(?u)`, `(?d)`, `(?l)` and `(?p)` with error 111 -
       // so those four stay "unknown flag" here, which is what they are.
+      // `(?r)` was in that bucket too until 2026-09-24 and should not have
+      // been: pcre2test compiles it and it works, so "no such letter" was
+      // the wrong answer about a letter that exists. It is built now,
+      // above, because the option it wants was already here.
       // Perl's `a` is built and never reaches this line.
       //
       // Not built because the letters are finer than this library's bits:

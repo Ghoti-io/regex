@@ -994,6 +994,20 @@ static const FlagRow pcre_flags[] = {
   {'n', FLAG_OPTION, GRX_OPT_NO_CAPTURE, 0, 0},
   {'U', FLAG_OPTION, GRX_OPT_UNGREEDY, 0, 0},
   {'J', FLAG_OPTION, GRX_OPT_DUPLICATE_NAMES, 0, 0},
+  // PCRE2's caseless-restrict, which is where it keeps what Perl spells
+  // `/aa`. It is the *fold* half alone: `(?r)\d` still takes U+0661 and
+  // `(?r)\w` still takes U+00E9, where Perl's `/aa` narrows the classes
+  // too, because `/aa` is the letter `a` twice and carries `a`'s meaning
+  // with it. So the two dialects reach one option by different routes and
+  // `r` is not in perl_flags - perl has no such letter.
+  //
+  // Measured against pcre2test 10.46 under UTF and UCP: `(?ri)k` does not
+  // match U+212A where `(?i)k` does, still matches "K", and still folds
+  // U+00C0 with U+00E0 - which is GRX_OPT_ASCII_FOLD_SEPARATE exactly, and
+  // not "fold ASCII only". It scopes and negates like any other flag:
+  // `(?r:k)` narrows the group, `(?:(?r))k` narrows nothing outside it,
+  // and `(?-r)` turns it back on.
+  {'r', FLAG_OPTION, GRX_OPT_ASCII_FOLD_SEPARATE, 0, 0},
   {0, FLAG_OPTION, 0, 0, 0},
 };
 

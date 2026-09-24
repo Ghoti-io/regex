@@ -384,6 +384,75 @@ TEST(Perl, TheCaretResetAppliesTheLettersThatFollowIt) {
   EXPECT_FALSE(search("(?i-i:a)", "A").matched);
 }
 
+/**
+ * PCRE2's `(?r)`, and the half of Perl's `/aa` it is not.
+ *
+ * The options this needs cannot be spelled in a flags string - the PCRE2
+ * alphabet has no letter for UTF or UCP, those being API arguments here -
+ * so the options go in directly rather than through grx_options_parse().
+ */
+static bool matches_with(const std::string & pattern,
+    const std::string & subject, uint32_t options,
+    GRX_Syntax syntax = GRX_SYNTAX_PCRE) {
+  GRX_Regex * regex = nullptr;
+  GRX_Error error;
+  grx_error_clear(&error);
+  if (grx_regex_compile_with_allocator(pattern.data(), pattern.size(), syntax,
+          options, nullptr, nullptr, &error, &regex) != GRX_OK) {
+    // Not `return false`. Half the assertions below are EXPECT_FALSE, and a
+    // helper that answers "did not match" for "did not compile" makes every
+    // one of them pass against a build where `(?r)` is an unknown flag -
+    // which is exactly the build this test exists to distinguish from.
+    ADD_FAILURE() << "did not compile: /" << pattern << "/ diag "
+                  << (int)error.diag;
+    return false;
+  }
+  GRX_Match * match = nullptr;
+  grx_match_create(regex, nullptr, &match);
+  int matched = 0;
+  grx_regex_search(regex, subject.data(), subject.size(), 0, GRX_ENGINE_AUTO,
+      nullptr, match, &matched);
+  grx_match_destroy(match);
+  grx_regex_free(regex);
+  return matched != 0;
+}
+
+TEST(Perl, PcreCaselessRestrictIsTheFoldHalfOfPerlsDoubledA) {
+  const uint32_t utf_fold = GRX_OPT_UTF | GRX_OPT_CASELESS;
+  const std::string kelvin = "\xe2\x84\xaa";         // U+212A KELVIN SIGN
+  const std::string a_grave_lower = "\xc3\xa0";       // U+00E0
+  const std::string arabic_one = "\xd9\xa1";          // U+0661 ARABIC-INDIC 1
+
+  // The control: without it, caseless folds across the ASCII boundary.
+  EXPECT_TRUE(matches_with("k", kelvin, utf_fold));
+  EXPECT_FALSE(matches_with("(?r)k", kelvin, utf_fold))
+      << "(?r) is PCRE2_EXTRA_CASELESS_RESTRICT";
+
+  // It is not "fold ASCII only": both of the pairs that stay inside one
+  // side of the boundary still fold. pcre2test 10.46 answers both this way.
+  EXPECT_TRUE(matches_with("(?r)k", "K", utf_fold));
+  EXPECT_TRUE(matches_with("(?r)\xc3\x80", a_grave_lower, utf_fold));
+
+  // And it is the *fold* half alone, which is what makes it not Perl's
+  // `/aa`: the classes are untouched, where `/aa` narrows them because it
+  // is the letter `a` twice and carries `a`'s meaning with it.
+  EXPECT_TRUE(matches_with("(?r)\\d", arabic_one,
+      GRX_OPT_UTF | GRX_OPT_UCP));
+
+  // It scopes and negates like any other flag, and does not leak out of a
+  // group it was set inside.
+  EXPECT_FALSE(matches_with("(?i)(?r:k)", kelvin, GRX_OPT_UTF));
+  EXPECT_TRUE(matches_with("(?i)(?:(?r))k", kelvin, GRX_OPT_UTF));
+  EXPECT_TRUE(matches_with("(?r)(?-r)k", kelvin, utf_fold));
+
+  // Perl has no such letter, so it stays unknown there rather than
+  // becoming a second spelling of `/aa`.
+  Attempt perl = compile("(?r)k", GRX_SYNTAX_PERL);
+  EXPECT_NE(perl.result, GRX_OK);
+  EXPECT_EQ(perl.diag, GRX_DIAG_UNKNOWN_FLAG);
+  grx_regex_free(perl.regex);
+}
+
 TEST(Perl, DuplicateNamesNeedJOrABranchReset) {
   Attempt plain = compile("(?<a>x)(?<a>y)");
   EXPECT_NE(plain.result, GRX_OK);
