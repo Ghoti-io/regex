@@ -155,6 +155,48 @@ def nested_lookbehind_reach(pattern, window, ours_line, theirs_line):
     return mine <= yours
 
 
+SCAN_SUBSTRING = ("(*scs:", "(*scan_substring:")
+
+
+def scan_substring_forgets_noteol(pattern, subject, window, ours, theirs):
+    r"""pcre2 lets a `$` that follows a scan substring ignore NOTEOL.
+
+    `(a)(*scs:(1)a)a*+$` matches "a" 0-1 under PCRE2_NOTEOL in pcre2 10.46,
+    and `(a)a*+$` - the same pattern without the scan substring - correctly
+    does not. The flag is being lost across the block rather than mis-read:
+    the end of the subject is where the `$` lands, `(a)b(*scs:(1)a)$` on
+    "ab" matches too, and `(a)$(*scs:(1)a)`, with the scan substring *after*
+    the `$`, is no match, so what matters is that the block comes first.
+    `(*scan_substring:` does it as well, so it is the construct and not the
+    spelling, and `(*atomic:a*)$` in the same place does not, so it is not
+    any bracketed verb. A scan substring whose body fails takes the whole
+    pattern down and never reaches the question.
+
+    The mirror does not happen: NOTBOL survives a scan substring, and
+    `^(a)(*scs:(1)a)` on "a" is no match there under it.
+
+    Narrow in both dimensions. The pattern must hold a scan substring
+    *before* a `$`, **and** the disagreement has to be this library finding
+    nothing where pcre2's match ends exactly at the position NOTEOL forbids
+    - the end of the window, or the newline that ends it. Any other
+    difference in this family is still a disagreement, and every row of it
+    without NOTEOL is compared as usual.
+    """
+    if "E" not in window[2] or ours != "nomatch":
+        return False
+    if not theirs.startswith("match "):
+        return False
+    first = min((pattern.find(verb) for verb in SCAN_SUBSTRING
+        if verb in pattern), default=-1)
+    if first < 0 or "$" not in pattern[first:]:
+        return False
+    limit = len(subject) if window[1] is None else window[1]
+    ended = int(theirs.split()[1].split(":")[1])
+    if ended == limit:
+        return True
+    return ended == limit - 1 and subject[ended:limit] == "\n"
+
+
 def normalise(line):
     """A driver line, with the engine name that only one side prints removed."""
     if line.startswith("match "):
@@ -213,6 +255,7 @@ def main(argv):
     compared = 0
     refused = 0
     reach = 0
+    noteol = 0
     declined = 0
 
     for index, (flags, pattern, subject, window) in enumerate(rows):
@@ -234,6 +277,10 @@ def main(argv):
                 pattern, window, ours_line, theirs_line):
             reach += 1
             continue
+        if ours_line != theirs_line and scan_substring_forgets_noteol(
+                pattern, subject, window, ours_line, theirs_line):
+            noteol += 1
+            continue
 
         compared += 1
         if ours_line != theirs_line:
@@ -250,6 +297,8 @@ def main(argv):
           % (len(rows), compared, len(disagreements)))
     if reach:
         print("%-7s %d pcre2's nested-lookbehind reach" % ("", reach))
+    if noteol:
+        print("%-7s %d pcre2's scan substring forgetting NOTEOL" % ("", noteol))
     if refused:
         print("%-7s %d the pattern was refused" % ("", refused))
     if declined:

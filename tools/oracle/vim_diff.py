@@ -443,6 +443,41 @@ def is_forward_reference_artifact(pattern, them, us):
         "\\%d" % n in pattern for n in range(1, 10))
 
 
+def is_abandoned_mark_artifact(pattern, them, us):
+    r"""vim keeps the *marks* an abandoned branch wrote, not only its captures.
+
+    The row above is about groups and checks that the whole match agrees.
+    The same commit that writes a group inside a postfix operator writes
+    `\zs` and `\ze` there too, and then the span disagrees as well:
+    `\(a\zeb\)\@>\d\|\&` against "ab" is 0-2 under `re=2` and 0-1 under
+    `re=1`, with group one holding "ab" in both, where the branch that set
+    them **cannot match** - `\(a\zeb\)\@>\d` alone is no match in both
+    engines, and putting a branch that fails on the other side of the `\|`
+    makes the whole pattern no match. The match vim reports is the empty
+    one from the second branch, wearing the end the first branch left
+    behind. `\zs` does it from the other side: `\(a\zsb\)\@=\d\|\&` is
+    1-1 under `re=1`.
+
+    The minimal pair says which part matters. Without the mark,
+    `\(ab\)\@>\d\|\&` is 0-0 with group one still kept - the row above.
+    Without the postfix operator, `a\zeb\d\|\&` is 0-0 with nothing kept,
+    so the mark alone does not do it.
+
+    Narrow in both dimensions: the pattern needs a postfix operator, a
+    mark, and an alternation, **and** this library's answer has to be the
+    empty match - a row where this library reports a span of its own is a
+    disagreement whatever vim says.
+    """
+    if not (them.startswith("match ") and us.startswith("match ")):
+        return False
+    if "@" not in pattern or "|" not in pattern:
+        return False
+    if "\\zs" not in pattern and "\\ze" not in pattern:
+        return False
+    start, end = us.split()[1].split(":")
+    return start == end
+
+
 def is_postfix_capture_artifact(pattern, them, us):
     """vim mislays a capture around one of its postfix assertions.
 
@@ -738,6 +773,7 @@ def main():
             continue
         if (is_forward_reference_artifact(case[0], them, us)
                 or is_postfix_capture_artifact(case[0], them, us)
+                or is_abandoned_mark_artifact(case[0], them, us)
                 or is_lookbehind_backreference_artifact(case[0], them, us)
                 or is_very_magic_line_start_repeat(case[0], them, us)
                 or is_line_number_star(case[0], them, us)

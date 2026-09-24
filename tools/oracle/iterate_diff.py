@@ -161,6 +161,53 @@ def trim(line):
     return " ".join(fields[:2] + out)
 
 
+def search_start_before_pos(dialect, pattern, ours, theirs):
+    r"""perl lets a match *begin* before the position `\G` reads.
+
+    `\G` is a zero-width assertion that holds where the previous match ended,
+    and perl leaves the start of the scan alone when it is not the first
+    thing in the pattern: with pos() at 2, `a{0,2}?\G(?|(a)|(b))\1` over
+    "aaaa" reports 0-4 - the `a{0,2}?` consuming the two characters the
+    previous iteration already returned - and `ab\Gc` over "abc" reports
+    0-3. PCRE2 does not: the same pattern and subject under `,global` in
+    pcre2test 10.46 gives the second match as "aa" at 2-4, and with an
+    explicit `offset=2` it gives the same, because a match there may not
+    begin before the offset it was given. This library is PCRE2's: the
+    window says where a match may begin (documentation/dialects.md section
+    6), so `\G` can only pull the *rest* of the pattern to the search start,
+    never the start of the match behind it.
+
+    Both engines agree with each other about the assertion itself - a
+    pattern whose `\G` leads it answers alike in all three - so this is
+    where the match is allowed to start and not what `\G` means.
+
+    Narrow in both dimensions: the `\G` has to be somewhere other than the
+    first two characters of the pattern, **and** the two answers have to
+    agree about everything except how far back a match reaches - the same
+    number of matches, the same ends, the same groups, and no match of
+    perl's beginning later than ours. A row that differs anywhere else is a
+    disagreement.
+    """
+    if dialect != "perl" or "\\G" not in pattern[2:]:
+        return False
+    mine = ours.split(" ")
+    yours = theirs.split(" ")
+    if len(mine) != len(yours) or mine[:2] != yours[:2]:
+        return False
+    earlier = False
+    for a, b in zip(mine[2:], yours[2:]):
+        one = a.split(",")
+        two = b.split(",")
+        if len(one) != len(two) or one[1:] != two[1:]:
+            return False
+        if one[0].split(":")[1] != two[0].split(":")[1]:
+            return False
+        if int(two[0].split(":")[0]) > int(one[0].split(":")[0]):
+            return False
+        earlier = earlier or one[0] != two[0]
+    return earlier
+
+
 def compare(dialect, rng, patterns, subjects, examples):
     flag_sets = (match_diff.FLAG_SETS if dialect == "ecmascript"
                  else perl_diff.FLAG_SETS)
@@ -193,6 +240,7 @@ def compare(dialect, rng, patterns, subjects, examples):
     compared = 0
     refused = 0
     declined = 0
+    start = 0
 
     for index, (flags, pattern, subject) in enumerate(rows):
         a = trim(mine[index])
@@ -211,6 +259,9 @@ def compare(dialect, rng, patterns, subjects, examples):
         if perl_diff.reference_defect(dialect, pattern, b, subject, a):
             declined += 1
             continue
+        if a != b and search_start_before_pos(dialect, pattern, a, b):
+            start += 1
+            continue
 
         compared += 1
         if a != b:
@@ -227,6 +278,8 @@ def compare(dialect, rng, patterns, subjects, examples):
         print("%-11s %d the pattern was refused" % ("", refused))
     if declined:
         print("%-11s %d one side declined to answer" % ("", declined))
+    if start:
+        print("%-11s %d perl beginning a match before pos()" % ("", start))
     if compared < len(rows) // 3:
         sys.stderr.write(
             "%s: fewer than a third of the rows were compared; the "

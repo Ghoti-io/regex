@@ -39,6 +39,7 @@ import argparse
 import json
 import os
 import random
+import re
 import subprocess
 import sys
 import tempfile
@@ -411,6 +412,44 @@ def splits_a_surrogate_pair(text):
     return False
 
 
+TEMPLATE_GROUP = re.compile(r"\\[1-9]")
+
+
+def is_abandoned_path_artifact(pattern, template):
+    r"""vim keeps what a path it abandoned wrote; this library discards it.
+
+    documentation/dialects.md section 6, item 2, and the two predicates in
+    tools/oracle/vim_diff.py that count it there. A group written inside one
+    of vim's postfix operators survives the branch that set it -
+    `\(a\)\@>x\|\A` reports group one as "a" in vim where the branch died,
+    and pcre2test and node both report it unset - and so do `\zs` and `\ze`:
+    `\(a\zeb\)\@>\d\|\&` against "ab" is 0-2 there, wearing the end a branch
+    that cannot match left behind.
+
+    A replacement is where both of those become text. The group arrives
+    through a template that names it, and the mark arrives through the span
+    the substitution covers, so either is enough on its own - which is why
+    this asks for the postfix operator and a path that can be abandoned
+    first, and only then for one of the two ways the difference can be
+    seen. The row this was written for, from seed 901 of the soak, is the
+    negative-lookbehind spelling:
+    `\%>2v\(a\(b\)\@=\)\@<!\(a\zsb\)\@=\V\m` with `\n\2\U\&`, where vim's
+    `\2` holds the "b" its failed lookbehind captured and this library's is
+    empty.
+
+    The narrowing is real and worth saying: a defect of this library's in
+    exactly that shape would not be reported here. The match differential
+    still compares these patterns, against spans rather than text, with
+    predicates of its own that are narrower again.
+    """
+    if "@" not in pattern:
+        return False
+    if "|" not in pattern and "@!" not in pattern and "@<!" not in pattern:
+        return False
+    return (TEMPLATE_GROUP.search(template) is not None
+        or "\\zs" in pattern or "\\ze" in pattern)
+
+
 def compare(dialect, driver, seed, patterns, templates, subjects, examples):
     """One dialect against its reference. None means the run was not made."""
     reference = None
@@ -555,6 +594,12 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
         for row, old_answer in zip(disagreements, older):
             if old_answer == row[5]:
                 split += 1
+                continue
+            if is_abandoned_path_artifact(row[1], row[3]):
+                # vim keeps the captures and the marks a path it abandoned
+                # wrote, and this library does not, so the group a template
+                # names or the span it covers differs. Section 6, item 2.
+                defect += 1
                 continue
             kept.append(row)
         disagreements = kept
