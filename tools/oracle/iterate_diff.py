@@ -241,6 +241,8 @@ def compare(dialect, rng, patterns, subjects, examples):
     refused = 0
     declined = 0
     start = 0
+    quoting = []
+    quoted = 0
 
     for index, (flags, pattern, subject) in enumerate(rows):
         a = trim(mine[index])
@@ -262,10 +264,35 @@ def compare(dialect, rng, patterns, subjects, examples):
         if a != b and search_start_before_pos(dialect, pattern, a, b):
             start += 1
             continue
+        if a != b and dialect == "perl" and perl_diff.holds_quoting(pattern):
+            # This generator draws from perl_diff.ATOMS, so it inherited the
+            # quoting rows when that vocabulary gained them - and with them
+            # the deviation documentation/dialects.md section 6 records:
+            # `\Q` is interpolation in perl, so a pattern arriving as text
+            # has an unknown escape there and this library has PCRE2's
+            # construct. Re-asked below the same way perl_diff.py does it,
+            # rather than excluded by spelling.
+            quoting.append((index, flags, pattern, subject, a, b))
+            continue
 
         compared += 1
         if a != b:
             disagreements.append((flags, pattern, subject, a, b))
+
+    if quoting:
+        retry = [(flags, perl_diff.as_letters(pattern), subject)
+                for _, flags, pattern, subject, _, _ in quoting]
+        again = ask_library(retry, dialect)
+        if again is None or len(again) != len(retry):
+            disagreements.extend(
+                (row[1], row[2], row[3], row[4], row[5]) for row in quoting)
+        else:
+            for row, answer in zip(quoting, again):
+                if trim(answer) == row[5]:
+                    quoted += 1
+                else:
+                    disagreements.append(
+                        (row[1], row[2], row[3], row[4], row[5]))
 
     for flags, pattern, subject, a, b in disagreements[:examples]:
         print("/%s/%s on %s" % (pattern, flags, json.dumps(subject)))
@@ -280,6 +307,8 @@ def compare(dialect, rng, patterns, subjects, examples):
         print("%-11s %d one side declined to answer" % ("", declined))
     if start:
         print("%-11s %d perl beginning a match before pos()" % ("", start))
+    if quoted:
+        print("%-11s %d perl's quoting" % ("", quoted))
     if compared < len(rows) // 3:
         sys.stderr.write(
             "%s: fewer than a third of the rows were compared; the "
