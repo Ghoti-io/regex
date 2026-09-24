@@ -307,7 +307,7 @@ There are three, and the third is not a new algorithm:
 
 | Engine | Runs | Cost | Guarantees |
 | --- | --- | --- | --- |
-| **Pike VM** | the regular subset | O(subject × program) time, O(program) memory | linear in the subject; never `GRX_ERR_LIMIT` for time unless `max_steps` is set below `subject × program` |
+| **Pike VM** | the regular subset | O(subject × program × masks) time, O(program × masks) memory | linear in the subject; `GRX_ERR_LIMIT` for time when `max_steps` is set below what the closure walks |
 | **Bit-state backtracker** | anything without a backreference, lookaround or recursion, when `program × subject` fits a memory budget | O(subject × program) time, O(subject × program / 8) memory | linear; leftmost-first captures exactly as the backtracker would report them |
 | **Backtracker** | everything | exponential worst case, capped by `max_steps` and `max_backtrack` | terminates; `GRX_ERR_LIMIT` when the cap is hit |
 
@@ -315,10 +315,29 @@ There are three, and the third is not a new algorithm:
 `GRX_ENGINE_PIKE` gets `GRX_ERR_UNSUPPORTED` for a program the Pike VM cannot
 run, never a quiet substitution.
 
+`masks` in the first row is the number of distinct stall masks a program
+counter can carry, and it is there because the row used to read `O(subject ×
+program)` and that stopped being true when the stall mask arrived (section
+3.5.1). A program counter holds one thread per distinct mask, and `n`
+potentially-empty loops *in sequence* produce 2^n of them - so a
+forty-five-byte pattern is not bounded by its length the way the old row
+implied. The Pike VM is still linear in the *subject*, which is the guarantee
+that distinguishes it from the backtracker; it is the other factor that is
+not small.
+
+That is why the row no longer says "never `GRX_ERR_LIMIT` for time". It said
+so on the reasoning that a closure visits each program counter at most once
+per position, which the mask ended; and because the closure walk was not
+charged to `max_steps` at all, the sentence was true for the wrong reason -
+the engine could not report a limit for time because it was not counting the
+time. Both halves are fixed: the walk is charged (section 3.5.1) and a caller
+who sets `max_steps` gets a bound that holds.
+
 #### 3.5.1 Pike VM
 
 Cox's lockstep simulation: two thread lists as sparse sets keyed by program
-counter *and by a stall mask*, so the bound is structural rather than counted.
+counter *and by a stall mask*, so a thread's survival is decided structurally
+rather than by a counter. What that costs is counted, and charged (below).
 
 The mask is what makes the set sound. A plain `(pc, position)` key assumes
 two threads at one program counter have the same future - true of a pure NFA,
@@ -344,9 +363,45 @@ where the fixed size would have had to choose between a wrong result and a
 write past the end.
 
 This is worth stating plainly because the invariant the sparse set exists to
-provide is the library's headline claim. It still holds: the mask is bounded
-by the number of potentially-empty loops enclosing a program counter, not by
-the subject. Threads are ordered by
+provide is the library's headline claim. It still holds in the subject: the
+mask does not grow as the subject does. It is not otherwise small, and this
+paragraph used to say it was - "bounded by the number of potentially-empty
+loops *enclosing* a program counter". That is not what `stall_mask()`
+computes. It walks every progress register in the program and sets a bit for
+each one whose slot equals the current position, so loops in *sequence*
+contribute bits just as nested ones do: after `(a?)*(a?)*` both registers can
+equal the position at once. `n` potentially-empty loops anywhere in a program
+therefore admit 2^n masks, and a program counter can hold a thread for each.
+
+"Enclosing" made the factor look like nesting depth, which is small in real
+patterns and bounded by `max_nesting_depth` besides. The true factor is a
+count of loops, which nothing bounds but `max_program_size`. Forty-five bytes
+of `(a?)*` repeated nine times walks 1,587,969 program counters over a
+256-byte subject, and 101,079,031 over sixteen kilobytes.
+
+Which is why the closure walk is charged to `max_steps`: one step per program
+counter visited, plus one for each extra thread `list_find()` has to walk
+past on a program counter's chain. Both, because both grow with the masks -
+capping visits alone left a visit costing 427 nanoseconds at nine loops
+against a plain pattern's 12, and the bound then held in the subject but not
+in the loop count. It was not charged at all, once: `max_steps` counted the
+dispatch loop -
+the threads that survived into a list - on the old reasoning that the closure
+visits each program counter at most once per position. The mask ended that
+reasoning and the count was not revisited, so the engine's dominant cost was
+free. The pattern above returned `GRX_OK` after forty-six seconds having
+charged 163,850 of its ten million steps, and no value of `max_steps` would
+have stopped it, because the quantity being capped was not the quantity being
+spent. `max_match_memory` did not catch it either, and could not: it bounds
+the state alive at one position, and that state is reused at the next. The
+cost here is the *sum* over positions, which is what a step count is for.
+
+With both charged, `(a?)*` repeated is refused in 38 to 52 milliseconds at
+the default budget - at any subject length from 64 bytes to 64 kilobytes, and
+at any loop count from seven to twenty-two, because what ends the run is the
+budget rather than either of those. It was 46 seconds and `GRX_OK`.
+
+Threads are ordered by
 priority, which is what makes the result leftmost-*first*; a leftmost-*longest*
 mode for the POSIX dialects keeps running after the first `MATCH` and reports
 the last one. Per-thread state is the capture array plus the progress
@@ -733,7 +788,7 @@ need:
 | `max_lookbehind_length` | analysis, after lowering | maximum length of a lookbehind body. `GRX_NPOS` for an unbounded body, which exceeds every finite cap. A *caller's* policy rather than a dialect's rule, so its default is 0; a dialect that bounds its own lookbehind enforces that through its profile instead |
 | `max_recursion_depth` | backtracker | nested `CALL` frames. Reserved until WP-18 brought a dialect that recurses; `tests/unit/test_limits.cpp:RecursionDepthIsEnforcedNowThatADialectHasRecursion` is the test that was waiting for it. Frames, not C frames - a subroutine call is heap bookkeeping |
 | `max_subject_length` | entry | bytes of subject |
-| `max_steps` | all engines | instructions executed in one search |
+| `max_steps` | all engines | instructions executed in one search. On the Pike VM that is every program counter the closure walk visits and every chained thread it walks past, not only the threads that survive into a list: the walk is where that engine's work is, and a count that skipped it left `max_steps` unable to bound the one thing it exists to bound |
 | `max_backtrack` | backtracker | frames on the stack |
 | `max_match_memory` *(new)* | exec | bytes of scratch a match object may grow to; selects bit-state eligibility |
 

@@ -1682,10 +1682,19 @@ should not lift casually, and that is the number the warning is about.
 hostile one does, and the two are measured separately.
 
 Above: on whichever engine `GRX_ENGINE_AUTO` picks, a scanning pattern costs
-between 0.02 and 3.0 steps per subject byte - the high end being an
+between 0.0 and 10.0 steps per subject byte - the high end being an
 unanchored `[a-z]+@[a-z]+`, which restarts at every position. At
-`max_steps = 10,000,000` the costliest of those scans about 3.3 MB before
+`max_steps = 10,000,000` the costliest of those scans about 1.0 MB before
 the limit binds.
+
+That high end was 3.0 steps per byte, and the ceiling 3.3 MB, until the Pike
+VM began charging its closure walk to `max_steps` ([design.md](design.md)
+§3.5.1). The work a pattern does did not change; what changed is that the
+part of it this engine actually spends its time on is now counted. The old
+figure was measuring the dispatch loop and calling it the cost of a match.
+A caller who set `max_steps` from the old arithmetic is scanning about a
+third of what they budgeted for and should divide by ten rather than by
+three.
 
 This paragraph said 2.0 and 5 MB until the driver behind it was checked
 rather than trusted. `measure.py` asks for a 100,000-byte subject;
@@ -1736,7 +1745,7 @@ preference. Lowering it to a million would refuse a still-pathological pair
 in about 15 ms instead of 130 - but would also cap a legitimate scan at 333 KB,
 and a caller scanning documents that large is not the one being attacked. A
 caller who *is* - one compiling patterns from a file it did not write -
-should lower it, and now has the arithmetic to choose by: divide it by three
+should lower it, and now has the arithmetic to choose by: divide it by ten
 to get the bytes it will scan, and multiply it by 15 nanoseconds to get the
 time it will spend refusing on an idle core.
 

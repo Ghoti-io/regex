@@ -26,7 +26,13 @@
  * Three engines, because no single one covers the dialects:
  *
  * - The Pike VM runs the whole program in lockstep and so is linear in the
- *   subject length, but cannot express a backreference.
+ *   subject length, but cannot express a backreference. Linear in the
+ *   *subject*: the other factor is the program and the number of distinct
+ *   stall masks a program counter can carry, and that second one is 2^n in
+ *   the number of potentially-empty loops (documentation/design.md section
+ *   3.5.1). So this engine is bounded by GRX_Limits::max_steps too, and a
+ *   caller who takes patterns from outside should set it for this engine as
+ *   much as for the backtracker.
  * - The backtracking engine can, at the cost of an exponential worst case,
  *   which is what GRX_Limits::max_steps and max_backtrack exist to bound.
  * - The bit-state engine is the backtracker with a memo, which buys back the
@@ -445,6 +451,13 @@ GRX_API GRX_Result grx_match_span(
  * limit from measurement rather than from guesswork can measure it. Reset at
  * the start of every search, including each attempt inside
  * grx_regex_search_next().
+ *
+ * On the Pike VM an instruction is every program counter the closure walk
+ * visits, plus every chained thread it walks past at one of them - not only
+ * the threads that reach the dispatch loop. The walk is where that engine
+ * spends its time, and a count that skipped it could not bound it. A caller measuring against a previous release will find the same
+ * pattern reports more steps here than it used to; the work did not change,
+ * the accounting did.
  *
  * @param match The match object. NULL returns 0.
  * @return The step count.

@@ -264,6 +264,61 @@ TEST(ReDoS, EveryPairIsAnsweredOrRefusedQuicklyAndNeverOnlyByOneEngine) {
       rows, file.records.size(), refused, slowest_refusal, slowest_answer);
 }
 
+TEST(ReDoS, TheStepLimitReachesTheClosureWalkAndNotOnlyTheDispatchLoop) {
+  // Every row of the corpus above is a backtracking bomb, and all of it is
+  // ECMAScript. Both of those are why this shape was not in it.
+  //
+  // The Pike VM's cost is its closure walk, and the stall mask made that walk
+  // super-linear: a program counter can hold one thread per distinct mask,
+  // and `n` potentially-empty loops *in sequence* produce 2^n of them, per
+  // subject position. ECMAScript cannot reach it, because its progress-check
+  // arm is `fail` and a stalled iteration dies there; the `break` dialects -
+  // Perl, POSIX, vim - carry it onwards with the register still equal to the
+  // position, which is what multiplies the masks. The corpus being one
+  // dialect made the one immune dialect the only one measured.
+  //
+  // None of that walk was charged to max_steps, which counted the threads
+  // that survived into a list and nothing else. This pattern is forty-five
+  // bytes. Over sixteen kilobytes of "a" it took forty-six seconds and
+  // returned GRX_OK, having charged 163,850 of the ten million steps it was
+  // allowed while the closure walked 101,079,031 program counters. There was
+  // no value of max_steps that stopped it: the work it does is not the
+  // quantity the field was counting.
+  //
+  // So the assertion is the one this file's docstring already makes for the
+  // backtracker - a limit has to arrive, and arrive quickly - made of the
+  // engine that is supposed to need no limit at all.
+  const std::string pattern = "(a?)*(a?)*(a?)*(a?)*(a?)*(a?)*(a?)*(a?)*(a?)*";
+  const std::string subject(256, 'a');
+
+  GRX_Regex * regex = nullptr;
+  ASSERT_EQ(grx_regex_compile(pattern.c_str(), GRX_SYNTAX_PERL, GRX_OPT_NONE,
+                &regex),
+      GRX_OK);
+
+  GRX_Limits limits;
+  grx_limits_default(&limits);
+  // Far above what this subject costs an engine that charges what it does -
+  // a plain pattern over 256 bytes is a few thousand steps - and far below
+  // the 1,587,969 the closure actually walks here. A budget in that gap is
+  // refused only by a count that can see the walk: before the closure was
+  // charged this row spent 2,570 steps and answered GRX_OK.
+  limits.max_steps = 500000;
+
+  Attempt attempt = run(regex, subject, GRX_ENGINE_PIKE, &limits);
+  EXPECT_EQ(attempt.result, GRX_ERR_LIMIT)
+      << "the closure walked past max_steps and was not stopped; it spent "
+      << attempt.steps << " steps and took " << attempt.milliseconds << " ms";
+  EXPECT_GE(attempt.steps, limits.max_steps)
+      << "refused without having counted the steps that got it there";
+  if (!under_valgrind()) {
+    EXPECT_LT(attempt.milliseconds, kBudgetMilliseconds)
+        << "the refusal took " << attempt.milliseconds << " ms";
+  }
+
+  grx_regex_free(regex);
+}
+
 TEST(ReDoS, TheSafeEnginesStayLinearAsTheSubjectGrows) {
   // The refusal above is measured at one subject length. This is the claim
   // that makes the refusal unnecessary: doubling the subject must not square

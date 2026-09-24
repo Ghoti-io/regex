@@ -308,16 +308,31 @@ static void list_free(Pike * pike, PikeList * list) {
   list->threads = NULL;
 }
 
-/** Which thread holds this program counter and stall mask, if any. */
-static uint32_t list_find(
-    const PikeList * list, uint32_t pc, uint64_t stalls) {
+/**
+ * Which thread holds this program counter and stall mask, if any.
+ *
+ * `out_walked` reports how many chained threads were examined, because that
+ * is not a constant and the caller charges it. One program counter holds one
+ * thread per distinct stall mask, chained; with `n` potentially-empty loops
+ * in a program there can be 2^n of them, and this walks the chain. Counting
+ * the visit but not the walk would repeat one level down the mistake that
+ * counting the dispatch loop but not the closure made one level up: at nine
+ * loops a visit costs 427 nanoseconds against a plain pattern's 12, and all
+ * of that difference is here.
+ */
+static uint32_t list_find(const PikeList * list, uint32_t pc, uint64_t stalls,
+    size_t * out_walked) {
   uint32_t index = list->sparse[pc];
+  size_t walked = 0;
   while (index < list->count && list->threads[index].pc == pc) {
+    walked++;
     if (list->threads[index].stalls == stalls) {
+      *out_walked = walked;
       return index;
     }
     index = list->threads[index].next;
   }
+  *out_walked = walked;
   return PIKE_NO_THREAD;
 }
 
@@ -834,6 +849,24 @@ static int closure_better(
       candidate->slots, held->slots, pike->captures);
 }
 
+/**
+ * Charge work to max_steps, and say whether the budget is now spent.
+ *
+ * A step is a unit of work this engine actually did, so the places that do
+ * work in amounts other than one charge that amount rather than rounding it
+ * to a single step.
+ */
+static int charge_steps(Pike * pike, size_t amount) {
+  pike->steps += amount;
+  if (pike->request->limits->max_steps
+      && pike->steps > pike->request->limits->max_steps) {
+    pike->failure = GRX_ERR_LIMIT;
+    pike->failure_diag = GRX_DIAG_LIMIT_STEPS;
+    return 1;
+  }
+  return 0;
+}
+
 static void add_thread(
     Pike * pike, PikeList * list, uint32_t pc, PikeState * state,
     size_t position) {
@@ -847,6 +880,40 @@ static void add_thread(
     uint32_t current_pc = pike->stack[depth].pc;
     PikeState * current = pike->stack[depth].state;
 
+    // Every program counter the closure visits is a step, charged here
+    // because this walk is where the work of this engine actually is.
+    //
+    // It used to be free. `max_steps` counted the dispatch loop below - one
+    // step per thread that survived into a list - and the closure that built
+    // those lists counted nothing, on the old reasoning that a closure visits
+    // each program counter at most once per position and so costs
+    // `program_size` per position no matter what the pattern is. The stall
+    // mask ended that: a program counter can now hold one thread per distinct
+    // mask, and `n` potentially-empty loops in *sequence* make 2^n of them.
+    // `(a?)*` nine times over sixteen kilobytes of "a" took forty-six seconds
+    // and returned GRX_OK, having charged 163,850 of the ten million steps it
+    // was allowed - the closure walked a hundred and one million program
+    // counters, and not one of them was counted.
+    //
+    // That is the whole promise of the field (core.h): max_steps is what
+    // turns a small hostile pattern from a hang into GRX_ERR_LIMIT. A limit
+    // that counts a term the pattern does not control, while the term it does
+    // control runs free, cannot keep it. Charging the visit is what makes the
+    // count proportional to the time again.
+    //
+    // ECMAScript does not reach this because its progress-check arm is
+    // `fail`, which kills a stalled iteration; the `break` dialects - Perl,
+    // POSIX, vim and the rest - carry it onwards with the register still
+    // equal to the position, which is what multiplies the masks.
+    if (charge_steps(pike, 1)) {
+      state_release(pike, current);
+      while (depth) {
+        depth--;
+        state_release(pike, pike->stack[depth].state);
+      }
+      return;
+    }
+
     uint64_t stalls = stall_mask(pike, current, position);
     if (current_pc >= pike->program->insts.count) {
       state_release(pike, current);
@@ -854,7 +921,16 @@ static void add_thread(
     }
 
     size_t slot;
-    uint32_t occupant = list_find(list, current_pc, stalls);
+    size_t walked = 0;
+    uint32_t occupant = list_find(list, current_pc, stalls, &walked);
+    if (walked > 1 && charge_steps(pike, walked - 1)) {
+      state_release(pike, current);
+      while (depth) {
+        depth--;
+        state_release(pike, pike->stack[depth].state);
+      }
+      return;
+    }
     if (occupant != PIKE_NO_THREAD) {
       // Under GRX_SUBMATCH_FIRST_PATH the first arrival stays and this one
       // dies: a program counter reached twice at one position with the same
@@ -868,19 +944,17 @@ static void add_thread(
       // division too. That is a relaxation and it settles: each replacement
       // strictly improves the vector at one program counter under a total
       // order over finitely many vectors, so no pair can displace each other
-      // forever. It is not free, though, which is why it is counted against
-      // max_steps like everything else this engine does.
+      // forever. It is not free, though, which is why it is charged a
+      // second step on top of the one the visit already paid above: a
+      // replacement re-walks everything downstream of this program counter,
+      // so it costs more than an arrival that simply dies here.
       if (!pike->posix || !pike->contested[current_pc]
           || !closure_better(pike, current,
                  list->threads[occupant].best)) {
         state_release(pike, current);
         continue;
       }
-      pike->steps++;
-      if (pike->request->limits->max_steps
-          && pike->steps > pike->request->limits->max_steps) {
-        pike->failure = GRX_ERR_LIMIT;
-        pike->failure_diag = GRX_DIAG_LIMIT_STEPS;
+      if (charge_steps(pike, 1)) {
         state_release(pike, current);
         continue;
       }
@@ -1250,6 +1324,16 @@ GRX_Result grx_exec_pike(const GRX_ExecRequest * request, int * out_matched) {
         goto done;
       }
       add_thread(&pike, &pike.current, 0, state, position);
+      // The other add_thread() call site has always checked this; this one
+      // had not. A closure that stops at a limit while *seeding* leaves an
+      // empty list, and an empty list at this position reads as "nothing to
+      // run here" - so the failure was dropped and the search went on to
+      // report a plain non-match. A limit must be reported as one, not
+      // answered as an absence of matches.
+      if (pike.failure != GRX_OK) {
+        result = pike.failure;
+        goto done;
+      }
     }
 
     // An empty thread list used to mean the search was over, because an
