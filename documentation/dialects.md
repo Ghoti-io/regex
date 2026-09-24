@@ -529,6 +529,14 @@ does not match in perl and does not here. It only exists for the window
 between a group opening and closing, which is why nothing a reference could
 already see changed. See `GRX_PROGRAM_SHADOW_CAPTURES`.
 
+**A conditional may name a group the pattern has not got in Perl, and may
+not in PCRE2 or Python.** `(?(99)a|b)` matches "b" in perl - the condition
+is simply false - and is "reference to non-existent subpattern" in
+pcre2test and "invalid group reference" in CPython; the same split applies
+to `(?(R99)...)`. `(?(0)...)` is an error in all three, and so is a *name*
+no group has, so the leniency is the numeric forms alone.
+`GRX_SyntaxSpec::condition_group_may_be_absent` is the axis.
+
 **A name belonging to several groups names all of them**, and what a
 construct reading it means is whichever of them is *set* when it runs -
 `(?J)` in PCRE2, and no switch at all in perl. Two constructs read a name

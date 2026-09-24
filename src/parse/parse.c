@@ -489,8 +489,26 @@ static void prescan(GRX_Parser * parser) {
       // group that does not exist.
       continue;
     }
+
     if (i + 1 >= parser->length || parser->text[i + 1] != '?') {
       parser->group_count++;
+      continue;
+    }
+    if (i + 2 < parser->length && parser->text[i + 2] == '(') {
+      // `(?(...)`: the second `(` opens a *condition*, not a group, and it
+      // was counted as one until a differential asked. `(?(R)a|b)\1` is
+      // "reference to non-existent subpattern" in pcre2 and in perl, and
+      // compiled here, the conditional having left a group behind for the
+      // reference to find; `(?(1)a|b)` with no group 1 is the same mistake
+      // from the other side, refused by both references and accepted here
+      // because the condition named the parenthesis it was written in.
+      //
+      // Stepped over rather than recognised where it stands, so that a
+      // `\(` before it cannot be mistaken for the opener: the escape was
+      // consumed two iterations ago and only this one knows the `(?` was
+      // real. An assertion condition needs no rule of its own - the `(` of
+      // `(?(?=a)b|c)` has a `?` after it and was never counted.
+      i += 2;
       continue;
     }
     // `(?<name>` captures and names; `(?<=` and `(?<!` are lookbehind and do

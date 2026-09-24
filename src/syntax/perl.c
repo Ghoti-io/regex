@@ -3746,7 +3746,9 @@ static GRX_Result read_condition(GRX_Parser * parser, size_t start,
         value = value * 10 + (uint64_t)(byte_at(parser, 0) - '0');
         parser->position++;
       }
-      if (byte_at(parser, 0) != ')' || value > (uint64_t)parser->group_count) {
+      if (byte_at(parser, 0) != ')'
+          || (value > (uint64_t)parser->group_count
+              && !parser->spec.condition_group_may_be_absent)) {
         return grx_parse_fail(parser, GRX_DIAG_INVALID_CONDITION, start,
             parser->position - start);
       }
@@ -3803,7 +3805,11 @@ static GRX_Result read_condition(GRX_Parser * parser, size_t start,
       out->flags |= GRX_NODE_RELATIVE;
       return GRX_OK;
     }
-    if (!value || value > (uint64_t)parser->group_count) {
+    if (!value
+        || (value > (uint64_t)parser->group_count
+            && !parser->spec.condition_group_may_be_absent)) {
+      // `(?(0)` is an error in perl as well as in pcre2test, which is why
+      // the zero is tested whatever the dialect says.
       return grx_parse_fail(
           parser, GRX_DIAG_INVALID_CONDITION, start, parser->position - start);
     }

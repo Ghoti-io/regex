@@ -372,6 +372,44 @@ TEST(Perl, DuplicateNamesNeedJOrABranchReset) {
   grx_regex_free(reset.regex);
 }
 
+TEST(Perl, AConditionsParenthesisIsNotAGroup) {
+  // The prescan counts capturing parentheses so that `\1` can be told from
+  // an octal escape, and it counted the `(` of `(?(...)` - which opens a
+  // *condition* - as one of them. Two symptoms, and the references agree
+  // with each other on both: a backreference to a group the pattern has not
+  // got compiled, and a condition naming the parenthesis it was written in
+  // compiled too.
+  EXPECT_EQ(compile_result("(?(R)a|b)\\1", GRX_SYNTAX_PCRE), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("(?(R)a|b)\\1", GRX_SYNTAX_PERL), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("\\1(?(R)a|b)", GRX_SYNTAX_PCRE), GRX_ERR_SYNTAX);
+  // An escaped parenthesis before one is still an escaped parenthesis:
+  // `\(?(a)\1` is a literal "(", optional, then a group and a reference to
+  // it, and it matches "aa" as well as "(aa".
+  EXPECT_EQ(span_of("\\(?(a)\\1", "aa"), "0-2");
+  EXPECT_EQ(span_of("\\(?(a)\\1", "(aa"), "0-3");
+  // And the assertion condition, whose inner `(` has a `?` after it and was
+  // never counted, still compiles and still runs.
+  EXPECT_EQ(span_of("(?(?=a)b|c)", "c"), "0-1");
+}
+
+TEST(Perl, WhetherAConditionMayNameAGroupThatIsNotThere) {
+  // perl reads `(?(99)a|b)` as a condition that is false and matches "b";
+  // pcre2test refuses it as a reference to a subpattern that does not
+  // exist, and so does CPython. Both were asked.
+  EXPECT_EQ(span_of("(?(99)a|b)", "b", GRX_SYNTAX_PERL), "0-1");
+  EXPECT_EQ(span_of("(?(R99)a|b)", "b", GRX_SYNTAX_PERL), "0-1");
+  EXPECT_EQ(compile_result("(?(99)a|b)", GRX_SYNTAX_PCRE), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("(?(R99)a|b)", GRX_SYNTAX_PCRE), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("(?(99)a|b)", GRX_SYNTAX_PYTHON), GRX_ERR_SYNTAX);
+  // `(?(0)` is an error in every one of them, and so is a name no group
+  // has, so the leniency is the numeric forms alone.
+  EXPECT_EQ(compile_result("(?(0)a|b)", GRX_SYNTAX_PERL), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("(?(<n>)a|b)", GRX_SYNTAX_PERL), GRX_ERR_SYNTAX);
+  // A group that *is* there is unaffected in both.
+  EXPECT_EQ(span_of("(a)(?(1)b|c)", "ab", GRX_SYNTAX_PERL), "0-2");
+  EXPECT_EQ(span_of("(a)(?(1)b|c)", "ab", GRX_SYNTAX_PCRE), "0-2");
+}
+
 TEST(Perl, AConditionalOnADuplicateNameAsksWhetherAnyOfThemIsSet) {
   // One name, several groups, and a conditional that names it: the question
   // is whether *any* group of that name participated, which is the rule a

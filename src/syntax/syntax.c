@@ -142,6 +142,12 @@ static const GRX_SyntaxSpec spec_table[GRX_SYNTAX_COUNT] = {
     // anyway, as a group that never matches. pcre2test refuses the same
     // pattern outright.
     .allow_impossible_repeat = 1,
+    // `(?(99)a|b)` matches "b" in perl - a condition naming a group the
+    // pattern has not got is simply false - where pcre2test and CPython
+    // both refuse it. Measured; `(?(0)...)` is an error everywhere and a
+    // missing *name* is an error everywhere, so this is the numeric forms
+    // alone, `(?(R99)...)` included.
+    .condition_group_may_be_absent = 1,
     // documentation/dialects.md section 5.15: Perl's subject is a Unicode
     // string, so UTF is on unless the caller turns it off. The field had
     // been empty since the table was written, and what it cost was visible

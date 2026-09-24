@@ -300,6 +300,21 @@ typedef struct GRX_SyntaxSpec {
    * AST learns a new node kind.
    */
   int branch_and_operator;
+  /**
+   * Non-zero when a conditional may name a group the pattern has not got.
+   *
+   * Perl reads `(?(99)a|b)` as a condition that is simply false - the
+   * pattern matches "b" - where PCRE2 and CPython both refuse it as a
+   * reference to a subpattern that does not exist. The same split applies
+   * to the recursion form: `(?(R99)a|b)` matches "b" in perl and is an
+   * error in pcre2test. `(?(0)...)` is an error in every one of them, and
+   * a *name* no group has is an error in every one of them too, so this is
+   * about the numeric forms alone.
+   *
+   * A flag rather than a rule in the reader, because the reader is shared
+   * and the question is one line of it.
+   */
+  int condition_group_may_be_absent;
 } GRX_SyntaxSpec;
 
 /**

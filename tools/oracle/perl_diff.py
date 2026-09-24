@@ -109,6 +109,12 @@ SHARED_ATOMS = [
     # be there.
     "(a)(?(1)b|c)", "(a)?(?(1)b|c)", "(?<n>a)?(?(<n>)b|c)", "(a)(?(?=a)b|c)",
     "(a)(?(1)b)",
+    # The two recursion conditions, which need a recursion to be true in -
+    # a bare `(?(R)a|b)` can only ever take its false branch, and a
+    # vocabulary holding only that would generate the condition without
+    # ever asking it. `GRX_COND_RECURSION_ANY` and its numbered form were
+    # reached by no differential at all until these four.
+    "(?(R)a|b)", "(a(?(R)b|c))(?1)", "(?(R1)a|b)", "(a(?(R1)b|c))(?1)",
     # Branch reset, which gives two groups one number.
     "(?|(a)|(b))", "(?|(a)|(b))\\1",
     # Duplicate names, which perl allows with no modifier - `(?J)` is
