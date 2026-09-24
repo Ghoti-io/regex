@@ -29,6 +29,7 @@ import os
 import shutil
 import subprocess
 import sys
+import node_runner
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
@@ -103,7 +104,7 @@ for (const [pattern, subject, limit] of cases) {
 process.stdout.write(JSON.stringify(out));
 """
     payload = json.dumps([[p, s, l] for p, s, l, _ in cases])
-    text, _ = run(["node", "-e", source], stdin=payload)
+    text, _ = run(node_runner.command("-e", source), stdin=payload)
     return json.loads(text)
 
 

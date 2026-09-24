@@ -49,6 +49,7 @@ sys.path.insert(0, HERE)
 
 import match_diff
 import perl_diff
+import node_runner
 
 # The constructs that tell the iteration rules apart. Every one of them can
 # match empty *and* match something longer at the same position, which is
@@ -112,7 +113,8 @@ def ask_library(rows, dialect):
 def ask_node(rows):
     payload = json.dumps([[f, p, s] for f, p, s in rows])
     finished = subprocess.run(
-        ["node", os.path.join(HERE, "node_match.mjs"), "all"], input=payload,
+        node_runner.command(os.path.join(HERE, "node_match.mjs"), "all"),
+        input=payload,
         capture_output=True, text=True, check=True)
     answers = json.loads(finished.stdout)
     out = []

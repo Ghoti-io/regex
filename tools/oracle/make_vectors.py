@@ -36,6 +36,7 @@ ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE)
 
 import match_diff
+import node_runner
 
 # Cases worth writing down by name rather than leaving to chance. Each is a
 # rule from documentation/dialects.md that a random corpus would reach only by
@@ -129,7 +130,8 @@ def unescape(text):
 
 def ask_node(rows):
     payload = json.dumps([[f, p, s] for f, p, s in rows])
-    finished = subprocess.run(["node", os.path.join(HERE, "node_match.mjs")],
+    finished = subprocess.run(
+        node_runner.command(os.path.join(HERE, "node_match.mjs")),
         input=payload, capture_output=True, text=True, check=True)
     return json.loads(finished.stdout), finished.stderr.strip()
 

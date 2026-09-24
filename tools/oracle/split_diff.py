@@ -58,6 +58,7 @@ Copyright 2026 by Corey Pennycuff
 """
 
 import argparse
+import node_runner
 import json
 import os
 import random
@@ -127,7 +128,8 @@ def make_pattern(rng, unicode_sets, dialect):
 
 def ask_node(rows):
     payload = json.dumps([[f, p, s, l] for f, p, s, l in rows])
-    finished = subprocess.run(["node", os.path.join(HERE, "node_split.mjs")],
+    finished = subprocess.run(
+        node_runner.command(os.path.join(HERE, "node_split.mjs")),
         input=payload, capture_output=True, text=True, check=True)
     return json.loads(finished.stdout)
 

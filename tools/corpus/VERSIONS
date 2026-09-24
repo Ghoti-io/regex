@@ -186,3 +186,25 @@ glibc glibc-2.41
 # so no part of it reaches the shipped library or its package. If that ever
 # stops being true, the MIT notice has to travel with it.
 musl v1.2.6
+
+# A defect in Node v22.23.2 / V8 12.4.254.21, found at seed 4009 of the
+# replacement soak and minimised to one pattern with no alternation in it:
+#
+#   /(?:(?=a)a)*\B../u  over "\nabc" from offset 1
+#
+# is 1-4 on the *first* execution in a fresh process and **no match** on
+# every execution after it. `--regexp-interpret-all` gives 1-4 always;
+# `--no-regexp-tier-up`, which compiles immediately, gives no match always.
+# So V8's regexp interpreter and its compiled code disagree, and the tier-up
+# between them is the whole of it.
+#
+# 1-4 is the right answer - pcre2test 10.46 and perl 5.40.1 both give it,
+# and so does this library - so the compiled path is the wrong one.
+#
+# The reason it matters more than one wrong answer: without the flag the
+# oracle's answer to a row depends on how many rows ran before it, so the
+# same case can pass or fail according to where it lands in a batch. A
+# differential whose reference is order-dependent is not measuring what it
+# says it measures. Every generator here asks Node through
+# tools/oracle/node_runner.py, which adds the flag and refuses to run
+# without it rather than falling back to a quietly order-dependent oracle.

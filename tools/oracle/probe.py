@@ -28,6 +28,7 @@ import os
 import shutil
 import subprocess
 import sys
+import node_runner
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
@@ -89,7 +90,7 @@ const out = rows.map(([p, f, s]) => {
 });
 process.stdout.write(JSON.stringify(out));
 """
-    text, _ = run(["node", "-e", source],
+    text, _ = run(node_runner.command("-e", source),
         json.dumps([[p, f, s] for p, f, s, _ in cases]))
     try:
         return json.loads(text)

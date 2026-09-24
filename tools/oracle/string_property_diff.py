@@ -24,6 +24,7 @@ import json
 import os
 import subprocess
 import sys
+import node_runner
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
@@ -59,7 +60,8 @@ def read_universe(path):
 
 def ask_node(rows):
     payload = json.dumps([[f, p, s] for f, p, s in rows])
-    finished = subprocess.run(["node", os.path.join(HERE, "node_match.mjs")],
+    finished = subprocess.run(
+        node_runner.command(os.path.join(HERE, "node_match.mjs")),
         input=payload, capture_output=True, text=True, check=True)
     return json.loads(finished.stdout)
 

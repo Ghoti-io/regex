@@ -52,6 +52,7 @@ sys.path.insert(0, HERE)
 import match_diff
 import perl_diff
 import vim_diff
+import node_runner
 
 # The pieces a template is built from. Every recognised form, every way of
 # spelling something that looks like one and is not, and plain text between
@@ -302,7 +303,8 @@ def ask_python(rows):
 
 def ask_node(rows):
     payload = json.dumps([[f, p, s, t] for f, p, s, t in rows])
-    finished = subprocess.run(["node", os.path.join(HERE, "node_replace.mjs")],
+    finished = subprocess.run(
+        node_runner.command(os.path.join(HERE, "node_replace.mjs")),
         input=payload, capture_output=True, text=True, check=True)
     return json.loads(finished.stdout)
 

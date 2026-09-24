@@ -1427,6 +1427,7 @@ answer.
 | all | `{m,n}` bounds above `max_repeat_count`, and expansions above `max_program_size`, are refused | bounded compile time | `GRX_ERR_LIMIT` |
 | all | No locale; POSIX classes and case folding are C-locale ASCII or Unicode, never `LC_CTYPE` | [unicode.md](unicode.md) §7 | - |
 | ECMAScript | Lone surrogates cannot occur in the subject | UTF-8 | - |
+| ECMAScript | V8's regexp interpreter and its compiled code disagree, and this library is the interpreter's | `/(?:(?=a)a)*\B../u` over "\nabc" from offset 1 is 1-4 on the first execution in a fresh Node process and **no match** on every execution after it, so the answer depends on how many times the pattern has run. `--regexp-interpret-all` gives 1-4 always and `--no-regexp-tier-up` gives no match always, which places it in the tier-up. 1-4 is right: pcre2test 10.46 and perl 5.40.1 both give it, and it is what ordered alternation requires - the same pattern's first alternative alone matches 1-4 there too. Found at seed 4009 of the replacement soak; the oracle now runs with the interpreter, because a reference whose answer moves with the execution count cannot settle anything. Node v22.23.2, V8 12.4.254.21; `tools/corpus/VERSIONS` and `tools/oracle/node_runner.py` | - |
 | ECMAScript | Repeat counts are limited (the grammar admits 2^53 - 1) | as above | `GRX_ERR_LIMIT` |
 | ECMAScript | **The subject is code points, not UTF-16 code units, in *both* modes** | see below | - |
 | ECMAScript | A match cannot begin or end between the halves of a surrogate pair | as above | - |

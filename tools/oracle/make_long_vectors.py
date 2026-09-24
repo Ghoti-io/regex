@@ -1,4 +1,5 @@
 import json, os, subprocess, sys
+import node_runner
 
 HERE = "tools/oracle"
 B = chr(92)
@@ -63,7 +64,7 @@ def main():
         rows.append((flags, pattern, decode_unit(unit) * repeat))
 
     finished = subprocess.run(
-        ["node", os.path.join(HERE, "node_match.mjs")],
+        node_runner.command(os.path.join(HERE, "node_match.mjs")),
         input=json.dumps([[f, p, s] for f, p, s in rows]),
         capture_output=True, text=True, check=True)
     answers = json.loads(finished.stdout)

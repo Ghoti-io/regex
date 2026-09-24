@@ -32,6 +32,7 @@ import os
 import random
 import subprocess
 import sys
+import node_runner
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
@@ -84,7 +85,7 @@ def corpus(seed, count):
 def ask_node(rows):
     payload = json.dumps([[flags, pattern] for flags, pattern in rows])
     finished = subprocess.run(
-        ["node", os.path.join(HERE, "node_syntax.mjs")],
+        node_runner.command(os.path.join(HERE, "node_syntax.mjs")),
         input=payload, capture_output=True, text=True, check=True)
     return json.loads(finished.stdout)
 

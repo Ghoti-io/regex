@@ -28,6 +28,7 @@ import json
 import os
 import subprocess
 import sys
+import node_runner
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
@@ -108,7 +109,7 @@ def ask_library(driver, names):
 
 
 def ask_node(names):
-    finished = subprocess.run(["node", "-e", NODE_SOURCE],
+    finished = subprocess.run(node_runner.command("-e", NODE_SOURCE),
         input=json.dumps(names), capture_output=True, text=True, check=True)
     return json.loads(finished.stdout)
 
