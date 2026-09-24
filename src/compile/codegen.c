@@ -1056,16 +1056,38 @@ static GRX_Result gen_cond_assertion(
  * An assertion condition has no such cheap test - it has to run a
  * sub-program - and is laid out by gen_cond_assertion() instead.
  */
+static GRX_Result copy_group_list(Codegen * codegen, const GRX_IRNode * node,
+    uint32_t ir_list, uint32_t * out_offset);
+
 static GRX_Result gen_cond(Codegen * codegen, const GRX_IRNode * node) {
   if (node->mode == GRX_COND_ASSERTION) {
     return gen_cond_assertion(codegen, node);
   }
 
+  // `x` is the group, unless the name it was written with belongs to
+  // several - then it is a list of them and GRX_INST_AMBIGUOUS_REF says so,
+  // exactly as a backreference carries one, because the question is the
+  // same: which of the groups with that name is set when this runs.
+  uint32_t operand = node->a;
+  if (node->flags & GRX_IR_AMBIGUOUS_REF) {
+    GRX_Result listed = copy_group_list(codegen, node, node->b, &operand);
+    if (listed != GRX_OK) {
+      return listed;
+    }
+  }
+
   uint32_t test = GRX_INDEX_NONE;
   GRX_Result result
-      = emit(codegen, GRX_OP_COND, node->mode, node->a, 0, node, &test);
+      = emit(codegen, GRX_OP_COND, node->mode, operand, 0, node, &test);
   if (result != GRX_OK) {
     return result;
+  }
+  if (node->flags & GRX_IR_AMBIGUOUS_REF) {
+    GRX_Inst * inst = GRX_ARENA_AT(GRX_Inst, &codegen->program->insts, test);
+    if (!inst) {
+      return fail(codegen, GRX_DIAG_INTERNAL, node);
+    }
+    inst->flags |= GRX_INST_AMBIGUOUS_REF;
   }
 
   uint32_t yes = node->first_child;

@@ -372,6 +372,28 @@ TEST(Perl, DuplicateNamesNeedJOrABranchReset) {
   grx_regex_free(reset.regex);
 }
 
+TEST(Perl, AConditionalOnADuplicateNameAsksWhetherAnyOfThemIsSet) {
+  // One name, several groups, and a conditional that names it: the question
+  // is whether *any* group of that name participated, which is the rule a
+  // backreference to a duplicate name already followed. It asked the first
+  // group alone - the one that may never run - so these two were exactly
+  // inverted. perl 5.40.1 and pcre2 10.46 agree with each other here, and
+  // both were asked before this was written.
+  EXPECT_EQ(span_of("(?J)(?<n>x)?(?<n>b)(?(<n>)c|d)", "bc"), "0-2");
+  EXPECT_EQ(span_of("(?J)(?<n>x)?(?<n>b)(?(<n>)c|d)", "bd"), "nomatch");
+  // The first group of the name is the one that is set here, which is the
+  // case that passed before: a rule that reads the first group looks right
+  // until the first group is the one that did not run.
+  EXPECT_EQ(span_of("(?J)(?<n>b)(?<n>a)?(?(<n>)b|c)", "bab"), "0-3");
+  EXPECT_EQ(span_of("(?J)(?<n>b)(?<n>a)?(?(<n>)b|c)", "bc"), "nomatch");
+  // And the same in perl's spelling, where duplicate names need no switch.
+  EXPECT_EQ(span_of("(?<n>x)|(?<n>b)(?(<n>)c|d)", "bc", GRX_SYNTAX_PERL), "0-2");
+  EXPECT_EQ(span_of("(?<n>a)(?(<n>)b|c)", "ab", GRX_SYNTAX_PERL), "0-2");
+  // A name belonging to one group is unchanged: no list, no lookup.
+  EXPECT_EQ(span_of("(?<n>a)?(?(<n>)b|c)", "ab"), "0-2");
+  EXPECT_EQ(span_of("(?<n>a)?(?(<n>)b|c)", "c"), "0-1");
+}
+
 // --------------------------------------------------------------------------
 // The numeric escapes
 // --------------------------------------------------------------------------

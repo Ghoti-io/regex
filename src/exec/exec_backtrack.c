@@ -2320,7 +2320,14 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
             break;
           case GRX_COND_GROUP_SET:
           default: {
-            size_t start_slot = (size_t)inst->x * 2;
+            // One name may belong to several groups, and then the question
+            // is whether any of them is set: ambiguous_group() answers with
+            // the first that is, or with the first of the list when none
+            // is, so the test below gives the right answer either way.
+            uint32_t group = (inst->flags & GRX_INST_AMBIGUOUS_REF)
+                ? ambiguous_group(bt, inst)
+                : inst->x;
+            size_t start_slot = (size_t)group * 2;
             size_t end_slot = start_slot + 1;
             holds = end_slot < bt->captures
                 && bt->slots[start_slot] != GRX_NPOS

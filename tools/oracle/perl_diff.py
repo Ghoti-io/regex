@@ -34,6 +34,7 @@ import argparse
 import binascii
 import os
 import random
+import re
 import subprocess
 import sys
 
@@ -155,6 +156,13 @@ PERL_ONLY = [
     # The charset modifiers, which pick which alphabet `\\w` and friends
     # mean. PCRE2 has no such letter.
     "(?a:\\w)", "(?u:\\w)", "(?aa:\\w)", "(?d:\\w)",
+    # The four segmentation boundaries, which are perl's alone: pcre2test
+    # reads `\\b{wb}` as a word boundary and then a literal brace. They
+    # compile here and `perl_syntax_diff.py` says so, and until now nothing
+    # asked where they *hold* over a subject - the tests state the rule and
+    # a test is not a differential.
+    "\\b{wb}", "\\B{wb}", "\\b{gcb}", "\\B{gcb}", "\\b{sb}",
+    "\\B{sb}", "\\b{lb}", "\\B{lb}",
 ]
 
 # What only PCRE2 has.
@@ -278,7 +286,32 @@ def trim_unset(line):
     return " ".join(fields)
 
 
-def reference_defect(dialect, pattern, them):
+BOUNDARY_FIRST = re.compile(r"\\[bB]\{\s*(?:wb|gcb|g|sb|lb)\s*\}")
+
+
+def boundary_end_of_subject(pattern, them, subject, ours):
+    """Whether the only difference is the empty match at the end.
+
+    Two shapes, one defect, because two gates ask the same question in two
+    ways: `perl_diff.py` asks for one match and `iterate_diff.py` asks for
+    every match. In the first, perl finds nothing where this library finds
+    the empty span at the end; in the second, perl's list is this library's
+    without its last entry, and that entry is the empty span at the end.
+    """
+    if subject is None or ours is None or not BOUNDARY_FIRST.match(pattern):
+        return False
+    end = "%d:%d" % (len(subject.encode()), len(subject.encode()))
+    if ours == "match " + end and them == "nomatch":
+        return True
+    if ours.startswith("all ") and them.startswith("all "):
+        mine = ours.split()
+        theirs = them.split()
+        return (len(mine) == len(theirs) + 1 and mine[-1] == end
+            and mine[2:-1] == theirs[2:])
+    return False
+
+
+def reference_defect(dialect, pattern, them, subject=None, ours=None):
     r"""Rows where the *reference* is known to be wrong.
 
     Counted and reported rather than silently dropped, and written as
@@ -316,8 +349,27 @@ def reference_defect(dialect, pattern, them):
 
     The pcre2 rule is gated on the reference having *refused* the pattern, so
     a row pcre2 actually compiled can never be excluded by it.
+
+    **perl misses the boundary at the end of a one-character subject** when
+    the pattern begins with one of the four segmentation assertions. The
+    boundary is there and perl's own answers say so from every other
+    direction: `a\b{lb}` against "a" is 0-1, `\b{lb}$` against "a" is 1-1,
+    `\b{gcb}` against "ab" is 0-0, 1-1 and 2-2 under `/g`, and
+    `x|\b{gcb}` against "a" is 0-0 and 1-1 - the same assertion, in an
+    alternation that defeats whatever optimisation this is. Alone it gives
+    0-0 and stops, and `\b{lb}`, whose LB2 forbids a break at the start,
+    gives nothing at all.
+
+    UAX #29's GB2 and SB2 and UAX #14's LB3 all break at the end of text,
+    so the boundary exists in every one of those. The rule is narrow in
+    both dimensions rather than one: the pattern has to *begin* with such
+    an assertion, **and** the difference has to be exactly the empty match
+    at the end of the subject - a row where the two differ anywhere else is
+    still a disagreement.
     """
     if dialect == "perl":
+        if boundary_end_of_subject(pattern, them, subject, ours):
+            return True
         return "(?|" in pattern and ("\\g{-" in pattern or "(?(" in pattern)
     return (them.startswith("compile") and "(?[" in pattern
         and ("(?<=" in pattern or "(?<!" in pattern or "(*nlb:" in pattern
@@ -391,7 +443,8 @@ def compare(dialect, ours, seed, patterns, examples):
         compared += 1
         if trim_unset(normalise_ours(us)) == trim_unset(them):
             continue
-        if reference_defect(dialect, pattern, them):
+        if reference_defect(dialect, pattern, them, subject,
+                trim_unset(normalise_ours(us))):
             known += 1
             continue
         disagreements.append((flags, pattern, subject, them, us))

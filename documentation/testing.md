@@ -812,13 +812,22 @@ imported corpora:
 - perl quantifies every control verb, as it quantifies `\K` and the anchors.
   The rule had pcre2's half only, which refuses everything but `(*ACCEPT)*`.
 
-And two defects of the *references*, each excluded by name and counted in
-the run so the exclusion cannot go quiet: perl 5.40.1's branch-reset
-regression (Perl/perl5#24577) and a pcre2 10.46 internal error on a
-lookbehind beside an extended class. Both are described in
-`tools/corpus/VERSIONS`, and the perl exclusion applies to the perl run
-only - the same family is still compared against pcre2, which has it
-right.
+And three defects of the *references*, each excluded by name and counted
+in the run so the exclusion cannot go quiet: perl 5.40.1's branch-reset
+regression (Perl/perl5#24577), a pcre2 10.46 internal error on a lookbehind
+beside an extended class, and perl's search for a pattern that *begins*
+with `\b{lb}` missing the end of a one-character subject. The first two are
+described in `tools/corpus/VERSIONS`, and the perl exclusions apply to the
+perl run only - the same families are still compared against pcre2.
+
+The third came with the four segmentation boundaries, which were in the
+syntax differential and in the unit tests and in no match differential at
+all: `\b{wb}`, `\b{gcb}`, `\b{sb}` and `\b{lb}` compiled, and nothing
+asked perl where they *hold* over a subject. They agree everywhere except
+that one shape, where perl contradicts itself: `a\b{lb}` against "a" is 0-1
+and `\b{lb}$` against "a" is 1-1, so the boundary is there, while
+`\b{lb}` alone against "a" is no match - and 2-2 against "ab", 3-3 against
+"abc". UAX #14 breaks at the end of text in all of them.
 
 The vocabulary includes ill-formed atoms for the reason
 [posix_diff.py](../tools/oracle/posix_diff.py) does: without them nothing is

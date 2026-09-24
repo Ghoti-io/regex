@@ -529,6 +529,16 @@ does not match in perl and does not here. It only exists for the window
 between a group opening and closing, which is why nothing a reference could
 already see changed. See `GRX_PROGRAM_SHADOW_CAPTURES`.
 
+**A name belonging to several groups names all of them**, and what a
+construct reading it means is whichever of them is *set* when it runs -
+`(?J)` in PCRE2, and no switch at all in perl. Two constructs read a name
+that way and both follow the rule: a backreference, and a conditional
+asking whether the group participated. `(?J)(?<n>x)?(?<n>b)(?(<n>)c|d)`
+against "bc" is 0-2 in perl and in pcre2test, because the second group of
+that name is set; reading the first group alone - the one that may never
+run - answers the question backwards, which is what this library did until
+a differential put a duplicate name and a conditional in one pattern.
+
 ### 5.7 Backreference versus octal, and the numeric escapes
 
 | Dialect | `\1`..`\9` | `\10` and up | `\0` | Octal | `\x` |

@@ -208,7 +208,7 @@ def compare(dialect, rng, patterns, subjects, examples):
         if not a.startswith("all ") or not b.startswith("all "):
             declined += 1
             continue
-        if perl_diff.reference_defect(dialect, pattern, b):
+        if perl_diff.reference_defect(dialect, pattern, b, subject, a):
             declined += 1
             continue
 
