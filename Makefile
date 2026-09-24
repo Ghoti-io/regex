@@ -421,7 +421,7 @@ TESTFLAGS := `PKG_CONFIG_PATH=$(PKG_CONFIG_LOOKUP_PATH) pkg-config --libs --cfla
 ALL_TEST_GATES := check-symbols check-layering check-aliasing \
 	check-unicode-tables check-dump-names check-readme-example \
 	check-diagnostics check-engine-equivalence check-json-schema-suite \
-	check-tables
+	check-tables check-status-line
 TEST_GATES ?= $(ALL_TEST_GATES)
 
 # Every target that runs the suites carries them - `test`, `test-quiet`,
@@ -814,7 +814,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 
 # General commands
 .PHONY: check-oracle-soak
-.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-dump-names check-readme-example check-tables check-oracle-syntax check-oracle-match check-oracle-soak check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-perl-syntax check-oracle-script-runs check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
+.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-dump-names check-readme-example check-tables check-status-line check-oracle-syntax check-oracle-match check-oracle-soak check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-perl-syntax check-oracle-script-runs check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
 	check-oracle-properties check-oracle-numeric-properties \
 	check-oracle-string-properties check-oracle-posix check-oracle-sed \
 	check-oracle-exclusions check-oracle-determinism \
@@ -1538,6 +1538,29 @@ check-tables:
 		exit 0; \
 	fi; \
 	python3 tools/check_tables.py
+
+check-status-line: ## Fail if README's status paragraph disagrees with the code
+# README.md opens by saying how many dialects are built and how many are
+# refused. It has been wrong four times, always in the safe direction, and
+# the fourth sat directly above a Status table row reading "Vim front end |
+# working" - the contradiction was already on the page and nobody read it.
+#
+# The failure is structural, not careless. That paragraph goes stale when
+# *another* file changes: a front end lands in src/syntax/frontend.c and two
+# numbers three directories away silently stop being true. "Re-read it when
+# you edit it" is exactly the wrong discipline for a claim whose trigger is
+# somewhere else, because the moment it needs checking is the moment nobody
+# has a reason to open it. Counting is the only thing that can catch it.
+#
+# So this counts the arms of grx_frontend_for() and the enumerators before
+# GRX_SYNTAX_COUNT, and compares both numbers against the prose. It costs
+# milliseconds and needs no reference implementation.
+check-status-line:
+	@if ! command -v python3 >/dev/null 2>&1; then \
+		printf "check-status-line: skipped (no python3)\n"; \
+		exit 0; \
+	fi; \
+	python3 tools/check_status_line.py
 
 check-dump-names: ## Fail if a dump's name table is shorter than its enum
 # Every dump here turns an enumerator into a word through a positional

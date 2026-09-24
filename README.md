@@ -8,30 +8,39 @@ that is linear in the subject length, a backtracking engine for the constructs
 no lockstep simulation can express, and a bit-state engine that is the
 backtracker with a memo and the linear bound back.
 
-**Status: under construction.** Eight dialects parse, compile and match on
+**Status: under construction.** Nine dialects parse, compile and match on
 all three engines: ECMAScript in its legacy, `u` and `v` modes, checked
 against Node 22; PCRE2 and Perl against pcre2 10.46 and perl 5.40.1;
-`posix-bre`, `posix-ere`, `gnu-bre` and `gnu-ere` against glibc and musl; and
-Python against CPython 3.13.
+`posix-bre`, `posix-ere`, `gnu-bre` and `gnu-ere` against glibc and musl;
+Python against CPython 3.13; and Vim against both of vim's own engines,
+`set re=1` and `set re=2`.
 `text` validates JSON Schema's `pattern` and `patternProperties` through
 this library. Of 37,212 conformance vectors, **every dialect passes 100%**,
 Perl over the 5,975 of its 5,983 whose expectation is sound: the other eight
 are defects in Perl itself, excluded from the denominator and each named in
 `tests/data/vectors/known-gaps.txt` with the reproduction that demonstrates
-it. There are no gaps left in that file. Python has no corpus - CPython
-removed `re_tests.py` and Debian does not ship it - so its gate is a
-generator alone, over 4.2 million rows against `re` itself. The other eight
-dialects are named and report `GRX_ERR_UNSUPPORTED`. See [Status](#status) below for exactly what
+it. There are no gaps left in that file. Two of the nine have no vector
+corpus and are gated by a generator alone: Python, because CPython removed
+`re_tests.py` and Debian does not ship it, over 4.2 million rows against
+`re` itself; and Vim, which never had one, over 10,180 rows asked of both
+of its engines. The other seven dialects are named and report
+`GRX_ERR_UNSUPPORTED`. See [Status](#status) below for exactly what
 works today.
 
-(This paragraph has been wrong twice, both times by lagging: first it said
+(This paragraph has been wrong four times, every time by lagging: first it said
 the compiler and the engines were stubs, after they had stopped being stubs;
 then it quoted 90.9% and 94.7% for PCRE2 and Perl, and named twelve
 unsupported dialects, after four more had front ends; then it said nine
-unsupported, after Python made it eight. A status line that is
+unsupported, after Python made it eight; then eight unsupported and eight
+working, after Vim made it seven and nine - and that one sat directly above
+a table row reading "Vim front end | working". A status line that is
 wrong in the *safe* direction is still wrong, and it sits above a table that
-contradicts it. It is checked against a fresh `make test` when it changes,
-which is the only thing that has ever kept it honest.)
+contradicts it. It was "checked against a fresh `make test` when it
+changes", which is exactly the discipline that let it lag four times: the
+paragraph goes stale when something *else* changes, so the moment it needs
+checking is the moment nobody is looking at it. `make check-status-line`
+counts the arms of `grx_frontend_for()` and fails if the two numbers here
+disagree with it.)
 
 ## Example
 
