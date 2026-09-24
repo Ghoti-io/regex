@@ -3071,6 +3071,102 @@ TEST(Perl, PcresCharsetModifiersNarrowOneThingEach) {
   }
 }
 
+// A pattern that stops inside an option setting has run out of pattern, and
+// that is a different complaint from a letter the dialect has not got. All
+// three references keep the two apart, and keep them apart by the same rule:
+// it is whether the *letter* was acceptable, not whether the end was near.
+//
+//   pcre2test  `(?n`  error 114 "missing closing parenthesis"
+//              `(?u`  error 111 "unrecognized character after (? or (?-"
+//   perl       `(?i`  "Sequence (?... not terminated"
+//              `(?z`  "Sequence (?z...) not recognized"
+//   re         `(?i`  "missing -, : or )"
+//              `(?z`  "unknown extension ?z"
+//
+// `n` and `i` are letters those dialects have, so the end of the pattern is
+// what is wrong; `u` and `z` are not, so the letter is what is wrong, and it
+// stays wrong even though the pattern ends immediately after it.
+//
+// Every one of these answered "unknown flag" here until 2026-09-24, because
+// the letter loop read the terminating NUL as a letter and refused it before
+// the end-of-pattern check below the loop could run. Both refuse either way,
+// so no match was ever wrong; the reason was, and the reason is what a
+// caller puts in front of a user.
+TEST(Perl, RunningOutOfPatternIsNotAnUnknownLetter) {
+  struct { GRX_Syntax syntax; const char * pattern; } truncated[] = {
+    // Letters each dialect has, then nothing.
+    {GRX_SYNTAX_PCRE, "(?i"}, {GRX_SYNTAX_PCRE, "(?im"},
+    {GRX_SYNTAX_PCRE, "(?-i"}, {GRX_SYNTAX_PCRE, "(?^i"},
+    {GRX_SYNTAX_PCRE, "(?x"}, {GRX_SYNTAX_PCRE, "(?xx"},
+    {GRX_SYNTAX_PCRE, "(?n"},
+    // The two built today, which is what brought this to notice: `(?a`
+    // takes the whole family and `(?aD` one member, and both then end.
+    {GRX_SYNTAX_PCRE, "(?r"}, {GRX_SYNTAX_PCRE, "(?a"},
+    {GRX_SYNTAX_PCRE, "(?aD"}, {GRX_SYNTAX_PCRE, "(?aS"},
+    {GRX_SYNTAX_PCRE, "(?aW"}, {GRX_SYNTAX_PCRE, "(?aP"},
+    {GRX_SYNTAX_PCRE, "(?aT"}, {GRX_SYNTAX_PCRE, "(?a-"},
+    {GRX_SYNTAX_PCRE, "(?aDi"},
+    // `(?` with no letter at all. perl separates this one ("Sequence (?
+    // incomplete") and so does `re` ("unexpected end of pattern"), but
+    // both put it on the termination side, which is the side that matters.
+    {GRX_SYNTAX_PCRE, "(?"},
+    // Perl's charset letters, which take a different branch of the loop.
+    {GRX_SYNTAX_PERL, "(?i"}, {GRX_SYNTAX_PERL, "(?a"},
+    {GRX_SYNTAX_PERL, "(?aa"}, {GRX_SYNTAX_PERL, "(?u"},
+    {GRX_SYNTAX_PERL, "(?l"}, {GRX_SYNTAX_PERL, "(?p"},
+    {GRX_SYNTAX_PERL, "(?-i"}, {GRX_SYNTAX_PERL, "(?"},
+    // Python's, which take a third branch.
+    {GRX_SYNTAX_PYTHON, "(?i"}, {GRX_SYNTAX_PYTHON, "(?a"},
+    {GRX_SYNTAX_PYTHON, "(?u"}, {GRX_SYNTAX_PYTHON, "(?-i"},
+    {GRX_SYNTAX_PYTHON, "(?"},
+  };
+
+  for (const auto & row : truncated) {
+    Attempt cut = compile(row.pattern, row.syntax);
+    EXPECT_EQ(cut.result, GRX_ERR_SYNTAX) << row.pattern;
+    EXPECT_EQ(cut.diag, GRX_DIAG_UNMATCHED_OPEN_PAREN) << row.pattern;
+    grx_regex_free(cut.regex);
+  }
+
+  // The other side of the rule, and the half that makes this a fix rather
+  // than a blanket "end of pattern wins": a letter the dialect has not got
+  // is an unknown flag whether or not the pattern ends after it. Without
+  // these rows, moving the end check above the letter read would pass just
+  // as well as moving it below, and only one of those is what pcre2 does.
+  struct { GRX_Syntax syntax; const char * pattern; } unknown[] = {
+    {GRX_SYNTAX_PCRE, "(?u"}, {GRX_SYNTAX_PCRE, "(?d"},
+    {GRX_SYNTAX_PCRE, "(?l"}, {GRX_SYNTAX_PCRE, "(?p"},
+    {GRX_SYNTAX_PCRE, "(?z"}, {GRX_SYNTAX_PCRE, "(?iz"},
+    {GRX_SYNTAX_PERL, "(?r"}, {GRX_SYNTAX_PERL, "(?z"},
+    {GRX_SYNTAX_PYTHON, "(?z"}, {GRX_SYNTAX_PYTHON, "(?r"},
+  };
+
+  for (const auto & row : unknown) {
+    Attempt bad = compile(row.pattern, row.syntax);
+    EXPECT_EQ(bad.result, GRX_ERR_SYNTAX) << row.pattern;
+    EXPECT_EQ(bad.diag, GRX_DIAG_UNKNOWN_FLAG) << row.pattern;
+    grx_regex_free(bad.regex);
+  }
+
+  // And the reason the check is grx_parse_at_end() and not `c == '\0'`.
+  // Patterns carry a length, so an embedded NUL is an ordinary byte that no
+  // dialect has a letter for. It must stay an unknown flag, and a fix
+  // written against the byte would call it the end of the pattern.
+  const std::string embedded("(?i\0m)x", 7);
+  Attempt nul = compile(embedded, GRX_SYNTAX_PCRE);
+  EXPECT_EQ(nul.result, GRX_ERR_SYNTAX);
+  EXPECT_EQ(nul.diag, GRX_DIAG_UNKNOWN_FLAG);
+  grx_regex_free(nul.regex);
+
+  // A group whose letters parsed and whose *body* then ran out has always
+  // reported this, and the truncated settings above now join it rather than
+  // getting a code of their own.
+  Attempt body = compile("(?i:a", GRX_SYNTAX_PCRE);
+  EXPECT_EQ(body.result, GRX_ERR_SYNTAX);
+  EXPECT_EQ(body.diag, GRX_DIAG_UNMATCHED_OPEN_PAREN);
+  grx_regex_free(body.regex);
+}
+
 // The family bit is still one bit for the callers that hold it, and setting
 // it is setting all five. A caller reaching GRX_OPT_ASCII_CLASSES through
 // the API - which is how Perl's `/a`, Perl's `/l` and Python's `re.ASCII`

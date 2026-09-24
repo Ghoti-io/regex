@@ -1059,6 +1059,20 @@ each other - `u` and `v` - are `GRX_DIAG_CONFLICTING_FLAGS` in either order,
 which needed an exclusion *group* rather than a mask of forbidden option bits:
 `v` implies `u`, so a mask catches `vu` and misses `uv`.
 
+A fifth answer applies to an option setting inside a pattern rather than to a
+flag string: **a pattern that stops before the setting closes has run out of
+pattern, not run into a letter the dialect lacks**, and it is
+`GRX_DIAG_UNMATCHED_OPEN_PAREN` - the same answer `(?i:a` has always given.
+All three references keep those two apart, and keep them apart on the same
+test, which is whether the *letter* was one the dialect has rather than how
+near the end was: pcre2test answers error 114 "missing closing parenthesis"
+for `(?n` and error 111 "unrecognized character" for `(?u`, because `n` is one
+of its letters and `u` is not; perl says "Sequence (?... not terminated"
+against "Sequence (?z...) not recognized"; `re` says "missing -, : or )"
+against "unknown extension ?z". So `(?i`, `(?-i`, `(?^i`, `(?a` and `(?aD` are
+unmatched parentheses and `(?z` is an unknown flag, at the end of a pattern as
+anywhere else.
+
 Perl's four charset modifiers - `a`, `d`, `l`, `u` - are one such group, with
 one wrinkle no other letter has: `a` may be written twice, and the two need
 not be adjacent, so `(?aia:s)` is `/aa`. What each chooses:

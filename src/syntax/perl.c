@@ -2237,6 +2237,27 @@ static GRX_Result read_option_letters(GRX_Parser * parser, size_t start,
   }
 
   for (;;) {
+    // End of pattern, before any letter is read. All three references make
+    // running out of pattern a *termination* error and an unrecognised
+    // letter an *alphabet* error, and they keep the two apart the same way:
+    // pcre2test answers 114 "missing closing parenthesis" for `(?n` and 111
+    // "unrecognized character" for `(?u`, because `n` is one of its letters
+    // and `u` is not; perl says "Sequence (?... not terminated" against
+    // "Sequence (?z...) not recognized"; `re` says "missing -, : or )"
+    // against "unknown extension ?z". So the test has to be here, above the
+    // read, rather than on the byte: a letter that is genuinely not in the
+    // dialect's alphabet is still an unknown flag no matter where it sits.
+    //
+    // byte_at() returns '\0' past the end, which is not `:` and not `)`, so
+    // without this the NUL fell through to the unknown-flag return below and
+    // the end-of-pattern check after the loop could never run - it was
+    // written for this case and was dead from the day it was written.
+    // grx_parse_at_end() rather than `c == '\0'`, because patterns are
+    // length-delimited and an embedded NUL is a real byte that no dialect
+    // has a letter for; it must stay an unknown flag.
+    if (grx_parse_at_end(parser)) {
+      break;
+    }
     char c = byte_at(parser, 0);
     if (c == ':' || c == ')') {
       break;
@@ -2371,6 +2392,10 @@ static GRX_Result read_option_letters(GRX_Parser * parser, size_t start,
     }
   }
 
+  // Reached by the `break` at the top of the loop, which is the only way out
+  // of it that is not `:` or `)`. The offset is the `(`, matching what
+  // `(?i:a` - a group whose letters parsed and whose body never closed - has
+  // always reported.
   if (grx_parse_at_end(parser)) {
     return grx_parse_fail(parser, GRX_DIAG_UNMATCHED_OPEN_PAREN, start, 1);
   }
