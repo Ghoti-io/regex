@@ -2679,6 +2679,42 @@ TEST(Perl, NoCaptureModeLeavesNoGroupForANumberToName) {
   EXPECT_EQ(compile_result("(a)\\2", GRX_SYNTAX_PERL), GRX_ERR_SYNTAX);
 }
 
+TEST(Perl, PcresCharsetModifiersAreNotBuiltAndSaySo) {
+  // pcre2test 10.46 compiles `(?a)` and the suffixed forms, each narrowing
+  // one thing to ASCII: `(?aD)\d` stops matching U+0661 under UCP,
+  // `(?aS)\s` stops matching U+00A0, `(?aW)\w` stops matching "é", and
+  // `(?a)` does all of them at once. This library has one bit for the
+  // whole family - GRX_OPT_ASCII_CLASSES narrows every shorthand and the
+  // POSIX classes together - so the letters cannot be answered separately
+  // and the construct is refused.
+  //
+  // What the answer *is* matters: "not implemented" and not "unknown
+  // flag", because PCRE2 has the letter.
+  Attempt whole = compile("(?a)\\w", GRX_SYNTAX_PCRE);
+  EXPECT_EQ(whole.result, GRX_ERR_UNSUPPORTED);
+  EXPECT_EQ(whole.diag, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED);
+  grx_regex_free(whole.regex);
+
+  Attempt suffixed = compile("(?aD)\\d", GRX_SYNTAX_PCRE);
+  EXPECT_EQ(suffixed.result, GRX_ERR_UNSUPPORTED);
+  grx_regex_free(suffixed.regex);
+
+  // The four letters PCRE2 does not have stay unknown flags, which is what
+  // pcre2test answers for them: error 111, "unrecognized character after
+  // (? or (?-".
+  for (const char * pattern : {"(?u)a", "(?d)a", "(?l)a", "(?p)a"}) {
+    Attempt unknown = compile(pattern, GRX_SYNTAX_PCRE);
+    EXPECT_EQ(unknown.result, GRX_ERR_SYNTAX) << pattern;
+    EXPECT_EQ(unknown.diag, GRX_DIAG_UNKNOWN_FLAG) << pattern;
+    grx_regex_free(unknown.regex);
+  }
+
+  // Perl's own `a` is built and is not touched by any of this: `(?a)\w`
+  // there narrows the shorthand, and `/aa` narrows the folding with it.
+  EXPECT_EQ(span_of("(?a)\\w", "\xC3\xA9", GRX_SYNTAX_PERL), "nomatch");
+  EXPECT_EQ(span_of("(?a)\\w", "a", GRX_SYNTAX_PERL), "0-1");
+}
+
 int main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

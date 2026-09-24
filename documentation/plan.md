@@ -614,6 +614,17 @@ first as a block of one-atom patterns, for the reason WP-44 gives.
 **WP-37 Tcl** (the `TCL_ARE` match preference is an engine mode, *engines,
 M*), **WP-38 Emacs**.
 
+**WP-46 PCRE2's `a` charset modifiers**: *front ends, S-M*, and not built.
+`(?aD)`, `(?aS)`, `(?aW)`, `(?aP)` and `(?aT)` each narrow *one* thing to
+ASCII, where this library has a single bit for the family - `(?a)` and
+Perl's `/a` set GRX_OPT_ASCII_CLASSES and every shorthand narrows together.
+Answering them separately means splitting that bit and the `shorthands`
+enum it selects, which is a change to the lowering rather than to the
+reader, so the construct is refused with GRX_ERR_UNSUPPORTED and
+[dialects.md](dialects.md) §6 carries it with the measurements.
+`tools/oracle/perl_diff.py` generates the spellings and counts the
+refusals, so the gap has a number rather than a note.
+
 **WP-44 Vim's composing clusters**: **built 2026-09-23**, `\Z` with it. A
 base and the composing characters after it are one character to vim, and
 the set of marks was already here - the zero-cell column of

@@ -2269,6 +2269,22 @@ static GRX_Result read_option_letters(GRX_Parser * parser, size_t start,
       option = flavour_option_for_letter(parser, c);
     }
     if (!option) {
+      // PCRE2 *has* the `a` modifiers and this library has not built them,
+      // which is a different answer from "no such letter". pcre2test 10.46
+      // compiles `(?a)`, `(?aa)` and the suffixed `(?aD)`, `(?aS)`,
+      // `(?aW)`, `(?aP)` and `(?aT)`, each narrowing one thing to ASCII,
+      // and it refuses `(?u)`, `(?d)`, `(?l)` and `(?p)` with error 111 -
+      // so those four stay "unknown flag" here, which is what they are.
+      // Perl's `a` is built and never reaches this line.
+      //
+      // Not built because the letters are finer than this library's bits:
+      // GRX_OPT_ASCII_CLASSES narrows every shorthand and the POSIX
+      // classes together, where PCRE2 can narrow `\d` alone. Recorded in
+      // documentation/dialects.md section 6.
+      if (flavour(parser) == FLAVOUR_PCRE && c == 'a') {
+        return grx_parse_fail(parser, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED,
+            parser->position, 1);
+      }
       return grx_parse_fail(parser, GRX_DIAG_UNKNOWN_FLAG, parser->position, 1);
     }
 

@@ -71,6 +71,21 @@ SHARED_ATOMS = [
     "(?=(?<=a)b)", "(?<=(?<=a)b)",
     # Atomic grouping and inline modifiers.
     "(?>a)", "(?i)a", "(?i:a)", "(?-i:a)", "(?^i:a)",
+    # The modifiers that are not `i`, each of which is an option bit with a
+    # spec row and, until these lines, no generating gate at all: the
+    # driver spells flags as letters and has none of these among them, so
+    # the *only* way the vocabulary can ask about them is the inline form.
+    # `(?n)` found a defect the first time it was generated - a number that
+    # no-capture mode leaves without a group was not refused.
+    #
+    # `(?l)` is deliberately absent and is the one exclusion here: it asks
+    # for the locale's semantics, this library has only the C locale
+    # (documentation/dialects.md section 6), and perl's answer depends on
+    # the locale the shell started it in - `(?l)\\b` against "é" is 0-0
+    # there under a UTF-8 locale. A row whose answer moves with the
+    # environment is not a rule either side can be held to.
+    "(?n)a", "(?n:(a))", "(?x)a", "(?x: a )", "(?xx)a", "(?xx:[a b])",
+    "(?a)\\w", "(?aa)\\w", "(?u)\\w", "(?a:\\w)", "(?d)\\w", "(?p)a",
     # The extended class. It was PCRE2-only here on the belief that perl's
     # grammar differs; over 13,440 generated rows the operands, operators
     # and precedence all agree, and what differs is which characters are
@@ -339,6 +354,8 @@ def boundary_end_of_subject(pattern, them, subject, ours):
 
 
 CALL_SPELLING = re.compile(r"\(\?(?:R|[0-9]|&|P>|\+|-)")
+# `(?a` and `(?^a`, with or without the letters that may follow it.
+CHARSET_A = re.compile(r"\(\?\^?[a-zA-Z]*a")
 BEHIND_NON_ATOMIC = ("(*naplb:", "(*non_atomic_positive_lookbehind:")
 
 
@@ -382,9 +399,21 @@ def library_deviation(pattern, them, us):
 
     Both halves are required, so a pattern holding a non-atomic lookbehind
     and no call, or a call and no such lookbehind, is compared as usual.
+
+    And one shape that is a *gap* rather than a decision: PCRE2's `a`
+    charset modifiers. pcre2test 10.46 compiles `(?a)`, `(?aa)` and the
+    suffixed `(?aD)`, `(?aS)`, `(?aW)`, `(?aP)` and `(?aT)`, each narrowing
+    one thing to ASCII; this library has one bit for the whole family and
+    answers GRX_ERR_UNSUPPORTED. `(?u)`, `(?d)`, `(?l)` and `(?p)` are
+    error 111 in pcre2test and an unknown flag here, so they are not in
+    this rule and are compared as usual. Gated on this library having
+    refused and the reference having compiled, like the row above, so a
+    pattern the two both accept can never be excluded by it.
     """
     if not us.startswith("compile") or them.startswith("compile"):
         return False
+    if CHARSET_A.search(pattern) is not None:
+        return True
     return (any(spelling in pattern for spelling in BEHIND_NON_ATOMIC)
         and CALL_SPELLING.search(pattern) is not None)
 
