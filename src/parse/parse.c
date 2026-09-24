@@ -558,6 +558,15 @@ static GRX_Result parse_quantifier(
   if (skipped != GRX_OK) {
     return skipped;
   }
+  if (in_quote(parser)) {
+    // Asked again, because the skip above is what *opens* a run. `a\Q*\E`
+    // arrives here with the `\Q` still unread: the check before the skip
+    // sees no run, the skip opens one, and the `*` inside it is a literal.
+    // The quantifier is the only operator this could reach - every other
+    // one is read after a skip rather than before it - which is why
+    // `a\Q|\Eb` and `a\Q)\E` were right and `a\Q*\E` repeated the "a".
+    return GRX_OK;
+  }
   if (grx_parse_at_end(parser)) {
     return GRX_OK;
   }

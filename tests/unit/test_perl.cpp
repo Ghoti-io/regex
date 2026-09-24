@@ -245,6 +245,35 @@ TEST(Perl, AQuotedRunIsLiteralAndNotAnAtom) {
 
   // A `\E` with no `\Q` is harmless in both references.
   EXPECT_TRUE(search("a\\Eb", "ab").matched);
+
+  // A run that *opens* where a quantifier would go. This is the case the
+  // test above could not see: the check for an open run happened before
+  // the step that reads `\Q`, so `a\Q*\E` arrived at the quantifier with
+  // the run unopened and repeated the "a". pcre2test matches "a*" here and
+  // not "aaa", and every quantifier spelling did it.
+  EXPECT_TRUE(search("a\\Q*\\E", "a*").matched);
+  EXPECT_FALSE(search("a\\Q*\\E", "aaa").matched);
+  EXPECT_FALSE(search("a\\Q*\\E", "a").matched);
+  EXPECT_FALSE(search("a\\Q+\\E", "aaa").matched);
+  EXPECT_TRUE(search("a\\Q+\\E", "a+").matched);
+  EXPECT_FALSE(search("a\\Q{2}\\E", "aa").matched);
+  EXPECT_TRUE(search("a\\Q{2}\\E", "a{2}").matched);
+
+  // Which is not the same as suspending the quantifier that follows the
+  // run: `a\Q*\E*` is "a", a literal asterisk, and a repeat of it.
+  EXPECT_TRUE(search("a\\Q*\\E*", "a**").matched);
+  EXPECT_EQ(search("a\\Q*\\E*", "a**").end, 3u);
+
+  // The quantifier was the only operator that could reach this, because
+  // every other one is read after the step that opens a run rather than
+  // before it. These were right the whole time and are here so that a
+  // change to the ordering has to keep them right.
+  EXPECT_TRUE(search("a\\Q|\\Eb", "a|b").matched);
+  EXPECT_FALSE(search("a\\Q|\\Eb", "a").matched);
+  EXPECT_TRUE(search("a\\Q)\\E", "a)").matched);
+  EXPECT_TRUE(search("a\\Q(\\E", "a(").matched);
+  EXPECT_TRUE(search("a\\Q[\\E", "a[").matched);
+  EXPECT_FALSE(search("a\\Q.\\E", "ax").matched);
 }
 
 TEST(Perl, ACommentGroupIsLexicalAndAQuantifierSeesPastIt) {
