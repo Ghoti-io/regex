@@ -758,20 +758,29 @@ TEST(Vim, AnEmptyFirstIterationRunsAndItsMarkSticks) {
   EXPECT_EQ(span("\\%(\\zsa\\)*", "aa"), "1-2");
 }
 
-TEST(Vim, AMarkMakesTheAdvanceAboutWhatWasWalked) {
-  // The four shapes an empty-span test gets wrong. What decides is whether
-  // the next attempt would start where this one began, and the pair that
-  // answers it is the *walked* start against the *reported* end.
+TEST(Vim, TheSameSpanTwiceIsNotTwoMatches) {
+  // What decides the advance is what the *next attempt* finds, not what
+  // this match did. Two patterns report the same empty span at 1 over
+  // their subjects and vim treats them differently, because the attempt
+  // from 1 answers differently.
   //
-  // `a\zs` reports 1-1 having walked 0-1, so it arrived there and the
-  // loop goes on from 1 without advancing.
+  // `a\zs` over "aab" reports 1-1; from 1 the next attempt finds 2-2, a
+  // different span, and vim reports it.
   EXPECT_EQ(replaced("a\\zs", "aab", "X"), "aXaXb");
-  // `\zea` reports 1-1 having walked 1-2: still where it began, so the
-  // loop advances. Without that this pattern never terminates.
+  // `a\?\zs` over "ab" reports 1-1 too; from 1 the next attempt finds
+  // 1-1 again, the optional `a` having matched nothing, so vim moves on a
+  // character instead of reporting it twice.
+  EXPECT_EQ(replaced("a\\?\\zs", "ab", "X"), "aXbX");
+  EXPECT_EQ(replaced("a\\?\\zs", "aab", "X"), "aXaXbX");
+  EXPECT_EQ(replaced("a*\\zs", "ab", "X"), "aXbX");
+  // `\zea` reports an empty span having walked a character, which is why
+  // the engine's own "no empty match where the search began" cannot settle
+  // this: it sees a non-empty match and would hand back the same one for
+  // ever. The span test does settle it.
   EXPECT_EQ(replaced("\\zea", "xaby", "X"), "xXaby");
   EXPECT_EQ(replaced("\\zea", "aaa", "X"), "XaXaXa");
   EXPECT_EQ(replaced("\\zeab", "abab", "X"), "XabXab");
-  // And one that walked nothing at all, which advances as it always did.
+  // And one that walked nothing at all, which moves on as it always did.
   EXPECT_EQ(replaced("\\(b\\)\\@<=", "abcb", "X"), "abXcbX");
 }
 

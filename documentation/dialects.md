@@ -740,30 +740,36 @@ from.
 | `RETRY_NONEMPTY_THEN_ADVANCE` | at the same position, retry refusing an empty match; if that fails, advance one character | Perl, PCRE2 (its documented `NOTEMPTY_ATSTART` loop), Python 3.7+ |
 | `ADVANCE_ONE` | advance one code point (one code unit without `u`) and search again; an empty match immediately after a non-empty one is reported | ECMAScript (`RegExpBuiltinExec` / `AdvanceStringIndex`), Java (**probe**), .NET (**probe**), Ruby (**probe**) |
 | `ADVANCE_ONE_SKIP_ABUTTING` | as above, but an empty match abutting the previous match is not reported | Go (`regexp` documentation: "empty matches abutting a preceding match are ignored"); Rust (**probe**) |
-| `ADVANCE_ONE_STOP_AT_END` | as `ADVANCE_ONE`, with two changes: a match reaching the end of the subject ends the loop, and the character-advance is taken when the match's *walked start* is its reported end | Vim |
+| `ADVANCE_ONE_STOP_AT_END` | a match reaching the end of the subject ends the loop, and the search goes on from the previous match's end - where that finds the span just reported, it advances one character rather than reporting it twice | Vim |
 
 **Vim's row is its own and both halves are measured.** `substitute("ab",
 "b*", "<>", "g")` is `"<>a<>"` there and `"<>a<><>"` in node, perl and `re`
 alike: every other reference reports the empty match at the end that follows
 a non-empty one reaching it.
 
-The second half is the only place in this library where the span a match
-*reports* and the text it *walked* have to be told apart, which is what
-GRX_Match::consumed is for. An empty-span test gets three of these four
-wrong:
+The second half is about what the *next attempt finds*, not about what this
+one did, and `\zs` is what makes the difference visible. Two patterns
+report the same thing and vim treats them differently:
 
-| | reported | walked | vim advances? |
+| | reported | the attempt from that end finds | vim reports it? |
 | --- | --- | --- | --- |
-| `\|a` over "aab" | 0-0 | 0-0 | yes |
-| `a\zs` over "aab" | 1-1 | 0-1 | **no** - it walked "a" to get to 1 |
-| `\zea` over "xaby" | 1-1 | 1-2 | yes - it is still where it began |
-| `\(b\)\@<=` over "abcb" | 2-2 | 2-2 | yes |
+| `a\zs` over "aab" | 1-1 | 2-2, a different span | yes - "aXaXb" |
+| `a\?\zs` over "ab" | 1-1 | 1-1 again, the optional `a` matching nothing | no - "aXbX" |
 
-So the question is whether the next attempt would start where this one
-began, and the pair that answers it is the walked *start* against the
-reported *end*. `substitute("aab", 'a\zs', "X", "g")` is `"aXaXb"` in vim
-and would be `"aXab"` under the span test; `substitute("xaby", '\zea', "X",
-"g")` is `"xXaby"` and would be a loop that never ends.
+So the rule is **the same span twice is not two matches**: search from the
+previous end, and where the answer is the span just reported, move on a
+character and search again. Both rows above fall out of it, and so do
+`substitute("aab", '\|a', "<>", "g")` = `"<>a<>a<>b<>"` and
+`substitute("xaby", '\zea', "X", "g")` = `"xXaby"`.
+
+A rule written as "advance when the match stood still" cannot do both rows,
+whichever span it measures standing still by: the two attempts are
+identical and only their answers differ. This library carried one - the
+walked start against the reported end - and it answered the first row and
+not the second. The engine's own "no empty match where the search began"
+cannot do it either: `\zea` reports an empty span at 0 having walked a
+character, so the engine sees a non-empty match there and would hand back
+the same one forever.
 
 The cell had never been probed and read Perl's
 `RETRY_NONEMPTY_THEN_ADVANCE` until it was: under that rule

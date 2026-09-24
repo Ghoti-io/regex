@@ -368,7 +368,6 @@ static GRX_Result exec(const GRX_Regex * regex, const char * subject,
     match->matched = 0;
     match->steps = 0;
     match->mark = GRX_INDEX_NONE;
-    match->consumed = (GRX_Capture) {GRX_NPOS, GRX_NPOS};
     match->searched_from = options->begin;
     grx_error_clear(&match->error);
   }
@@ -542,23 +541,6 @@ GRX_Result grx_regex_search_next(const GRX_Regex * regex,
   }
   GRX_Capture previous = match->captures[0];
   int was_empty = previous.start == previous.end;
-  // What the attempt *walked*, which a `\K` or a `\ze` can make different
-  // from what it reported. Only Vim's rule below asks, and only the engine
-  // that can run those two ever fills it in; GRX_NPOS means "the same".
-  GRX_Capture walked = match->consumed;
-  if (walked.start == GRX_NPOS || walked.end == GRX_NPOS) {
-    walked = previous;
-  }
-  // "The next attempt would start where this one began." The test is the
-  // *walked* start against the *reported* end, which is the only pair that
-  // answers it once `\zs` and `\ze` can move the two apart: a match that
-  // consumed nothing has them equal, and so does one whose `\ze` pinned
-  // the end back to where the match began. A match that arrived at its
-  // reported end - `a\zs`, which walked "a" to get to 1 - has them
-  // different and does not stand still. Nothing else can loop: where they
-  // differ the reported end is past the walked start, which is at or past
-  // where the search began.
-  int stood_still = walked.start == previous.end;
 
   // The subject was validated by the search that produced the previous
   // match, and this call is documented to run against the same bytes. Paying
@@ -614,19 +596,43 @@ GRX_Result grx_regex_search_next(const GRX_Regex * regex,
       // not reported: `b*` over "ab" is "<>a<>" in vim and "<>a<><>" in
       // node, perl and `re` alike.
       //
-      // And the character-advance is decided by what the match *walked*
-      // rather than by what it reported, which is the only place in this
-      // file the two come apart. `a\zs` over "aab" reports an empty span
-      // at 1 having consumed the "a" before it, and vim goes on from 1
-      // without advancing - "aXaXb", where an empty-span test gives
-      // "aXab". Every other dialect here has no `\zs`, and `\K` is
-      // Perl's, whose rule is the first case above.
+      // And the search goes on from where the last match ended, with one
+      // rule about what comes back: **the same span twice is not two
+      // matches.** Vim's loop reports a match and looks again from its
+      // end; where that finds the span it has just reported, it moves on a
+      // character rather than reporting it twice.
+      //
+      // Two cases that no "did this match stand still" test covers at
+      // once, which is what this replaced:
+      //
+      //   - `a\zs` over "aab" reports an empty span at 1, having consumed
+      //     the "a" before it. Looking again from 1 finds the empty span
+      //     at *2* - a different match - and vim reports it: "aXaXb".
+      //   - `a\?\zs` over "ab" reports an empty span at 1 the same way,
+      //     and looking again from 1 finds the *same* span, the optional
+      //     `a` having matched nothing. vim reports "aXbX", not "aXXbX".
+      //
+      // The two attempts are identical and the answers differ, so what
+      // decides is the answer and not the attempt. `\ze` is why this is a
+      // span test rather than the engine's "no empty match where the
+      // search began": `\zea` reports an empty span at 0 having walked a
+      // character, so the engine sees a non-empty match there and would
+      // hand back the same one forever.
       if (previous.end >= end) {
         return no_further_match(match, out_matched);
       }
-      resolved.begin = stood_still
-          ? advance_one(regex, subject, end, previous.end)
-          : previous.end;
+      resolved.begin = previous.end;
+      GRX_Result again = grx_regex_search_ex(regex, subject, length,
+          &resolved, match, out_matched);
+      if (again != GRX_OK || !*out_matched
+          || match->captures[0].start != previous.start
+          || match->captures[0].end != previous.end) {
+        return again;
+      }
+      if (previous.end >= end) {
+        return no_further_match(match, out_matched);
+      }
+      resolved.begin = advance_one(regex, subject, end, previous.end);
       return grx_regex_search_ex(regex, subject, length, &resolved, match,
           out_matched);
 

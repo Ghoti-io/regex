@@ -485,13 +485,19 @@ typedef enum {
   /**
    * As ADVANCE_ONE, and a match reaching the end of the subject ends it.
    *
-   * Vim's, and the only rule here that looks at *where* a match ended
-   * rather than at whether it was empty. `substitute("ab", "b*", "<>", "g")`
-   * is "<>a<>" there and "<>a<><>" in node, perl and `re` alike: every
-   * other reference reports the empty match at the end that follows a
-   * non-empty one reaching it, and vim stops instead. Measured against
-   * `substitute()`, which is `:s` over a string and so the form this
-   * library can be.
+   * Vim's, and the only rule here that asks what the *next* attempt finds
+   * rather than whether this match was empty. Two halves, both measured
+   * against `substitute()`, which is `:s` over a string and so the form
+   * this library can be:
+   *
+   * - A match reaching the end of the subject ends the loop, so
+   *   `substitute("ab", "b*", "<>", "g")` is "<>a<>" there and "<>a<><>"
+   *   in node, perl and `re` alike.
+   * - The same span twice is not two matches. The search goes on from the
+   *   previous end and, where that finds the span just reported, moves on
+   *   a character - which is what separates `a\zs` over "aab" ("aXaXb",
+   *   the next attempt finding 2-2) from `a\?\zs` over "ab" ("aXbX", the
+   *   next attempt finding 1-1 again).
    */
   GRX_ITERATE_ADVANCE_ONE_STOP_AT_END,
   GRX_ITERATE_COUNT                   ///< Closes the enum; not a rule.

@@ -77,23 +77,6 @@ struct GRX_Match {
   GRX_Error error;
 
   /**
-   * What the last attempt actually walked, which is not always what it
-   * reports.
-   *
-   * `\K` moves the reported start and Vim's `\ze` moves the reported end,
-   * so a match can report an empty span having consumed text -
-   * `a\zs` over "aab" reports 1-1 and walked 0-1. Vim's search loop
-   * distinguishes them: it advances a character after a match that
-   * consumed *nothing*, and `substitute("aab", 'a\zs', "X", "g")` is
-   * "aXaXb" there rather than the "aXab" an empty-span test gives.
-   *
-   * GRX_NPOS when the engine did not say, which means "the same as capture
-   * zero" - every engine but the backtracker, and the backtracker for every
-   * program without a mark in it.
-   */
-  GRX_Capture consumed;
-
-  /**
    * Where the last attempt was told to start looking.
    *
    * Read by Vim's iteration rule and by nothing else. The loop there has to
