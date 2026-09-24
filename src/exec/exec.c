@@ -629,9 +629,8 @@ GRX_Result grx_regex_search_next(const GRX_Regex * regex,
           || match->captures[0].end != previous.end) {
         return again;
       }
-      if (previous.end >= end) {
-        return no_further_match(match, out_matched);
-      }
+      // The end was tested before the first attempt and neither it nor
+      // `previous` has moved since, so there is a character to move on to.
       resolved.begin = advance_one(regex, subject, end, previous.end);
       return grx_regex_search_ex(regex, subject, length, &resolved, match,
           out_matched);
