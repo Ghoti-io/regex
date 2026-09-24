@@ -150,10 +150,20 @@ GRX_Result grx_named_set(
     case GRX_SET_UNICODE_SPACE:
       return add_property(cls, "White_Space", limits);
     case GRX_SET_UNICODE_WORD: {
-      // UTS #18 Annex C's word character: letters, marks, decimal numbers,
-      // connector punctuation, and the two join controls that hold a word
-      // together without being part of it.
-      GRX_Result result = add_property(cls, "L", limits);
+      // UTS #18 Annex C's word character: alphabetic characters, marks,
+      // decimal numbers, connector punctuation, and the two join controls
+      // that hold a word together without being part of it.
+      //
+      // `Alphabetic` and not `L`, which is what this read until
+      // 2026-09-24. Annex C spells it `\p{alpha}`, and the two are not the
+      // same set: `Alphabetic` is `L` plus `Nl` plus Other_Alphabetic, so
+      // `L` dropped every letter-number - 236 code points, the Roman
+      // numerals and the Suzhou and Counting Rod numerals among them. `\w`
+      // and `[[:word:]]` both refused U+2160 here where perl and pcre2test
+      // take it, and `\b` refused a boundary beside one, being defined from
+      // this set. Swept a code point at a time against both references over
+      // all 1,112,064; `Nl` was the whole of the difference.
+      GRX_Result result = add_property(cls, "Alphabetic", limits);
       if (result == GRX_OK) {
         result = add_property(cls, "M", limits);
       }

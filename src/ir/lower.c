@@ -302,7 +302,7 @@ static GRX_Result posix_class_named_set(Lowering * low, const char * name,
   POSIX_ROW("graph", graph, NULL, NULL, 0)
   POSIX_ROW("lower", lower, "Lowercase", NULL, 0)
   POSIX_ROW("print", print, NULL, NULL, 0)
-  POSIX_ROW("punct", punct, "P", "S", 0)
+  POSIX_ROW("punct", punct, "P", NULL, 0)
   POSIX_ROW("space", space, "White_Space", NULL, 0)
   POSIX_ROW("upper", upper, "Uppercase", NULL, 0)
   POSIX_ROW("word", word, NULL, NULL, 0)
@@ -326,12 +326,34 @@ static GRX_Result posix_class_named_set(Lowering * low, const char * name,
     // pcre2pattern under UCP: `graph` is everything that is neither a
     // separator nor a control or unassigned code point, and `print` is that
     // plus the space separators. Built by complement rather than by naming
-    // the categories that remain, because "everything except C and Z" is the
+    // the categories that remain, because "everything except these" is the
     // definition and a list of the others would be a second thing to keep in
     // step with each Unicode release.
+    //
+    // The excluded set is the four *other* C categories and not `C`, which
+    // is the fix of 2026-09-24. `Cf` is a graphic character in both
+    // references - pcre2test and perl both match U+00AD, U+200B and the
+    // bidi controls with `[[:graph:]]` - and excluding the whole of `C` took
+    // 164 code points out that both of them keep. Swept a code point at a
+    // time over all 1,112,064; that was the only shape of the difference
+    // among them.
+    //
+    // `Co` is where the two references part, and this sides with pcre2:
+    // U+E000 is `[[:graph:]]` in perl and is not in pcre2test. That is a
+    // deviation for the Perl dialect and is in documentation/dialects.md
+    // section 6 - a per-dialect set, which this is not yet.
     GRX_CharClass excluded;
     grx_charclass_init(&excluded, out->allocator);
-    GRX_Result result = add_property_named(low, "C", &excluded);
+    GRX_Result result = add_property_named(low, "Cc", &excluded);
+    if (result == GRX_OK) {
+      result = add_property_named(low, "Cn", &excluded);
+    }
+    if (result == GRX_OK) {
+      result = add_property_named(low, "Cs", &excluded);
+    }
+    if (result == GRX_OK) {
+      result = add_property_named(low, "Co", &excluded);
+    }
     if (result == GRX_OK) {
       result = add_property_named(low, "Z", &excluded);
     }
@@ -380,6 +402,23 @@ static GRX_Result posix_class_named_set(Lowering * low, const char * name,
     if (strcmp(name, "blank") == 0) {
       // PCRE2 keeps the tab in `blank` under UCP; `Zs` does not contain it.
       return grx_charclass_add_range(out, 0x09, 0x09, low->limits);
+    }
+    if (strcmp(name, "punct") == 0) {
+      // `\p{P}` plus the ASCII punctuation, which adds the nine symbols
+      // `$ + < = > ^ ` | ~` and nothing else - every other member of the
+      // narrow table is already `P`. This read `\p{P}` plus the whole of
+      // `\p{S}` until 2026-09-24, which is 7,766 code points neither
+      // reference has: swept a code point at a time over all 1,112,064,
+      // perl and pcre2test hold exactly those nine symbols and no other,
+      // and they hold the same nine as each other.
+      for (size_t i = 0; i < count; i++) {
+        GRX_Result added = grx_charclass_add_range(
+            out, ranges[i].lo, ranges[i].hi, low->limits);
+        if (added != GRX_OK) {
+          return added;
+        }
+      }
+      return GRX_OK;
     }
     return GRX_OK;
   }

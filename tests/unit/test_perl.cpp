@@ -1105,6 +1105,49 @@ TEST(Perl, UcpWidensThePosixClassesItCanAndRefusesTheOnesItCannot) {
   EXPECT_TRUE(search("(*UTF)^[[:xdigit:]]$", "f").matched);
 }
 
+TEST(Perl, TheWidePosixClassesWereSweptAgainstBothReferences) {
+  // Every one of the fourteen names asked about all 1,112,064 code points
+  // in pcre2test 10.46 and in perl, against this library, on 2026-09-24.
+  // Three rules were wrong, and none of them could be seen from the
+  // conformance corpus: 37,212 cases hold no letter-number, no format
+  // character inside `[[:graph:]]`, and no non-ASCII symbol.
+
+  // 1. `[[:punct:]]` is `\p{P}` plus exactly nine ASCII symbols - the same
+  // nine in both references - and was `\p{P}` plus the whole of `\p{S}`,
+  // which is 7,766 code points neither of them has.
+  EXPECT_TRUE(search("(*UTF)(*UCP)^[[:punct:]]$", "$").matched);
+  EXPECT_TRUE(search("(*UTF)(*UCP)^[[:punct:]]$", "~").matched);
+  EXPECT_TRUE(search("(*UTF)(*UCP)^[[:punct:]]$", "\xE2\x80\x94").matched);
+  EXPECT_FALSE(search("(*UTF)(*UCP)^[[:punct:]]$", "\xC2\xA2").matched);
+  EXPECT_FALSE(search("(*UTF)(*UCP)^[[:punct:]]$", "\xE2\x81\x84").matched);
+  EXPECT_FALSE(search("(*UTF)(*UCP)^[[:punct:]]$", "\xE2\x98\x83").matched);
+
+  // 2. `[[:graph:]]` and `[[:print:]]` keep the format characters. The
+  // excluded set is the four other `C` categories, not `C`.
+  EXPECT_TRUE(search("(*UTF)(*UCP)^[[:graph:]]$", "\xC2\xAD").matched);
+  EXPECT_TRUE(search("(*UTF)(*UCP)^[[:graph:]]$", "\xE2\x80\x8B").matched);
+  EXPECT_TRUE(search("(*UTF)(*UCP)^[[:print:]]$", "\xEF\xBB\xBF").matched);
+  EXPECT_FALSE(search("(*UTF)(*UCP)^[[:graph:]]$", "\x01").matched);
+  EXPECT_FALSE(search("(*UTF)(*UCP)^[[:graph:]]$", "\xE2\x80\x83").matched);
+
+  // 3. `\w`, `[[:word:]]` and `\b` take the letter-numbers. UTS #18 Annex C
+  // spells the first term `\p{alpha}`, which is `Alphabetic` and not `L`:
+  // `Alphabetic` carries `Nl`, and using `L` dropped 236 code points that
+  // both references keep.
+  const char * roman_one = "\xE2\x85\xA0"; // U+2160, gc=Nl
+  EXPECT_TRUE(search("(*UTF)(*UCP)^\\w$", roman_one).matched);
+  EXPECT_TRUE(search("(*UTF)(*UCP)^[[:word:]]$", roman_one).matched);
+  EXPECT_TRUE(search("(*UTF)(*UCP)^[[:alpha:]]$", roman_one).matched);
+  // `\b` is defined from `\w`, so it moved with it: there is no boundary
+  // between a Roman numeral and a letter now, and there was one.
+  EXPECT_FALSE(search("(*UTF)(*UCP)\\bx", "\xE2\x85\xA0x").matched);
+  EXPECT_TRUE(search("(*UTF)(*UCP)\\bx", " x").matched);
+  // And the narrowing still reaches it, which is what says the set moved
+  // rather than the test being satisfied by something wider.
+  EXPECT_FALSE(search("(*UTF)(*UCP)(?aW)^\\w$", roman_one).matched);
+  EXPECT_FALSE(search("(*UTF)^\\w$", roman_one).matched);
+}
+
 TEST(Perl, AVersionConditionIsAnsweredWhenThePatternIsRead) {
   // `(?(VERSION>=n.n))` is decided at compile time against the version this
   // library emulates, which documentation/dialects.md section 9 names.
