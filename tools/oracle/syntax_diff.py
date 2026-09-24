@@ -97,6 +97,54 @@ def ask_library(driver, rows):
     return finished.stdout.splitlines()
 
 
+# A BMP character above every surrogate, so that putting it where an astral
+# one stood cannot turn an ascending class range into a descending one.
+ASTRAL_STAND_IN = "�"
+
+
+def holds_astral(pattern):
+    return any(ord(character) > 0xFFFF for character in pattern)
+
+
+def without_astral(pattern):
+    return "".join(ASTRAL_STAND_IN if ord(c) > 0xFFFF else c for c in pattern)
+
+
+def astral_in_the_pattern(rows, reference, ours):
+    r"""Rows where a literal astral character in the *pattern* is the whole
+    difference.
+
+    documentation/dialects.md section 6: ECMA-262's pattern source is UTF-16
+    code units, so without `u` or `v` a literal astral character written in
+    it is two atoms - `/\u{1F41F}+/` repeats the low half alone and is 0-2
+    over two fish in Node, where this library's pattern is code points and
+    it is 0-8. The accept-or-reject half of that shows up in a class range:
+    `[\uDC1F-\u{1F41F}]` is DC1F to D83D there, descending, and "Range out
+    of order in character class"; here it is DC1F to 1F41F and ascending.
+    The escaped spelling `[\uDC1F-🐟]` is two units on both sides
+    and both refuse it, which is what says this is the *source* and not the
+    range rule.
+
+    Asked rather than assumed, and narrowed in three directions: only where
+    this library accepted and Node did not, only without `u` or `v` - `v`
+    reads the source as code points too - and only where putting a BMP
+    character in the astral one's place makes Node accept. That last is the
+    property itself: if the same pattern with one unit where there were two
+    is fine, the two units were the reason.
+    """
+    wanted = [index for index, ((flags, pattern), expected, verdict)
+        in enumerate(zip(rows, reference, ours))
+        if verdict == "ok" and not expected and holds_astral(pattern)
+            and "u" not in flags and "v" not in flags]
+    if not wanted:
+        return set()
+    again = ask_node([(rows[index][0], without_astral(rows[index][1]))
+        for index in wanted])
+    if len(again) != len(wanted):
+        return set()
+    return {index for index, accepted in zip(wanted, again) if accepted}
+
+
 def main(argv):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--seed", type=int, default=1)
@@ -132,9 +180,14 @@ def main(argv):
         sys.stderr.write("a driver did not answer every pattern\n")
         return 2
 
+    astral = astral_in_the_pattern(rows, reference, ours)
+
     disagreements = {}
     capped = 0
-    for (flags, pattern), expected, verdict in zip(rows, reference, ours):
+    for index, ((flags, pattern), expected, verdict) in enumerate(
+            zip(rows, reference, ours)):
+        if index in astral:
+            continue
         # The driver refuses a pattern longer than its buffer rather than
         # parsing the prefix. That must stop the gate rather than count as a
         # rejection: a comparison against what Node said about the whole
@@ -164,8 +217,10 @@ def main(argv):
             "  ".join(json.dumps(e) for e in examples[:args.examples])))
 
     print("\n%d patterns x %d flag sets = %d cases; %d capped by a limit and "
-          "not compared; %d disagreements"
-          % (len(patterns), len(FLAG_SETS), len(rows), capped, total))
+          "not compared; %d an astral character in the pattern; "
+          "%d disagreements"
+          % (len(patterns), len(FLAG_SETS), len(rows), capped, len(astral),
+             total))
     return 1 if total else 0
 
 

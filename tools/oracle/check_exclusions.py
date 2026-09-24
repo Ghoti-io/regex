@@ -33,6 +33,7 @@ import perl_diff
 import posix_diff
 import replace_diff
 import script_run_diff
+import syntax_diff
 import vim_diff
 import window_diff
 
@@ -540,6 +541,37 @@ block("script_run_diff.is_pcre2_han_defect",
      ("漢かカ",), False),
     ("two companion families and no Han at all",
      ("か한",), False),
+])
+
+
+# --------------------------------------------------------------------
+# ECMAScript: a literal astral character in the pattern source.
+# --------------------------------------------------------------------
+block("syntax_diff.holds_astral",
+    lambda pattern: syntax_diff.holds_astral(pattern),
+    [
+    ("a character above the BMP", ("[a-\U0001F41F]",), True),
+    ("a lone high surrogate, which is one unit on both sides",
+     ("[a-\ud83d]",), False),
+    ("a lone low surrogate", ("[a-\udc1f]",), False),
+    ("nothing above the BMP at all", ("[a-z]",), False),
+])
+
+block("syntax_diff.without_astral",
+    lambda pattern: syntax_diff.without_astral(pattern),
+    [
+    ("the astral character is replaced and nothing else is",
+     ("[\udc1f-\U0001F41F]",), "[\udc1f-�]"),
+    ("a pattern with none of them is unchanged",
+     ("[a-z]",), "[a-z]"),
+])
+
+block("syntax_diff.ASTRAL_STAND_IN",
+    lambda: ord(syntax_diff.ASTRAL_STAND_IN) > 0xDFFF
+        and ord(syntax_diff.ASTRAL_STAND_IN) <= 0xFFFF,
+    [
+    ("the stand-in must outrank every surrogate, or it would turn an "
+     "ascending range descending and hide the row it is testing", (), True),
 ])
 
 
