@@ -60,7 +60,8 @@ typedef struct {
   GRX_Error * error;           ///< Where a failure is reported.
   uint32_t options;            ///< The options the pattern was parsed with.
   GRX_FoldKind fold;           ///< The folding a caseless match uses, or NONE.
-  GRX_ShorthandSet shorthands; ///< Which sets `\d`, `\w`, `\s` name.
+  GRX_ShorthandSet shorthands; ///< The width UCP and the profile choose.
+  uint32_t ascii;              ///< Which of those a modifier narrows back.
   int reverse;                 ///< Non-zero inside a lookbehind body.
   uint32_t newline_class;      ///< The line-terminator set, or GRX_INDEX_NONE.
   uint32_t word_class;         ///< The word set for `\b`, or GRX_INDEX_NONE.
@@ -175,6 +176,61 @@ static GRX_Result add_property_named(Lowering * low, const char * name,
  * wrong answer wearing a right one's clothes.
  */
 /**
+ * Every per-letter ASCII narrowing an option set asks for.
+ *
+ * PCRE2 narrows one thing at a time where Perl's `/a` narrows the family,
+ * so the family bit is defined here as all five of the letters at once.
+ *
+ * GRX_OPT_ASCII_POSIX carrying GRX_OPT_ASCII_POSIX_DIGIT is *not* written
+ * here, though it reads as if it belongs: posix_class_is_wide() already
+ * tests the wide bit for every name, so an implication here would be a
+ * second statement of the same rule and a mutation removing it changed no
+ * answer. The other half of that implication - `(?-aP)` clearing `T` as
+ * well, which pcre2test shows with `(?aT)(?-aP)[[:digit:]]` matching -
+ * cannot live here at all, since a clear is gone by the time this runs. It
+ * is in the mask the front end gives the letter.
+ */
+static uint32_t ascii_narrowing(uint32_t options) {
+  const uint32_t every = GRX_OPT_ASCII_DIGIT | GRX_OPT_ASCII_SPACE
+      | GRX_OPT_ASCII_WORD | GRX_OPT_ASCII_POSIX | GRX_OPT_ASCII_POSIX_DIGIT;
+  if (options & GRX_OPT_ASCII_CLASSES) {
+    return every;
+  }
+  return options & every;
+}
+
+/**
+ * The set one shorthand names, given what the options narrow.
+ *
+ * `low->shorthands` is the width the dialect and UCP choose; this applies
+ * the narrowing on top, per letter. `\h` and `\v` fall through because they
+ * are fixed sets that nothing narrows - grx_shorthand_set() ignores the
+ * argument for them, and passing the dialect's width keeps the call
+ * honest rather than implying a choice it does not make.
+ */
+static GRX_ShorthandSet shorthands_for(
+    const Lowering * low, GRX_ShorthandKind kind) {
+  uint32_t bit = 0;
+  switch (kind) {
+    case GRX_SHORTHAND_DIGIT:
+    case GRX_SHORTHAND_NOT_DIGIT:
+      bit = GRX_OPT_ASCII_DIGIT;
+      break;
+    case GRX_SHORTHAND_WORD:
+    case GRX_SHORTHAND_NOT_WORD:
+      bit = GRX_OPT_ASCII_WORD;
+      break;
+    case GRX_SHORTHAND_SPACE:
+    case GRX_SHORTHAND_NOT_SPACE:
+      bit = GRX_OPT_ASCII_SPACE;
+      break;
+    default:
+      return low->shorthands;
+  }
+  return (low->ascii & bit) ? GRX_SHORTHANDS_ASCII : low->shorthands;
+}
+
+/**
  * Whether a POSIX class takes its Unicode definition rather than its ASCII
  * one.
  *
@@ -186,7 +242,15 @@ static GRX_Result add_property_named(Lowering * low, const char * name,
  * shorthand columns.
  */
 static int posix_class_is_wide(Lowering * low, const char * name) {
-  int wide = !(low->options & GRX_OPT_ASCII_CLASSES)
+  // PCRE2's `(?aT)` narrows these two names and no others, which is what
+  // makes it a bit of its own rather than a spelling of `(?aP)`:
+  // `(?aT)[[:digit:]]` and `(?aT)[[:xdigit:]]` both refuse U+0661 and
+  // U+FF10 in pcre2test while `(?aT)[[:alpha:]]` still takes U+00E9.
+  uint32_t narrow = GRX_OPT_ASCII_POSIX;
+  if (strcmp(name, "digit") == 0 || strcmp(name, "xdigit") == 0) {
+    narrow |= GRX_OPT_ASCII_POSIX_DIGIT;
+  }
+  int wide = !(low->ascii & narrow)
       && ((low->options & GRX_OPT_UCP)
           || low->profile.shorthands == GRX_SHORTHANDS_UNICODE);
 
@@ -402,8 +466,9 @@ static GRX_Result item_base_set(Lowering * low, const GRX_ClassItem * item,
       return grx_charclass_add_range(out, item->lo, item->hi, low->limits);
 
     case GRX_CLASS_ITEM_SHORTHAND: {
-      GRX_Result result = grx_shorthand_set(out, low->shorthands,
-          (GRX_ShorthandKind)item->a, low->limits);
+      GRX_ShorthandKind kind = (GRX_ShorthandKind)item->a;
+      GRX_Result result = grx_shorthand_set(out, shorthands_for(low, kind),
+          kind, low->limits);
       if (result == GRX_ERR_UNSUPPORTED) {
         return fail(low, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, node);
       }
@@ -735,8 +800,9 @@ static GRX_Result word_class(Lowering * low, uint32_t * out_index) {
 
   GRX_CharClass cls;
   grx_charclass_init(&cls, low->ir->allocator);
-  GRX_Result result = grx_shorthand_set(
-      &cls, low->shorthands, GRX_SHORTHAND_WORD, low->limits);
+  GRX_Result result = grx_shorthand_set(&cls,
+      shorthands_for(low, GRX_SHORTHAND_WORD), GRX_SHORTHAND_WORD,
+      low->limits);
   if (result == GRX_OK && low->profile.caseless_widens_shorthands) {
     result = grx_charclass_fold_closure(&cls, low->fold, low->limits);
   }
@@ -1686,7 +1752,11 @@ static GRX_Result lower_group(
  * of one node, so the derived values have to move with them.
  */
 static void adopt_options(Lowering * low, uint32_t options) {
-  const GRX_ShorthandSet was_shorthands = low->shorthands;
+  // Read before anything moves. It is the *word* set and not `shorthands`
+  // that the cache below turns on, and since the narrowing became
+  // per-letter the two are no longer the same question: `(?aD)` changes
+  // `shorthands_for(DIGIT)` and leaves `\b` exactly as it was.
+  const GRX_ShorthandSet was_word = shorthands_for(low, GRX_SHORTHAND_WORD);
   const GRX_FoldKind was_fold = low->fold;
   low->options = options;
   int utf = (options & GRX_OPT_UTF) != 0 || (options & GRX_OPT_UCP) != 0;
@@ -1697,13 +1767,13 @@ static void adopt_options(Lowering * low, uint32_t options) {
   // the shorthand rule right and said so; this line did not.
   low->shorthands = (options & GRX_OPT_UCP) ? low->profile.shorthands_wide
                                             : low->profile.shorthands;
-  // Perl's `/a` and `/l`, which narrow where GRX_OPT_UCP widens. Applied
-  // after the UTF choice rather than instead of it, because the two are
-  // written together: `(?a)` under a dialect whose subject is Unicode still
-  // means "and the shorthands are ASCII".
-  if (options & GRX_OPT_ASCII_CLASSES) {
-    low->shorthands = GRX_SHORTHANDS_ASCII;
-  }
+  // Perl's `/a` and `/l` and PCRE2's `(?a...)`, which narrow where
+  // GRX_OPT_UCP widens. Kept beside the width rather than folded into it,
+  // because PCRE2 narrows one shorthand at a time: `(?aD)\d` is ASCII
+  // while `(?aD)\w` in the same pattern is not, so there is no single
+  // GRX_ShorthandSet that answers for all three. shorthands_for() combines
+  // the two, once per shorthand, and this records the second half.
+  low->ascii = ascii_narrowing(options);
   low->fold = GRX_FOLD_NONE;
   if (options & GRX_OPT_CASELESS) {
     low->fold = utf ? low->profile.fold_utf : low->profile.fold;
@@ -1743,7 +1813,8 @@ static void adopt_options(Lowering * low, uint32_t options) {
   // rather than rebuilt, because the class table already returns one index
   // for one set: a pattern whose options move and come back pays a lookup
   // and gets its first class again.
-  if (low->shorthands != was_shorthands || low->fold != was_fold) {
+  if (shorthands_for(low, GRX_SHORTHAND_WORD) != was_word
+      || low->fold != was_fold) {
     low->word_class = GRX_INDEX_NONE;
   }
 }

@@ -535,10 +535,15 @@ block("perl_diff.library_deviation",
     [
     ("a subroutine call into a non-atomic lookbehind's group",
      (r"(*naplb:(a))(?1)", "match 1:2", "compile"), True),
-    ("PCRE2's `a` charset modifiers, which are a gap and not a decision",
-     (r"(?aD)\d", "match 0:1", "compile"), True),
+    # WP-46 built the `a` charset modifiers on 2026-09-24, so these two
+    # are now False: the rule must *not* take them, because a pattern this
+    # library answers is a pattern the differential has to compare. They
+    # stay here rather than being deleted, as the negative direction of a
+    # retired exclusion is the case that catches it being revived.
+    ("PCRE2's `a` charset modifiers, built and no longer excluded",
+     (r"(?aD)\d", "match 0:1", "compile"), False),
     ("the bare `(?a)` spelling",
-     (r"(?a)\w", "match 0:1", "compile"), True),
+     (r"(?a)\w", "match 0:1", "compile"), False),
     ("a non-atomic lookbehind with no call in the pattern",
      (r"(*naplb:(a))x", "match 0:1", "compile"), False),
     ("a call with no such lookbehind",

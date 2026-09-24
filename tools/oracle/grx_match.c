@@ -300,10 +300,12 @@ int main(int argc, char ** argv) {
         // table does not know is *silently ignored*, so a generator that
         // ever put one in a flag set would have this driver answering a
         // different question from the reference - agreement and
-        // disagreement both meaning nothing. No generator spells it yet:
-        // perl_diff.py reaches the mode through `(?a)` inside the pattern,
-        // and it cannot go in a shared flag set while pcre2's side of that
-        // run has no `a` option built (WP-46).
+        // disagreement both meaning nothing. No generator spells it:
+        // perl_diff.py reaches every ASCII mode through the pattern -
+        // `(?a)` in both dialects and PCRE2's `(?aD)`, `(?aS)`, `(?aW)`,
+        // `(?aP)` and `(?aT)` besides - which is where a modifier's scope
+        // can be asked about and a flag set's cannot. The five narrower
+        // bits WP-46 added therefore have no letter here, on purpose.
         case 'a': options |= GRX_OPT_ASCII_CLASSES; break;
         // Separate from `u`, because PCRE2 separates them and the pair is
         // the axis this library got wrong: `\w`, `\d` and `\s` widen on

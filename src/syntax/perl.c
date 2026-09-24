@@ -2179,6 +2179,42 @@ static uint32_t charset_options(const CharsetChoice * choice) {
 }
 
 /**
+ * The bits one letter after PCRE2's `a` asks for, or 0 if it is not one.
+ *
+ * PCRE2 narrows one thing at a time where Perl's `/a` narrows the family.
+ * Measured against pcre2test 10.46 under `utf,ucp`, one subject per letter:
+ * `(?aD)\d` stops matching U+0661, `(?aS)\s` stops matching U+00A0,
+ * `(?aW)\w` stops matching "é", `(?aP)` narrows every POSIX class, and
+ * `(?aT)` narrows `[[:digit:]]` and `[[:xdigit:]]` alone - leaving
+ * `[[:alpha:]]` and `[[:word:]]` Unicode and touching no shorthand at all.
+ *
+ * `P` carries `T` because pcre2 makes the wider letter imply the narrower
+ * one: `(?aP)(?-aT)[[:digit:]]` still refuses U+0661 and
+ * `(?aT)(?-aP)[[:digit:]]` takes it.
+ *
+ * What none of them narrows is the *folding*, which is the trap in this
+ * construct: `(?aa)` is not Perl's `/aa`. It is `a` applied twice, compiles,
+ * and still folds "k" with U+212A - as does `(?aaa)`. The letter for that in
+ * PCRE2 is `r`, which is GRX_OPT_ASCII_FOLD_SEPARATE and built separately.
+ */
+static uint32_t pcre_ascii_letter(char c) {
+  switch (c) {
+    case 'D': return GRX_OPT_ASCII_DIGIT;
+    case 'S': return GRX_OPT_ASCII_SPACE;
+    case 'W': return GRX_OPT_ASCII_WORD;
+    case 'P': return GRX_OPT_ASCII_POSIX | GRX_OPT_ASCII_POSIX_DIGIT;
+    case 'T': return GRX_OPT_ASCII_POSIX_DIGIT;
+    default: return 0;
+  }
+}
+
+/** Everything PCRE2's bare `(?a)` narrows. */
+static uint32_t pcre_ascii_all(void) {
+  return GRX_OPT_ASCII_DIGIT | GRX_OPT_ASCII_SPACE | GRX_OPT_ASCII_WORD
+      | GRX_OPT_ASCII_POSIX | GRX_OPT_ASCII_POSIX_DIGIT;
+}
+
+/**
  * Read the letters of an inline option setting, up to `:` or `)`.
  *
  * `(?i-m:...)`, `(?^i...)` and `(?xx)` are all this grammar. `^` means
@@ -2222,6 +2258,40 @@ static GRX_Result read_option_letters(GRX_Parser * parser, size_t start,
       GRX_Result charset = read_charset_letter(parser, c, clearing, &charset_choice);
       if (charset != GRX_OK) {
         return charset;
+      }
+      continue;
+    }
+
+    // PCRE2's `a` charset modifiers. `(?a)` narrows the whole family and
+    // each of `(?aD)`, `(?aS)`, `(?aW)`, `(?aP)` and `(?aT)` narrows one
+    // thing; the hyphen belongs in front of the `a` and not inside the
+    // pair, so `(?-aD)` turns `D` back on and `(?a-D)` is error 111 there.
+    //
+    // Exactly one letter may follow: pcre2test answers error 111 for
+    // `(?aDS)` and for `(?aTP)`. Nothing enforces that here, and nothing
+    // needs to - a second suffix letter falls out of this branch and is
+    // read as an ordinary flag, which is "unknown flag" for all five of
+    // them and the same refusal for the same reason. `(?aDi)`, `(?iaD)`
+    // and `(?aD-i)` are all legal there and all work here, which is the
+    // half that a rule spelled as "one letter then stop" would break.
+    if (flavour(parser) == FLAVOUR_PCRE && c == 'a') {
+      parser->position++;
+      uint32_t wanted = pcre_ascii_letter(byte_at(parser, 0));
+      if (wanted) {
+        parser->position++;
+      }
+      else {
+        wanted = pcre_ascii_all();
+      }
+      // Both directions, because a later letter in the same setting has to
+      // beat an earlier one rather than being ORed alongside it.
+      if (clearing) {
+        clear |= wanted;
+        set &= ~wanted;
+      }
+      else {
+        set |= wanted;
+        clear &= ~wanted;
       }
       continue;
     }
@@ -2275,26 +2345,13 @@ static GRX_Result read_option_letters(GRX_Parser * parser, size_t start,
       option = flavour_option_for_letter(parser, c);
     }
     if (!option) {
-      // PCRE2 *has* the `a` modifiers and this library has not built them,
-      // which is a different answer from "no such letter". pcre2test 10.46
-      // compiles `(?a)`, `(?aa)` and the suffixed `(?aD)`, `(?aS)`,
-      // `(?aW)`, `(?aP)` and `(?aT)`, each narrowing one thing to ASCII,
-      // and it refuses `(?u)`, `(?d)`, `(?l)` and `(?p)` with error 111 -
-      // so those four stay "unknown flag" here, which is what they are.
-      // `(?r)` was in that bucket too until 2026-09-24 and should not have
-      // been: pcre2test compiles it and it works, so "no such letter" was
-      // the wrong answer about a letter that exists. It is built now,
-      // above, because the option it wants was already here.
-      // Perl's `a` is built and never reaches this line.
-      //
-      // Not built because the letters are finer than this library's bits:
-      // GRX_OPT_ASCII_CLASSES narrows every shorthand and the POSIX
-      // classes together, where PCRE2 can narrow `\d` alone. Recorded in
-      // documentation/dialects.md section 6.
-      if (flavour(parser) == FLAVOUR_PCRE && c == 'a') {
-        return grx_parse_fail(parser, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED,
-            parser->position, 1);
-      }
+      // The four letters PCRE2 has *not* got - `(?u)`, `(?d)`, `(?l)` and
+      // `(?p)` - reach here and are unknown flags, which is error 111 in
+      // pcre2test and the same answer. Two letters that it *has* got were
+      // once in this bucket and should not have been, both fixed
+      // 2026-09-24: `(?r)`, which was already spellable because the option
+      // it wants was here, and the `a` modifiers, which needed the one
+      // ASCII bit split into five. Perl's own `a` never reaches this line.
       return grx_parse_fail(parser, GRX_DIAG_UNKNOWN_FLAG, parser->position, 1);
     }
 

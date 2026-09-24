@@ -2856,25 +2856,110 @@ TEST(Perl, HorizontalAndVerticalSpaceAreFixedSets) {
   EXPECT_TRUE(matches_with("\\v", "\n", GRX_OPT_UTF));
 }
 
-TEST(Perl, PcresCharsetModifiersAreNotBuiltAndSaySo) {
-  // pcre2test 10.46 compiles `(?a)` and the suffixed forms, each narrowing
-  // one thing to ASCII: `(?aD)\d` stops matching U+0661 under UCP,
-  // `(?aS)\s` stops matching U+00A0, `(?aW)\w` stops matching "é", and
-  // `(?a)` does all of them at once. This library has one bit for the
-  // whole family - GRX_OPT_ASCII_CLASSES narrows every shorthand and the
-  // POSIX classes together - so the letters cannot be answered separately
-  // and the construct is refused.
+TEST(Perl, PcresCharsetModifiersNarrowOneThingEach) {
+  // WP-46. PCRE2 narrows one thing at a time where Perl's `/a` narrows the
+  // family, so this library's one ASCII bit is five: `(?aD)` for `\d`,
+  // `(?aS)` for `\s`, `(?aW)` for `\w` and `\b`, `(?aP)` for every POSIX
+  // class, and `(?aT)` for `[[:digit:]]` and `[[:xdigit:]]` alone.
   //
-  // What the answer *is* matters: "not implemented" and not "unknown
-  // flag", because PCRE2 has the letter.
-  Attempt whole = compile("(?a)\\w", GRX_SYNTAX_PCRE);
-  EXPECT_EQ(whole.result, GRX_ERR_UNSUPPORTED);
-  EXPECT_EQ(whole.diag, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED);
-  grx_regex_free(whole.regex);
+  // Every expectation below was taken from pcre2test 10.46 under
+  // `utf,ucp`, and the whole matrix was then re-run as a differential:
+  // 500 rows, 0 differences.
+  const uint32_t utf_ucp = GRX_OPT_UTF | GRX_OPT_UCP;
+  const std::string arabic_one = "\xd9\xa1";  // U+0661, `\d` and [[:digit:]]
+  const std::string nbsp = "\xc2\xa0";        // U+00A0, `\s` and [[:space:]]
+  const std::string e_acute = "\xc3\xa9";     // U+00E9, `\w` and [[:alpha:]]
+  const std::string full_zero = "\xef\xbc\x90"; // U+FF10, [[:xdigit:]]
 
-  Attempt suffixed = compile("(?aD)\\d", GRX_SYNTAX_PCRE);
-  EXPECT_EQ(suffixed.result, GRX_ERR_UNSUPPORTED);
-  grx_regex_free(suffixed.regex);
+  // Each letter narrows its own and leaves the others alone. The second
+  // half of each pair is what makes this a test of five bits rather than
+  // of one: a build that kept the single bit would pass every EXPECT_FALSE
+  // here and fail every EXPECT_TRUE beside it.
+  EXPECT_FALSE(matches_with("(?aD)\\d", arabic_one, utf_ucp));
+  EXPECT_TRUE(matches_with("(?aD)\\s", nbsp, utf_ucp));
+  EXPECT_TRUE(matches_with("(?aD)\\w", e_acute, utf_ucp));
+  EXPECT_TRUE(matches_with("(?aD)[[:digit:]]", arabic_one, utf_ucp));
+
+  EXPECT_FALSE(matches_with("(?aS)\\s", nbsp, utf_ucp));
+  EXPECT_TRUE(matches_with("(?aS)\\d", arabic_one, utf_ucp));
+
+  EXPECT_FALSE(matches_with("(?aW)\\w", e_acute, utf_ucp));
+  EXPECT_TRUE(matches_with("(?aW)[[:word:]]", e_acute, utf_ucp));
+
+  // `(?aP)` is every POSIX class; `(?aT)` is two names and no shorthand.
+  EXPECT_FALSE(matches_with("(?aP)[[:alpha:]]", e_acute, utf_ucp));
+  EXPECT_FALSE(matches_with("(?aP)[[:digit:]]", arabic_one, utf_ucp));
+  EXPECT_TRUE(matches_with("(?aP)\\w", e_acute, utf_ucp));
+
+  EXPECT_FALSE(matches_with("(?aT)[[:digit:]]", arabic_one, utf_ucp));
+  EXPECT_FALSE(matches_with("(?aT)[[:xdigit:]]", full_zero, utf_ucp));
+  EXPECT_TRUE(matches_with("(?aT)[[:alpha:]]", e_acute, utf_ucp));
+  EXPECT_TRUE(matches_with("(?aT)[[:word:]]", e_acute, utf_ucp));
+  EXPECT_TRUE(matches_with("(?aT)\\d", arabic_one, utf_ucp));
+
+  // `(?a)` is all of them at once.
+  for (const char * pattern : {"(?a)\\d", "(?a)[[:digit:]]"}) {
+    EXPECT_FALSE(matches_with(pattern, arabic_one, utf_ucp)) << pattern;
+  }
+  EXPECT_FALSE(matches_with("(?a)\\s", nbsp, utf_ucp));
+  EXPECT_FALSE(matches_with("(?a)\\w", e_acute, utf_ucp));
+  EXPECT_FALSE(matches_with("(?a)[[:alpha:]]", e_acute, utf_ucp));
+
+  // `\b` moves with `W` and with nothing else, being defined from `\w`.
+  // "é x" has no boundary before the "x" while "é" is a word character.
+  const std::string e_acute_x = e_acute + "x";
+  EXPECT_FALSE(matches_with("\\bx", e_acute_x, utf_ucp));
+  EXPECT_TRUE(matches_with("(?aW)\\bx", e_acute_x, utf_ucp));
+  EXPECT_TRUE(matches_with("(?a)\\bx", e_acute_x, utf_ucp));
+  EXPECT_FALSE(matches_with("(?aD)\\bx", e_acute_x, utf_ucp));
+  EXPECT_FALSE(matches_with("(?a)(?-aW)\\bx", e_acute_x, utf_ucp));
+
+  // The hyphen goes in front of the `a`, and `P` carries `T` in both
+  // directions: clearing the narrow letter leaves the wide one standing,
+  // and clearing the wide one reaches the narrow set.
+  EXPECT_TRUE(matches_with("(?a)(?-aD)\\d", arabic_one, utf_ucp));
+  EXPECT_FALSE(matches_with("(?a)(?-aD)\\w", e_acute, utf_ucp));
+  EXPECT_TRUE(matches_with("(?a)(?-a)\\d", arabic_one, utf_ucp));
+  EXPECT_TRUE(matches_with("(?a)(?-a)[[:alpha:]]", e_acute, utf_ucp));
+  EXPECT_FALSE(matches_with("(?aP)(?-aT)[[:digit:]]", arabic_one, utf_ucp));
+  EXPECT_TRUE(matches_with("(?aT)(?-aP)[[:digit:]]", arabic_one, utf_ucp));
+
+  // Scope is the group's, like any other modifier, and a setting inside a
+  // non-capturing group does not leak past it.
+  EXPECT_FALSE(matches_with("(?aD:\\d)", arabic_one, utf_ucp));
+  EXPECT_TRUE(matches_with("(?aD:x)\\d", "x" + arabic_one, utf_ucp));
+  EXPECT_TRUE(matches_with("(?:(?aD))\\d", arabic_one, utf_ucp));
+
+  // `(?aa)` is *not* Perl's `/aa`. It is `a` applied twice: it compiles,
+  // behaves as `(?a)`, and still folds "k" with U+212A - the letter PCRE2
+  // has for that is `r`. This is the trap in the construct, and the reason
+  // WP-46 could not be reached by way of the already-built `/aa`.
+  const uint32_t utf_fold = GRX_OPT_UTF | GRX_OPT_CASELESS;
+  const std::string kelvin = "\xe2\x84\xaa";
+  EXPECT_TRUE(matches_with("(?aa)k", kelvin, utf_fold));
+  EXPECT_TRUE(matches_with("(?aaa)k", kelvin, utf_fold));
+  EXPECT_TRUE(matches_with("(?ai)k", kelvin, GRX_OPT_UTF));
+  EXPECT_FALSE(matches_with("(?ri)k", kelvin, GRX_OPT_UTF));
+
+  // Exactly one letter may follow the `a`. Nothing enforces that: the
+  // second one is read as an ordinary flag, which is unknown for all five
+  // and the same refusal pcre2test gives - error 111 for `(?aDS)` and for
+  // `(?aTP)`, and for `(?a-D)`, where the hyphen is on the wrong side.
+  for (const char * pattern :
+      {"(?aDS)x", "(?aTP)x", "(?aDD)x", "(?a-D)x", "(?aX)x"}) {
+    Attempt bad = compile(pattern, GRX_SYNTAX_PCRE);
+    EXPECT_EQ(bad.result, GRX_ERR_SYNTAX) << pattern;
+    EXPECT_EQ(bad.diag, GRX_DIAG_UNKNOWN_FLAG) << pattern;
+    grx_regex_free(bad.regex);
+  }
+
+  // And an `a` modifier mixes with the ordinary letters in either order,
+  // which is the half a rule spelled "one letter then stop" would break.
+  for (const char * pattern : {"(?aDi)x", "(?iaD)x", "(?aD-i)x", "(?-aDi)x"}) {
+    Attempt good = compile(pattern, GRX_SYNTAX_PCRE);
+    EXPECT_EQ(good.result, GRX_OK) << pattern;
+    grx_regex_free(good.regex);
+  }
 
   // The four letters PCRE2 does not have stay unknown flags, which is what
   // pcre2test answers for them: error 111, "unrecognized character after
@@ -2886,10 +2971,59 @@ TEST(Perl, PcresCharsetModifiersAreNotBuiltAndSaySo) {
     grx_regex_free(unknown.regex);
   }
 
-  // Perl's own `a` is built and is not touched by any of this: `(?a)\w`
-  // there narrows the shorthand, and `/aa` narrows the folding with it.
+  // Perl is untouched: its `a` is the whole family and it has no suffix
+  // letters at all. perl refuses `(?aD)`, `(?aS)`, `(?aW)`, `(?aP)` and
+  // `(?aT)` and compiles `(?a)`, so this dialect does too.
   EXPECT_EQ(span_of("(?a)\\w", "\xC3\xA9", GRX_SYNTAX_PERL), "nomatch");
   EXPECT_EQ(span_of("(?a)\\w", "a", GRX_SYNTAX_PERL), "0-1");
+  for (const char * pattern :
+      {"(?aD)x", "(?aS)x", "(?aW)x", "(?aP)x", "(?aT)x"}) {
+    Attempt perl_refuses = compile(pattern, GRX_SYNTAX_PERL);
+    EXPECT_NE(perl_refuses.result, GRX_OK) << pattern;
+    grx_regex_free(perl_refuses.regex);
+  }
+}
+
+// The family bit is still one bit for the callers that hold it, and setting
+// it is setting all five. A caller reaching GRX_OPT_ASCII_CLASSES through
+// the API - which is how Perl's `/a`, Perl's `/l` and Python's `re.ASCII`
+// arrive - must get exactly what the five spell together.
+TEST(Perl, TheFamilyBitIsTheFiveLettersTogether) {
+  const uint32_t utf_ucp = GRX_OPT_UTF | GRX_OPT_UCP;
+  const uint32_t every = GRX_OPT_ASCII_DIGIT | GRX_OPT_ASCII_SPACE
+      | GRX_OPT_ASCII_WORD | GRX_OPT_ASCII_POSIX | GRX_OPT_ASCII_POSIX_DIGIT;
+
+  struct { const char * pattern; const char * subject; } cases[] = {
+    {"\\d", "\xd9\xa1"}, {"\\s", "\xc2\xa0"}, {"\\w", "\xc3\xa9"},
+    {"[[:digit:]]", "\xd9\xa1"}, {"[[:xdigit:]]", "\xef\xbc\x90"},
+    {"[[:alpha:]]", "\xc3\xa9"}, {"[[:word:]]", "\xc3\xa9"},
+    {"[[:space:]]", "\xc2\xa0"},
+    // Members that are in the ASCII set too, so that a build narrowing
+    // everything to nothing would not pass this by refusing it all.
+    {"\\d", "7"}, {"\\w", "x"}, {"[[:alpha:]]", "q"},
+  };
+
+  for (const auto & row : cases) {
+    EXPECT_EQ(matches_with(row.pattern, row.subject,
+                  utf_ucp | GRX_OPT_ASCII_CLASSES),
+        matches_with(row.pattern, row.subject, utf_ucp | every))
+        << row.pattern;
+  }
+
+  // GRX_OPT_ASCII_POSIX means *every* POSIX class, so it has to carry the
+  // digit bit for a caller who sets it alone - the front end never does,
+  // because `(?aP)` sets both, and a mutation removing the implication
+  // therefore passed every other assertion in this file. This is the one
+  // reader it has.
+  EXPECT_FALSE(matches_with("[[:xdigit:]]", "\xef\xbc\x90",
+      utf_ucp | GRX_OPT_ASCII_POSIX));
+  EXPECT_FALSE(matches_with("[[:digit:]]", "\xd9\xa1",
+      utf_ucp | GRX_OPT_ASCII_POSIX));
+  // And the narrow bit alone does not reach the rest, in either direction.
+  EXPECT_TRUE(matches_with("[[:alpha:]]", "\xc3\xa9",
+      utf_ucp | GRX_OPT_ASCII_POSIX_DIGIT));
+  EXPECT_FALSE(matches_with("[[:xdigit:]]", "\xef\xbc\x90",
+      utf_ucp | GRX_OPT_ASCII_POSIX_DIGIT));
 }
 
 int main(int argc, char ** argv) {

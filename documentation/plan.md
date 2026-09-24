@@ -614,16 +614,35 @@ first as a block of one-atom patterns, for the reason WP-44 gives.
 **WP-37 Tcl** (the `TCL_ARE` match preference is an engine mode, *engines,
 M*), **WP-38 Emacs**.
 
-**WP-46 PCRE2's `a` charset modifiers**: *front ends, S-M*, and not built.
-`(?aD)`, `(?aS)`, `(?aW)`, `(?aP)` and `(?aT)` each narrow *one* thing to
-ASCII, where this library has a single bit for the family - `(?a)` and
-Perl's `/a` set GRX_OPT_ASCII_CLASSES and every shorthand narrows together.
-Answering them separately means splitting that bit and the `shorthands`
-enum it selects, which is a change to the lowering rather than to the
-reader, so the construct is refused with GRX_ERR_UNSUPPORTED and
-[dialects.md](dialects.md) §6 carries it with the measurements.
-`tools/oracle/perl_diff.py` generates the spellings and counts the
-refusals, so the gap has a number rather than a note.
+**WP-46 PCRE2's `a` charset modifiers**: **built 2026-09-24**. `(?aD)`,
+`(?aS)`, `(?aW)`, `(?aP)` and `(?aT)` each narrow *one* thing to ASCII,
+where this library had a single bit for the family. The split is five
+option bits rather than five values of the `shorthands` enum, because the
+enum answers for all three shorthands at once and `(?aD)\d` has to be ASCII
+in the same pattern where `(?aD)\w` is not: `shorthands_for(kind)` combines
+the dialect's width with the per-letter narrowing, once per shorthand, and
+`GRX_OPT_ASCII_CLASSES` is defined as all five together so that Perl's
+`/a`, Perl's `/l` and Python's `re.ASCII` keep one letter with one meaning.
+[dialects.md](dialects.md) §5.15 carries the grammar and the measurements.
+
+**Two defects came out of measuring for it**, neither on any list, both in
+places a conformance number does not reach. `\h` and `\v` were being
+narrowed by the same switch as `\d`, `\w` and `\s` - no reference narrows
+them for anything, and nothing had ever asked. And `[[:xdigit:]]` under UCP
+answered the ASCII 22 where both references answer 44: the table that maps
+a POSIX name to its set carries the widening as a *property name*, no
+property names that set, so `wide` was computed, was true, and fell through
+to the narrow ranges with a plausible answer coming out. `(?aT)` exists to
+narrow exactly that class, so it had nothing to narrow.
+
+A full sweep of all fourteen POSIX names against pcre2test came with it and
+found more, which `notes/regex/TODO.md` carries: the seam is `punct`,
+`graph`, `print` and `lower`, and it is a separate piece of work.
+
+`tools/oracle/perl_diff.py` generates all five spellings and their clear
+forms, and its exclusion for them is gone rather than left standing over a
+closed gap - a bucket that keeps accepting rows after its reason is gone is
+how a later defect gets reported as known.
 
 **WP-44 Vim's composing clusters**: **built 2026-09-23**, `\Z` with it. A
 base and the composing characters after it are one character to vim, and

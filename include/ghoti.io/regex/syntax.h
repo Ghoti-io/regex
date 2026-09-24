@@ -129,6 +129,17 @@ typedef enum {
    * `/l` sets it too - this library has no locale and says so
    * (documentation/dialects.md section 6), and the C locale's answer to
    * "which characters are word characters" is the ASCII one.
+   *
+   * It is the whole family, and PCRE2 can ask for less: setting this is
+   * exactly setting GRX_OPT_ASCII_DIGIT, GRX_OPT_ASCII_SPACE,
+   * GRX_OPT_ASCII_WORD, GRX_OPT_ASCII_POSIX and GRX_OPT_ASCII_POSIX_DIGIT
+   * together. It stays a bit of its own rather than becoming a mask of
+   * those, because a caller may already hold it and because Perl's `/a` is
+   * one letter with one meaning rather than five that happen to coincide.
+   *
+   * What it does *not* narrow is `\h` and `\v`: neither reference narrows
+   * those for anything, and they are written-out constants rather than a
+   * family a mode selects. See documentation/dialects.md section 5.9.
    */
   GRX_OPT_ASCII_CLASSES = GRX_BIT(13),
   /**
@@ -179,7 +190,43 @@ typedef enum {
    * is public because a caller compiling a Vim pattern by hand may want the
    * same rule without writing the marker into the text.
    */
-  GRX_OPT_IGNORE_COMBINING = GRX_BIT(16)
+  GRX_OPT_IGNORE_COMBINING = GRX_BIT(16),
+  /**
+   * @brief `\d` and `\D` are ASCII.
+   *
+   * PCRE2's `(?aD)`, and one fifth of GRX_OPT_ASCII_CLASSES. PCRE2 narrows
+   * each of these things on its own where Perl's `/a` narrows the family,
+   * so the family bit above is defined as all five of these together and
+   * each of them is spellable alone.
+   */
+  GRX_OPT_ASCII_DIGIT = GRX_BIT(17),
+  /** @brief `\s` and `\S` are ASCII. PCRE2's `(?aS)`. */
+  GRX_OPT_ASCII_SPACE = GRX_BIT(18),
+  /**
+   * @brief `\w`, `\W`, `\b` and `\B` are ASCII.
+   *
+   * PCRE2's `(?aW)`. `\b` moves with it because `\b` is defined from `\w`:
+   * pcre2test matches `(?aW)\bx` against "é x" at the "x", where plain
+   * `\bx` finds no boundary there.
+   */
+  GRX_OPT_ASCII_WORD = GRX_BIT(19),
+  /**
+   * @brief Every POSIX class is ASCII.
+   *
+   * PCRE2's `(?aP)`. Implies GRX_OPT_ASCII_POSIX_DIGIT, which is why
+   * `(?aP)(?-aT)[[:digit:]]` still refuses U+0661 in pcre2test: clearing
+   * the narrower bit leaves the wider one standing.
+   */
+  GRX_OPT_ASCII_POSIX = GRX_BIT(20),
+  /**
+   * @brief `[[:digit:]]` and `[[:xdigit:]]` are ASCII.
+   *
+   * PCRE2's `(?aT)`, a strict subset of GRX_OPT_ASCII_POSIX: it leaves
+   * `[[:alpha:]]` and `[[:word:]]` Unicode, and it touches neither `\d`
+   * nor any other shorthand. The two names travel together in pcre2test -
+   * `(?aT)[[:xdigit:]]` refuses U+FF10 and takes "f".
+   */
+  GRX_OPT_ASCII_POSIX_DIGIT = GRX_BIT(21)
 } GRX_Option;
 
 /**

@@ -797,8 +797,10 @@ patterns from an atom vocabulary and puts them through a reference and this
 library side by side. Each dialect has one definition, the way glibc is the
 definition of `gnu-bre`: perl decides `GRX_SYNTAX_PERL` and pcre2 decides
 `GRX_SYNTAX_PCRE`, so there is no agreement to take and the vocabularies are
-separate - `(?J)` is PCRE2's and perl refuses it, the charset modifiers are
-perl's and PCRE2 has no letter for them.
+separate - `(?J)` is PCRE2's and perl refuses it, and the charset modifiers
+are in both vocabularies with different grammars: perl's `a`, `d`, `l` and
+`u`, against PCRE2's `a` alone with a letter after it (`(?aD)`, `(?aS)`,
+`(?aW)`, `(?aP)`, `(?aT)`), which perl refuses.
 
 perl is driven through `tools/corpus/perl_match.pl`. pcre2 is driven through
 `tools/oracle/pcre2_match.c`, which links the installed libpcre2-8 through

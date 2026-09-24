@@ -1052,6 +1052,41 @@ not be adjacent, so `(?aia:s)` is `/aa`. What each chooses:
 | `aa` | the same, and no fold orbit crosses U+0080: `/ai` lets `s` match U+017F and `/aai` does not, while U+00C0 still matches U+00E0 under both |
 | `l` | the locale's semantics, which is the C locale's here - see section 6 |
 
+**PCRE2's `a` is finer than Perl's, and is the whole reason this library has
+five ASCII bits rather than one.** Perl's `/a` narrows the family; PCRE2
+narrows one thing at a time, written as one letter after the `a`. Built
+2026-09-24 (WP-46), against pcre2test 10.46 under `utf,ucp`:
+
+| Spelling | Narrows | Option |
+| --- | --- | --- |
+| `(?aD)` | `\d`, `\D` | `GRX_OPT_ASCII_DIGIT` |
+| `(?aS)` | `\s`, `\S` | `GRX_OPT_ASCII_SPACE` |
+| `(?aW)` | `\w`, `\W`, and `\b` with them | `GRX_OPT_ASCII_WORD` |
+| `(?aP)` | every POSIX class | `GRX_OPT_ASCII_POSIX` |
+| `(?aT)` | `[[:digit:]]` and `[[:xdigit:]]` alone | `GRX_OPT_ASCII_POSIX_DIGIT` |
+| `(?a)` | all five | all five, which is `GRX_OPT_ASCII_CLASSES` |
+
+Exactly one letter may follow: `(?aDS)` and `(?aTP)` are error 111 there and
+an unknown flag here, and two letters are written `(?aD)(?aS)`. The hyphen
+belongs in front of the `a` - `(?-aD)` turns `D` back on, `(?a-D)` is error
+111 - and `P` carries `T` in both directions: `(?aP)(?-aT)[[:digit:]]` still
+refuses U+0661, while `(?aT)(?-aP)[[:digit:]]` takes it. They scope like any
+other modifier: `(?aD:\d)` narrows only the group and `(?:(?aD))\d` narrows
+nothing outside it.
+
+`\b` moves with `W` because `\b` is defined from `\w`: `(?aW)\bx` matches
+"é x" at the "x" where plain `\bx` finds no boundary there. `\h` and `\v`
+move with nothing (section 5.9).
+
+**`(?aa)` is not Perl's `/aa`.** It is `a` applied twice - and so is
+`(?aaa)` - and it still folds "k" with U+212A. What PCRE2 spells for the
+fold half is `(?r)`, in the alphabet table below. The two letters coincide
+in spelling and not in meaning, so this could not be reached by way of the
+built `/aa`.
+
+The four letters PCRE2 has *not* got - `(?u)`, `(?d)`, `(?l)` and `(?p)` -
+are error 111 there and an unknown flag here, which is the same answer.
+
 | Dialect | Alphabet | Notes |
 | --- | --- | --- |
 | POSIX, GNU | none (API flags `REG_ICASE`, `REG_NEWLINE`) | `GRX_OPT_CASELESS`, `GRX_OPT_MULTILINE` |
@@ -1465,7 +1500,6 @@ answer.
 | Perl | Where a failed negative lookaround's body stopped *part way through an iteration*, the group reports the last value an iteration **finished** | §5.17 is followed as written - Perl keeps, ECMAScript and PCRE2 discard - but "what the body last wrote" is only well defined if the body failed between iterations, and Perl states no rule for the rest: it decides on the width of the repeated body, answering `(?!(a){2}$)` and `(?!(aa){2}$)` against "aaa" as unset and 0-2. The rule here answers them 1-2 and 0-2, so the two agree wherever Perl is self-consistent and differ on the narrow case where it is not | - |
 | Perl | A match may not begin before the start of the window, so a `\G` written anywhere but first cannot reach behind it | `\G` holds where the previous match ended, and perl leaves the *start of the scan* alone when the assertion is not the first thing in the pattern: with `pos()` at 2, `a{0,2}?\G(?\|(a)\|(b))\1` over \"aaaa\" is 0-4 there - the `a{0,2}?` consuming the two characters the previous iteration already returned - and `ab\Gc` over \"abc\" is 0-3. PCRE2 answers the first 2-4 under `,global` and the same with an explicit `offset=2`, because a match may not begin before the offset it was given, and this library is PCRE2's: `grx_regex_search_ex` is told where the search begins and a span before it is outside what was asked for. The assertion itself is the same in all three - a pattern whose `\G` leads it answers alike - so what differs is where a match is allowed to start. It costs perl matches this library never reports, not merely earlier starts, and the effect compounds: each match perl reaches back for leaves `pos()` somewhere this library's scan never stood, so the next reach-back begins from there. `\w\Ga|b` over "ababaaa" is 1-2 and 3-4 here and in pcre2test under `,global`, and perl reports 1-2, 1-3, 3-4, 3-5, 4-6, 5-7. `tools/oracle/iterate_diff.py` counts these rows | - |
 | Perl | `\Q...\E` quotes, as it does in PCRE2; in perl it is interpolation and a pattern arriving as text has an unknown escape there | perl does the quoting when the *source* is tokenised, so a pattern that reaches the engine in a variable never went through it and `\Q` is an unrecognized escape - passed through as the letter, with a warning. `\Qa.b\E` in a variable matches \"QaXbE\" there and not \"a.b\"; `[\Qa-z\E]` is `[Qa-zE]`, matching \"Q\" and \"b\" and not \"-\"; and `[a-\Qz\E]` is the reversed range a-Q, which perl calls \"Invalid [] range\". pcre2test, which reads its pattern as source, quotes it and matches \"a.b\" alone. A C API has only the text, so following perl would make `\Q` mean the letter Q and silently change every pattern that uses the construct; the feature table's QUOTING row has said Perl has it since it was written. `tools/oracle/perl_diff.py` generates these rows and checks each one against perl's *own* reading - this library's answer to the pattern with `\Q` and `\E` replaced by their letters - rather than excluding them by spelling, so a defect inside a quoted run is still reported. 615 rows of one seed | - |
-| PCRE2 | The `a` charset modifiers - `(?a)`, `(?aa)` and the suffixed `(?aD)`, `(?aS)`, `(?aW)`, `(?aP)`, `(?aT)` - are not built | each narrows *one* thing to ASCII, and this library's bit narrows them together: GRX_OPT_ASCII_CLASSES holds every shorthand and the POSIX classes at once, which is what Perl's `/a` asks for and not what `(?aD)` does. Measured against pcre2test 10.46 under UTF and UCP: `(?aD)\d` stops matching U+0661, `(?aS)\s` stops matching U+00A0, `(?aW)\w` stops matching \"é\", `(?a)` does all of them, and `(?-aD)` turns one back on - `(?a-D)` does not, the hyphen belonging in front of the `a` and not inside the pair. One letter per `(?a...)`: `(?aDS)` is error 111, and two are written `(?aD)(?aS)`. They scope like any other modifier - `(?aD:\d)` narrows only the group, and `(?:(?aD))\d` narrows nothing outside it. The four letters PCRE2 has *not* got - `(?u)`, `(?d)`, `(?l)` and `(?p)` - are error 111 there and an unknown flag here, which is a different answer on purpose. Perl's own `/a` and `/aa` are built; it is the per-letter control that is not. **`(?aP)` and `(?aT)` measured 2026-09-24**, the row having named them without saying what they do: `(?aP)` narrows every POSIX class - `[[:alpha:]]` stops taking U+00E9 and `[[:word:]]` with it - while `(?aT)` narrows `[[:digit:]]` **alone**, leaving `[[:alpha:]]` and `[[:word:]]` Unicode, so `T` is a strict subset of `P` and neither touches `\\d`, `\\s` or `\\w`. **And PCRE2's `(?aa)` is not Perl's `/aa`**: it is `a` idempotent - `(?aa)`, and `(?aaa)` too, compile and behave as `(?a)`, still folding "k" with U+212A where Perl's `/aa` refuses it. What PCRE2 spells for that is `(?r)`, which is **built** (see the alphabet table in section 5) and is the fold half alone. So a later WP-46 must not reach `(?aa)` by way of the built `/aa`; the two letters coincide in spelling and not in meaning | `GRX_ERR_UNSUPPORTED` |
 | PCRE2 | A script run may mix Han with **two** of Hiragana/Katakana, Hangul and Bopomofo | pcre2 10.46 accepts the mixture its own manual denies. pcre2unicode says a run may hold "a mixture of Hiragana, Katakana, and Han, or a mixture of Hangul and Han, or a mixture of Bopomofo and Han, but not, for example, a mixture of Hangul and Bopomofo and Han", and pcre2test matches that last one. All twenty two- and three-way combinations of U+6F22, U+304B, U+30AB, U+D55C and U+3105 were put to both references: they agree on fourteen - including `Hiragana+Hangul`, which both refuse, so it is not that Han lets anything through - and differ on exactly the six that mix two families. perl 5.40.1 refuses all six, which is UTS #39 section 5.1, and so does this library | - |
 | PCRE2 | A subroutine call to a group defined inside a **non-atomic lookbehind** is refused | a subroutine block is generated once and its instructions step the way its *definition* does, so a group written inside a body that runs backwards has a backwards block and a call from outside it walks the subject the wrong way. `(*naplb:(a))(?1)` against "aa" is 1-2 in pcre2test and was 1-1 here, with group one left holding a span outside the match. The fix is a second copy of the block lowered the other way round, which the reverse flag alone cannot express - a lookbehind *inside* the called group must stay reversed in that copy. The other mixture is untouched and agrees: `(a)(*naplb:(?1))` is a call from inside a lookbehind to a group outside it | `GRX_ERR_UNSUPPORTED` |
 | PCRE2, Perl | `\C`, one code unit | the subject here is code points, and a construct that can land inside a character has no honest approximation | `GRX_ERR_UNSUPPORTED` |

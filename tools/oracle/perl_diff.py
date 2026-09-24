@@ -212,6 +212,18 @@ PCRE_ONLY = [
     "(a)(*scs:(1)a)", "(?<n>a)(*scs:(<n>)a)",
     # PCRE2's own `\\g` spelling, and the callouts.
     "(a)\\g{1}", "(?C)a", "(?C1)a",
+    # The `a` charset modifiers, WP-46. One letter narrows one thing, and
+    # each of these is here with the subject that separates it from the
+    # other four: U+0661 for `D`, U+00A0 for `S`, "é" for `W`, and the two
+    # POSIX letters against the names that tell `P` from `T`. The clear
+    # forms are here too, because the hyphen goes in front of the `a` and
+    # `(?-aP)` reaches `T` while `(?-aT)` does not reach `P`.
+    "(?aD)\\d", "(?aS)\\s", "(?aW)\\w", "(?aP)[[:alpha:]]",
+    "(?aT)[[:digit:]]", "(?aT)[[:xdigit:]]", "(?aP)[[:digit:]]",
+    "(?aT)[[:alpha:]]", "(?aD)[[:digit:]]", "(?aW)[[:word:]]",
+    "(?a)(?-aD)\\d", "(?a)(?-aW)\\w", "(?a)(?-a)\\d",
+    "(?aP)(?-aT)[[:digit:]]", "(?aT)(?-aP)[[:digit:]]",
+    "(?aD:\\d)", "(?aD:x)\\d", "(?:(?aD))\\d", "(?aW)\\bx", "(?aDi)\\d",
 ]
 
 
@@ -223,9 +235,15 @@ PCRE_ONLY = [
 # conformance corpus held such a character, and the library widened the
 # shorthands in every dialect - ECMA-262's rule applied to perl, pcre2 and
 # CPython alike - with both gates green throughout.
+#
+# U+0661, U+00A0 and U+FF10 arrived with WP-46, for the same reason and one
+# step further out: the `a` modifiers narrow `\d`, `\s` and `[[:xdigit:]]`
+# one at a time, and the other twenty-one subjects hold no character that
+# any of those three sets takes and its ASCII form does not. A modifier with
+# no subject to separate it is a pattern that compiles and proves nothing.
 SUBJECTS = ["", "a", "b", "ab", "aab", "abc", "aaa", "a.b", "A", "AB", "aA",
             "\n", "a\nb", "abab", "ababaaa", "aaaa", "a b", "é", "ab\n",
-            "\u017f", "x\u212a"]
+            "\u017f", "x\u212a", "\u0661", "\u00a0", "\uff10"]
 
 # `x` is left out on purpose: grx_match maps flag letters to GRX_Option bits
 # and has no GRX_OPT_EXTENDED among them, so a row with `x` would be asking
@@ -374,8 +392,6 @@ def boundary_end_of_subject(pattern, them, subject, ours):
 
 
 CALL_SPELLING = re.compile(r"\(\?(?:R|[0-9]|&|P>|\+|-)")
-# `(?a` and `(?^a`, with or without the letters that may follow it.
-CHARSET_A = re.compile(r"\(\?\^?[a-zA-Z]*a")
 BEHIND_NON_ATOMIC = ("(*naplb:", "(*non_atomic_positive_lookbehind:")
 
 
@@ -420,20 +436,17 @@ def library_deviation(pattern, them, us):
     Both halves are required, so a pattern holding a non-atomic lookbehind
     and no call, or a call and no such lookbehind, is compared as usual.
 
-    And one shape that is a *gap* rather than a decision: PCRE2's `a`
-    charset modifiers. pcre2test 10.46 compiles `(?a)`, `(?aa)` and the
-    suffixed `(?aD)`, `(?aS)`, `(?aW)`, `(?aP)` and `(?aT)`, each narrowing
-    one thing to ASCII; this library has one bit for the whole family and
-    answers GRX_ERR_UNSUPPORTED. `(?u)`, `(?d)`, `(?l)` and `(?p)` are
-    error 111 in pcre2test and an unknown flag here, so they are not in
-    this rule and are compared as usual. Gated on this library having
-    refused and the reference having compiled, like the row above, so a
-    pattern the two both accept can never be excluded by it.
+    PCRE2's `a` charset modifiers were a second shape here until
+    2026-09-24 and are not any more: WP-46 built them, so `(?a)` and the
+    suffixed `(?aD)`, `(?aS)`, `(?aW)`, `(?aP)` and `(?aT)` are compared
+    like anything else. The exclusion is gone rather than left standing
+    over a fixed gap, because a rule matching an "a" after "(?" and any
+    letters took every pattern whose option letters end in "a" out of the
+    run, and a bucket that keeps accepting rows after its reason is gone is
+    how a later defect gets reported as known.
     """
     if not us.startswith("compile") or them.startswith("compile"):
         return False
-    if CHARSET_A.search(pattern) is not None:
-        return True
     return (any(spelling in pattern for spelling in BEHIND_NON_ATOMIC)
         and CALL_SPELLING.search(pattern) is not None)
 
