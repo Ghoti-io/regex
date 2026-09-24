@@ -757,6 +757,29 @@ TEST(Perl, RecursionReEntersAGroupAndRestoresWhatItCaptured) {
   // pcre2pattern: the values a call captured are reset to what they were
   // before it. Group 1 keeps the outer "a", not the "b" the call found.
   EXPECT_EQ(group_of("^(a|b)(?1)$", "ab", 1), "0-1");
+
+  // A call can be backtracked into, in both dialects. This was a profile
+  // axis - "pcre2pattern says a recursive call is treated as an atomic
+  // group" - and pcre2test 10.46 does not do that: `^(a|ab)(?1)b$` against
+  // "aabb" matches there and in perl, which it can only do by going back
+  // into the call for its second alternative, and `aa$|a(?R)a|a` against
+  // "aaa" is the whole string in both where an atomic call gives one
+  // character. Measured 2026-09-24 in four spellings - `(?R)`, `(?1)`,
+  // `(?-1)` and a call from inside another group - and the axis went with
+  // the measurement.
+  EXPECT_EQ(span_of("^(a|ab)(?1)b$", "aabb", GRX_SYNTAX_PCRE), "0-4");
+  EXPECT_EQ(span_of("^(a|ab)(?1)b$", "aabb", GRX_SYNTAX_PERL), "0-4");
+  EXPECT_EQ(span_of("^(a|ab)(?-1)b$", "aabb", GRX_SYNTAX_PCRE), "0-4");
+  EXPECT_EQ(span_of("^((a|ab)(?2)b)$", "aabb", GRX_SYNTAX_PCRE), "0-4");
+  EXPECT_EQ(span_of("aa$|a(?R)a|a", "aaa", GRX_SYNTAX_PCRE), "0-3");
+  EXPECT_EQ(span_of("aa$|a(?R)a|a", "aaa", GRX_SYNTAX_PERL), "0-3");
+
+  // The row a soak seed found, where an atomic call took the wrong path
+  // and then could not give it back: pcre2test and perl both report the
+  // five-character match with group two holding "bab".
+  EXPECT_EQ(span_of("(a|ab)*(a|b(?1))a", "ababaaa", GRX_SYNTAX_PCRE), "0-5");
+  EXPECT_EQ(group_of("(a|ab)*(a|b(?1))a", "ababaaa", 2, GRX_SYNTAX_PCRE),
+      "1-4");
 }
 
 TEST(Perl, ABranchResetNumbersEveryBranchFromTheSameBase) {

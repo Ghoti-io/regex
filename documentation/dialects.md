@@ -1314,6 +1314,33 @@ column of `src/unicode/display.c`, 2,033 code points, which `strchars(s, 1)`
 over every code point returns identically - so the width table and the
 matching model read one table rather than two that agree today.
 
+### 5.21 What a subroutine call gives back
+
+A call - `(?R)`, `(?1)`, `(?-1)`, `(?&name)`, and the recursion conditions
+that go with them - is **not atomic** in either reference, so backtracking
+goes back into it and tries another way through.
+
+This was a profile axis once, on the strength of pcre2pattern's "a
+recursive call is treated as an atomic group". pcre2test 10.46 does not
+behave that way, and neither does perl 5.40.1:
+
+| Pattern | Subject | perl | pcre2test | Here |
+| --- | --- | --- | --- | --- |
+| `^(a\|ab)(?1)b$` | "aabb" | 0-4 | 0-4 | 0-4 |
+| `^(a\|ab)(?-1)b$` | "aabb" | 0-4 | 0-4 | 0-4 |
+| `^((a\|ab)(?2)b)$` | "aabb" | 0-4 | 0-4 | 0-4 |
+| `aa$\|a(?R)a\|a` | "aaa" | 0-3 | 0-3 | 0-3 |
+
+Each of those needs the call's *second* alternative after its first led
+nowhere, which an atomic call cannot give. The axis was removed rather than
+set to zero: a value no dialect takes is a path no test can reach. Found by
+seed 905 of `make check-oracle-soak`, where `(a\|ab)*(a\|b(?1))a` over
+"ababaaa" was 0-6 here and 0-5 in both references.
+
+What a call *does* keep is its captures: pcre2pattern's rule that the
+values a call set are restored to what they were before it, so
+`^(a|b)(?1)$` over "ab" reports group one as "a" and not "b".
+
 ## 6. Deviations
 
 Every place this library knowingly differs from the implementation a

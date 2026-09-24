@@ -512,16 +512,6 @@ typedef struct GRX_Profile {
   GRX_FoldKind fold_utf;            ///< Caseless folding with UTF.
   GRX_PropertyMatch property_match; ///< How `\p{...}` names are spelled.
   GRX_TemplateSpec template_spec;   ///< The replacement-template grammar.
-  /**
-   * A recursion or subroutine call cannot be backtracked into.
-   *
-   * pcre2pattern says a recursive call is treated as an atomic group; Perl's
-   * is not, and `aa$|a(?R)a|a` against "aaa" is where the two part - Perl
-   * reports the whole string by letting the call give back what it took, and
-   * PCRE2 reports one character. An axis rather than a rule in lowering,
-   * because it is exactly the kind of difference a table is for.
-   */
-  int recursion_is_atomic;
   int multiline_by_default;         ///< Ruby: `^`/`$` are always line anchors.
   /**
    * `\B` does not match when the subject is empty.

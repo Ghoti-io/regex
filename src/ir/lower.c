@@ -1883,20 +1883,15 @@ static GRX_Result lower_recurse(
   grx_ir_node(low->ir, *out_node)->b
       = definition < GRX_INDEX_NONE ? (uint32_t)definition : GRX_INDEX_NONE;
 
-  if (!low->profile.recursion_is_atomic) {
-    return GRX_OK;
-  }
-
-  // PCRE2's rule, and only PCRE2's: once the call has matched, backtracking
-  // does not go back in to try a different way through it. Expressed with
-  // the atomic pair that already exists rather than with a second mechanism
-  // meaning the same thing.
-  uint32_t call = *out_node;
-  result = add(low, GRX_IR_ATOMIC, node, out_node);
-  if (result != GRX_OK) {
-    return result;
-  }
-  return attach(low, *out_node, call);
+  // No atomic wrapper. This used to be a profile axis - "pcre2pattern says
+  // a recursive call is treated as an atomic group" - and pcre2test 10.46
+  // does not: `aa$|a(?R)a|a` against "aaa" is the whole string there, the
+  // same as perl, and `^(a|ab)(?1)b$` against "aabb" matches in both, which
+  // it can only do by backtracking into the call. `(?-1)` and a call from
+  // inside another group answer alike. Measured 2026-09-24 against both
+  // references; the axis went with the measurement, because a value no
+  // dialect takes is a path no test can reach.
+  return GRX_OK;
 }
 
 /**

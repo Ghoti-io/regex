@@ -540,7 +540,6 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
   },
   [GRX_SYNTAX_PCRE] = {
     .empty_loop = GRX_EMPTY_LOOP_BREAK,
-    .recursion_is_atomic = 1,
     .lookbehind = GRX_LOOKBEHIND_BOUNDED,
     .dollar = GRX_DOLLAR_BEFORE_FINAL_NEWLINE,
     .shorthands = GRX_SHORTHANDS_ASCII,
