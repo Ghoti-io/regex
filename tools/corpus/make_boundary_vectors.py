@@ -17,6 +17,9 @@ import subprocess
 import sys
 import os
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import perl_ucd
+
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # The five spellings, positive and negative, plus `\X` on its own.
@@ -57,7 +60,9 @@ SUBJECTS = [
 # That day has arrived and is a decision rather than a chore: perl 5.44.0 is
 # the current stable release and `lib/unicore/version` in it reads 17.0.0,
 # which is exactly the UCD these tables are generated from. Raising the pin
-# in tools/corpus/VERSIONS would retire the first three entries here. It
+# in tools/corpus/VERSIONS would retire the first four entries here - three
+# rules, one of them on two subjects, which is why the count of entries and
+# the count of rules are not the same number. It
 # would also re-import t/re/re_tests from a different release, which is why
 # it is not done in passing.
 #
@@ -74,34 +79,44 @@ SUBJECTS = [
 #
 # `(?!)` never matches, so the two patterns cannot differ - and they do. The
 # engine has it right and the optimisation in front of it does not.
+# The fourth field is the Unicode version that introduced the rule, or None
+# where the row is out for a reason no upgrade fixes. check_oracle_ucd()
+# reads it, so raising the pin names its own consequences instead of leaving
+# them to be counted by hand.
 EXCLUSIONS = [
     (("gcb", "g"), "\u0915\u094d\u0937",
-     "GB9c, the Indic conjunct break, is Unicode 15.1 and Perl has 15.0"),
+     "GB9c, the Indic conjunct break, is Unicode 15.1 and Perl has 15.0",
+     "15.1"),
     (("gcb", "g"), "\u0915\u094d\u0915",
-     "GB9c, the Indic conjunct break, is Unicode 15.1 and Perl has 15.0"),
+     "GB9c, the Indic conjunct break, is Unicode 15.1 and Perl has 15.0",
+     "15.1"),
     (("lb",), "subtract .5 now",
-     "LB15c, the decimal mark after a space, is Unicode 16"),
+     "LB15c, the decimal mark after a space, is Unicode 16",
+     "16.0"),
     (("lb",), "\u05d0-\u05d1",
-     "LB21a's HH class, the unambiguous hyphen, is Unicode 17"),
+     "LB21a's HH class, the unambiguous hyphen, is Unicode 17",
+     "17.0"),
     (("lb",), "x",
      "perl finds no \\b{lb} at all in a one-character subject, though the "
      "boundary is there: `.\\b{lb}` matches at that same position. A defect "
-     "in the oracle's unanchored search, not a rule"),
+     "in the oracle's unanchored search, not a rule",
+     None),
     (("lb",), ".",
-     "the same one-character defect as \"x\""),
+     "the same one-character defect as \"x\"",
+     None),
 ]
 
 
 def excluded(pattern, subject):
     """The reason this row is left out, or None to keep it."""
-    for kinds, skip_subject, reason in EXCLUSIONS:
+    for kinds, skip_subject, reason, _since in EXCLUSIONS:
         if subject != skip_subject:
             continue
         for kind in kinds:
             if "{%s}" % kind in pattern:
                 return reason
-        if "\\X" in pattern and "gcb" in [k for ks, _, _ in EXCLUSIONS
-                                          for k in ks if k == "gcb"]:
+        if "\\X" in pattern and "gcb" in [k for ks, _, _, _ in EXCLUSIONS
+                                             for k in ks if k == "gcb"]:
             # `\X` is built out of the grapheme boundary, so it inherits that
             # boundary's exclusions and nothing else.
             if kinds[0] in ("gcb", "g"):
@@ -135,7 +150,62 @@ def escape(text):
     return "".join(out)
 
 
+# The UCD edition the exclusions above were written against.
+#
+# Every version-skew entry is a claim about *this* number, and until now the
+# number lived only in the prose above it. Nothing asked perl. That is the
+# same shape as the locale the vim oracle was reading and no file recorded:
+# a generated corpus whose contents depend on a property of the environment
+# that nothing verifies. It fails in the direction that hides work - upgrade
+# perl, regenerate, and rows perl can now answer are still dropped, with the
+# exclusion note still confidently naming a version perl no longer carries.
+# An exclusion outliving its reason is a blindfold, and it reads exactly like
+# a considered decision.
+ORACLE_UCD_VERSION = "15.0.0"
+
+
+def check_oracle_ucd():
+    """Refuse to generate against a perl the exclusions were not written for.
+
+    Refuse rather than warn: a warning on stderr is lost in a redirect, and
+    the output of this script is a committed corpus. There is no fallback to
+    "generate anyway and hope" for the same reason the oracle drivers have no
+    fallback mode - a corpus generated against an unknown edition is worse
+    than none, because it looks the same.
+    """
+    found = perl_ucd.perl_ucd_version()
+    if found is None:
+        sys.stderr.write(
+            "could not ask perl for its UCD version. The exclusions in this "
+            "file are claims about that number, so it has to be known "
+            "before a corpus is written.\n")
+        return 2
+    if found == ORACLE_UCD_VERSION:
+        return 0
+    sys.stderr.write(
+        "perl carries UCD %s; the exclusions here were written for %s.\n"
+        % (found, ORACLE_UCD_VERSION))
+    retired = [(reason, since) for _kinds, _subject, reason, since in EXCLUSIONS
+        if since is not None and perl_ucd.version_tuple(since) <= perl_ucd.version_tuple(found)]
+    if retired:
+        sys.stderr.write("%d of the %d exclusions are no longer version skew "
+            "and would be dropped silently:\n" % (len(retired), len(EXCLUSIONS)))
+        for reason, since in retired:
+            sys.stderr.write("  - (Unicode %s) %s\n" % (since, reason))
+    else:
+        sys.stderr.write("no exclusion here is retired by that edition, so "
+            "this is skew in the other direction: an oracle *ahead* of these "
+            "tables disagrees across the whole corpus rather than on named "
+            "rows. See documentation/unicode.md section 1.\n")
+    sys.stderr.write("Raise ORACLE_UCD_VERSION with tools/corpus/VERSIONS, "
+        "delete the entries named above, and regenerate.\n")
+    return 2
+
+
 def main():
+    failure = check_oracle_ucd()
+    if failure:
+        return failure
     driver = os.path.join(ROOT, "tools", "corpus", "perl_match.pl")
     rows = [(p, s) for p in PATTERNS for s in SUBJECTS]
     payload = "".join(

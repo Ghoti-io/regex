@@ -24,6 +24,9 @@ import random
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import perl_ucd
+
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 UCD = os.path.join(ROOT, "third_party", "ucd", "17.0.0")
 
@@ -136,6 +139,11 @@ def escape(text):
 
 
 def main():
+    oracle_ucd = perl_ucd.perl_ucd_version()
+    if oracle_ucd is None:
+        sys.stderr.write("could not ask perl for its UCD version; the header "
+            "of this corpus names it, so it has to be known.\n")
+        return 2
     rows = cases()
     driver = os.path.join(ROOT, "tools", "corpus", "perl_match.pl")
     payload = "".join(
@@ -158,11 +166,14 @@ def main():
         "# name, hyphens for spaces, a doubled space, an unknown name, and a\n"
         "# name of the right shape for a range it does not fall in.\n"
         "#\n"
-        "# Rows for characters Perl's UCD 15.0.0 does not have are left out:\n"
+        # Asked rather than asserted. This line states which edition decided
+        # what is missing from the corpus below it, and a number the
+        # generator did not measure is how such a line comes to be wrong.
+        "# Rows for characters Perl's UCD %s does not have are left out:\n"
         "# those are a version difference rather than a disagreement, the\n"
         "# same skew unicode.md section 1 describes.\n"
         "dialect: perl\n"
-        "unicode: 17.0\n")
+        "unicode: 17.0\n" % oracle_ucd)
 
     written = 0
     skipped = 0
