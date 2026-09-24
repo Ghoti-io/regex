@@ -681,6 +681,21 @@ from it. Perl is neither case: its subject is a Unicode string and its
 shorthands are Unicode with no flag, so `/a` is the interesting direction
 there.
 
+**`\h` and `\v` are not in that family**, though they sat in the same
+lowering switch until 2026-09-24. Only Perl and PCRE2 have the letters, and
+neither narrows them for anything: pcre2test 10.46 matches U+00A0 with `\h`
+and U+2028 with `\v` under `utf` alone, under `utf,ucp`, and under `(?a)`
+with either, and in 8-bit mode with no UTF it matches the bytes 0xA0 and
+0x85. perl agrees on all of it - with the subject upgraded, since a perl
+string below U+0100 is answered by ASCII rules whatever the pattern says.
+pcre2pattern lists both sets in full for that reason: they are written-out
+constants and not a property that a mode selects. The switch that lowered
+them asked "are this dialect's shorthands Unicode", which made `(?a)\h`
+refuse U+00A0 in both dialects and plain `\h` refuse it under UTF without
+UCP in PCRE2. A non-UTF subject needs no narrower set: it is bytes, the
+members above 0xFF match nothing there, and that is the same truncation
+pcre2 does for an 8-bit pattern.
+
 **A caseless mode widens the shorthands in ECMAScript and in no other
 dialect here.** ECMA-262 22.2.2.9.3 defines WordCharacters(rer) as the basic
 word characters *plus* every character that canonicalises to one, so `\w`

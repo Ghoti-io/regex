@@ -1001,20 +1001,20 @@ TEST(Sets, TheShorthandsResolveToTheDialectsDefinitions) {
   }
 }
 
-TEST(Sets, TheSetsNoFrontEndAsksForYet) {
-  // `\h` and `\v` are Perl-family shorthands, and the Unicode definitions
-  // are what PCRE2 uses under UCP. No front end emits them yet, so they are
-  // tested directly rather than through a pattern - the alternative is
-  // shipping a set nothing has ever evaluated.
+TEST(Sets, TheNamedSetsAFrontEndCannotSpellDirectly) {
+  // These are reachable through a pattern - `\h`, `\v` and the three
+  // shorthands under UCP - but only in combinations that the dialect tests
+  // reach one at a time. Asserted here as sets so that a member nobody
+  // happens to have written a pattern for is still evaluated once.
   struct {
     GRX_NamedSet set;
     uint32_t inside;
     uint32_t outside;
   } cases[] = {
-    {GRX_SET_ASCII_HSPACE, ' ', '\n'},
-    {GRX_SET_ASCII_HSPACE, '\t', 'a'},
-    {GRX_SET_ASCII_VSPACE, '\n', ' '},
-    {GRX_SET_ASCII_VSPACE, 0x0B, 'a'},
+    {GRX_SET_UNICODE_HSPACE, ' ', '\n'},
+    {GRX_SET_UNICODE_HSPACE, 0x00A0, 'a'},
+    {GRX_SET_UNICODE_VSPACE, '\n', ' '},
+    {GRX_SET_UNICODE_VSPACE, 0x0085, 'a'},
     {GRX_SET_UNICODE_DIGIT, 0x0661, 'a'},
     {GRX_SET_UNICODE_SPACE, 0x00A0, 'a'},
     {GRX_SET_UNICODE_WORD, 0x00E9, ' '},

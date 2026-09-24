@@ -2771,6 +2771,63 @@ TEST(Perl, NoCaptureModeLeavesNoGroupForANumberToName) {
   EXPECT_EQ(compile_result("(a)\\2", GRX_SYNTAX_PERL), GRX_ERR_SYNTAX);
 }
 
+TEST(Perl, HorizontalAndVerticalSpaceAreFixedSets) {
+  // `\h` and `\v` were lowered through the same switch as `\d`, `\w` and
+  // `\s`, which chooses an ASCII set whenever the dialect's shorthands are
+  // not Unicode. That is the right question for those three and the wrong
+  // one for these two: neither reference narrows `\h` or `\v` for anything.
+  //
+  // Measured 2026-09-24. pcre2test 10.46 matches U+00A0 with `\h` and
+  // U+2028 with `\v` under `utf` alone, under `utf,ucp`, and under `(?a)`
+  // with either; in 8-bit mode with no UTF at all it matches the bytes 0xA0
+  // and 0x85. perl agrees on all of it, with the subject upgraded so the
+  // rule being read is the Unicode one.
+  const std::string nbsp = "\xc2\xa0";        // U+00A0
+  const std::string line_sep = "\xe2\x80\xa8"; // U+2028
+  const std::string next_line = "\xc2\x85";    // U+0085
+
+  // The three modes the old code distinguished and should not have. UCP is
+  // the one that used to decide it in the PCRE2 dialect, where the profile's
+  // narrow shorthands are ASCII.
+  const uint32_t modes[] = {
+    (uint32_t)GRX_OPT_UTF,
+    (uint32_t)(GRX_OPT_UTF | GRX_OPT_UCP),
+    (uint32_t)(GRX_OPT_UTF | GRX_OPT_UCP | GRX_OPT_ASCII_CLASSES),
+    (uint32_t)(GRX_OPT_UTF | GRX_OPT_ASCII_CLASSES),
+  };
+  for (uint32_t options : modes) {
+    for (GRX_Syntax syntax : {GRX_SYNTAX_PCRE, GRX_SYNTAX_PERL}) {
+      EXPECT_TRUE(matches_with("\\h", nbsp, options, syntax))
+          << "options " << options << " syntax " << (int)syntax;
+      EXPECT_TRUE(matches_with("\\v", line_sep, options, syntax))
+          << "options " << options << " syntax " << (int)syntax;
+      EXPECT_TRUE(matches_with("\\v", next_line, options, syntax))
+          << "options " << options << " syntax " << (int)syntax;
+
+      // The control, and it is the point of the test: `\s` *is* one of the
+      // three, so it narrows under `/a` and widens under UCP. A build that
+      // answered "Unicode always" for every shorthand would pass the
+      // assertions above and fail these.
+      const bool ascii = (options & GRX_OPT_ASCII_CLASSES) != 0;
+      const bool wide = !ascii
+          && ((options & GRX_OPT_UCP) != 0 || syntax == GRX_SYNTAX_PERL);
+      EXPECT_EQ(matches_with("\\s", nbsp, options, syntax), wide)
+          << "options " << options << " syntax " << (int)syntax;
+    }
+  }
+
+  // The negations follow their own sets, so `\H` and `\V` do not quietly
+  // keep the ASCII complement.
+  EXPECT_FALSE(matches_with("\\H", nbsp, GRX_OPT_UTF));
+  EXPECT_FALSE(matches_with("\\V", line_sep, GRX_OPT_UTF));
+
+  // A member that is in both the ASCII set and the Unicode one still
+  // matches, which is what kept this invisible: every ordinary pattern
+  // asks about a tab or a space.
+  EXPECT_TRUE(matches_with("\\h", "\t", GRX_OPT_UTF));
+  EXPECT_TRUE(matches_with("\\v", "\n", GRX_OPT_UTF));
+}
+
 TEST(Perl, PcresCharsetModifiersAreNotBuiltAndSaySo) {
   // pcre2test 10.46 compiles `(?a)` and the suffixed forms, each narrowing
   // one thing to ASCII: `(?aD)\d` stops matching U+0661 under UCP,

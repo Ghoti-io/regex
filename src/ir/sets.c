@@ -50,8 +50,6 @@ static const GRX_CharRange ascii_digit[] = {{'0', '9'}};
 static const GRX_CharRange ascii_word[]
     = {{'0', '9'}, {'A', 'Z'}, {'_', '_'}, {'a', 'z'}};
 static const GRX_CharRange ascii_space[] = {{0x09, 0x0D}, {0x20, 0x20}};
-static const GRX_CharRange ascii_hspace[] = {{0x09, 0x09}, {0x20, 0x20}};
-static const GRX_CharRange ascii_vspace[] = {{0x0A, 0x0D}};
 
 // pcre2pattern's own lists. `\h` is the horizontal whitespace, which is the
 // space separators together with the tab and the no-break space; `\v` is the
@@ -123,8 +121,6 @@ GRX_Result grx_named_set(
     [GRX_SET_ASCII_WORD] = {ascii_word, sizeof(ascii_word) / sizeof(*ascii_word)},
     [GRX_SET_ASCII_SPACE] = {ascii_space, sizeof(ascii_space) / sizeof(*ascii_space)},
     [GRX_SET_ES_SPACE] = {es_space, sizeof(es_space) / sizeof(*es_space)},
-    [GRX_SET_ASCII_HSPACE] = {ascii_hspace, sizeof(ascii_hspace) / sizeof(*ascii_hspace)},
-    [GRX_SET_ASCII_VSPACE] = {ascii_vspace, sizeof(ascii_vspace) / sizeof(*ascii_vspace)},
     [GRX_SET_UNICODE_HSPACE]
         = {unicode_hspace, sizeof(unicode_hspace) / sizeof(*unicode_hspace)},
     [GRX_SET_UNICODE_VSPACE]
@@ -209,15 +205,31 @@ GRX_Result grx_shorthand_set(GRX_CharClass * cls, GRX_ShorthandSet shorthands,
       return grx_named_set(cls,
           unicode ? GRX_SET_UNICODE_SPACE : GRX_SET_ASCII_SPACE, limits);
 
+    // `\h` and `\v` do not move with `shorthands`, which is the one thing
+    // that made them look like the other three. They are fixed sets in both
+    // references and in every mode: pcre2test matches byte 0xA0 with `\h`
+    // and byte 0x85 with `\v` in 8-bit mode with no UTF and no UCP, matches
+    // U+00A0 and U+2028 under `utf` alone, and goes on matching both under
+    // `(?a)`; perl agrees, with the subject upgraded so that the rule being
+    // read is Unicode's (perl's own below-U+0100 downgrade would otherwise
+    // answer for ASCII). So neither UCP nor `/a` is the deciding question,
+    // and there is no narrower set to choose - a non-UTF subject is bytes,
+    // and the members above 0xFF simply match nothing there, which is the
+    // same truncation pcre2 does for an 8-bit pattern.
+    //
+    // This read `unicode ? UNICODE : ASCII` until 2026-09-24, which was
+    // wrong three ways at once: `(?a)\h` refused U+00A0 in perl and pcre
+    // both, and plain `\h` refused it under `utf` without `ucp` in pcre,
+    // where pcre2test takes it. Only those two dialects have the letters -
+    // ECMAScript's `\v` is the vertical-tab character and python's is too -
+    // so the ASCII sets these chose had no reader left and are gone.
     case GRX_SHORTHAND_HSPACE:
     case GRX_SHORTHAND_NOT_HSPACE:
-      return grx_named_set(cls,
-          unicode ? GRX_SET_UNICODE_HSPACE : GRX_SET_ASCII_HSPACE, limits);
+      return grx_named_set(cls, GRX_SET_UNICODE_HSPACE, limits);
 
     case GRX_SHORTHAND_VSPACE:
     case GRX_SHORTHAND_NOT_VSPACE:
-      return grx_named_set(cls,
-          unicode ? GRX_SET_UNICODE_VSPACE : GRX_SET_ASCII_VSPACE, limits);
+      return grx_named_set(cls, GRX_SET_UNICODE_VSPACE, limits);
 
     case GRX_SHORTHAND_COUNT:
     default:

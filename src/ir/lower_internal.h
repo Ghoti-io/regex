@@ -67,16 +67,20 @@ typedef enum {
   GRX_SET_UNICODE_DIGIT,    ///< `\p{Nd}`.
   GRX_SET_UNICODE_WORD,     ///< `\p{L}\p{N}\p{M}\p{Pc}` plus the join controls.
   GRX_SET_UNICODE_SPACE,    ///< `\p{White_Space}`.
-  GRX_SET_ASCII_HSPACE,     ///< `[ \t]`, for `\h`.
-  GRX_SET_ASCII_VSPACE,     ///< `[\n\v\f\r]`, for `\v`.
   /**
-   * The Perl family's `\h` and `\v` in UTF mode.
+   * The Perl family's `\h` and `\v`, in every mode it has.
    *
    * pcre2pattern lists both sets in full, and they are not the ASCII ones
    * widened by a property: `\h` is the space separators *plus* the tab and
    * U+00A0, and `\v` is the line separators plus U+0085. Written out for
    * that reason - a set nobody can derive has to be a set somebody wrote
    * down.
+   *
+   * "In every mode" is the part that was wrong until 2026-09-24. There were
+   * ASCII spellings of both beside these, chosen whenever the dialect's
+   * shorthands were not Unicode - so `(?a)\h` and, in the PCRE2 dialect,
+   * `\h` without UCP, both refused U+00A0 where pcre2test and perl take it.
+   * Neither reference narrows these two for anything. See grx_shorthand_set.
    */
   GRX_SET_UNICODE_HSPACE,
   GRX_SET_UNICODE_VSPACE,
