@@ -184,9 +184,16 @@ def search_start_before_pos(dialect, pattern, ours, theirs):
     Narrow in both dimensions: the `\G` has to be somewhere other than the
     first two characters of the pattern, **and** the two answers have to
     agree about everything except how far back a match reaches - the same
-    number of matches, the same ends, the same groups, and no match of
-    perl's beginning later than ours. A row that differs anywhere else is a
-    disagreement.
+    number of matches, the same ends, and no match of perl's beginning
+    later than ours. A row that differs anywhere else is a disagreement.
+
+    The one thing allowed to move with the start is a group that matched
+    *empty where this library's match began* and, in perl's answer, lies
+    wholly in the text perl reached back for: `(a|)\G(?[ [a] ])` over "aab"
+    is 1-2 with group one empty at 1 here, and 0-2 with group one holding
+    the "a" at 0-1 there. That is the prefix the deviation is about. A
+    group of perl's that ends after our match began is inside the span the
+    two share, and a difference there is still a disagreement.
     """
     if dialect != "perl" or "\\G" not in pattern[2:]:
         return False
@@ -198,11 +205,30 @@ def search_start_before_pos(dialect, pattern, ours, theirs):
     for a, b in zip(mine[2:], yours[2:]):
         one = a.split(",")
         two = b.split(",")
-        if len(one) != len(two) or one[1:] != two[1:]:
+        if len(one) != len(two):
             return False
         if one[0].split(":")[1] != two[0].split(":")[1]:
             return False
-        if int(two[0].split(":")[0]) > int(one[0].split(":")[0]):
+        my_start = one[0].split(":")[0]
+        their_start = two[0].split(":")[0]
+        if int(their_start) > int(my_start):
+            return False
+        for group_mine, group_theirs in zip(one[1:], two[1:]):
+            if group_mine == group_theirs:
+                continue
+            # A group that matched empty where *this library's* match began
+            # and, in perl's answer, lies wholly in the text perl reached
+            # back for. `(a|)\G(?[ [a] ])` over "aab" reports its second
+            # match as 1-2 with group one empty at 1, and perl reports 0-2
+            # with group one holding the "a" at 0-1 - the character its
+            # earlier start let the group take. The difference is confined
+            # to the prefix perl matched and this library did not, which is
+            # the deviation itself; a group of perl's that ends *after* our
+            # match began is inside the span we both matched and is still a
+            # disagreement.
+            if (group_mine == "%s:%s" % (my_start, my_start)
+                    and int(group_theirs.split(":")[1]) <= int(my_start)):
+                continue
             return False
         earlier = earlier or one[0] != two[0]
     return earlier

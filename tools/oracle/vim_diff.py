@@ -704,6 +704,19 @@ def is_lookbehind_backreference_artifact(pattern, them, us):
     rather than folded into one of the others. A regression of this
     library's inside that shape would not be reported.
     """
+    return lookbehind_with_backreference(pattern)
+
+
+def lookbehind_with_backreference(pattern):
+    """The shape the row above is about, so that two gates ask one question.
+
+    `tools/oracle/replace_diff.py` meets the same deviation through a
+    substitution rather than through a span - `\\Ma\\%[\\d\\w]\\(\\(a\\)\\@=a\\)\\@<=\\(a\\)\\1`
+    over "aab" is 0:2 in both of vim's engines, with the group its
+    *successful* lookbehind wrote reported empty so that the `\\1` matches
+    nothing, and 0:3 here and in pcre2test - so the test lives here and is
+    called from there.
+    """
     # `\@<=` and `\@<!`, and the byte-bounded `\@123<=` forms too - the
     # count sits between the `@` and the `<`, so a plain substring test
     # misses them, which a thirty-seed run found once the bound was built.

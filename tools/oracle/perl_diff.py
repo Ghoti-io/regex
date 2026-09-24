@@ -312,7 +312,8 @@ def trim_unset(line):
     return " ".join(fields)
 
 
-BOUNDARY_FIRST = re.compile(r"(?:\(\?:\))*\\[bB]\{\s*(?:wb|gcb|g|sb|lb)\s*\}")
+BOUNDARY_FIRST = re.compile(
+    r"(?:\(\?:\)|\(\?#[^)]*\))*\\[bB]\{\s*(?:wb|gcb|g|sb|lb)\s*\}")
 
 
 def boundary_end_of_subject(pattern, them, subject, ours):
@@ -324,11 +325,15 @@ def boundary_end_of_subject(pattern, them, subject, ours):
     the empty span at the end; in the second, perl's list is this library's
     without its last entry, and that entry is the empty span at the end.
 
-    An empty *non-capturing* group may stand in front of the assertion and
-    the defect is the same: `(?:)\\b{lb}` against "a" is no match in perl
-    where `()\\b{lb}` is 1-1, so the widening stops at that one spelling.
-    `x*\\b{lb}` is 1-1 there too - a quantifier in that position defeats
-    whatever optimisation this is - so both of those are compared as usual.
+    What may stand in front of the assertion is measured rather than
+    assumed, and it is exactly what the reader passes over without building
+    a node: an empty *non-capturing* group and a comment. `(?:)\\b{lb}`,
+    `(?#c)\\b{lb}` and `(?#c)(?:)\\b{lb}` against "a" are all no match in
+    perl, where `\\b{lb}` alone is - the same defect. It stops there:
+    `()\\b{lb}` is 1-1 in perl, `x*\\b{lb}` is 1-1, and `(?#c)()\\b{lb}`
+    and `(?#c)x*\\b{lb}` are 1-1 too, so a capturing group or a quantifier
+    in that position defeats whatever optimisation this is and those rows
+    are compared as usual.
     """
     if subject is None or ours is None or not BOUNDARY_FIRST.match(pattern):
         return False

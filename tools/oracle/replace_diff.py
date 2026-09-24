@@ -595,6 +595,14 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
             if old_answer == row[5]:
                 split += 1
                 continue
+            if vim_diff.lookbehind_with_backreference(row[1]):
+                # vim loses the capture a *successful* postfix lookbehind
+                # made, so a `\\1` after it matches nothing there and the
+                # substitution covers a shorter span. Section 6, item 4,
+                # and the predicate is vim_diff.py's so that the two gates
+                # ask one question.
+                defect += 1
+                continue
             if is_abandoned_path_artifact(row[1], row[3]):
                 # vim keeps the captures and the marks a path it abandoned
                 # wrote, and this library does not, so the group a template

@@ -199,6 +199,13 @@ def is_glibc_backreference_defect(pattern, them, us):
     together that do it. `(){2}(a)\1` is worse: glibc reports *no match*
     where its own answer to `()(a)\1` is a match.
 
+    A *stacked quantifier* does it as well, and needs no group to repeat:
+    `a?+(a)\1` against "aab" is 0-2 in glibc with group one unset, where
+    `a?(a)\1` and `a*(a)\1` - one quantifier instead of two - both report
+    it as 0-1 there, and `a?+(a)` with the backreference taken off reports
+    1-2. Found at seed 1015 of the soak, where the shape this asked for was
+    the repeated group alone.
+
     An answer that contradicts the same implementation's answer to a
     neighbouring pattern is not a rule to follow, so these rows are counted
     rather than compared. Both halves of the shape are required, and the
@@ -206,7 +213,9 @@ def is_glibc_backreference_defect(pattern, them, us):
     an unset group where this library has a span, or no match at all -
     so a row where this library loses one is still a disagreement.
     """
-    if not REPEATED_GROUP.search(pattern) or not BACKREFERENCE.search(pattern):
+    if not BACKREFERENCE.search(pattern):
+        return False
+    if not REPEATED_GROUP.search(pattern) and not stacked_quantifier(pattern):
         return False
     if them == "nomatch" and us.startswith("match"):
         return True
@@ -218,7 +227,60 @@ def is_glibc_backreference_defect(pattern, them, us):
         and any(a == "-" and b != "-" for a, b in zip(theirs, mine)))
 
 
-STACKED_PLUS = re.compile(r"(?:[*+?}]|\\[*+?}])\\?\+")
+# A quantifier, and the one that may stand stacked on it. Both spellings,
+# because a basic RE writes `\+`, `\?` and `\{m,n\}`.
+QUANTIFIER = re.compile(r"\\?[*+?]|\\?\{([0-9]*)(,?)([0-9]*)\\?\}")
+
+
+def quantifier_bounds(text):
+    """The (min, max) a quantifier asks for, with None for no ceiling."""
+    if text in ("*", "\\*"):
+        return 0, None
+    if text in ("+", "\\+"):
+        return 1, None
+    if text in ("?", "\\?"):
+        return 0, 1
+    inside = text.strip("\\{}").replace("\\", "")
+    low, comma, high = inside.partition(",")
+    if not comma:
+        value = int(low or 0)
+        return value, value
+    return int(low or 0), (int(high) if high else None)
+
+
+def stacked_quantifier(pattern):
+    """Whether two quantifiers stand next to each other anywhere in it."""
+    for match in QUANTIFIER.finditer(pattern):
+        if QUANTIFIER.match(pattern, match.end()):
+            return True
+    return False
+
+def stacked_keeps_empty(pattern):
+    r"""Whether the pattern stacks two quantifiers in the shape glibc mishandles.
+
+    Measured over all eighteen pairs of `*`, `+`, `?` and a bound, put to
+    glibc as `(a|)XY` against "a" and "aaa". The rule its answers describe
+    is: the **outer** quantifier can run more than once, and at least one
+    of the two asks for an iteration - `?+`, `*+`, `++`, `{1,2}+`,
+    `{0,2}+`, `+*`, `{1,2}*`, `?{1,2}`, `*{1,2}`, `+{1,2}`, `+{0,2}` and
+    `{1,2}{1,2}` all keep the empty final iteration there, while `?*`,
+    `**`, `+?`, `*?`, `??` and `{1,2}?` do not.
+
+    The row this replaces asked only for an outer `+`, which is six of the
+    twelve; `(a|)+*` was a disagreement at seed 1015 of the soak until the
+    other six were measured.
+    """
+    for match in QUANTIFIER.finditer(pattern):
+        following = QUANTIFIER.match(pattern, match.end())
+        if not following:
+            continue
+        inner_min, _ = quantifier_bounds(match.group(0))
+        outer_min, outer_max = quantifier_bounds(following.group(0))
+        if outer_max is not None and outer_max <= 1:
+            continue
+        if inner_min >= 1 or outer_min >= 1:
+            return True
+    return False
 
 
 def is_glibc_stacked_plus_defect(pattern, them, us):
@@ -238,7 +300,7 @@ def is_glibc_stacked_plus_defect(pattern, them, us):
     the group at the empty span where the match ends, and this library put
     it somewhere else.
     """
-    if not STACKED_PLUS.search(pattern):
+    if not stacked_keeps_empty(pattern):
         return False
     if not them.startswith("match ") or not us.startswith("match "):
         return False
