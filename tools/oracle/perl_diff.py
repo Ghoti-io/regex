@@ -85,16 +85,21 @@ SHARED_ATOMS = [
     "(*sr:a+)", "(*asr:a+)", "(*sr:\\w+)", "(*sr:a)*",
     # A comment, which changes how the rest is read.
     "(?#c)",
-    # `\Q...\E` is deliberately absent. perl cannot be asked about it
-    # through this transport: `\Q` is double-quotish processing, done when
-    # the *source* is tokenised, so a pattern that arrives in a variable -
-    # which is the only way a driver can pass one - never goes through it.
-    # `qr/$p/` with $p holding `\Qa.b\E` matches neither "a.b" nor "axb" nor
-    # anything else that was tried. It is not that perl disagrees; it is that
-    # the question cannot be put. pcre2test, which reads its pattern as
-    # source, quotes it and matches "a.b" alone, which is what this library
-    # does - so the construct is checked in tests/unit/test_perl.cpp
-    # (AQuotedRunIsLiteralAndNotAnAtom) rather than here.
+    # `\Q...\E`, which this list used to leave out on the ground that perl
+    # could not be asked about it through this transport. It can: `\Q` is
+    # double-quotish processing, done when the *source* is tokenised, so a
+    # pattern arriving in a variable never goes through it and perl reads
+    # the escape as the letter - `\Qa.b\E` there matches "QaXbE" and not
+    # "a.b", which is not "no answer" but a different one. The note had
+    # tried two subjects and neither was the one that says so.
+    #
+    # pcre2test reads its pattern as source, quotes it, and matches "a.b"
+    # alone; this library does the same for both dialects. So these rows
+    # agree on the pcre run and are the deviation below on the perl one,
+    # where `quoting_reads_as_letters()` checks each against what perl's
+    # own reading would be rather than excluding it by its spelling.
+    "\\Qa.b\\E", "\\Q*\\E", "\\Qa\\E", "a\\Q\\Eb", "[\\Qa-z\\E]",
+    "\\Qa", "a\\E",
     # Alternations whose branches are different lengths. Leftmost-first says
     # the first branch wins even when a later one is longer, and an engine
     # that quietly took the longest would pass a corpus without these.
@@ -331,6 +336,33 @@ CALL_SPELLING = re.compile(r"\(\?(?:R|[0-9]|&|P>|\+|-)")
 BEHIND_NON_ATOMIC = ("(*naplb:", "(*non_atomic_positive_lookbehind:")
 
 
+def as_letters(pattern):
+    r"""The pattern perl reads, where `\Q` and `\E` are unknown escapes.
+
+    perl passes an unrecognized alphabetic escape through as the letter -
+    with a warning - so `[\Qa-z\E]` is `[Qa-zE]` there, which is why it
+    matches "Q" and "b" and not "-". A backslash pair is stepped over
+    rather than read, so `\\Q` keeps its literal backslash.
+    """
+    out = []
+    index = 0
+    while index < len(pattern):
+        character = pattern[index]
+        if character == "\\" and index + 1 < len(pattern):
+            following = pattern[index + 1]
+            out.append(following if following in "QE" else character + following)
+            index += 2
+            continue
+        out.append(character)
+        index += 1
+    return "".join(out)
+
+
+def holds_quoting(pattern):
+    r"""Whether the pattern writes `\Q` or `\E` as an escape of its own."""
+    return as_letters(pattern) != pattern
+
+
 def library_deviation(pattern, them, us):
     """A pattern this library refuses on purpose, recorded in section 6.
 
@@ -466,6 +498,8 @@ def compare(dialect, ours, seed, patterns, examples):
     unsupported = 0
     declined = 0
     known = 0
+    quoting = []
+    quoted = 0
 
     for (flags, pattern, subject), them, us in zip(cases, theirs, mine):
         # The reference declining to answer - a match limit, a subject it
@@ -490,7 +524,34 @@ def compare(dialect, ours, seed, patterns, examples):
                 trim_unset(normalise_ours(us))):
             known += 1
             continue
+        if dialect == "perl" and holds_quoting(pattern):
+            # Asked again below rather than excluded here: the row is the
+            # quoting deviation only if perl's answer is this library's
+            # answer to the pattern perl actually read.
+            quoting.append((flags, pattern, subject, them, us))
+            continue
         disagreements.append((flags, pattern, subject, them, us))
+
+    # The second pass, and what makes the quoting exclusion checkable.
+    # This library implements `\Q...\E` as PCRE2 does, because a pattern
+    # is text here and there is no interpolation to have done it earlier;
+    # perl reads the escape as the letter. A row is that deviation only
+    # when this library's answer to `as_letters(pattern)` *is* perl's
+    # answer to the pattern as written - anything else is a disagreement
+    # and is reported as one, so a defect inside a quoted run is still
+    # this tool's to find.
+    if quoting:
+        rows = [(flags, as_letters(pattern), subject)
+                for flags, pattern, subject, _, _ in quoting]
+        again = ask([ours, dialect], rows)
+        if len(again) != len(rows):
+            disagreements.extend(quoting)
+        else:
+            for row, answer in zip(quoting, again):
+                if trim_unset(normalise_ours(answer)) == trim_unset(row[3]):
+                    quoted += 1
+                else:
+                    disagreements.append(row)
 
     for flags, pattern, subject, them, us in disagreements[:examples]:
         print("  /%s/%-4s on %-12s %s=%-22s ours=%s"
@@ -498,10 +559,11 @@ def compare(dialect, ours, seed, patterns, examples):
 
     print("%-5s %d patterns x %d flag sets x %d subjects = %d cases against "
           "%s, %d compared, %d this library does not implement, %d the "
-          "reference declined, %d a known %s defect, %d disagreements"
+          "reference declined, %d a known %s defect, %d perl's quoting, "
+          "%d disagreements"
           % (dialect + ":", len(built), len(FLAG_SETS), len(SUBJECTS),
              len(cases), REFERENCE[dialect], compared, unsupported, declined,
-             known, REFERENCE[dialect], len(disagreements)))
+             known, REFERENCE[dialect], quoted, len(disagreements)))
     return len(disagreements)
 
 
