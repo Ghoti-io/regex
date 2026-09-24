@@ -235,6 +235,35 @@ static GRX_Result skip_ignorable(GRX_Parser * parser) {
 // Building nodes
 // --------------------------------------------------------------------------
 
+GRX_Result grx_parse_literal_extend(
+    GRX_Parser * parser, uint32_t node, uint32_t codepoint) {
+  if (!parser) {
+    return GRX_ERR_INVALID;
+  }
+  GRX_Node * literal = grx_pattern_node(parser->pattern, node);
+  if (!literal || literal->kind != GRX_NODE_LITERAL) {
+    return GRX_ERR_INVALID;
+  }
+  // Only the run that ends where the arena does can grow: another node's
+  // run sits in front of the next one's and cannot be lengthened without
+  // moving it. Every caller extends the node it has just made, so this is a
+  // check rather than a case to handle.
+  if ((size_t)literal->a + literal->b != parser->pattern->literals.count) {
+    return GRX_ERR_INVALID;
+  }
+  if (codepoint == 0x0A || codepoint == 0x0D) {
+    parser->pattern->has_cr_or_lf = 1;
+  }
+  GRX_Result result
+      = grx_arena_append(&parser->pattern->literals, &codepoint, NULL);
+  if (result != GRX_OK) {
+    return grx_parse_fail(
+        parser, GRX_DIAG_OUT_OF_MEMORY, parser->position, 0);
+  }
+  grx_pattern_node(parser->pattern, node)->b++;
+  return GRX_OK;
+}
+
 GRX_Result grx_parse_literal_node(GRX_Parser * parser, uint32_t codepoint,
     size_t offset, size_t length, uint32_t * out_node) {
   if (!parser || !out_node) {

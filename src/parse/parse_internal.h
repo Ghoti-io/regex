@@ -1028,6 +1028,24 @@ GRX_Result grx_parse_literal_node(GRX_Parser * parser, uint32_t codepoint,
     size_t offset, size_t length, uint32_t * out_node);
 
 /**
+ * @brief Add one code point to the literal run a node already holds.
+ *
+ * For a dialect where a character in the pattern can be longer than one
+ * code point: Vim reads a base character and the composing characters
+ * after it as one atom, and this is how the atom grows once it has been
+ * made. Only the node whose run ends where the literal arena does may
+ * grow, which is the node the caller has just made.
+ *
+ * @param parser The parser.
+ * @param node The literal node to extend.
+ * @param codepoint The code point to add.
+ * @return GRX_OK, or GRX_ERR_INVALID when the node is not a literal whose
+ *   run is the last one.
+ */
+GRX_Result grx_parse_literal_extend(
+    GRX_Parser * parser, uint32_t node, uint32_t codepoint);
+
+/**
  * @brief Append an empty character-class node, ready for items.
  *
  * @param parser The parser.

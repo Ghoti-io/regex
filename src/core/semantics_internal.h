@@ -217,6 +217,32 @@ typedef enum {
    */
   GRX_ASSERT_WORD_CLASS_START,
   GRX_ASSERT_WORD_CLASS_END,
+  /**
+   * The character here is not a composing one; the class says which.
+   *
+   * Vim's matching model, where a base character and the composing
+   * characters after it are one character (documentation/dialects.md
+   * §5.20). Two uses, and both are "the cluster ends here": after the run
+   * of composing characters an atom absorbed, where it is what makes the
+   * run possessive without an atomic group - a thread that stopped early
+   * dies here, so every engine can still run the program - and at the end
+   * of the whole match, which vim refuses to let fall before a composing
+   * character.
+   */
+  GRX_ASSERT_NOT_COMPOSING,
+  /**
+   * A cluster boundary: the character here is not composing, or none
+   * precedes it.
+   *
+   * The same question grx_display_cell_width()'s `first` parameter asks: a
+   * composing character with nothing before it is a character of its own,
+   * and one after anything at all belongs to what it follows. Vim both
+   * starts and ends a match only at such a position, which is why `\%2c`
+   * holds nowhere inside a cluster and why `[^a]` does not match the mark
+   * in "a" U+0301 "b" - and why `a*` still matches the empty string at
+   * offset 0 of U+0301 "a", where the mark is a base and not a mark.
+   */
+  GRX_ASSERT_CLUSTER_BOUNDARY,
   GRX_ASSERT_SEARCH_START,      ///< `\G`: where this search attempt began.
   /**
    * The four segmentation boundaries, and their negations.

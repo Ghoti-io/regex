@@ -178,6 +178,22 @@ uint32_t grx_display_cell_width(uint32_t codepoint, int first);
 size_t grx_display_column_after(
     uint32_t codepoint, size_t column, size_t tabstop, int first);
 
+/**
+ * @brief The `index`-th run of composing characters, in ascending order.
+ *
+ * The zero-cell column of src/unicode/display.c read as what it also is:
+ * the set vim's matching model calls composing, where a base character and
+ * the composing characters after it are one character. Enumerated rather
+ * than returned as a table so that there is one table and not two.
+ *
+ * @param index Which run, counting from zero.
+ * @param out_lo Receives the first code point of the run; may be NULL.
+ * @param out_hi Receives the last; may be NULL.
+ * @return Non-zero while there is such a run, zero when there is not.
+ */
+int grx_display_composing_range(
+    size_t index, uint32_t * out_lo, uint32_t * out_hi);
+
 /** @brief Vim's class for a blank, and for nothing at all. */
 #define GRX_VIM_CLASS_BLANK 0u
 

@@ -213,6 +213,23 @@ typedef enum {
 } GRX_WordBoundaryRule;
 
 /**
+ * @brief What a composing character is to the matcher.
+ *
+ * documentation/dialects.md section 5.20. Everywhere but Vim a composing
+ * character is a character: `.` matches one, a literal beside it is two
+ * atoms, and a match may start or end between a base and its mark. Vim's
+ * matcher reads a base character and the composing characters after it as
+ * **one** character, which reaches every atom that consumes anything and
+ * the two ends of the match as well - so it is a matching model rather
+ * than a construct, and this is the axis that says which model.
+ */
+typedef enum {
+  GRX_COMPOSING_SEPARATE = 0, ///< A composing character is a character.
+  GRX_COMPOSING_CLUSTER,      ///< Vim: a base and its marks are one.
+  GRX_COMPOSING_COUNT         ///< Closes the enum; not a rule.
+} GRX_ComposingRule;
+
+/**
  * @brief What a replacement template may say, and how.
  *
  * documentation/dialects.md section 5.11 as bits. A template is a second
@@ -456,6 +473,7 @@ typedef struct GRX_Profile {
   GRX_NewlineSet newlines;          ///< The line-terminator set.
   GRX_ShorthandSet shorthands;      ///< `\w`, `\d`, `\s` by default.
   GRX_WordBoundaryRule word_boundary; ///< What `\<` and `\>` compare.
+  GRX_ComposingRule composing;      ///< What a composing character is.
   /**
    * @brief The same, once the dialect's *widening* flag is set.
    *

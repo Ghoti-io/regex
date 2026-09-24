@@ -579,7 +579,6 @@ TEST(Vim, TheConstructsItRefusesAndWhy) {
   EXPECT_EQ(why("a~"), GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED);
   EXPECT_EQ(span("a\\~", "a~"), "0-2");
   EXPECT_EQ(span("\\M~", "a~"), "1-2");
-  EXPECT_EQ(why("\\Za"), GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED); // combining
   // These two vim refuses itself, outside a syntax file.
   EXPECT_EQ(why("\\z(a\\)"), GRX_DIAG_NOT_IN_DIALECT);
   EXPECT_EQ(why("\\z1"), GRX_DIAG_NOT_IN_DIALECT);
@@ -888,6 +887,120 @@ TEST(Vim, EveryClassFromTwoUpIsAKeywordCharacterAndNothingElseIs) {
   grx_match_destroy(match);
   grx_regex_free(attempt.regex);
   EXPECT_EQ(disagreements, 0u) << "first at U+" << std::hex << first;
+}
+
+// --------------------------------------------------------------------------
+// Composing clusters
+// --------------------------------------------------------------------------
+
+TEST(Vim, ABaseAndTheMarksAfterItAreOneCharacter) {
+  // Vim matches a *cluster*: a character and the composing characters
+  // written after it are one character to every atom that consumes
+  // anything. Every number here was asked of vim 9.1 first.
+  //
+  // "a" U+0301 is three bytes and one character, so `.` takes all of it
+  // and a literal `a` matches none of it - the literal is the one atom
+  // that does not take the marks, and a match may not end between them.
+  EXPECT_EQ(span(".", "a\u0301b"), "0-3");
+  EXPECT_EQ(span("[a]", "a\u0301b"), "0-3");
+  EXPECT_EQ(span("\\w", "a\u0301b"), "0-3");
+  EXPECT_EQ(span("[[:alpha:]]", "a\u0301b"), "0-3");
+  EXPECT_EQ(span("a", "a\u0301b"), "nomatch");
+  EXPECT_EQ(span("\\(a\\)", "a\u0301b"), "nomatch");
+  // Two marks are one character with the base, and `.` after a literal
+  // takes the marks the literal left: the literal consumes its own code
+  // point and the cluster ends where the marks stop.
+  EXPECT_EQ(span(".", "a\u0301\u0302b"), "0-5");
+  EXPECT_EQ(span("a.", "a\u0301b"), "0-3");
+  EXPECT_EQ(span("a.", "a\u0301\u0302b"), "0-5");
+  EXPECT_EQ(group("\\(a\\)\\(.\\)", "a\u0301b", 2), "1-3");
+  // `..` finds one character inside a cluster and the next one after it,
+  // and `.\{2}` over a subject that holds only the cluster finds nothing:
+  // the marks cannot be given back, which is what makes the run of them
+  // possessive rather than greedy.
+  EXPECT_EQ(span("..", "a\u0301b"), "0-4");
+  EXPECT_EQ(span(".\\{2}", "a\u0301"), "nomatch");
+  // Any character can be a base: a line break, a space and a wide
+  // character all carry marks in vim.
+  EXPECT_EQ(span("[^a]", "a\n\u0301b"), "1-4");
+  EXPECT_EQ(span("[^a]", "a \u0301b"), "1-4");
+  EXPECT_EQ(span(".", "\u65e5\u0301b"), "0-5");
+}
+
+TEST(Vim, AMatchBeginsAndEndsWhereAClusterDoes) {
+  // A composing character with something before it is in the middle of a
+  // character, and no match starts or ends there. `\%2c` is the position
+  // one byte in, which is inside the cluster, and `[^a]` skips it for the
+  // "b" rather than matching the mark.
+  EXPECT_EQ(span("\\%2c", "a\u0301b"), "nomatch");
+  EXPECT_EQ(span("\\%4c", "a\u0301b"), "3-3");
+  EXPECT_EQ(span("[^a]", "a\u0301b"), "3-4");
+  // A composing character with *nothing* before it is a character of its
+  // own, so the empty match at offset 0 stands and `.` takes it.
+  EXPECT_EQ(span("a*", "\u0301a"), "0-0");
+  EXPECT_EQ(span(".", "\u0301a"), "0-2");
+  EXPECT_EQ(span(".", "\u0301\u0302a"), "0-4");
+  // The screen column agrees with the rule from the other side: a mark has
+  // no column of its own, so `\%2v` holds at the character after the
+  // cluster and nowhere inside it.
+  EXPECT_EQ(span("\\%2v", "a\u0301b"), "3-3");
+}
+
+TEST(Vim, EveryMarkThePatternWritesMustBeInTheCluster) {
+  // A base with marks written after it in the *pattern* is one atom, and
+  // the marks it names must all be among the ones the text carries. Order
+  // does not matter and the text may carry more, so a pattern with one
+  // mark matches a cluster with two - and consumes both.
+  EXPECT_EQ(span("a\u0301", "a\u0301b"), "0-3");
+  EXPECT_EQ(span("a\u0301", "a\u0301\u0302b"), "0-5");
+  EXPECT_EQ(span("a\u0302", "a\u0301\u0302b"), "0-5");
+  EXPECT_EQ(span("a\u0302", "a\u0301b"), "nomatch");
+  EXPECT_EQ(span("a\u0301\u0302", "a\u0301b"), "nomatch");
+  EXPECT_EQ(span("a\u0301", "ab"), "nomatch");
+  // The cluster is the atom a repeat applies to, not the mark.
+  EXPECT_EQ(span("a\u0301*", "a\u0301a\u0301"), "0-6");
+  EXPECT_EQ(span("a\u0301*", "ab"), "0-0");
+  EXPECT_EQ(group("\\(a\u0301\\)", "a\u0301\u0302b", 1), "0-5");
+}
+
+TEST(Vim, IgnoreCombiningCarriesTheMarksInsteadOfMatchingThem) {
+  // `\Z` anywhere in the pattern decides the whole of it, as `\c` does.
+  // With it every atom takes the composing characters after what it
+  // matched - the literal included, which is the only difference - and a
+  // composing character written beside a base in the pattern is ignored.
+  EXPECT_EQ(span("\\Za", "a\u0301b"), "0-3");
+  EXPECT_EQ(span("\\Za", "ab"), "0-1");
+  EXPECT_EQ(span("\\Za\u0301", "ab"), "0-1");
+  EXPECT_EQ(span("\\Zab", "a\u0301b"), "0-4");
+  EXPECT_EQ(span("a\\Zb", "a\u0301b"), "0-4");
+  EXPECT_EQ(span("\\Z[^a]", "a\u0301b"), "3-4");
+  EXPECT_EQ(group("\\Z\\(a\\)", "a\u0301b", 1), "0-3");
+  // It is a marker and not an atom, so a multi may not follow it - `a\Z*`
+  // is an error in vim exactly as `a\c*` is - and one with nothing before
+  // it leaves the `*` a literal asterisk.
+  EXPECT_EQ(accepts("a\\Z*"), "refused");
+  EXPECT_EQ(accepts("a\\Z\\+"), "refused");
+  EXPECT_EQ(span("\\Z*", "aaa"), "nomatch");
+}
+
+TEST(Vim, AComposingCharacterThatBeginsAnAtomIsRefused) {
+  // A mark written after `.`, after `\w`, after a group, or with nothing
+  // before it at all is a second matching rule in vim - the atom then
+  // matches any cluster carrying that mark, base ignored - and its own two
+  // engines disagree about the collection. Refused rather than answered
+  // either way; documentation/dialects.md section 6.
+  EXPECT_EQ(accepts(".\u0301"), "refused");
+  EXPECT_EQ(accepts("\\w\u0301"), "refused");
+  EXPECT_EQ(accepts("\\(a\\)\u0301"), "refused");
+  EXPECT_EQ(accepts("\u0301"), "refused");
+  EXPECT_EQ(accepts("[a\u0301]"), "refused");
+  EXPECT_EQ(accepts("x\\|\u0301"), "refused");
+  EXPECT_EQ(why(".\u0301"), GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED);
+  EXPECT_EQ(why("[a\u0301]"), GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED);
+  // And `\Z` does not make them legal: under it a composing character
+  // beside a base is dropped, but one that begins an atom still asks for
+  // the rule above.
+  EXPECT_EQ(accepts("\\Z.\u0301"), "refused");
 }
 
 int main(int argc, char ** argv) {

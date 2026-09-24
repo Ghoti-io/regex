@@ -75,6 +75,7 @@
 #include <string.h>
 
 #include "../parse/parse_internal.h"
+#include "../unicode/unicode_internal.h"
 #include "syntax_internal.h"
 
 // --------------------------------------------------------------------------
@@ -337,15 +338,32 @@ static GRX_Result anchor_node(GRX_Parser * parser, GRX_AnchorKind anchor,
  * vim and `[^a]` would too, but `\_[^\n]` matches one and `[^\n]` does
  * not, and only one of those two can be spelled by adding a member.
  *
- * So the negated forms become an alternation of the break and the class,
+ * So the negated forms become an alternation of the class and the break,
  * wrapped in a group so that the whole thing is still one atom and can
  * still be repeated. Nothing below the AST learns a new node kind.
+ *
+ * The break is a one-member *class* and not a literal, which matters in
+ * exactly one place and is why it is worth the extra node: a literal
+ * matches its own code point and nothing else, where a class takes the
+ * composing characters after what it matched. `\_W` over a line break
+ * carrying a mark is 1-4 in vim and was 1-2 here while this branch was a
+ * literal, so the `.` after it matched the mark that `\_W` should have
+ * taken. The class comes first for the same reason: where both branches
+ * can match the break, the one that takes the marks with it is vim's
+ * answer.
  */
 static GRX_Result wrap_with_newline(
     GRX_Parser * parser, size_t start, uint32_t inner, uint32_t * out_node) {
   uint32_t literal = GRX_INDEX_NONE;
-  GRX_Result result = grx_parse_literal_node(
-      parser, (uint32_t)'\n', start, parser->position - start, &literal);
+  GRX_Result result = grx_parse_class_node(parser, start, &literal);
+  if (result != GRX_OK) {
+    return result;
+  }
+  GRX_ClassItem newline = {
+    .kind = GRX_CLASS_ITEM_SINGLE, .flags = 0, .lo = '\n', .hi = '\n',
+    .a = 0, .offset = start, .length = parser->position - start,
+  };
+  result = grx_parse_class_add(parser, literal, &newline);
   if (result != GRX_OK) {
     return result;
   }
@@ -354,8 +372,8 @@ static GRX_Result wrap_with_newline(
   if (result != GRX_OK) {
     return result;
   }
-  if (grx_pattern_add_child(parser->pattern, alternate, literal) != GRX_OK
-      || grx_pattern_add_child(parser->pattern, alternate, inner) != GRX_OK) {
+  if (grx_pattern_add_child(parser->pattern, alternate, inner) != GRX_OK
+      || grx_pattern_add_child(parser->pattern, alternate, literal) != GRX_OK) {
     return grx_parse_fail(parser, GRX_DIAG_OUT_OF_MEMORY, start, 0);
   }
   uint32_t group = GRX_INDEX_NONE;
@@ -647,6 +665,19 @@ static const VimRange * vim_named_set(char c, size_t * out_count,
  * in that one function and all three are the same defect - a second
  * reader of a grammar, written from memory. There is one reader now.
  */
+/**
+ * Whether a code point is one of the composing characters.
+ *
+ * Vim reads a base character and the composing characters after it as one
+ * character, in the pattern as well as in the subject, so the reader has to
+ * know the set too. It is the one in src/unicode/display.c - a character of
+ * zero display cells is a composing one, measured both ways and the same
+ * 2,033 code points either way.
+ */
+static int vim_is_composing(uint32_t codepoint) {
+  return grx_display_cell_width(codepoint, 0) == 0;
+}
+
 static int collection_closes(const char * text, size_t length, size_t at) {
   size_t i = at;
   if (i < length && text[i] == '^') {
@@ -684,6 +715,7 @@ static uint32_t vim_initial_options(
     const char * text, size_t length, uint32_t options) {
   int caseless = 0;
   int forced = 0;
+  int ignore_combining = 0;
   VimMagic level = VIM_MAGIC;
   int in_class = 0;
   int first_in_class = 0;
@@ -696,6 +728,7 @@ static uint32_t vim_initial_options(
         switch (next) {
           case 'c': caseless = 1; break;
           case 'C': forced = 1; break;
+          case 'Z': ignore_combining = 1; break;
           case 'v': level = VIM_VERY_MAGIC; break;
           case 'm': level = VIM_MAGIC; break;
           case 'M': level = VIM_NOMAGIC; break;
@@ -735,6 +768,11 @@ static uint32_t vim_initial_options(
     }
   }
 
+  if (ignore_combining) {
+    // `\Z`, which has no counterpart to turn it off: one anywhere in the
+    // pattern makes the whole of it ignore composing characters.
+    options |= GRX_OPT_IGNORE_COMBINING;
+  }
   if (caseless) {
     return options | GRX_OPT_CASELESS;
   }
@@ -1087,6 +1125,18 @@ static GRX_Result read_collection(GRX_Parser * parser, size_t start,
       item.kind = GRX_CLASS_ITEM_RANGE;
       item.hi = high_item.lo;
       item.length = parser->position - item_start;
+    }
+
+    if ((item.kind == GRX_CLASS_ITEM_SINGLE
+            || item.kind == GRX_CLASS_ITEM_RANGE)
+        && (vim_is_composing(item.lo) || vim_is_composing(item.hi))) {
+      // Vim fuses a composing character onto the member before it, so
+      // `[a` U+0301 `]` holds one member and not two - and its own two
+      // engines disagree about what that member then matches. Refused
+      // rather than answered either way; documentation/dialects.md
+      // section 6.
+      return grx_parse_fail(parser, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED,
+          item_start, parser->position - item_start);
     }
 
     GRX_Result added = grx_parse_class_add(parser, *out_node, &item);
@@ -1861,6 +1911,12 @@ static GRX_Result vim_read_repeat(GRX_Parser * parser, GRX_Quantifier * out) {
   // matches "*a": there the marker has no atom before it, this reader is
   // never asked, and the `*` is the literal it is at every level.
   //
+  // `\Z` is the seventh marker and behaves as the other six do here:
+  // `a\Z*`, `a\Z\+`, `a\Z\{2}` and even `a\Z\=` are all refused in
+  // vim, where `a*` and `a\=` are not, and `\Z*` at the start of a
+  // pattern is the literal asterisk. Measured when `\Z` stopped being
+  // refused outright and became this dialect's composing model.
+  //
   // Read here and acted on only once a repeat has actually been found,
   // because this function is called wherever a repeat *might* stand and
   // failing early refused every pattern with a marker in it.
@@ -1868,7 +1924,7 @@ static GRX_Result vim_read_repeat(GRX_Parser * parser, GRX_Quantifier * out) {
   if (parser->position >= 2 && parser->text[parser->position - 2] == '\\') {
     char marker = parser->text[parser->position - 1];
     after_marker = marker == 'v' || marker == 'm' || marker == 'M'
-        || marker == 'V' || marker == 'c' || marker == 'C';
+        || marker == 'V' || marker == 'c' || marker == 'C' || marker == 'Z';
   }
   int star_escaped = level == VIM_NOMAGIC || level == VIM_VERY_NOMAGIC;
   int others_escaped = level != VIM_VERY_MAGIC;
@@ -1968,14 +2024,15 @@ static GRX_Result vim_skip_ignorable(GRX_Parser * parser) {
       return GRX_OK;
     }
     char c = byte_at(parser, 1);
-    if (c == 'Z') {
-      // "Ignore differences in Unicode combining characters": a rule about
-      // normalisation, which this library has none of. Refused here because
-      // this is where it is read, not because it is a marker.
-      return grx_parse_fail(
-          parser, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, parser->position, 2);
-    }
     switch (c) {
+      case 'Z':
+        // "Ignore differences in Unicode combining characters", which is
+        // this dialect's composing-cluster model with the marks made
+        // optional rather than a rule of its own. Read by
+        // vim_initial_options() before the parse began, like `\c`: one
+        // anywhere decides the whole pattern. Nothing left to do but step
+        // over it.
+        break;
       case 'v': parser->dialect_mode = VIM_VERY_MAGIC; break;
       case 'm': parser->dialect_mode = VIM_MAGIC; break;
       case 'M': parser->dialect_mode = VIM_NOMAGIC; break;
@@ -2065,6 +2122,38 @@ static GRX_Result vim_check_quantifier_target(GRX_Parser * parser,
  * library's lookbehind is unbounded. documentation/dialects.md section 6.
  */
 static GRX_Result vim_postfix_atom(GRX_Parser * parser, uint32_t * node) {
+  // The composing characters written after the atom belong to it: vim reads
+  // a character out of a pattern with `utfc_ptr2len()`, which is the
+  // character *and* its marks. Done here because here is after the atom and
+  // before any repeat, which is where vim does it too - `a` U+0301 `*`
+  // repeats the cluster and not the mark.
+  for (;;) {
+    uint32_t codepoint = 0;
+    size_t width = 0;
+    if (grx_parse_peek(parser, &codepoint, &width) != GRX_OK
+        || !vim_is_composing(codepoint)) {
+      break;
+    }
+    const GRX_Node * atom = grx_pattern_node(parser->pattern, *node);
+    if (!atom || atom->kind != GRX_NODE_LITERAL) {
+      // After `.`, a collection or a group, vim's answer is a second rule
+      // rather than this one, and its two engines do not agree on the
+      // collection: section 6.
+      return grx_parse_fail(parser, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED,
+          parser->position, width);
+    }
+    GRX_Result result = grx_parse_literal_extend(parser, *node, codepoint);
+    if (result != GRX_OK) {
+      return result == GRX_ERR_INVALID
+          ? grx_parse_fail(parser, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED,
+              parser->position, width)
+          : result;
+    }
+    parser->position += width;
+    grx_pattern_node(parser->pattern, *node)->length
+        = parser->position - atom->offset;
+  }
+
   for (;;) {
     VimMagic level = magic_level(parser);
     size_t start = parser->position;
@@ -2225,6 +2314,17 @@ static GRX_Result vim_literal_atom(GRX_Parser * parser, uint32_t codepoint,
     if (codepoint == '$' && at_branch_end(parser, offset + length)) {
       return anchor_node(parser, GRX_ANCHOR_DOLLAR, offset, out_node);
     }
+  }
+  if (vim_is_composing(codepoint)) {
+    // A composing character that *begins* an atom, which is what one after
+    // `.`, after `\w`, after a group, or at the start of the pattern is.
+    // Vim matches such an atom against any cluster carrying that mark, its
+    // base ignored, and that is a second matching rule rather than this
+    // one: documentation/dialects.md section 6 has the measurements. A
+    // composing character after a literal never reaches here - the literal
+    // has already taken it, which is what vim's own reader does.
+    return grx_parse_fail(
+        parser, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, offset, length);
   }
   if (codepoint == '~' && (level == VIM_MAGIC || level == VIM_VERY_MAGIC)) {
     // The text of the last `:s` replacement. There has not been one, and

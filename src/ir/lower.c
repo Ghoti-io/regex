@@ -64,6 +64,7 @@ typedef struct {
   int reverse;                 ///< Non-zero inside a lookbehind body.
   uint32_t newline_class;      ///< The line-terminator set, or GRX_INDEX_NONE.
   uint32_t word_class;         ///< The word set for `\b`, or GRX_INDEX_NONE.
+  uint32_t composing_class;    ///< Vim's composing set, or GRX_INDEX_NONE.
 } Lowering;
 
 static GRX_Result lower_node(
@@ -647,6 +648,262 @@ static GRX_Result word_class(Lowering * low, uint32_t * out_index) {
 static GRX_Result lower_run(Lowering * low, const uint32_t * points,
     size_t length, const GRX_Node * node, uint32_t * out_node);
 
+// --------------------------------------------------------------------------
+// Vim's composing clusters
+// --------------------------------------------------------------------------
+
+/**
+ * Whether a base character and the composing characters after it are one.
+ *
+ * documentation/dialects.md section 5.20, and Vim is the only dialect here
+ * that says yes. Everything below this line builds nothing at all when it
+ * says no, which is what keeps the other ten dialects' programs the size
+ * they were.
+ */
+static int composing_clusters(const Lowering * low) {
+  return low->profile.composing == GRX_COMPOSING_CLUSTER;
+}
+
+/** Whether a code point is one of vim's composing characters. */
+static int is_composing(uint32_t codepoint) {
+  return grx_display_cell_width(codepoint, 0) == 0;
+}
+
+/** Vim's `\Z`: the composing characters are carried rather than matched. */
+static int ignoring_composing(const Lowering * low) {
+  return (low->options & GRX_OPT_IGNORE_COMBINING) != 0;
+}
+
+/** The set of composing characters, interned once for the whole pattern. */
+static GRX_Result composing_class(Lowering * low, uint32_t * out_index) {
+  if (low->composing_class != GRX_INDEX_NONE) {
+    *out_index = low->composing_class;
+    return GRX_OK;
+  }
+
+  GRX_CharClass cls;
+  grx_charclass_init(&cls, low->ir->allocator);
+  GRX_Result result = GRX_OK;
+  uint32_t lo = 0;
+  uint32_t hi = 0;
+  for (size_t i = 0; result == GRX_OK
+      && grx_display_composing_range(i, &lo, &hi); i++) {
+    result = grx_charclass_add_range(&cls, lo, hi, low->limits);
+  }
+  if (result == GRX_OK) {
+    result = intern(low, &cls, NULL, &low->composing_class);
+  }
+  grx_charclass_clear(&cls);
+  if (result != GRX_OK) {
+    return storage_failed(low, result, NULL);
+  }
+
+  *out_index = low->composing_class;
+  return GRX_OK;
+}
+
+/** One assertion about the composing set, attached to `parent`. */
+static GRX_Result attach_composing_assert(Lowering * low,
+    const GRX_Node * node, uint32_t parent, GRX_AssertKind kind) {
+  uint32_t index = GRX_INDEX_NONE;
+  GRX_Result result = composing_class(low, &index);
+  if (result != GRX_OK) {
+    return result;
+  }
+  uint32_t assertion = GRX_INDEX_NONE;
+  result = add(low, GRX_IR_ASSERT, node, &assertion);
+  if (result != GRX_OK) {
+    return result;
+  }
+  grx_ir_node(low->ir, assertion)->mode = (uint8_t)kind;
+  grx_ir_node(low->ir, assertion)->a = index;
+  return attach(low, parent, assertion);
+}
+
+static GRX_Result cluster_wrap(Lowering * low, const GRX_Node * node,
+    uint32_t atom, uint32_t * out_node);
+static GRX_Result lower_codepoint(Lowering * low, uint32_t codepoint,
+    const GRX_Node * node, uint32_t * out_node);
+
+/**
+ * Lower one cluster written in the pattern: a base and the marks after it.
+ *
+ *     BASE (?= COMPOSING* m1 ) ... (?= COMPOSING* mk ) COMPOSING* !COMPOSING
+ *
+ * Vim's rule, measured: the base must match, **each** composing character
+ * the pattern wrote must be somewhere among the ones the text's cluster
+ * carries - order does not matter and the text may carry more, so "a"
+ * U+0301 matches a cluster with U+0301 and U+0302 in it - and what is
+ * consumed is the whole cluster either way. One lookahead per pattern mark
+ * is what says "somewhere among", and it is why a pattern that writes a
+ * composing character costs the backtracker: the engines that cannot run a
+ * lookaround will not be offered this program. A pattern with no composing
+ * character in it never reaches here.
+ */
+static GRX_Result lower_cluster(Lowering * low, const uint32_t * points,
+    size_t length, const GRX_Node * node, uint32_t * out_node) {
+  uint32_t index = GRX_INDEX_NONE;
+  GRX_Result result = composing_class(low, &index);
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  uint32_t sequence = GRX_INDEX_NONE;
+  result = add(low, GRX_IR_CONCAT, node, &sequence);
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  uint32_t base = GRX_INDEX_NONE;
+  result = lower_codepoint(low, points[0], node, &base);
+  if (result == GRX_OK) {
+    result = attach(low, sequence, base);
+  }
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  for (size_t i = 1; result == GRX_OK && i < length; i++) {
+    uint32_t look = GRX_INDEX_NONE;
+    result = add(low, GRX_IR_LOOK, node, &look);
+    if (result != GRX_OK) {
+      return result;
+    }
+    grx_ir_node(low->ir, look)->mode = (uint8_t)GRX_LOOK_AHEAD_POSITIVE;
+
+    uint32_t body = GRX_INDEX_NONE;
+    result = add(low, GRX_IR_CONCAT, node, &body);
+    if (result != GRX_OK) {
+      return result;
+    }
+
+    // The run of marks the pattern's mark may be anywhere in: lazy, so that
+    // the search walks the cluster from its start rather than from its end.
+    uint32_t skip = GRX_INDEX_NONE;
+    result = add(low, GRX_IR_REPEAT, node, &skip);
+    if (result != GRX_OK) {
+      return result;
+    }
+    GRX_IRNode * loop = grx_ir_node(low->ir, skip);
+    loop->min = 0;
+    loop->max = GRX_REPEAT_INF;
+    loop->mode = GRX_REPEAT_LAZY;
+    loop->empty_loop = (uint8_t)low->profile.empty_loop;
+    loop->capture_reset = (uint8_t)low->profile.capture_reset;
+
+    uint32_t any_mark = GRX_INDEX_NONE;
+    result = add(low, GRX_IR_CLASS, node, &any_mark);
+    if (result != GRX_OK) {
+      return result;
+    }
+    grx_ir_node(low->ir, any_mark)->a = index;
+
+    uint32_t wanted = GRX_INDEX_NONE;
+    result = lower_codepoint(low, points[i], node, &wanted);
+    if (result == GRX_OK) {
+      result = attach(low, skip, any_mark);
+    }
+    if (result == GRX_OK) {
+      result = attach(low, body, skip);
+    }
+    if (result == GRX_OK) {
+      result = attach(low, body, wanted);
+    }
+    if (result == GRX_OK) {
+      result = attach(low, look, body);
+    }
+    if (result == GRX_OK) {
+      result = attach(low, sequence, look);
+    }
+  }
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  // And then the cluster itself, whatever it holds.
+  uint32_t absorbed = GRX_INDEX_NONE;
+  result = cluster_wrap(low, node, sequence, &absorbed);
+  if (result != GRX_OK) {
+    return result;
+  }
+  *out_node = absorbed;
+  return GRX_OK;
+}
+
+/**
+ * Wrap an atom in the composing characters that belong to it.
+ *
+ *     ATOM ( COMPOSING )* NOT_COMPOSING
+ *
+ * The loop is greedy and the assertion after it is what makes it
+ * *possessive*: a thread that stopped with a composing character still in
+ * front of it dies there, so exactly one path survives and `.\{2}` cannot
+ * match "a" U+0301 by letting the first `.` give back the mark. Vim's own
+ * `\X` needs an atomic group for the same job; this does not, and that
+ * matters here because every consuming atom in the dialect passes through
+ * this function - an atomic group in each would put every Vim pattern on
+ * the backtracker.
+ *
+ * `atom` is already in the IR; what comes back is the sequence that now
+ * holds it. Not applied to a literal, which in Vim matches its own code
+ * point and leaves the marks to whatever follows - unless `\Z` is in the
+ * pattern, when a literal absorbs them like everything else.
+ */
+static GRX_Result cluster_wrap(Lowering * low, const GRX_Node * node,
+    uint32_t atom, uint32_t * out_node) {
+  *out_node = atom;
+  if (!composing_clusters(low)) {
+    return GRX_OK;
+  }
+
+  uint32_t sequence = GRX_INDEX_NONE;
+  GRX_Result result = add(low, GRX_IR_CONCAT, node, &sequence);
+  if (result == GRX_OK) {
+    result = attach(low, sequence, atom);
+  }
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  uint32_t index = GRX_INDEX_NONE;
+  result = composing_class(low, &index);
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  uint32_t repeat = GRX_INDEX_NONE;
+  result = add(low, GRX_IR_REPEAT, node, &repeat);
+  if (result != GRX_OK) {
+    return result;
+  }
+  GRX_IRNode * loop = grx_ir_node(low->ir, repeat);
+  loop->min = 0;
+  loop->max = GRX_REPEAT_INF;
+  loop->mode = GRX_REPEAT_GREEDY;
+  loop->empty_loop = (uint8_t)low->profile.empty_loop;
+  loop->capture_reset = (uint8_t)low->profile.capture_reset;
+
+  uint32_t body = GRX_INDEX_NONE;
+  result = add(low, GRX_IR_CLASS, node, &body);
+  if (result != GRX_OK) {
+    return result;
+  }
+  grx_ir_node(low->ir, body)->a = index;
+  result = attach(low, repeat, body);
+  if (result == GRX_OK) {
+    result = attach(low, sequence, repeat);
+  }
+  if (result == GRX_OK) {
+    result = attach_composing_assert(
+        low, node, sequence, GRX_ASSERT_NOT_COMPOSING);
+  }
+  if (result != GRX_OK) {
+    return result;
+  }
+  *out_node = sequence;
+  return GRX_OK;
+}
+
 /**
  * Lower one code point.
  *
@@ -1035,7 +1292,9 @@ static GRX_Result lower_any(
       && grx_newline_has_crlf(low->profile.newlines)) {
     grx_ir_node(low->ir, *out_node)->flags |= GRX_IR_NEWLINE_CRLF;
   }
-  return GRX_OK;
+  // `.` over "a" U+0301 is the whole cluster in Vim, and 0-1 everywhere
+  // else. Nothing is built where the dialect does not say so.
+  return cluster_wrap(low, node, *out_node, out_node);
 }
 
 /** Whether `^` and `$` are line anchors in this pattern. */
@@ -2648,6 +2907,85 @@ static GRX_Result evaluate_class_set(
 }
 
 /** One run as a concatenation of code points, each folded if need be. */
+/**
+ * Lower a run of literal code points where a base and its marks are one
+ * character.
+ *
+ * Vim. The run is cut into clusters - a code point and the composing
+ * characters written after it - and each becomes one atom. Two of them are
+ * refused rather than guessed at, and both are places where vim's own rule
+ * is an accident of where its parser reads a character rather than a rule
+ * about matching:
+ *
+ * - A composing character that **begins** an atom, which is what a mark
+ *   written after `.`, after `\w`, after a group or at the start of the
+ *   pattern is. Vim matches such an atom against any cluster carrying that
+ *   mark, base ignored - so `\w` U+0301 against "a" U+0301 "a" U+0301 is
+ *   the *whole* string in both of its engines, two clusters for what reads
+ *   as one atom and a mark.
+ * - Every composing character, under `\Z`, is dropped instead: it is the
+ *   marker's whole meaning that the pattern's marks are not matched.
+ *
+ * documentation/dialects.md section 6 carries the measurements, including
+ * the one place vim's two engines disagree - `[ab]` U+0301 against "ab" is
+ * a match under `re=2` and no match under `re=1`, and the mark can hardly
+ * be both required and ignored.
+ */
+static GRX_Result lower_run_clusters(Lowering * low, const uint32_t * points,
+    size_t length, const GRX_Node * node, uint32_t * out_node) {
+  if (ignoring_composing(low)) {
+    // `\Zá` matches "ab": the mark is not part of the pattern at all, and
+    // what is left of the run absorbs whatever the text carries.
+    uint32_t sequence = GRX_INDEX_NONE;
+    GRX_Result result = add(low, GRX_IR_CONCAT, node, &sequence);
+    for (size_t i = 0; result == GRX_OK && i < length; i++) {
+      if (is_composing(points[i])) {
+        continue;
+      }
+      uint32_t child = GRX_INDEX_NONE;
+      result = lower_codepoint(low, points[i], node, &child);
+      if (result == GRX_OK) {
+        result = cluster_wrap(low, node, child, &child);
+      }
+      if (result == GRX_OK) {
+        result = attach(low, sequence, child);
+      }
+    }
+    if (result != GRX_OK) {
+      return result;
+    }
+    *out_node = sequence;
+    return GRX_OK;
+  }
+
+  if (length && is_composing(points[0])) {
+    return fail(low, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, node);
+  }
+
+  uint32_t sequence = GRX_INDEX_NONE;
+  GRX_Result result = add(low, GRX_IR_CONCAT, node, &sequence);
+  size_t i = 0;
+  while (result == GRX_OK && i < length) {
+    size_t span = 1;
+    while (i + span < length && is_composing(points[i + span])) {
+      span++;
+    }
+    uint32_t child = GRX_INDEX_NONE;
+    result = span == 1
+        ? lower_codepoint(low, points[i], node, &child)
+        : lower_cluster(low, points + i, span, node, &child);
+    if (result == GRX_OK) {
+      result = attach(low, sequence, child);
+    }
+    i += span;
+  }
+  if (result != GRX_OK) {
+    return result;
+  }
+  *out_node = sequence;
+  return GRX_OK;
+}
+
 static GRX_Result lower_run(Lowering * low, const uint32_t * points,
     size_t length, const GRX_Node * node, uint32_t * out_node) {
   // Full folding first, because it is the one folding that cannot be taken a
@@ -2667,6 +3005,10 @@ static GRX_Result lower_run(Lowering * low, const uint32_t * points,
     if (result != GRX_OK) {
       return storage_failed(low, result, node);
     }
+  }
+
+  if (composing_clusters(low)) {
+    return lower_run_clusters(low, points, length, node, out_node);
   }
 
   if (length == 1) {
@@ -2952,7 +3294,13 @@ static GRX_Result lower_node(
         return result;
       }
       grx_ir_node(low->ir, class_node)->a = class_index;
-      return lower_class_full_folds(low, node, class_node, out_node);
+      result = lower_class_full_folds(low, node, class_node, out_node);
+      if (result != GRX_OK) {
+        return result;
+      }
+      // A collection takes the composing characters after what it matched,
+      // where a literal does not: `[a]` over "a" U+0301 is 0-3 in Vim.
+      return cluster_wrap(low, node, *out_node, out_node);
     }
 
     case GRX_NODE_ANY:
@@ -3095,6 +3443,7 @@ GRX_Result grx_lower_pattern(const GRX_Pattern * pattern,
     .reverse = 0,
     .newline_class = GRX_INDEX_NONE,
     .word_class = GRX_INDEX_NONE,
+    .composing_class = GRX_INDEX_NONE,
   };
 
   GRX_Result result = grx_syntax_spec(pattern->syntax, &low.spec);
@@ -3172,6 +3521,29 @@ GRX_Result grx_lower_pattern(const GRX_Pattern * pattern,
   }
   else {
     result = lower_node(&low, pattern->root, &root);
+  }
+
+  // Vim's two cluster rules that are about the *match* rather than about an
+  // atom: it begins and - unless `\Z` says the marks are not being matched
+  // - ends one only where a cluster does. The same assertion at both ends,
+  // because the question is the same one: a composing character with
+  // something before it is in the middle of a character. They cost nothing
+  // to any engine, and nothing at all to the ten dialects that do not ask.
+  if (result == GRX_OK && composing_clusters(&low)) {
+    uint32_t guarded = GRX_INDEX_NONE;
+    result = add(&low, GRX_IR_CONCAT, NULL, &guarded);
+    if (result == GRX_OK) {
+      result = attach_composing_assert(
+          &low, NULL, guarded, GRX_ASSERT_CLUSTER_BOUNDARY);
+    }
+    if (result == GRX_OK) {
+      result = attach(&low, guarded, root);
+    }
+    if (result == GRX_OK && !ignoring_composing(&low)) {
+      result = attach_composing_assert(
+          &low, NULL, guarded, GRX_ASSERT_CLUSTER_BOUNDARY);
+    }
+    root = guarded;
   }
 
   if (result != GRX_OK) {

@@ -280,6 +280,7 @@
 #define grx_parse_eat GHOTIIO_REGEX(grx_parse_eat)
 #define grx_parse_fail GHOTIIO_REGEX(grx_parse_fail)
 #define grx_parse_literal_node GHOTIIO_REGEX(grx_parse_literal_node)
+#define grx_parse_literal_extend GHOTIIO_REGEX(grx_parse_literal_extend)
 #define grx_parse_peek GHOTIIO_REGEX(grx_parse_peek)
 #define grx_parse_shorthand_node GHOTIIO_REGEX(grx_parse_shorthand_node)
 #define grx_parse_take GHOTIIO_REGEX(grx_parse_take)
@@ -305,6 +306,9 @@
 #define grx_unicode_fold_simple GHOTIIO_REGEX(grx_unicode_fold_simple)
 #define grx_display_cell_width GHOTIIO_REGEX(grx_display_cell_width)
 #define grx_display_column_after GHOTIIO_REGEX(grx_display_column_after)
+#define grx_display_composing_range                                          \
+  GHOTIIO_REGEX(grx_display_composing_range)
+#define grx_cluster_base_before GHOTIIO_REGEX(grx_cluster_base_before)
 #define grx_vim_char_class GHOTIIO_REGEX(grx_vim_char_class)
 #define grx_vim_word_start GHOTIIO_REGEX(grx_vim_word_start)
 #define grx_vim_word_end GHOTIIO_REGEX(grx_vim_word_end)

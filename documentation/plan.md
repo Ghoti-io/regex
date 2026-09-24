@@ -605,28 +605,42 @@ enumerated against vim a code point at a time, and so are its seven own
 set `\<` and `\>` read - which is 'iskeyword' and not `\w`, and was five
 ranges ending `{0xC0, 0x10FFFF}` and wrong by 5,464 code points.
 
-One rule remains unbuilt and is in [dialects.md](dialects.md) §6 with its
-measurement, because it is a matching model rather than a construct: **a
-base and the combining marks after it are one character** in vim, which is
-the machinery `\Z` needs too. It is WP-44 below, and the differential's
-subjects hold no composing character until it lands. The second of the
-pair, **`\<` and `\>` over vim's nine character classes**, is WP-45 and is
-built: its subjects are back in the differential.
+Both of the rules it left are built. **A base and the composing characters
+after it are one character** (WP-44, with `\Z`) and **`\<` and `\>` hold
+where vim's character class changes** (WP-45); the subjects that ask about
+each are back in the differential, the second as ordinary subjects and the
+first as a block of one-atom patterns, for the reason WP-44 gives.
 
 **WP-37 Tcl** (the `TCL_ARE` match preference is an engine mode, *engines,
 M*), **WP-38 Emacs**.
 
-**WP-44 Vim's composing clusters** (*parser and lowering, M*). A base and
-the combining marks after it are one character to vim: `.` over "a" U+0301
-is 0-3 there and 0-1 here, `[a]`, `\w` and `[[:alpha:]]` take the whole
-cluster, a literal `a` matches none of it, `..` finds one character in it,
-and `\%2c` holds nowhere inside it. The set of marks is already here - it
-is the zero-cell column of `src/unicode/display.c` - so the work is the
-rule rather than the data: every consuming node becomes "the node, then
-any number of marks", a literal run gains "and no mark follows", and a
-match may not begin inside a cluster. `\Z` is the same machinery with the
-marks made optional, so the two ship together. The differential's subjects
-hold no composing character until this lands.
+**WP-44 Vim's composing clusters**: **built 2026-09-23**, `\Z` with it. A
+base and the composing characters after it are one character to vim, and
+the set of marks was already here - the zero-cell column of
+`src/unicode/display.c`, which `strchars(s, 1)` over every code point
+returns identically - so the work was the rule rather than the data.
+
+Lowering builds it, and the shape is what let every engine keep running
+these programs: each atom that matches a character becomes `ATOM
+(COMPOSING)* !COMPOSING`, where the assertion after the loop is what makes
+the run *possessive* without an atomic group - a thread that stopped early
+dies there. A literal takes no marks, which is vim's rule and which is why
+`a.` over "a" U+0301 is 0-3. The two ends of the match are the same
+assertion again: a composing character with something before it is in the
+middle of a character, and no match begins or ends there. `\Z` sets
+GRX_OPT_IGNORE_COMBINING from wherever it stands, as `\c` does, and then
+the literal absorbs like everything else.
+
+Two shapes are refused rather than guessed at, both where vim's rule is an
+accident of where its reader takes a character: a composing character that
+*begins* an atom, and one inside a collection - where its two engines
+disagree with each other. Both are in [dialects.md](dialects.md) §6, which
+also carries the reason the differential asks composing subjects of
+one-atom patterns only: **vim's default engine shares one step length
+between every thread alive at a position**, so a literal that matches a
+cluster's base shortens the step for the atom that would have matched the
+whole of it, and `a\|` beside a cluster branch finds nothing where `b\|`
+beside the same branch finds it.
 
 **WP-45 Vim's word classes**: **built 2026-09-23**. `\<` and `\>` hold
 where vim's character *class* changes and not merely where a word begins -

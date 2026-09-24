@@ -160,7 +160,26 @@ typedef enum {
    * POSIX's rule names. A *positive* list is untouched: `[\n]` under
    * `REG_NEWLINE` still matches a newline in glibc and in musl both.
    */
-  GRX_OPT_NEWLINE_TERMINATES = GRX_BIT(15)
+  GRX_OPT_NEWLINE_TERMINATES = GRX_BIT(15),
+  /**
+   * @brief Composing characters are not matched, only carried.
+   *
+   * Vim's `\Z`, and meaningful only in a dialect whose matching model makes
+   * a base character and the composing characters after it one character -
+   * which today is Vim alone. With it, every atom that matches a character
+   * takes the composing characters after it too, a composing character
+   * written in the pattern beside a base is ignored, and a match may end
+   * before a composing character; without it a literal matches its own code
+   * point and no more, and a composing character in the pattern is part of
+   * the atom it follows.
+   *
+   * A pattern option rather than a caller's choice, in the dialect that has
+   * it: `\Z` anywhere in a Vim pattern decides the whole of it, exactly as
+   * `\c` does, and the front end sets this bit before the parse begins. It
+   * is public because a caller compiling a Vim pattern by hand may want the
+   * same rule without writing the marker into the text.
+   */
+  GRX_OPT_IGNORE_COMBINING = GRX_BIT(16)
 } GRX_Option;
 
 /**

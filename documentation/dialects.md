@@ -1237,6 +1237,49 @@ same way `src/unicode/display.c` is: 355 ranges of exception to a default of
 table and requires the two to agree, because the boundary is only as right
 as the two measurements of one option are consistent.
 
+### 5.20 What a composing character is
+
+| Dialect | Rule |
+| --- | --- |
+| Everything but Vim | a character: `.` matches one, a literal beside it is two atoms, and a match may begin or end between a base and its mark |
+| Vim | part of the character before it: a base and the composing characters after it are **one** character, and `\Z` is that rule with the marks carried rather than matched |
+
+Vim's rule reaches every atom that consumes anything and both ends of the
+match, which is why it is a matching model rather than a construct:
+
+- **A literal matches its own code point and stops.** `a` does not match
+  "a" U+0301 at all, and `a.` does - the `.` takes the mark the literal
+  left.
+- **Everything else takes the composing characters after what it matched.**
+  `.`, a collection, a named class and a POSIX class over "a" U+0301 are
+  all 0-3. The run of marks is *possessive*: `.\{2}` over "a" U+0301 finds
+  nothing, because the first `.` cannot give the mark back for the second.
+- **A base with marks written after it in the pattern is one atom**, and
+  every mark it names must be among the ones the text carries - order does
+  not matter and the text may carry more, so `a` U+0301 matches a cluster
+  holding U+0301 and U+0302 and consumes both.
+- **A match begins and ends only where a cluster does.** `\%2c` holds
+  nowhere inside one, `[^a]` over "a" U+0301 "b" is 3-4 rather than the
+  mark, and a literal that would leave the match ending between a base and
+  its mark simply does not match. A composing character with *nothing*
+  before it is a character of its own, so `a*` still matches the empty
+  string at offset 0 of U+0301 "a".
+
+Any character can be a base: a line break, a space and a wide character all
+carry marks, so `[^a]` over "a" LF U+0301 "b" is 1-4.
+
+`\Z` anywhere in the pattern turns the rule off for all of it, as `\c` does
+for case, and sets `GRX_OPT_IGNORE_COMBINING`. Then every atom takes the
+marks - the literal included, which is the only difference - and a
+composing character written beside a base is dropped. It is a marker and not
+an atom, so a multi may not follow it: `a\Z*` is an error exactly as
+`a\c*` is.
+
+The set of composing characters is vim's, not Unicode's: the zero-cell
+column of `src/unicode/display.c`, 2,033 code points, which `strchars(s, 1)`
+over every code point returns identically - so the width table and the
+matching model read one table rather than two that agree today.
+
 ## 6. Deviations
 
 Every place this library knowingly differs from the implementation a
@@ -1291,8 +1334,11 @@ answer.
 | .NET | Culture-sensitive folding is invariant; balancing groups deferred | §5.8; [design.md](design.md) §2 | `GRX_ERR_UNSUPPORTED` for balancing groups |
 | Emacs | Syntax classes (`\s-`, `\w`) use fixed Unicode definitions, not a syntax table | no syntax table | - |
 | Vim | The subject is a string, not a buffer | vim's help describes matching against a *buffer*, where `.` refuses the line break. `matchstrpos()` over a string is what this library can be, and what its differential asks: there `a.b` matches "a\nb", `[^x]` matches the break, and `^`, `$`, `\_^` and `\_$` hold at the two ends only. The `\_` forms are still distinct, because `\s` refuses a break and `\_s` accepts one | - |
-| Vim | **A base and the combining marks after it are one character there and several here** | vim matches a *composing cluster*: `.` against "a" U+0301 is 0-3 there and 0-1 here, `[a]`, `\w` and `[[:alpha:]]` all take the whole cluster, a literal `a` matches **none** of it, `..` finds only one character in it, and `\%2c` holds nowhere inside it. Measured over 114 rows, and the set of marks is the one this library already carries for `\%23v` - a character of zero display cells. It is not built because it is a matching model rather than a construct: every consuming instruction, in both directions, plus the rule that a match may not begin inside a cluster - and it is the same machinery `\Z` needs. `tools/oracle/vim_diff.py` generates no subject holding one, and says so | - |
-| Vim | `\Z` (ignore combining characters) | a rule about normalisation, and the machinery is the composing-cluster row above: `\Z` is that rule with the marks made optional rather than required | `GRX_ERR_UNSUPPORTED` |
+| Vim | A composing character that **begins an atom** is refused | vim reads a character out of a pattern with its marks, so a mark written after a *literal* belongs to that literal and is built here. A mark written after `.`, after `\w`, after a group, or with nothing before it is a second rule: the atom then matches any cluster carrying that mark with its base ignored, so `\w` U+0301 against "a" U+0301 "a" U+0301 is the **whole** string in both of vim's engines - two clusters for what reads as one atom and one mark. And the collection is worse than unbuilt: `[ab]` U+0301 against "ab" is a match under `re=2` and no match under `re=1`, the mark being ignored by one engine and required by the other. Refused rather than answered either way | `GRX_ERR_UNSUPPORTED` |
+| Vim | A composing character **inside a collection** is refused | vim fuses it onto the member before it, so `[a` U+0301 `]` holds one member - the cluster - and not two; `[a` U+0301 `]` against "ab" is no match there. This library's collection is a set of code points, and the member that is a cluster has nowhere to live in it | `GRX_ERR_UNSUPPORTED` |
+| Vim | The line break `\_` adds takes the composing characters after it here, and does not there | `\_d` over "a" LF U+0301 "b" is 1-2 in vim and 1-4 here. Vim's own classes *do* take them - `\_W` over the same text is 1-4 in both, the `\W` matching the break as a non-word character - so following it would make the break a whole character when `\W` matches it and half of one when `\_` does. One rule for every atom that matches a character is the coherent half, and this is the price | - |
+| Vim | **Vim's default engine shares one step length between its threads**, and this library does not | `clen` there is the length of a character *with* its composing characters, and a thread that matches a plain literal sets it to the base alone - for the whole step, and so for every other thread in it. The effect is that an atom which cannot match takes the marks away from one that can: `a\|` beside a cluster branch finds nothing over "a" U+0301 U+0302 "b" where that branch alone finds 0-5, `b\|` beside it finds 0-5, and branch order has nothing to do with it. `\%[abc][ab]` loses the cluster that `[ab]` alone matches; `\(a\+\)\@>a\=` is 0-1 under `re=1`, ending inside the cluster, and 0-3 under `re=2`, ending past marks no atom in the pattern matched. A rule cannot depend on what a failed alternative begins with, so this library answers the coherent thing. `tools/oracle/vim_diff.py` puts composing subjects only to one-atom patterns for this reason, which is where vim's answer is a rule | - |
+| Vim | A lookbehind's byte bound counts bytes here and stretches to a cluster there | `\(\w\+\)\@2<=` over "a" U+0301 "b" is 3-3 in vim with group one holding "a" U+0301 - three bytes back, where the bound says two - and 4-4 here with group one holding "b". The bound is applied as written; a count that a cluster can overrun is vim's own arithmetic, and the row above says why its answers over a cluster are not one rule | - |
 | Vim | `\i`, `\k`, `\f` and `\p` are vim's *defaults* | those four are the options 'isident', 'iskeyword', 'isfname' and 'isprint', and a user who has changed one has a dialect this library does not read. Measured at the defaults, and measured by enumeration: every one of the 1,114,112 code points put to vim for each of the 52 class spellings, which is what a set whose members are decided one at a time needs. They had been *sampled* instead, and three of the four were wrong - `\i` and `\k` both missed U+00B5, and `\k` took in 5,463 code points vim excludes | - |
 | Vim | An unknown `[:name:]` is refused | vim compiles a collection holding one into a pattern that can never match anything at all - `[[:foo:]]*a` does not match "a" - which is a degenerate answer rather than a rule | `GRX_ERR_SYNTAX` |
 | Vim | Nine answers of vim's are not followed, each measured against a second reference | (1) a forward backreference is refused, where vim accepts one *if a lookbehind follows it* - every other spelling is "E65: Illegal back reference" in both of its engines; (2) the captures an abandoned path wrote are discarded, where vim keeps them and pcre2test does not - `\(a\)\@>x\|\A` and `\(a\)\@=a$\|b` both report group one as "a" there, and `\(a\)\@=ax\|b` does not, so what decides is whether the abandoned branch died at an assertion or at a character; node and pcre2test both report it unset; (3) a capture around a postfix assertion followed by a repeat is kept, where vim loses it and pcre2test does not; (4) a postfix lookbehind with a backreference after it follows pcre2test: `\(a\)\@<=\(a\)\1\l` reports 1:4 where vim reports 1:3 in both engines and names text that does not satisfy its own pattern, and `\v\D(a)@<=\m\(a\)\1\(a\+\)\@>` reports no match where vim reports 0:3 with a group the match has no room for; (5) `\v\_^*` matches the empty string, where vim matches nothing at all in either engine - and `\m\_^*`, `\v\_$*`, `\v\_^{0,1}` and `\v(\_^)*` all match it there, so the one spelling that fails is an accident of its parser and not a rule; (6) **a group inside `\%[...]` is refused**, where the default engine takes one - `a\%[\(bc\)]`, `a\%[\%(bc\)]` and a nested `a\%[b\%[cd]]` are all "E54" under `set re=1` and all compile under `re=2`. Every other member is built: a class, a collection, `\%d98`, `\zs`, `\<`, `\_s` and a backreference are atoms and vim's help says so, and the seven escapes that are the bare letter only in there (`\v`, `\m`, `\M`, `\V`, `\c`, `\C`, `\Z` - enumerated one letter at a time over all fifty-two) are read that way; (7) **`\%23l*` matches the empty string**, where vim matches nothing at all in either engine - the same shape as (5), since `\%23l\{}`, `\%23l\{-}`, `\%23l\{0,1}`, `\(\%23l\)*` and the very magic `%23l*` all match it there, so it is the bare `*` outside very magic after an `l` form and nothing else. A marker between the two is the same artifact seen from the other side: `\%23l\v*` compiles in vim and is refused here, where `\%23c\v*` and `a\v*` are "E871" in vim too; (8) **a bare `*` with nothing to repeat is the literal asterisk wherever it stands**, where vim refuses two spellings out of the set: `^\m*` is an error and `^*` matches, `\(\m*\)` matches and `^\m\+` is an error here too - so the marker loses the caret for the `*` alone; and `\%(*\)` is an error where `\(*\)`, `\v%(*)` and `\M\%(*\)` all match, the same construct in four spellings refused in one. Both engines alike; (9) **`\zs` and `\ze` inside an assertion or an atomic group still count**, which is `set re=1`, where vim's default engine mostly makes them inert. Measured over 140 patterns putting each of four marker bodies inside each of `\@=`, `\@!`, `\@<=`, `\@<!`, `\@>` and `\&` with five tails: the old engine answers all 140 the way one mark register does, the new one agrees with it on 110, and the 30 left have no rule behind them - `\(ab\zec\)\@=a` against "abc" is 0-2 old and 0-1 new, while `x\(ab\zec\)\@=` against "xabc" is 0-3 in *both*, so the same character consumed outside the same assertion decides differently by which side of it it was written; `a\zeb` is 0-1 everywhere, so later text does not overwrite a mark either; and the new engine drops a `\zs` where it keeps a `\ze`. `tools/oracle/vim_diff.py` counts each of these rather than dropping it, and a tenth class - where vim's two engines simply disagree without either being incoherent - is settled by *asking* `set re=1` rather than by guessing | - |

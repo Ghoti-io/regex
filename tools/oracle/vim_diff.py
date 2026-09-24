@@ -48,6 +48,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import unicodedata
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
@@ -118,7 +119,73 @@ ATOMS = [
     "\\v", "\\m", "\\M", "\\V", "\\c", "\\C",
     # The branch operator, which is a grammar level rather than an atom.
     "\\&", "&",
+    # `\Z` turns the composing-cluster rule off for the whole pattern, and
+    # it is an atom here for the same reason `\c` is - it decides the
+    # pattern from wherever it stands. The clusters it decides about are
+    # in COMPOSING_SUBJECTS below, where the subjects hold one.
+    "\\Z",
 ]
+
+# The composing-cluster block: every atom above, against subjects that hold
+# a base and the marks that belong to it.
+#
+# A block of its own rather than more subjects, because it is **one atom per
+# pattern**. Vim's default engine shares one step length between the threads
+# alive at a position (see SUBJECTS), so a second atom in a pattern can take
+# the marks away from the first and vim's answer stops being a rule. One atom
+# is one thread, and there every row is a measurement. Each atom is asked
+# twice, with and without `\Z`, because the marker's whole meaning is that
+# the marks are carried rather than matched.
+#
+# The subjects are the bases that carry marks: a letter, a letter with two of
+# them, a cluster at the end of the subject and one in the middle, a mark
+# with nothing before it - which is a character of its own and not a mark -
+# and the three bases that are not letters at all, a line break, a space and
+# a wide character.
+COMPOSING_SUBJECTS = [
+    "áb", "á̂b", "á", "xá", "áá",
+    "́a", "́̂a", "a\ńb", "a ́b", "日́b",
+]
+
+# The atoms this block does not ask about. Each is a deviation already
+# recorded in documentation/dialects.md section 6 rather than a rule this
+# library declined to build, and each was measured before it was listed:
+#
+#   - the **positive `\_` forms**, where the line break vim adds does not
+#     take the composing characters after it and this library's does:
+#     `\_d` over a break carrying a mark is 1-2 there and 1-4 here. Vim's
+#     own classes do take them - `\_W` over the same text is 1-4 in both -
+#     so following it would mean a break that is a whole character when
+#     `\W` matches it and half of one when `\_` does.
+#   - the **bounded lookbehinds**, where vim's byte count and a cluster
+#     disagree about how far back two bytes reaches.
+#   - a **marker inside an assertion**, which is section 6's item 9: vim's
+#     two engines answer those differently already and this library follows
+#     the one whose answer can be stated as a rule.
+#   - `\(a\+\)\@>`, where vim's two engines give two answers and neither is
+#     coherent: `re=1` ends the match inside the cluster, and `re=2` ends it
+#     past marks that no atom in the pattern matched.
+COMPOSING_SKIP = {
+    "\\_s", "\\_d", "\\_w", "\\_[ab]", "\\_[^ab]", "\\_[^\\n]",
+    "a\\%[\\_s]",
+    "\\(a\\)\\@1<=", "\\(ab\\)\\@1<=", "\\(ab\\)\\@2<=",
+    "\\(\\w\\+\\)\\@2<=", "\\(ab\\)\\@1<!", "(a|ab)@2<=",
+    "\\(a\\zsb\\)\\@>", "\\(a\\zeb\\)\\@>", "\\(a\\zsb\\)\\@=",
+    "\\(a\\zeb\\)\\@=", "\\(a\\zeb\\)\\@<=", "\\(a\\+\\)\\@>",
+}
+
+
+def composing_cases():
+    """Every atom the block asks about, with and without `\\Z`."""
+    out = []
+    for atom in ATOMS:
+        if atom in COMPOSING_SKIP:
+            continue
+        for subject in COMPOSING_SUBJECTS:
+            out.append((atom, subject))
+            out.append(("\\Z" + atom, subject))
+    return out
+
 
 # Constructs vim refuses or this library refuses on purpose. Kept in the
 # vocabulary rather than left out, because a differential that only generates
@@ -141,17 +208,21 @@ REFUSED = [
 # times the generator happened to spell it - it would put a floor under the
 # disagreement count and hide the next real one under it.
 #
-# One entry left, where there were eight. `\Z` asks for the composing rule
-# that dialects.md section 6 records as unbuilt, and it is a documented
-# deviation with a test in tests/unit/test_vim.cpp asserting the refusal -
-# which is where a regression that started accepting it would be caught.
+# Two entries, and `\Z` is no longer one of them: the composing-cluster
+# model it asks for is built, so `\Z` is generated like any other marker.
+# What is left is the *pattern* side of that model, where vim's rule is an
+# accident of where its reader takes a character rather than a rule about
+# matching - and where, for the collection, its two engines disagree with
+# each other. Both are refused here and both are in dialects.md section 6
+# with the measurement; tests/unit/test_vim.cpp asserts the refusals.
 #
-# `~` and `\~` are *not* here any more, and that is the correction rather
-# than the omission: this library refuses `~` and reads `\~` as a literal
-# tilde, and so does vim, because "the last `:s` replacement" is E33 in the
-# only state a library ever has. They are generated like anything else.
+# `~` and `\~` are *not* here, and that is the correction rather than the
+# omission: this library refuses `~` and reads `\~` as a literal tilde, and
+# so does vim, because "the last `:s` replacement" is E33 in the only state
+# a library ever has. They are generated like anything else.
 NOT_IMPLEMENTED = [
-    "\\Z",
+    ".\u0301",     # a composing character that begins an atom
+    "[a\u0301]",   # a composing character inside a collection
 ]
 
 # The four levels, written as the prefix that selects one. The empty string
@@ -164,23 +235,22 @@ SUBJECTS = [
     # display cells, and a subject of one-cell characters answers both the
     # same way.
     #
-    # **One kind of character is deliberately not here**, and it is a
-    # narrowing with a reason rather than an oversight: it is a rule vim
-    # has that this library does not, it was found by putting such a
-    # subject in, and it is written up in documentation/dialects.md
-    # section 6 with its measurement. Generating it would report the same
-    # gap thousands of times over and bury whatever else this tool found,
-    # which is the floor `[[:foo:]]` is kept out for.
+    # **A composing character is not in this list**, and the reason is not
+    # that the rule is unbuilt - it is built, and COMPOSING_SUBJECTS below
+    # is the block that checks it. It is that **vim's default engine shares
+    # one step length between every thread alive at a position**: `clen` is
+    # the length of a character with its composing characters, and a thread
+    # that matches a plain literal sets it to the base alone for the whole
+    # step. So `a\|` beside a cluster branch finds nothing over
+    # "a" U+0301 U+0302 "b" where that branch alone finds 0-5, while
+    # `b\|` beside it finds 0-5 - branch order having nothing to do with
+    # it. A rule cannot depend on what a failed alternative begins with, so
+    # rows like that would measure how often this generator spelled one.
+    # documentation/dialects.md section 6 carries the measurement.
     #
-    #   - **A composing character.** In vim a base and the marks after it
-    #     are *one character*: `.` over "a" U+0301 is 0-3 there and 0-1
-    #     here, `[a]` takes the whole cluster, a literal `a` matches none
-    #     of it, and `\%2c` holds nowhere inside it.
-    #
-    # The second narrowing that stood here is gone. Characters outside
-    # Latin's word class are in the list below, because `\<` and `\>`
-    # follow vim's nine character classes now rather than a word set: six
-    # of the nine are represented, which is what asks that question.
+    # Characters outside Latin's word class *are* here, because `\<` and
+    # `\>` follow vim's nine character classes now rather than a word set:
+    # six of the nine are represented.
     "\t\tx",
     "abcabc", "xayaz", "[a]", "a*b", "a+b", "a.c", "(a)", "a|b", "read",
     "rea", "r", "A", "0", "_", "é", "É", "aéb", "~", "^a$",
@@ -332,6 +402,17 @@ def normalise_ours(line, subject):
     while groups and groups[-1] == "":
         groups.pop()
     return "match %s %s" % (whole, " ".join(json.dumps(g) for g in groups))
+
+
+def holds_composing(subject):
+    """Whether the subject carries a composing character after something.
+
+    unicodedata.combining() is not vim's table - vim's is the one in
+    src/unicode/display.c, measured - but the two agree on everything a
+    subject here is built from, and what this needs is "might the cluster
+    rules be in play", not the set itself.
+    """
+    return any(unicodedata.combining(c) for c in subject[1:])
 
 
 def is_forward_reference_artifact(pattern, them, us):
@@ -625,6 +706,7 @@ def main():
             else rng.sample(SUBJECTS, min(args.subjects, len(SUBJECTS))))
         for subject in subjects:
             cases.append((pattern, subject))
+    cases.extend(composing_cases())
 
     theirs_raw = ask_vim(cases)
     if len(theirs_raw) != len(cases):
@@ -655,6 +737,15 @@ def main():
                 or is_line_number_star(case[0], them, us)
                 or is_leading_star_artifact(case[0], them, us)):
             artifacts += 1
+            continue
+        if holds_composing(case[1]):
+            # Not asked of `set re=1` below, where every other disagreement
+            # is: the old engine has no composing-cluster model at all -
+            # `x\?[ab]` over "a" U+0301 is 0-1 there, a match that ends in
+            # the middle of a character - so its answer on such a row is
+            # not a second opinion but a third. A row here is this
+            # library's to explain.
+            disagreements.append((case, them, us))
             continue
         candidates.append((case, them, us))
 

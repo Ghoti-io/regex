@@ -781,6 +781,12 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     // keyword characters. Measured with `charclass()` over every code
     // point; src/unicode/vim_class.c is the table and the rule.
     .word_boundary = GRX_WORD_BOUNDARY_VIM_CLASS,
+    // A base character and the composing characters after it are one
+    // character to vim: `.` over "a" U+0301 is 0-3 there, a literal `a`
+    // matches none of it, and no match begins or ends inside the cluster.
+    // `\Z` is the same model with the marks made optional, and sets
+    // GRX_OPT_IGNORE_COMBINING from wherever it stands.
+    .composing = GRX_COMPOSING_CLUSTER,
     // SIMPLE, where this row said ASCII. Measured: `\cÉ` matches "é" in
     // vim 9.1, so the folding is Unicode and the page that said otherwise
     // was describing a version of vim without multibyte support.

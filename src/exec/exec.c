@@ -120,6 +120,56 @@ GRX_Result grx_match_create(const GRX_Regex * regex,
  * The tabstop is eight, which is vim's default for the option the answer
  * depends on; see documentation/dialects.md section 6.
  */
+/**
+ * The base of the cluster the character before `position` belongs to.
+ *
+ * Vim's word assertions ask what class the character before a position is
+ * in, and in a dialect where a base character and the composing characters
+ * after it are one character that question is about the *base*: `\>` holds
+ * between U+65E5 U+0301 and "x" there, where the mark alone would say the
+ * classes are the same and no boundary falls. Vim asks it the same way, by
+ * stepping back over composing characters to the head of the character.
+ *
+ * A run of composing characters at the very start of the window is its own
+ * base - a mark with nothing before it is a character of its own, which is
+ * the rule everywhere else in this model too.
+ *
+ * @param subject The text.
+ * @param start Where the window begins; nothing before it is read.
+ * @param position The position to look back from.
+ * @param utf Non-zero when the subject is UTF-8.
+ * @param out_codepoint Receives the base.
+ * @return Non-zero when there was a character to read.
+ */
+int grx_cluster_base_before(const char * subject, size_t start,
+    size_t position, int utf, uint32_t * out_codepoint) {
+  size_t at = position;
+  uint32_t codepoint = 0;
+  int seen = 0;
+  while (at > start) {
+    if (!utf) {
+      codepoint = (unsigned char)subject[at - 1];
+      at--;
+      seen = 1;
+      break;
+    }
+    size_t width = grx_unicode_utf8_decode_prev(subject, at, &codepoint);
+    if (!width) {
+      return 0;
+    }
+    at -= width;
+    seen = 1;
+    if (grx_display_cell_width(codepoint, 0) != 0) {
+      break;
+    }
+  }
+  if (!seen) {
+    return 0;
+  }
+  *out_codepoint = codepoint;
+  return 1;
+}
+
 static uint32_t * build_columns(const GRX_Regex * regex,
     const char * subject, size_t end, const GRX_Limits * limits) {
   (void)limits;

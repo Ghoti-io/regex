@@ -277,6 +277,23 @@ static inline int grx_exec_submatch_better(const size_t * candidate,
  * @param regex The compiled regex. NULL returns 0.
  * @return Non-zero when only the backtracking engine can run it.
  */
+/**
+ * @brief The base of the cluster the character before `position` is in.
+ *
+ * Steps back over composing characters, which is what Vim's word
+ * assertions ask about; see src/exec/exec.c. A run of them at the start of
+ * the window is its own base.
+ *
+ * @param subject The text.
+ * @param start Where the window begins.
+ * @param position The position to look back from.
+ * @param utf Non-zero when the subject is UTF-8.
+ * @param out_codepoint Receives the base.
+ * @return Non-zero when there was a character to read.
+ */
+int grx_cluster_base_before(const char * subject, size_t start,
+    size_t position, int utf, uint32_t * out_codepoint);
+
 int grx_exec_program_needs_backtracking(const GRX_Regex * regex);
 
 /**

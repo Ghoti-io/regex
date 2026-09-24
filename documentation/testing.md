@@ -620,17 +620,24 @@ visible:
   and every such row reaches the engine-split count above rather than being
   recognised from the pattern's shape.
 
-**Two kinds of character are deliberately absent from its subjects**, and
-each is a rule vim has that this library does not - found by putting such a
-subject in, and taken back out so that one unbuilt rule does not bury
-everything else the tool finds. Both are in [dialects.md](dialects.md) §6
-with their measurements. A base and the combining marks after it are *one
-character* in vim, so `.` over "a" U+0301 is 0-3 there and 0-1 here; and
-`\<` and `\>` hold where vim's character *class* changes rather than
-merely where a word begins, so `\>` holds between U+65E5 and "x" there and
-nowhere here. Neither is a construct that could be refused - they are how
-vim reads every subject - which is why the narrowing is in the subjects and
-not in the vocabulary.
+**Both of the rules its subjects used to leave out are built**, and the
+subjects say so in two different ways. Characters outside Latin's word class
+are in the ordinary list - six of vim's nine classes, each beside Latin and
+beside one another - because `\<` and `\>` follow those classes now rather
+than a word set.
+
+**Composing characters are a block of their own**: every atom in the
+vocabulary, with and without `\Z`, against ten subjects that hold a base and
+its marks - 2,900 rows a run, beside the 20,000 the generator writes. One
+atom per pattern, and that is the point rather than a convenience. Vim's
+default engine shares one step length between every thread alive at a
+position, so a second atom in the pattern can take the marks away from the
+first: `a\|` beside a cluster branch finds nothing where that branch alone
+finds the cluster, and `b\|` beside it finds it. A rule cannot depend on
+what a failed alternative begins with, so rows like that would measure how
+often the generator spelled one. Nineteen atoms are named in `COMPOSING_SKIP`
+with the reason for each, every one a row already in
+[dialects.md](dialects.md) §6.
 
 **The vocabulary carries what vim refuses**, at one row in eight - `\z(`,
 `\z1`, `\1` with no group, `a\{2`, `\(a`, `a**`, `\v+a`, `\v@a` and

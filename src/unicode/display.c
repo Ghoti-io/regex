@@ -44,6 +44,15 @@
  *   rather than named. A zero-width character with nothing before it is
  *   drawn on its own and takes one cell, which is
  *   grx_display_cell_width()'s `first` parameter.
+ *
+ *   That column is also the answer to a second question, which is why
+ *   grx_display_composing_range() enumerates it: vim's *matching* model
+ *   makes a base character and the composing characters after it one
+ *   character, and what counts as composing there is this same set. Asked
+ *   a second way - `strchars(s, 1)` over every code point, which counts a
+ *   composing character as part of what precedes it - it comes back
+ *   identical, all 2,033, so the two readings are one table rather than
+ *   two that agree today.
  * - **Four, six or seven** for the `<xx>` and `<uxxxx>` forms vim uses for
  *   an unprintable code point.
  *
@@ -258,6 +267,27 @@ uint32_t grx_display_cell_width(uint32_t codepoint, int first) {
     }
   }
   return 1;
+}
+
+int grx_display_composing_range(
+    size_t index, uint32_t * out_lo, uint32_t * out_hi) {
+  size_t seen = 0;
+  for (size_t i = 0; i < sizeof(cell_widths) / sizeof(*cell_widths); i++) {
+    if (cell_widths[i].cells) {
+      continue;
+    }
+    if (seen == index) {
+      if (out_lo) {
+        *out_lo = cell_widths[i].lo;
+      }
+      if (out_hi) {
+        *out_hi = cell_widths[i].hi;
+      }
+      return 1;
+    }
+    seen++;
+  }
+  return 0;
 }
 
 size_t grx_display_column_after(

@@ -1046,10 +1046,26 @@ static int assertion_holds(
     // absent character at either end is a blank, which is what vim reads
     // there too.
     case GRX_ASSERT_WORD_CLASS_START:
-      return grx_vim_word_start(has_before, before, has_after, after);
+    case GRX_ASSERT_WORD_CLASS_END: {
+      // The character *before* is the base of the cluster it belongs to,
+      // which is what vim asks: `\>` holds between U+65E5 U+0301 and "x"
+      // there, and reading the mark instead would say both sides are
+      // keyword characters and no boundary falls.
+      uint32_t base = 0;
+      int has_base = grx_cluster_base_before(
+          text, bt->window_start, position, bt->utf, &base);
+      return inst->mode == GRX_ASSERT_WORD_CLASS_START
+          ? grx_vim_word_start(has_base, base, has_after, after)
+          : grx_vim_word_end(has_base, base, has_after, after);
+    }
 
-    case GRX_ASSERT_WORD_CLASS_END:
-      return grx_vim_word_end(has_before, before, has_after, after);
+    // Vim's composing clusters: the end of a cluster, and the start of one.
+    // `inst->x` is the class of composing characters in both.
+    case GRX_ASSERT_NOT_COMPOSING:
+      return !(has_after && in_class(bt, inst->x, after));
+
+    case GRX_ASSERT_CLUSTER_BOUNDARY:
+      return !has_before || !(has_after && in_class(bt, inst->x, after));
 
     case GRX_ASSERT_LOOK_LENGTH: {
       // How far is it to the end of this assertion, and can the alternative
