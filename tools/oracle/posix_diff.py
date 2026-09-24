@@ -50,6 +50,7 @@ import argparse
 import binascii
 import os
 import random
+import re
 import subprocess
 import sys
 
@@ -183,6 +184,40 @@ def is_known_deviation(pattern, subject, newline):
         and ("^" in pattern or "$" in pattern))
 
 
+REPEATED_GROUP = re.compile(r"\\?\)(?:\*|\\?\+|\\?\{)")
+BACKREFERENCE = re.compile(r"\\[1-9]")
+
+
+def is_glibc_backreference_defect(pattern, them, us):
+    """glibc loses a group when a repeated group precedes a backreference.
+
+    `()+(a)\1` against "aaaa" is 0-1 in glibc with group two **unset**,
+    though the match it reports is one character long and group two is the
+    only thing in the pattern that consumes one. `()(a)\1` - the same
+    pattern with the repeat taken off - reports group two as 0-1, and so
+    does `()+(a)` with the backreference taken off, so it is the two
+    together that do it. `(){2}(a)\1` is worse: glibc reports *no match*
+    where its own answer to `()(a)\1` is a match.
+
+    An answer that contradicts the same implementation's answer to a
+    neighbouring pattern is not a rule to follow, so these rows are counted
+    rather than compared. Both halves of the shape are required, and the
+    exclusion fires only where glibc reported *less* than this library did -
+    an unset group where this library has a span, or no match at all -
+    so a row where this library loses one is still a disagreement.
+    """
+    if not REPEATED_GROUP.search(pattern) or not BACKREFERENCE.search(pattern):
+        return False
+    if them == "nomatch" and us.startswith("match"):
+        return True
+    if not them.startswith("match") or not us.startswith("match"):
+        return False
+    theirs = them.split()
+    mine = us.split()
+    return (len(theirs) == len(mine)
+        and any(a == "-" and b != "-" for a, b in zip(theirs, mine)))
+
+
 def find(name):
     for platform in ("linux", "mac", "win64", "win32"):
         for build in ("release", "debug"):
@@ -227,6 +262,7 @@ def compare(dialect, seed, patterns, examples):
     compared = 0
     declined = 0
     unsettled = 0
+    defect = 0
     known = 0
     for index, ((flags, pattern, subject), us) in enumerate(zip(cases, mine)):
         newline = "n" in flags
@@ -247,6 +283,10 @@ def compare(dialect, seed, patterns, examples):
         if is_known_deviation(pattern, subject, newline):
             known += 1
             continue
+        if is_glibc_backreference_defect(
+                pattern, expected, normalise_ours(us)):
+            defect += 1
+            continue
         disagreements.append(
             (pattern, subject, newline, expected, normalise_ours(us)))
 
@@ -256,10 +296,10 @@ def compare(dialect, seed, patterns, examples):
                  "REG_NEWLINE" if newline else "", them, us))
     print("%s: %d patterns x %d subjects x %d newline modes = %d cases, "
           "%d compared against %s, %d the oracles left unsettled, "
-          "%d the anchor deviation, %d disagreements"
+          "%d the anchor deviation, %d a glibc defect, %d disagreements"
           % (dialect, len(built), len(SUBJECTS), len(NEWLINE_MODES),
              len(cases), compared, " and ".join(wanted), unsettled, known,
-             len(disagreements)))
+             defect, len(disagreements)))
     return len(disagreements)
 
 

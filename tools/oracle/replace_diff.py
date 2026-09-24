@@ -50,6 +50,7 @@ sys.path.insert(0, HERE)
 
 import match_diff
 import perl_diff
+import vim_diff
 
 # The pieces a template is built from. Every recognised form, every way of
 # spelling something that looks like one and is not, and plain text between
@@ -217,7 +218,6 @@ def make_pattern(dialect, rng):
         # vim_diff's own generator, refused constructs and all: this run has
         # to ask the accept-or-refuse question too, and vim's template
         # alphabet has no ill-formed spelling to ask it with.
-        import vim_diff
         return vim_diff.make_pattern(rng)
     if dialect == "python":
         # python_diff's vocabulary, which is the one `re` accepts. Its named
@@ -470,6 +470,7 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
     rejected = 0
     declined = 0
     deviation = 0
+    refused_here = 0
     lazy = 0
     defect = 0
 
@@ -498,6 +499,18 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
                 disagreements.append(
                     (flags, pattern, subject, template, them, us))
             continue
+        if dialect == "vim" and us == "syntax" \
+                and vim_diff.is_forward_reference_artifact(
+                    pattern, "match", "compile"):
+            # vim accepts a forward backreference when a lookbehind follows
+            # it and refuses every other spelling of one, in both of its
+            # engines - documentation/dialects.md section 6, item 1, and
+            # `vim_diff.py`'s predicate rather than a second copy of it.
+            # The rows reach here rather than the refusal arm above because
+            # vim *compiled* the pattern: what it returns is the subject
+            # unchanged.
+            defect += 1
+            continue
         if splits_a_surrogate_pair(them):
             deviation += 1
             continue
@@ -515,6 +528,14 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
             # does match is still a disagreement. Recorded in dialects.md
             # section 5.11 and counted here.
             lazy += 1
+            continue
+        if us == "syntax" and perl_diff.library_deviation(
+                pattern, "ok", "compile"):
+            # A subroutine call to a group defined inside a non-atomic
+            # lookbehind, which this library refuses rather than answering
+            # backwards. perl_diff.py's predicate rather than a second copy
+            # of it; documentation/dialects.md section 6.
+            refused_here += 1
             continue
         compared += 1
         if us != them:
@@ -548,9 +569,11 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
     print("%-11s %d rows, %d compared, %d the pattern was rejected, "
           "%d the reference declined, %d the surrogate-pair deviation, "
           "%d the template parsed up front, %d a known reference defect, "
+          "%d this library refuses on purpose, "
           "%d vim's two engines disagree, %d disagreements"
           % (dialect + ":", len(rows), compared, rejected, declined,
-             deviation, lazy, defect, split, len(disagreements)))
+             deviation, lazy, defect, refused_here, split,
+             len(disagreements)))
     if not rejected:
         sys.stderr.write(
             "%s: no generated pattern was rejected, so the accept/reject "

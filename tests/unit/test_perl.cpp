@@ -372,6 +372,26 @@ TEST(Perl, DuplicateNamesNeedJOrABranchReset) {
   grx_regex_free(reset.regex);
 }
 
+TEST(Perl, ACallIntoALookbehindsGroupIsRefused) {
+  // A subroutine block is generated once and steps the way its *definition*
+  // does, so a group written inside a lookbehind that runs backwards has a
+  // backwards block. A call from outside it would walk the subject the
+  // wrong way: `(*naplb:(a))(?1)` against "aa" is 1-2 in pcre2test and was
+  // 1-1 here, with group one left holding a span outside the match.
+  EXPECT_EQ(compile_result("(*naplb:(a))(?1)", GRX_SYNTAX_PCRE),
+      GRX_ERR_UNSUPPORTED);
+  EXPECT_EQ(compile_result("(*naplb:(a))b(?1)", GRX_SYNTAX_PCRE),
+      GRX_ERR_UNSUPPORTED);
+  // The lookbehind that runs *forwards* is untouched - its group's block is
+  // forwards too - and so is a call from inside a lookbehind to a group
+  // outside it, which agrees with pcre2test.
+  EXPECT_EQ(span_of("(?<=(a))(?1)", "aa"), "1-2");
+  EXPECT_EQ(span_of("(a)(*naplb:(?1))", "aa"), "0-1");
+  EXPECT_EQ(span_of("(*naplb:(a)(?1))b", "aab"), "2-3");
+  // And an ordinary call is an ordinary call.
+  EXPECT_EQ(span_of("(a)(?1)", "aa"), "0-2");
+}
+
 TEST(Perl, AConditionsParenthesisIsNotAGroup) {
   // The prescan counts capturing parentheses so that `\1` can be told from
   // an octal escape, and it counted the `(` of `(?(...)` - which opens a

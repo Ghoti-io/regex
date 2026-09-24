@@ -312,9 +312,38 @@ def boundary_end_of_subject(pattern, them, subject, ours):
     if ours.startswith("all ") and them.startswith("all "):
         mine = ours.split()
         theirs = them.split()
-        return (len(mine) == len(theirs) + 1 and mine[-1] == end
+        # A field is `whole` or `whole,group,group`, so the last one is
+        # compared by its whole-match span alone - the groups of an empty
+        # match at the end are that same empty span, and writing them out
+        # here would be a second spelling of the same thing.
+        return (len(mine) == len(theirs) + 1
+            and mine[-1].split(",")[0] == end
             and mine[2:-1] == theirs[2:])
     return False
+
+
+CALL_SPELLING = re.compile(r"\(\?(?:R|[0-9]|&|P>|\+|-)")
+BEHIND_NON_ATOMIC = ("(*naplb:", "(*non_atomic_positive_lookbehind:")
+
+
+def library_deviation(pattern, them, us):
+    """A pattern this library refuses on purpose, recorded in section 6.
+
+    One shape today: a subroutine call to a group defined inside a
+    *non-atomic* lookbehind. The block a call enters is generated once and
+    steps the way its definition does, so a group written inside a
+    backwards-running body has a backwards block and a call from outside it
+    would walk the subject the wrong way - `(*naplb:(a))(?1)` against "aa" is
+    1-2 in pcre2test and was 1-1 here, with group one holding a span outside
+    the match. Refused rather than answered; see src/compile/codegen.c.
+
+    Both halves are required, so a pattern holding a non-atomic lookbehind
+    and no call, or a call and no such lookbehind, is compared as usual.
+    """
+    if not us.startswith("compile") or them.startswith("compile"):
+        return False
+    return (any(spelling in pattern for spelling in BEHIND_NON_ATOMIC)
+        and CALL_SPELLING.search(pattern) is not None)
 
 
 def reference_defect(dialect, pattern, them, subject=None, ours=None):
@@ -444,6 +473,9 @@ def compare(dialect, ours, seed, patterns, examples):
         # printed rather than dropped, because a rising count is the tool
         # saying the generator has found new ground.
         if us.startswith("unsupported"):
+            unsupported += 1
+            continue
+        if library_deviation(pattern, them, us):
             unsupported += 1
             continue
         compared += 1

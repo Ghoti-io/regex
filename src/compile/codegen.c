@@ -143,6 +143,7 @@ typedef struct {
   uint32_t call;       ///< The CALL instruction's index.
   uint32_t group;      ///< The group it re-enters.
   uint32_t definition; ///< Which definition of it; see call_target().
+  uint32_t reverse;    ///< Non-zero when the call is inside a reverse body.
 } Fixup;
 
 static GRX_Result gen(Codegen * codegen, uint32_t node_index);
@@ -1134,7 +1135,8 @@ static GRX_Result gen_call(Codegen * codegen, const GRX_IRNode * node) {
     return result;
   }
 
-  Fixup fixup = {.call = call, .group = node->a, .definition = node->b};
+  Fixup fixup = {.call = call, .group = node->a, .definition = node->b,
+    .reverse = reversed(node) ? 1u : 0u};
   result = grx_arena_append(&codegen->fixups, &fixup, NULL);
   if (result != GRX_OK) {
     return fail(codegen,
@@ -1655,6 +1657,28 @@ static GRX_Result gen_subroutines(Codegen * codegen) {
       uint32_t target = call_target(codegen->ir, group, definition);
       if (target == GRX_INDEX_NONE) {
         return fail(codegen, GRX_DIAG_INVALID_RECURSION, NULL);
+      }
+      // A subroutine block is generated once and shared by every call to
+      // it, and its instructions step the way its *definition* does. A
+      // group written inside a lookbehind that runs backwards therefore has
+      // a backwards block, and a call from outside would walk the subject
+      // the wrong way: `(*naplb:(a))(?1)` against "aa" is 1-2 in pcre2test
+      // and was 1-1 here, the call having matched nothing and left group
+      // one holding a span outside the match.
+      //
+      // Refused rather than answered, because the fix is a second copy of
+      // the block lowered the other way round and the flag says nothing
+      // about where the reversal came from: a lookbehind *inside* the
+      // called group must stay reversed in that copy, and clearing the flag
+      // through the subtree would straighten it too. The other mixture -
+      // a call from inside a lookbehind to a group outside it - is left
+      // alone, because `(a)(*naplb:(?1))` agrees with pcre2test today.
+      // documentation/dialects.md section 6.
+      const GRX_IRNode * definition_node = grx_ir_node(codegen->ir, target);
+      if (definition_node && (definition_node->flags & GRX_IR_REVERSE)
+          && !fixup->reverse) {
+        return fail(codegen, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED,
+            definition_node);
       }
 
       // Reserved before the block is generated, so that a call the block
