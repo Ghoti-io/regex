@@ -2636,6 +2636,49 @@ TEST(Perl, AFalseRangeIsThreeMembersInPerlAndAnErrorInPcre2) {
   EXPECT_EQ(compile_result("[z-a]", GRX_SYNTAX_PERL), GRX_ERR_SYNTAX);
 }
 
+TEST(Perl, NoCaptureModeLeavesNoGroupForANumberToName) {
+  // `/n` and `(?n)` stop a bare parenthesis capturing, so `(?n)(a)\1`
+  // names a group the pattern has not got: "Reference to nonexistent
+  // group" in perl 5.40.1 and error 15 in pcre2test. It compiled here and
+  // answered no match, because the check made while reading counts
+  // parentheses in a prescan and the prescan cannot know what a flag
+  // written inside the pattern will do.
+  EXPECT_EQ(compile_result("(?n)(a)\\1", GRX_SYNTAX_PERL), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("(?n)(a)\\1", GRX_SYNTAX_PCRE), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("(?n)\\1(a)", GRX_SYNTAX_PCRE), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("(?n:(a))\\1", GRX_SYNTAX_PCRE), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("(?n:(a)\\1)", GRX_SYNTAX_PCRE), GRX_ERR_SYNTAX);
+
+  // The scope is the flag's own, and the numbering was already right: a
+  // group opened *before* the flag still captures and may still be named.
+  EXPECT_EQ(span_of("(a)(?n)(b)\\1", "aba", GRX_SYNTAX_PERL), "0-3");
+  EXPECT_EQ(group_of("(a)(?n)(b)\\1", "aba", 1, GRX_SYNTAX_PERL), "0-1");
+  EXPECT_EQ(compile_result("(a)(?n)(b)\\2", GRX_SYNTAX_PERL), GRX_ERR_SYNTAX);
+  EXPECT_EQ(span_of("((?n)(a))\\1", "aa", GRX_SYNTAX_PERL), "0-2");
+  EXPECT_EQ(span_of("(?n)((?-n)(a))\\1", "aa", GRX_SYNTAX_PERL), "0-2");
+
+  // A named group captures under `/n` in both references, and a name
+  // still resolves.
+  EXPECT_EQ(span_of("(?n)(?<x>a)\\k<x>", "aa", GRX_SYNTAX_PERL), "0-2");
+  EXPECT_EQ(span_of("(?n)(?<x>a)\\1", "aa", GRX_SYNTAX_PERL), "0-2");
+
+  // A conditional asks the same question, and the two dialects answer it
+  // the way they answer `(?(99)a|b)`: perl takes the false branch, pcre2
+  // refuses a condition naming a subpattern that is not there.
+  EXPECT_EQ(span_of("(?n)(a)(?(1)b|c)", "ac", GRX_SYNTAX_PERL), "0-2");
+  EXPECT_EQ(compile_result("(?n)(a)(?(1)b|c)", GRX_SYNTAX_PCRE),
+      GRX_ERR_SYNTAX);
+
+  // Nothing that was legal became illegal. A forward reference is still
+  // read as one, a branch reset still numbers its branches alike, and the
+  // number one past the last is still the error it always was.
+  EXPECT_EQ(span_of("\\1(a)", "aa", GRX_SYNTAX_PERL), "nomatch");
+  EXPECT_EQ(span_of("(?|(a)|(b)(c))\\2", "ab", GRX_SYNTAX_PERL), "nomatch");
+  EXPECT_EQ(compile_result("(?|(a)|(b)(c))\\3", GRX_SYNTAX_PERL),
+      GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("(a)\\2", GRX_SYNTAX_PERL), GRX_ERR_SYNTAX);
+}
+
 int main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

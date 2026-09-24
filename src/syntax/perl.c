@@ -4690,6 +4690,34 @@ static GRX_Result pcre_validate(GRX_Parser * parser) {
       continue;
     }
 
+    // A *number* that no group wears. The prescan counts parentheses, and
+    // under `(?n)` a bare one is not a capture - so `(?n)(a)\1` passed the
+    // check made while reading and is "reference to nonexistent group" in
+    // perl and error 15 in pcre2test. Here the parse is finished and
+    // `groups_opened` is what the pattern actually numbered.
+    //
+    // The relative spellings never had this: `\g{-1}` and `(?-1)` are
+    // resolved against the same counter as they are read, so `(?n)(a)\g{-1}`
+    // was already refused. It is the absolute form alone.
+    if (node->kind == GRX_NODE_BACKREF && !(node->flags & GRX_NODE_NAMED)
+        && node->a > (uint32_t)parser->groups_opened) {
+      return grx_parse_fail(parser, GRX_DIAG_INVALID_BACKREFERENCE,
+          node->offset, node->length);
+    }
+    // The same question asked by a conditional, for the dialects that
+    // refuse one naming a group that is not there. pcre2test answers
+    // `(?n)(a)(?(1)b|c)` with "reference to non-existent subpattern" where
+    // perl takes the false branch, which is the split this flag already
+    // carries for `(?(99)a|b)`.
+    if (node->kind == GRX_NODE_CONDITIONAL && !(node->flags & GRX_NODE_NAMED)
+        && (node->a == GRX_COND_GROUP_SET
+            || node->a == GRX_COND_RECURSION_GROUP)
+        && !parser->spec.condition_group_may_be_absent
+        && node->b > (uint32_t)parser->groups_opened) {
+      return grx_parse_fail(parser, GRX_DIAG_INVALID_BACKREFERENCE,
+          node->offset, node->length);
+    }
+
     int names_group = (node->kind == GRX_NODE_BACKREF
                           || node->kind == GRX_NODE_RECURSE
                           || node->kind == GRX_NODE_CONDITIONAL)
