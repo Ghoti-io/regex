@@ -721,6 +721,46 @@ def is_lookbehind_backreference_artifact(pattern, them, us):
     return lookbehind_with_backreference(pattern)
 
 
+MARK = re.compile(r"\\z[se]")
+
+
+def marks_in_a_lookbehind_and_after_it(pattern):
+    r"""Two marks, one inside a positive lookbehind, and vim keeps the first.
+
+    Section 6's item 9 is about where a `\zs` or a `\ze` inside an
+    assertion or an atomic group counts, and this is the one shape in that
+    family where vim's two engines *agree* and this library still differs.
+    `\(a\zeb\)\@<=\(a\zeb\)\@>` over "ababS" is 2-2 under `re=1` and under
+    `re=2`; here it is 2-3. This library's rule is that the last write
+    wins, which is what both engines do for plain marks -
+    `a\zeb\zec` over "abc" is 0-2 in all three - and vim keeps the
+    lookbehind's instead once a postfix operator holds the second one.
+
+    Both halves are required, and the neighbours say why:
+
+      - `\(a\zeb\)\@<=\(ab\)\@>` has only the lookbehind's mark and is 2-2
+        everywhere, so it is not that the mark is ignored;
+      - `\(ab\)\@<=\(a\zeb\)\@>` has only the operator's and is 2-3 here
+        and under `re=1`, which is item 9's ordinary case;
+      - `\(a\zeb\)\@<=a\zeb`, with the second mark *not* inside an
+        operator, is 2-3 here and under `re=2` and 2-2 under `re=1` - the
+        engines disagree, so the gate settles it by asking and this
+        predicate must not cover it;
+      - `\(a\zeb\)\@<!a\zeb` and `\(a\zeb\)\@=\(a\zeb\)\@>` agree in all
+        three, so it is the *positive* lookbehind and nothing else.
+
+    Counted and printed rather than dropped, like the rest of item 9.
+    """
+    where = pattern.find("\\@<=")
+    if where < 0:
+        return False
+    if MARK.search(pattern[:where]) is None:
+        return False
+    rest = pattern[where + 4:]
+    found = MARK.search(rest)
+    return found is not None and "\\@" in rest[found.end():]
+
+
 def lookbehind_with_backreference(pattern):
     """The shape the row above is about, so that two gates ask one question.
 
@@ -804,7 +844,8 @@ def main():
                 or is_lookbehind_backreference_artifact(case[0], them, us)
                 or is_very_magic_line_start_repeat(case[0], them, us)
                 or is_line_number_star(case[0], them, us)
-                or is_leading_star_artifact(case[0], them, us)):
+                or is_leading_star_artifact(case[0], them, us)
+                or marks_in_a_lookbehind_and_after_it(case[0])):
             artifacts += 1
             continue
         if holds_composing(case[1]):

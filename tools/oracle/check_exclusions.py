@@ -172,6 +172,27 @@ block("vim_diff.is_forward_reference_artifact",
      (r"\1\(a\)\@<=", "match 1:1 \"a\"", "match 1:1 \"a\""), False),
 ])
 
+block("vim_diff.marks_in_a_lookbehind_and_after_it",
+    lambda pattern: vim_diff.marks_in_a_lookbehind_and_after_it(pattern),
+    [
+    ("a mark in the lookbehind and one in the operator after it",
+     (r"\(a\zeb\)\@<=\(a\zeb\)\@>",), True),
+    ("the `\\zs` spelling of the same shape",
+     (r"\(a\zsb\)\@<=\(a\zsb\)\@>",), True),
+    ("only the lookbehind's mark, which every engine agrees about",
+     (r"\(a\zeb\)\@<=\(ab\)\@>",), False),
+    ("only the operator's mark, which is item 9's ordinary case",
+     (r"\(ab\)\@<=\(a\zeb\)\@>",), False),
+    ("the second mark not inside an operator, where the engines differ "
+     "and the gate settles it by asking",
+     (r"\(a\zeb\)\@<=a\zeb",), False),
+    ("a negative lookbehind, where all three agree",
+     (r"\(a\zeb\)\@<!a\zeb",), False),
+    ("a lookahead rather than a lookbehind",
+     (r"\(a\zeb\)\@=\(a\zeb\)\@>",), False),
+    ("no mark at all", (r"\(ab\)\@<=\(ab\)\@>",), False),
+])
+
 block("vim_diff.lookbehind_with_backreference",
     lambda pattern: vim_diff.lookbehind_with_backreference(pattern),
     [

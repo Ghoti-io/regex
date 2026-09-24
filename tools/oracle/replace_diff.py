@@ -694,6 +694,16 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
                 defect += 1
                 compared -= 1
                 continue
+            if vim_diff.marks_in_a_lookbehind_and_after_it(row[1]):
+                # Section 6, item 9's one shape where vim's two engines
+                # agree and this library still differs: a mark inside a
+                # positive lookbehind and another inside a postfix operator
+                # after it. vim keeps the first and this library's rule is
+                # that the last write wins. vim_diff.py's predicate rather
+                # than a second copy of it.
+                defect += 1
+                compared -= 1
+                continue
             if old_answer != row[4]:
                 # Two axes at once, which is the third category vim_diff.py
                 # keeps and this gate did not. Most split rows turn on one
