@@ -489,6 +489,12 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     // Probed rather than read; see tests/data/probe/report.md and
     // documentation/dialects.md section 5.5.
     .capture_reset = GRX_CAPTURE_RESET_AFTER_EACH,
+    // `[:lower:]` and `[:upper:]` are one class under `/i` at both widths
+    // here, where pcre2 stops at the ASCII one. Measured with the subject
+    // upgraded, because below U+0100 an unupgraded perl string gets ASCII
+    // semantics: `/i` takes "A", U+017F, U+212A and U+00C9, and refuses
+    // U+05D0. See the field.
+    .posix_case_classes_collapse_wide = 1,
     .lookbehind = GRX_LOOKBEHIND_BOUNDED,
     // Perl alone. `a(?!(b)c)` against "abd" reports group 1 as "b" here and
     // unset in pcre2test and in Node: the body captured it before failing,

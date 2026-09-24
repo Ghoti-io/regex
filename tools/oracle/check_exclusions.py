@@ -495,26 +495,6 @@ block("perl_diff.reference_defect (pcre2)",
      (r"(?<=a)\w", "compile"), False),
 ])
 
-block("perl_diff.reference_defect (pcre2's POSIX case classes)",
-    lambda pattern, them, ours, flags:
-        perl_diff.reference_defect("pcre", pattern, them, None, ours, flags),
-    [
-    ("pcre2 refusing the collapse at its Unicode width",
-     ("[[:lower:]]", "nomatch", "match 0:1", "iuP"), True),
-    ("the other case class",
-     ("[[:upper:]]", "nomatch", "match 0:1", "iuP"), True),
-    ("no UCP, where pcre2 collapses them and the two agree",
-     ("[[:lower:]]", "nomatch", "match 0:1", "iu"), False),
-    ("no caseless flag, so there is no collapse to argue about",
-     ("[[:lower:]]", "nomatch", "match 0:1", "uP"), False),
-    ("pcre2 matched, so it is not refusing anything",
-     ("[[:lower:]]", "match 0:1", "match 0:1", "iuP"), False),
-    ("this library found nothing either",
-     ("[[:lower:]]", "nomatch", "nomatch", "iuP"), False),
-    ("a class that is not one of the two",
-     ("[[:alpha:]]", "nomatch", "match 0:1", "iuP"), False),
-])
-
 block("perl_diff.reference_defect (perl)",
     lambda pattern, them: perl_diff.reference_defect("perl", pattern, them),
     [

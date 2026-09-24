@@ -468,11 +468,11 @@ TEST(Lower, ACaselessModeCollapsesTheTwoPosixCaseClasses) {
   EXPECT_EQ(spans(Compiled("(?ai)[[:lower:]]", "", nullptr, GRX_SYNTAX_PERL),
       long_s), "nomatch");
 
-  // At the Unicode width the same union is `Ll` with `Lu`, so every cased
-  // letter is in and U+05D0 is not. Measure perl for this with the subject
-  // upgraded: below U+0100 an unupgraded string gets ASCII semantics, which
-  // is perl's documented Unicode bug and which read U+00C9 as "no match"
-  // here until the strings were upgraded.
+  // At the Unicode width perl collapses them too, so every cased letter is
+  // in and U+05D0 is not. Measure perl for this with the subject upgraded:
+  // below U+0100 an unupgraded string gets ASCII semantics, which is
+  // perl's documented Unicode bug and which read U+00C9 as "no match" here
+  // until the strings were upgraded.
   EXPECT_EQ(spans(Compiled("(?i)[[:lower:]]", "", nullptr, GRX_SYNTAX_PERL),
       long_s), "0:2");
   EXPECT_EQ(spans(Compiled("(?i)[[:lower:]]", "", nullptr, GRX_SYNTAX_PERL),
@@ -483,6 +483,17 @@ TEST(Lower, ACaselessModeCollapsesTheTwoPosixCaseClasses) {
       alef), "nomatch");
   EXPECT_EQ(spans(Compiled("[[:alpha:]]", "", nullptr, GRX_SYNTAX_PERL),
       alef), "0:2");
+
+  // PCRE2 stops at the ASCII width, and this library follows each
+  // reference rather than choosing between them:
+  // `(*UCP)(?i)[[:lower:]]` refuses "A" there while still matching
+  // U+017F, which is `Ll` whatever the folding does.
+  EXPECT_EQ(spans(Compiled("(?i)[[:lower:]]", "uP", nullptr, GRX_SYNTAX_PCRE),
+      "A"), "nomatch");
+  EXPECT_EQ(spans(Compiled("(?i)[[:lower:]]", "uP", nullptr, GRX_SYNTAX_PCRE),
+      long_s), "0:2");
+  EXPECT_EQ(spans(Compiled("(?i)[[:upper:]]", "uP", nullptr, GRX_SYNTAX_PCRE),
+      e_acute_upper), "0:2");
 
   // glibc and musl both collapse them too - `[[:lower:]]` under REG_ICASE
   // matches "A" in each - so the POSIX rows follow the same rule.

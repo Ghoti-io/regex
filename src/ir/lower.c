@@ -174,14 +174,18 @@ static GRX_Result add_property_named(Lowering * low, const char * name,
  * `[[:graph:]]` that quietly means "printable ASCII" under `(*UCP)` is a
  * wrong answer wearing a right one's clothes.
  */
-static GRX_Result posix_class_named_set(Lowering * low, const char * name,
-    const GRX_Node * node, GRX_CharClass * out) {
-  // Not `low->shorthands`, which UTF alone widens. pcre2pattern is explicit
-  // that the POSIX classes use Unicode "only if PCRE2_UCP is set", so
-  // `(*UTF)[[:alpha:]]` is ASCII and `(*UTF)(*UCP)[[:alpha:]]` is not. Perl
-  // is the other case and needs no flag: its classes are Unicode by default,
-  // which its profile already says by naming the Unicode sets in *both*
-  // shorthand columns.
+/**
+ * Whether a POSIX class takes its Unicode definition rather than its ASCII
+ * one.
+ *
+ * Not `low->shorthands`, which UTF alone widens. pcre2pattern is explicit
+ * that the POSIX classes use Unicode "only if PCRE2_UCP is set", so
+ * `(*UTF)[[:alpha:]]` is ASCII and `(*UTF)(*UCP)[[:alpha:]]` is not. Perl
+ * is the other case and needs no flag: its classes are Unicode by default,
+ * which its profile already says by naming the Unicode sets in *both*
+ * shorthand columns.
+ */
+static int posix_class_is_wide(Lowering * low, const char * name) {
   int wide = !(low->options & GRX_OPT_ASCII_CLASSES)
       && ((low->options & GRX_OPT_UCP)
           || low->profile.shorthands == GRX_SHORTHANDS_UNICODE);
@@ -191,6 +195,13 @@ static GRX_Result posix_class_named_set(Lowering * low, const char * name,
       && (strcmp(name, "lower") == 0 || strcmp(name, "upper") == 0)) {
     wide = 1;
   }
+  return wide;
+}
+
+
+static GRX_Result posix_class_named_set(Lowering * low, const char * name,
+    const GRX_Node * node, GRX_CharClass * out) {
+  int wide = posix_class_is_wide(low, name);
 
   struct Range { uint32_t lo; uint32_t hi; };
   static const struct Range ascii_only[] = {{0x00, 0x7F}};
@@ -324,11 +335,14 @@ static GRX_Result posix_class_named_set(Lowering * low, const char * name,
  * string gets ASCII semantics, which is perl's documented Unicode bug and
  * which made U+00C9 read as "no" here until the strings were upgraded.
  *
- * `(*UCP)(?i)[[:lower:]]` over "A" is where pcre2 parts from perl - no
- * match there, match here and in perl. pcre2 collapses the two classes at
- * its ASCII width and not at its Unicode one, which is its bitmap showing
- * through rather than a rule a second implementation can take.
- * documentation/dialects.md section 6 carries it.
+ * Where the two references part is the other width, and each dialect
+ * follows its own: perl collapses them there as well, pcre2 stops, and
+ * `(*UCP)(?i)[[:lower:]]` refuses "A" there while still matching U+017F,
+ * which is `Ll` on its own account. That is
+ * GRX_Profile::posix_case_classes_collapse_wide, an axis rather than a
+ * deviation - the first draft followed perl everywhere and section 6
+ * carried pcre2, which cost eleven excluded rows in two seed ranges for a
+ * difference the profile can simply state.
  */
 static GRX_Result posix_class_set(Lowering * low, const GRX_ClassItem * item,
     const GRX_Node * node, GRX_CharClass * out) {
@@ -338,7 +352,9 @@ static GRX_Result posix_class_set(Lowering * low, const GRX_ClassItem * item,
   }
   GRX_Result result = posix_class_named_set(low, name, node, out);
   if (result != GRX_OK || low->fold == GRX_FOLD_NONE
-      || (item->flags & GRX_CLASS_ITEM_NO_FOLD)) {
+      || (item->flags & GRX_CLASS_ITEM_NO_FOLD)
+      || (posix_class_is_wide(low, name)
+          && !low->profile.posix_case_classes_collapse_wide)) {
     // Vim is the one dialect here that makes no collapse, and it already
     // says so per item: `\c[a-z]` matches "A" and `\c[[:lower:]]` does
     // not, a collection being a set of code points there and a named class

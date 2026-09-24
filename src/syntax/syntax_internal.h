@@ -591,6 +591,29 @@ typedef struct GRX_Profile {
    * documentation/dialects.md section 6.
    */
   int posix_case_classes_wide;
+  /**
+   * A caseless flag collapses `[:lower:]` and `[:upper:]` at the *Unicode*
+   * width too, and not only at the ASCII one.
+   *
+   * The collapse itself is not in question: `[[:lower:]]` under a caseless
+   * flag matches "A" in perl, in pcre2test, and in glibc and musl under
+   * REG_ICASE. It is the union of the two classes rather than a closure of
+   * either, which U+05D0 settles - alphabetic and uncased, refused by
+   * `(?i)[[:lower:]]` in both references where `[[:alpha:]]` takes it.
+   *
+   * Where they part is the other width. perl collapses them there as well,
+   * so `/i` over an upgraded subject takes "A", U+017F, U+212A and U+00C9;
+   * pcre2 stops, and `(*UCP)(?i)[[:lower:]]` refuses "A" while still
+   * matching U+017F, which is `Ll` on its own account. Each dialect
+   * follows its own reference, which is why this is an axis and not a
+   * deviation: PCRE2 leaves it clear and Perl sets it.
+   *
+   * Only reached at the Unicode width. At the ASCII width every dialect
+   * here collapses, so the field says nothing about POSIX, GNU or vim -
+   * and vim makes no collapse at all, which GRX_CLASS_ITEM_NO_FOLD
+   * already says per item.
+   */
+  int posix_case_classes_collapse_wide;
 } GRX_Profile;
 
 /**
