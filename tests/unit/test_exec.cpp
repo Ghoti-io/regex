@@ -346,6 +346,18 @@ TEST(Backtrack, RunsWhatTheLockstepEngineCannot) {
     // body touched on the way to failing.
     {"(?<!(a))b", GRX_OPT_UTF, "cb", "1:2 -"},
     {"(?<!(a))b", GRX_OPT_UTF, "ab", ""},
+    // A lookaround *inside* a lookbehind. The body is matched backwards,
+    // and the lookaround written in it still looks forwards from where it
+    // stands - it inherited the body's direction here, so the first of
+    // these did not match and the second matched for the wrong reason,
+    // its negation holding because the body looked for "c" behind the
+    // position rather than in front of it. node answers 1-2 to both.
+    {"(?<=a(?=b))b", GRX_OPT_UTF, "ab", "1:2"},
+    {"(?<=a(?!c))b", GRX_OPT_UTF, "ab", "1:2"},
+    {"(?<=(?=a)a)b", GRX_OPT_UTF, "ab", "1:2"},
+    {"(?<!a(?=b))b", GRX_OPT_UTF, "ab", ""},
+    {"(?<=a(?=b))c", GRX_OPT_UTF, "abc", ""},
+    {"(?<=(?<=a)b)c", GRX_OPT_UTF, "abc", "2:3"},
   };
 
   for (const auto & test : cases) {

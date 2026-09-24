@@ -72,6 +72,11 @@ ATOMS = [
     "(?=a)", "(?!a)", "(?<=a)", "(?<!a)", "(?=ab)", "(?<=ab)",
     "(?<=a+)", "(?<=a*)", "(?<=ab|c)", "(?<=a{2,4})", "(?<=a?)",
     "(?<!a+)", "(?<=(a|bc))", "(?<=\\w+)",
+    # A lookaround inside a lookbehind. Zero-width, so `re` accepts it in a
+    # fixed-width lookbehind, and it is the shape a defect hid in: the body
+    # is matched backwards and the lookaround in it still looks forwards.
+    "(?<=a(?=b))", "(?<=(?=a)a)", "(?<=a(?!c))", "(?<!a(?=b))",
+    "(?=(?<=a)b)",
     # Backreferences.
     "(a)\\1", "(a)?\\1", "(?P<m>a)(?P=m)",
     # Conditionals.

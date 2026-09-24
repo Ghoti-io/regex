@@ -86,6 +86,12 @@ ATOMS = [
     # for as long as this file had no way to generate it.
     "\\(a\\)\\@=", "\\(a\\)\\@!", "\\(a\\)\\@<=", "\\(a\\)\\@<!",
     "\\(a\\+\\)\\@>", "(a)@=", "(a)@!", "(a)@<=", "(a)@<!", "(a+)@>",
+    # A postfix assertion inside another one: vim's spelling of the shape
+    # that hid a defect in shared lowering, where a lookaround written
+    # inside a lookbehind's body inherited the backwards direction of the
+    # body instead of looking forwards from where it stands.
+    "\\(a\\(b\\)\\@=\\)\\@<=", "\\(\\(a\\)\\@=a\\)\\@<=",
+    "\\(a\\(c\\)\\@!\\)\\@<=", "\\(a\\(b\\)\\@=\\)\\@<!",
     "\\(a\\zsb\\)\\@>", "\\(a\\zeb\\)\\@>", "\\(a\\zsb\\)\\@=",
     "\\(a\\zeb\\)\\@=", "\\(a\\zeb\\)\\@<=",
     # The byte bound on a lookbehind, which is a restriction and so needs a

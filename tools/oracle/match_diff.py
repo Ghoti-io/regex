@@ -56,6 +56,15 @@ ATOMS = [
     "(?=a)", "(?!a)", "(?<=a)", "(?<!a)", "(a)\\1", "(a|b)\\1",
     "(?=(a))", "(?<=(a))", "(?!(a)b)", "(?<=ab|c)", "(?=a*)", "(?<=[a-c]+)",
     "(?:(?=a)a)", "((a)|(b))\\2", "(?<n>a)\\k<n>",
+    # A lookaround *inside* a lookbehind, which nothing here spelled until
+    # a defect in that shape was found by a different dialect's work. The
+    # body of a lookbehind is matched backwards; a lookaround written in it
+    # still looks forwards from where it stands, and this library inherited
+    # the direction instead - `(?<=a(?=b))b` against "ab" was no match, and
+    # `(?<=a(?!c))b` was a match for the wrong reason, the negation holding
+    # because its body looked for "c" behind the position.
+    "(?<=a(?=b))", "(?<=(?=a)a)", "(?<=a(?!c))", "(?<!a(?=b))",
+    "(?=(?<=a)b)", "(?<=(?<=a)b)", "(?<=a(?=b)b)",
     "\\p{L}", "\\p{Lu}", "\\P{L}", "\\p{Script=Greek}",
     E_ACUTE, LONG_S, "[" + chr(0x00E0) + "-" + chr(0x00FF) + "]",
 ]

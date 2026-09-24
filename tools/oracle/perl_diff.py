@@ -60,8 +60,14 @@ SHARED_ATOMS = [
     "^", "$", "\\b", "\\B", "\\A", "\\z", "\\Z", "\\G",
     # References.
     "(a)\\1", "(?<n>a)\\k<n>", "(?<n>a)\\g{n}", "(a)\\g1", "(a)\\g{-1}",
-    # Lookaround, both directions and both senses.
+    # Lookaround, both directions and both senses - and one *inside*
+    # another, which nothing here spelled until a defect in that shape was
+    # found by the Vim work. A lookbehind's body is matched backwards and a
+    # lookaround written in it still looks forwards; this library inherited
+    # the direction, so `(?<=a(?=b))b` against "ab" did not match.
     "(?=a)", "(?!a)", "(?<=a)", "(?<!a)",
+    "(?<=a(?=b))", "(?<=(?=a)a)", "(?<=a(?!c))", "(?<!a(?=b))",
+    "(?=(?<=a)b)", "(?<=(?<=a)b)",
     # Atomic grouping and inline modifiers.
     "(?>a)", "(?i)a", "(?i:a)", "(?-i:a)", "(?^i:a)",
     # The extended class. It was PCRE2-only here on the belief that perl's

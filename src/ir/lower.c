@@ -2345,10 +2345,17 @@ static GRX_Result lower_look(
   // length be an ordinary sub-program (design.md section 3.5.2). A forward
   // one leaves the body alone: it is matched left to right like any other,
   // and it is the *start* the engine has to choose.
+  //
+  // Assigned rather than only set, which is the whole of the fix for a
+  // lookaround *inside* a reverse body: a nested `(?=b)` looks forward
+  // from where it stands whatever encloses it, and this used to inherit
+  // the reverse flag and emit its body backwards. `(?<=a(?=b))b` against
+  // "ab" is 1-2 in node and was no match here, and `(?<=a(?!c))b` was a
+  // match for the wrong reason - the negation held because the body could
+  // not find "c" *behind* the position. A forward-running lookbehind
+  // nested in a reverse one clears it for the same reason.
   int outer = low->reverse;
-  if (behind && !forward) {
-    low->reverse = 1;
-  }
+  low->reverse = (behind && !forward) ? 1 : 0;
 
   uint32_t body = GRX_INDEX_NONE;
   if (node->first_child != GRX_INDEX_NONE) {
