@@ -48,6 +48,31 @@ const char * grx_opcode_name(GRX_Opcode op) {
   return (unsigned)op < GRX_OP_COUNT && names[op] ? names[op] : "?";
 }
 
+/**
+ * A group operand: one number, or the list of groups a duplicated name
+ * stands for.
+ *
+ * GRX_INST_AMBIGUOUS_REF says `x` is where a list starts rather than a
+ * group number, and a dump that printed it either way would be naming a
+ * group the pattern may not have.
+ */
+static void dump_group_operand(
+    FILE * out, const GRX_Program * program, const GRX_Inst * inst) {
+  if (!(inst->flags & GRX_INST_AMBIGUOUS_REF)) {
+    fprintf(out, "#%u", inst->x);
+    return;
+  }
+  size_t count = 0;
+  const uint32_t * groups = grx_program_scan_list(program, inst->x, &count);
+  fputs("#", out);
+  for (size_t i = 0; groups && i < count; i++) {
+    fprintf(out, "%s%u", i ? "|" : "", groups[i]);
+  }
+  if (!groups || !count) {
+    fprintf(out, "?");
+  }
+}
+
 /** The name of an assertion, for the disassembly. */
 static const char * assert_name(uint8_t kind) {
   static const char * const names[GRX_ASSERT_COUNT] = {
@@ -220,8 +245,12 @@ static void dump_operands(
           empty_loop_name(inst->mode));
       break;
     case GRX_OP_BACKREF:
-      fprintf(out, "#%u  (unset %s)", inst->x,
-          backref_unset_name(inst->mode));
+      // `x` is a group number, unless the name it was written with belongs
+      // to several - then it is where the *list* of them starts, and a
+      // dump that printed it as "#5" would be naming a group the pattern
+      // may not have. The same is true of a conditional below.
+      dump_group_operand(out, program, inst);
+      fprintf(out, "  (unset %s)", backref_unset_name(inst->mode));
       break;
     case GRX_OP_LOOK: {
       // The body is the next instruction, always, so what is worth printing
@@ -239,7 +268,14 @@ static void dump_operands(
       fprintf(out, "end=%u", inst->x);
       break;
     case GRX_OP_COND:
-      fprintf(out, "%s #%u else=%u", cond_name(inst->mode), inst->x, inst->y);
+      fprintf(out, "%s ", cond_name(inst->mode));
+      if (inst->mode == GRX_COND_GROUP_SET) {
+        dump_group_operand(out, program, inst);
+      }
+      else {
+        fprintf(out, "#%u", inst->x);
+      }
+      fprintf(out, " else=%u", inst->y);
       break;
     case GRX_OP_CALL:
       fprintf(out, "target=%u next=%u", inst->x, inst->y);
