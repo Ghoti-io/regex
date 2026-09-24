@@ -45,6 +45,7 @@ import json
 import os
 import random
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -325,6 +326,31 @@ qa!
 """
 
 
+# Every vim this file runs goes through here, and the `--cmd` is the reason
+# the list exists rather than being spelled at the call site.
+#
+# vim takes `&encoding` from the locale, and `-u NONE` means no vimrc is read
+# to set it. Under `LANG=C`, or with `LANG` unset as it is in a container,
+# `&encoding` is latin1 and vim reads each byte of a UTF-8 subject as its own
+# character: `\X` over U+00E9 then "Y" answers 0:1 where a UTF-8 vim answers
+# 0:2, and `\k\+` over U+00C9 then "x" answers 0:2 against 0:3.
+#
+# Measured at this gate's defaults, that was **1855 of 50980 rows** - every
+# one a non-ASCII subject, and none of them a defect in this library. It also
+# moved two exclusion counts (113 known vim artifacts to 119, and four rows
+# into "neither engine gives it"), so part of the damage was being absorbed
+# by the exclusion list rather than counted as disagreement, which is why the
+# figure is larger than a glance at a sample suggests.
+#
+# So the gate's green result was a statement about the shell `make` happened
+# to be started from, and no file in either repository recorded which locale
+# it had to be. Setting it here rather than inside the two scripts below puts
+# it at the one place every invocation passes, so a third script cannot be
+# added without it. vim_encoding() below confirms it took.
+VIM_COMMAND = ["vim", "-es", "-u", "NONE", "-i", "NONE",
+    "--cmd", "set encoding=utf-8"]
+
+
 def ask_vim(cases):
     """The reference: one process for every case in the run."""
     return _ask(cases, VIM_SCRIPT)
@@ -340,7 +366,7 @@ def _ask(cases, script):
     with open(in_path, "w", newline="\n") as handle:
         for pattern, subject in cases:
             handle.write(json.dumps([pattern, subject]) + "\n")
-    command = ["vim", "-es", "-u", "NONE", "-i", "NONE",
+    command = VIM_COMMAND + [
         "--cmd", "let g:vimdiff_in=%s" % json.dumps(in_path),
         "--cmd", "let g:vimdiff_out=%s" % json.dumps(out_path),
         "-c", "source " + script_path]
@@ -787,6 +813,43 @@ def find(name):
     return None
 
 
+def vim_encoding():
+    """The encoding vim actually answers in, or None when there is no vim.
+
+    `which vim` asks whether something called vim is on `PATH`, which is not
+    the question this gate needs answered. The question is whether the vim
+    that is about to answer fifty thousand rows will read them the way they
+    were written, and the only honest way to answer it is to reach for that
+    vim, through the same command line, before the rows are asked.
+    """
+    work = tempfile.mkdtemp(prefix="vim_diff.enc.")
+    try:
+        out_path = os.path.join(work, "encoding.txt")
+        try:
+            subprocess.run(VIM_COMMAND + ["-c",
+                "call writefile([&encoding], %s) | qa!" % json.dumps(out_path)],
+                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL, timeout=60)
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        if not os.path.exists(out_path):
+            return None
+        with open(out_path) as handle:
+            return handle.read().strip()
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+def vim_version():
+    """The first line of `vim --version`, so a run says which vim answered."""
+    try:
+        finished = subprocess.run(["vim", "--version"], capture_output=True,
+            timeout=60)
+    except (OSError, subprocess.TimeoutExpired):
+        return "unknown"
+    return finished.stdout.decode("utf-8", "replace").splitlines()[0].strip()
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--seed", type=int, default=20260923)
@@ -798,9 +861,17 @@ def main():
         help="exit 1 if the two disagree anywhere")
     args = parser.parse_args()
 
-    if subprocess.run(["which", "vim"], capture_output=True).returncode != 0:
+    encoding = vim_encoding()
+    if encoding is None:
         print("vim_diff: skipped (vim is not installed)")
         return 0
+    if encoding != "utf-8":
+        sys.stderr.write("vim answers in %s, not utf-8; the subjects here are "
+            "UTF-8 and every non-ASCII row would disagree for that reason "
+            "alone. VIM_COMMAND sets it, so this means the setting did not "
+            "take.\n" % encoding)
+        return 2
+    print("vim_diff: oracle(host): %s, encoding %s" % (vim_version(), encoding))
     ours = find("grx_match")
     if not ours:
         sys.stderr.write("grx_match not built; run `make tools`\n")
