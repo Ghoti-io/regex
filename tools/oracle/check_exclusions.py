@@ -32,7 +32,9 @@ import iterate_diff
 import perl_diff
 import posix_diff
 import replace_diff
+import script_run_diff
 import vim_diff
+import window_diff
 
 
 # Each block is (label, call, rows). A row is (reason, args, want), and
@@ -273,6 +275,274 @@ block("perl_diff.holds_quoting",
 ])
 
 
+# --------------------------------------------------------------------
+# pcre2: a nested lookbehind reaching further than the offset allows, and
+# a `$` after a scan substring forgetting NOTEOL.
+# --------------------------------------------------------------------
+block("window_diff.nested_lookbehind_reach",
+    lambda pattern, window, ours, theirs:
+        window_diff.nested_lookbehind_reach(pattern, window, ours, theirs),
+    [
+    ("pcre2 found nothing where the assertion holds",
+     (r"(?<=(?<=a)b)", (4, None, ""), "match 2:2", "nomatch"), True),
+    ("pcre2 found the same match later",
+     (r"(?<=(?<=a)b)", (2, None, ""), "match 2:2", "match 4:4"), True),
+    ("the window begins at zero, where the two agree",
+     (r"(?<=(?<=a)b)", (0, None, ""), "match 2:2", "nomatch"), False),
+    ("one lookbehind, the flat spelling of the same width",
+     (r"(?<=ab)", (2, None, ""), "match 2:2", "nomatch"), False),
+    ("pcre2 found the *earlier* match, which is still a disagreement",
+     (r"(?<=(?<=a)b)", (2, None, ""), "match 4:4", "match 2:2"), False),
+    ("this library found nothing",
+     (r"(?<=(?<=a)b)", (2, None, ""), "nomatch", "match 2:2"), False),
+])
+
+block("window_diff.scan_substring_forgets_noteol",
+    lambda pattern, subject, window, ours, theirs:
+        window_diff.scan_substring_forgets_noteol(pattern, subject, window,
+            ours, theirs),
+    [
+    ("the match pcre2 makes end where NOTEOL forbids",
+     (r"(a)(*scs:(1)a)a*+$", "a", (0, None, "E"), "nomatch", "match 0:1"),
+     True),
+    ("the long spelling of the same verb",
+     (r"(a)(*scan_substring:(1)a)a*+$", "a", (0, None, "E"), "nomatch",
+      "match 0:1"), True),
+    ("ending on the newline the window ends with",
+     (r"(a)(*scs:(1)a)a*+$", "a\n", (0, None, "E"), "nomatch",
+      "match 0:1"), True),
+    ("no NOTEOL, so there is nothing to have been forgotten",
+     (r"(a)(*scs:(1)a)a*+$", "a", (0, None, ""), "nomatch", "match 0:1"),
+     False),
+    ("the scan substring written after the `$`",
+     (r"(a)$(*scs:(1)a)", "a", (0, None, "E"), "nomatch", "match 0:1"),
+     False),
+    ("a bracketed verb that is not a scan substring",
+     (r"(a)(*atomic:a*)$", "a", (0, None, "E"), "nomatch", "match 0:1"),
+     False),
+    ("pcre2's match ends somewhere NOTEOL has no opinion about",
+     (r"(a)(*scs:(1)a)a*+$", "ab", (0, None, "E"), "nomatch",
+      "match 0:1"), False),
+    ("this library matched too, so the difference is elsewhere",
+     (r"(a)(*scs:(1)a)a*+$", "a", (0, None, "E"), "match 0:1",
+      "match 0:1"), False),
+])
+
+
+# --------------------------------------------------------------------
+# glibc: the anchor it reads two ways, and the group it loses.
+# --------------------------------------------------------------------
+block("posix_diff.is_known_deviation",
+    lambda pattern, subject, newline:
+        posix_diff.is_known_deviation(pattern, subject, newline),
+    [
+    ("an anchor beside something that consumes, from the left",
+     ("$.", "a\nb", False), True),
+    ("and from the right",
+     (".^", "a\nb", False), True),
+    ("with REG_NEWLINE, where both read the anchor as a line anchor",
+     ("$.", "a\nb", True), False),
+    ("a subject with no newline in it",
+     ("$.", "ab", False), False),
+    ("a pattern that is only an anchor",
+     ("^", "a\nb", False), False),
+    ("no anchor at all",
+     ("a.b", "a\nb", False), False),
+])
+
+block("posix_diff.is_glibc_backreference_defect",
+    lambda pattern, them, us:
+        posix_diff.is_glibc_backreference_defect(pattern, them, us),
+    [
+    ("a repeated group in front of a backreference",
+     (r"()+(a)\1", "match 0:1 0:0 -", "match 0:1 0:0 0:1"), True),
+    ("the same, where glibc reports no match at all",
+     (r"(){2}(a)\1", "nomatch", "match 0:1 0:0 0:1"), True),
+    ("a stacked quantifier, which needs no group to repeat",
+     (r"a?+(a)\1", "match 0:2 -", "match 0:2 0:1"), True),
+    ("one quantifier instead of two",
+     (r"a?(a)\1", "match 0:1 -", "match 0:1 0:1"), False),
+    ("the backreference taken off",
+     (r"()+(a)", "match 0:1 0:0 -", "match 0:1 0:0 0:1"), False),
+    ("this library is the one that lost a group",
+     (r"()+(a)\1", "match 0:1 0:0 0:1", "match 0:1 0:0 -"), False),
+])
+
+block("posix_diff.is_glibc_stacked_plus_defect",
+    lambda pattern, them, us:
+        posix_diff.is_glibc_stacked_plus_defect(pattern, them, us),
+    [
+    ("glibc put the group at the empty span the match ends on",
+     (r"(a|)?+", "match 0:4 4:4", "match 0:4 3:4"), True),
+    ("the same shape with the other stacked pair",
+     (r"(a|)+*", "match 0:2 2:2", "match 0:2 1:2"), True),
+    ("a pair glibc handles like every other spelling",
+     (r"(a|)?*", "match 0:4 3:4", "match 0:4 3:4"), False),
+    ("glibc's group is not the empty span at the end",
+     (r"(a|)?+", "match 0:4 2:3", "match 0:4 3:4"), False),
+    ("the whole match differs, which is not this question",
+     (r"(a|)?+", "match 0:3 3:3", "match 0:4 3:4"), False),
+    ("one quantifier, so nothing is stacked",
+     (r"(a|)+", "match 0:4 4:4", "match 0:4 3:4"), False),
+])
+
+block("posix_diff.quantifier_bounds",
+    lambda text: posix_diff.quantifier_bounds(text),
+    [
+    ("a star", ("*",), (0, None)),
+    ("a basic RE's star, which needs no backslash", ("\\*",), (0, None)),
+    ("a plus", ("+",), (1, None)),
+    ("a basic RE's plus", ("\\+",), (1, None)),
+    ("an option", ("?",), (0, 1)),
+    ("a bound with both ends", ("{1,2}",), (1, 2)),
+    ("a bound with one number", ("{2}",), (2, 2)),
+    ("a bound with no ceiling", ("{0,}",), (0, None)),
+    ("a basic RE's bound", ("\\{1,2\\}",), (1, 2)),
+])
+
+
+# --------------------------------------------------------------------
+# vim: the captures and the marks an abandoned path wrote.
+# --------------------------------------------------------------------
+block("vim_diff.is_abandoned_mark_artifact",
+    lambda pattern, them, us:
+        vim_diff.is_abandoned_mark_artifact(pattern, them, us),
+    [
+    ("the empty match wearing the end a dead branch left",
+     (r"\(a\zeb\)\@>\d\|\&", "match 0:2", "match 0:0"), True),
+    ("the `\\zs` spelling from the other side",
+     (r"\(a\zsb\)\@=\d\|\&", "match 1:1", "match 0:0"), True),
+    ("without the mark, which is the row above this one",
+     (r"\(ab\)\@>\d\|\&", "match 0:0", "match 0:0"), False),
+    ("without the postfix operator, where the mark alone does nothing",
+     (r"a\zeb\d\|\&", "match 0:0", "match 0:0"), False),
+    ("without the alternation, where neither engine matches",
+     (r"\(a\zeb\)\@>\d", "match 0:2", "match 0:0"), False),
+    ("this library reported a span of its own",
+     (r"\(a\zeb\)\@>\d\|\&", "match 0:2", "match 0:1"), False),
+])
+
+block("vim_diff.is_postfix_capture_artifact",
+    lambda pattern, them, us:
+        vim_diff.is_postfix_capture_artifact(pattern, them, us),
+    [
+    ("vim lost a capture, which is allowed for any `\\@` operator",
+     (r"\(a\)\(a\)\@=a\{2,}", 'match 0:3 "" "a"', 'match 0:3 "a" "a"'),
+     True),
+    ("vim kept one an atomic group had written",
+     (r"\(a\)\@>x\|\A", 'match 0:1 "a"', "match 0:1"), True),
+    ("vim kept one an abandoned branch had written",
+     (r"\(a\)\@=a$\|b", 'match 0:2 "a"', "match 0:2"), True),
+    ("vim kept one where the branch died at a character",
+     (r"\(a\)\@=ax", 'match 0:2 "a"', "match 0:2"), False),
+    ("no postfix operator at all",
+     (r"\(a\)x\|b", 'match 0:1 "a"', "match 0:1"), False),
+    ("the whole match differs, which is not a capture question",
+     (r"\(a\)\@>x\|\A", 'match 0:2 "a"', "match 0:1"), False),
+    ("two groups that differ and neither is empty",
+     (r"\(a\)\@>x\|\A", 'match 0:1 "a"', 'match 0:1 "b"'), False),
+])
+
+block("vim_diff.holds_composing",
+    lambda subject: vim_diff.holds_composing(subject),
+    [
+    ("a mark after a base", ("á",), True),
+    ("a mark later in the subject", ("ab́c",), True),
+    ("a mark that begins the subject, which starts no cluster",
+     ("́a",), False),
+    ("no mark at all", ("ab",), False),
+])
+
+
+# --------------------------------------------------------------------
+# vim, through a substitution: the same writes seen as text.
+# --------------------------------------------------------------------
+block("replace_diff.is_abandoned_path_artifact",
+    lambda pattern, template:
+        replace_diff.is_abandoned_path_artifact(pattern, template),
+    [
+    ("the negative-lookbehind row this was written for",
+     (r"\%>2v\(a\(b\)\@=\)\@<!\(a\zsb\)\@=\V\m", r"\n\2\U\&"), True),
+    ("an alternation and a template that names a group",
+     (r"\(a\)\@>x\|\A", r"\1"), True),
+    ("an alternation and a mark, where the span is what differs",
+     (r"\(a\zeb\)\@>\d\|\&", "X"), True),
+    ("no postfix operator",
+     (r"\(a\)x\|b", r"\1"), False),
+    ("no path that can be abandoned",
+     (r"\(a\)\@>x", r"\1"), False),
+    ("neither a group in the template nor a mark in the pattern",
+     (r"\(a\)\@>x\|\A", "X"), False),
+])
+
+
+# --------------------------------------------------------------------
+# The two references, where each is the one that is wrong - and the one
+# construct this library refuses on purpose beside the one it has not built.
+# --------------------------------------------------------------------
+block("perl_diff.reference_defect (pcre2)",
+    lambda pattern, them: perl_diff.reference_defect("pcre", pattern, them),
+    [
+    ("a lookbehind and an extended class whose body uses an operator",
+     (r"(?<=a)(?[\w|\d])", "compile"), True),
+    ("the non-atomic lookbehind spelling of the same",
+     (r"(*naplb:a)(?[\w|\d])", "compile"), True),
+    ("pcre2 compiled it, so there is no internal error to excuse",
+     (r"(?<=a)(?[\w|\d])", "match 0:1"), False),
+    ("a lookahead, which does not do it",
+     (r"(?=a)(?[\w|\d])", "compile"), False),
+    ("no extended class",
+     (r"(?<=a)\w", "compile"), False),
+])
+
+block("perl_diff.reference_defect (perl)",
+    lambda pattern, them: perl_diff.reference_defect("perl", pattern, them),
+    [
+    ("a branch reset whose group a relative reference reads",
+     (r"(?|(a)|(b))(a)\g{-1}", "nomatch"), True),
+    ("a branch reset whose group a conditional reads",
+     (r"(?|(a)|(b))(?(1)x|y)", "match 0:2"), True),
+    ("a branch reset with a plain backreference, which agrees",
+     (r"(?|(a)|(b))\1", "nomatch"), False),
+    ("a conditional with no branch reset, which agrees",
+     (r"(?:(a)|(b))(?(1)x|y)", "match 0:2"), False),
+])
+
+block("perl_diff.library_deviation",
+    lambda pattern, them, us: perl_diff.library_deviation(pattern, them, us),
+    [
+    ("a subroutine call into a non-atomic lookbehind's group",
+     (r"(*naplb:(a))(?1)", "match 1:2", "compile"), True),
+    ("PCRE2's `a` charset modifiers, which are a gap and not a decision",
+     (r"(?aD)\d", "match 0:1", "compile"), True),
+    ("the bare `(?a)` spelling",
+     (r"(?a)\w", "match 0:1", "compile"), True),
+    ("a non-atomic lookbehind with no call in the pattern",
+     (r"(*naplb:(a))x", "match 0:1", "compile"), False),
+    ("a call with no such lookbehind",
+     (r"((a))(?1)", "match 0:2", "compile"), False),
+    ("`(?u)`, which is an unknown flag on both sides",
+     (r"(?u)\w", "compile", "compile"), False),
+    ("this library compiled it, so it refused nothing",
+     (r"(*naplb:(a))(?1)", "match 1:2", "match 1:2"), False),
+])
+
+block("script_run_diff.is_pcre2_han_defect",
+    lambda subject: script_run_diff.is_pcre2_han_defect(subject),
+    [
+    ("Han with two companion families, which pcre2's manual denies",
+     ("漢한ㄅ",), True),
+    ("Han with Hiragana and Hangul",
+     ("漢か한",), True),
+    ("Han with one companion family, which the manual allows",
+     ("漢か",), False),
+    ("Hiragana and Katakana, one family, with Han",
+     ("漢かカ",), False),
+    ("two companion families and no Han at all",
+     ("か한",), False),
+])
+
+
 def main():
     failures = 0
     checked = 0
@@ -280,11 +550,15 @@ def main():
         for reason, args, want in rows:
             checked += 1
             got = call(*args)
-            if bool(got) != want:
+            # A predicate answers yes or no and is compared as such; the
+            # handful of helpers under them answer a value, and `want` says
+            # which by its own type.
+            seen = bool(got) if isinstance(want, bool) else got
+            if seen != want:
                 failures += 1
                 print("%s: %s\n  %s\n  wanted %s, got %s"
                     % (label, reason, "  ".join(repr(a) for a in args),
-                        want, bool(got)))
+                        want, seen))
     print("check_exclusions: %d controls over %d predicates, %d failed"
         % (checked, len(BLOCKS), failures))
     return 1 if failures else 0
