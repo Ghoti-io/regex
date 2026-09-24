@@ -420,7 +420,8 @@ TESTFLAGS := `PKG_CONFIG_PATH=$(PKG_CONFIG_LOOKUP_PATH) pkg-config --libs --cfla
 # that names itself is a recursion error rather than a subtraction.
 ALL_TEST_GATES := check-symbols check-layering check-aliasing \
 	check-unicode-tables check-dump-names check-readme-example \
-	check-diagnostics check-engine-equivalence check-json-schema-suite
+	check-diagnostics check-engine-equivalence check-json-schema-suite \
+	check-tables
 TEST_GATES ?= $(ALL_TEST_GATES)
 
 # Every target that runs the suites carries them - `test`, `test-quiet`,
@@ -813,7 +814,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 
 # General commands
 .PHONY: check-oracle-soak
-.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-dump-names check-readme-example check-oracle-syntax check-oracle-match check-oracle-soak check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-perl-syntax check-oracle-script-runs check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
+.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-dump-names check-readme-example check-tables check-oracle-syntax check-oracle-match check-oracle-soak check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-perl-syntax check-oracle-script-runs check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
 	check-oracle-properties check-oracle-numeric-properties \
 	check-oracle-string-properties check-oracle-posix check-oracle-sed \
 	check-oracle-exclusions \
@@ -1504,6 +1505,22 @@ check-layering: ## Fail if an engine knows which dialect it is running
 UCD_VERSION := $(shell cat tools/unicode/UCD_VERSION 2>/dev/null)
 UCD_DIR := third_party/ucd/$(UCD_VERSION)
 UNICODE_TABLES := src/unicode/tables
+
+check-tables: ## Fail if a markdown table has a row of the wrong width
+# Most of what this library knows about its dialects is written as a table,
+# and a row with one cell too few or too many still renders - the extra
+# falls off the end, or the last column goes blank - so a wrong row reads as
+# a claim rather than as damage. The way it happens here is edits made by
+# script: a section 6 row is one line of prose with four cells in it, and a
+# program splicing a new one in, or rewriting a cell that has a `|` in it,
+# gets the count wrong in a way no build step notices. Milliseconds, and no
+# reference implementation.
+check-tables:
+	@if ! command -v python3 >/dev/null 2>&1; then \
+		printf "check-tables: skipped (no python3)\n"; \
+		exit 0; \
+	fi; \
+	python3 tools/check_tables.py
 
 check-dump-names: ## Fail if a dump's name table is shorter than its enum
 # Every dump here turns an enumerator into a word through a positional
