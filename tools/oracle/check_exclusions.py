@@ -530,29 +530,15 @@ block("perl_diff.reference_defect (perl)",
      (r"(?:(a)|(b))(?(1)x|y)", "match 0:2"), False),
 ])
 
-block("perl_diff.library_deviation",
-    lambda pattern, them, us: perl_diff.library_deviation(pattern, them, us),
-    [
-    ("a subroutine call into a non-atomic lookbehind's group",
-     (r"(*naplb:(a))(?1)", "match 1:2", "compile"), True),
-    # WP-46 built the `a` charset modifiers on 2026-09-24, so these two
-    # are now False: the rule must *not* take them, because a pattern this
-    # library answers is a pattern the differential has to compare. They
-    # stay here rather than being deleted, as the negative direction of a
-    # retired exclusion is the case that catches it being revived.
-    ("PCRE2's `a` charset modifiers, built and no longer excluded",
-     (r"(?aD)\d", "match 0:1", "compile"), False),
-    ("the bare `(?a)` spelling",
-     (r"(?a)\w", "match 0:1", "compile"), False),
-    ("a non-atomic lookbehind with no call in the pattern",
-     (r"(*naplb:(a))x", "match 0:1", "compile"), False),
-    ("a call with no such lookbehind",
-     (r"((a))(?1)", "match 0:2", "compile"), False),
-    ("`(?u)`, which is an unknown flag on both sides",
-     (r"(?u)\w", "compile", "compile"), False),
-    ("this library compiled it, so it refused nothing",
-     (r"(*naplb:(a))(?1)", "match 1:2", "match 1:2"), False),
-])
+# `perl_diff.library_deviation` was here until 2026-09-24 and is gone with
+# the predicate: both shapes it named were built that day - PCRE2's `a`
+# charset modifiers (WP-46) and a subroutine call into a non-atomic
+# lookbehind's group - and a predicate with nothing left to exclude is not a
+# predicate to keep controls for. What replaces it is the differential
+# itself: `make check-oracle-perl` now compares those rows, and its
+# "0 this library does not implement" is the assertion that the bucket is
+# empty rather than merely unexamined.
+
 
 block("script_run_diff.is_pcre2_han_defect",
     lambda subject: script_run_diff.is_pcre2_han_defect(subject),

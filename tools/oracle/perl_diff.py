@@ -208,6 +208,20 @@ PCRE_ONLY = [
     # Non-atomic lookaround, which can be re-entered where an ordinary one
     # cannot - a difference visible only in what a backreference then sees.
     "(*napla:a|(.))\\1", "(*naplb:(.)|x)\\1", "(?*a|(.))\\1",
+    # A call into a group defined inside a lookbehind, refused until
+    # 2026-09-24 and now a second copy of the block laid out the other way
+    # round. Both halves are in one atom on purpose: the generator composes
+    # one to three atoms, and over 400 draws it had produced a non-atomic
+    # lookbehind in four patterns and a call in forty-four and the two
+    # together in *none* - so the run had been reporting "0 this library
+    # does not implement" about a shape it never built.
+    "(*naplb:(a))(?1)", "(*naplb:((a)b))(?1)", "(*naplb:(?<x>a))(?&x)",
+    "(*naplb:(a|bc))(?1)", "(?<=(a))(?1)", "(?<=(a))x(?1)",
+    # The two mixtures that always agreed, kept beside them so that a
+    # regression in either is a row rather than a memory: a call from inside
+    # a lookbehind to a group outside it, and a lookaround written inside
+    # the called group, whose own direction must survive the copy.
+    "(a)(*naplb:(?1))", "(*naplb:(a(?=b)))(?1)", "(*naplb:(a(?<=xa)))(?1)",
     # Scan-substring, which re-runs an assertion over what a group captured.
     "(a)(*scs:(1)a)", "(?<n>a)(*scs:(<n>)a)",
     # PCRE2's own `\\g` spelling, and the callouts.
@@ -391,10 +405,6 @@ def boundary_end_of_subject(pattern, them, subject, ours):
     return False
 
 
-CALL_SPELLING = re.compile(r"\(\?(?:R|[0-9]|&|P>|\+|-)")
-BEHIND_NON_ATOMIC = ("(*naplb:", "(*non_atomic_positive_lookbehind:")
-
-
 def as_letters(pattern):
     r"""The pattern perl reads, where `\Q` and `\E` are unknown escapes.
 
@@ -420,35 +430,6 @@ def as_letters(pattern):
 def holds_quoting(pattern):
     r"""Whether the pattern writes `\Q` or `\E` as an escape of its own."""
     return as_letters(pattern) != pattern
-
-
-def library_deviation(pattern, them, us):
-    """A pattern this library refuses on purpose, recorded in section 6.
-
-    One shape today: a subroutine call to a group defined inside a
-    *non-atomic* lookbehind. The block a call enters is generated once and
-    steps the way its definition does, so a group written inside a
-    backwards-running body has a backwards block and a call from outside it
-    would walk the subject the wrong way - `(*naplb:(a))(?1)` against "aa" is
-    1-2 in pcre2test and was 1-1 here, with group one holding a span outside
-    the match. Refused rather than answered; see src/compile/codegen.c.
-
-    Both halves are required, so a pattern holding a non-atomic lookbehind
-    and no call, or a call and no such lookbehind, is compared as usual.
-
-    PCRE2's `a` charset modifiers were a second shape here until
-    2026-09-24 and are not any more: WP-46 built them, so `(?a)` and the
-    suffixed `(?aD)`, `(?aS)`, `(?aW)`, `(?aP)` and `(?aT)` are compared
-    like anything else. The exclusion is gone rather than left standing
-    over a fixed gap, because a rule matching an "a" after "(?" and any
-    letters took every pattern whose option letters end in "a" out of the
-    run, and a bucket that keeps accepting rows after its reason is gone is
-    how a later defect gets reported as known.
-    """
-    if not us.startswith("compile") or them.startswith("compile"):
-        return False
-    return (any(spelling in pattern for spelling in BEHIND_NON_ATOMIC)
-        and CALL_SPELLING.search(pattern) is not None)
 
 
 def reference_defect(dialect, pattern, them, subject=None, ours=None):
@@ -580,9 +561,6 @@ def compare(dialect, ours, seed, patterns, examples):
         # printed rather than dropped, because a rising count is the tool
         # saying the generator has found new ground.
         if us.startswith("unsupported"):
-            unsupported += 1
-            continue
-        if library_deviation(pattern, them, us):
             unsupported += 1
             continue
         compared += 1

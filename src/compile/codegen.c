@@ -85,6 +85,26 @@ typedef struct {
    */
   int forward_tail;
   /**
+   * Generate the current subtree in the direction opposite to its flags.
+   *
+   * A subroutine block's instructions step the way its *definition* does,
+   * and a group defined inside a reverse lookbehind can be called from a
+   * forward context - `(*naplb:(a))(?1)`. One block cannot serve both, so
+   * a block is generated per (group, definition, direction) and this says
+   * which of the two is being laid out.
+   *
+   * It is an XOR on the way down rather than a rewrite of the flags,
+   * because the flags are shared: the same IR nodes are read again for the
+   * other copy. And it is *cleared* at every lookaround body, which is the
+   * whole reason a flag rewrite would not do - a lookbehind written inside
+   * the called group looks behind whatever encloses the call, so its body
+   * keeps the direction lowering gave it while everything around it turns
+   * over. Lookarounds are the only construct that sets a direction
+   * absolutely (see lower.c's lookaround), so they are the only place this
+   * is cleared.
+   */
+  int flip;
+  /**
    * The pattern can read a capture back: it has a conditional or a
    * backreference somewhere.
    *
@@ -122,6 +142,15 @@ typedef struct {
    * a block each rather than sharing the first one's.
    */
   uint32_t called_definition[GRX_CODEGEN_MAX_CALLED];
+  /**
+   * And which direction each block runs in, as the third of the key.
+   *
+   * A group defined inside a reverse lookbehind and called from outside it
+   * needs a forward copy; called from inside another one, it needs the
+   * backwards copy as well. Both are the same IR subtree laid out twice,
+   * which is why this is a key and not a flag on the group.
+   */
+  uint32_t called_reverse[GRX_CODEGEN_MAX_CALLED];
   uint32_t entry[GRX_CODEGEN_MAX_CALLED];    ///< Their block starts.
   size_t called_count;
   /**
@@ -153,6 +182,12 @@ static GRX_Result fail(
     Codegen * codegen, GRX_Diag diag, const GRX_IRNode * node) {
   return grx_error_set(codegen->error, grx_diag_result(diag), diag,
       node ? node->offset : GRX_NPOS, node ? node->length : 0);
+}
+
+/** Whether a node runs right to left, in the copy being generated. */
+static int reversed(const Codegen * codegen, const GRX_IRNode * node) {
+  int flagged = (node->flags & GRX_IR_REVERSE) != 0;
+  return codegen->flip ? !flagged : flagged;
 }
 
 /**
@@ -192,7 +227,7 @@ static GRX_Result emit(Codegen * codegen, GRX_Opcode op, uint8_t mode,
     .op = (uint8_t)op,
     .mode = mode,
     .flags = (uint8_t)(
-        ((node && (node->flags & GRX_IR_REVERSE)) ? GRX_INST_REVERSE : 0u)
+        ((node && reversed(codegen, node)) ? GRX_INST_REVERSE : 0u)
         | ((node && (node->flags & GRX_IR_LINE_ANCHOR))
             ? GRX_INST_LINE_ANCHOR : 0u)
         | ((node && (node->flags & GRX_IR_NEWLINE_CRLF))
@@ -335,14 +370,9 @@ static GRX_Result emit_capture_reset_late(
   return GRX_OK;
 }
 
-/** Whether a node runs right to left. */
-static int reversed(const GRX_IRNode * node) {
-  return (node->flags & GRX_IR_REVERSE) != 0;
-}
-
 /** Generate a concatenation, in reading order or against it. */
 static GRX_Result gen_concat(Codegen * codegen, const GRX_IRNode * node) {
-  if (!reversed(node)) {
+  if (!reversed(codegen, node)) {
     for (uint32_t child = node->first_child; child != GRX_INDEX_NONE;) {
       const GRX_IRNode * child_node = grx_ir_node(codegen->ir, child);
       if (!child_node) {
@@ -591,7 +621,7 @@ static GRX_Result gen_fold_run(Codegen * codegen, const GRX_IRNode * node) {
     *slot = (uint32_t)(i - 1);
   }
 
-  int reverse = reversed(node);
+  int reverse = reversed(codegen, node);
   for (size_t step = 0; step < node->b && result == GRX_OK; step++) {
     // Forwards the walk leaves position `step`; backwards it arrives at
     // position `b - step`, and the edges it may take are the ones that end
@@ -1136,7 +1166,7 @@ static GRX_Result gen_call(Codegen * codegen, const GRX_IRNode * node) {
   }
 
   Fixup fixup = {.call = call, .group = node->a, .definition = node->b,
-    .reverse = reversed(node) ? 1u : 0u};
+    .reverse = reversed(codegen, node) ? 1u : 0u};
   result = grx_arena_append(&codegen->fixups, &fixup, NULL);
   if (result != GRX_OK) {
     return fail(codegen,
@@ -1173,8 +1203,14 @@ static GRX_Result gen_non_atomic_look(
   // measuring the caller's distance against this body's alternatives. It is
   // not the same assertion; it gets no guards.
   int outer_body = codegen->forward_tail;
+  int outer_flip = codegen->flip;
   codegen->forward_tail = 0;
+  // A lookaround sets its body's direction absolutely, so a subroutine
+  // block being laid out the other way round turns over everything except
+  // this. See the `flip` field.
+  codegen->flip = 0;
   result = gen(codegen, node->first_child);
+  codegen->flip = outer_flip;
   codegen->forward_tail = outer_body;
   if (result != GRX_OK) {
     return result;
@@ -1257,8 +1293,11 @@ static GRX_Result gen_look(Codegen * codegen, const GRX_IRNode * node) {
   // reverse lookbehind, a scan - clears it, and the engine clears the
   // matching runtime field in the same places.
   int outer_body = codegen->forward_tail;
+  int outer_flip = codegen->flip;
   codegen->forward_tail = (node->flags & GRX_IR_LOOK_FORWARD) ? 1 : 0;
+  codegen->flip = 0; // As in gen_non_atomic_look: the body's own direction.
   result = gen(codegen, node->first_child);
+  codegen->flip = outer_flip;
   codegen->forward_tail = outer_body;
   if (result != GRX_OK) {
     return result;
@@ -1469,8 +1508,8 @@ static GRX_Result gen(Codegen * codegen, uint32_t node_index) {
       // start is slot 0 and the whole match is slots 0 and 1. A reversed
       // capture writes its end first, because that is the boundary its body
       // reaches first.
-      uint32_t first = node->a * 2 + (reversed(node) ? 1u : 0u);
-      uint32_t second = node->a * 2 + (reversed(node) ? 0u : 1u);
+      uint32_t first = node->a * 2 + (reversed(codegen, node) ? 1u : 0u);
+      uint32_t second = node->a * 2 + (reversed(codegen, node) ? 0u : 1u);
       GRX_Result result
           = emit(codegen, GRX_OP_SAVE, 0, first, 0, node, NULL);
       if (result == GRX_OK) {
@@ -1643,7 +1682,8 @@ static GRX_Result gen_subroutines(Codegen * codegen) {
     size_t known = codegen->called_count;
     for (size_t i = 0; i < codegen->called_count; i++) {
       if (codegen->called[i] == group
-          && codegen->called_definition[i] == definition) {
+          && codegen->called_definition[i] == definition
+          && codegen->called_reverse[i] == fixup->reverse) {
         known = i;
         break;
       }
@@ -1658,41 +1698,45 @@ static GRX_Result gen_subroutines(Codegen * codegen) {
       if (target == GRX_INDEX_NONE) {
         return fail(codegen, GRX_DIAG_INVALID_RECURSION, NULL);
       }
-      // A subroutine block is generated once and shared by every call to
-      // it, and its instructions step the way its *definition* does. A
+      // A block's instructions step the way its *definition* does, and a
       // group written inside a lookbehind that runs backwards therefore has
-      // a backwards block, and a call from outside would walk the subject
-      // the wrong way: `(*naplb:(a))(?1)` against "aa" is 1-2 in pcre2test
-      // and was 1-1 here, the call having matched nothing and left group
-      // one holding a span outside the match.
+      // a backwards definition. A call from outside it wants a forward one:
+      // `(*naplb:(a))(?1)` against "aa" is 1-2 in pcre2test, and was 1-1
+      // here until 2026-09-24, the call having matched nothing and left
+      // group one holding a span outside the match. That is why the key
+      // above is a triple - the direction is part of what a block *is*, and
+      // the same group may need a copy each way.
       //
-      // Refused rather than answered, because the fix is a second copy of
-      // the block lowered the other way round and the flag says nothing
-      // about where the reversal came from: a lookbehind *inside* the
-      // called group must stay reversed in that copy, and clearing the flag
-      // through the subtree would straighten it too. The other mixture -
-      // a call from inside a lookbehind to a group outside it - is left
-      // alone, because `(a)(*naplb:(?1))` agrees with pcre2test today.
-      // documentation/dialects.md section 6.
+      // The other copy is the same subtree laid out with `flip` set, which
+      // is an XOR on the way down and not a rewrite of the IR flags: a
+      // lookbehind written *inside* the called group looks behind whatever
+      // encloses the call, so its body has to keep the direction lowering
+      // gave it while everything around it turns over. Rewriting the flags
+      // would straighten that too, which is the reason this was refused
+      // rather than answered for as long as it was.
       const GRX_IRNode * definition_node = grx_ir_node(codegen->ir, target);
-      if (definition_node && (definition_node->flags & GRX_IR_REVERSE)
-          && !fixup->reverse) {
-        return fail(codegen, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED,
-            definition_node);
+      if (!definition_node) {
+        return fail(codegen, GRX_DIAG_INTERNAL, NULL);
       }
+      uint32_t defined_reverse
+          = (definition_node->flags & GRX_IR_REVERSE) ? 1u : 0u;
 
       // Reserved before the block is generated, so that a call the block
       // makes to its own group finds the entry already recorded rather than
       // starting a second copy of it.
       codegen->called[codegen->called_count] = group;
       codegen->called_definition[codegen->called_count] = definition;
+      codegen->called_reverse[codegen->called_count] = fixup->reverse;
       codegen->entry[codegen->called_count] = here(codegen);
       codegen->called_count++;
 
+      int outer_flip = codegen->flip;
+      codegen->flip = defined_reverse != fixup->reverse;
       GRX_Result result = gen(codegen, target);
       if (result == GRX_OK) {
         result = emit(codegen, GRX_OP_RET, 0, 0, 0, NULL, NULL);
       }
+      codegen->flip = outer_flip;
       if (result != GRX_OK) {
         return result;
       }

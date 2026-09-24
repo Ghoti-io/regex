@@ -470,20 +470,64 @@ TEST(Perl, DuplicateNamesNeedJOrABranchReset) {
   grx_regex_free(reset.regex);
 }
 
-TEST(Perl, ACallIntoALookbehindsGroupIsRefused) {
-  // A subroutine block is generated once and steps the way its *definition*
-  // does, so a group written inside a lookbehind that runs backwards has a
-  // backwards block. A call from outside it would walk the subject the
-  // wrong way: `(*naplb:(a))(?1)` against "aa" is 1-2 in pcre2test and was
-  // 1-1 here, with group one left holding a span outside the match.
-  EXPECT_EQ(compile_result("(*naplb:(a))(?1)", GRX_SYNTAX_PCRE),
-      GRX_ERR_UNSUPPORTED);
-  EXPECT_EQ(compile_result("(*naplb:(a))b(?1)", GRX_SYNTAX_PCRE),
-      GRX_ERR_UNSUPPORTED);
-  // The lookbehind that runs *forwards* is untouched - its group's block is
-  // forwards too - and so is a call from inside a lookbehind to a group
-  // outside it, which agrees with pcre2test.
+TEST(Perl, ACallIntoALookbehindsGroupGetsItsOwnCopy) {
+  // A subroutine block's instructions step the way its *definition* does,
+  // so a group written inside a lookbehind that runs backwards has a
+  // backwards block. A call from outside it walked the subject the wrong
+  // way: `(*naplb:(a))(?1)` against "aa" is 1-2 in pcre2test and was 1-1
+  // here, with group one left holding a span outside the match. It was
+  // refused outright until 2026-09-24; now the direction is part of the
+  // block's key and the group gets a copy laid out each way.
+  EXPECT_EQ(span_of("(*naplb:(a))(?1)", "aa", GRX_SYNTAX_PCRE), "1-2");
+  EXPECT_EQ(group_of("(*naplb:(a))(?1)", "aa", 1, GRX_SYNTAX_PCRE), "0-1");
+  EXPECT_EQ(span_of("(*naplb:(a))(?1)", "ab", GRX_SYNTAX_PCRE), "nomatch");
+  EXPECT_EQ(span_of("(*naplb:(a))x(?1)", "aaxa", GRX_SYNTAX_PCRE), "2-4");
+  EXPECT_EQ(span_of("(*naplb:(ab))(?1)", "abab", GRX_SYNTAX_PCRE), "2-4");
+  EXPECT_EQ(span_of("(*naplb:((a)b))(?1)", "abab", GRX_SYNTAX_PCRE), "2-4");
+  EXPECT_EQ(span_of("(*naplb:(a|bc))(?1)", "bcbc", GRX_SYNTAX_PCRE), "2-4");
+  EXPECT_EQ(span_of("(*naplb:(?<x>a))(?&x)", "aa", GRX_SYNTAX_PCRE), "1-2");
+  EXPECT_EQ(span_of("(*naplb:(a))(?1)(?1)", "aaa", GRX_SYNTAX_PCRE), "1-3");
+
+  // A lookaround written *inside* the called group keeps the direction
+  // lowering gave it, which is why the copy is an XOR on the way down and
+  // not a rewrite of the flags. The discriminating case is a call in the
+  // other mixture - a group defined forwards, called from inside a
+  // backwards body, so the copy is the reversed one: `(x(?=y))` must go on
+  // looking *ahead* for the "y" there. A copy that straightened the
+  // lookahead along with everything else looks behind from the "x", finds
+  // nothing, and answers no match. pcre2test: 0-1.
+  EXPECT_EQ(span_of("(x(?=y))(*naplb:(?1))", "xy", GRX_SYNTAX_PCRE), "0-1");
+  EXPECT_EQ(span_of("(x(?=y))(*naplb:(?1))", "xyxy", GRX_SYNTAX_PCRE), "0-1");
+  EXPECT_EQ(span_of("(x(?<=zx))(*naplb:(?1))", "zxzx", GRX_SYNTAX_PCRE),
+      "1-2");
+  // The non-atomic spellings take a different path through codegen and
+  // have to clear it in their own place. Without these two the clear in
+  // gen_non_atomic_look() could be deleted and every other assertion here
+  // would still pass. pcre2test: 0-1 and 1-2.
+  EXPECT_EQ(span_of("(x(*napla:y))(*naplb:(?1))", "xy", GRX_SYNTAX_PCRE),
+      "0-1");
+  EXPECT_EQ(span_of("(x(*naplb:zx))(*naplb:(?1))", "zxzx", GRX_SYNTAX_PCRE),
+      "1-2");
+  // And the same shape with the call outside, which refuses on both sides.
+  EXPECT_EQ(span_of("(*naplb:(a(?=b)))(?1)", "abab", GRX_SYNTAX_PCRE),
+      "nomatch");
+  EXPECT_EQ(span_of("(*naplb:(a(?<=xa)))(?1)", "xaxa", GRX_SYNTAX_PCRE),
+      "nomatch");
+
+  // One group called *both* ways in one pattern, which is what makes the
+  // direction part of the block's key rather than a property of the group:
+  // the inner `(?1)` runs backwards and the outer one forwards, and a
+  // cache keyed on the pair alone hands the second call the first's block.
+  // pcre2test: 2-3.
+  EXPECT_EQ(span_of("(*naplb:(a)(?1))(?1)", "aaa", GRX_SYNTAX_PCRE), "2-3");
+  EXPECT_EQ(span_of("(*naplb:(a)(?1))(?1)", "aaaa", GRX_SYNTAX_PCRE), "2-3");
+
+  // The forward-model lookbehind is the same question from the other side,
+  // and it was already right: its group's block is forwards too.
   EXPECT_EQ(span_of("(?<=(a))(?1)", "aa"), "1-2");
+  EXPECT_EQ(span_of("(?<=(a))x(?1)", "axa"), "1-3");
+  // A call from inside a lookbehind to a group outside it, which always
+  // agreed, and a call to a group inside the same lookbehind.
   EXPECT_EQ(span_of("(a)(*naplb:(?1))", "aa"), "0-1");
   EXPECT_EQ(span_of("(*naplb:(a)(?1))b", "aab"), "2-3");
   // And an ordinary call is an ordinary call.

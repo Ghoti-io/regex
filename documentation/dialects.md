@@ -1463,6 +1463,29 @@ What a call *does* keep is its captures: pcre2pattern's rule that the
 values a call set are restored to what they were before it, so
 `^(a|b)(?1)$` over "ab" reports group one as "a" and not "b".
 
+**A call carries its own direction, not its definition's.** A subroutine
+block's instructions step the way the group they were generated from does,
+and a group written inside a reverse lookbehind has a backwards definition.
+`(*naplb:(a))(?1)` over "aa" is 1-2 in pcre2test, and was 1-1 here until
+2026-09-24 - the call matching nothing and leaving group one holding a span
+outside the match - because the one block it had ran backwards. It is now a
+block per (group, definition, direction), the same subtree laid out twice,
+and the cost is the copy.
+
+The copy is an exclusive-or applied on the way down rather than a rewrite of
+the direction flags, and that is the part the flags alone cannot express: a
+lookaround written *inside* the called group sets its body's direction
+absolutely and must keep it while everything around it turns over.
+`(x(?=y))(*naplb:(?1))` over "xy" is 0-1 in pcre2test, and the `(?=y)` there
+is inside a block laid out backwards and still looks ahead. Lookarounds are
+the only construct that sets a direction absolutely, so they are the only
+place the flip is cleared.
+
+One group may be called both ways in one pattern - `(*naplb:(a)(?1))(?1)`,
+2-3 in pcre2test, where the inner call runs backwards and the outer one
+forwards - which is why the direction is part of the key and not a property
+of the group.
+
 ## 6. Deviations
 
 Every place this library knowingly differs from the implementation a
@@ -1501,7 +1524,6 @@ answer.
 | Perl | A match may not begin before the start of the window, so a `\G` written anywhere but first cannot reach behind it | `\G` holds where the previous match ended, and perl leaves the *start of the scan* alone when the assertion is not the first thing in the pattern: with `pos()` at 2, `a{0,2}?\G(?\|(a)\|(b))\1` over \"aaaa\" is 0-4 there - the `a{0,2}?` consuming the two characters the previous iteration already returned - and `ab\Gc` over \"abc\" is 0-3. PCRE2 answers the first 2-4 under `,global` and the same with an explicit `offset=2`, because a match may not begin before the offset it was given, and this library is PCRE2's: `grx_regex_search_ex` is told where the search begins and a span before it is outside what was asked for. The assertion itself is the same in all three - a pattern whose `\G` leads it answers alike - so what differs is where a match is allowed to start. It costs perl matches this library never reports, not merely earlier starts, and the effect compounds: each match perl reaches back for leaves `pos()` somewhere this library's scan never stood, so the next reach-back begins from there. `\w\Ga|b` over "ababaaa" is 1-2 and 3-4 here and in pcre2test under `,global`, and perl reports 1-2, 1-3, 3-4, 3-5, 4-6, 5-7. `tools/oracle/iterate_diff.py` counts these rows | - |
 | Perl | `\Q...\E` quotes, as it does in PCRE2; in perl it is interpolation and a pattern arriving as text has an unknown escape there | perl does the quoting when the *source* is tokenised, so a pattern that reaches the engine in a variable never went through it and `\Q` is an unrecognized escape - passed through as the letter, with a warning. `\Qa.b\E` in a variable matches \"QaXbE\" there and not \"a.b\"; `[\Qa-z\E]` is `[Qa-zE]`, matching \"Q\" and \"b\" and not \"-\"; and `[a-\Qz\E]` is the reversed range a-Q, which perl calls \"Invalid [] range\". pcre2test, which reads its pattern as source, quotes it and matches \"a.b\" alone. A C API has only the text, so following perl would make `\Q` mean the letter Q and silently change every pattern that uses the construct; the feature table's QUOTING row has said Perl has it since it was written. `tools/oracle/perl_diff.py` generates these rows and checks each one against perl's *own* reading - this library's answer to the pattern with `\Q` and `\E` replaced by their letters - rather than excluding them by spelling, so a defect inside a quoted run is still reported. 615 rows of one seed | - |
 | PCRE2 | A script run may mix Han with **two** of Hiragana/Katakana, Hangul and Bopomofo | pcre2 10.46 accepts the mixture its own manual denies. pcre2unicode says a run may hold "a mixture of Hiragana, Katakana, and Han, or a mixture of Hangul and Han, or a mixture of Bopomofo and Han, but not, for example, a mixture of Hangul and Bopomofo and Han", and pcre2test matches that last one. All twenty two- and three-way combinations of U+6F22, U+304B, U+30AB, U+D55C and U+3105 were put to both references: they agree on fourteen - including `Hiragana+Hangul`, which both refuse, so it is not that Han lets anything through - and differ on exactly the six that mix two families. perl 5.40.1 refuses all six, which is UTS #39 section 5.1, and so does this library | - |
-| PCRE2 | A subroutine call to a group defined inside a **non-atomic lookbehind** is refused | a subroutine block is generated once and its instructions step the way its *definition* does, so a group written inside a body that runs backwards has a backwards block and a call from outside it walks the subject the wrong way. `(*naplb:(a))(?1)` against "aa" is 1-2 in pcre2test and was 1-1 here, with group one left holding a span outside the match. The fix is a second copy of the block lowered the other way round, which the reverse flag alone cannot express - a lookbehind *inside* the called group must stay reversed in that copy. The other mixture is untouched and agrees: `(a)(*naplb:(?1))` is a call from inside a lookbehind to a group outside it | `GRX_ERR_UNSUPPORTED` |
 | PCRE2, Perl | `\C`, one code unit | the subject here is code points, and a construct that can land inside a character has no honest approximation | `GRX_ERR_UNSUPPORTED` |
 | PCRE2 | `(*BSR_ANYCRLF)`, `(*BSR_UNICODE)` | built: `\R` is an alternation the parser writes and a directive may only lead the pattern, so the flag is set before the `\R` it governs. `(*BSR_ANYCRLF)\R` refuses a vertical tab and plain `\R` takes one, in pcre2test and here | - |
 | PCRE2 | `(*LIMIT_MATCH=n)` and kin are applied in this library's units, not PCRE2's | the directive is honoured - §7.1 below - but `(*LIMIT_MATCH=n)` lands on `max_steps` and PCRE2's match limit counts calls to its internal match function, so the same `n` buys a different amount of work in each. A pattern that asks for a limit gets one, and the *number* is not portable | `GRX_ERR_LIMIT` |

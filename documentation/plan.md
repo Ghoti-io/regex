@@ -639,6 +639,23 @@ A full sweep of all fourteen POSIX names against pcre2test came with it and
 found more, which `notes/regex/TODO.md` carries: the seam is `punct`,
 `graph`, `print` and `lower`, and it is a separate piece of work.
 
+**The other deviation §6 carried for PCRE2 is built too**, the same day: a
+subroutine call to a group defined inside a non-atomic lookbehind. A block's
+instructions step the way its definition does, and one block cannot serve
+both directions, so the block is now keyed on (group, definition,
+direction). The copy is an exclusive-or applied on the way down rather than
+a rewrite of the IR's direction flags, which is what makes it expressible at
+all: a lookaround written inside the called group sets its body's direction
+absolutely and has to keep it while everything around it turns over.
+[dialects.md](dialects.md) §5.21 carries the rule.
+
+With both of those gone, `perl_diff.library_deviation` had nothing left to
+exclude and is deleted rather than left standing, and so are its controls.
+The generator gained the deciding shape, which it had never built: over 400
+draws it had produced a non-atomic lookbehind in four patterns and a call in
+forty-four and **the two together in none**, so the run's "0 this library
+does not implement" had been an answer about rows it never had.
+
 `tools/oracle/perl_diff.py` generates all five spellings and their clear
 forms, and its exclusion for them is gone rather than left standing over a
 closed gap - a bucket that keeps accepting rows after its reason is gone is
