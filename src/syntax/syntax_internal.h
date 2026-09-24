@@ -508,6 +508,30 @@ typedef struct GRX_Profile {
    * - it is what the dialect's single ASCII flag means.
    */
   int ascii_classes_fold_ascii;
+  /**
+   * A caseless mode widens `\w`, `\d`, `\s` and `\b` by folding the set.
+   *
+   * ECMA-262 22.2.2.9.3 defines WordCharacters(rer) as the basic word
+   * characters *plus* every character that canonicalises to one, so under
+   * `iu` `\w` matches U+017F and U+212A and `\b` reads them as word
+   * characters. That is one dialect's rule and it was written here as
+   * everyone's, which made three references wrong at once. Measured, each
+   * against its own reference, with `\w` narrowed to ASCII so that the
+   * question is the folding and not the width:
+   *
+   * | | `\w` on U+017F | `x\b` on "x" U+212A |
+   * | --- | --- | --- |
+   * | node, `iu` | match | no match - the boundary is gone |
+   * | pcre2test, `(?i)` | no match | 0-1 |
+   * | perl, `/ai` | no match | 0-1 |
+   * | CPython, `(?ai)` | no match | 0-1 |
+   *
+   * The literal and the range are a separate question and fold in all four:
+   * `(?i)s` and `(?i)[a-z]` both match U+017F in pcre2test. So this is the
+   * *shorthand set* alone, which is why it sits beside the shorthand
+   * fields rather than beside the fold ones.
+   */
+  int caseless_widens_shorthands;
   GRX_FoldKind fold;                ///< Caseless folding without UTF.
   GRX_FoldKind fold_utf;            ///< Caseless folding with UTF.
   GRX_PropertyMatch property_match; ///< How `\p{...}` names are spelled.

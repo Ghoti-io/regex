@@ -681,6 +681,36 @@ from it. Perl is neither case: its subject is a Unicode string and its
 shorthands are Unicode with no flag, so `/a` is the interesting direction
 there.
 
+**A caseless mode widens the shorthands in ECMAScript and in no other
+dialect here.** ECMA-262 22.2.2.9.3 defines WordCharacters(rer) as the basic
+word characters *plus* every character that canonicalises to one, so `\w`
+under `iu` gains U+017F and U+212A and `\b` reads them as word characters -
+which is the "plus U+017F, U+212A" in the ECMAScript row above. That is one
+specification's rule and this library applied it to every dialect, which
+made three references wrong at once. Measured with `\w` narrowed to ASCII,
+so that the question is the folding and not the width:
+
+| | `\w` over U+017F | `x\b` over "x" U+212A |
+| --- | --- | --- |
+| node, `iu` | match | no match - U+212A is a word character, so no boundary |
+| pcre2test, `(?i)` | no match | 0-1 |
+| perl, `/ai` | no match | 0-1 |
+| CPython, `(?ai)` | no match | 0-1 |
+
+The written-out forms are a different question and fold in all four:
+`(?i)s` and `(?i)[a-z]` both match U+017F in pcre2test, and so does
+`(?i)\p{Lu}`. So it is a set *named* by a shorthand that is not widened,
+which is `GRX_Profile::caseless_widens_shorthands` and is why the choice is
+made per class item rather than once for the class - a bare `\w` is a class
+of one item, and gating the class-level closure alone left it folded.
+
+`\b`'s word set is derived from the same two things - the shorthand width
+and the fold - and the lowering interns it once for the whole pattern. An
+inline modifier moves them, so that cache is dropped whenever either
+changes: `(?:\b|)(?a)\bx` over U+0100 "x" is 1-2 in perl and was no match
+here, the second assertion reading the Unicode word set the first one had
+left behind.
+
 POSIX bracket classes (`[:alpha:]` and the other eleven) are ASCII in POSIX
 and GNU (C locale), Unicode in Perl, PCRE2 under `UCP`, Ruby, Tcl and Rust;
 RE2 is ASCII. **Vim is neither**: `[[:lower:]]` matches "é" and

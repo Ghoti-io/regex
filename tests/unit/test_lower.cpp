@@ -381,6 +381,79 @@ TEST(Lower, FoldingHappensBeforeNegationAndNotAfter) {
   EXPECT_EQ(spans(Compiled("\\W", "u"), long_s), "0:2");
 }
 
+TEST(Lower, OnlyECMAScriptWidensAShorthandByFolding) {
+  // ECMA-262 22.2.2.9.3 puts every character that canonicalises to a word
+  // character into WordCharacters, so `\w` under `iu` gains U+017F and
+  // U+212A and `\b` reads them as word characters. That is written into one
+  // specification and into no other, and this library applied it to every
+  // dialect - which made three references wrong at once. Measured against
+  // each, with `\w` narrowed to ASCII so that the question is the folding
+  // and not the width: `(?i)\w` over U+017F is no match in pcre2test 10.46,
+  // in perl 5.40.1 under `/ai`, and in CPython 3.13 under `(?ai)`.
+  const std::string long_s = "\xC5\xBF";     // U+017F
+  const std::string kelvin = "\xE2\x84\xAA"; // U+212A
+
+  EXPECT_EQ(spans(Compiled("(?i)\\w", "u", nullptr, GRX_SYNTAX_PCRE),
+      long_s), "nomatch");
+  EXPECT_EQ(spans(Compiled("(?i)\\w", "u", nullptr, GRX_SYNTAX_PCRE),
+      kelvin), "nomatch");
+  // Both of these need the `i` as well as the `a`: without a caseless mode
+  // there is no folding to widen anything, so `(?a)\\w` passes whatever
+  // this rule says and states nothing.
+  EXPECT_EQ(spans(Compiled("(?ai)\\w", "", nullptr, GRX_SYNTAX_PERL),
+      long_s), "nomatch");
+  EXPECT_EQ(spans(Compiled("(?ai)\\w", "", nullptr, GRX_SYNTAX_PYTHON),
+      long_s), "nomatch");
+
+  // The literal and the range are a different question and fold in all
+  // four, which is what says this is the shorthand's rule and not the
+  // class's: `(?i)s` and `(?i)[a-z]` both match U+017F in pcre2test.
+  EXPECT_EQ(spans(Compiled("(?i)s", "u", nullptr, GRX_SYNTAX_PCRE),
+      long_s), "0:2");
+  EXPECT_EQ(spans(Compiled("(?i)[a-z]", "u", nullptr, GRX_SYNTAX_PCRE),
+      long_s), "0:2");
+  // And a shorthand written inside a class takes the shorthand's rule, not
+  // the neighbouring range's.
+  EXPECT_EQ(spans(Compiled("(?i)[\\w]", "u", nullptr, GRX_SYNTAX_PCRE),
+      long_s), "nomatch");
+
+  // `\b` is the same set seen from the other side. `(?i)x\b` over "x"
+  // U+212A is 0-1 in all three references, the boundary being there
+  // because U+212A is not a word character; it was no match here.
+  EXPECT_EQ(spans(Compiled("(?i)x\\b", "u", nullptr, GRX_SYNTAX_PCRE),
+      "x" + kelvin), "0:1");
+  EXPECT_EQ(spans(Compiled("(?i)s\\b", "u", nullptr, GRX_SYNTAX_PCRE),
+      "s" + long_s), "0:1");
+
+  // ECMAScript keeps all of it, which is the control: a change that simply
+  // stopped folding shorthands would pass every line above.
+  EXPECT_EQ(spans(Compiled("\\w", "iu"), long_s), "0:2");
+  EXPECT_EQ(spans(Compiled("[\\w]", "iu"), long_s), "0:2");
+  EXPECT_EQ(spans(Compiled("x\\b", "iu"), "x" + kelvin), "nomatch");
+  EXPECT_EQ(spans(Compiled("s\\b", "iu"), "s" + long_s), "1:3");
+}
+
+TEST(Lower, TheWordSetIsReDerivedWhenAModifierMovesIt) {
+  // `\b` reads a word set that the lowering interns once and hands to every
+  // `\b` in the pattern. An inline modifier moves it, and the cache did not
+  // notice: the second assertion read the set the first one had left.
+  //
+  // U+0100 is a word character to perl's Unicode shorthands and not to its
+  // ASCII ones, so a boundary between it and "x" exists under `/a` and does
+  // not otherwise. Both directions, because one fix could be an accident:
+  // perl 5.40.1 answers 1-2, 1-2, no match and no match for these four.
+  const std::string subject = "\xC4\x80x";  // U+0100 "x"
+
+  EXPECT_EQ(spans(Compiled("(?a)\\bx", "", nullptr, GRX_SYNTAX_PERL),
+      subject), "2:3");
+  EXPECT_EQ(spans(Compiled("(?:\\b|)(?a)\\bx", "", nullptr,
+      GRX_SYNTAX_PERL), subject), "2:3");
+  EXPECT_EQ(spans(Compiled("(?u)\\bx", "", nullptr, GRX_SYNTAX_PERL),
+      subject), "nomatch");
+  EXPECT_EQ(spans(Compiled("(?a)(?:\\b|)(?u)\\bx", "", nullptr,
+      GRX_SYNTAX_PERL), subject), "nomatch");
+}
+
 TEST(Lower, TheTwoFoldingsAreDifferentFunctions) {
   // documentation/dialects.md section 5.8. ECMAScript without `u` uses
   // Canonicalize, which refuses to map a non-ASCII code point into ASCII;

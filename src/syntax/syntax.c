@@ -597,6 +597,10 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     // match U+017F.
     .shorthands = GRX_SHORTHANDS_ECMASCRIPT,
     .shorthands_wide = GRX_SHORTHANDS_ECMASCRIPT,
+    // And the widening the folding does to them is ECMAScript's alone. See
+    // the field: pcre2, perl and CPython all leave `\w` and `\b` where
+    // they are under a caseless flag, and this library did it for them too.
+    .caseless_widens_shorthands = 1,
     .fold = GRX_FOLD_ES_LEGACY,
     .fold_utf = GRX_FOLD_SIMPLE,
     .property_match = GRX_PROPERTY_STRICT,

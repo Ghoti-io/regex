@@ -334,6 +334,14 @@ static GRX_Result item_base_set(Lowering * low, const GRX_ClassItem * item,
       // `/iu` exclude U+017F while `\P{Lu}` under the same flags is the
       // complement of an *unfolded* Lu. The two are different rules and were
       // one rule until Node was asked about `[^\P{Lu}]`.
+      //
+      // And it is ECMAScript's rule, not everyone's. It was written here
+      // unconditionally, which made `(?i)\w` match U+017F in the Perl
+      // family where pcre2test, perl and CPython all answer no match. See
+      // the profile field.
+      if (!low->profile.caseless_widens_shorthands) {
+        return GRX_OK;
+      }
       return grx_charclass_fold_closure(out, low->fold, low->limits);
     }
 
@@ -456,8 +464,19 @@ static GRX_Result evaluate_class(
       // GRX_CLASS_ITEM_NO_FOLD: in vim the same set written as `[a-z]` and
       // as `[[:lower:]]` answers differently under `\c`, so the choice
       // cannot be made once for the class.
-      result = grx_charclass_union(
-          (item->flags & GRX_CLASS_ITEM_NO_FOLD) ? &unfolded : out, &piece,
+      //
+      // A *shorthand* takes that route in every dialect but ECMAScript,
+      // which is the same rule item_base_set applies to the set it builds
+      // and has to be applied again here: the closure below runs over the
+      // whole class, so gating it there alone left a bare `\w` - a class
+      // of one item - folded anyway. `(?i)\w` over U+017F is no match in
+      // pcre2test, perl and CPython and was 0-2 here, while `(?i)[a-z]`
+      // over the same character matches in all four, which is why the
+      // route is the item's and not the class's.
+      const int unfolded_item = (item->flags & GRX_CLASS_ITEM_NO_FOLD)
+          || (item->kind == GRX_CLASS_ITEM_SHORTHAND
+              && !low->profile.caseless_widens_shorthands);
+      result = grx_charclass_union(unfolded_item ? &unfolded : out, &piece,
           low->limits);
     }
     grx_charclass_clear(&piece);
@@ -626,7 +645,7 @@ static GRX_Result word_class(Lowering * low, uint32_t * out_index) {
   grx_charclass_init(&cls, low->ir->allocator);
   GRX_Result result = grx_shorthand_set(
       &cls, low->shorthands, GRX_SHORTHAND_WORD, low->limits);
-  if (result == GRX_OK) {
+  if (result == GRX_OK && low->profile.caseless_widens_shorthands) {
     result = grx_charclass_fold_closure(&cls, low->fold, low->limits);
   }
   if (result == GRX_OK) {
@@ -1575,6 +1594,8 @@ static GRX_Result lower_group(
  * of one node, so the derived values have to move with them.
  */
 static void adopt_options(Lowering * low, uint32_t options) {
+  const GRX_ShorthandSet was_shorthands = low->shorthands;
+  const GRX_FoldKind was_fold = low->fold;
   low->options = options;
   int utf = (options & GRX_OPT_UTF) != 0 || (options & GRX_OPT_UCP) != 0;
   // The shorthands widen on UCP and the folding widens on UTF, which are
@@ -1618,6 +1639,20 @@ static void adopt_options(Lowering * low, uint32_t options) {
         low->fold = GRX_FOLD_FULL_ASCII_APART;
       }
     }
+  }
+
+  // `\b` reads a word set derived from exactly those two, and word_class()
+  // interns it once and hands the same index to every `\b` in the pattern.
+  // That is right only while the two hold still, and an inline modifier
+  // moves them: `(?:\b|)(?a)\bx` over U+0100 "x" is 1-2 in perl and was
+  // no match here, the second assertion reading the Unicode word set the
+  // first one interned - and `(?a)(?:\b|)(?u)\bx` is the same mistake
+  // pointing the other way, no match in perl and a match here. Dropped
+  // rather than rebuilt, because the class table already returns one index
+  // for one set: a pattern whose options move and come back pays a lookup
+  // and gets its first class again.
+  if (low->shorthands != was_shorthands || low->fold != was_fold) {
+    low->word_class = GRX_INDEX_NONE;
   }
 }
 
