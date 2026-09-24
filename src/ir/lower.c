@@ -1142,12 +1142,25 @@ static GRX_Result lower_anchor(
       kind = GRX_ASSERT_NOT_LINE_BOUNDARY;
       break;
 
+    // `\<` and `\>`. Two rules rather than one, and the profile says
+    // which: under GRX_WORD_BOUNDARY_VIM_CLASS these hold where vim's
+    // character class changes rather than where its word set starts or
+    // stops, and then no set is interned at all - the class table is the
+    // whole answer, and `needs_word` stays where it was.
     case GRX_ANCHOR_WORD_START:
+      if (low->profile.word_boundary == GRX_WORD_BOUNDARY_VIM_CLASS) {
+        kind = GRX_ASSERT_WORD_CLASS_START;
+        break;
+      }
       kind = GRX_ASSERT_WORD_START;
       needs_word = 1;
       break;
 
     case GRX_ANCHOR_WORD_END:
+      if (low->profile.word_boundary == GRX_WORD_BOUNDARY_VIM_CLASS) {
+        kind = GRX_ASSERT_WORD_CLASS_END;
+        break;
+      }
       kind = GRX_ASSERT_WORD_END;
       needs_word = 1;
       break;

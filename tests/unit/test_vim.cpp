@@ -26,6 +26,8 @@
 
 #include "test_helpers.h"
 
+#include "../../src/unicode/unicode_internal.h"
+
 namespace {
 
 struct Attempt {
@@ -107,6 +109,30 @@ std::string group(const std::string & pattern, const std::string & subject,
   grx_match_destroy(match);
   grx_regex_free(attempt.regex);
   return answer;
+}
+
+/** One code point, as UTF-8. Every byte of it is the subject to match. */
+std::string utf8(uint32_t codepoint) {
+  std::string out;
+  if (codepoint < 0x80) {
+    out += (char)codepoint;
+  }
+  else if (codepoint < 0x800) {
+    out += (char)(0xC0 | (codepoint >> 6));
+    out += (char)(0x80 | (codepoint & 0x3F));
+  }
+  else if (codepoint < 0x10000) {
+    out += (char)(0xE0 | (codepoint >> 12));
+    out += (char)(0x80 | ((codepoint >> 6) & 0x3F));
+    out += (char)(0x80 | (codepoint & 0x3F));
+  }
+  else {
+    out += (char)(0xF0 | (codepoint >> 18));
+    out += (char)(0x80 | ((codepoint >> 12) & 0x3F));
+    out += (char)(0x80 | ((codepoint >> 6) & 0x3F));
+    out += (char)(0x80 | (codepoint & 0x3F));
+  }
+  return out;
 }
 
 } // namespace
@@ -783,6 +809,85 @@ TEST(Vim, AnAssertionPutsBackTheShadowSpansItsBodyWrote) {
   // same pattern has no match there at all.
   EXPECT_EQ(span("(?=(a))$|(a)\\1", "aa", GRX_SYNTAX_PCRE), "nomatch");
   EXPECT_EQ(span("\\(a\\)\\@=$\\|\\(a\\)\\1", "aa"), "0-1");
+}
+
+// --------------------------------------------------------------------------
+// The word classes
+// --------------------------------------------------------------------------
+
+TEST(Vim, WordBoundariesHoldWhereTheCharacterClassChanges) {
+  // `\<` and `\>` are not the word set's two halves in vim: it sorts every
+  // code point into one of nine classes and they hold where the *class*
+  // changes. So a boundary falls between two characters that are both
+  // 'iskeyword', which no set can see. Every row was asked of vim 9.1.
+  //
+  // U+65E5 is CJK and "x" is Latin: one word ends and another begins
+  // between them, three bytes in.
+  EXPECT_EQ(span("\\>", "\u65e5x"), "3-3");
+  EXPECT_EQ(span("\\<x", "\u65e5x"), "3-4");
+  // Two characters of the same class, and there is no boundary between them
+  // at all - the end of the subject is the only place `\>` holds.
+  EXPECT_EQ(span("^a\\>", "ab"), "nomatch");
+  EXPECT_EQ(span("^\u65e5\\>", "\u65e5\u65e5"), "nomatch");
+  EXPECT_EQ(span("\u65e5\u65e5\\>", "\u65e5\u65e5"), "0-6");
+  // Hiragana, Katakana, Braille, Hangul and emoji are five more classes, so
+  // each of these is a boundary though both sides are word characters.
+  EXPECT_EQ(span("\\>", "\u3042\u30a2"), "3-3");
+  EXPECT_EQ(span("\\>", "\u2801a"), "3-3");
+  EXPECT_EQ(span("\\>", "a\U0001F600"), "1-1");
+  EXPECT_EQ(span("\\>", "\ud55c\u3131"), "3-3");
+  // And the rule the word set already gave: a keyword character next to a
+  // blank or a punctuation mark, and the two ends of the subject.
+  EXPECT_EQ(span("\\<", "!ab"), "1-1");
+  EXPECT_EQ(span("\\>", "ab!"), "2-2");
+  EXPECT_EQ(span("\\>", "ab"), "2-2");
+  EXPECT_EQ(span("\\<", "ab"), "0-0");
+  // Class one and class zero are both "not a word", so nothing holds
+  // between a punctuation mark and a space either way.
+  EXPECT_EQ(span("\\<", "! "), "nomatch");
+  EXPECT_EQ(span("\\>", "! "), "nomatch");
+  // "é" and "µ" are keyword characters at vim's default 'iskeyword', which
+  // is the measurement the class table shares with `\k`.
+  EXPECT_EQ(span("^a\\>", "a\u00e9"), "nomatch");
+  EXPECT_EQ(span("\\>", "\u00b5!"), "2-2");
+}
+
+TEST(Vim, EveryClassFromTwoUpIsAKeywordCharacterAndNothingElseIs) {
+  // Two tables measured separately from the same vim: `\k` is 'iskeyword'
+  // enumerated in the front end, and src/unicode/vim_class.c is
+  // `charclass()` enumerated for the boundaries. The boundaries are only
+  // right if the two agree, because "class two or more" is what stands
+  // where the word set used to - so this asks all 1,114,112 code points
+  // rather than trusting that two enumerations of one option landed in the
+  // same place.
+  Attempt attempt = compile("\\k", GRX_SYNTAX_VIM);
+  ASSERT_EQ(attempt.result, GRX_OK);
+  GRX_Match * match = nullptr;
+  ASSERT_EQ(grx_match_create(attempt.regex, nullptr, &match), GRX_OK);
+  size_t disagreements = 0;
+  uint32_t first = 0;
+  for (uint32_t codepoint = 0; codepoint <= 0x10FFFF; codepoint++) {
+    // The surrogates are written through in both tables: a UTF-8 subject
+    // has none, and vim cannot make one to be asked about.
+    if (codepoint >= 0xD800 && codepoint <= 0xDFFF) {
+      continue;
+    }
+    std::string subject = utf8(codepoint);
+    int matched = 0;
+    ASSERT_EQ(grx_regex_search(attempt.regex, subject.data(), subject.size(),
+                  0, GRX_ENGINE_AUTO, nullptr, match, &matched), GRX_OK);
+    int keyword = matched != 0;
+    int word = grx_vim_char_class(codepoint) >= GRX_VIM_CLASS_KEYWORD;
+    if (keyword != word) {
+      if (!disagreements) {
+        first = codepoint;
+      }
+      disagreements++;
+    }
+  }
+  grx_match_destroy(match);
+  grx_regex_free(attempt.regex);
+  EXPECT_EQ(disagreements, 0u) << "first at U+" << std::hex << first;
 }
 
 int main(int argc, char ** argv) {

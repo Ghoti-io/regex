@@ -53,7 +53,8 @@ static const char * assert_name(uint8_t kind) {
   static const char * const names[GRX_ASSERT_COUNT] = {
     "start-subject", "end-subject", "end-before-newline", "start-line",
     "start-line-interior", "end-line", "word-boundary",
-    "not-word-boundary", "word-start", "word-end", "search-start",
+    "not-word-boundary", "word-start", "word-end",
+    "word-class-start", "word-class-end", "search-start",
     "grapheme-boundary", "not-grapheme-boundary",
     "word-seg-boundary", "not-word-seg-boundary",
     "sentence-boundary", "not-sentence-boundary",

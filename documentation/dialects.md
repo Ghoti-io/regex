@@ -164,8 +164,9 @@ references and worth recording now so nobody builds on the wrong row:
   written before it. It has eleven named classes of its own (`\a`, `\h`,
   `\i`, `\k`, `\f`, `\p`, `\l`, `\u`, `\x`, `\o` and `\d`), each
   with an uppercase complement, and a `\_` prefix that adds the line break
-  to any of them; its word boundaries are `\<` and `\>`, defined from
-  'iskeyword' rather than from `\w`.
+  to any of them; its word boundaries are `\<` and `\>`, which are defined
+  from neither `\w` nor a word set at all but from its nine character
+  classes - section 5.19.
 
 ## 4. What an absent construct does
 
@@ -638,7 +639,7 @@ reads bytes until `PCRE2_UTF` says otherwise.
 | RE2 | ASCII | ASCII | `[\t\n\f\r ]` | `\pL`, `\p{Greek}`: categories and scripts, exact case |
 | Rust | Unicode (UTS #18); ASCII under `(?-u)` | `Nd` | `White_Space` | loose (UAX #44) |
 | Tcl | Unicode `[[:alnum:]_]` | Unicode `[[:digit:]]` | Unicode `[[:space:]]` | none |
-| Vim | `[0-9A-Za-z_]` - and `\<`/`\>` are *not* defined from it, but from 'iskeyword' | `[0-9]` | `[ \t]` - space and tab alone | none |
+| Vim | `[0-9A-Za-z_]` - and `\<`/`\>` are not defined from it, nor from any set: section 5.19 | `[0-9]` | `[ \t]` - space and tab alone | none |
 | Emacs | syntax table: word constituents (**deviation:** treated as `[[:word:]]` = Unicode letters and digits) | none | `\s-` (syntax class), not `\s` | none |
 
 **`UCP` widens the shorthands and `UTF` widens the folding**, and they are
@@ -1208,6 +1209,34 @@ parenthesis -- 1003.2 goofed here"* - and glibc matches `"a)"` with `a)` in
 both. A basic RE's `\)` is still an operator, so an unmatched one is still
 an error; the two questions are about two spellings.
 
+### 5.19 What `\<` and `\>` compare
+
+| Dialect | Rule |
+| --- | --- |
+| GNU, POSIX | the word set's two halves: a word character on one side of the position and not on the other |
+| Vim | the *character class* changes across the position, and the class on the word side is a keyword class |
+
+GNU's two assertions are `\b` split in half, and this library carried them
+that way for every dialect that has them. Vim's are not. It sorts every code
+point into one of **nine** classes - blank, punctuation, keyword, emoji, and
+one each for Braille, Hiragana, Katakana, the CJK ideographs and the Hangul
+syllables - and `\<` and `\>` hold where the class *changes*. So `\>` holds
+between U+65E5 and "x" there, though both are 'iskeyword' characters and no
+word set can see a boundary between them at all.
+
+The two rules agree wherever a word meets something that is not a word,
+which is why this survived a differential of a million rows: the union of
+the classes from the keyword class up is exactly the keyword set - both
+enumerated against vim 9.1, independently, and both 1,108,520 code points.
+What the class rule moves is only a boundary *between* two word characters.
+
+The table is `src/unicode/vim_class.c`, measured with `charclass()` over all
+1,114,112 code points, and it is vim's data rather than Unicode's in the
+same way `src/unicode/display.c` is: 355 ranges of exception to a default of
+"keyword character". A unit test puts every code point to `\k` and to the
+table and requires the two to agree, because the boundary is only as right
+as the two measurements of one option are consistent.
+
 ## 6. Deviations
 
 Every place this library knowingly differs from the implementation a
@@ -1263,7 +1292,6 @@ answer.
 | Emacs | Syntax classes (`\s-`, `\w`) use fixed Unicode definitions, not a syntax table | no syntax table | - |
 | Vim | The subject is a string, not a buffer | vim's help describes matching against a *buffer*, where `.` refuses the line break. `matchstrpos()` over a string is what this library can be, and what its differential asks: there `a.b` matches "a\nb", `[^x]` matches the break, and `^`, `$`, `\_^` and `\_$` hold at the two ends only. The `\_` forms are still distinct, because `\s` refuses a break and `\_s` accepts one | - |
 | Vim | **A base and the combining marks after it are one character there and several here** | vim matches a *composing cluster*: `.` against "a" U+0301 is 0-3 there and 0-1 here, `[a]`, `\w` and `[[:alpha:]]` all take the whole cluster, a literal `a` matches **none** of it, `..` finds only one character in it, and `\%2c` holds nowhere inside it. Measured over 114 rows, and the set of marks is the one this library already carries for `\%23v` - a character of zero display cells. It is not built because it is a matching model rather than a construct: every consuming instruction, in both directions, plus the rule that a match may not begin inside a cluster - and it is the same machinery `\Z` needs. `tools/oracle/vim_diff.py` generates no subject holding one, and says so | - |
-| Vim | **`\<` and `\>` hold where vim's character *class* changes, not merely where a word begins** | vim has more than one word class - `\>` holds between U+65E5 and "x" there and nowhere here, because both are 'iskeyword' characters and this library's boundary is "word on one side, not on the other". Nine distinct classes over 418 ranges, measured by signature against ten probe characters. Not built for the same reason as the row above: it is a second classification of every code point rather than the set the shared assertion carries, and `\<` at the *start* of a word is right either way - the keyword set and "class two or more" are the same 1,106,472 code points. No subject in the differential holds a character outside Latin's class | - |
 | Vim | `\Z` (ignore combining characters) | a rule about normalisation, and the machinery is the composing-cluster row above: `\Z` is that rule with the marks made optional rather than required | `GRX_ERR_UNSUPPORTED` |
 | Vim | `\i`, `\k`, `\f` and `\p` are vim's *defaults* | those four are the options 'isident', 'iskeyword', 'isfname' and 'isprint', and a user who has changed one has a dialect this library does not read. Measured at the defaults, and measured by enumeration: every one of the 1,114,112 code points put to vim for each of the 52 class spellings, which is what a set whose members are decided one at a time needs. They had been *sampled* instead, and three of the four were wrong - `\i` and `\k` both missed U+00B5, and `\k` took in 5,463 code points vim excludes | - |
 | Vim | An unknown `[:name:]` is refused | vim compiles a collection holding one into a pattern that can never match anything at all - `[[:foo:]]*a` does not match "a" - which is a degenerate answer rather than a rule | `GRX_ERR_SYNTAX` |

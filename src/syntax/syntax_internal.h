@@ -188,27 +188,29 @@ typedef enum {
   GRX_SHORTHANDS_ASCII = 0,  ///< `[A-Za-z0-9_]`, `[0-9]`, `[ \t\n\v\f\r]`.
   GRX_SHORTHANDS_ECMASCRIPT, ///< ASCII `\w` and `\d`; ECMAScript's wider `\s`.
   GRX_SHORTHANDS_UNICODE,    ///< UTS #18: `\p{Word}`, `\p{Nd}`, `\p{White_Space}`.
-  /**
-   * ASCII, with the word set taken from Vim's 'iskeyword'.
-   *
-   * Read by nothing but its word boundaries: `\<` and `\>` are defined
-   * from 'iskeyword' there and *not* from `\w`, which is the ASCII four -
-   * so `\w` matching "0" and `\>` holding after it are two different
-   * questions, and U+2028 answers them differently. The other two columns
-   * stay ASCII, which is why this is not GRX_SHORTHANDS_UNICODE: that
-   * value would widen the POSIX bracket classes too, and vim's
-   * `[[:alpha:]]` does not match "é".
-   *
-   * The set is GRX_SET_VIM_KEYWORD, enumerated rather than described. It
-   * was "every code point from U+00C0 up" here until it was measured.
-   *
-   * Vim's own `\w`, `\d` and `\s` do not come through this enum at all:
-   * its front end writes each of its named classes out as explicit ranges,
-   * because vim's `\s` is space and tab alone and no value here says that.
-   */
-  GRX_SHORTHANDS_VIM_KEYWORD,
   GRX_SHORTHANDS_COUNT       ///< Closes the enum; not a definition.
 } GRX_ShorthandSet;
+
+/**
+ * @brief What `\<` and `\>` compare either side of a position.
+ *
+ * documentation/dialects.md section 5.12. GNU's two assertions are the word
+ * set's two halves: a word character on one side and not on the other. Vim's
+ * are not, because vim classifies a code point into one of *nine* classes
+ * rather than two, and its assertions hold where the class changes - so `\>`
+ * holds between U+65E5 and "x" there, where both are keyword characters and
+ * a set can see no boundary at all.
+ *
+ * The distinction is invisible at the start or end of a word, which is why
+ * it survived a differential: the keyword set and "class two or more" are
+ * the same 1,108,520 code points, so only a boundary *between* two word
+ * characters moves.
+ */
+typedef enum {
+  GRX_WORD_BOUNDARY_SET = 0,   ///< Word on one side, not on the other.
+  GRX_WORD_BOUNDARY_VIM_CLASS, ///< Vim: the character class changes.
+  GRX_WORD_BOUNDARY_COUNT      ///< Closes the enum; not a rule.
+} GRX_WordBoundaryRule;
 
 /**
  * @brief What a replacement template may say, and how.
@@ -453,6 +455,7 @@ typedef struct GRX_Profile {
   GRX_DollarRule dollar;            ///< `$` without multiline.
   GRX_NewlineSet newlines;          ///< The line-terminator set.
   GRX_ShorthandSet shorthands;      ///< `\w`, `\d`, `\s` by default.
+  GRX_WordBoundaryRule word_boundary; ///< What `\<` and `\>` compare.
   /**
    * @brief The same, once the dialect's *widening* flag is set.
    *

@@ -767,15 +767,20 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     // the end of the subject ends the loop, so `b*` over "ab" is "<>a<>"
     // and not node's, perl's and `re`'s "<>a<><>".
     .iteration = GRX_ITERATE_ADVANCE_ONE_STOP_AT_END,
-    // Read only by `\<`, `\>` and the POSIX classes: vim's eleven named
-    // classes are built out as explicit sets by the front end, because
-    // three of them have a counterpart here and all three differ - vim's
-    // `\s` is space and tab alone. ASCII_PLUS_HIGH is what the *word
-    // boundaries* need: they are defined from 'iskeyword', whose default
-    // takes in U+00C0 and everything above it, so `\<` does not hold
-    // between "a" and "é". Measured.
-    .shorthands = GRX_SHORTHANDS_VIM_KEYWORD,
-    .shorthands_wide = GRX_SHORTHANDS_VIM_KEYWORD,
+    // Read by the POSIX classes alone, and only for whether they widen:
+    // vim's eleven named classes are built out as explicit sets by the
+    // front end, because three of them have a counterpart here and all
+    // three differ - vim's `\s` is space and tab alone. This row named a
+    // word set of its own while `\<` and `\>` were the word set's two
+    // halves; they are GRX_WORD_BOUNDARY_VIM_CLASS now and read no set at
+    // all, so what is left for this field to say is "not Unicode".
+    .shorthands = GRX_SHORTHANDS_ASCII,
+    .shorthands_wide = GRX_SHORTHANDS_ASCII,
+    // `\<` and `\>` hold where vim's character *class* changes, and it has
+    // nine of them: `\>` holds between U+65E5 and "x" there, where both are
+    // keyword characters. Measured with `charclass()` over every code
+    // point; src/unicode/vim_class.c is the table and the rule.
+    .word_boundary = GRX_WORD_BOUNDARY_VIM_CLASS,
     // SIMPLE, where this row said ASCII. Measured: `\cÉ` matches "é" in
     // vim 9.1, so the folding is Unicode and the page that said otherwise
     // was describing a version of vim without multibyte support.

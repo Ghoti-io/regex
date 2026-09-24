@@ -164,26 +164,32 @@ SUBJECTS = [
     # display cells, and a subject of one-cell characters answers both the
     # same way.
     #
-    # **Two kinds of character are deliberately not here**, and both are
-    # narrowings with a reason rather than oversights. Each is a rule vim
-    # has that this library does not, each was found by putting such a
-    # subject in, and each is written up in documentation/dialects.md
-    # section 6 with its measurement. Generating them would report the
-    # same two gaps thousands of times over and bury whatever else this
-    # tool found, which is the floor `[[:foo:]]` is kept out for.
+    # **One kind of character is deliberately not here**, and it is a
+    # narrowing with a reason rather than an oversight: it is a rule vim
+    # has that this library does not, it was found by putting such a
+    # subject in, and it is written up in documentation/dialects.md
+    # section 6 with its measurement. Generating it would report the same
+    # gap thousands of times over and bury whatever else this tool found,
+    # which is the floor `[[:foo:]]` is kept out for.
     #
     #   - **A composing character.** In vim a base and the marks after it
     #     are *one character*: `.` over "a" U+0301 is 0-3 there and 0-1
     #     here, `[a]` takes the whole cluster, a literal `a` matches none
     #     of it, and `\%2c` holds nowhere inside it.
-    #   - **A character outside Latin's word class.** `\<` and `\>` hold
-    #     where vim's character *class* changes and not merely where a
-    #     word starts, and it has more than one word class: `\>` holds
-    #     between U+65E5 and "x" there and nowhere here, because both are
-    #     'iskeyword' characters.
+    #
+    # The second narrowing that stood here is gone. Characters outside
+    # Latin's word class are in the list below, because `\<` and `\>`
+    # follow vim's nine character classes now rather than a word set: six
+    # of the nine are represented, which is what asks that question.
     "\t\tx",
     "abcabc", "xayaz", "[a]", "a*b", "a+b", "a.c", "(a)", "a|b", "read",
     "rea", "r", "A", "0", "_", "é", "É", "aéb", "~", "^a$",
+    # Six of vim's nine classes, and the boundaries between them: CJK,
+    # Hiragana, Katakana, Hangul, Braille and emoji, each beside Latin and
+    # beside one another. `\>` holds between U+65E5 and "x" there, both of
+    # them keyword characters, which is what no word set could see.
+    "日x", "x日", "日日", "aあ", "あア",
+    "⠁a", "a😀", "한ㄱ", "日 x", "一あb",
 ]
 
 

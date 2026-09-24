@@ -62,17 +62,6 @@ extern "C" {
 typedef enum {
   GRX_SET_ASCII_DIGIT = 0,  ///< `[0-9]`.
   GRX_SET_ASCII_WORD,       ///< `[0-9A-Za-z_]`.
-  /**
-   * `[0-9A-Za-z_]` and every code point from U+00C0 up.
-   *
-   * Vim's 'iskeyword' at its default, which is what `\<` and `\>` are
-   * defined from there, and *not* what its `\w` is - that is the ASCII
-   * four. Enumerated one code point at a time over all 1,114,112 of them,
-   * because a set whose members are decided one at a time cannot be
-   * sampled: this was five ranges ending `{0xC0, 0x10FFFF}` and was wrong
-   * by 5,464, U+00D7, U+00F7 and U+2028 among them.
-   */
-  GRX_SET_VIM_KEYWORD,
   GRX_SET_ASCII_SPACE,      ///< `[ \t\n\v\f\r]`.
   GRX_SET_ES_SPACE,         ///< ECMA-262 WhiteSpace plus LineTerminator.
   GRX_SET_UNICODE_DIGIT,    ///< `\p{Nd}`.

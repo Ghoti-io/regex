@@ -204,6 +204,19 @@ typedef enum {
    */
   GRX_ASSERT_WORD_START,
   GRX_ASSERT_WORD_END,
+  /**
+   * Vim's `\<` and `\>`: the same two halves, over its character classes.
+   *
+   * Vim has nine word classes where this library's word set has one, and its
+   * two assertions hold where the *class* changes rather than where wordness
+   * does: `\>` holds between U+65E5 and "x" there, both of them keyword
+   * characters. Separate kinds rather than a bit on the two above, because a
+   * program dump should say which rule it is running and because these carry
+   * no class index at all - src/unicode/vim_class.c is the whole of the
+   * answer, and no set is interned for them.
+   */
+  GRX_ASSERT_WORD_CLASS_START,
+  GRX_ASSERT_WORD_CLASS_END,
   GRX_ASSERT_SEARCH_START,      ///< `\G`: where this search attempt began.
   /**
    * The four segmentation boundaries, and their negations.

@@ -1039,6 +1039,18 @@ static int assertion_holds(
       return inst->mode == GRX_ASSERT_WORD_BOUNDARY ? boundary : !boundary;
     }
 
+    // Vim's `\<` and `\>`, which ask a different question of the same two
+    // characters: not "is one a word character and the other not" but "do
+    // they belong to different classes", of which vim has nine. No class
+    // index is carried - src/unicode/vim_class.c holds the table - and the
+    // absent character at either end is a blank, which is what vim reads
+    // there too.
+    case GRX_ASSERT_WORD_CLASS_START:
+      return grx_vim_word_start(has_before, before, has_after, after);
+
+    case GRX_ASSERT_WORD_CLASS_END:
+      return grx_vim_word_end(has_before, before, has_after, after);
+
     case GRX_ASSERT_LOOK_LENGTH: {
       // How far is it to the end of this assertion, and can the alternative
       // that follows span it? Outside a forward lookbehind body there is no

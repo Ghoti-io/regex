@@ -178,6 +178,62 @@ uint32_t grx_display_cell_width(uint32_t codepoint, int first);
 size_t grx_display_column_after(
     uint32_t codepoint, size_t column, size_t tabstop, int first);
 
+/** @brief Vim's class for a blank, and for nothing at all. */
+#define GRX_VIM_CLASS_BLANK 0u
+
+/**
+ * @brief Vim's class for a keyword character, and the floor of a word.
+ *
+ * Every class at least this is a word character to `\<` and `\>`; the two
+ * below it, blank and punctuation, are not. The classes above it are the
+ * scripts vim separates - see src/unicode/vim_class.c for the nine.
+ */
+#define GRX_VIM_CLASS_KEYWORD 2u
+
+/**
+ * @brief Which character class a code point is in. Vim's, not Unicode's.
+ *
+ * Measured with vim 9.1's `charclass()` over every code point; see
+ * src/unicode/vim_class.c for the nine classes and why they are not a
+ * property.
+ *
+ * @param codepoint The code point.
+ * @return Vim's class number, GRX_VIM_CLASS_KEYWORD for everything not in
+ *   the table.
+ */
+uint32_t grx_vim_char_class(uint32_t codepoint);
+
+/**
+ * @brief Vim's `\<`: a word character whose class differs from the one
+ *   before it.
+ *
+ * `\<` and `\>` are not the word set's two halves in vim, because vim has
+ * more than one word class: `\>` holds between U+65E5 and "x" there, where
+ * both are keyword characters. GRX_ASSERT_WORD_START is the rule this
+ * library's other dialects take and GRX_ASSERT_WORD_CLASS_START is this one.
+ *
+ * @param has_before Non-zero when a character precedes the position.
+ * @param before That character.
+ * @param has_after Non-zero when a character follows the position.
+ * @param after That character.
+ * @return Non-zero where a word begins.
+ */
+int grx_vim_word_start(
+    int has_before, uint32_t before, int has_after, uint32_t after);
+
+/**
+ * @brief Vim's `\>`: the position after a word character whose class the
+ *   next character does not share.
+ *
+ * @param has_before Non-zero when a character precedes the position.
+ * @param before That character.
+ * @param has_after Non-zero when a character follows the position.
+ * @param after That character.
+ * @return Non-zero where a word ends.
+ */
+int grx_vim_word_end(
+    int has_before, uint32_t before, int has_after, uint32_t after);
+
 /**
  * @brief Simple_Uppercase_Mapping, or the code point where there is none.
  *

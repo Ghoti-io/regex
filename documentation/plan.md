@@ -605,14 +605,13 @@ enumerated against vim a code point at a time, and so are its seven own
 set `\<` and `\>` read - which is 'iskeyword' and not `\w`, and was five
 ranges ending `{0xC0, 0x10FFFF}` and wrong by 5,464 code points.
 
-Two rules remain unbuilt and are in [dialects.md](dialects.md) §6 with
-their measurements, because each is a matching model rather than a
-construct: **a base and the combining marks after it are one character** in
-vim - which is the machinery `\Z` needs too - and **`\<` and `\>` hold
-where its character class changes**, of which it has nine. Both were found
-by widening the differential's subjects, which is where they had never
-looked, and the subjects that expose them are out again so that one
-unbuilt rule does not bury the rest. They are WP-44 and WP-45 below.
+One rule remains unbuilt and is in [dialects.md](dialects.md) §6 with its
+measurement, because it is a matching model rather than a construct: **a
+base and the combining marks after it are one character** in vim, which is
+the machinery `\Z` needs too. It is WP-44 below, and the differential's
+subjects hold no composing character until it lands. The second of the
+pair, **`\<` and `\>` over vim's nine character classes**, is WP-45 and is
+built: its subjects are back in the differential.
 
 **WP-37 Tcl** (the `TCL_ARE` match preference is an engine mode, *engines,
 M*), **WP-38 Emacs**.
@@ -629,15 +628,24 @@ match may not begin inside a cluster. `\Z` is the same machinery with the
 marks made optional, so the two ship together. The differential's subjects
 hold no composing character until this lands.
 
-**WP-45 Vim's word classes** (*lowering and the two engines, S*). `\<` and
-`\>` hold where vim's character *class* changes and not merely where a
-word begins - `\>` holds between U+65E5 and "x" there and nowhere here,
-because both are 'iskeyword' characters. Nine classes over 418 ranges,
-measured by signature against ten probe characters. `\<` at the start of a
-word is right either way, the keyword set and "class two or more" being
-the same 1,106,472 code points, so what this changes is the boundary
-*between* two word characters. A flag on the word-boundary instruction and
-a class table beside the width one.
+**WP-45 Vim's word classes**: **built 2026-09-23**. `\<` and `\>` hold
+where vim's character *class* changes and not merely where a word begins -
+`\>` holds between U+65E5 and "x", because both are 'iskeyword' characters
+and a word set can see no boundary between two of those. Nine classes,
+`charclass()` asked for every one of the 1,114,112 code points rather than
+the signature sampling that first found the rule: 355 ranges of exception
+to "keyword character" in `src/unicode/vim_class.c`, beside the width
+table it is shaped like. Two assertion kinds rather than a flag, so that a
+program dump says which rule it is running, chosen by a profile axis
+([dialects.md](dialects.md) §5.19).
+
+It removed a table rather than adding one. `\<` and `\>` were the only
+readers of the word set the vim row named, so `GRX_SET_VIM_KEYWORD` and
+`GRX_SHORTHANDS_VIM_KEYWORD` are gone and the copy that remains is the
+front end's, where `\k` and `[:keyword:]` read it. That the two
+enumerations agree - 1,108,520 code points, measured on different days
+through different vim functions - is what a unit test now asserts a code
+point at a time, because the boundary is only as right as their agreement.
 
 ### Phase 8: performance and translation
 
