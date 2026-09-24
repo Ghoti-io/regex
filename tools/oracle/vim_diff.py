@@ -434,6 +434,15 @@ def is_forward_reference_artifact(pattern, them, us):
     than a rule a second implementation could follow - the same category as
     the two `reference-defect` records in tests/data/vectors/known-gaps.txt.
 
+    The bound acquits, which is the opposite of what the byte-bounded
+    lookbehind did to lookbehind_with_backreference() below and so was
+    measured rather than assumed: `\\1\\(a\\)\\@1<=`,
+    `\\1\\(a\\)\\@2<=`, `\\1\\(a\\)\\@2<!` and
+    `\\1\\(a\\)\\@10<=` are all "E65" in both of vim's engines, as
+    here. So the substring test below is the whole class: it is the
+    *unbounded* postfix lookbehind and nothing else that vim compiles a
+    forward reference in front of.
+
     Counted and reported rather than dropped silently, so that the number
     moving is visible.
     """
@@ -613,7 +622,12 @@ def is_line_number_star(pattern, them, us):
 
     Three answers come out of it, which is why this looks at ours as well:
 
-      - vim finds nothing where this library matches the empty string;
+      - vim finds nothing where this library matches. That is the empty
+        string the repeat gives when the construct is the whole pattern,
+        and whatever the rest of the pattern matches around it otherwise:
+        `\\%23l*a` over "a" is no match there and 0-1 here. So a span
+        of ours is not required to be empty on this arm, and the check
+        for an empty one below is on the arm where vim *did* match;
       - vim finds a *longer* match, another branch having won because the
         first offers nothing - `\\%23l*\\|\\x` over "a" is 0-1 there and
         0-0 here;
