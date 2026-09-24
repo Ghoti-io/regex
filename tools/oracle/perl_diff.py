@@ -297,7 +297,7 @@ def trim_unset(line):
     return " ".join(fields)
 
 
-BOUNDARY_FIRST = re.compile(r"\\[bB]\{\s*(?:wb|gcb|g|sb|lb)\s*\}")
+BOUNDARY_FIRST = re.compile(r"(?:\(\?:\))*\\[bB]\{\s*(?:wb|gcb|g|sb|lb)\s*\}")
 
 
 def boundary_end_of_subject(pattern, them, subject, ours):
@@ -308,6 +308,12 @@ def boundary_end_of_subject(pattern, them, subject, ours):
     every match. In the first, perl finds nothing where this library finds
     the empty span at the end; in the second, perl's list is this library's
     without its last entry, and that entry is the empty span at the end.
+
+    An empty *non-capturing* group may stand in front of the assertion and
+    the defect is the same: `(?:)\\b{lb}` against "a" is no match in perl
+    where `()\\b{lb}` is 1-1, so the widening stops at that one spelling.
+    `x*\\b{lb}` is 1-1 there too - a quantifier in that position defeats
+    whatever optimisation this is - so both of those are compared as usual.
     """
     if subject is None or ours is None or not BOUNDARY_FIRST.match(pattern):
         return False
