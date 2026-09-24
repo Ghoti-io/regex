@@ -696,6 +696,16 @@ UCP in PCRE2. A non-UTF subject needs no narrower set: it is bytes, the
 members above 0xFF match nothing there, and that is the same truncation
 pcre2 does for an 8-bit pattern.
 
+**`[[:xdigit:]]` widens under UCP too**, which is easy to miss because the
+widening is not a property. It is 44 code points: the 22 ASCII hexadecimal
+digits and their fullwidth forms, U+FF10-U+FF19, U+FF21-U+FF26 and
+U+FF41-U+FF46. Swept a code point at a time over all 1,112,064 of them in
+pcre2test 10.46 under `utf,ucp` and in perl with the subject upgraded - the
+same 44 in both. This library answered the ASCII 22 under UCP until
+2026-09-24: the table for the name has no property beside it, so the narrow
+ranges fell through with nothing to widen them and a plausible answer came
+out. Nothing refused, nothing logged.
+
 **A caseless mode widens the shorthands in ECMAScript and in no other
 dialect here.** ECMA-262 22.2.2.9.3 defines WordCharacters(rer) as the basic
 word characters *plus* every character that canonicalises to one, so `\w`

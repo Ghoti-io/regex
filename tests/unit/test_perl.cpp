@@ -1031,6 +1031,34 @@ TEST(Perl, UcpWidensThePosixClassesItCanAndRefusesTheOnesItCannot) {
   EXPECT_TRUE(search("(*UTF)(*UCP)^[[:graph:]]$", "\xC3\xA9").matched);
   EXPECT_FALSE(search("(*UTF)(*UCP)^[[:graph:]]$", " ").matched);
   EXPECT_TRUE(search("(*UTF)(*UCP)^[[:print:]]$", " ").matched);
+
+  // `xdigit` widens to exactly 44 code points: the 22 ASCII hexadecimal
+  // digits and their fullwidth forms, and nothing else. Swept a code point
+  // at a time over all 1,112,064 in pcre2test 10.46 and in perl - same
+  // count, same six ranges - because no property names this set and a
+  // written-out constant has to be checked against something.
+  //
+  // It answered the ASCII 22 under UCP until 2026-09-24, which is the
+  // failure mode this class of code has: not a refusal, not a wrong
+  // property, just the narrow table falling through with nothing to widen
+  // it and a plausible answer coming out.
+  EXPECT_TRUE(search("(*UTF)(*UCP)^[[:xdigit:]]$", "f").matched);
+  EXPECT_TRUE(search("(*UTF)(*UCP)^[[:xdigit:]]$", "\xEF\xBC\x90").matched);
+  EXPECT_TRUE(search("(*UTF)(*UCP)^[[:xdigit:]]$", "\xEF\xBC\xA6").matched);
+  EXPECT_TRUE(search("(*UTF)(*UCP)^[[:xdigit:]]$", "\xEF\xBD\x86").matched);
+  // One past the end of each of the two letter ranges: U+FF27 is fullwidth
+  // "G" and U+FF47 is fullwidth "g". Both boundaries, because a table
+  // written out by hand is exactly where an off-by-one lives - the first
+  // draft of this test asked about U+FF06 and caught its own typo.
+  EXPECT_FALSE(search("(*UTF)(*UCP)^[[:xdigit:]]$", "\xEF\xBC\xA7").matched);
+  EXPECT_FALSE(search("(*UTF)(*UCP)^[[:xdigit:]]$", "\xEF\xBD\x87").matched);
+  // And U+0661, which `[[:digit:]]` takes under UCP and this does not.
+  EXPECT_FALSE(search("(*UTF)(*UCP)^[[:xdigit:]]$", "\xD9\xA1").matched);
+  EXPECT_TRUE(search("(*UTF)(*UCP)^[[:digit:]]$", "\xD9\xA1").matched);
+
+  // The control: without UCP it is the ASCII 22 again.
+  EXPECT_FALSE(search("(*UTF)^[[:xdigit:]]$", "\xEF\xBC\x90").matched);
+  EXPECT_TRUE(search("(*UTF)^[[:xdigit:]]$", "f").matched);
 }
 
 TEST(Perl, AVersionConditionIsAnsweredWhenThePatternIsRead) {

@@ -287,6 +287,24 @@ static GRX_Result posix_class_named_set(Lowering * low, const char * name,
     return GRX_OK;
   }
 
+  if (wide && strcmp(name, "xdigit") == 0) {
+    // A written-out constant, like `\h` and `\v`, because it is one: the
+    // whole of it is the 22 ASCII hexadecimal digits and their fullwidth
+    // forms, and no property names that. Swept a code point at a time over
+    // all 1,112,064 of them, in pcre2test 10.46 under `utf,ucp` and in perl
+    // with the subject upgraded: 44 members each, the same 44, these six
+    // ranges. This library answered the ASCII 22 under UCP - not a refusal
+    // and not a property, just the narrow table falling through - which is
+    // the "wrong answer wearing a right one's clothes" the comment above
+    // this function warns about, for the one name that comment did not
+    // reach. PCRE2's `(?aT)` exists to narrow exactly this class and
+    // `[[:digit:]]` back again, so it had nothing to narrow until now.
+    static const struct Range wide_xdigit[] = {{'0', '9'}, {'A', 'F'},
+        {'a', 'f'}, {0xFF10, 0xFF19}, {0xFF21, 0xFF26}, {0xFF41, 0xFF46}};
+    ranges = wide_xdigit;
+    count = sizeof(wide_xdigit) / sizeof(*wide_xdigit);
+  }
+
   if (wide && property) {
     GRX_Result result = add_property_named(low, property, out);
     if (result == GRX_OK && second) {
