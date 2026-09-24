@@ -56,6 +56,15 @@ SHARED_ATOMS = [
     # axis, GRX_Profile::posix_case_classes_collapse_wide, so both rows of
     # this gate compare it against their own reference.
     "[[:lower:]]",
+    # `graph`, `print` and `word`, which had no atom at all until
+    # 2026-09-24. The three of them are where perl and pcre2 disagree with
+    # each other by the widest margins in this library - 137,468 code points
+    # for `graph` and 1,513 for `word` - and both rows of this gate ran
+    # clean for as long as nothing here spelled them. `[[:word:]]` beside
+    # `\w` on purpose: they are one set in both references, and a profile
+    # axis that reached one spelling and missed the other would pass every
+    # `\w` row.
+    "[[:graph:]]", "[[:print:]]", "[[:word:]]", "[[:^graph:]]",
     "\\d", "\\D", "\\w", "\\W", "\\s", "\\S",
     # Groups, named and not.
     "(a)", "(?:a)", "(?<n>a)", "(?'m'a)", "(a|b)", "(a|)", "()",
@@ -257,7 +266,26 @@ PCRE_ONLY = [
 # no subject to separate it is a pattern that compiles and proves nothing.
 SUBJECTS = ["", "a", "b", "ab", "aab", "abc", "aaa", "a.b", "A", "AB", "aA",
             "\n", "a\nb", "abab", "ababaaa", "aaaa", "a b", "é", "ab\n",
-            "\u017f", "x\u212a", "\u0661", "\u00a0", "\uff10"]
+            "\u017f", "x\u212a", "\u0661", "\u00a0", "\uff10",
+            # The code points where perl and pcre2 disagree with each other
+            # about `\w` and `[[:graph:]]`, which is what the profile's
+            # word_set and the two graph fields exist to answer. Every one
+            # of them was added on 2026-09-24 *after* a hand sweep found the
+            # defects, because this run reported 0 disagreements over 256,320
+            # cases while three of the four classes were wrong: none of the
+            # 24 subjects above was a letter-number, a non-spacing mark, a
+            # connector, a private-use code point or a bidi isolate.
+            #
+            # Paired with an "a" so that `\b` is asked as well as `\w` -
+            # a boundary needs two sides, and a one-character subject can
+            # only ever be the start of the string.
+            "\u00b2", "a\u00b2",   # No: pcre2's `\w`, not perl's
+            "\u0903", "a\u0903",   # Mc: perl's `\w`, not pcre2's
+            "\u203f", "a\u203f",   # Pc: both, and not `re`'s
+            "\u24b6", "a\u24b6",   # So and Alphabetic: perl's, not pcre2's
+            "\u2160",               # Nl: both, and the 2026-09-24 `L` fix
+            "\ue000",               # Co: perl's `[[:graph:]]`, not pcre2's
+            "\u2066", "\u180e"]    # Cf: dropped from pcre2's graph by name
 
 # `x` is left out on purpose: grx_match maps flag letters to GRX_Option bits
 # and has no GRX_OPT_EXTENDED among them, so a row with `x` would be asking

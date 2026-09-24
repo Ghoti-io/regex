@@ -1135,17 +1135,134 @@ TEST(Perl, TheWidePosixClassesWereSweptAgainstBothReferences) {
   // `Alphabetic` carries `Nl`, and using `L` dropped 236 code points that
   // both references keep.
   const char * roman_one = "\xE2\x85\xA0"; // U+2160, gc=Nl
-  EXPECT_TRUE(search("(*UTF)(*UCP)^\\w$", roman_one).matched);
-  EXPECT_TRUE(search("(*UTF)(*UCP)^[[:word:]]$", roman_one).matched);
-  EXPECT_TRUE(search("(*UTF)(*UCP)^[[:alpha:]]$", roman_one).matched);
+  EXPECT_TRUE(search("^\\w$", roman_one, GRX_SYNTAX_PERL).matched);
+  EXPECT_TRUE(search("^[[:word:]]$", roman_one, GRX_SYNTAX_PERL).matched);
+  EXPECT_TRUE(search("^[[:alpha:]]$", roman_one, GRX_SYNTAX_PERL).matched);
   // `\b` is defined from `\w`, so it moved with it: there is no boundary
   // between a Roman numeral and a letter now, and there was one.
-  EXPECT_FALSE(search("(*UTF)(*UCP)\\bx", "\xE2\x85\xA0x").matched);
-  EXPECT_TRUE(search("(*UTF)(*UCP)\\bx", " x").matched);
+  EXPECT_FALSE(search("\\bx", "\xE2\x85\xA0x", GRX_SYNTAX_PERL).matched);
+  EXPECT_TRUE(search("\\bx", " x", GRX_SYNTAX_PERL).matched);
   // And the narrowing still reaches it, which is what says the set moved
   // rather than the test being satisfied by something wider.
   EXPECT_FALSE(search("(*UTF)(*UCP)(?aW)^\\w$", roman_one).matched);
   EXPECT_FALSE(search("(*UTF)^\\w$", roman_one).matched);
+}
+
+// The wide classes are not one set shared by two dialects, and four of the
+// fourteen names plus `\w` and `\h` are where that shows. PCRE2 spells its
+// wide classes with general categories and perl with the derived properties
+// UTS #18 names; PCRE2 also keeps U+180E a space, which it was until
+// Unicode 6.3, and perl does not.
+//
+// Every row was measured a code point at a time against pcre2test 10.46 and
+// against perl on 2026-09-24, over the 286,719 code points those two and UCD
+// 17.0.0 all call assigned. Restricting to that intersection is the whole
+// reason the figures mean anything: unrestricted, this library knows 4,803
+// code points pcre2 has never heard of and the comparison measures the
+// Unicode release instead of the rule. With the profile axes set, all 28
+// dialect/name pairs and all 16 dialect/shorthand pairs agree, less four
+// known version artifacts - U+0295, `Ll` here and `Lo` in UCD 17.0.0, and
+// 33 combining Latin letters that gained Other_Alphabetic in 17.0.0. node,
+// whose Unicode is also 17.0, sides with this library on all 34.
+TEST(Perl, TheWideClassesAreEachDialectsOwnAndNotOneSharedSet) {
+  struct {
+    const char * label;
+    const char * subject;
+    const char * pattern;
+    bool pcre;
+    bool perl;
+  } cases[] = {
+    // `[[:alpha:]]` is `\p{L}` in PCRE2 and `\p{Alphabetic}` in perl, so
+    // every member of Other_Alphabetic parts them: a letter-number, a
+    // circled letter, a spacing mark.
+    {"U+2160 Nl", "\xE2\x85\xA0", "^[[:alpha:]]$", false, true},
+    {"U+24B6 So", "\xE2\x92\xB6", "^[[:alpha:]]$", false, true},
+    {"U+0903 Mc", "\xE0\xA4\x83", "^[[:alpha:]]$", false, true},
+    // ...and a titlecase letter and a modifier letter are `L`, so they are
+    // in both and would pass whichever spelling were used. Present so that
+    // the rows above are known to be about the *property* and not about
+    // this library refusing everything unusual.
+    {"U+01C5 Lt", "\xC7\x85", "^[[:alpha:]]$", true, true},
+    {"U+02B0 Lm", "\xCA\xB0", "^[[:alpha:]]$", true, true},
+    // `[[:alnum:]]` is `L` plus `N` there, so a letter-number is alnum in
+    // PCRE2 while not being alpha - the one place the two names part.
+    {"U+2160 alnum", "\xE2\x85\xA0", "^[[:alnum:]]$", true, true},
+    {"U+24B6 alnum", "\xE2\x92\xB6", "^[[:alnum:]]$", false, true},
+    // `[[:lower:]]`/`[[:upper:]]` are `Ll`/`Lu` there and Lowercase/
+    // Uppercase here: Other_Lowercase carries the modifier letters and the
+    // small Roman numerals, Other_Uppercase the circled capitals.
+    {"U+02B0 lower", "\xCA\xB0", "^[[:lower:]]$", false, true},
+    {"U+2170 lower", "\xE2\x85\xB0", "^[[:lower:]]$", false, true},
+    {"U+24B6 upper", "\xE2\x92\xB6", "^[[:upper:]]$", false, true},
+    {"U+2160 upper", "\xE2\x85\xA0", "^[[:upper:]]$", false, true},
+    {"U+00E9 lower", "\xC3\xA9", "^[[:lower:]]$", true, true},
+    {"U+00C9 upper", "\xC3\x89", "^[[:upper:]]$", true, true},
+    // `\w` is `\p{L}\p{N}\p{Mn}\p{Pc}` there and Annex C's here. `No` is
+    // PCRE2's and not perl's; `Mc`, `Me` and the alphabetic `So` are
+    // perl's and not PCRE2's. Neither set contains the other.
+    {"U+00B2 No", "\xC2\xB2", "^\\w$", true, false},
+    {"U+0903 Mc", "\xE0\xA4\x83", "^\\w$", false, true},
+    {"U+24B6 So", "\xE2\x92\xB6", "^\\w$", false, true},
+    {"U+200C JC", "\xE2\x80\x8C", "^\\w$", false, true},
+    {"U+0301 Mn", "\xCC\x81", "^\\w$", true, true},
+    {"U+203F Pc", "\xE2\x80\xBF", "^\\w$", true, true},
+    // `[[:word:]]` is the same set as `\w` in both references, so every row
+    // above holds for it too. Two of them here, because an axis that
+    // reached one spelling and not the other would pass all of the above.
+    {"U+00B2 word", "\xC2\xB2", "^[[:word:]]$", true, false},
+    {"U+0903 word", "\xE0\xA4\x83", "^[[:word:]]$", false, true},
+    // `[[:graph:]]` takes private use in perl and not in PCRE2 - 137,468
+    // code points, the widest disagreement between them anywhere here -
+    // and PCRE2 drops six `Cf` characters that perl keeps.
+    {"U+E000 Co", "\xEE\x80\x80", "^[[:graph:]]$", false, true},
+    {"U+E000 print", "\xEE\x80\x80", "^[[:print:]]$", false, true},
+    {"U+2066 LRI", "\xE2\x81\xA6", "^[[:graph:]]$", false, true},
+    {"U+061C ALM", "\xD8\x9C", "^[[:graph:]]$", false, true},
+    {"U+00AD SHY", "\xC2\xAD", "^[[:graph:]]$", true, true},
+    // U+180E is the six-character list's odd one: PCRE2 drops it from
+    // `graph` and keeps it in `print`, because `print` is `graph` plus the
+    // space separators and PCRE2 still classes it as one.
+    {"U+180E graph", "\xE1\xA0\x8E", "^[[:graph:]]$", false, true},
+    {"U+180E print", "\xE1\xA0\x8E", "^[[:print:]]$", true, true},
+    // ...and that same classing reaches four space spellings in PCRE2 and
+    // none in perl. `\v` takes it in neither, which is what says this is
+    // one code point's category and not a blanket widening.
+    {"U+180E \\h", "\xE1\xA0\x8E", "^\\h$", true, false},
+    {"U+180E \\s", "\xE1\xA0\x8E", "^\\s$", true, false},
+    {"U+180E blank", "\xE1\xA0\x8E", "^[[:blank:]]$", true, false},
+    {"U+180E space", "\xE1\xA0\x8E", "^[[:space:]]$", true, false},
+    {"U+180E \\v", "\xE1\xA0\x8E", "^\\v$", false, false},
+    {"U+00A0 \\h", "\xC2\xA0", "^\\h$", true, true},
+  };
+
+  for (const auto & row : cases) {
+    // PCRE2 needs both verbs; perl's shorthands are Unicode either way, and
+    // its subject is text in every mode.
+    std::string pcre_pattern = std::string("(*UTF)(*UCP)") + row.pattern;
+    EXPECT_EQ(search(pcre_pattern, row.subject, GRX_SYNTAX_PCRE).matched,
+        row.pcre) << row.label << "  " << row.pattern << "  PCRE";
+    EXPECT_EQ(search(row.pattern, row.subject, GRX_SYNTAX_PERL).matched,
+        row.perl) << row.label << "  " << row.pattern << "  PERL";
+  }
+
+  // `\b` is defined from `\w`, so the word-set axis has to reach it. U+00B2
+  // is a word character in PCRE2 and not in perl, so "a²" holds a boundary
+  // in one dialect and not the other - and a set that moved while `\b` kept
+  // its own copy would answer the same in both.
+  EXPECT_FALSE(search("(*UTF)(*UCP)a\\b", "a\xC2\xB2", GRX_SYNTAX_PCRE).matched);
+  EXPECT_TRUE(search("a\\b", "a\xC2\xB2", GRX_SYNTAX_PERL).matched);
+  // ...and the other way round, so neither answer is "no boundary ever".
+  EXPECT_TRUE(search("(*UTF)(*UCP)a\\b", "a\xE0\xA4\x83", GRX_SYNTAX_PCRE).matched);
+  EXPECT_FALSE(search("a\\b", "a\xE0\xA4\x83", GRX_SYNTAX_PERL).matched);
+
+  // Python is the third word set, and the one neither of the other two can
+  // reach: `re`'s `\w` is `isalnum` plus `_`, so it takes `No` with PCRE2
+  // and refuses every mark, and refuses the connectors that are not `_`.
+  EXPECT_TRUE(search("^\\w$", "\xC2\xB2", GRX_SYNTAX_PYTHON).matched);
+  EXPECT_FALSE(search("^\\w$", "\xCC\x81", GRX_SYNTAX_PYTHON).matched);
+  EXPECT_FALSE(search("^\\w$", "\xE2\x80\xBF", GRX_SYNTAX_PYTHON).matched);
+  EXPECT_TRUE(search("^\\w$", "_", GRX_SYNTAX_PYTHON).matched);
+  EXPECT_TRUE(search("^\\w$", "\xE2\x85\xA0", GRX_SYNTAX_PYTHON).matched);
 }
 
 TEST(Perl, AVersionConditionIsAnsweredWhenThePatternIsRead) {

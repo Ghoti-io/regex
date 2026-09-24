@@ -706,13 +706,37 @@ wrong, and none of the three could be seen from the conformance corpus:
 | `graph`, `print` | everything but `C` and `Z` | the format characters stay: the excluded set is `Cc`, `Cn`, `Cs`, `Co` and `Z`, which is 164 code points both references keep |
 | `word`, and `\w` and `\b` with it | `L` ∪ `M` ∪ `Nd` ∪ `Pc` ∪ join controls | UTS #18 Annex C spells the first term `\p{alpha}`, which is `Alphabetic` and carries `Nl`: 236 code points, the Roman numerals among them |
 
-Two differences that remain are the references disagreeing with each other,
-and are in section 6: perl's `[[:graph:]]` and `[[:print:]]` take the
-137,468 private-use code points and pcre2test's do not, and pcre2's `\w`
-takes `No` where perl's does not. One is a *version* difference and not a
-deviation at all: U+0295 is `Ll` in both references and `Lo` in UCD 17.0.0,
-so `[[:lower:]]` here refuses a code point they accept, and the newer table
-is right.
+**The classes are per-dialect, not one shared set.** The sweep above was
+repeated on 2026-09-24 with each dialect compared against *its own*
+reference rather than against both, which is a different question and had a
+different answer: six more names were wrong for PCRE2, and the reason is one
+sentence - **PCRE2 spells its wide classes with general categories where
+perl uses the derived properties UTS #18 names**. Four profile axes carry
+it, and with them all 28 dialect/name pairs and all 16 dialect/shorthand
+pairs agree:
+
+| Axis | PCRE2 | Perl |
+| --- | --- | --- |
+| `alpha`, `alnum`, `lower`, `upper` | `L`, `L`∪`N`, `Ll`, `Lu` | `Alphabetic`, `Alphabetic`∪`Nd`, `Lowercase`, `Uppercase` - 1,694, 2,373, 312 and 120 code points apart |
+| `\w`, `[[:word:]]`, `\b` | `L`∪`N`∪`Mn`∪`Pc` | Annex C's `alpha`∪`M`∪`Nd`∪`Pc`∪join controls - 1,513 apart, and neither set contains the other |
+| `graph`, `print` | no private use, and six `Cf` dropped by name | private use counts, and all six `Cf` stay - 137,468 and 6 |
+| `\h`, `\s`, `blank`, `space` | U+180E is a space, as it was before Unicode 6.3 | it is not |
+
+Python's `re` is a third word set and not a variant of either: `isalnum`
+plus `_`, which takes `No` with PCRE2 and refuses every mark and every
+connector but the underscore. It was Annex C's set here until 2026-09-24,
+wrong by 3,506 code points.
+
+The comparisons are restricted to the 286,719 code points perl 5.40.1,
+pcre2test 10.46 and UCD 17.0.0 all call assigned, and that restriction is
+what makes the figures mean anything: unrestricted, this library knows 4,803
+code points pcre2 has not heard of and 10,615 perl has not, and a sweep
+measures the Unicode release rather than the rule. Four differences survive
+the restriction and all four are *version* differences rather than
+deviations: U+0295 is `Ll` in both references and `Lo` in UCD 17.0.0, and 33
+combining Latin letters gained Other_Alphabetic in 17.0.0, so `[[:lower:]]`
+and `[[:alpha:]]` here answer differently for them. node, whose Unicode is
+also 17.0, sides with this library on all 34.
 
 **`[[:xdigit:]]` widens under UCP too**, which is easy to miss because the
 widening is not a property. It is 44 code points: the 22 ASCII hexadecimal
@@ -1561,8 +1585,6 @@ answer.
 | PCRE2 | `(*LIMIT_MATCH=n)` and kin are applied in this library's units, not PCRE2's | the directive is honoured - §7.1 below - but `(*LIMIT_MATCH=n)` lands on `max_steps` and PCRE2's match limit counts calls to its internal match function, so the same `n` buys a different amount of work in each. A pattern that asks for a limit gets one, and the *number* is not portable | `GRX_ERR_LIMIT` |
 | PCRE2 | A limit directive whose number does not fit a `size_t` is refused | pcre2test answers error 160, "(*VERB) not recognized or malformed", for `(*LIMIT_MATCH=4294967294)`, because its counter is 32 bits wide. This library's ceiling is its own and far higher, so the two disagree only between 2^32 and 2^64; what they share is refusing an unrepresentable request rather than turning it into another number | `GRX_ERR_SYNTAX` |
 | PCRE2 | `(?(VERSION>=n.n))` is answered against 10.46 | this library emulates that version rather than being it. PCRE2's alone: perl answers "Unknown switch condition (?(...))" for every spelling, asking about its own version with `$]` outside the pattern | - |
-| PCRE2 | `\w`, `\W` and `\b` under UCP do not take `\p{No}` | the two references disagree and this follows perl, which is also what UTS #18 Annex C says: its word character is `\p{alpha}` - `Alphabetic`, so `Nl` but not `No` - plus marks, `Nd`, `Pc` and the join controls. pcre2's `\w` is `\p{Xwd}`, built on `\p{Xan}` = `L` ∪ `N`, so it takes the 915 `No` code points and refuses 452 `Mc`, 13 `Me` and 130 `So` that perl takes. Swept a code point at a time over all 1,112,064 on 2026-09-24. One set serves both dialects here; making it two is a profile axis and is not built | - |
-| Perl | `[[:graph:]]` and `[[:print:]]` refuse the private-use code points | the two references disagree and this follows pcre2test, which refuses U+E000 where perl accepts it - 137,468 code points, the whole of the three private-use areas. Both agree on everything else after the 2026-09-24 sweep, the format characters included. Same profile axis as the row above | - |
 | POSIX, GNU | Without `REG_NEWLINE`, `^` is the start of the subject and `$` its end, wherever in the pattern they stand | glibc answers the same question two ways. `^b` against "a\nb" is **nomatch** there, so `^` is not a line anchor for a search - but `.*^b` against the same subject **matches 0-3**, and `.^` matches 1-2, so a `^` reached after something consumed the newline *does* succeed. `a*^b`, `()^b`, `(^)b` and `(a\|)^b` are all nomatch again, which is the same position reached without consuming. Five of 7,033 differential cases turn on it and no imported vector does; the rule here is the consistent reading of the two | - |
 | POSIX BRE, POSIX ERE | Measured only where two references agree, and not at all where the dialects differ from both | glibc's `regcomp` defines what POSIX leaves undefined and so answers as GNU; musl's regex, from Laurikari's TRE, shares no code with it but is not strict POSIX either - its basic RE takes `\|`, `\+` and `\?`, and it refuses the `[[.x.]]` POSIX requires. Neither decides alone. The 380 `posix-*` vectors are Spencer's rows the two answer *identically*; 41 they answer differently are left out as open questions and 8 use a construct these dialects do not have. What defines these rows - refusing the GNU operators - has no reference on this machine and is still built from the standard alone | - |
 | GNU ERE | glibc keeps an empty final iteration under **stacked quantifiers** and not otherwise, and this library never does | `(a|)?+` over "aaaa" is 0-4 in glibc with group one at 4-4, the empty span at the end. An extended RE stacks quantifiers freely and `a?+` *is* `(a?)+`, and glibc answers the written-out form `((a|)?)+` with group one at 3-4 - and answers `(a|)+` that way too. Two spellings of one pattern, two answers; this library gives every spelling the same one, which is the one glibc gives for all but these. All eighteen pairs of `*`, `+`, `?` and a bound were put to it as `(a|)XY` over "a" and "aaa", and the rule its answers describe is that the *outer* quantifier can run more than once and at least one of the two asks for an iteration: `?+`, `*+`, `++`, `{1,2}+`, `{0,2}+`, `+*`, `{1,2}*`, `?{1,2}`, `*{1,2}`, `+{1,2}`, `+{0,2}` and `{1,2}{1,2}` keep it, while `?*`, `**`, `+?`, `*?`, `??` and `{1,2}?` do not. The row said "a stacked `+`" until seed 1015 of the soak spelled `(a|)+*`. `tools/oracle/posix_diff.py` counts these rows | - |

@@ -65,7 +65,22 @@ typedef enum {
   GRX_SET_ASCII_SPACE,      ///< `[ \t\n\v\f\r]`.
   GRX_SET_ES_SPACE,         ///< ECMA-262 WhiteSpace plus LineTerminator.
   GRX_SET_UNICODE_DIGIT,    ///< `\p{Nd}`.
-  GRX_SET_UNICODE_WORD,     ///< `\p{L}\p{N}\p{M}\p{Pc}` plus the join controls.
+  /**
+   * UTS #18 Annex C: `\p{alpha}\p{M}\p{Nd}\p{Pc}` plus the join controls.
+   *
+   * Spelled out rather than summarised, because a summary is where this one
+   * drifted twice: this comment read `\p{L}\p{N}\p{M}\p{Pc}` until
+   * 2026-09-24, and it was wrong in both halves at once - `\p{alpha}` is
+   * wider than `\p{L}` by `Nl` and Other_Alphabetic, and `\p{Nd}` is
+   * narrower than `\p{N}` by `Nl` and `No`. The code had one of the two
+   * right. See GRX_WordSet: this is one of three, and the other two are
+   * *not* reachable by narrowing it.
+   */
+  GRX_SET_UNICODE_WORD,
+  /** `\p{L}\p{N}\p{Mn}\p{Pc}`: GRX_WORD_CATEGORIES, which is PCRE2's. */
+  GRX_SET_CATEGORIES_WORD,
+  /** `\p{L}\p{N}` and `_`: GRX_WORD_ALNUM, which is CPython `re`'s. */
+  GRX_SET_ALNUM_WORD,
   GRX_SET_UNICODE_SPACE,    ///< `\p{White_Space}`.
   /**
    * The Perl family's `\h` and `\v`, in every mode it has.
@@ -112,6 +127,15 @@ GRX_Result grx_named_set(
  *
  * @param cls The class to fill. NULL is GRX_ERR_INVALID.
  * @param shorthands Which definitions the dialect uses.
+ * @param word_set Which of the three Unicode word sets `\w` denotes. Read
+ *   only when `shorthands` is GRX_SHORTHANDS_UNICODE and the shorthand is
+ *   `\w` or `\W`; a parameter rather than a lookup inside, so that neither
+ *   of the two call sites can take the width from the profile and forget to
+ *   take this with it.
+ * @param mongolian_space GRX_Profile::mongolian_separator_is_space. Reaches
+ *   `\\h` at every width, because `\\h` is a fixed set, and `\\s` only at the
+ *   Unicode one - which is what pcre2test does: `(?a)\\h` matches U+180E
+ *   there and `(?a)\\s` does not.
  * @param kind Which shorthand was written; the negated spellings are
  *   resolved by the caller, which has to complement *after* folding.
  * @param limits Caps to apply. NULL applies none.
@@ -119,7 +143,8 @@ GRX_Result grx_named_set(
  *   cover, or a failure code.
  */
 GRX_Result grx_shorthand_set(GRX_CharClass * cls, GRX_ShorthandSet shorthands,
-    GRX_ShorthandKind kind, const GRX_Limits * limits);
+    GRX_WordSet word_set, int mongolian_space, GRX_ShorthandKind kind,
+    const GRX_Limits * limits);
 
 /**
  * @brief The line-terminator set a newline rule names.

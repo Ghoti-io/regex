@@ -512,6 +512,14 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     .dollar = GRX_DOLLAR_BEFORE_FINAL_NEWLINE,
     .shorthands = GRX_SHORTHANDS_UNICODE,
     .shorthands_wide = GRX_SHORTHANDS_UNICODE,
+    // GRX_WORD_UTS18 by omission, and this is the dialect that makes it the
+    // default: perl's `\w` *is* Annex C, to the code point, over all 286,719
+    // that it and pcre2 and UCD 17.0.0 agree are assigned.
+    //
+    // `[[:graph:]]` is the other half, and there perl is the outlier: it
+    // counts the 137,468 private-use code points as graphic and pcre2 does
+    // not. U+E000 with the subject upgraded settles it.
+    .posix_graph_takes_private_use = 1,
     // Full folding, which is the one thing about Perl's `/i` that a class
     // cannot express: `ß` matches "ss" and `ff` matches the `ﬀ` ligature,
     // so a caseless match here can be a different length from the pattern
@@ -550,6 +558,23 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     .dollar = GRX_DOLLAR_BEFORE_FINAL_NEWLINE,
     .shorthands = GRX_SHORTHANDS_ASCII,
     .shorthands_wide = GRX_SHORTHANDS_UNICODE,
+    // `\w` under `PCRE2_UCP` is `\p{L}\p{N}\p{Mn}\p{Pc}`, which crosses UTS
+    // #18 rather than narrowing or widening it: 915 code points of `No` that
+    // Annex C has not got, against 598 of `Mc`, `Me`, alphabetic `So` and
+    // the join controls that it has. This dialect answered Annex C's set
+    // until 2026-09-24, wrong by all 1,513.
+    .word_set = GRX_WORD_CATEGORIES,
+    // And `[[:graph:]]` drops six `Cf` characters by name. Private use it
+    // already dropped, which is why there is no second field here.
+    .posix_graph_drops_invisibles = 1,
+    // `[[:alpha:]]` is `\p{L}` here and `\p{Alphabetic}` in perl, and the
+    // same choice runs through `alnum`, `lower` and `upper`. 1,694, 2,373,
+    // 312 and 120 code points; all four were perl's set until 2026-09-24.
+    .posix_wide_general_category = 1,
+    // U+180E was `Zs` until Unicode 6.3 and PCRE2 kept it a space. `\h`,
+    // `\s`, `[[:blank:]]` and `[[:space:]]` take it here and in no other
+    // dialect; `\v` does not, in either.
+    .mongolian_separator_is_space = 1,
     .fold = GRX_FOLD_ASCII,
     .fold_utf = GRX_FOLD_SIMPLE,
     .property_match = GRX_PROPERTY_LOOSE,
@@ -657,6 +682,15 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     // because those key on UTF and `re`'s ASCII mode touches neither.
     .shorthands = GRX_SHORTHANDS_UNICODE,
     .shorthands_wide = GRX_SHORTHANDS_UNICODE,
+    // `re`'s `\w` is `isalnum` plus `_`, the narrowest of the three word
+    // sets: no marks at all, and no connector punctuation but the underscore
+    // itself. This dialect answered Annex C's set until 2026-09-24, wrong by
+    // 3,506 code points - every `Mn`, `Mc` and `Me`, the alphabetic `So`,
+    // the join controls and eight of the nine other `Pc`, against the `No`
+    // that `re` has and Annex C has not.
+    //
+    // `re` has no POSIX classes, so neither graph field says anything here.
+    .word_set = GRX_WORD_ALNUM,
     .fold = GRX_FOLD_SIMPLE,
     .fold_utf = GRX_FOLD_SIMPLE,
     // ...and the same flag narrows the folding, which is where Python and

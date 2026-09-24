@@ -132,6 +132,18 @@ SUBJECTS = [
     "a\n", "\na", "a\nb", "\n", "a\n\n", "aaa", "aaaa",
     "é", "aé", "١", " ", "ſ", "K",
     "A", "AB", "aB", "-", "a-b", "]", "[",
+    # `re`'s `\w` is the third of the three word sets this library has, and
+    # the narrowest: `isalnum` plus `_`. None of the subjects above is a
+    # mark, a connector or a letter-number, so this gate reported 0
+    # disagreements over 90,000 rows while `\w` here was perl's set instead
+    # of `re`'s - wrong by 3,506 code points. Added 2026-09-24, after a hand
+    # sweep found it.
+    #
+    # Paired with an "a" so that `\b` is asked as well as `\w`.
+    "\u00b2", "a\u00b2",   # No: a word character in `re`, not in perl
+    "\u0301", "a\u0301",   # Mn: in perl's, not in `re`'s
+    "\u203f", "a\u203f",   # Pc that is not `_`: in perl's, not in `re`'s
+    "\u2160",               # Nl: `re` takes it through `isalnum`
 ]
 
 # The flag strings both sides understand. `x` is left out: it changes what the

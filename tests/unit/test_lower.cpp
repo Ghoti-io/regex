@@ -975,28 +975,51 @@ TEST(Sets, EcmaScriptsWhitespaceIsNotUnicodesWhiteSpace) {
 TEST(Sets, TheShorthandsResolveToTheDialectsDefinitions) {
   struct {
     GRX_ShorthandSet shorthands;
+    GRX_WordSet word_set;
+    int mongolian;
     GRX_ShorthandKind kind;
     uint32_t inside;
     uint32_t outside;
   } cases[] = {
-    {GRX_SHORTHANDS_ASCII, GRX_SHORTHAND_DIGIT, '5', 0x0661},
-    {GRX_SHORTHANDS_UNICODE, GRX_SHORTHAND_DIGIT, 0x0661, 'a'},
-    {GRX_SHORTHANDS_ASCII, GRX_SHORTHAND_WORD, '_', 0x00E9},
-    {GRX_SHORTHANDS_UNICODE, GRX_SHORTHAND_WORD, 0x00E9, ' '},
-    {GRX_SHORTHANDS_ASCII, GRX_SHORTHAND_SPACE, '\t', 0x00A0},
-    {GRX_SHORTHANDS_ECMASCRIPT, GRX_SHORTHAND_SPACE, 0x00A0, 'a'},
-    {GRX_SHORTHANDS_UNICODE, GRX_SHORTHAND_SPACE, 0x00A0, 'a'},
+    {GRX_SHORTHANDS_ASCII, GRX_WORD_UTS18, 0, GRX_SHORTHAND_DIGIT, '5', 0x0661},
+    {GRX_SHORTHANDS_UNICODE, GRX_WORD_UTS18, 0, GRX_SHORTHAND_DIGIT, 0x0661, 'a'},
+    {GRX_SHORTHANDS_ASCII, GRX_WORD_UTS18, 0, GRX_SHORTHAND_WORD, '_', 0x00E9},
+    {GRX_SHORTHANDS_UNICODE, GRX_WORD_UTS18, 0, GRX_SHORTHAND_WORD, 0x00E9, ' '},
+    {GRX_SHORTHANDS_ASCII, GRX_WORD_UTS18, 0, GRX_SHORTHAND_SPACE, '\t', 0x00A0},
+    {GRX_SHORTHANDS_ECMASCRIPT, GRX_WORD_UTS18, 0, GRX_SHORTHAND_SPACE, 0x00A0, 'a'},
+    {GRX_SHORTHANDS_UNICODE, GRX_WORD_UTS18, 0, GRX_SHORTHAND_SPACE, 0x00A0, 'a'},
+    // The word set reaches `\w` and nothing else. U+00B2 is `No`: a word
+    // character under GRX_WORD_CATEGORIES and GRX_WORD_ALNUM and not under
+    // Annex C, while U+0301 is a mark and goes the other way and U+203F is
+    // connector punctuation that only `re` refuses.
+    {GRX_SHORTHANDS_UNICODE, GRX_WORD_CATEGORIES, 0, GRX_SHORTHAND_WORD, 0x00B2, 0x0903},
+    {GRX_SHORTHANDS_UNICODE, GRX_WORD_CATEGORIES, 0, GRX_SHORTHAND_WORD, 0x0301, 0x200C},
+    {GRX_SHORTHANDS_UNICODE, GRX_WORD_ALNUM, 0, GRX_SHORTHAND_WORD, 0x00B2, 0x0301},
+    {GRX_SHORTHANDS_UNICODE, GRX_WORD_ALNUM, 0, GRX_SHORTHAND_WORD, '_', 0x203F},
+    // ...and it is read only at the Unicode width, so an ASCII `\w` is the
+    // same set whichever value is beside it.
+    {GRX_SHORTHANDS_ASCII, GRX_WORD_CATEGORIES, 0, GRX_SHORTHAND_WORD, '_', 0x00B2},
+    {GRX_SHORTHANDS_ASCII, GRX_WORD_ALNUM, 0, GRX_SHORTHAND_WORD, '_', 0x00B2},
+    // ...and `\d` and `\s` do not move with it, which is why it is not a
+    // fourth GRX_ShorthandSet value.
+    {GRX_SHORTHANDS_UNICODE, GRX_WORD_CATEGORIES, 0, GRX_SHORTHAND_DIGIT, 0x0661, 'a'},
+    {GRX_SHORTHANDS_UNICODE, GRX_WORD_ALNUM, 0, GRX_SHORTHAND_DIGIT, 0x0661, 'a'},
+    {GRX_SHORTHANDS_UNICODE, GRX_WORD_CATEGORIES, 0, GRX_SHORTHAND_SPACE, 0x00A0, 'a'},
+    {GRX_SHORTHANDS_UNICODE, GRX_WORD_ALNUM, 0, GRX_SHORTHAND_SPACE, 0x00A0, 'a'},
   };
 
   for (const auto & test : cases) {
     GRX_CharClass cls;
     grx_charclass_init(&cls, nullptr);
-    ASSERT_EQ(grx_shorthand_set(&cls, test.shorthands, test.kind, nullptr),
+    ASSERT_EQ(grx_shorthand_set(&cls, test.shorthands, test.word_set,
+                  test.mongolian, test.kind, nullptr),
         GRX_OK);
     EXPECT_TRUE(grx_charclass_contains(&cls, test.inside))
-        << "kind " << test.kind << " set " << test.shorthands;
+        << "kind " << test.kind << " set " << test.shorthands
+        << " word " << test.word_set;
     EXPECT_FALSE(grx_charclass_contains(&cls, test.outside))
-        << "kind " << test.kind << " set " << test.shorthands;
+        << "kind " << test.kind << " set " << test.shorthands
+        << " word " << test.word_set;
     grx_charclass_clear(&cls);
   }
 }
@@ -1020,6 +1043,14 @@ TEST(Sets, TheNamedSetsAFrontEndCannotSpellDirectly) {
     {GRX_SET_UNICODE_WORD, 0x00E9, ' '},
     {GRX_SET_UNICODE_WORD, 0x200C, ' '}, // A join control, per UTS #18.
     {GRX_SET_UNICODE_WORD, 0x0301, ' '}, // A combining mark.
+    // The two word sets that are not Annex C. Each row picks a member the
+    // *other* two sets refuse, so no row would pass against a neighbour:
+    // U+00B2 `No` is in both of these and not in Annex C's, U+0903 `Mc` is
+    // in Annex C's alone, and U+203F `Pc` is in all but `re`'s.
+    {GRX_SET_CATEGORIES_WORD, 0x00B2, 0x0903},
+    {GRX_SET_CATEGORIES_WORD, 0x203F, 0x200C},
+    {GRX_SET_ALNUM_WORD, 0x00B2, 0x203F},
+    {GRX_SET_ALNUM_WORD, '_', 0x0301},
   };
 
   for (const auto & test : cases) {
@@ -1039,14 +1070,41 @@ TEST(Sets, TheNamedSetsAFrontEndCannotSpellDirectly) {
   EXPECT_EQ(grx_named_set(&cls, (GRX_NamedSet)9999, nullptr), GRX_ERR_INVALID);
 
   // `\h` and `\v`, which the Perl family has and ECMAScript does not.
-  EXPECT_EQ(grx_shorthand_set(&cls, GRX_SHORTHANDS_ASCII,
+  EXPECT_EQ(grx_shorthand_set(&cls, GRX_SHORTHANDS_ASCII, GRX_WORD_UTS18, 0,
                 GRX_SHORTHAND_HSPACE, nullptr), GRX_OK);
-  EXPECT_EQ(grx_shorthand_set(&cls, GRX_SHORTHANDS_ASCII,
+  EXPECT_EQ(grx_shorthand_set(&cls, GRX_SHORTHANDS_ASCII, GRX_WORD_UTS18, 0,
                 GRX_SHORTHAND_VSPACE, nullptr), GRX_OK);
+  // U+180E reaches `\h` at every width, because `\h` has only one, and `\s`
+  // at the Unicode width alone - which is the asymmetry pcre2test has.
+  grx_charclass_clear(&cls);
+  EXPECT_EQ(grx_shorthand_set(&cls, GRX_SHORTHANDS_ASCII, GRX_WORD_UTS18, 1,
+                GRX_SHORTHAND_HSPACE, nullptr), GRX_OK);
+  EXPECT_TRUE(grx_charclass_contains(&cls, 0x180E));
+  grx_charclass_clear(&cls);
+  EXPECT_EQ(grx_shorthand_set(&cls, GRX_SHORTHANDS_ASCII, GRX_WORD_UTS18, 1,
+                GRX_SHORTHAND_SPACE, nullptr), GRX_OK);
+  EXPECT_FALSE(grx_charclass_contains(&cls, 0x180E));
+  grx_charclass_clear(&cls);
+  EXPECT_EQ(grx_shorthand_set(&cls, GRX_SHORTHANDS_UNICODE, GRX_WORD_UTS18, 1,
+                GRX_SHORTHAND_SPACE, nullptr), GRX_OK);
+  EXPECT_TRUE(grx_charclass_contains(&cls, 0x180E));
+  // ...and `\v` never takes it, in either reference.
+  grx_charclass_clear(&cls);
+  EXPECT_EQ(grx_shorthand_set(&cls, GRX_SHORTHANDS_UNICODE, GRX_WORD_UTS18, 1,
+                GRX_SHORTHAND_VSPACE, nullptr), GRX_OK);
+  EXPECT_FALSE(grx_charclass_contains(&cls, 0x180E));
+  grx_charclass_clear(&cls);
   // Every value of the enum now names a set this function can build, so the
   // only thing left to refuse is a value that is not one.
-  EXPECT_EQ(grx_shorthand_set(&cls, GRX_SHORTHANDS_ASCII,
+  EXPECT_EQ(grx_shorthand_set(&cls, GRX_SHORTHANDS_ASCII, GRX_WORD_UTS18, 0,
                 GRX_SHORTHAND_COUNT, nullptr), GRX_ERR_UNSUPPORTED);
+  // An out-of-range word set falls back to Annex C rather than failing,
+  // which is what unicode_word_set()'s default arm is for: a profile field
+  // is internal, so a bad value is a bug here and not caller input, and the
+  // safe answer is the one every unmeasured dialect already has.
+  EXPECT_EQ(grx_shorthand_set(&cls, GRX_SHORTHANDS_UNICODE, GRX_WORD_COUNT, 0,
+                GRX_SHORTHAND_WORD, nullptr), GRX_OK);
+  EXPECT_TRUE(grx_charclass_contains(&cls, 0x0903));
   grx_charclass_clear(&cls);
 }
 
@@ -1082,8 +1140,8 @@ TEST(Sets, TheNewlineSetsAreNamedInOnePlace) {
       GRX_ERR_INVALID);
   EXPECT_EQ(grx_named_set(nullptr, GRX_SET_ASCII_DIGIT, nullptr),
       GRX_ERR_INVALID);
-  EXPECT_EQ(grx_shorthand_set(nullptr, GRX_SHORTHANDS_ASCII,
-                GRX_SHORTHAND_DIGIT, nullptr),
+  EXPECT_EQ(grx_shorthand_set(nullptr, GRX_SHORTHANDS_ASCII, GRX_WORD_UTS18,
+                0, GRX_SHORTHAND_DIGIT, nullptr),
       GRX_ERR_INVALID);
 }
 

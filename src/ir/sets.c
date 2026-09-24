@@ -178,13 +178,68 @@ GRX_Result grx_named_set(
       }
       return result;
     }
+    case GRX_SET_CATEGORIES_WORD: {
+      // PCRE2's `\w` under `PCRE2_UCP`, measured: `\p{L}`, `\p{N}`,
+      // `\p{Mn}` and `\p{Pc}`, and nothing else. Zero difference from
+      // pcre2test 10.46 over the 286,719 code points perl, pcre2 and this
+      // library all call assigned.
+      //
+      // Note what it is not. It is not GRX_SET_UNICODE_WORD widened: it
+      // *adds* `No` and *drops* `Mc`, `Me`, the alphabetic `So` and the
+      // join controls. Neither set contains the other, so there is no
+      // narrowing bit that could reach one from the other - which is why
+      // GRX_WordSet is an enum and this is a set in its own right.
+      GRX_Result result = add_property(cls, "L", limits);
+      if (result == GRX_OK) {
+        result = add_property(cls, "N", limits);
+      }
+      if (result == GRX_OK) {
+        result = add_property(cls, "Mn", limits);
+      }
+      if (result == GRX_OK) {
+        result = add_property(cls, "Pc", limits);
+      }
+      return result;
+    }
+    case GRX_SET_ALNUM_WORD: {
+      // CPython `re`'s `\w` for a `str` pattern: `SRE_UNI_IS_WORD` is
+      // `Py_UNICODE_ISALNUM(ch) || ch == '_'`, and `isalnum` is `L*` plus
+      // the three numeric predicates, which together are `\p{N}`. Zero
+      // difference from `re` over the same 286,719.
+      //
+      // The underscore on its own and not `\p{Pc}`: `re` refuses U+203F
+      // UNDERTIE, which the other two word sets take.
+      GRX_Result result = add_property(cls, "L", limits);
+      if (result == GRX_OK) {
+        result = add_property(cls, "N", limits);
+      }
+      if (result == GRX_OK) {
+        result = grx_charclass_add_range(cls, '_', '_', limits);
+      }
+      return result;
+    }
     default:
       return GRX_ERR_INTERNAL;
   }
 }
 
+/** The named set a Unicode-width `\w` denotes under each GRX_WordSet. */
+static GRX_NamedSet unicode_word_set(GRX_WordSet word_set) {
+  switch (word_set) {
+    case GRX_WORD_CATEGORIES:
+      return GRX_SET_CATEGORIES_WORD;
+    case GRX_WORD_ALNUM:
+      return GRX_SET_ALNUM_WORD;
+    case GRX_WORD_UTS18:
+    case GRX_WORD_COUNT:
+      break;
+  }
+  return GRX_SET_UNICODE_WORD;
+}
+
 GRX_Result grx_shorthand_set(GRX_CharClass * cls, GRX_ShorthandSet shorthands,
-    GRX_ShorthandKind kind, const GRX_Limits * limits) {
+    GRX_WordSet word_set, int mongolian_space, GRX_ShorthandKind kind,
+    const GRX_Limits * limits) {
   if (!cls) {
     return GRX_ERR_INVALID;
   }
@@ -205,15 +260,22 @@ GRX_Result grx_shorthand_set(GRX_CharClass * cls, GRX_ShorthandSet shorthands,
       // produces, and the caller closes it (ECMA-262 22.2.2.9.3, whose
       // definition is exactly that closure).
       return grx_named_set(cls,
-          unicode ? GRX_SET_UNICODE_WORD : GRX_SET_ASCII_WORD, limits);
+          unicode ? unicode_word_set(word_set) : GRX_SET_ASCII_WORD, limits);
 
     case GRX_SHORTHAND_SPACE:
-    case GRX_SHORTHAND_NOT_SPACE:
+    case GRX_SHORTHAND_NOT_SPACE: {
       if (shorthands == GRX_SHORTHANDS_ECMASCRIPT) {
         return grx_named_set(cls, GRX_SET_ES_SPACE, limits);
       }
-      return grx_named_set(cls,
+      GRX_Result result = grx_named_set(cls,
           unicode ? GRX_SET_UNICODE_SPACE : GRX_SET_ASCII_SPACE, limits);
+      // U+180E, at the Unicode width only - `(?aS)\s` refuses it in
+      // pcre2test. See GRX_Profile::mongolian_separator_is_space.
+      if (result == GRX_OK && unicode && mongolian_space) {
+        result = grx_charclass_add_range(cls, 0x180E, 0x180E, limits);
+      }
+      return result;
+    }
 
     // `\h` and `\v` do not move with `shorthands`, which is the one thing
     // that made them look like the other three. They are fixed sets in both
@@ -234,8 +296,16 @@ GRX_Result grx_shorthand_set(GRX_CharClass * cls, GRX_ShorthandSet shorthands,
     // ECMAScript's `\v` is the vertical-tab character and python's is too -
     // so the ASCII sets these chose had no reader left and are gone.
     case GRX_SHORTHAND_HSPACE:
-    case GRX_SHORTHAND_NOT_HSPACE:
-      return grx_named_set(cls, GRX_SET_UNICODE_HSPACE, limits);
+    case GRX_SHORTHAND_NOT_HSPACE: {
+      GRX_Result result = grx_named_set(cls, GRX_SET_UNICODE_HSPACE, limits);
+      // The one member the two references do not share, and it is added at
+      // every width because `\h` has only one: `(?a)\h` matches U+180E in
+      // pcre2test where `(?a)\s` does not.
+      if (result == GRX_OK && mongolian_space) {
+        result = grx_charclass_add_range(cls, 0x180E, 0x180E, limits);
+      }
+      return result;
+    }
 
     case GRX_SHORTHAND_VSPACE:
     case GRX_SHORTHAND_NOT_VSPACE:

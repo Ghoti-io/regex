@@ -192,6 +192,64 @@ typedef enum {
 } GRX_ShorthandSet;
 
 /**
+ * @brief Which code points a *Unicode-width* `\w` stands for.
+ *
+ * documentation/dialects.md section 5.9. Beside GRX_ShorthandSet and not
+ * inside it, for the reason GRX_SHORTHANDS_UNICODE's own comment gives about
+ * the other two: a dialect that makes `\w` Unicode makes `\d` and `\s`
+ * Unicode too, and the three references that answer here agree on `\d` and
+ * `\s` exactly while disagreeing about `\w`. A fourth GRX_ShorthandSet value
+ * would therefore be claiming a difference in `\d` and `\s` that no reference
+ * has, which is the trap two-flags-one-letter describes from the other side.
+ *
+ * Three values because three were measured, a code point at a time over the
+ * 286,719 that perl 5.40.1, pcre2test 10.46 and this library's UCD 17.0.0 all
+ * call assigned. Restricting to that intersection is what makes the figures
+ * mean anything: unrestricted, this library has 4,800-odd code points neither
+ * reference has heard of, and the comparison measures the Unicode release
+ * rather than the rule.
+ *
+ * `\d` and `\s` do not move with this, and neither does the *narrow* `\w`:
+ * every dialect's ASCII `\w` is `[0-9A-Za-z_]`.
+ */
+typedef enum {
+  /**
+   * UTS #18 Annex C: `\p{alpha}`, `\p{M}`, `\p{Nd}`, `\p{Pc}` and the two
+   * join controls. Perl's `\w`, exactly, over all 286,719.
+   *
+   * The default, so a dialect that has not been measured keeps the answer it
+   * had before this enum existed. Java, .NET, Rust, Tcl and Emacs are all in
+   * that position - their references are not on this machine, which is open
+   * item 4 - and none of them changed when the two that *were* measured moved
+   * off it.
+   */
+  GRX_WORD_UTS18 = 0,
+  /**
+   * `\p{L}`, `\p{N}`, `\p{Mn}` and `\p{Pc}`. PCRE2's `\w` under `PCRE2_UCP`,
+   * exactly.
+   *
+   * It is not UTS #18 narrowed or widened but crossed: against Annex C it
+   * *adds* `\p{No}` (915 code points, U+00B2 among them) and *drops* `Mc`
+   * (452), `Me` (13), the alphabetic `So` (130), one `Mn` and the two join
+   * controls - 1,513 code points of symmetric difference. There is no subset
+   * relation to lean on, which is why this is a set of its own rather than a
+   * bit that turns something off.
+   */
+  GRX_WORD_CATEGORIES,
+  /**
+   * `\p{L}`, `\p{N}` and `_`. CPython `re`'s `\w` for a `str` pattern,
+   * exactly: `SRE_UNI_IS_WORD` is `Py_UNICODE_ISALNUM(ch) || ch == '_'`, and
+   * `isalnum` is `L*` plus the numerics.
+   *
+   * The narrowest of the three - no marks at all, and no connector
+   * punctuation but the underscore itself, so U+203F UNDERTIE is a word
+   * character in the other two and not here.
+   */
+  GRX_WORD_ALNUM,
+  GRX_WORD_COUNT             ///< Closes the enum; not a definition.
+} GRX_WordSet;
+
+/**
  * @brief What `\<` and `\>` compare either side of a position.
  *
  * documentation/dialects.md section 5.12. GNU's two assertions are the word
@@ -493,6 +551,102 @@ typedef struct GRX_Profile {
    * with no UCP anywhere.
    */
   GRX_ShorthandSet shorthands_wide;
+  /**
+   * Which of the three word sets a Unicode-width `\w` denotes.
+   *
+   * Read wherever `shorthands` or `shorthands_wide` has settled on
+   * GRX_SHORTHANDS_UNICODE, and ignored otherwise: an ASCII-width `\w` is
+   * `[0-9A-Za-z_]` in every dialect here, so this field says nothing about
+   * one. `[[:word:]]` and `\b` are the same set by definition and move with
+   * it - measured, not assumed: `\w` and `[[:word:]]` returned the identical
+   * 139,612 code points in perl and the identical 139,929 in pcre2test.
+   *
+   * See GRX_WordSet for what each value is and how it was measured.
+   */
+  GRX_WordSet word_set;
+  /**
+   * `[[:graph:]]` and `[[:print:]]` count private-use code points.
+   *
+   * Perl does and PCRE2 does not, and it is the largest single disagreement
+   * between the two anywhere in this library: 137,468 code points, the whole
+   * of `\p{Co}`. `[[:graph:]]` matches U+E000 in perl with the subject
+   * upgraded and does not in pcre2test under `utf,ucp`.
+   *
+   * Neither is unreasonable, which is why it is an axis rather than a defect
+   * in one of them. A private-use code point has whatever glyph the agreeing
+   * parties gave it, so "it marks the page" is unknowable; perl assumes it
+   * does and PCRE2 assumes nothing.
+   *
+   * Left clear by every dialect with no reference on this machine, which is
+   * the answer they already had.
+   */
+  int posix_graph_takes_private_use;
+  /**
+   * `[[:graph:]]` and `[[:print:]]` drop six format characters by name.
+   *
+   * PCRE2 excludes U+061C ARABIC LETTER MARK, U+180E MONGOLIAN VOWEL
+   * SEPARATOR and U+2066 to U+2069, the four bidi isolates, from
+   * `[[:graph:]]`; perl keeps all six. It is a hand-written list in the
+   * reference and a hand-written list here, because it is one in Unicode
+   * too: they are the `Cf` characters that are defined never to mark the
+   * page, and no property collects exactly them.
+   *
+   * A second field rather than a wider spelling of
+   * posix_graph_takes_private_use, because the two are independent facts
+   * that happen to point the same way in the only two dialects that have
+   * been measured: this one makes PCRE2's set *narrower* than perl's, that
+   * one makes perl's *wider* than PCRE2's, and a dialect could want either
+   * without the other.
+   *
+   * `[[:print:]]` drops five of the six and keeps U+180E, which PCRE2
+   * classes as a space separator - and `print` is `graph` plus the space
+   * separators. That is measured rather than reasoned: pcre2test's `print`
+   * matches U+180E and its `graph` does not.
+   */
+  int posix_graph_drops_invisibles;
+  /**
+   * The wide POSIX classes are general categories, not derived properties.
+   *
+   * PCRE2 spells `[[:alpha:]]` as `\p{L}`, `[[:alnum:]]` as `\p{L}\p{N}`,
+   * `[[:lower:]]` as `\p{Ll}` and `[[:upper:]]` as `\p{Lu}`. Perl spells the
+   * same four with `Alphabetic`, `Alphabetic` plus `Nd`, `Lowercase` and
+   * `Uppercase`, which are the derived properties UTS #18 Annex C names.
+   *
+   * It is one field and not four because it is one decision in the
+   * reference, and the four move together: measured a code point at a time
+   * over the 286,719 that perl, pcre2test 10.46 and UCD 17.0.0 all call
+   * assigned, every one of the four is exactly its general category in
+   * pcre2test and exactly its derived property in perl. The differences are
+   * 1,694 code points for `alpha`, 2,373 for `alnum`, 312 for `lower` and
+   * 120 for `upper` - the marks with Other_Alphabetic, the letter-numbers,
+   * the circled letters, and the modifier letters that are Other_Lowercase.
+   *
+   * GRX_Profile::word_set is the same decision for `\w` and `[[:word:]]`,
+   * and is *not* folded in here: PCRE2's word set is `\p{L}\p{N}\p{Mn}\p{Pc}`,
+   * which is not the general-category reading of Annex C's `alpha` term but
+   * a different list, and `re` needs a third answer that these four names
+   * never ask for.
+   */
+  int posix_wide_general_category;
+  /**
+   * U+180E MONGOLIAN VOWEL SEPARATOR counts as horizontal whitespace.
+   *
+   * PCRE2 matches it with `\h`, `\s`, `[[:blank:]]` and `[[:space:]]` and
+   * refuses it with `\v`; perl matches it with none of them. It was `Zs`
+   * until Unicode 6.3 and has been `Cf` since, and PCRE2 kept it where it
+   * was - which is also why its `[[:print:]]` takes it while its
+   * `[[:graph:]]` does not, `print` being `graph` plus the space
+   * separators.
+   *
+   * It does not move with a charset modifier the way the rest of `\s` does,
+   * and that asymmetry is measured rather than assumed: `(?a)\h` still
+   * matches it in pcre2test and `(?a)\s` does not, which is the `\h`/`\v`
+   * rule of 2026-09-24 holding - those two are fixed sets that nothing
+   * narrows, and this field changes which fixed set PCRE2's is by one
+   * member. `\s`, `[[:blank:]]` and `[[:space:]]` take it only at the
+   * Unicode width.
+   */
+  int mongolian_separator_is_space;
   /**
    * GRX_OPT_ASCII_CLASSES makes the folding ASCII-only as well.
    *

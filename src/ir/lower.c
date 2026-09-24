@@ -318,8 +318,49 @@ static GRX_Result posix_class_named_set(Lowering * low, const char * name,
     return fail(low, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, node);
   }
 
+  // Four of the fourteen are a derived property in perl and a plain general
+  // category in PCRE2 - see GRX_Profile::posix_wide_general_category. Here
+  // rather than in POSIX_ROW's columns because it reaches four rows out of
+  // fourteen and the table is already the widest thing in this function.
+  //
+  // Each substitution was measured against pcre2test 10.46 a code point at
+  // a time over the 286,719 that it, perl and UCD 17.0.0 all call assigned,
+  // and each is exact: `alpha` differed by 1,694 code points before this,
+  // `alnum` by 2,373, `lower` by 312 and `upper` by 120. The other ten rows
+  // were swept too and agree in both spellings, which is why they are not
+  // here - not because nobody looked.
+  if (wide && low->profile.posix_wide_general_category) {
+    if (strcmp(name, "alpha") == 0) {
+      property = "L";
+      second = NULL;
+    }
+    else if (strcmp(name, "alnum") == 0) {
+      property = "L";
+      second = "N";
+    }
+    else if (strcmp(name, "lower") == 0) {
+      property = "Ll";
+      second = NULL;
+    }
+    else if (strcmp(name, "upper") == 0) {
+      property = "Lu";
+      second = NULL;
+    }
+  }
+
   if (wide && strcmp(name, "word") == 0) {
-    return grx_named_set(out, GRX_SET_UNICODE_WORD, low->limits);
+    // The same set `\w` gets, through the same door, so that the profile
+    // axis cannot reach one spelling and miss the other. Both references
+    // agree the two are one set - perl answered 139,612 code points to each
+    // and pcre2test 139,929 to each - and that agreement is what licenses
+    // this line rather than a table row of its own.
+    GRX_Result result = grx_shorthand_set(out, GRX_SHORTHANDS_UNICODE,
+        low->profile.word_set, low->profile.mongolian_separator_is_space,
+        GRX_SHORTHAND_WORD, low->limits);
+    if (result != GRX_OK) {
+      return fail(low, GRX_DIAG_INTERNAL, node);
+    }
+    return GRX_OK;
   }
 
   if (wide && (strcmp(name, "graph") == 0 || strcmp(name, "print") == 0)) {
@@ -338,10 +379,14 @@ static GRX_Result posix_class_named_set(Lowering * low, const char * name,
     // time over all 1,112,064; that was the only shape of the difference
     // among them.
     //
-    // `Co` is where the two references part, and this sides with pcre2:
-    // U+E000 is `[[:graph:]]` in perl and is not in pcre2test. That is a
-    // deviation for the Perl dialect and is in documentation/dialects.md
-    // section 6 - a per-dialect set, which this is not yet.
+    // `Co` and six named `Cf` characters are where the two references part,
+    // and each is a profile axis rather than a deviation - see
+    // GRX_Profile.posix_graph_takes_private_use and
+    // posix_graph_drops_invisibles. Both were measured over the 286,719 code
+    // points perl, pcre2 and UCD 17.0.0 all call assigned; with the two
+    // fields set as each dialect wants them, the formulas below reproduce
+    // pcre2test and perl exactly, 0 difference each.
+    int print_class = strcmp(name, "print") == 0;
     GRX_CharClass excluded;
     grx_charclass_init(&excluded, out->allocator);
     GRX_Result result = add_property_named(low, "Cc", &excluded);
@@ -351,11 +396,37 @@ static GRX_Result posix_class_named_set(Lowering * low, const char * name,
     if (result == GRX_OK) {
       result = add_property_named(low, "Cs", &excluded);
     }
-    if (result == GRX_OK) {
+    if (result == GRX_OK && !low->profile.posix_graph_takes_private_use) {
       result = add_property_named(low, "Co", &excluded);
     }
     if (result == GRX_OK) {
-      result = add_property_named(low, "Z", &excluded);
+      // `print` is `graph` plus the space separators, so it excludes only
+      // the other two `Z` categories. Building it that way round rather
+      // than as a union afterwards is what lets PCRE2 keep U+180E in
+      // `print` while dropping it from `graph`: there it is a space
+      // separator, and a set that excluded all of `Z` and then added `Zs`
+      // back would have to special-case it twice.
+      result = print_class
+          ? add_property_named(low, "Zl", &excluded)
+          : add_property_named(low, "Z", &excluded);
+      if (result == GRX_OK && print_class) {
+        result = add_property_named(low, "Zp", &excluded);
+      }
+    }
+    if (result == GRX_OK && low->profile.posix_graph_drops_invisibles) {
+      // The `Cf` characters that never mark the page. U+180E is absent from
+      // the `print` list because PCRE2 classes it as a space separator, and
+      // `print` takes those; pcre2test matches it with `[[:print:]]` and
+      // refuses it with `[[:graph:]]`.
+      result = grx_charclass_add_range(&excluded, 0x061C, 0x061C, low->limits);
+      if (result == GRX_OK && !print_class) {
+        result = grx_charclass_add_range(
+            &excluded, 0x180E, 0x180E, low->limits);
+      }
+      if (result == GRX_OK) {
+        result = grx_charclass_add_range(
+            &excluded, 0x2066, 0x2069, low->limits);
+      }
     }
     if (result == GRX_OK) {
       result = grx_charclass_complement(&excluded, low->limits);
@@ -366,9 +437,6 @@ static GRX_Result posix_class_named_set(Lowering * low, const char * name,
     grx_charclass_clear(&excluded);
     if (result != GRX_OK) {
       return result;
-    }
-    if (strcmp(name, "print") == 0) {
-      return add_property_named(low, "Zs", out);
     }
     return GRX_OK;
   }
@@ -401,7 +469,19 @@ static GRX_Result posix_class_named_set(Lowering * low, const char * name,
     }
     if (strcmp(name, "blank") == 0) {
       // PCRE2 keeps the tab in `blank` under UCP; `Zs` does not contain it.
-      return grx_charclass_add_range(out, 0x09, 0x09, low->limits);
+      result = grx_charclass_add_range(out, 0x09, 0x09, low->limits);
+      if (result == GRX_OK && low->profile.mongolian_separator_is_space) {
+        result = grx_charclass_add_range(out, 0x180E, 0x180E, low->limits);
+      }
+      return result;
+    }
+    if (strcmp(name, "space") == 0
+        && low->profile.mongolian_separator_is_space) {
+      // U+180E is `Cf` and so is not in `White_Space`, but PCRE2 has kept
+      // it a space since it was `Zs`. Only at the Unicode width, which is
+      // the only width this branch runs at: `(?a)[[:blank:]]` refuses it in
+      // pcre2test. See GRX_Profile::mongolian_separator_is_space.
+      return grx_charclass_add_range(out, 0x180E, 0x180E, low->limits);
     }
     if (strcmp(name, "punct") == 0) {
       // `\p{P}` plus the ASCII punctuation, which adds the nine symbols
@@ -507,6 +587,7 @@ static GRX_Result item_base_set(Lowering * low, const GRX_ClassItem * item,
     case GRX_CLASS_ITEM_SHORTHAND: {
       GRX_ShorthandKind kind = (GRX_ShorthandKind)item->a;
       GRX_Result result = grx_shorthand_set(out, shorthands_for(low, kind),
+          low->profile.word_set, low->profile.mongolian_separator_is_space,
           kind, low->limits);
       if (result == GRX_ERR_UNSUPPORTED) {
         return fail(low, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, node);
@@ -840,7 +921,8 @@ static GRX_Result word_class(Lowering * low, uint32_t * out_index) {
   GRX_CharClass cls;
   grx_charclass_init(&cls, low->ir->allocator);
   GRX_Result result = grx_shorthand_set(&cls,
-      shorthands_for(low, GRX_SHORTHAND_WORD), GRX_SHORTHAND_WORD,
+      shorthands_for(low, GRX_SHORTHAND_WORD), low->profile.word_set,
+      low->profile.mongolian_separator_is_space, GRX_SHORTHAND_WORD,
       low->limits);
   if (result == GRX_OK && low->profile.caseless_widens_shorthands) {
     result = grx_charclass_fold_closure(&cls, low->fold, low->limits);
