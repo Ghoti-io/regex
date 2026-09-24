@@ -63,3 +63,56 @@ def command(*arguments):
     """The command to run, with the flag and the capability check."""
     check()
     return NODE + list(arguments)
+
+
+# The reproducer, kept executable rather than only described. It runs the
+# row many times in one process: without the flag the first answer differs
+# from the rest, so one distinct answer *is* the property being asserted.
+DETERMINISM = r"""
+const s = "\nabc", p = "(?:(?=a)a)*\\B..";
+const seen = [];
+for (let i = 0; i < 40; i++) {
+  const re = new RegExp(p, "uy");
+  re.lastIndex = 1;
+  const m = re.exec(s);
+  const r = m ? m.index + ":" + (m.index + m[0].length) : "nomatch";
+  if (seen[seen.length - 1] !== r) { seen.push(r); }
+}
+console.log(seen.join(" "));
+"""
+
+WANTED = "1:4"
+
+
+def check_determinism():
+    """Assert that Node answers the known divergent row one way, correctly.
+
+    Two assertions in one, and both are needed. *One* answer says the
+    tier-up is not switching paths underneath the oracle; that it is 1-4
+    says the path in use is the one pcre2test 10.46 and perl 5.40.1 agree
+    with. A Node that started answering "nomatch" every time would be
+    consistent and wrong, and the count alone would not notice.
+    """
+    finished = subprocess.run(command("-e", DETERMINISM),
+        capture_output=True, text=True)
+    if finished.returncode != 0:
+        sys.stderr.write("node could not run the determinism probe:\n%s\n"
+            % finished.stderr.strip())
+        return 1
+    answers = finished.stdout.split()
+    if answers == [WANTED]:
+        print("node answers /(?:(?=a)a)*\\B../u at offset 1 as %s, every "
+            "time." % WANTED)
+        return 0
+    sys.stderr.write(
+        "node answered the same row %d different ways (%s), wanting %s "
+        "every time.\nV8 interprets a regular expression and compiles it "
+        "after a few runs, and\nthe two paths disagree here - so the "
+        "oracle's answer to a row would\ndepend on how many rows ran "
+        "before it. See this file's docstring and\ntools/corpus/VERSIONS.\n"
+        % (len(answers), " then ".join(answers), WANTED))
+    return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(check_determinism())

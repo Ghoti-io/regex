@@ -817,7 +817,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 .PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-dump-names check-readme-example check-tables check-oracle-syntax check-oracle-match check-oracle-soak check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-perl-syntax check-oracle-script-runs check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
 	check-oracle-properties check-oracle-numeric-properties \
 	check-oracle-string-properties check-oracle-posix check-oracle-sed \
-	check-oracle-exclusions \
+	check-oracle-exclusions check-oracle-determinism \
 	check-oracles \
 	check-limits check-json-schema-suite vectors vectors-ecmascript \
 	vectors-pcre vectors-perl vectors-posix
@@ -917,7 +917,7 @@ check-oracles: check-oracle-syntax check-oracle-match check-oracle-properties \
 	check-oracle-script-runs check-oracle-newlines check-oracle-callouts \
 	check-oracle-sed \
 	check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
-	check-oracle-exclusions \
+	check-oracle-exclusions check-oracle-determinism \
 	check-engine-equivalence
 
 check-oracle-soak: ## Run the generating differentials over many seeds
@@ -1216,6 +1216,23 @@ check-oracle-window: $(TOOLS)
 		exit 0; \
 	fi; \
 	python3 tools/oracle/window_diff.py --seed $(ORACLE_SEED)
+
+check-oracle-determinism: ## Fail if the ECMAScript oracle answers a row two ways
+# V8 runs a regular expression in an interpreter and compiles it after a few
+# executions, and the two paths do not always agree. Without
+# `--regexp-interpret-all` the oracle's answer to a row therefore depends on
+# how many rows ran before it, so the same case can pass or fail according
+# to where it lands in a batch - and every gate goes on printing "0
+# disagreements" either way. The flag is applied in
+# tools/oracle/node_runner.py; this asserts that it is doing what it is
+# there for, on the row that found it, and that the answer it produces is
+# the one pcre2test and perl agree with. One node process.
+check-oracle-determinism:
+	@if ! command -v node >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then \
+		printf "check-oracle-determinism: skipped (no node or no python3)\n"; \
+		exit 0; \
+	fi; \
+	python3 tools/oracle/node_runner.py
 
 check-oracle-exclusions: ## Put each differential's exclusions their own controls
 # Every exclusion in this directory narrows a gate, and a gate narrowed too
