@@ -1001,6 +1001,29 @@ def main():
             % (len(both_axes) - args.examples))
     if args.strict and disagreements:
         return 1
+    # The two-axis bucket is empty on a healthy run and is the one exclusion
+    # category here whose size can be asserted: the other two are
+    # seed-dependent (known artifacts range 113 to 214 over four seeds,
+    # engine splits 24 to 42) and a number that moves with the seed cannot
+    # be pinned. This one was 0 at every seed tried and held 4 rows when the
+    # encoding was wrong.
+    #
+    # It is asserted because leaving it to be read is what failed. The
+    # comment above says these are "printed rather than swallowed" so that a
+    # person can see them - and when latin1 put four rows in here, nobody
+    # did. A category with no expected size is where a defect goes to be
+    # quiet, and that is not a property of static lists: these rows are
+    # classified by predicates over the pattern and the answers, and it is
+    # precisely a predicate's willingness to accept a new arrival that lets
+    # one in. Deriving a category dynamically is not a defence; it is the
+    # mechanism.
+    if args.strict and both_axes:
+        sys.stderr.write("%d rows where vim's two engines disagree and "
+            "neither gives this library's answer. That bucket is empty on a "
+            "healthy run, so these are either a defect here or a vim "
+            "behaviour nothing has classified yet - decide which, rather "
+            "than letting the count carry them.\n" % len(both_axes))
+        return 1
     return 0
 
 
