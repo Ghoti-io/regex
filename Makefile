@@ -933,11 +933,18 @@ check-oracle-soak: ## Run the generating differentials over many seeds
 #
 #   make check-oracle-soak SOAK_SEEDS=50
 #
-# The ten generating differentials, which are the ones a seed means anything
-# to. `submatch_diff`, `newline_diff`, `callout_diff` and `sed_diff` put a
-# fixed list of cases and answer the same question every time, so a seed
-# would be a flag they ignore; `script_run_diff` takes one and needs no
-# pattern count.
+# The twelve generating differentials, which are the ones a seed means
+# anything to. `submatch_diff`, `newline_diff`, `callout_diff`, `sed_diff`
+# and `perl_syntax_diff` put a fixed list of cases and answer the same
+# question every time, so a seed would be a flag they ignore.
+#
+# Two of the twelve are run in a second loop because they take no
+# `--patterns`: `syntax_diff` generates its own count and `script_run_diff`
+# generates subjects rather than patterns. That is the whole reason they
+# were missing from this list, which is the same hole one level down - the
+# list was written from what the first loop could spell, and a tool left
+# out of a soak is a tool that only ever answers seed 1. `syntax_diff` is
+# ten seconds a seed and `script_run_diff` is a third of one.
 SOAK_SEEDS ?= 20
 SOAK_FROM ?= 1
 
@@ -955,6 +962,15 @@ check-oracle-soak: $(TOOLS)
 				engine_diff; do \
 			if ! python3 tools/oracle/$$tool.py --seed $$seed \
 					--patterns $(ORACLE_PATTERNS) > $$out 2>&1; then \
+				printf "\033[0;31m### %s disagreed at seed %d ###\033[0m\n" \
+					"$$tool" "$$seed" >&2; \
+				cat $$out >&2; \
+				status=1; \
+			fi; \
+		done; \
+		for tool in syntax_diff script_run_diff; do \
+			if ! python3 tools/oracle/$$tool.py --seed $$seed \
+					> $$out 2>&1; then \
 				printf "\033[0;31m### %s disagreed at seed %d ###\033[0m\n" \
 					"$$tool" "$$seed" >&2; \
 				cat $$out >&2; \
