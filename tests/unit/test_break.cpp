@@ -115,14 +115,36 @@ bool read_break_test(const std::string & path, std::vector<Row> * out) {
 }
 
 /** Run one file against one kind, reporting the first few disagreements. */
-void check_file(const char * name, GRX_BreakKind kind) {
+void check_file(const char * name, GRX_BreakKind kind, size_t expected_rows) {
   std::vector<Row> rows;
   if (!read_break_test(ucd_path(name), &rows)) {
-    printf("%s: skipped (no third_party/ucd; run tools/unicode/fetch.sh)\n",
-        name);
-    return;
+    // GTEST_SKIP() and not a bare `return`. This was a bare `return` from a
+    // `void` helper until 2026-09-24, which records nothing, so gtest
+    // reported the test PASSED - and `third_party/` is gitignored, so on a
+    // fresh clone or any CI without the fetch step all four UAX files were
+    // compared against nothing and this binary printed "[ PASSED ] 4 tests"
+    // and exited 0. Confirmed by moving the directory aside and running it.
+    // Indistinguishable from a real pass in both the exit status and the
+    // test count, which is the one shape of missing gate that no amount of
+    // reading the summary will catch.
+    GTEST_SKIP() << name << ": no third_party/ucd; run tools/unicode/fetch.sh";
   }
-  ASSERT_GT(rows.size(), 100u) << name << " parsed as almost nothing";
+
+  // The denominator, printed whether it is right or not, because "0
+  // disagreements" means nothing without it. Reported even on success: a
+  // file that parsed as forty rows would otherwise pass in silence.
+  printf("%s: %zu rows\n", name, rows.size());
+
+  // Exact, not a floor. UCD 17.0.0's counts, which is the version
+  // ucd_path() pins and tools/check-ucd-pins.sh holds all three libraries
+  // to. A truncated download, a half-written file or a silently bumped UCD
+  // each change this number, and each of those used to read as a pass:
+  // `ASSERT_GT(rows.size(), 100u)` let a file lose 99% of its cases and
+  // still count. Bumping the UCD is meant to fail here - the new counts are
+  // part of the bump.
+  ASSERT_EQ(rows.size(), expected_rows)
+      << name << " parsed " << rows.size() << " rows, expected "
+      << expected_rows << " - a truncated file, or a UCD version change";
 
   size_t wrong = 0;
   size_t shown = 0;
@@ -168,19 +190,19 @@ void check_file(const char * name, GRX_BreakKind kind) {
 } // namespace
 
 TEST(Break, GraphemeClustersMatchTheUnicodeTestFile) {
-  check_file("GraphemeBreakTest.txt", GRX_BREAK_GRAPHEME);
+  check_file("GraphemeBreakTest.txt", GRX_BREAK_GRAPHEME, 766);
 }
 
 TEST(Break, WordsMatchTheUnicodeTestFile) {
-  check_file("WordBreakTest.txt", GRX_BREAK_WORD);
+  check_file("WordBreakTest.txt", GRX_BREAK_WORD, 1944);
 }
 
 TEST(Break, SentencesMatchTheUnicodeTestFile) {
-  check_file("SentenceBreakTest.txt", GRX_BREAK_SENTENCE);
+  check_file("SentenceBreakTest.txt", GRX_BREAK_SENTENCE, 512);
 }
 
 TEST(Break, LinesMatchTheUnicodeTestFile) {
-  check_file("LineBreakTest.txt", GRX_BREAK_LINE);
+  check_file("LineBreakTest.txt", GRX_BREAK_LINE, 19338);
 }
 
 int main(int argc, char ** argv) {
