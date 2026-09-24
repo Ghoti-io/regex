@@ -733,6 +733,17 @@ hyphen is a sign, and is the one piece of punctuation loose matching must not
 drop. [unicode.md](unicode.md) §6.1 has the rule and where the values come
 from.
 
+**`\B` on an empty subject is Python's alone.** Position 0 of "" has no word
+character on either side, so it is not a word boundary and `\B` holds there -
+which is what perl and Node both answer, and `re.search(r"\B", "")` is
+`None`. Everywhere else the three agree exactly, over "a", "ab", " ", "  ",
+"-", "a b" and "--", so the empty subject is the whole of the difference;
+that is `GRX_Profile::empty_subject_has_no_interior`, and Python's row is
+the only one that sets it. The row was in the code and not on this page
+until 2026-09-24, which is how the axis beside it - whether a subroutine
+call is atomic (§5.21) - came to be wrong for two pinned versions without
+anything saying so.
+
 ### 5.10 Iteration after an empty match
 
 | Value | Rule | Dialects |
