@@ -52,13 +52,26 @@ ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE)
 
 import match_diff
+import perl_diff
 import posix_diff
+import python_diff
+import vim_diff
 
 # The dialects whose preference is leftmost-longest, and where the atoms that
 # tell the two preferences apart already live. posix_diff built them for a
 # reference comparison; the same vocabulary is what this needs, because the
 # question - does the alternation `a|ab` end at 1 or at 2 - is the same one.
 LONGEST_DIALECTS = ("posix-ere", "posix-bre", "gnu-ere", "gnu-bre")
+
+# The dialects whose *constructs* the two engines implement separately, which
+# is the other way two engines can come apart. Every assertion in this library
+# is written twice - once in each engine - and a dialect that brings new ones
+# brings two implementations of them: Vim's screen column, its byte column,
+# its two word-class boundaries and its cluster boundary were all added in
+# pairs, and nothing here compared them until this list existed. Perl and
+# PCRE2 bring the recursion, the verbs and the callouts; Python brings its own
+# empty-loop rule.
+OTHER_DIALECTS = ("vim", "perl", "pcre", "python")
 
 # Every engine that can be asked for by name. GRX_ENGINE_AUTO is deliberately
 # not among them: the invariant is about engines agreeing, and AUTO is
@@ -77,6 +90,42 @@ def rows_for(syntax, rng, patterns, subjects):
                 out.append((flags, pattern,
                     match_diff.make_subject(rng, "u" in flags)))
         return out
+
+    if syntax == "vim":
+        # The composing block as well as the generated patterns: a cluster
+        # is where this dialect's two new assertions and its possessive mark
+        # run meet, and both engines have their own copy of each.
+        out = []
+        for _ in range(patterns):
+            pattern = vim_diff.make_pattern(rng)
+            for subject in rng.sample(vim_diff.SUBJECTS,
+                    min(subjects, len(vim_diff.SUBJECTS))):
+                out.append(("", pattern, subject))
+        out.extend(("", pattern, subject)
+            for pattern, subject in vim_diff.composing_cases())
+        return out
+
+    if syntax == "python":
+        out = []
+        for _ in range(patterns):
+            pattern = python_diff.make_pattern(rng)
+            flags = rng.choice(python_diff.FLAGSETS)
+            for subject in rng.sample(python_diff.SUBJECTS,
+                    min(subjects, len(python_diff.SUBJECTS))):
+                out.append((flags, pattern, subject))
+        return out
+
+    if syntax in ("perl", "pcre"):
+        atoms = perl_diff.ATOMS[syntax] + perl_diff.ILL_FORMED[syntax]
+        built = set()
+        for _ in range(patterns):
+            built.add("".join(
+                rng.choice(atoms) for _ in range(rng.randint(1, 3))))
+        return [(flags, pattern, subject)
+                for pattern in sorted(built)
+                for flags in perl_diff.FLAG_SETS
+                for subject in rng.sample(perl_diff.SUBJECTS,
+                    min(subjects, len(perl_diff.SUBJECTS)))]
 
     atoms = posix_diff.ATOMS[syntax] + posix_diff.ILL_FORMED[syntax]
     built = set()
@@ -179,8 +228,7 @@ def main(argv):
     parser.add_argument("--driver", default=None)
     parser.add_argument("--examples", type=int, default=6)
     parser.add_argument("--syntax", default="all",
-        help="a dialect name, or 'all' for ecmascript and the four "
-             "leftmost-longest rows")
+        help="a dialect name, or 'all' for every dialect with a front end")
     args = parser.parse_args(argv[1:])
 
     driver = args.driver
@@ -199,7 +247,7 @@ def main(argv):
             "the grx_match tool was not found; run `make tools` first\n")
         return 2
 
-    dialects = (("ecmascript",) + LONGEST_DIALECTS
+    dialects = (("ecmascript",) + LONGEST_DIALECTS + OTHER_DIALECTS
                 if args.syntax == "all" else (args.syntax,))
     total = 0
     for syntax in dialects:

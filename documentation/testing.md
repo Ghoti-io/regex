@@ -776,6 +776,20 @@ Also fixed there: `tools/oracle/grx_match.c` had no name for the bit-state
 engine and printed `?`, which is what turned the first run of the extended
 check into 1,304 spurious disagreements.
 
+**And the dialects whose constructs the engines implement separately.** The
+preference was one axis; the other is that *every assertion in this library
+is written twice*, once in each engine, and a dialect that brings new ones
+brings two implementations of them. Vim's screen column, its byte column,
+its two word-class boundaries and its cluster boundary were each added in a
+pair, and nothing compared the two halves: the Vim differential asks
+`GRX_ENGINE_AUTO`, which is one engine per program. The check generates from
+Vim's, Perl's, PCRE2's and Python's vocabularies as well now - nine dialects
+- and the Vim rows alone put 3,214 programs through two engines or more.
+
+Seen to fail, on the code the new rows exist for: making the Pike VM's
+cluster boundary always hold reports 171 disagreements against the
+backtracker and the bit-state engine, and none without it.
+
 ### The Perl-family differential
 
 `make check-oracle-perl` runs `tools/oracle/perl_diff.py`, which builds
