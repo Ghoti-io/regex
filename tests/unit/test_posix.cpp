@@ -614,6 +614,27 @@ TEST(Posix, RegNewlineTakesTheNewlineOutOfDotAndOutOfANegatedList) {
   EXPECT_EQ(span("[^a]", "\n", kEre, GRX_OPT_NEWLINE_TERMINATES), "nomatch");
 }
 
+TEST(Posix, AReferenceMayNotCrossAnAlternative) {
+  // glibc's rule, and these two rows are glibc's to define: a backreference
+  // to a group written in *another branch* of an alternation is "Invalid
+  // back reference" there. `(a)|(b)\1`, `(a)(b)|\2` and `x(a)x|y\1` are
+  // all refused; the crossing is what does it, not the alternation.
+  EXPECT_EQ(compile_result("(a)|(b)\\1", kEre), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("(a)(b)|\\2", kEre), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("x(a)x|y\\1", kEre), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("\\(a\\)\\|\\(b\\)\\1", kBre),
+      GRX_ERR_SYNTAX);
+  // The reference and its group in the same branch compile, and so does a
+  // reference *outside* the alternation that holds the group: both are
+  // matches in glibc.
+  EXPECT_EQ(span("(a)\\1|(b)", "aa", kEre), "0-2");
+  EXPECT_EQ(span("((a)|(b))\\3", "bb", kEre), "0-2");
+  EXPECT_EQ(span("\\(a\\)\\1\\|\\(b\\)", "aa", kBre), "0-2");
+  // The two POSIX rows are left alone: they are decided by glibc and musl
+  // agreeing, and musl compiles every one of these and matches.
+  EXPECT_EQ(compile_result("(a)|(b)\\1", GRX_SYNTAX_POSIX_ERE), GRX_OK);
+}
+
 TEST(Posix, TheseDialectsHaveNoFlagLetters) {
   // Their options are arguments to regcomp - REG_ICASE, REG_NEWLINE - and
   // not letters a pattern author writes, so the alphabet is empty and any

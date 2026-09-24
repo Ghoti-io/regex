@@ -307,8 +307,13 @@ def boundary_end_of_subject(pattern, them, subject, ours):
     if subject is None or ours is None or not BOUNDARY_FIRST.match(pattern):
         return False
     end = "%d:%d" % (len(subject.encode()), len(subject.encode()))
-    if ours == "match " + end and them == "nomatch":
-        return True
+    if them == "nomatch" and ours.startswith("match "):
+        # The whole match's span, and the groups after it are whatever an
+        # empty match at the end gives them - a pattern holding a group is
+        # still a pattern that found the boundary perl's search missed, and
+        # comparing the whole field is what made `\b{lb}(a|)` look like a
+        # different defect.
+        return ours.split()[1] == end
     if ours.startswith("all ") and them.startswith("all "):
         mine = ours.split()
         theirs = them.split()

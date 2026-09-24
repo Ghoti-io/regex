@@ -121,6 +121,40 @@ def ask(driver, rows, extra=()):
     return finished.stdout.splitlines()
 
 
+def nested_lookbehind_reach(pattern, window, ours_line, theirs_line):
+    """pcre2 under-counts how far back a *nested* lookbehind reaches.
+
+    With a start offset, pcre2 allows a lookbehind to read the characters
+    before it - up to the maximum lookbehind length it computed for the
+    pattern - and that maximum does not include a lookbehind nested inside
+    another. `(?<=(?<=a)b)` against "abab" is 2-2 when the search starts at
+    0 or at 1, and 4-4 when it starts at 2: the same match at 2, found or
+    not according to where the search began. Started at 4 it reports no
+    match at all, where the assertion holds there as well.
+
+    The flat lookbehind of the same width agrees at every offset - `(?<=ab)`
+    is 2-2 from 0, 1 and 2 - so it is the nesting and not the length. This
+    library reads the subject it was given, and where a match may *begin* is
+    what the window says; that answer does not change with the offset.
+
+    Narrow in both dimensions: two lookbehinds in the pattern, a window that
+    begins somewhere other than zero, and this library finding a match no
+    later than pcre2's. A row where pcre2 finds the *earlier* match is still
+    a disagreement.
+    """
+    if window[0] == 0 or pattern.count("(?<") < 2:
+        return False
+    if not ours_line.startswith("match "):
+        return False
+    if theirs_line == "nomatch":
+        return True
+    if not theirs_line.startswith("match "):
+        return False
+    mine = int(ours_line.split()[1].split(":")[0])
+    yours = int(theirs_line.split()[1].split(":")[0])
+    return mine <= yours
+
+
 def normalise(line):
     """A driver line, with the engine name that only one side prints removed."""
     if line.startswith("match "):
@@ -178,6 +212,7 @@ def main(argv):
     disagreements = []
     compared = 0
     refused = 0
+    reach = 0
     declined = 0
 
     for index, (flags, pattern, subject, window) in enumerate(rows):
@@ -195,6 +230,11 @@ def main(argv):
             declined += 1
             continue
 
+        if ours_line != theirs_line and nested_lookbehind_reach(
+                pattern, window, ours_line, theirs_line):
+            reach += 1
+            continue
+
         compared += 1
         if ours_line != theirs_line:
             disagreements.append((flags, pattern, subject, window,
@@ -208,6 +248,8 @@ def main(argv):
 
     print("window: %d rows, %d compared, %d disagreements"
           % (len(rows), compared, len(disagreements)))
+    if reach:
+        print("%-7s %d pcre2's nested-lookbehind reach" % ("", reach))
     if refused:
         print("%-7s %d the pattern was refused" % ("", refused))
     if declined:

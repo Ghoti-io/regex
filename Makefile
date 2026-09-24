@@ -812,7 +812,8 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 ####################################################################
 
 # General commands
-.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-dump-names check-readme-example check-oracle-syntax check-oracle-match check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-perl-syntax check-oracle-script-runs check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
+.PHONY: check-oracle-soak
+.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-dump-names check-readme-example check-oracle-syntax check-oracle-match check-oracle-soak check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-perl-syntax check-oracle-script-runs check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
 	check-oracle-properties check-oracle-numeric-properties \
 	check-oracle-string-properties check-oracle-posix check-oracle-sed \
 	check-oracles \
@@ -915,6 +916,57 @@ check-oracles: check-oracle-syntax check-oracle-match check-oracle-properties \
 	check-oracle-sed \
 	check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
 	check-engine-equivalence
+
+check-oracle-soak: ## Run the generating differentials over many seeds
+# `make check-oracles` asks each generating differential one seed's worth of
+# questions, which is what keeps it a few seconds. The seed is fixed, so
+# every run asks the *same* questions: a pattern shape the generator can
+# reach but seed 1 never spells is a shape the gate never sees.
+#
+# That is not hypothetical. Twenty seeds, run once by hand, turned up four
+# things seed 1 does not reach - a defect of this library's (a subroutine
+# call into a lookbehind's group), a defect of glibc's, a classification the
+# Vim replacement gate was missing, and an exclusion in the iteration gate
+# that could not recognise its own case. This target is the shell loop that
+# found them, so that "a soak before a milestone" is a command rather than
+# something to reconstruct.
+#
+#   make check-oracle-soak SOAK_SEEDS=50
+#
+# The ten generating differentials, which are the ones a seed means anything
+# to. `submatch_diff`, `newline_diff`, `callout_diff` and `sed_diff` put a
+# fixed list of cases and answer the same question every time, so a seed
+# would be a flag they ignore; `script_run_diff` takes one and needs no
+# pattern count.
+SOAK_SEEDS ?= 20
+SOAK_FROM ?= 1
+
+check-oracle-soak: $(TOOLS)
+	@if ! command -v python3 >/dev/null 2>&1; then \
+		printf "check-oracle-soak: skipped (no python3)\n"; \
+		exit 0; \
+	fi; \
+	status=0; \
+	last=$$(( $(SOAK_FROM) + $(SOAK_SEEDS) - 1 )); \
+	for seed in $$(seq $(SOAK_FROM) $$last); do \
+		for tool in match_diff perl_diff python_diff vim_diff posix_diff \
+				iterate_diff replace_diff split_diff window_diff \
+				engine_diff; do \
+			if ! python3 tools/oracle/$$tool.py --seed $$seed \
+					--patterns $(ORACLE_PATTERNS) > $(BUILD_DIR)/soak.out 2>&1; then \
+				printf "\033[0;31m### %s disagreed at seed %d ###\033[0m\n" \
+					"$$tool" "$$seed" >&2; \
+				cat $(BUILD_DIR)/soak.out >&2; \
+				status=1; \
+			fi; \
+		done; \
+	done; \
+	rm -f $(BUILD_DIR)/soak.out; \
+	if [ $$status -eq 0 ]; then \
+		printf "The generating differentials agree over %d seeds.\n" \
+			"$(SOAK_SEEDS)"; \
+	fi; \
+	exit $$status
 
 check-oracle-properties: ## Compare every Unicode property table against the reference
 check-oracle-properties: $(TOOLS)

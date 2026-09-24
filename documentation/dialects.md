@@ -529,6 +529,16 @@ does not match in perl and does not here. It only exists for the window
 between a group opening and closing, which is why nothing a reference could
 already see changed. See `GRX_PROGRAM_SHADOW_CAPTURES`.
 
+**A backreference may not cross an alternative in the GNU rows.**
+`(a)|(b)\1` is "Invalid back reference" in glibc and so is
+`\(a\)\|\(b\)\1`, while `(a)\1|(b)` - the reference and its group in
+the same branch - compiles, and so does `((a)|(b))\3`, where the reference
+stands outside the alternation that holds the group. The crossing is the
+rule, not the alternation. It belongs to the two GNU rows alone: the POSIX
+rows are decided by glibc and musl agreeing, and musl compiles every one of
+those and matches, so the standard's "undefined" is left undefined rather
+than settled from one side.
+
 **A conditional may name a group the pattern has not got in Perl, and may
 not in PCRE2 or Python.** `(?(99)a|b)` matches "b" in perl - the condition
 is simply false - and is "reference to non-existent subpattern" in

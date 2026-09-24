@@ -708,6 +708,135 @@ static GRX_Result px_check_quantifier_target(GRX_Parser * parser,
   return GRX_OK;
 }
 
+/**
+ * Whether this subtree opens capturing group `group`.
+ *
+ * Used only by the check below, which asks it of one branch of an
+ * alternation at a time.
+ */
+static int px_defines_group(
+    const GRX_Pattern * pattern, uint32_t index, uint32_t group) {
+  const GRX_Node * node = grx_pattern_node(pattern, index);
+  if (!node) {
+    return 0;
+  }
+  if (node->kind == GRX_NODE_GROUP && (node->flags & GRX_NODE_CAPTURING)
+      && node->a == group) {
+    return 1;
+  }
+  for (uint32_t child = node->first_child; child != GRX_INDEX_NONE;) {
+    const GRX_Node * part = grx_pattern_node(pattern, child);
+    if (!part) {
+      return 0;
+    }
+    if (px_defines_group(pattern, child, group)) {
+      return 1;
+    }
+    child = part->next_sibling;
+  }
+  return 0;
+}
+
+/**
+ * The first backreference in this subtree naming a group another branch of
+ * `alternation` defines, or GRX_INDEX_NONE.
+ */
+static uint32_t px_reference_across(const GRX_Pattern * pattern,
+    uint32_t index, uint32_t alternation, uint32_t own_branch) {
+  const GRX_Node * node = grx_pattern_node(pattern, index);
+  if (!node) {
+    return GRX_INDEX_NONE;
+  }
+  if (node->kind == GRX_NODE_BACKREF) {
+    const GRX_Node * alt = grx_pattern_node(pattern, alternation);
+    for (uint32_t branch = alt ? alt->first_child : GRX_INDEX_NONE;
+        branch != GRX_INDEX_NONE;) {
+      const GRX_Node * part = grx_pattern_node(pattern, branch);
+      if (!part) {
+        break;
+      }
+      if (branch != own_branch
+          && px_defines_group(pattern, branch, node->a)) {
+        return index;
+      }
+      branch = part->next_sibling;
+    }
+  }
+  for (uint32_t child = node->first_child; child != GRX_INDEX_NONE;) {
+    const GRX_Node * part = grx_pattern_node(pattern, child);
+    if (!part) {
+      break;
+    }
+    uint32_t found
+        = px_reference_across(pattern, child, alternation, own_branch);
+    if (found != GRX_INDEX_NONE) {
+      return found;
+    }
+    child = part->next_sibling;
+  }
+  return GRX_INDEX_NONE;
+}
+
+/** The first reference that crosses an alternation, anywhere in the tree. */
+static uint32_t px_crossing_reference(
+    const GRX_Pattern * pattern, uint32_t index) {
+  const GRX_Node * node = grx_pattern_node(pattern, index);
+  if (!node) {
+    return GRX_INDEX_NONE;
+  }
+  if (node->kind == GRX_NODE_ALTERNATE) {
+    for (uint32_t branch = node->first_child; branch != GRX_INDEX_NONE;) {
+      const GRX_Node * part = grx_pattern_node(pattern, branch);
+      if (!part) {
+        break;
+      }
+      uint32_t found
+          = px_reference_across(pattern, branch, index, branch);
+      if (found != GRX_INDEX_NONE) {
+        return found;
+      }
+      branch = part->next_sibling;
+    }
+  }
+  for (uint32_t child = node->first_child; child != GRX_INDEX_NONE;) {
+    const GRX_Node * part = grx_pattern_node(pattern, child);
+    if (!part) {
+      break;
+    }
+    uint32_t found = px_crossing_reference(pattern, child);
+    if (found != GRX_INDEX_NONE) {
+      return found;
+    }
+    child = part->next_sibling;
+  }
+  return GRX_INDEX_NONE;
+}
+
+/**
+ * Refuse a backreference to a group in another alternative.
+ *
+ * glibc's: `(a)|(b)\1` is "Invalid back reference" there, and so is
+ * `\(a\)\|\(b\)\1` in the basic grammar, while `(a)\1|(b)` - the reference
+ * and its group in the *same* branch - compiles, and so does
+ * `((a)|(b))\3`, where the reference is outside the alternation that holds
+ * the group. The rule is the crossing and not the alternation.
+ *
+ * It is the GNU rows' rule alone, because glibc is what defines them. The
+ * two POSIX rows are decided by glibc and musl agreeing, and they do not
+ * agree here - musl compiles all of these and matches - so the standard's
+ * "undefined" is left undefined rather than settled from one side.
+ */
+static GRX_Result px_validate(GRX_Parser * parser) {
+  uint32_t crossing
+      = px_crossing_reference(parser->pattern, parser->pattern->root);
+  if (crossing == GRX_INDEX_NONE) {
+    return GRX_OK;
+  }
+  const GRX_Node * node = grx_pattern_node(parser->pattern, crossing);
+  return grx_parse_fail(parser, GRX_DIAG_INVALID_BACKREFERENCE,
+      node ? node->offset : 0, node ? node->length : 0);
+}
+
 const GRX_Frontend grx_frontend_posix_bre = {
   .name = "posix-bre",
   .atom_escape = px_atom_escape,
@@ -734,6 +863,7 @@ const GRX_Frontend grx_frontend_posix_ere = {
 
 const GRX_Frontend grx_frontend_gnu_bre = {
   .name = "gnu-bre",
+  .validate = px_validate,
   .atom_escape = px_atom_escape,
   .class_escape = px_class_escape,
   .char_class = px_char_class,
@@ -746,6 +876,7 @@ const GRX_Frontend grx_frontend_gnu_bre = {
 
 const GRX_Frontend grx_frontend_gnu_ere = {
   .name = "gnu-ere",
+  .validate = px_validate,
   .atom_escape = px_atom_escape,
   .class_escape = px_class_escape,
   .char_class = px_char_class,
