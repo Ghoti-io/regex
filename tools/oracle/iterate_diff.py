@@ -161,6 +161,38 @@ def trim(line):
     return " ".join(fields[:2] + out)
 
 
+def same_match(one, two):
+    r"""Whether one match of ours and one of perl's say the same thing.
+
+    True when perl's began earlier, False when the two are identical, and
+    None when they differ in a way the deviation does not cover.
+
+    The one thing allowed to move with the start is a group that matched
+    *empty where this library's match began* and, in perl's answer, lies
+    wholly in the text perl reached back for: `(a|)\G(?[ [a] ])` over "aab"
+    is 1-2 with group one empty at 1 here, and 0-2 with group one holding
+    the "a" at 0-1 there. That is the prefix the deviation is about. A
+    group of perl's that ends after our match began is inside the span the
+    two share, and a difference there is still a disagreement.
+    """
+    if len(one) != len(two):
+        return None
+    if one[0].split(":")[1] != two[0].split(":")[1]:
+        return None
+    my_start = int(one[0].split(":")[0])
+    their_start = int(two[0].split(":")[0])
+    if their_start > my_start:
+        return None
+    for group_mine, group_theirs in zip(one[1:], two[1:]):
+        if group_mine == group_theirs:
+            continue
+        if (group_mine == "%d:%d" % (my_start, my_start)
+                and int(group_theirs.split(":")[1]) <= my_start):
+            continue
+        return None
+    return their_start < my_start
+
+
 def search_start_before_pos(dialect, pattern, ours, theirs):
     r"""perl lets a match *begin* before the position `\G` reads.
 
@@ -181,57 +213,55 @@ def search_start_before_pos(dialect, pattern, ours, theirs):
     pattern whose `\G` leads it answers alike in all three - so this is
     where the match is allowed to start and not what `\G` means.
 
+    The deviation has two consequences and the loop below covers both. A
+    match perl reaches back for may be one this library also found, one
+    character later - and it may be one perl alone reports, because
+    everything it could match lies behind the point the scan resumed from.
+    The second compounds: each extra match moves perl's pos() somewhere
+    this library's never was, so one reach-back begets the next. `\w\Ga|b`
+    over "ababaaa" is 1-2 and 3-4 here and in pcre2test 10.46 under
+    `,global`; perl reports 1-2, 1-3, 3-4, 3-5, 4-6, 5-7.
+
     Narrow in both dimensions: the `\G` has to be somewhere other than the
     first two characters of the pattern, **and** the two answers have to
-    agree about everything except how far back a match reaches - the same
-    number of matches, the same ends, and no match of perl's beginning
-    later than ours. A row that differs anywhere else is a disagreement.
-
-    The one thing allowed to move with the start is a group that matched
-    *empty where this library's match began* and, in perl's answer, lies
-    wholly in the text perl reached back for: `(a|)\G(?[ [a] ])` over "aab"
-    is 1-2 with group one empty at 1 here, and 0-2 with group one holding
-    the "a" at 0-1 there. That is the prefix the deviation is about. A
-    group of perl's that ends after our match began is inside the span the
-    two share, and a difference there is still a disagreement.
+    agree about everything except how far back a match reaches. Perl's
+    matches are walked against ours in order, and one of perl's that we do
+    not report is allowed only where it begins before *perl's own* pos(),
+    the end of the match perl reported before it. That is the deviation
+    stated exactly: a match that overlaps the one before it can only have
+    got there by reaching back past the `\G`, which is the one thing this
+    library's window refuses. Every match of ours has to be accounted for,
+    and anything else - a match of perl's beginning at or after the pos()
+    it was searching from, a match of ours perl does not report, a
+    difference in an end or in a group - is a disagreement.
     """
     if dialect != "perl" or "\\G" not in pattern[2:]:
         return False
     mine = ours.split(" ")
     yours = theirs.split(" ")
-    if len(mine) != len(yours) or mine[:2] != yours[:2]:
+    if mine[0] != "all" or yours[0] != "all":
         return False
-    earlier = False
-    for a, b in zip(mine[2:], yours[2:]):
-        one = a.split(",")
-        two = b.split(",")
-        if len(one) != len(two):
-            return False
-        if one[0].split(":")[1] != two[0].split(":")[1]:
-            return False
-        my_start = one[0].split(":")[0]
-        their_start = two[0].split(":")[0]
-        if int(their_start) > int(my_start):
-            return False
-        for group_mine, group_theirs in zip(one[1:], two[1:]):
-            if group_mine == group_theirs:
+    mine = [field.split(",") for field in mine[2:]]
+    yours = [field.split(",") for field in yours[2:]]
+
+    deviated = False
+    position = 0
+    index = 0
+    for match in yours:
+        start, end = (int(part) for part in match[0].split(":"))
+        if index < len(mine):
+            earlier = same_match(mine[index], match)
+            if earlier is not None:
+                deviated = deviated or earlier
+                index += 1
+                position = end
                 continue
-            # A group that matched empty where *this library's* match began
-            # and, in perl's answer, lies wholly in the text perl reached
-            # back for. `(a|)\G(?[ [a] ])` over "aab" reports its second
-            # match as 1-2 with group one empty at 1, and perl reports 0-2
-            # with group one holding the "a" at 0-1 - the character its
-            # earlier start let the group take. The difference is confined
-            # to the prefix perl matched and this library did not, which is
-            # the deviation itself; a group of perl's that ends *after* our
-            # match began is inside the span we both matched and is still a
-            # disagreement.
-            if (group_mine == "%s:%s" % (my_start, my_start)
-                    and int(group_theirs.split(":")[1]) <= int(my_start)):
-                continue
-            return False
-        earlier = earlier or one[0] != two[0]
-    return earlier
+        if start < position:
+            deviated = True
+            position = end
+            continue
+        return False
+    return deviated and index == len(mine)
 
 
 def compare(dialect, rng, patterns, subjects, examples):

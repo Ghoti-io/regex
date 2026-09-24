@@ -412,6 +412,45 @@ def splits_a_surrogate_pair(text):
     return False
 
 
+# A template with no `$` in it and no surrogate in it either, so that a
+# replacement node writes between the halves of a pair cannot be healed by
+# the text the template reinserts. See heal_split_pairs below.
+SURROGATE_PROBE = "\u00b7"
+
+
+def heal_split_pairs(text, marker):
+    """Take the marker back out from between the halves of every split pair.
+
+    A high surrogate, the marker, and a low surrogate can only have come
+    from a replacement written at a position inside a character, because
+    nothing else in this file's alphabet produces an unpaired surrogate.
+
+    The halves are then put back together, which is not cosmetic: node
+    reports them as two lone surrogates and this library reports one
+    character, and the two print the same because `json.dumps` spells an
+    astral character as a surrogate pair either way. Re-encoding through
+    UTF-16 is what makes the comparison ask about the text.
+    """
+    out = []
+    index = 0
+    while index < len(text):
+        after = index + 1 + len(marker)
+        if (0xD800 <= ord(text[index]) <= 0xDBFF
+                and text[index + 1:after] == marker
+                and after < len(text)
+                and 0xDC00 <= ord(text[after]) <= 0xDFFF):
+            out.append(text[index])
+            index = after
+            continue
+        out.append(text[index])
+        index += 1
+    joined = "".join(out)
+    try:
+        return joined.encode("utf-16", "surrogatepass").decode("utf-16")
+    except UnicodeDecodeError:
+        return joined
+
+
 TEMPLATE_GROUP = re.compile(r"\\[1-9]")
 
 
@@ -580,7 +619,50 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
         if us != them:
             disagreements.append((flags, pattern, subject, template, them, us))
 
+    if dialect == "ecmascript" and disagreements:
+        # The surrogate-pair deviation again, for the rows the check inside
+        # the loop cannot see. That one reads node's answer and asks whether
+        # it holds an unpaired surrogate, which is what a replacement
+        # written between the halves of a pair leaves behind - but only
+        # while the template writes something that keeps them apart. A
+        # template that reinserts the text around the match puts the two
+        # halves back together across the join: `\B.??` over "aab" U+1F600
+        # "Abx" with `$'ab$`$&` heals into a string that encodes as UTF-8
+        # like any other, and the witness for the deviation is gone.
+        #
+        # So ask again with a template that cannot heal - one character,
+        # no `$`, no surrogate - and put the same rows to this library.
+        # Take node's extra marker back out from between the halves it
+        # split, and the two answers have to be equal. That is the
+        # deviation stated as a property rather than guessed from a
+        # spelling: the match sets agree except for the positions inside a
+        # character, and a replacement is a function of the match set and
+        # the template, so the row this exclusion covers is the row where
+        # nothing else differs. Anything left over is a disagreement.
+        astral = [index for index, row in enumerate(disagreements)
+            if any(ord(character) > 0xFFFF for character in row[2])]
+        if astral:
+            probe = [(disagreements[index][0], disagreements[index][1],
+                disagreements[index][2], SURROGATE_PROBE)
+                for index in astral]
+            theirs_probe = ask_node(probe)
+            ours_probe = ask_library(driver, dialect, probe)
+            healed = set()
+            if len(theirs_probe) == len(probe) \
+                    and len(ours_probe) == len(probe):
+                for index, theirs_one, ours_one in zip(
+                        astral, theirs_probe, ours_probe):
+                    if heal_split_pairs(theirs_one, SURROGATE_PROBE) \
+                            == ours_one:
+                        healed.add(index)
+            if healed:
+                deviation += len(healed)
+                compared -= len(healed)
+                disagreements = [row for index, row
+                    in enumerate(disagreements) if index not in healed]
+
     split = 0
+    both_axes = []
     if dialect == "vim" and disagreements:
         # Every row left, put to vim's other engine. The two disagree about
         # where a `\zs` or a `\ze` inside an assertion counts, and this
@@ -594,6 +676,7 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
         for row, old_answer in zip(disagreements, older):
             if old_answer == row[5]:
                 split += 1
+                compared -= 1
                 continue
             if vim_diff.lookbehind_with_backreference(row[1]):
                 # vim loses the capture a *successful* postfix lookbehind
@@ -602,12 +685,33 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
                 # and the predicate is vim_diff.py's so that the two gates
                 # ask one question.
                 defect += 1
+                compared -= 1
                 continue
             if is_abandoned_path_artifact(row[1], row[3]):
                 # vim keeps the captures and the marks a path it abandoned
                 # wrote, and this library does not, so the group a template
                 # names or the span it covers differs. Section 6, item 2.
                 defect += 1
+                compared -= 1
+                continue
+            if old_answer != row[4]:
+                # Two axes at once, which is the third category vim_diff.py
+                # keeps and this gate did not. Most split rows turn on one
+                # axis and `set re=1` gives exactly this library's answer;
+                # a pattern touching two of them agrees with neither
+                # engine, because this library follows the old one where a
+                # mark sits inside an assertion or an atomic group and the
+                # new one elsewhere - each because that engine's answer is
+                # the one that can be stated as a rule.
+                # `\(\w\+\)\@2<=\(a\zsb\)\@>\v` over "BbBab0A" is
+                # both: the `\zs` inside `\@>` counts here and under
+                # `re=1` and is inert under `re=2`, and the bounded
+                # lookbehind reaches two characters back here and under
+                # `re=2` and one under `re=1`. Printed rather than
+                # swallowed - a defect of this library's could hide among
+                # them, and the only defence is that a person can see them.
+                both_axes.append(row + (old_answer,))
+                compared -= 1
                 continue
             kept.append(row)
         disagreements = kept
@@ -618,14 +722,23 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
             json.dumps(subject)))
         print("      reference: %s" % json.dumps(them))
         print("      ours:      %s" % json.dumps(us))
+    for flags, pattern, subject, template, them, us, older in \
+            both_axes[:examples]:
+        print("  [both axes] /%s/%s  %s on %s"
+            % (pattern, flags, json.dumps(template), json.dumps(subject)))
+        print("      re=2: %s" % json.dumps(them))
+        print("      re=1: %s" % json.dumps(older))
+        print("      ours: %s" % json.dumps(us))
 
     print("%-11s %d rows, %d compared, %d the pattern was rejected, "
           "%d the reference declined, %d the surrogate-pair deviation, "
           "%d the template parsed up front, %d a known reference defect, "
           "%d this library refuses on purpose, "
-          "%d vim's two engines disagree, %d disagreements"
+          "%d vim's two engines disagree, "
+          "%d vim's two engines disagree and neither gives ours, "
+          "%d disagreements"
           % (dialect + ":", len(rows), compared, rejected, declined,
-             deviation, lazy, defect, refused_here, split,
+             deviation, lazy, defect, refused_here, split, len(both_axes),
              len(disagreements)))
     if not rejected:
         sys.stderr.write(

@@ -816,6 +816,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 .PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-dump-names check-readme-example check-oracle-syntax check-oracle-match check-oracle-soak check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-perl-syntax check-oracle-script-runs check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
 	check-oracle-properties check-oracle-numeric-properties \
 	check-oracle-string-properties check-oracle-posix check-oracle-sed \
+	check-oracle-exclusions \
 	check-oracles \
 	check-limits check-json-schema-suite vectors vectors-ecmascript \
 	vectors-pcre vectors-perl vectors-posix
@@ -915,6 +916,7 @@ check-oracles: check-oracle-syntax check-oracle-match check-oracle-properties \
 	check-oracle-script-runs check-oracle-newlines check-oracle-callouts \
 	check-oracle-sed \
 	check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
+	check-oracle-exclusions \
 	check-engine-equivalence
 
 check-oracle-soak: ## Run the generating differentials over many seeds
@@ -1213,6 +1215,22 @@ check-oracle-window: $(TOOLS)
 		exit 0; \
 	fi; \
 	python3 tools/oracle/window_diff.py --seed $(ORACLE_SEED)
+
+check-oracle-exclusions: ## Put each differential's exclusions their own controls
+# Every exclusion in this directory narrows a gate, and a gate narrowed too
+# far is green for the same reason a working one is. The generators cannot
+# tell the two apart: they only produce rows the exclusions were written
+# for, so widening one quietly buys a clean run. This puts each predicate a
+# table of rows it must recognise and rows a hand's breadth away it must
+# refuse - no reference implementation, no build, a few milliseconds - so
+# that the narrowing is a thing that can fail rather than a thing that was
+# once argued for in a comment.
+check-oracle-exclusions:
+	@if ! command -v python3 >/dev/null 2>&1; then \
+		printf "check-oracle-exclusions: skipped (no python3)\n"; \
+		exit 0; \
+	fi; \
+	python3 tools/oracle/check_exclusions.py
 
 check-oracle-iterate: ## Compare the search-all loop against node and perl
 # grx_regex_search_next() is the one entry point whose answer is a sequence,
