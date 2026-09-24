@@ -51,6 +51,15 @@ GRIN = chr(0x1F600)
 ATOMS = [
     "a", "b", "c", "x", ".", "\\d", "\\w", "\\s", "\\D", "\\W", "\\S",
     "[abc]", "[^abc]", "[a-c]", "[\\d-]", "[^\\W]", "\\u0061", "\\x62",
+    # The braced escape, which this vocabulary had in neither spelling
+    # though `syntax_diff.py` has long asked whether both sides *accept*
+    # it. Without `u` Annex B reads `\u{2}` as "u, twice" and `\u{1F41F}`
+    # as literal text, with `u` they are a code point and an error - four
+    # readings of two atoms, and the matching half of all four was
+    # untested. A literal astral character is deliberately not added here:
+    # that one *is* a deviation (section 6, the pattern source is code
+    # units in ECMAScript) and would bury this gate in excluded rows.
+    "\\u{2}", "\\u{1F41F}",
     "(a)", "(b|c)", "(?:ab)", "(a|)", "()", "(?<n>a)", "(a)(b)",
     "(a*)", "(a|b)*", "((a)|b)", "(?:(a)|b)", "(a?)", "(?:a|)",
     "(?=a)", "(?!a)", "(?<=a)", "(?<!a)", "(a)\\1", "(a|b)\\1",
