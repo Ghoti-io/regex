@@ -245,33 +245,6 @@ extern const size_t grx_unicode_es_legacy_orbit_member_count;
  * replacement template asking for "the next character in upper case" means
  * - Vim's `\u` and `\U`.
  */
-/** Character names for `\N{NAME}`: the word dictionary, then the names.
- *
- * A name is a run of tokens in `grx_unicode_name_tokens`, from its entry in
- * `grx_unicode_name_offset` to the next; each token is a word number into
- * the dictionary in its low 15 bits, with bit 15 set when a `-` rather than
- * a space precedes it. The rows are sorted by name so that a lookup can
- * binary search them.
- */
-extern const char grx_unicode_name_words[];
-extern const uint32_t grx_unicode_name_word_offset[];
-extern const size_t grx_unicode_name_word_count;
-
-/** A family whose names are computed from the code point. */
-typedef struct {
-  uint32_t first;        /**< First code point. */
-  uint32_t last;         /**< Last code point. */
-  const char * prefix;   /**< What every name in it begins with. */
-  uint8_t hangul;        /**< 1 when the tail is a jamo spelling, not hex. */
-} GRX_UnicodeNameRange;
-
-extern const GRX_UnicodeNameRange grx_unicode_name_ranges[];
-extern const size_t grx_unicode_name_range_count;
-
-extern const uint16_t grx_unicode_name_tokens[];
-extern const uint32_t grx_unicode_name_offset[];
-extern const uint32_t grx_unicode_name_codepoint[];
-extern const size_t grx_unicode_name_count;
 
 
 #ifdef __cplusplus
