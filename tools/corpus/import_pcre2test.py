@@ -44,6 +44,7 @@ ORACLE = os.path.join(ROOT, "tools", "oracle")
 sys.path.insert(0, ORACLE)
 
 import make_vectors
+import pcre2_runner
 
 # pcre2test modifiers this library's PCRE2 flag alphabet can express. A
 # pattern carrying anything else is skipped and counted rather than imported
@@ -183,7 +184,7 @@ def ask_pcre2test(patterns):
     """
     sent = ["/%s/%s" % (pattern, modifiers)
             for pattern, _, modifiers in patterns]
-    finished = subprocess.run(["pcre2test", "-q"],
+    finished = subprocess.run(pcre2_runner.test_command("-q"),
         input="".join(line + "\n\n" for line in sent),
         capture_output=True, text=True)
 
@@ -209,9 +210,14 @@ def ask_pcre2test(patterns):
 
 
 def version():
-    finished = subprocess.run(["pcre2test", "--version"], capture_output=True,
-        text=True)
-    return finished.stdout.strip()
+    """The pcre2 that answered, which is the pinned one rather than the host's.
+
+    tools/corpus/VERSIONS pins the corpus - testinput1 and testinput2 from
+    10.46 - and tools/oracle/containers/IMAGES pins the pcre2test that answers
+    it. Importing from one release and asking another measures the gap between
+    them and records it as a verdict.
+    """
+    return pcre2_runner.version()
 
 
 def main(argv):

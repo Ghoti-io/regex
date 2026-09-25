@@ -14,12 +14,18 @@ test262 35d566604512cba908054eec49f85e64a59f3091
 # (PCRE2-specific), from the release that matches the pcre2test on this
 # machine: 10.46.
 #
-# And src/pcre2.h.in, the public header, because tools/oracle/pcre2_match.c
-# links the installed libpcre2-8 and Debian 13 ships libpcre2-8.so.0 without
-# the -dev package's pcre2.h. It is a configure template whose only open
-# substitutions are four version macros; the Makefile fills them from this
-# ref, so the header, the installed library and the imported testinput files
-# are one version or the build is wrong in a way that says so.
+# The reference that *answers* this corpus is pinned separately, in
+# tools/oracle/containers/IMAGES, and the two move together: importing
+# testinput1 from one release and asking another which patterns it refuses
+# measures the gap between them. Both name 10.46.
+#
+# `src/pcre2.h.in` used to be fetched with the corpus as well, because
+# tools/oracle/pcre2_match.c linked the installed libpcre2-8 and Debian 13
+# ships libpcre2-8.so.0 without the -dev package's pcre2.h; the Makefile
+# substituted four version macros into the configure template to make one.
+# The driver is compiled inside the pinned image now, against that image's
+# own libpcre2-dev, so the header is upstream's rather than a reconstruction
+# and the ldconfig scrape that found the library is gone with it.
 #
 # Why a driver at all when pcre2test is here: pcre2test reports the matched
 # *text* rather than byte offsets, and omits a trailing group that did not

@@ -32,6 +32,7 @@ import subprocess
 import sys
 
 import oracle_env
+import pcre2_runner
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
@@ -151,9 +152,9 @@ def main(argv):
     args = parser.parse_args(argv[1:])
 
     ours = find("grx_match")
-    pcre2 = find("pcre2_match")
+    pcre2 = pcre2_runner.command()
     perl = os.path.join(ROOT, "tools", "corpus", "perl_match.pl")
-    if not ours or not pcre2:
+    if not ours:
         sys.stderr.write("run `make tools` first\n")
         return 2
     if not os.path.exists(perl):
@@ -178,7 +179,7 @@ def main(argv):
     pattern = "^(*sr:.+)$"
 
     mine = ask([ours, "pcre"], subjects, pattern)
-    theirs = ask([pcre2], subjects, pattern)
+    theirs = ask(pcre2, subjects, pattern)
     yours = ask(oracle_env.command("perl", ["perl", perl]), subjects, pattern)
     if len({len(mine), len(theirs), len(yours), len(subjects)}) != 1:
         sys.stderr.write("a driver answered %d, %d and %d of %d requests\n"

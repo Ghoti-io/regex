@@ -554,37 +554,24 @@ MUSL_CFLAGS := -std=c11 -O2 -w -Itools/oracle/musl-include \
 	-DCHARCLASS_NAME_MAX=14 -DRE_DUP_MAX=255 \
 	-Dregcomp=musl_regcomp -Dregexec=musl_regexec -Dregfree=musl_regfree
 
-# pcre2, linked rather than driven through pcre2test. Debian ships
-# libpcre2-8.so.0 without the -dev package's pcre2.h, so the header comes
-# from the release pinned in tools/corpus/VERSIONS, fetched with the corpus.
-# It is a configure template whose only open substitutions are four version
-# macros, which is what the rule below fills in - so the pinned corpus, the
-# header and the installed library are one version or the build says so.
+# pcre2 is not built here at all any more, and three workarounds went with it.
+#
+# Debian ships libpcre2-8.so.0 without the -dev package, so reaching pcre2 on
+# this machine used to need: a `pcre2.h` manufactured out of the pinned
+# release's `pcre2.h.in` by substituting four version macros; an
+# `ldconfig -p` scrape with a multiarch wildcard behind it, because the `.so`
+# symlink `-l` wants belongs to that same -dev package; and a `vectors-pcre`
+# that skipped for want of `pcre2test`. All three were this laptop's shape
+# written into the build.
+#
+# tools/oracle/pcre2_match.c is now compiled *inside* the pinned image, at run
+# time, against that image's own libpcre2-dev - so the header is upstream's,
+# the link is `-lpcre2-8`, and pcre2test is present. See
+# tools/oracle/pcre2_runner.py and tools/oracle/containers/pcre2/Dockerfile.
+#
+# PCRE2_REF stays because the *corpus* pin is still read here.
 PCRE2_REF := $(shell awk '$$1 == "pcre2" { print $$2; exit }' tools/corpus/VERSIONS)
 PCRE2_SRC := third_party/pcre2/$(PCRE2_REF)
-PCRE2_HEADER_IN := $(PCRE2_SRC)/pcre2.h.in
-PCRE2_HEADER := $(GEN_DIR)/pcre2.h
-PCRE2_MATCH := $(APP_DIR)/tools/pcre2_match$(EXE_EXTENSION)
-
-# Where the shared library actually is. `-lpcre2-8` needs the `.so` symlink
-# that only the -dev package installs, so the versioned file is found instead
-# - through ldconfig where there is one, and by looking where a Debian
-# multiarch install puts it otherwise.
-PCRE2_LIB := $(shell { /sbin/ldconfig -p 2>/dev/null || ldconfig -p 2>/dev/null; } \
-	| awk '/libpcre2-8\.so/ { print $$NF; exit }')
-ifeq ($(PCRE2_LIB),)
-PCRE2_LIB := $(firstword $(wildcard /usr/lib/*/libpcre2-8.so.0 \
-	/usr/lib/libpcre2-8.so.0 /lib/*/libpcre2-8.so.0))
-endif
-
-# Joined to the tool list only when both halves are present, the way the musl
-# oracle is: a fresh clone that has not fetched, or a machine with no pcre2,
-# builds what it can and the checks that want this say they skipped.
-ifneq ($(wildcard $(PCRE2_HEADER_IN)),)
-ifneq ($(PCRE2_LIB),)
-PCRE2_AVAILABLE := 1
-endif
-endif
 
 # The oracle drivers: this library wrapped so that a conformance harness can
 # ask it the same question it asks a reference implementation. Built on
@@ -598,10 +585,6 @@ TOOLS := $(patsubst tools/limits/%.c,$(APP_DIR)/tools/%$(EXE_EXTENSION),$(TOOLS)
 ifdef MUSL_AVAILABLE
 TOOLS += $(MUSL_MATCH)
 endif
-ifdef PCRE2_AVAILABLE
-TOOLS += $(PCRE2_MATCH)
-endif
-
 # The JSON Schema suite runner links `text`, so it joins the list only when
 # pkg-config found it.
 JSONSCHEMA_TOOL_SOURCES := $(shell find tools/jsonschema -type f -name '*.c' 2>/dev/null)
@@ -797,28 +780,6 @@ $(MUSL_MATCH): tools/oracle/musl_match.c tools/oracle/musl-include/regex.h \
 	@mkdir -p $(@D)
 	$(CC) $(MUSL_CFLAGS) -DGRX_MUSL_REF='"$(MUSL_REF)"' -o $@ \
 		tools/oracle/musl_match.c $(MUSL_UNITS)
-
-# pcre2's public header, from the pinned release's configure template. The
-# four substitutions are the whole of what configure does to it, and they are
-# version macros the driver prints so that a mismatch with the installed
-# library is visible in the run rather than inferred from a crash.
-$(PCRE2_HEADER): $(PCRE2_HEADER_IN)
-	@mkdir -p $(@D)
-	@sed -e 's/@PCRE2_MAJOR@/$(word 1,$(subst ., ,$(patsubst pcre2-%,%,$(PCRE2_REF))))/' \
-	     -e 's/@PCRE2_MINOR@/$(word 2,$(subst ., ,$(patsubst pcre2-%,%,$(PCRE2_REF))))/' \
-	     -e 's/@PCRE2_PRERELEASE@//' \
-	     -e 's/@PCRE2_DATE@/$(PCRE2_REF)/' $< > $@
-
-# Nothing of this library linked, for the reason musl_match links none: an
-# oracle answers for somebody else's implementation and must not be able to
-# reach this one. The shared library is named by path rather than by -l,
-# because the `.so` symlink -l needs belongs to a -dev package that is not
-# installed here.
-$(PCRE2_MATCH): tools/oracle/pcre2_match.c $(PCRE2_HEADER)
-	@printf "\n### Compiling Tool: pcre2_match ###\n"
-	@mkdir -p $(@D)
-	$(CC) -std=c17 -O2 -Wall -Wextra -I$(GEN_DIR) -o $@ \
-		tools/oracle/pcre2_match.c $(PCRE2_LIB)
 
 $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/limits/%.c $(APP_DIR)/$(STATIC_TARGET) \
 		| $(APP_DIR)/$(TARGET)
@@ -1179,12 +1140,9 @@ check-oracle-perl: ## Compare the Perl-family front ends against perl and pcre2
 # resolving to a group that was never set, and perl's rule for quantifying a
 # control verb.
 check-oracle-perl: $(TOOLS)
-	@if ! command -v perl >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then \
-		printf "check-oracle-perl: skipped (no perl or no python3)\n"; \
-		exit 0; \
-	fi; \
-	python3 tools/oracle/perl_diff.py --seed $(ORACLE_SEED) \
-		--patterns $(ORACLE_PATTERNS)
+	@$(REQUIRE_PYTHON3)
+	$(call run-oracle,perl$(comma)pcre2,python3 tools/oracle/perl_diff.py \
+		--seed $(ORACLE_SEED) --patterns $(ORACLE_PATTERNS))
 
 check-oracle-perl-syntax: ## Ask perl and this library whether each Perl-family construct compiles
 # A list rather than a generator, and that is the point: perl_diff.py
@@ -1204,11 +1162,9 @@ check-oracle-script-runs: ## Compare `(*script_run:...)` against pcre2 and perl
 # finding - pcre2 accepts the three-way mixture its own manual names as
 # not a script run, and perl refuses it.
 check-oracle-script-runs: $(TOOLS)
-	@if ! command -v perl >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then \
-		printf "check-oracle-script-runs: skipped (no perl or no python3)\n"; \
-		exit 0; \
-	fi; \
-	python3 tools/oracle/script_run_diff.py --seed $(ORACLE_SEED)
+	@$(REQUIRE_PYTHON3)
+	$(call run-oracle,perl$(comma)pcre2,python3 tools/oracle/script_run_diff.py \
+		--seed $(ORACLE_SEED))
 
 check-oracle-newlines: ## Compare PCRE2's newline conventions against pcre2
 # Six conventions, each deciding four things at once - what `.` refuses,
@@ -1217,11 +1173,8 @@ check-oracle-newlines: ## Compare PCRE2's newline conventions against pcre2
 # decides: Perl has no newline conventions, so there is no second opinion
 # and none is pretended.
 check-oracle-newlines: $(TOOLS)
-	@if ! command -v python3 >/dev/null 2>&1; then \
-		printf "check-oracle-newlines: skipped (no python3)\n"; \
-		exit 0; \
-	fi; \
-	python3 tools/oracle/newline_diff.py
+	@$(REQUIRE_PYTHON3)
+	$(call run-oracle,pcre2,python3 tools/oracle/newline_diff.py)
 
 check-oracle-callouts: ## Compare the `(?C...)` trace against pcre2
 # The one construct whose answer is not "did it match" but "where were you,
@@ -1230,11 +1183,8 @@ check-oracle-callouts: ## Compare the `(?C...)` trace against pcre2
 # pcre2 is compiled with NO_START_OPTIMIZE and NO_AUTO_POSSESS for this,
 # because both change which paths it takes and this library has neither.
 check-oracle-callouts: $(TOOLS)
-	@if ! command -v python3 >/dev/null 2>&1; then \
-		printf "check-oracle-callouts: skipped (no python3)\n"; \
-		exit 0; \
-	fi; \
-	python3 tools/oracle/callout_diff.py
+	@$(REQUIRE_PYTHON3)
+	$(call run-oracle,pcre2,python3 tools/oracle/callout_diff.py)
 
 check-oracle-posix: ## Compare the POSIX and GNU front ends against glibc
 check-oracle-posix: $(TOOLS)
@@ -1361,15 +1311,9 @@ check-oracle-window: ## Compare the search window and its flags against pcre2
 # subject anchors as well as the line anchors, which neither PCRE2 nor glibc
 # does.
 check-oracle-window: $(TOOLS)
-	@if ! command -v python3 >/dev/null 2>&1; then \
-		printf "check-oracle-window: skipped (no python3)\n"; \
-		exit 0; \
-	fi; \
-	if [ ! -x "$(PCRE2_MATCH)" ]; then \
-		printf "check-oracle-window: skipped (pcre2 is not available)\n"; \
-		exit 0; \
-	fi; \
-	python3 tools/oracle/window_diff.py --seed $(ORACLE_SEED)
+	@$(REQUIRE_PYTHON3)
+	$(call run-oracle,pcre2,python3 tools/oracle/window_diff.py \
+		--seed $(ORACLE_SEED))
 
 check-oracle-determinism: ## Fail if the ECMAScript oracle answers a row two ways
 # V8 runs a regular expression in an interpreter and compiles it after a few
@@ -1452,15 +1396,15 @@ vectors-ecmascript: ## Regenerate the ECMAScript vectors from the pinned node
 	fi
 	$(call run-oracle,node,python3 tools/corpus/import_test262.py)
 
-vectors-pcre: ## Re-import PCRE2's testinput corpus (needs pcre2test)
-	@if ! command -v pcre2test >/dev/null 2>&1; then \
-		printf "vectors-pcre: skipped (no pcre2test)\n"; exit 0; \
-	fi; \
-	if [ ! -d third_party/pcre2 ]; then \
+vectors-pcre: ## Re-import PCRE2's testinput corpus, answered by the pinned pcre2test
+# No `command -v pcre2test`: it is a separate Debian package, so this target
+# used to skip on any machine that had the library and not the CLI. The image
+# has both.
+	@if [ ! -d third_party/pcre2 ]; then \
 		printf "vectors-pcre: skipped (run tools/corpus/fetch.sh pcre2)\n"; \
 		exit 0; \
-	fi; \
-	python3 tools/corpus/import_pcre2test.py
+	fi
+	$(call run-oracle,pcre2,python3 tools/corpus/import_pcre2test.py)
 
 vectors-posix: ## Re-import Spencer's test set, answered by glibc and by musl
 vectors-posix: $(TOOLS)

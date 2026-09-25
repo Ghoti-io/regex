@@ -39,6 +39,7 @@ import subprocess
 import sys
 
 import oracle_env
+import pcre2_runner
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
@@ -536,15 +537,12 @@ def reference_command(dialect):
                   % dialect)
             return None
         return oracle_env.command("perl", ["perl", script])
-    driver = find("pcre2_match")
-    if not driver:
-        # Not an error. The driver needs pcre2's header, which arrives with
-        # the corpus, and a libpcre2-8 to link; a clone that has neither
-        # builds everything else and says this was not run.
-        print("%s: skipped (no pcre2_match; run tools/corpus/fetch.sh pcre2 "
-              "and `make tools`)" % dialect)
-        return None
-    return [driver]
+    # No `find("pcre2_match")` and no skip. The driver is compiled inside the
+    # pinned image against that image's pcre2 and run there, so there is
+    # nothing for `make tools` to have failed to build and nothing for a fresh
+    # clone to be missing - and the reference is resolved and versioned by
+    # oracle_run.py before this runs.
+    return pcre2_runner.command()
 
 
 def compare(dialect, ours, seed, patterns, examples):

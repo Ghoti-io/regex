@@ -44,6 +44,7 @@ import subprocess
 import sys
 import tempfile
 
+import pcre2_runner
 import vim_runner
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -240,7 +241,7 @@ def ask_pcre2(driver, rows):
         flags, pattern.encode("utf-8").hex(), subject.encode("utf-8").hex(),
         template.encode("utf-8").hex())
         for flags, pattern, subject, template in rows)
-    finished = subprocess.run([driver, "replace"], input=lines,
+    finished = subprocess.run(list(driver), input=lines,
         capture_output=True, text=True, check=True)
     out = []
     for line in finished.stdout.splitlines():
@@ -512,12 +513,9 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
         # needs to know - see vim_runner.py's docstring for what it cost.
         print("vim: %s" % vim_runner.version())
     if dialect == "pcre":
-        pcre2 = find("pcre2_match")
-        if not pcre2:
-            print("pcre: skipped (no pcre2_match; run tools/corpus/fetch.sh "
-                  "pcre2 and `make tools`)")
-            return 0
-        reference = pcre2
+        # Compiled inside the pinned image and run there, so there is no
+        # driver for `make tools` to have failed to build and no skip.
+        reference = pcre2_runner.command("replace")
 
     rng = random.Random(seed)
     rows = []

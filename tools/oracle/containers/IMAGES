@@ -119,3 +119,30 @@ node	docker.io/library/node:22.23.2-slim@sha256:43aeff40f4afc22e83f7589a2f37e111
 # against vim itself rather than against a number it does not state - and it
 # is why "which vim" is the whole question for them.
 vim	localhost/ghoti-regex-oracle-vim:9.1.1244	Included patches: 1-1244	The Vim dialect, its nine character classes and its cell widths
+
+# pcre2, for the PCRE dialect - and, alone, for the newline conventions, the
+# callout trace and the search window, which nothing else can answer.
+#
+# **Built here, and what it removes is the argument for it.** On this machine
+# pcre2 was reached through three workarounds, all of them in the Makefile and
+# all of them there because Debian installs the runtime without the -dev
+# package: `pcre2.h` was manufactured out of the pinned release's
+# `pcre2.h.in` by substituting four version macros, the `.so` symlink `-l`
+# wants was found by scraping `ldconfig -p` with a multiarch guess behind it,
+# and `vectors-pcre` skipped for want of `pcre2test`. In the image all three
+# are one `apt-get install libpcre2-dev pcre2-utils`, the header is upstream's
+# rather than a reconstruction, and the driver links `-lpcre2-8` the ordinary
+# way.
+#
+# The driver is compiled **inside** the image at run time rather than shipped
+# in it, the way `chron` compiles its ICU driver: the source lives here and
+# the image is deliberately ignorant of this library. What it holds is a pcre2
+# and a compiler, and what it builds links only pcre2 - which is the property
+# that stops an oracle reaching the implementation it answers for.
+#
+# The apt version is written out in full in the Dockerfile so that the archive
+# moving past 10.46 *fails the build* rather than quietly installing 10.47 and
+# reporting a corpus imported from 10.46 as regressed. When that first breaks,
+# snapshot.debian.org is the durable answer; it is not worth the weight
+# before then.
+pcre2	localhost/ghoti-regex-oracle-pcre2:10.46	PCRE2 version 10.46	The PCRE dialect, the newline conventions, the callout trace and the search window

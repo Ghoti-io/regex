@@ -70,6 +70,8 @@ import os
 import subprocess
 import sys
 
+import pcre2_runner
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 
@@ -171,14 +173,14 @@ def main(argv):
     args = parser.parse_args(argv[1:])
 
     ours = find("grx_match")
-    theirs = find("pcre2_match")
-    if not ours or not theirs:
+    if not ours:
         sys.stderr.write("run `make tools` first\n")
         return 2
+    theirs = pcre2_runner.command("callout")
 
     cases = list(rows())
     mine = ask([ours, "pcre", "callout"], cases)
-    reference = ask([theirs, "callout"], cases)
+    reference = ask(theirs, cases)
     if len(mine) != len(cases) or len(reference) != len(cases):
         sys.stderr.write("a driver answered %d and %d of %d requests\n"
                          % (len(mine), len(reference), len(cases)))

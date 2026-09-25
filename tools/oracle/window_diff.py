@@ -59,6 +59,7 @@ ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE)
 
 import perl_diff
+import pcre2_runner
 
 # The constructs whose answer the window and the flags actually change.
 # perl_diff's vocabulary builds patterns to be matched; these are the ones
@@ -116,7 +117,7 @@ def ask(driver, rows, extra=()):
         flags, pattern.encode("utf-8").hex(), subject.encode("utf-8").hex(),
         spell(window))
         for flags, pattern, subject, window in rows)
-    finished = subprocess.run([driver, *extra], input=lines,
+    finished = subprocess.run(list(driver) + list(extra), input=lines,
         capture_output=True, text=True, check=True)
     return finished.stdout.splitlines()
 
@@ -225,15 +226,10 @@ def main(argv):
     args = parser.parse_args(argv[1:])
 
     ours = find("grx_match")
-    theirs = find("pcre2_match")
     if not ours:
         sys.stderr.write("the grx_match tool was not found; run `make tools`\n")
         return 2
-    if not theirs:
-        sys.stderr.write(
-            "pcre2_match was not built, so the window axis has no oracle; "
-            "see the pcre2 block in the Makefile\n")
-        return 2
+    theirs = pcre2_runner.command()
 
     rng = random.Random(args.seed)
     rows = []
@@ -244,7 +240,7 @@ def main(argv):
                 for window in windows_for(subject, rng, args.windows):
                     rows.append((flags, pattern, subject, window))
 
-    mine = ask(ours, rows, ("pcre",))
+    mine = ask([ours], rows, ("pcre",))
     yours = ask(theirs, rows)
     if len(mine) != len(rows) or len(yours) != len(rows):
         sys.stderr.write("a driver did not answer every row (%d/%d of %d)\n"
