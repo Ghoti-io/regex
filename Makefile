@@ -1736,6 +1736,16 @@ ifeq ($(OS_NAME), Linux)
 		printf "See CONVENTIONS.md section 4.\n" >&2; \
 		exit 1; \
 	fi
+	@printf "\033[0;32mEvery exported symbol carries the $(LIBVER_SYMBOL)_ namespace.\033[0m\n"
+else
+# Only the sweep above is platform-bound: it reads `nm -D` on the built .so.
+# The three checks below are `find`/`awk`/`grep` over source text and have
+# nothing to do with the OS, but they sat inside this conditional and so did
+# not run at all off Linux - where a missing GRX_API is exactly the kind of
+# thing that gets written and not noticed, because the developer's own suite
+# said "skipped (Linux only)" and exited 0.
+	@printf "check-symbols: the exported-symbol sweep needs nm and is skipped on $(OS_NAME); the three source checks still run.\n"
+endif
 	@unexported=$$(find include -name '*.h' -exec awk '/^#if DOXYGEN/{d=1} d==0 && /^[a-z_][A-Za-z0-9_ ]*\**[[:space:]]*grx_[a-z0-9_]+[[:space:]]*\(/{print FILENAME": "$$0} /^#endif/{d=0}' {} + \
 		| grep -vE 'typedef|static inline' || true); \
 	if [ -n "$$unexported" ]; then \
@@ -1786,13 +1796,9 @@ ifeq ($(OS_NAME), Linux)
 		printf "silently empty. Guards mirror the path: GHOTI_IO_GRX_<PATH>_H.\n" >&2; \
 		exit 1; \
 	fi
-	@printf "\033[0;32mEvery exported symbol carries the $(LIBVER_SYMBOL)_ namespace.\033[0m\n"
 	@printf "\033[0;32mEvery public declaration carries GRX_API.\033[0m\n"
 	@printf "\033[0;32mEvery header includes macros.h.\033[0m\n"
 	@printf "\033[0;32mEvery include guard is unique and correctly prefixed.\033[0m\n"
-else
-	@printf "check-symbols: skipped (Linux only)\n"
-endif
 
 check-aliasing: ## Fail if the strict-aliasing warning is no longer armed
 # $(ALIASING_CFLAGS) detects the violations; this proves it can still detect
