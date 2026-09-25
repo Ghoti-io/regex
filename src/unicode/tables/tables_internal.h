@@ -210,27 +210,6 @@ extern const GRX_UnicodeName grx_unicode_loose_prop_names[];
 extern const size_t grx_unicode_loose_prop_name_count;
 
 /**
- * The break properties: UAX #29's three, UAX #14's one, and the
- * Indic_Conjunct_Break that UAX #29's GB9c needs.
- */
-extern const GRX_UnicodeBreakRange grx_unicode_gcb_ranges[];
-extern const size_t grx_unicode_gcb_range_count;
-extern const GRX_UnicodeBreakRange grx_unicode_wb_ranges[];
-extern const size_t grx_unicode_wb_range_count;
-extern const GRX_UnicodeBreakRange grx_unicode_sb_ranges[];
-extern const size_t grx_unicode_sb_range_count;
-extern const GRX_UnicodeBreakRange grx_unicode_lb_ranges[];
-extern const size_t grx_unicode_lb_range_count;
-extern const GRX_UnicodeBreakRange grx_unicode_incb_ranges[];
-extern const size_t grx_unicode_incb_range_count;
-extern const GRX_UnicodeBreakRange grx_unicode_extpict_ranges[];
-extern const size_t grx_unicode_extpict_range_count;
-extern const GRX_UnicodeBreakRange grx_unicode_ea_ranges[];
-extern const size_t grx_unicode_ea_range_count;
-extern const GRX_UnicodeBreakRange grx_unicode_epcn_ranges[];
-extern const size_t grx_unicode_epcn_range_count;
-
-/**
  * Full case folding: CaseFolding.txt status F, the folds of more than one
  * code point.
  *

@@ -1190,7 +1190,6 @@ def build_tables(ucd, version):
         "properties": properties,
         "string_sets": strings["sets"],
         "string_sequences": strings["sequences"],
-        "breaks": breaks,
         "folds": folds,
         "full_folds": full_folds,
         "fold_orbits": fold_orbits,
@@ -1411,27 +1410,6 @@ extern const size_t grx_unicode_loose_name_count;
 
 extern const GRX_UnicodeName grx_unicode_loose_prop_names[];
 extern const size_t grx_unicode_loose_prop_name_count;
-
-/**
- * The break properties: UAX #29's three, UAX #14's one, and the
- * Indic_Conjunct_Break that UAX #29's GB9c needs.
- */
-extern const GRX_UnicodeBreakRange grx_unicode_gcb_ranges[];
-extern const size_t grx_unicode_gcb_range_count;
-extern const GRX_UnicodeBreakRange grx_unicode_wb_ranges[];
-extern const size_t grx_unicode_wb_range_count;
-extern const GRX_UnicodeBreakRange grx_unicode_sb_ranges[];
-extern const size_t grx_unicode_sb_range_count;
-extern const GRX_UnicodeBreakRange grx_unicode_lb_ranges[];
-extern const size_t grx_unicode_lb_range_count;
-extern const GRX_UnicodeBreakRange grx_unicode_incb_ranges[];
-extern const size_t grx_unicode_incb_range_count;
-extern const GRX_UnicodeBreakRange grx_unicode_extpict_ranges[];
-extern const size_t grx_unicode_extpict_range_count;
-extern const GRX_UnicodeBreakRange grx_unicode_ea_ranges[];
-extern const size_t grx_unicode_ea_range_count;
-extern const GRX_UnicodeBreakRange grx_unicode_epcn_ranges[];
-extern const size_t grx_unicode_epcn_range_count;
 
 /**
  * Full case folding: CaseFolding.txt status F, the folds of more than one
@@ -1693,40 +1671,6 @@ def write_case(out_dir, tables):
             out, "grx_unicode_es_legacy_orbit", tables["es_orbits"])
 
 
-def write_breaks(out_dir, tables):
-    """The five break-property tables, one flat sorted array each."""
-    path = os.path.join(out_dir, "tables_break.c")
-    with open(path, "w", encoding="utf-8", newline="\n") as out:
-        out.write(HEADER_NOTICE % tables["version"])
-        out.write('\n#include "tables_internal.h"\n\n')
-
-        for name in ("gcb", "wb", "sb", "lb", "incb", "extpict", "ea",
-                     "epcn"):
-            rows = []
-            for value, ranges in tables["breaks"][name].items():
-                for low, high in ranges:
-                    rows.append((low, high, value))
-            rows.sort()
-
-            # Non-overlapping is the whole basis of the binary search, and a
-            # UCD that listed a code point twice would otherwise produce a
-            # table whose answer depends on where the search landed.
-            for earlier, later in zip(rows, rows[1:]):
-                if earlier[1] >= later[0]:
-                    raise ValueError(
-                        "%s: overlapping runs at U+%04X" % (name, later[0]))
-
-            out.write("const GRX_UnicodeBreakRange grx_unicode_%s_ranges[] = {\n"
-                      % name)
-            for start in range(0, len(rows), 3):
-                chunk = rows[start:start + 3]
-                out.write("  " + " ".join(
-                    "{0x%04X,0x%04X,%d}," % row for row in chunk) + "\n")
-            out.write("};\n")
-            out.write("const size_t grx_unicode_%s_range_count = %d;\n\n"
-                      % (name, len(rows)))
-
-
 def write_names(out_dir, tables):
     """The character-name table, as a word dictionary and encoded names.
 
@@ -1895,7 +1839,6 @@ def main(argv):
     write_header(out_dir, tables)
     write_ranges(out_dir, tables)
     write_case(out_dir, tables)
-    write_breaks(out_dir, tables)
     write_strings(out_dir, tables)
     write_names(out_dir, tables)
 
