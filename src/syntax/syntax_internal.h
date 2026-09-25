@@ -746,6 +746,30 @@ typedef struct GRX_Profile {
    */
   int posix_case_classes_wide;
   /**
+   * ...and the wide pair asks for a case *counterpart*, not for a property.
+   *
+   * Read only where posix_case_classes_wide has already widened them, and
+   * it is the third answer those two names have here - `\p{Lowercase}` and
+   * `\p{Uppercase}` for perl, `\p{Ll}` and `\p{Lu}` for PCRE2 (see
+   * posix_wide_general_category), and for vim "there is a code point to map
+   * to". The three are 2,595, 2,233 and 1,478 code points, so none of them
+   * is a rounding of another.
+   *
+   * Measured against vim 9.1 a code point at a time over all 1,112,064:
+   * `[[:upper:]]` is exactly the domain of the simple lowercase map and
+   * `[[:lower:]]` exactly that of the simple uppercase map plus U+00DF,
+   * whose full uppercase is "SS" and which therefore has no simple one.
+   * This library had been answering `\p{Lowercase}` and `\p{Uppercase}`,
+   * wrong by 1,125 and 608 - the modifier letters, the small Roman
+   * numerals, the circled capitals and the titlecase letters.
+   *
+   * The field's neighbour above was measured on "é" and "É" when it was
+   * written, and being *wide* was the right answer for both; which wide set
+   * is a question two examples cannot reach, and that is how this sat here
+   * for as long as it did.
+   */
+  int posix_case_classes_case_mapped;
+  /**
    * A caseless flag collapses `[:lower:]` and `[:upper:]` at the *Unicode*
    * width too, and not only at the ASCII one.
    *

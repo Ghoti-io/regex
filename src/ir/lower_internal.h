@@ -81,6 +81,18 @@ typedef enum {
   GRX_SET_CATEGORIES_WORD,
   /** `\p{L}\p{N}` and `_`: GRX_WORD_ALNUM, which is CPython `re`'s. */
   GRX_SET_ALNUM_WORD,
+  /**
+   * Every code point with a simple uppercase mapping, plus U+00DF.
+   *
+   * Vim's `[[:lower:]]`, which is not `\p{Lowercase}` and not `\p{Ll}` but
+   * "has a case counterpart" - see
+   * GRX_Profile::posix_case_classes_case_mapped. U+00DF is the one member
+   * that is not in the map: its *full* uppercase is "SS" so it has no
+   * simple one, and vim counts it lowercase anyway.
+   */
+  GRX_SET_CASE_MAPPED_LOWER,
+  /** Every code point with a simple lowercase mapping: vim's `[[:upper:]]`. */
+  GRX_SET_CASE_MAPPED_UPPER,
   GRX_SET_UNICODE_SPACE,    ///< `\p{White_Space}`.
   /**
    * The Perl family's `\h` and `\v`, in every mode it has.

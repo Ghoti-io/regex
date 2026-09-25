@@ -484,11 +484,27 @@ static const VimRange vim_set_upper[] = {{'A', 'Z'}};
  * 'isprint', and each is written here as vim 9.1 answers it at the defaults
  * with no vimrc. The first three of these were *sampled* when they were
  * first written and three of the four were wrong: `\i` and `\k` both
- * missed U+00B5, and `\k` took in 5,463 code points vim excludes - U+00D7
- * and U+00F7 among them, which is the shape of the mistake, since
+ * missed U+00B5, and `\k` took in 5,463 code points vim excludes, since
  * 'iskeyword' default is `@,48-57,_,192-255` and vim's `@` is its own
  * alphabetic classification rather than "everything above Latin-1". `\p`
  * was `{0xA0, 0x10FFFF}` against a table with nine holes in it.
+ *
+ * That correction went two code points too far, fixed 2026-09-24. U+00D7
+ * and U+00F7 were cited as examples of what `\k` wrongly took in, and they
+ * are not: they are the only two members of 192-255 that vim's `@` does
+ * *not* cover, so the explicit `192-255` range is the whole reason they are
+ * keyword characters, and vim 9.1 matches both with `\k`. The enumeration
+ * that said otherwise ran `vim -u NONE`, which leaves vim **Vi-compatible**,
+ * and 'iskeyword' is the one regex-visible option whose default differs
+ * between the two modes - `@,48-57,_` there against `@,48-57,_,192-255`,
+ * which vim's own help calls the Vim default. 'isident' does not differ,
+ * which is why `vim_set_ident` below has `{0xC0, 0xFF}` whole and this
+ * table had a two-code-point hole in the same range: the same numeric
+ * range, measured twice, under two different defaults.
+ *
+ * tools/oracle/vim_diff.py now pins the option rather than the mode. The
+ * mode would also flip 'cpoptions', which is the other regex-visible
+ * difference between them and is not the one in question.
  *
  * So each is now every code point put to vim one at a time, which is the
  * only way to measure a set whose members are decided one at a time -
@@ -506,7 +522,7 @@ static const VimRange vim_set_ident[] = {
     {0xC0, 0xFF}};
 static const VimRange vim_set_keyword[] = {
     {0x30, 0x39}, {0x41, 0x5A}, {0x5F, 0x5F}, {0x61, 0x7A}, {0xB5, 0xB5},
-    {0xC0, 0xD6}, {0xD8, 0xF6}, {0xF8, 0x37D}, {0x37F, 0x386},
+    {0xC0, 0x37D}, {0x37F, 0x386},
     {0x388, 0x559}, {0x560, 0x588}, {0x58A, 0x5BD}, {0x5BF, 0x5BF},
     {0x5C1, 0x5C2}, {0x5C4, 0x5F2}, {0x5F5, 0x60B}, {0x60D, 0x61A},
     {0x61C, 0x61E}, {0x620, 0x669}, {0x66E, 0x6D3}, {0x6D5, 0x6FF},

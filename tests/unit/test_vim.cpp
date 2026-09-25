@@ -324,6 +324,107 @@ TEST(Vim, ThePosixCaseClassesAreUnicodeAndTheRestAreNot) {
   EXPECT_EQ(span("[[:digit:]]", "5"), "0-1");
 }
 
+// Vim asks whether a code point has a case *counterpart*, not whether
+// Unicode calls it cased, and the two are 1,125 and 608 code points apart.
+// `[[:lower:]]` is the domain of the simple uppercase map plus U+00DF and
+// `[[:upper:]]` is the domain of the simple lowercase map, measured against
+// vim 9.1 a code point at a time over all 1,112,064 on 2026-09-24. They had
+// been `\p{Lowercase}` and `\p{Uppercase}`.
+//
+// The field above them was measured on "é" and "É", and being *wide* is the
+// right answer for both - which wide set is a question two examples cannot
+// reach.
+TEST(Vim, TheCaseClassesAreACounterpartNotAProperty) {
+  struct { const char * subject; const char * name; bool lower; bool upper; }
+  cases[] = {
+    // The discriminating rows: `\p{Lowercase}`/`\p{Uppercase}` take these
+    // and vim does not, because there is nothing to map to. A modifier
+    // letter is Other_Lowercase, and U+03D2 is `Lu` with no lowercase at
+    // all. Each was asked of vim 9.1 directly rather than reasoned from its
+    // category - two rows below were written from the category first and
+    // were wrong.
+    {"\u02b0", "U+02B0 modifier h", false, false},
+    {"\u03d2", "U+03D2 upsilon with hook", false, false},
+    // ...and the rows that go the other way, which keep this from being
+    // satisfied by a build that simply refuses more: a small Roman numeral
+    // *does* map up, to U+2160, and a circled capital *does* map down, to
+    // U+24D0, so vim takes both and so does the property. Without these a
+    // rule of "no Other_Lowercase at all" would pass.
+    {"\u2170", "U+2170 small roman one", true, false},
+    {"\u24b6", "U+24B6 circled A", false, true},
+    // A titlecase letter maps both ways, so vim counts it as both - which
+    // neither `\p{Ll}`/`\p{Lu}` nor Lowercase/Uppercase does.
+    {"\u01c5", "U+01C5 titlecase DZ", true, true},
+    // U+00DF has no *simple* uppercase - its full one is "SS" - and vim
+    // calls it lowercase regardless. The one member of this set that is not
+    // in the map, and it is hardcoded here because it is hardcoded there.
+    {"\u00df", "U+00DF sharp s", true, false},
+    // ...while U+0149 also has only a multi-character uppercase and is in
+    // neither class, which is what says the line is the *simple* mapping
+    // and not Changes_When_Uppercased.
+    {"\u0149", "U+0149 n preceded by apostrophe", false, false},
+    // U+1E9E maps down, so it is upper and not lower.
+    {"\u1e9e", "U+1E9E capital sharp s", false, true},
+    // The two the old rule got right, kept so that a build answering
+    // "nothing is cased" would not pass this by refusing everything.
+    {"\u00e9", "U+00E9 e acute", true, false},
+    {"\u00c9", "U+00C9 E acute", false, true},
+    {"a", "ASCII a", true, false},
+    {"A", "ASCII A", false, true},
+  };
+
+  for (const auto & row : cases) {
+    std::string subject = row.subject;
+    std::string want = "0-" + std::to_string(subject.size());
+    EXPECT_EQ(span("[[:lower:]]", subject), row.lower ? want : "nomatch")
+        << row.name << " in [[:lower:]]";
+    EXPECT_EQ(span("[[:upper:]]", subject), row.upper ? want : "nomatch")
+        << row.name << " in [[:upper:]]";
+  }
+
+  // `\l` and `\u` are the ASCII pair and do not move with them, which is
+  // what says this is the POSIX spelling's axis and not a global one.
+  EXPECT_EQ(span("\\l", "\u00e9"), "nomatch");
+  EXPECT_EQ(span("\\u", "\u00c9"), "nomatch");
+  EXPECT_EQ(span("\\l", "a"), "0-1");
+}
+
+// U+00D7 and U+00F7 are the only two members of 192-255 that vim's `@` does
+// not cover, so the explicit `192-255` in 'iskeyword' is the whole reason
+// they are keyword characters. They were excluded here until 2026-09-24,
+// because the enumeration that built the table ran `vim -u NONE` - which
+// leaves vim **Vi-compatible**, where 'iskeyword' defaults to `@,48-57,_`
+// instead. vim 9.1 at the Vim default matches both with `\k`, three ways:
+// `match()`, `charclass()` and a buffer `search()`.
+//
+// The tell was in the same file: 'isident' does not differ between the two
+// modes, so `\i` had `{0xC0, 0xFF}` whole while `\k` had a hole in the same
+// range.
+TEST(Vim, TheKeywordSetTakesTheWholeOfTheLatinOneRange) {
+  for (const char * subject : {"\u00d7", "\u00f7"}) {
+    EXPECT_EQ(span("\\k", subject), "0-2") << subject << " in \\k";
+    EXPECT_EQ(span("\\i", subject), "0-2") << subject << " in \\i";
+    // `\K` is not the complement of `\k`: vim spells it "a keyword
+    // character that is not a digit", so it takes these two as well. Asked
+    // of vim rather than assumed - the assumption was written here first,
+    // and the pair of rows below is what settles it.
+    EXPECT_EQ(span("\\K", subject), "0-2") << subject << " in \\K";
+  }
+  // A code point just outside the range stays out, so this is the range and
+  // not "everything above Latin-1".
+  EXPECT_EQ(span("\\k", "\u00bf"), "nomatch");
+  EXPECT_EQ(span("\\k", "\u00c0"), "0-2");
+  // ...and the digit split that makes `\K` a different set rather than a
+  // negation, which is what the rows above lean on.
+  EXPECT_EQ(span("\\k", "0"), "0-1");
+  EXPECT_EQ(span("\\K", "0"), "nomatch");
+
+  // `\<` and `\>` are defined from the same set, so they moved with it:
+  // there is no word start between "a" and "×" now, and there was one.
+  EXPECT_EQ(span("\\<\u00d7", "a\u00d7b"), "nomatch");
+  EXPECT_EQ(span("\\<\u00d7", " \u00d7b"), "1-3");
+}
+
 TEST(Vim, WordBoundariesUseTheKeywordSet) {
   // `\<` and `\>` are defined from 'iskeyword', whose default takes in
   // U+00C0 and everything above it - so there is no word start between "a"

@@ -34,8 +34,8 @@
  * | class | what is in it | code points |
  * | --- | --- | --- |
  * | 0 | blank - the space, the tab, NUL, U+00A0 | 22 |
- * | 1 | punctuation, and everything else that is not a keyword character | 5,570 |
- * | 2 | the keyword characters: 'iskeyword' at its default | 1,017,378 |
+ * | 1 | punctuation, and everything else that is not a keyword character | 5,568 |
+ * | 2 | the keyword characters: 'iskeyword' at its default | 1,017,380 |
  * | 3 | emoji | 1,410 |
  * | 10240 | Braille | 256 |
  * | 12352 | Hiragana | 96 |
@@ -51,7 +51,7 @@
  * So `\>` holds between U+65E5 and "x", where both are keyword characters
  * and this library's `\b` sees no boundary at all. The *union* of the
  * classes from 2 up is exactly the keyword set in src/ir/sets.c - both
- * enumerated, independently, and both 1,108,520 code points with the
+ * enumerated, independently, and both 1,108,522 code points with the
  * surrogates written through - which is why `\<` at the start of a word is
  * right either way and only a boundary *between* two word characters moves.
  *
@@ -79,7 +79,7 @@ static const GRX_VimClass vim_classes[] = {
     {0x0, 0x0, 0}, {0x1, 0x8, 1}, {0x9, 0x9, 0}, {0xA, 0x1F, 1},
     {0x20, 0x20, 0}, {0x21, 0x2F, 1}, {0x3A, 0x40, 1}, {0x5B, 0x5E, 1},
     {0x60, 0x60, 1}, {0x7B, 0x9F, 1}, {0xA0, 0xA0, 0}, {0xA1, 0xB4, 1},
-    {0xB6, 0xBF, 1}, {0xD7, 0xD7, 1}, {0xF7, 0xF7, 1}, {0x37E, 0x37E, 1},
+    {0xB6, 0xBF, 1}, {0x37E, 0x37E, 1},
     {0x387, 0x387, 1}, {0x55A, 0x55F, 1}, {0x589, 0x589, 1},
     {0x5BE, 0x5BE, 1}, {0x5C0, 0x5C0, 1}, {0x5C3, 0x5C3, 1},
     {0x5F3, 0x5F4, 1}, {0x60C, 0x60C, 1}, {0x61B, 0x61B, 1},

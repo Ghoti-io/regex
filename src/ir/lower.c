@@ -363,6 +363,16 @@ static GRX_Result posix_class_named_set(Lowering * low, const char * name,
     return GRX_OK;
   }
 
+  if (wide && low->profile.posix_case_classes_case_mapped
+      && (strcmp(name, "lower") == 0 || strcmp(name, "upper") == 0)) {
+    // Before the general-category substitution above would matter, and
+    // before the property table below: this dialect's wide case classes
+    // are neither a property nor a category. See the profile field.
+    return grx_named_set(out, strcmp(name, "lower") == 0
+            ? GRX_SET_CASE_MAPPED_LOWER : GRX_SET_CASE_MAPPED_UPPER,
+        low->limits);
+  }
+
   if (wide && (strcmp(name, "graph") == 0 || strcmp(name, "print") == 0)) {
     // pcre2pattern under UCP: `graph` is everything that is neither a
     // separator nor a control or unassigned code point, and `print` is that

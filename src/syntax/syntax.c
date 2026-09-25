@@ -852,6 +852,10 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     // `[[:lower:]]` matches "é" and `[[:upper:]]` matches "É", where
     // `[[:alpha:]]` matches neither. Measured; see the field.
     .posix_case_classes_wide = 1,
+    // ...and they are the case-mapped pair, not the Unicode properties:
+    // 1,478 and 1,460 code points against `\p{Lowercase}`'s 2,595 and
+    // `\p{Uppercase}`'s 2,006. See the field.
+    .posix_case_classes_case_mapped = 1,
     // Probed against vim 9.1's `substitute()`, which is the string form of
     // `:s` and so the one this library can be: `&` is the whole match,
     // `\&` a literal one, `\0` the whole match again, `\1` to `\9` name

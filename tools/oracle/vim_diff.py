@@ -267,6 +267,24 @@ SUBJECTS = [
     # them keyword characters, which is what no word set could see.
     "日x", "x日", "日日", "aあ", "あア",
     "⠁a", "a😀", "한ㄱ", "日 x", "一あb",
+    # The code points where vim's classes are not the Unicode properties,
+    # added 2026-09-24 after a hand sweep found two defects this gate could
+    # not see. It reported 0 disagreements over 50,980 rows while `\k` was
+    # two code points narrow and `[[:lower:]]`/`[[:upper:]]` were 1,125 and
+    # 608 wide: "é" and "É" were the only non-ASCII letters here, and both
+    # are covered by every reading of every rule in question.
+    #
+    # `×` and `÷` are the only two members of 192-255 that vim's `@` does
+    # not cover, so they are the whole of the difference between
+    # 'iskeyword' at its Vim default and at its Vi-compatible one.
+    "×", "a×b", "÷",
+    # Case classes: vim asks for a case *counterpart*, not for a property.
+    # A modifier letter and a small Roman numeral are Other_Lowercase with
+    # no uppercase to map to, a circled capital is Other_Uppercase, a
+    # titlecase letter maps both ways, "ß" has no simple uppercase and is
+    # lowercase in vim anyway, and "ŉ" has only a multi-character one and is
+    # neither case there.
+    "ʰ", "ⅰ", "Ⓐ", "ǅ", "ß", "ŉ",
 ]
 
 
@@ -347,8 +365,27 @@ qa!
 # it had to be. Setting it here rather than inside the two scripts below puts
 # it at the one place every invocation passes, so a third script cannot be
 # added without it. vim_encoding() below confirms it took.
+#
+# 'iskeyword' is the second pin, added 2026-09-24 for the same reason and
+# found the same way. `-u NONE` does not mean "vim's defaults" - it means
+# **Vi-compatible** defaults, and 'iskeyword' is one of exactly two
+# regex-visible options whose default differs between the two modes:
+# `@,48-57,_` compatible against `@,48-57,_,192-255` not, which vim's own
+# help calls the Vim default. That range is the whole reason U+00D7 and
+# U+00F7 are keyword characters - they are the only two members of 192-255
+# that vim's `@` does not cover - so a gate run in compatible mode reports a
+# `\k` two code points narrower than any user's vim has, and this library's
+# tables were enumerated from exactly such a run.
+#
+# The *option* rather than the mode, deliberately. `set nocompatible` would
+# also flip 'cpoptions', which is the other regex-visible difference and is
+# not the one in question; pinning what is actually being claimed keeps the
+# blast radius measured. The other three option-backed sets - 'isident',
+# 'isfname' and 'isprint' - are identical in both modes, checked rather than
+# assumed, which is why only this one is set.
 VIM_COMMAND = ["vim", "-es", "-u", "NONE", "-i", "NONE",
-    "--cmd", "set encoding=utf-8"]
+    "--cmd", "set encoding=utf-8",
+    "--cmd", "set iskeyword=@,48-57,_,192-255"]
 
 
 def ask_vim(cases):
