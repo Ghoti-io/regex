@@ -421,7 +421,7 @@ TESTFLAGS := `PKG_CONFIG_PATH=$(PKG_CONFIG_LOOKUP_PATH) pkg-config --libs --cfla
 ALL_TEST_GATES := check-symbols check-layering check-aliasing \
 	check-unicode-tables check-dump-names check-readme-example \
 	check-diagnostics check-engine-equivalence check-json-schema-suite \
-	check-tables check-status-line check-corpus-seeds
+	check-tables check-status-line check-corpus-seeds check-makefile-hash
 TEST_GATES ?= $(ALL_TEST_GATES)
 
 # What a gate that IS a python3 script does when there is no python3.
@@ -848,7 +848,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 
 # General commands
 .PHONY: check-oracle-soak
-.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-dump-names check-readme-example check-tables check-status-line check-corpus-seeds check-oracle-syntax check-oracle-match check-oracle-soak check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-perl-syntax check-oracle-script-runs check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
+.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-dump-names check-readme-example check-tables check-status-line check-corpus-seeds check-makefile-hash check-oracle-syntax check-oracle-match check-oracle-soak check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-perl-syntax check-oracle-script-runs check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
 	check-oracle-properties check-oracle-numeric-properties \
 	check-oracle-folds \
 	check-vim-widths check-vim-classes \
@@ -1617,6 +1617,23 @@ check-corpus-seeds: ## Fail if a fuzz corpus directory cannot hold a seed
 check-corpus-seeds:
 	@$(REQUIRE_PYTHON3); \
 	python3 tools/check_corpus_seeds.py
+
+check-makefile-hash: ## Fail if a `#` is escaped where make does not want it
+# make lexes `#` three ways, measured across GNU Make 4.2.1, 4.3 and 4.4.1:
+# `\#` is needed in a plain `VAR = ...` assignment, where a bare `#` comments
+# out the rest of the logical line and every continuation under it; and it is
+# wrong in a recipe line, a `define` body and a function invocation, where the
+# bare form is correct and the backslash survives into the output.
+#
+# The rule was measured, written down and committed - and then broken twice
+# the same day in the direction it predicts: a banner printed
+# `\#\#\# ... \#\#\#` for hours, and the guard that fixed it repeated the
+# mistake. It renders as something a reader assumes was intended, so nothing
+# reports it. A rule about which context you are in is not checkable by
+# recall, which is the whole reason this exists rather than a comment.
+check-makefile-hash:
+	@$(REQUIRE_PYTHON3); \
+	python3 tools/check_makefile_hash.py
 
 check-dump-names: ## Fail if a dump's name table is shorter than its enum
 # Every dump here turns an enumerator into a word through a positional
