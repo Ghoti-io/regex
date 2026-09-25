@@ -1680,6 +1680,21 @@ check-vim-widths: $(TOOLS)
 		--driver $(APP_DIR)/tools/grx_widths$(EXE_EXTENSION)
 
 check-unicode-tables: ## Fail if the committed Unicode tables are not what the generator produces
+# UCD_VERSION is `$(shell cat ...)` of the whole pin file, so an empty or
+# missing one makes UCD_DIR the bare `third_party/ucd/` - a directory that
+# EXISTS, so the `-d` test below passes and the run dies later inside the
+# generator, blaming the generator for a missing pin. Loud, but pointing at
+# the wrong thing. A comment line in the pin fails honestly by contrast,
+# because `third_party/ucd/\#...` does not exist. Checked both.
+	@if [ -z "$(UCD_VERSION)" ]; then \
+		printf "\033[0;31m\n### check-unicode-tables: the UCD pin is empty ###\033[0m\n" >&2; \
+		printf "\ntools/unicode/UCD_VERSION is missing or empty, so UCD_DIR is the\n" >&2; \
+		printf "bare third_party/ucd/ rather than a version under it. That\n" >&2; \
+		printf "directory exists, so without this check the run reaches the\n" >&2; \
+		printf "generator and fails there, naming the generator instead of the\n" >&2; \
+		printf "pin. The file should hold one bare version, e.g. 17.0.0.\n\n" >&2; \
+		exit 1; \
+	fi
 	@$(REQUIRE_PYTHON3); \
 	if ! python3 tools/unicode/test_gen.py >/dev/null 2>&1; then \
 		printf "\033[0;31m\n### The Unicode generator's own tests fail ###\033[0m\n" >&2; \
@@ -1687,7 +1702,7 @@ check-unicode-tables: ## Fail if the committed Unicode tables are not what the g
 		exit 1; \
 	fi; \
 	if [ ! -d "$(UCD_DIR)" ]; then \
-		printf "\033[0;31m\n\#\#\# check-unicode-tables: the UCD is not here \#\#\#\033[0m\n" >&2; \
+		printf "\033[0;31m\n### check-unicode-tables: the UCD is not here ###\033[0m\n" >&2; \
 		printf "\n%s\n" "$(UCD_DIR)" >&2; \
 		printf "\nThe UCD is not committed - it is somebody else's, and a copy here\n" >&2; \
 		printf "would stop being what everyone else is measured against. The\n" >&2; \
