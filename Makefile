@@ -1188,13 +1188,18 @@ check-oracle-submatch: $(TOOLS)
 		--strict)
 
 check-oracle-python: ## Compare the Python front end against CPython's `re`
-# The only oracle here that runs in-process: `re` is importable by the tool
-# that generates the cases, so a run costs a function call per row instead of
-# a fork per batch. That is worth a note because it changed what the gate
-# could find - 600,000 rows in under four seconds, against the tens of
-# thousands the subprocess differentials manage in the same time - and every
-# defect WP-30 found after the first build came out of scaling it up rather
-# than out of reading the `re` documentation more carefully.
+# This used to be the one oracle that ran in-process - `re` is importable by
+# the tool that generates the cases - and that was defended here on speed:
+# 600,000 rows in under four seconds against the tens of thousands the
+# subprocess differentials manage. What that measured was a process per
+# *case*. Behind a batch protocol the same 111,000 rows cost 0.53s
+# in-process, 0.63s as a host subprocess and 1.12s in the pinned image, so
+# the argument bought six tenths of a second and cost the only pin that
+# decides what a property answer means. See tools/oracle/python_match.py.
+#
+# What the old shape did earn is worth keeping: every defect WP-30 found
+# after the first build came out of scaling the run up rather than out of
+# reading the `re` documentation more carefully.
 #
 # Two of those defects were in code this dialect does not own: the prescan
 # lost its group count after any class containing an escape, which made

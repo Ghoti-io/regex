@@ -26,10 +26,11 @@ Copyright 2026 by Corey Pennycuff
 import argparse
 import json
 import os
-import shutil
 import subprocess
 import sys
+
 import node_runner
+import oracle_env
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
@@ -66,8 +67,19 @@ CASES = [
 ]
 
 
-def have(program):
-    return shutil.which(program) is not None
+def have(pin):
+    """Whether this reference can be reached, by reaching for it.
+
+    It was `shutil.which(program)`, which answers whether something of that
+    name is on PATH - a question `probe.py` got a wrong answer to, its
+    `gnu-ere` column having been answered by ugrep for as long as the test
+    stood. Resolving the pin asks what the column's header claims.
+    """
+    try:
+        oracle_env.ensure(pin)
+        return True
+    except oracle_env.OracleUnavailable:
+        return False
 
 
 def run(command, stdin=None):
@@ -126,7 +138,8 @@ for my $case (@$cases) {
 print encode_json(\@out);
 """
     payload = json.dumps([[p, s, l] for p, s, l, _ in cases])
-    text, code = run(["perl", "-e", source], stdin=payload)
+    text, code = run(oracle_env.command("perl", ["perl", "-e", source]),
+        stdin=payload)
     if code != 0:
         return ["driver failed"] * len(cases)
     return json.loads(text)
@@ -146,7 +159,9 @@ for pattern, subject, limit in cases:
 sys.stdout.write(json.dumps(out))
 """
     payload = json.dumps([[p, s, l] for p, s, l, _ in cases])
-    text, code = run(["python3", "-c", source], stdin=payload)
+    text, code = run(
+        oracle_env.command("python", ["python3", "-c", source]),
+        stdin=payload)
     if code != 0:
         return ["driver failed"] * len(cases)
     return json.loads(text)
@@ -197,10 +212,11 @@ def probe_library(cases):
     return out
 
 
+# column, the pin in tools/oracle/containers/IMAGES, the driver.
 DRIVERS = [
     ("ecmascript (node)", "node", probe_node),
     ("perl", "perl", probe_perl),
-    ("python", "python3", probe_python),
+    ("python", "python", probe_python),
 ]
 
 
@@ -211,10 +227,13 @@ def main(argv):
 
     results = {}
     skipped = []
-    for dialect, program, driver in DRIVERS:
-        if not have(program):
-            skipped.append("%s (%s is not installed)" % (dialect, program))
+    versions = {}
+    for dialect, pin, driver in DRIVERS:
+        if not have(pin):
+            skipped.append("%s (the %s reference cannot be reached)"
+                           % (dialect, pin))
             continue
+        versions[dialect] = oracle_env.check_pin(pin)
         results[dialect] = driver(CASES)
     results["this library"] = probe_library(CASES)
 
@@ -228,8 +247,13 @@ def main(argv):
                  "case that discriminates")
     lines.append("between two values of one row of "
                  "[dialects.md](../../documentation/dialects.md)")
-    lines.append("section 5.16; each column is a reference implementation "
-                 "this machine can run.")
+    lines.append("section 5.16; each column is a reference implementation, "
+                 "pinned in")
+    lines.append("[tools/oracle/containers/IMAGES](../../tools/oracle/"
+                 "containers/IMAGES):")
+    lines.append("")
+    for dialect in sorted(versions):
+        lines.append("- **%s** - %s" % (dialect, versions[dialect]))
     lines.append("")
     lines.append("`grx_regex_split()` implements ECMAScript's rule for every "
                  "dialect, so this")

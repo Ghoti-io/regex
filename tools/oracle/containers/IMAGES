@@ -207,3 +207,16 @@ musl	localhost/ghoti-regex-oracle-posix:deb13	GLIBC 2.41	musl v1.2.6's regex, ho
 # runs inside the container through tools/oracle/sed_match.py rather than the
 # container being started 396 times.
 sed	localhost/ghoti-regex-oracle-posix:deb13	sed (GNU sed) 4.9	The POSIX and GNU replacement template grammars
+
+# GNU grep, for the `gnu-ere` column of the semantic probe report - and this
+# is the row that found something. **This machine's `grep` is ugrep 7.8.4**,
+# not GNU grep: a drop-in replacement installed at some point and never
+# recorded anywhere, so `tests/data/probe/report.md` has a column headed
+# `gnu-ere` whose answers came from a different implementation. The report
+# says "each column is a reference implementation this machine can run", and
+# it was right about the machine and wrong about which implementation.
+#
+# Debian 13's grep 3.11, from the same image as the rest of the userland: the
+# probe asks it whether a line matches, which is all `grep -c` can answer, and
+# that is why it is a probe column rather than a differential.
+grep	localhost/ghoti-regex-oracle-posix:deb13	grep (GNU grep) 3.11	Whether a line matches, for the gnu-ere probe column

@@ -11,10 +11,23 @@ the spans, `nomatch`, or `error`. Getting them into one form is most of the
 work, and it is what makes a table of answers comparable rather than a
 collection of anecdotes.
 
-A driver for an implementation that is not installed is skipped and said to
-be skipped, so a report is honest about what it did not ask. The dialects a
-machine cannot run are the dialects this library cannot claim
-(dialects.md section 2).
+Every reference runs in an image pinned in `tools/oracle/containers/IMAGES`,
+so a column is a named version rather than whatever this machine has. That
+matters here more than in the differentials, because this report is *read* -
+its cells fill the `probe` entries of dialects.md section 5, and a cell whose
+provenance is "the machine I ran it on" is a cell nobody can check.
+
+It also changed an answer. The `gnu-ere` column was answered by `grep`, and
+`grep` on this machine is **ugrep 7.8.4** - a drop-in replacement installed at
+some point and recorded nowhere - so a column headed `gnu-ere` was reporting
+a different implementation. The header now names GNU grep 3.11 because that
+is what answers.
+
+A reference that cannot be reached is still skipped and said to be skipped,
+so a report stays honest about what it did not ask. What has changed is that
+"cannot be reached" now means the image is missing rather than the program
+is: `make oracle-images` fixes the first, and nothing but installing software
+fixed the second.
 
 Usage:
     tools/oracle/probe.py [--out FILE]
@@ -25,10 +38,13 @@ Copyright 2026 by Corey Pennycuff
 import argparse
 import json
 import os
-import shutil
 import subprocess
 import sys
+
 import node_runner
+import oracle_env
+import pcre2_runner
+import vim_runner
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
@@ -64,8 +80,18 @@ CASES = [
 ]
 
 
-def have(program):
-    return shutil.which(program) is not None
+def have(pin):
+    """Whether this reference can actually be reached, by reaching for it.
+
+    `shutil.which(program)` is what this was, and it answers whether something
+    of that name is on PATH - which for `grep` on this machine was true and
+    wrong. Resolving the pin asks the question the column's header claims.
+    """
+    try:
+        oracle_env.ensure(pin)
+        return True
+    except oracle_env.OracleUnavailable:
+        return False
 
 
 def run(command, stdin=None):
@@ -119,7 +145,7 @@ while (my $line = <STDIN>) {
 """
     stdin = "".join("%s\t%s\t%s\n" % (p.encode().hex(), f, s.encode().hex())
         for p, f, s, _ in cases)
-    text, _ = run(["perl", "-e", source], stdin)
+    text, _ = run(oracle_env.command("perl", ["perl", "-e", source]), stdin)
     lines = text.splitlines()
     return lines + ["driver failed"] * (len(cases) - len(lines))
 
@@ -147,7 +173,11 @@ for line in sys.stdin:
 """
     stdin = "".join("%s\t%s\t%s\n" % (p.encode().hex(), f, s.encode().hex())
         for p, f, s, _ in cases)
-    text, _ = run([sys.executable, "-c", source], stdin)
+    # `sys.executable`, which is *this* interpreter, was the one column whose
+    # reference could not be named at all - a probe report is read, and a cell
+    # answered by "whichever python3 ran the tool" is a cell nobody can check.
+    text, _ = run(
+        oracle_env.command("python", ["python3", "-c", source]), stdin)
     lines = text.splitlines()
     return lines + ["driver failed"] * (len(cases) - len(lines))
 
@@ -165,7 +195,7 @@ def probe_pcre2(cases):
             pattern.replace("/", "\\/"), modifiers,
             subject.replace("\\", "\\\\").replace("\n", "\\n")
                 .replace("\r", "\\r").replace("\0", "\\x00"))
-        text, code = run(["pcre2test", "-q", "-"], script)
+        text, code = run(pcre2_runner.test_command("-q", "-"), script)
         if code != 0 or "Failed" in text or "error" in text.lower():
             answers.append("error")
             continue
@@ -196,7 +226,7 @@ def probe_grep(cases):
         if "i" in flags:
             arguments.append("-i")
         arguments += ["--", pattern]
-        text, code = run(arguments, subject + "\n")
+        text, code = run(oracle_env.command("grep", arguments), subject + "\n")
         if code > 1:
             answers.append("error")
         else:
@@ -213,8 +243,14 @@ def probe_vim(cases):
             "let m = match(s, p)\n"
             "call writefile([string(m)], '/dev/stdout')\n"
             "qa!\n" % (json.dumps(subject), json.dumps(pattern)))
-        text, code = run(["vim", "-Es", "-u", "NONE", "-i", "NONE",
-            "--cmd", "set nocompatible", "-c", "source /dev/stdin"], script)
+        # Through vim_runner, so this driver gets the `encoding` and
+        # `iskeyword` pins the differentials have - it had neither, which is
+        # CONTAINERS.md finding 1.1 in a third file. `set nocompatible` is
+        # kept because it is what this driver asked for; it sets 'iskeyword'
+        # to the same value the pin does, so the two agree rather than
+        # fighting.
+        text, code = run(vim_runner.command(
+            ["--cmd", "set nocompatible", "-c", "source /dev/stdin"]), script)
         if code != 0:
             answers.append("error")
         else:
@@ -223,11 +259,12 @@ def probe_vim(cases):
     return answers
 
 
+# dialect, the pin in tools/oracle/containers/IMAGES, the driver.
 DRIVERS = [
     ("ecmascript", "node", probe_node),
     ("perl", "perl", probe_perl),
-    ("python", "python3", probe_python),
-    ("pcre2", "pcre2test", probe_pcre2),
+    ("python", "python", probe_python),
+    ("pcre2", "pcre2", probe_pcre2),
     ("gnu-ere", "grep", probe_grep),
     ("vim", "vim", probe_vim),
 ]
@@ -240,10 +277,13 @@ def main(argv):
 
     results = {}
     skipped = []
-    for dialect, program, driver in DRIVERS:
-        if not have(program):
-            skipped.append("%s (%s is not installed)" % (dialect, program))
+    versions = {}
+    for dialect, pin, driver in DRIVERS:
+        if not have(pin):
+            skipped.append("%s (the %s reference cannot be reached)"
+                           % (dialect, pin))
             continue
+        versions[dialect] = oracle_env.check_pin(pin)
         results[dialect] = driver(CASES)
 
     lines = []
@@ -253,18 +293,32 @@ def main(argv):
                  "that discriminates")
     lines.append("between two values of one axis in "
                  "[dialects.md](../../documentation/dialects.md)")
-    lines.append("section 5; each column is a reference implementation this "
-                 "machine can run.")
+    lines.append("section 5; each column is a reference implementation, "
+                 "pinned in")
+    lines.append("[tools/oracle/containers/IMAGES](../../tools/oracle/"
+                 "containers/IMAGES) and named below.")
+    lines.append("")
+    # The versions are in the report rather than only in IMAGES, because this
+    # file is the one a reader has in front of them when they fill a `probe`
+    # cell of dialects.md. It used to say "a reference implementation this
+    # machine can run", which was true and unfalsifiable: the `gnu-ere` column
+    # was answered by ugrep 7.8.4 for as long as that sentence stood.
+    lines.append("| Column | Reference |")
+    lines.append("| --- | --- |")
+    for dialect in sorted(versions):
+        lines.append("| %s | %s |" % (dialect, versions[dialect]))
     lines.append("")
     if skipped:
-        lines.append("**Not asked**, because the implementation is not "
-                     "installed: " + ", ".join(skipped) + ".")
+        lines.append("**Not asked**, because the reference could not be "
+                     "reached: " + ", ".join(skipped) + ".")
         lines.append("")
-        lines.append("A dialect this machine cannot run is a dialect this "
-                     "library cannot claim")
+        lines.append("A dialect with no reachable reference is a dialect "
+                     "this library cannot claim")
         lines.append("(dialects.md section 2), so an absent column is a "
                      "reason a tier is not started")
-        lines.append("rather than a gap to be filled by reasoning.")
+        lines.append("rather than a gap to be filled by reasoning. "
+                     "`make oracle-images` builds the")
+        lines.append("references that have no official image.")
         lines.append("")
 
     for index, (pattern, flags, subject, question) in enumerate(CASES):

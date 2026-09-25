@@ -113,6 +113,9 @@ PROBE = {
     # and hosted on *this* libc, so the two together decide an answer.
     "glibc": (["ldd", "--version"], "GLIBC", None),
     "sed": (["sed", "--version"], "GNU sed", None),
+    # Pinned because this machine's `grep` is ugrep, which answers the probe's
+    # `gnu-ere` column without being GNU's grep at all. See IMAGES.
+    "grep": (["grep", "--version"], "GNU grep", None),
 }
 # musl's regex is compiled from sources pinned in tools/corpus/VERSIONS
 # against *this* image's libc, and both halves decide an answer - so the probe
