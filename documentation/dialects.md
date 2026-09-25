@@ -51,7 +51,7 @@ this design was written on; a CI job installs the rest
 | RE2 | `re2` | Go 1.22 `regexp` | RE2 "Syntax" wiki; Go `regexp/syntax` documentation | `go` (install) |
 | Rust | `rust` | `regex` 1.10 | `regex-syntax` documentation | `cargo` (install) |
 | Tcl | `tcl` | Tcl 8.6 | `re_syntax(n)` | `tclsh` (install) |
-| Vim | `vim` | Vim 9.1, patches 1-1244 | `:help pattern` | `vim -es` with `matchlist()` (pinned) |
+| Vim | `vim` | Vim 9.2, patches 1-1129 | `:help pattern` | `vim -es` with `matchlist()` (pinned) |
 | Emacs | `emacs` | GNU Emacs 29 | Elisp Reference Manual, "Regular Expressions" | `emacs --batch` (install) |
 
 ### 2.1 Python's oracle is the only one that is not a subprocess
@@ -1474,15 +1474,17 @@ word set can see a boundary between them at all.
 The two rules agree wherever a word meets something that is not a word,
 which is why this survived a differential of a million rows: the union of
 the classes from the keyword class up is exactly the keyword set - both
-enumerated against vim 9.1, independently, and both 1,108,522 code points.
+enumerated against vim 9.2, independently, and both 1,108,570 code points.
 What the class rule moves is only a boundary *between* two word characters.
 
 The table is `src/unicode/vim_class.c`, measured with `charclass()` over all
 1,114,112 code points, and it is vim's data rather than Unicode's in the
-same way `src/unicode/display.c` is: 355 ranges of exception to a default of
+same way `src/unicode/display.c` is: 356 ranges of exception to a default of
 "keyword character". A unit test puts every code point to `\k` and to the
 table and requires the two to agree, because the boundary is only as right
-as the two measurements of one option are consistent.
+as the two measurements of one option are consistent - and on the vim 9.2
+raise it earned that, failing on the 48 code points whose class had moved
+while `\k` had not.
 
 ### 5.20 What a composing character is
 

@@ -12,7 +12,7 @@ section 5; each column is a reference implementation, pinned in
 | pcre2 | PCRE2 version 10.46 2025-08-27 |
 | perl | perl v5.44.0 |
 | python | python 3.14.7, UCD 16.0.0 |
-| vim | Included patches: 1-1244 |
+| vim | vim 9.2, Included patches: 1-1129 |
 
 ## `(a*)*` against "b"
 

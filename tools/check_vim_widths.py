@@ -3,7 +3,7 @@
 
 Every other table in this library is generated from the UCD and gated by
 `make check-unicode-tables`, which regenerates and compares. This one cannot
-be: **it is not Unicode data.** It is vim 9.1's own, and it disagrees with
+be: **it is not Unicode data.** It is vim 9.2's own, and it disagrees with
 East_Asian_Width on hundreds of code points - Tangut that vim draws in one
 cell, symbols it draws in two - which is the feature, because the dialect's
 definition is "what vim does" and `\\%23v` has to report the column vim would.

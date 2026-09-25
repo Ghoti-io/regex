@@ -460,7 +460,7 @@ static GRX_Result range_class(GRX_Parser * parser, const VimRange * ranges,
   return GRX_OK;
 }
 
-// The eleven named classes, at the values vim 9.1 gives them with no options
+// The eleven named classes, at the values vim 9.2 gives them with no options
 // changed. Measured one code point at a time rather than read off the help
 // page, because four of them are spelled as *options* there - `\i` is
 // 'isident', `\k` is 'iskeyword', `\f` is 'isfname' and `\p` is 'isprint' -
@@ -481,8 +481,8 @@ static const VimRange vim_set_upper[] = {{'A', 'Z'}};
  * The four option-backed sets, enumerated rather than sampled.
  *
  * `\i` is 'isident', `\k` is 'iskeyword', `\f` is 'isfname' and `\p` is
- * 'isprint', and each is written here as vim 9.1 answers it at the defaults
- * with no vimrc. The first three of these were *sampled* when they were
+ * 'isprint', and each is written here as the pinned vim answers it at the
+ * defaults with no vimrc. The first three of these were *sampled* when they were
  * first written and three of the four were wrong: `\i` and `\k` both
  * missed U+00B5, and `\k` took in 5,463 code points vim excludes, since
  * 'iskeyword' default is `@,48-57,_,192-255` and vim's `@` is its own
@@ -493,7 +493,7 @@ static const VimRange vim_set_upper[] = {{'A', 'Z'}};
  * and U+00F7 were cited as examples of what `\k` wrongly took in, and they
  * are not: they are the only two members of 192-255 that vim's `@` does
  * *not* cover, so the explicit `192-255` range is the whole reason they are
- * keyword characters, and vim 9.1 matches both with `\k`. The enumeration
+ * keyword characters, and vim matches both with `\k`. The enumeration
  * that said otherwise ran `vim -u NONE`, which leaves vim **Vi-compatible**,
  * and 'iskeyword' is the one regex-visible option whose default differs
  * between the two modes - `@,48-57,_` there against `@,48-57,_,192-255`,
@@ -513,6 +513,18 @@ static const VimRange vim_set_upper[] = {{'A', 'Z'}};
  * separately and are identical to these, which is why the class reader
  * shares the tables rather than carrying a second copy.
  *
+ * **That sweep is a tool now**, `make check-vim-sets`, and it was not until
+ * 2026-09-25. Three of these four tables had no gate of any kind and the
+ * fourth had one only sideways: a unit test requires `\k` to agree with
+ * src/unicode/vim_class.c, which catches a `\k` that disagrees with the
+ * class table and not a pair of them wrong together. Everything above is a
+ * record of what a sweep that could not be re-run cost, and the reference
+ * does move - **vim 9.2 puts U+2070..U+209F into 'iskeyword'**, all 48 of
+ * them, so `\k` gained a range with the pin. `\i`, `\f` and `\p` were
+ * re-measured at the same time and none of them moved.
+ *
+ * These are vim 9.2's answers at the defaults with no vimrc.
+ *
  * The surrogate block is not probed - `nr2char()` cannot make one and a
  * UTF-8 subject cannot hold one - so a range that ends at U+D7FF and
  * resumes at U+E000 is written through.
@@ -531,7 +543,8 @@ static const VimRange vim_set_keyword[] = {
     {0xF86, 0x1049}, {0x1050, 0x10FA}, {0x10FC, 0x1360}, {0x1369, 0x166C},
     {0x166F, 0x167F}, {0x1681, 0x169A}, {0x169D, 0x16EA}, {0x16EE, 0x1734},
     {0x1737, 0x17D3}, {0x17DD, 0x17FF}, {0x180B, 0x1FFF}, {0x203C, 0x203C},
-    {0x2049, 0x2049}, {0x2122, 0x2122}, {0x2139, 0x2139}, {0x2194, 0x2199},
+    {0x2049, 0x2049}, {0x2070, 0x209F}, {0x2122, 0x2122},
+    {0x2139, 0x2139}, {0x2194, 0x2199},
     {0x21A9, 0x21AA}, {0x231A, 0x231B}, {0x2328, 0x2328}, {0x23CF, 0x23CF},
     {0x23E9, 0x23F3}, {0x23F8, 0x23FA}, {0x24C2, 0x24C2}, {0x25AA, 0x25AB},
     {0x25B6, 0x25B6}, {0x25C0, 0x25C0}, {0x25FB, 0x25FE}, {0x2600, 0x2604},

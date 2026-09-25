@@ -89,12 +89,11 @@ node	docker.io/library/node:24-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea4195
 # the base by digest, vim's source by tag - and the run-time check below is
 # the real guarantee.
 #
-# **The version field names the patch level, not the release**, and it is the
-# one entry here where the first line a reference prints is useless. Every
-# vim built in the last two years says `VIM - Vi IMproved 9.1` there; what
-# distinguishes one from another is four lines down:
+# **The version field names the release and the patch level**, because
+# neither identifies a vim on its own. The patch line is what distinguishes
+# two builds of one release, and it is four lines down from the useless one:
 #
-#   this image      Included patches: 1-1244
+#   9.1 image       Included patches: 1-1244
 #   Debian 13's     Included patches: 1-948, 950-1230, 1242, 1244
 #
 # Contiguous against gappy, which is also the argument for building rather
@@ -102,36 +101,47 @@ node	docker.io/library/node:24-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea4195
 # update, and a version-pinned apt install eventually fails to resolve. A tag
 # has no expiry.
 #
+# The release line was dead weight for two years - every vim built in that
+# time says `VIM - Vi IMproved 9.1` - and this probe read the patch line
+# alone because of it. Raising to 9.2 showed why that was only half a
+# version: **9.2.1129 prints `Included patches: 1-1129`, a lower number than
+# 9.1.1244's `1-1244`**, so the patch line alone reads as a downgrade and
+# names no release at all. The probe prints both now.
+#
 # Why the tables matter here and not elsewhere: vim's character tables are its
 # own, in src/mbyte.c, and it publishes no UCD version for them. That is why
 # check-vim-classes and check-vim-widths exist - they compare 1.1M code points
 # against vim itself rather than against a number it does not state - and it
 # is why "which vim" is the whole question for them.
-# **Not raised to 9.2, and the reason is measured rather than cautious.** vim
-# is on 9.2.1129 today, a minor release and 1,129 patches ahead. Built and
-# asked on 2026-09-25:
+# **9.2.1129, raised from 9.1.1244 on 2026-09-25 together with the table it
+# moves.** The raise was measured a day before it was taken and deliberately
+# held, because it is not a pin bump: what 9.2 changes is data this library
+# committed, so the pin and `src/unicode/vim_class.c` had to move in one
+# commit or the gate would have been red in between.
 #
-#   check-vim-widths     1,112,062 code points, **0 disagreements**
+# What the raise costs, measured against 9.1.1244 before and after:
+#
+#   check-vim-widths     1,112,062 code points, **0 disagreements** both ways
 #   check-oracle-vim     66,580 rows, unchanged
-#   check-vim-classes    **48 disagreements**, and they are one block:
+#   check-vim-classes    **48 code points move**, and they are one block:
 #                        U+2070..U+209F, Superscripts and Subscripts, which
 #                        9.1 puts in class 1 (punctuation) and 9.2 gives a
 #                        class of its own - `charclass()` returns the code
 #                        point itself for those, the way it does for CJK.
 #
-# So raising this pin is not a pin bump: it means regenerating
-# `src/unicode/vim_class.c`, which changes what `\<`, `\>` and `\k` mean for
-# 48 code points in the Vim dialect. That is a decision about the dialect and
-# a data change to the library, and it belongs in its own commit with its own
-# reading - the same line drawn for `python` above. notes/regex/TODO.md
-# carries it.
+# So the Vim dialect's `\<`, `\>` and `\k` changed meaning for those 48 code
+# points, which is what following a reference means. documentation/
+# dialects.md carries the row.
 #
-# Reproduce in two commands:
+# Rebuild it with:
+#
+#   make oracle-images
+#
+# which reads the tag from this line, or by hand:
 #
 #   docker build --build-arg VIM_TAG=v9.2.1129 \
 #       -t localhost/ghoti-regex-oracle-vim:9.2.1129 tools/oracle/containers/vim
-#   ...then point the `vim` line here at it and run `make check-vim-classes`
-vim	localhost/ghoti-regex-oracle-vim:9.1.1244	Included patches: 1-1244	The Vim dialect, its nine character classes and its cell widths
+vim	localhost/ghoti-regex-oracle-vim:9.2.1129	vim 9.2, Included patches: 1-1129	The Vim dialect, its nine character classes and its cell widths
 
 # pcre2, for the PCRE dialect - and, alone, for the newline conventions, the
 # callout trace and the search window, which nothing else can answer.

@@ -25,11 +25,11 @@
  * `\>`.
  *
  * **This is not Unicode data**, any more than src/unicode/display.c is. It
- * is vim 9.1's, measured with `charclass()` over all 1,114,112 code points,
+ * is vim 9.2's, measured with `charclass()` over all 1,114,112 code points,
  * and it exists because vim's two word assertions do not ask what this
  * library's `\b` asks. `\b` asks whether the characters either side of a
  * position differ in *wordness*; vim asks whether they differ in *class*,
- * and it has nine:
+ * and it has eleven:
  *
  * `make check-vim-classes` regenerates this whole table from vim and diffs
  * it, which is the only thing that can: it is vim's data rather than the
@@ -38,9 +38,11 @@
  * | class | what is in it | code points |
  * | --- | --- | --- |
  * | 0 | blank - the space, the tab, NUL, U+00A0 | 22 |
- * | 1 | punctuation, and everything else that is not a keyword character | 5,568 |
- * | 2 | the keyword characters: 'iskeyword' at its default | 1,017,380 |
+ * | 1 | punctuation, and everything else that is not a keyword character | 5,520 |
+ * | 2 | the keyword characters: 'iskeyword' at its default | 1,017,391 |
  * | 3 | emoji | 1,410 |
+ * | 8304 | the superscripts, U+2070..U+207F | 16 |
+ * | 8320 | the subscripts, U+2080..U+2094 | 21 |
  * | 10240 | Braille | 256 |
  * | 12352 | Hiragana | 96 |
  * | 12448 | Katakana | 96 |
@@ -52,15 +54,42 @@
  * ordering, and only two things are ever asked of them - whether two are
  * equal, and whether one is at least 2.
  *
+ * **Classes 8304 and 8320 arrived with vim 9.2**, and they are the whole of
+ * what the raise from 9.1.1244 changed: 1,112,062 code points of
+ * `check-vim-widths` and 66,580 rows of `check-oracle-vim` were unmoved, and
+ * `check-vim-classes` reported 48. All 48 are in Superscripts and Subscripts,
+ * which 9.1 read as punctuation, and they do not all land in the same place:
+ *
+ * | | 9.1 | 9.2 |
+ * | --- | --- | --- |
+ * | U+2070..U+207F | 1 | 8304 |
+ * | U+2080..U+2094 | 1 | 8320 |
+ * | U+2095..U+209F | 1 | **2**, the default |
+ *
+ * That last row is why the table below has no entry for U+2095..U+209F at
+ * all, and it is the half a summary loses: eleven of the 48 did not get a
+ * class of their own, they became ordinary keyword characters. So `\k` now
+ * matches them and `\<` no longer holds against a letter beside them, while
+ * for the other 37 `\<` and `\>` hold on both sides where nothing did
+ * before.
+ *
  * So `\>` holds between U+65E5 and "x", where both are keyword characters
  * and this library's `\b` sees no boundary at all. The *union* of the
- * classes from 2 up is exactly the keyword set in src/ir/sets.c - both
- * enumerated, independently, and both 1,108,522 code points with the
- * surrogates written through - which is why `\<` at the start of a word is
- * right either way and only a boundary *between* two word characters moves.
+ * classes from 2 up is exactly the keyword set `\k` reads in
+ * src/syntax/vim.c - both enumerated, independently, and both 1,108,570 code
+ * points with the surrogates written through - which is why `\<` at the
+ * start of a word is right either way and only a boundary *between* two word
+ * characters moves.
  *
- * Class 2 is the default and the table holds the exceptions: 355 ranges out
- * of 1,114,112 code points. The surrogate block is unprobed and written
+ * That union is a unit test, and it is what caught the 9.2 raise being half
+ * done: this table moved and `\k` did not, so 48 code points were in a class
+ * at or above the keyword class and outside the keyword set. The figure was
+ * 1,108,522 under 9.1.
+ *
+ * Class 2 is the default and the table holds the exceptions: 356 ranges out
+ * of 1,114,112 code points. (353 before the 9.2 raise, where this line said
+ * 355 - a number nothing counted, in a file whose every other figure the gate
+ * checks.) The surrogate block is unprobed and written
  * through, as it is there and for the same reason: a UTF-8 subject has none,
  * and `nr2char()` cannot make one to ask about.
  */
@@ -98,7 +127,9 @@ static const GRX_VimClass vim_classes[] = {
     {0x2028, 0x2029, 0}, {0x202A, 0x202E, 1}, {0x202F, 0x202F, 0},
     {0x2030, 0x203B, 1}, {0x203C, 0x203C, 3}, {0x203D, 0x2048, 1},
     {0x2049, 0x2049, 3}, {0x204A, 0x205E, 1}, {0x205F, 0x205F, 0},
-    {0x2060, 0x2121, 1}, {0x2122, 0x2122, 3}, {0x2123, 0x2138, 1},
+    {0x2060, 0x206F, 1}, {0x2070, 0x207F, 8304},
+    {0x2080, 0x2094, 8320}, {0x20A0, 0x2121, 1},
+    {0x2122, 0x2122, 3}, {0x2123, 0x2138, 1},
     {0x2139, 0x2139, 3}, {0x213A, 0x2193, 1}, {0x2194, 0x2199, 3},
     {0x219A, 0x21A8, 1}, {0x21A9, 0x21AA, 3}, {0x21AB, 0x2319, 1},
     {0x231A, 0x231B, 3}, {0x231C, 0x2327, 1}, {0x2328, 0x2328, 3},

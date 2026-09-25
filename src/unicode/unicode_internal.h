@@ -150,7 +150,7 @@ uint32_t grx_unicode_fold_simple(uint32_t codepoint);
 /**
  * @brief How many terminal cells a character occupies. Vim's, not Unicode's.
  *
- * Measured with vim 9.1's `strdisplaywidth()` over every code point; see
+ * Measured with vim 9.2's `strdisplaywidth()` over every code point; see
  * src/unicode/display.c for what the four answers are and why the set is
  * written out rather than named after a property.
  *
@@ -209,7 +209,7 @@ int grx_display_composing_range(
 /**
  * @brief Which character class a code point is in. Vim's, not Unicode's.
  *
- * Measured with vim 9.1's `charclass()` over every code point; see
+ * Measured with vim 9.2's `charclass()` over every code point; see
  * src/unicode/vim_class.c for the nine classes and why they are not a
  * property.
  *

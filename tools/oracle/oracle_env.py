@@ -105,7 +105,20 @@ PROBE = {
                 "import sys, unicodedata; print('python %s, UCD %s'"
                 " % (sys.version.split()[0], unicodedata.unidata_version))"],
                "python 3", None),
-    "vim": (["vim", "--version"], "Included patches", "Included patches"),
+    # Both halves, because neither identifies a vim on its own. The release
+    # line is what every build prints first and it stood still for two years
+    # - every 9.1 says "VIM - Vi IMproved 9.1" - which is why this probe
+    # used to read the patch line alone. Raising the pin to 9.2 showed the
+    # other half of that: 9.2.1129 prints "Included patches: 1-1129", a
+    # *lower* number than 9.1.1244's "1-1244", so the patch line alone reads
+    # as a downgrade and names no release at all. Printed together they are
+    # unambiguous in both directions.
+    "vim": (["sh", "-c",
+             "vim --version"
+             " | sed -n -e '1s/^VIM - Vi IMproved \\([^ ]*\\).*/vim \\1,/p'"
+             " -e '/^Included patches/p'"
+             " | tr '\\n' ' '"],
+            "Included patches", None),
     "pcre2": (["pcre2test", "-C"], "PCRE2 version", None),
     # `ldd --version` is how a glibc says what it is; there is no library to
     # ask directly. It answers for `musl` too, and the IMAGES entry for that

@@ -39,7 +39,7 @@ observation of this machine - see §2.1.
 | musl v1.2.6 `regcomp` | POSIX BRE/ERE, with glibc | `tools/oracle/musl_match.c`: musl's own regex sources, fetched by `tools/corpus/fetch.sh musl`, compiled into the driver **against the image's glibc** - so it declines a NUL (musl has no `REG_STARTEND`) and any byte >= 0x80 (that glibc's `mbtowc`). Never decides alone - see below |
 | GNU sed 4.9 | the POSIX and GNU replacement templates | `tools/oracle/sed_match.py`, which runs sed's per-case loop *inside* the image: sed's `s` command takes one script and one subject, so it is the one reference here with no batch protocol of its own |
 | GNU grep 3.11 | the `gnu-ere` probe column | `tools/oracle/probe.py`. Only "did a line match", which is all `grep -c` can answer |
-| vim, patches 1-1244 | Vim | `tools/oracle/vim_diff.py`: **one** `vim -es` for a whole run, reading a file of cases and writing a file of answers, through `matchstrpos()` and `matchlist()`. It asks vim's *other* engine (`set re=1`) about the rows that came back different, because vim ships two and they do not always agree. `vim_runner.py` is the one place its command line is spelled |
+| vim 9.2, patches 1-1129 | Vim | `tools/oracle/vim_diff.py`: **one** `vim -es` for a whole run, reading a file of cases and writing a file of answers, through `matchstrpos()` and `matchlist()`. It asks vim's *other* engine (`set re=1`) about the rows that came back different, because vim ships two and they do not always agree. `vim_runner.py` is the one place its command line is spelled |
 | OpenJDK, .NET, Ruby, Go, Rust `regex`, Tcl, Emacs | tiers 2-4 | one driver each, same output form. **None is installed on the machine this was written on**, and with the references in images that is no longer what decides whether they can be asked |
 
 Every driver reads a pattern, a flag string and a subject from a JSON line
@@ -443,8 +443,8 @@ spellings each side accepts is the syntax check's question.
 ### The cell width check
 
 `make check-vim-widths` regenerates `src/unicode/display.c`'s table from
-whatever vim is on the machine and diffs it - 1,112,062 code points, 0
-disagreements against vim 9.1.
+the pinned vim and diffs it - 1,112,062 code points, 0 disagreements against
+vim 9.2, and 0 against 9.1 before the raise: the widths did not move at all.
 
 Every other table here is generated from the UCD and gated by
 `make check-unicode-tables`. This one cannot be, and the reason is the point:
@@ -481,11 +481,19 @@ as the `encoding` and `iskeyword` ones in `tools/oracle/vim_diff.py`.
 ### The vim character class check
 
 `make check-vim-classes` does for `src/unicode/vim_class.c` what the check
-above does for the widths: regenerates vim's nine-class table from whatever
-vim is present and diffs it. 1,112,063 code points, 0 disagreements against
-vim 9.1; U+0000 and the surrogates are unaskable and both dumpers write them
-as the same sentinel, so a mismatch in *which* are unaskable is itself a
+above does for the widths: regenerates vim's class table from the pinned
+vim and diffs it. 1,112,063 code points, 0 disagreements against vim 9.2;
+U+0000 and the surrogates are unaskable and both dumpers write them as the
+same sentinel, so a mismatch in *which* are unaskable is itself a
 disagreement.
+
+It is also the gate that made the 9.2 raise a piece of work rather than a
+pin bump. Against 9.1.1244 it reported **48 disagreements**, all in
+Superscripts and Subscripts: 9.1 reads U+2070..U+209F as punctuation, and 9.2
+gives U+2070..U+207F and U+2080..U+2094 classes of their own while making
+U+2095..U+209F ordinary keyword characters. `src/unicode/vim_class.c` moved
+with the pin, in the same commit, because the gate would have been red in
+between.
 
 This is the table with the most to lose from an unpinned option, and it is
 the one that proves the family matters. `charclass()` consults the buffer's
@@ -500,6 +508,33 @@ one-off sweep that built it ran without the pin.
 That is not a hypothetical control: reverting those two entries makes this
 gate report `U+000D7 vim class 2, ours 1` and exit 1. It would have caught
 the defect on the day the table was written.
+
+### The vim option-set check
+
+`make check-vim-sets` regenerates the four sets vim decides from *options*
+rather than from Unicode - `\i` is 'isident', `\k` is 'iskeyword', `\f` is
+'isfname', `\p` is 'isprint' - and diffs each against `src/syntax/vim.c`.
+1,112,063 code points per set, four sets, 0 disagreements against vim 9.2.
+
+**Three of the four had no gate at all until 2026-09-25**, and the fourth had
+one only sideways: a unit test requires `\k` to agree with
+`src/unicode/vim_class.c`, which catches a `\k` that disagrees with the class
+table and not a pair of them wrong together. The tables were built by a
+one-off sweep, and `src/syntax/vim.c`'s header is a record of what that cost:
+three of the four were wrong when first written, `\i` and `\k` both missed
+U+00B5, `\k` took in 5,463 code points vim excludes, and the correction then
+overshot by two.
+
+A sweep that is not a tool cannot be re-run when the reference moves, and the
+reference moves. The vim 9.2 raise put all 48 of U+2070..U+209F into
+'iskeyword' - the 37 that got classes of their own as much as the 11 that
+became plain keyword characters, since `\k` is every class from the keyword
+class up. This gate is what said *which* 48 and that `\i`, `\f` and `\p`
+were untouched; the sideways unit test said only that something was wrong.
+
+The prints carry each set's size as well as its disagreement count, because a
+set that collapsed to nothing would report zero disagreements if the
+reference collapsed with it, and a bare 0 cannot be told from that.
 
 ### The case-fold orbit check
 

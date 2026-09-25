@@ -35,7 +35,7 @@ Three things are pinned, and each is an *option* rather than a mode:
              U+00D7 and U+00F7 are the two code points the two spellings
              disagree about.
   the vim    tools/oracle/containers/IMAGES, through oracle_env: patches
-             1-1244 contiguous, rather than whatever this machine installed.
+             1-1129 of vim 9.2, rather than whatever this machine has.
              Debian 13's is 1-948, 950-1230, 1242, 1244.
 
 The option rather than the mode, deliberately: `set nocompatible` would also
@@ -102,11 +102,16 @@ def encoding(work):
 
 
 def version():
-    """The patch level of the vim that answers, which is what identifies it.
+    """The release and patch level of the vim that answers, which together
+    are what identify it.
 
-    Not the first line: every vim in the last two years prints
-    `VIM - Vi IMproved 9.1` there. `oracle_env` selects the same line for the
-    pin check, and this is the same fact said for a human.
+    Both halves, because neither does it alone. The release line was useless
+    for two years - every vim built in them prints `VIM - Vi IMproved 9.1` -
+    which is why this reached past it for the patch line. Raising the pin to
+    9.2 showed the other half: **9.2.1129 prints `Included patches: 1-1129`,
+    a lower number than 9.1.1244's `1-1244`**, so the patch line alone reads
+    as a downgrade and names no release at all. `oracle_env`'s probe prints
+    the same two, and this is that fact said for a human.
 
     Asked without `-es` and without the option pins, because `--version` is a
     different request: in Ex mode vim takes it as a command to run rather than

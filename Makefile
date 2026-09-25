@@ -798,7 +798,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 .PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-dump-names check-readme-example check-tables check-status-line check-corpus-seeds check-makefile-hash check-oracle-env check-oracle-syntax check-oracle-match check-oracle-soak check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-perl-syntax check-oracle-script-runs check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
 	check-oracle-properties check-oracle-numeric-properties \
 	check-oracle-folds \
-	check-vim-widths check-vim-classes \
+	check-vim-widths check-vim-classes check-vim-sets \
 	check-oracle-string-properties check-oracle-posix check-oracle-sed \
 	check-oracle-exclusions check-oracle-determinism \
 	check-oracles oracle-version oracle-images oracle-clean \
@@ -1036,7 +1036,7 @@ check-oracles: ## Run every differential check against the reference implementat
 check-oracles: check-oracle-syntax check-oracle-match check-oracle-properties \
 	check-oracle-numeric-properties check-oracle-string-properties \
 	check-oracle-folds \
-	check-vim-widths check-vim-classes \
+	check-vim-widths check-vim-classes check-vim-sets \
 	check-oracle-posix check-oracle-submatch \
 	check-oracle-perl check-oracle-perl-syntax check-oracle-python \
 	check-oracle-vim \
@@ -1713,6 +1713,12 @@ check-vim-classes: $(TOOLS)
 	@$(REQUIRE_PYTHON3)
 	$(call run-oracle,vim,python3 tools/check_vim_classes.py \
 		--driver $(APP_DIR)/tools/grx_vim_classes$(EXE_EXTENSION))
+
+check-vim-sets: ## Fail if vim.c's \i, \k, \f and \p are not what vim answers
+check-vim-sets: $(TOOLS)
+	@$(REQUIRE_PYTHON3)
+	$(call run-oracle,vim,python3 tools/check_vim_sets.py \
+		--driver $(APP_DIR)/tools/grx_vim_sets$(EXE_EXTENSION))
 
 check-vim-widths: ## Fail if display.c's cell widths are not what vim answers
 check-vim-widths: $(TOOLS)
