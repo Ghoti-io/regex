@@ -93,3 +93,29 @@ perl-next	docker.io/library/perl:5.44.0-slim@sha256:76d5a0d6f19a3841668e44a67ecb
 # every count in tests/data/vectors/ecmascript/ was taken against. Raising it
 # is its own commit with its own triage.
 node	docker.io/library/node:22.23.2-slim@sha256:43aeff40f4afc22e83f7589a2f37e111cff5ca84529571f1c8415bcc5fcc21b2	V8 12.4.254.21-node.56, Unicode 17.0	The ECMAScript dialect, and every Unicode property table
+
+# vim, for the Vim dialect and for two whole-plane tables. **Built here: there
+# is no official vim image**, which makes it the other kind of pin
+# (CONTAINERS.md section 2.6). What is pinned is everything the build reads -
+# the base by digest, vim's source by tag - and the run-time check below is
+# the real guarantee.
+#
+# **The version field names the patch level, not the release**, and it is the
+# one entry here where the first line a reference prints is useless. Every
+# vim built in the last two years says `VIM - Vi IMproved 9.1` there; what
+# distinguishes one from another is four lines down:
+#
+#   this image      Included patches: 1-1244
+#   Debian 13's     Included patches: 1-948, 950-1230, 1242, 1244
+#
+# Contiguous against gappy, which is also the argument for building rather
+# than installing: `apt-get install vim` drifts silently on the next security
+# update, and a version-pinned apt install eventually fails to resolve. A tag
+# has no expiry.
+#
+# Why the tables matter here and not elsewhere: vim's character tables are its
+# own, in src/mbyte.c, and it publishes no UCD version for them. That is why
+# check-vim-classes and check-vim-widths exist - they compare 1.1M code points
+# against vim itself rather than against a number it does not state - and it
+# is why "which vim" is the whole question for them.
+vim	localhost/ghoti-regex-oracle-vim:9.1.1244	Included patches: 1-1244	The Vim dialect, its nine character classes and its cell widths

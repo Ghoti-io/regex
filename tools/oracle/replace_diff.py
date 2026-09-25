@@ -44,6 +44,8 @@ import subprocess
 import sys
 import tempfile
 
+import vim_runner
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 
@@ -348,16 +350,24 @@ def ask_vim(rows, engine=0):
     with open(in_path, "w", newline="\n") as handle:
         for _, pattern, subject, template in rows:
             handle.write(json.dumps([pattern, subject, template]) + "\n")
-    command = ["vim", "-es", "-u", "NONE", "-i", "NONE",
-        "--cmd", "let g:in=%s" % json.dumps(in_path),
-        "--cmd", "let g:o=%s" % json.dumps(out_path)]
+    # Through vim_runner, which is what this file was missing. It built its
+    # own command line and so never got the `encoding` and `iskeyword` pins
+    # that vim_diff.py has carried since 3a45136 - measured 2026-09-25, this
+    # arm reported 67 disagreements over 9,600 rows under `LANG=C` against 0
+    # under UTF-8, with 3,691 rows declined and three absorbed into the
+    # known-defect bucket. The comment in vim_diff.py said a third script
+    # could not be added without the setting; a second one already had been.
+    extra = ["--cmd", "let g:in=%s" % json.dumps(in_path),
+             "--cmd", "let g:o=%s" % json.dumps(out_path)]
     if engine:
         # The old engine, for the reason vim_diff.py asks it: vim ships two
         # and they disagree, and a row where `set re=1` gives this
         # library's answer is one where this library picked one of vim's
         # answers rather than one where it is wrong.
-        command += ["--cmd", "set re=%d" % engine]
-    subprocess.run(command + ["-c", "source " + script_path],
+        extra += ["--cmd", "set re=%d" % engine]
+    subprocess.run(
+        vim_runner.command(extra + ["-c", "source " + script_path],
+                           scratch=work),
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1800)
     if not os.path.exists(out_path):
@@ -495,10 +505,12 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
     """One dialect against its reference. None means the run was not made."""
     reference = None
     if dialect == "vim":
-        if subprocess.run(["which", "vim"],
-                capture_output=True).returncode != 0:
-            print("vim: skipped (vim is not installed)")
-            return 0
+        # No `which vim` and no skip. The reference is resolved and versioned
+        # by oracle_run.py before this runs, and vim_runner raises rather than
+        # falling back if it cannot be reached. `which vim` answered whether
+        # something of that name was on PATH, which is not what this arm
+        # needs to know - see vim_runner.py's docstring for what it cost.
+        print("vim: %s" % vim_runner.version())
     if dialect == "pcre":
         pcre2 = find("pcre2_match")
         if not pcre2:

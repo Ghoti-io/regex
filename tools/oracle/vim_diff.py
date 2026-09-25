@@ -51,6 +51,8 @@ import sys
 import tempfile
 import unicodedata
 
+import vim_runner
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 
@@ -406,9 +408,16 @@ qa!
 # blast radius measured. The other three option-backed sets - 'isident',
 # 'isfname' and 'isprint' - are identical in both modes, checked rather than
 # assumed, which is why only this one is set.
-VIM_COMMAND = ["vim", "-es", "-u", "NONE", "-i", "NONE",
-    "--cmd", "set encoding=utf-8",
-    "--cmd", "set iskeyword=@,48-57,_,192-255"]
+# The command line moved to tools/oracle/vim_runner.py, and the reason is the
+# one the comment above gives applied one file further out. It said a third
+# script could not be added without the setting - and `replace_diff.py`
+# already had a vim command line of its own, which never got it, and was
+# still reporting 67 disagreements per 9,600 rows under `LANG=C` on
+# 2026-09-25. A module is what enforces "one spelling"; a comment in one file
+# is not.
+#
+# Kept as a name so that the two call sites below read the same as they did.
+VIM_COMMAND = vim_runner.BASE + vim_runner.PINS
 
 
 def ask_vim(cases):
@@ -426,10 +435,10 @@ def _ask(cases, script):
     with open(in_path, "w", newline="\n") as handle:
         for pattern, subject in cases:
             handle.write(json.dumps([pattern, subject]) + "\n")
-    command = VIM_COMMAND + [
+    command = vim_runner.command([
         "--cmd", "let g:vimdiff_in=%s" % json.dumps(in_path),
         "--cmd", "let g:vimdiff_out=%s" % json.dumps(out_path),
-        "-c", "source " + script_path]
+        "-c", "source " + script_path], scratch=work)
     try:
         subprocess.run(command, stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1800)
@@ -965,40 +974,24 @@ def find(name):
 
 
 def vim_encoding():
-    """The encoding vim actually answers in, or None when there is no vim.
+    """The encoding vim actually answers in, or None when it cannot be asked.
 
-    `which vim` asks whether something called vim is on `PATH`, which is not
-    the question this gate needs answered. The question is whether the vim
-    that is about to answer fifty thousand rows will read them the way they
-    were written, and the only honest way to answer it is to reach for that
-    vim, through the same command line, before the rows are asked.
+    Both halves live in vim_runner now. The argument is unchanged: `which vim`
+    asks whether something called vim is on `PATH`, which is not the question.
+    The question is whether the vim about to answer fifty thousand rows will
+    read them the way they were written, and the only honest way to answer it
+    is to reach for that vim, through the same command line, first.
     """
     work = tempfile.mkdtemp(prefix="vim_diff.enc.")
     try:
-        out_path = os.path.join(work, "encoding.txt")
-        try:
-            subprocess.run(VIM_COMMAND + ["-c",
-                "call writefile([&encoding], %s) | qa!" % json.dumps(out_path)],
-                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL, timeout=60)
-        except (OSError, subprocess.TimeoutExpired):
-            return None
-        if not os.path.exists(out_path):
-            return None
-        with open(out_path) as handle:
-            return handle.read().strip()
+        return vim_runner.encoding(work)
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
 
 def vim_version():
-    """The first line of `vim --version`, so a run says which vim answered."""
-    try:
-        finished = subprocess.run(["vim", "--version"], capture_output=True,
-            timeout=60)
-    except (OSError, subprocess.TimeoutExpired):
-        return "unknown"
-    return finished.stdout.decode("utf-8", "replace").splitlines()[0].strip()
+    """Which vim answered, by its patch level rather than its release."""
+    return vim_runner.version()
 
 
 def main():
@@ -1022,7 +1015,11 @@ def main():
             "alone. VIM_COMMAND sets it, so this means the setting did not "
             "take.\n" % encoding)
         return 2
-    print("vim_diff: oracle(host): %s, encoding %s" % (vim_version(), encoding))
+    # Not "oracle(host)", which is what this line said and what it stopped
+    # being true of the moment the reference moved into an image. Where the
+    # reference ran is oracle_run.py's line to print; this one says which vim
+    # and which encoding, which is the part only this tool can answer.
+    print("vim_diff: %s, encoding %s" % (vim_version(), encoding))
     ours = find("grx_match")
     if not ours:
         sys.stderr.write("grx_match not built; run `make tools`\n")

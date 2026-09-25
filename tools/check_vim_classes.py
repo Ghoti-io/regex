@@ -23,14 +23,20 @@ U+0000, because `nr2char(0, 1)` is a zero-length string, and the surrogate
 block, which `nr2char()` cannot make and a UTF-8 subject cannot hold.
 
 Usage:
-    tools/check_vim_classes.py --driver <grx_vim_classes> [--vim vim]
+    tools/check_vim_classes.py --driver <grx_vim_classes>
 """
 
 import argparse
+import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
+
+sys.path.insert(0, os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "oracle"))
+import vim_runner
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -62,7 +68,6 @@ def expand(text, label):
 def main(argv):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--driver", required=True)
-    parser.add_argument("--vim", default="vim")
     parser.add_argument("--examples", type=int, default=20)
     args = parser.parse_args(argv[1:])
 
@@ -71,13 +76,22 @@ def main(argv):
         return 2
 
     script = os.path.join(ROOT, "tools", "unicode", "vim_classes.vim")
-    with tempfile.NamedTemporaryFile("r", suffix=".txt") as out:
+    # A directory of its own rather than a bare NamedTemporaryFile: vim writes
+    # the answer, and the reference runs in a pinned image with the repository
+    # mounted read-only, so the place it writes has to be named and mounted.
+    # `--vim` is gone with it - which vim answers is a pin now, in
+    # tools/oracle/containers/IMAGES, not a command-line default of "vim".
+    work = tempfile.mkdtemp(prefix="vim_classes.")
+    try:
+        out_path = os.path.join(work, "table.txt")
         done = subprocess.run(
-            [args.vim, "-es", "-u", "NONE", "-i", "NONE",
-             "--cmd", "let g:vimclasses_out=%s" % repr(out.name).replace("'", '"'),
-             "-S", script],
+            vim_runner.command(
+                ["--cmd", "let g:vimclasses_out=%s" % json.dumps(out_path),
+                 "-S", script], scratch=work),
             stdin=subprocess.DEVNULL, capture_output=True, text=True)
-        theirs_text = open(out.name).read()
+        theirs_text = open(out_path).read() if os.path.exists(out_path) else ""
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
     if not theirs_text.strip():
         sys.stderr.write("vim wrote nothing: %s\n" % done.stderr[:300])
         return 2
@@ -99,9 +113,7 @@ def main(argv):
 
     stale = []
 
-    version = subprocess.run([args.vim, "--version"], capture_output=True,
-                             text=True).stdout.splitlines()
-    print("vim-classes: %s" % (version[0] if version else "vim ?"))
+    print("vim-classes: %s" % vim_runner.version())
     unaskable = sum(1 for c in range(0x110000) if ours[c] == UNASKABLE)
     print("vim-classes: %d code points compared, %d unaskable (U+0000 and "
           "the surrogates), %d disagreements"

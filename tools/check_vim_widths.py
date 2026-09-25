@@ -25,14 +25,20 @@ one appearing is reported instead of being absorbed:
           split a question vim's one function answers whole.
 
 Usage:
-    tools/check_vim_widths.py --driver <grx_widths> [--vim vim]
+    tools/check_vim_widths.py --driver <grx_widths>
 """
 
 import argparse
+import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
+
+sys.path.insert(0, os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "oracle"))
+import vim_runner
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -65,7 +71,6 @@ def expand(text, label):
 def main(argv):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--driver", required=True)
-    parser.add_argument("--vim", default="vim")
     parser.add_argument("--examples", type=int, default=20)
     args = parser.parse_args(argv[1:])
 
@@ -74,13 +79,22 @@ def main(argv):
         return 2
 
     script = os.path.join(ROOT, "tools", "unicode", "vim_widths.vim")
-    with tempfile.NamedTemporaryFile("r", suffix=".txt") as out:
+    # A directory of its own rather than a bare NamedTemporaryFile: vim writes
+    # the answer, and the reference runs in a pinned image with the repository
+    # mounted read-only, so the place it writes has to be named and mounted.
+    # `--vim` is gone with it - which vim answers is a pin now, in
+    # tools/oracle/containers/IMAGES, not a command-line default of "vim".
+    work = tempfile.mkdtemp(prefix="vim_widths.")
+    try:
+        out_path = os.path.join(work, "table.txt")
         done = subprocess.run(
-            [args.vim, "-es", "-u", "NONE", "-i", "NONE",
-             "--cmd", "let g:vimwidths_out=%s" % repr(out.name).replace("'", '"'),
-             "-S", script],
+            vim_runner.command(
+                ["--cmd", "let g:vimwidths_out=%s" % json.dumps(out_path),
+                 "-S", script], scratch=work),
             stdin=subprocess.DEVNULL, capture_output=True, text=True)
-        theirs_text = open(out.name).read()
+        theirs_text = open(out_path).read() if os.path.exists(out_path) else ""
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
     if not theirs_text.strip():
         sys.stderr.write("vim wrote nothing: %s\n" % done.stderr[:300])
         return 2
@@ -109,9 +123,7 @@ def main(argv):
     for codepoint in stale:
         print("  U+%05X agrees now - remove it from EXCLUDED" % codepoint)
 
-    version = subprocess.run([args.vim, "--version"], capture_output=True,
-                             text=True).stdout.splitlines()
-    print("vim-widths: %s" % (version[0] if version else "vim ?"))
+    print("vim-widths: %s" % vim_runner.version())
     print("vim-widths: %d code points compared, %d excluded as a different "
           "question, %d surrogates written through, %d disagreements"
           % (0x110000 - len(EXCLUDED) - 2048, len(EXCLUDED), 2048,

@@ -1021,8 +1021,14 @@ oracle-images: ## Build the oracle images that are built here rather than pulled
 # The prefix is enforced where a violation is *created*. An image named
 # outside it is one `oracle-clean` would silently decline to remove, so the
 # two constraints have to agree or the cleanup quietly does nothing.
+# The set comes from the directories that exist rather than from a list here,
+# so that adding a reference is adding a directory and an IMAGES line and
+# nothing else - a list in two places is a list that will disagree with
+# itself.
 oracle-images:
-	@for name in vim pcre2; do \
+	@for dir in tools/oracle/containers/*/; do \
+		[ -d "$$dir" ] || continue; \
+		name=$$(basename "$$dir"); \
 		tag=$$(awk -F'\t' -v n="$$name" '$$1 == n {print $$2}' \
 			tools/oracle/containers/IMAGES); \
 		if [ -z "$$tag" ]; then \
@@ -1040,8 +1046,7 @@ oracle-images:
 		   exit 1; ;; \
 		esac; \
 		printf "\n### Building the %s oracle image ###\n" "$$name"; \
-		$(GHOTI_CONTAINER_ENGINE) build -t "$$tag" \
-			tools/oracle/containers/$$name || exit 1; \
+		$(GHOTI_CONTAINER_ENGINE) build -t "$$tag" "$$dir" || exit 1; \
 	done
 
 # Only this library's own built-here images, and the guard enforces the
@@ -1288,15 +1293,8 @@ check-oracle-vim: ## Compare the Vim front end against vim itself
 # backreference reads - where the body had written them. `(?=(a))$|(a)\1`
 # matched "aa" here and "a" in node, and pcre2test refused it outright.
 check-oracle-vim: $(TOOLS)
-	@if ! command -v vim >/dev/null 2>&1; then \
-		printf "check-oracle-vim: skipped (no vim)\n"; \
-		exit 0; \
-	fi; \
-	if ! command -v python3 >/dev/null 2>&1; then \
-		printf "check-oracle-vim: skipped (no python3)\n"; \
-		exit 0; \
-	fi; \
-	python3 tools/oracle/vim_diff.py --strict
+	@$(REQUIRE_PYTHON3)
+	$(call run-oracle,vim,python3 tools/oracle/vim_diff.py --strict)
 
 check-oracle-replace: ## Compare every built template grammar against its reference
 # WP-16 and WP-22's missing generator. sed_diff.py did this for the POSIX and
@@ -1321,11 +1319,9 @@ check-oracle-replace: ## Compare every built template grammar against its refere
 # drives `matchstrpos()`: the subject here is a string. Rows where vim's two
 # engines disagree are put to `set re=1`, as that tool does.
 check-oracle-replace: $(TOOLS)
-	@if ! command -v node >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then \
-		printf "check-oracle-replace: skipped (no node or no python3)\n"; \
-		exit 0; \
-	fi; \
-	python3 tools/oracle/replace_diff.py --seed $(ORACLE_SEED)
+	@$(REQUIRE_PYTHON3)
+	$(call run-oracle,node$(comma)vim,python3 tools/oracle/replace_diff.py \
+		--seed $(ORACLE_SEED))
 
 check-oracle-split: ## Compare grx_regex_split() against ECMAScript's and perl's
 # The last documented surface of the substitution API with no generator
@@ -1785,21 +1781,15 @@ check-readme-example: $(APP_DIR)/$(STATIC_TARGET) | $(APP_DIR)/$(TARGET)
 
 check-vim-classes: ## Fail if vim_class.c's nine classes are not what vim answers
 check-vim-classes: $(TOOLS)
-	@if ! command -v vim >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then \
-		printf "check-vim-classes: skipped (no vim or no python3)\n"; \
-		exit 0; \
-	fi; \
-	python3 tools/check_vim_classes.py \
-		--driver $(APP_DIR)/tools/grx_vim_classes$(EXE_EXTENSION)
+	@$(REQUIRE_PYTHON3)
+	$(call run-oracle,vim,python3 tools/check_vim_classes.py \
+		--driver $(APP_DIR)/tools/grx_vim_classes$(EXE_EXTENSION))
 
 check-vim-widths: ## Fail if display.c's cell widths are not what vim answers
 check-vim-widths: $(TOOLS)
-	@if ! command -v vim >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then \
-		printf "check-vim-widths: skipped (no vim or no python3)\n"; \
-		exit 0; \
-	fi; \
-	python3 tools/check_vim_widths.py \
-		--driver $(APP_DIR)/tools/grx_widths$(EXE_EXTENSION)
+	@$(REQUIRE_PYTHON3)
+	$(call run-oracle,vim,python3 tools/check_vim_widths.py \
+		--driver $(APP_DIR)/tools/grx_widths$(EXE_EXTENSION))
 
 check-unicode-tables: ## Fail if the committed Unicode tables are not what the generator produces
 # UCD_VERSION is `$(shell cat ...)` of the whole pin file, so an empty or
