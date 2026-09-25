@@ -35,8 +35,12 @@ around a reference bug is a fact about the reference that would otherwise
 be lost.
 """
 
+import os
 import subprocess
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import oracle_env
 
 NODE = ["node", "--regexp-interpret-all"]
 
@@ -53,8 +57,8 @@ def check():
     global _checked
     if _checked:
         return
-    finished = subprocess.run(NODE + ["-e", "0"], capture_output=True,
-        text=True)
+    finished = subprocess.run(oracle_env.command("node", NODE + ["-e", "0"]),
+        capture_output=True, text=True)
     if finished.returncode != 0:
         sys.stderr.write(
             "this node does not accept --regexp-interpret-all, and the "
@@ -67,9 +71,16 @@ def check():
 
 
 def command(*arguments):
-    """The command to run, with the flag and the capability check."""
+    """The command to run, with the flag and the capability check.
+
+    The node it names is the pinned one - tools/oracle/containers/IMAGES,
+    through oracle_env - which is the same argument one layer out. The flag
+    keeps a row's answer from depending on how many rows preceded it; the pin
+    keeps it from depending on which node this machine happens to have. Both
+    are about a reference answering the same question twice.
+    """
     check()
-    return NODE + list(arguments)
+    return oracle_env.command("node", NODE + list(arguments))
 
 
 # The reproducer, kept executable rather than only described. It runs the

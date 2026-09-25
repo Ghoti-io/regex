@@ -1,5 +1,6 @@
 import json, os, subprocess, sys
 import node_runner
+import oracle_env
 
 HERE = "tools/oracle"
 B = chr(92)
@@ -68,7 +69,8 @@ def main():
         input=json.dumps([[f, p, s] for f, p, s in rows]),
         capture_output=True, text=True, check=True)
     answers = json.loads(finished.stdout)
-    version = finished.stderr.strip().replace("\n", "; ")
+    version = oracle_env.reference_stderr(
+        finished.stderr).strip().replace("\n", "; ")
 
     body = []
     for (flags, pattern, unit, repeat, engines, note), (_, _, subject), answer in zip(

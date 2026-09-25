@@ -48,6 +48,8 @@ ORACLE = os.path.join(ROOT, "tools", "oracle")
 sys.path.insert(0, ORACLE)
 
 import make_vectors
+import node_runner
+import oracle_env
 
 # Flags that change what a pattern means for one search from offset zero.
 # `g` and `d` do not - they are about the JavaScript API's iteration state and
@@ -276,9 +278,10 @@ def cases_from(path, source):
 def ask_node_syntax(rows):
     payload = json.dumps([[f, p] for p, f in rows])
     finished = subprocess.run(
-        ["node", os.path.join(ORACLE, "node_syntax.mjs")],
+        node_runner.command(os.path.join(ORACLE, "node_syntax.mjs")),
         input=payload, capture_output=True, text=True, check=True)
-    return json.loads(finished.stdout), finished.stderr.strip()
+    return (json.loads(finished.stdout),
+            oracle_env.reference_stderr(finished.stderr).strip())
 
 
 def main(argv):

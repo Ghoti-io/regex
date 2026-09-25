@@ -68,3 +68,28 @@ perl	docker.io/library/perl:5.40.1-slim@sha256:741d8a6d6e1aef546c29fb55173d6c7db
 # regenerating the boundary vectors would answer a 5.40.1 corpus with a 5.44.0
 # perl. What it is for is the reading between the two.
 perl-next	docker.io/library/perl:5.44.0-slim@sha256:76d5a0d6f19a3841668e44a67ecb680fc8cd8e3fac4388dd01f48750031bb524	perl v5.44.0	The same questions one UCD ahead - and past Perl/perl5#24577
+
+# node, for the ECMAScript dialect - and, because V8 carries ICU, for whole
+# Unicode property tables. `check-oracle-properties` compares every property's
+# code point set against it, which is only meaningful because node 22.23.2's
+# ICU 78.2 is Unicode 17.0, an exact match with tools/unicode/UCD_VERSION.
+# That is the reading the version field below is for: CPython's `re` cannot be
+# asked the same question, because its UCD is two releases behind.
+#
+# **The pin names V8, not node**, for the reason node_runner.py exists. V8
+# interprets a regular expression and compiles it after a few executions, and
+# the two paths do not always agree:
+#
+#   /(?:(?=a)a)*\B../u  over "\nabc" from offset 1
+#
+# is 1-4 on the first execution in a fresh process and no match on every one
+# after it. `--regexp-interpret-all` gives 1-4 always, which is the answer
+# pcre2test 10.46 and perl 5.40.1 agree with. Present in 12.4.254.21 and gone
+# by Chrome 153's V8, so it is a fact about this V8 rather than about node -
+# and the flag is applied by node_runner.py, which refuses to run without it.
+# `make check-oracle-determinism` asserts that it is doing what it is for.
+#
+# 22.23.2 because that is the node tools/corpus/VERSIONS records and the one
+# every count in tests/data/vectors/ecmascript/ was taken against. Raising it
+# is its own commit with its own triage.
+node	docker.io/library/node:22.23.2-slim@sha256:43aeff40f4afc22e83f7589a2f37e111cff5ca84529571f1c8415bcc5fcc21b2	V8 12.4.254.21-node.56, Unicode 17.0	The ECMAScript dialect, and every Unicode property table

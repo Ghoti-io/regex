@@ -37,6 +37,7 @@ sys.path.insert(0, HERE)
 
 import match_diff
 import node_runner
+import oracle_env
 
 # Cases worth writing down by name rather than leaving to chance. Each is a
 # rule from documentation/dialects.md that a random corpus would reach only by
@@ -133,7 +134,8 @@ def ask_node(rows):
     finished = subprocess.run(
         node_runner.command(os.path.join(HERE, "node_match.mjs")),
         input=payload, capture_output=True, text=True, check=True)
-    return json.loads(finished.stdout), finished.stderr.strip()
+    return (json.loads(finished.stdout),
+            oracle_env.reference_stderr(finished.stderr).strip())
 
 
 def record_for(flags, pattern, subject, answer):

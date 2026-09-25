@@ -989,6 +989,10 @@ ORACLE_ENV := GHOTI_ORACLE_MODE=$(ORACLE_MODE) \
 	GHOTI_ORACLE_REQUIRED=$(ORACLE_REQUIRED) \
 	GHOTI_CONTAINER_ENGINE=$(GHOTI_CONTAINER_ENGINE)
 
+# $(call) splits its arguments on commas in the raw text, so a gate naming two
+# references spells the separator this way: $(call run-oracle,node$(comma)perl,...)
+comma := ,
+
 define run-oracle
 	@$(ORACLE_ENV) python3 tools/oracle/oracle_run.py $(1) -- $(2)
 endef
@@ -1147,12 +1151,9 @@ check-oracle-soak: $(TOOLS)
 
 check-oracle-properties: ## Compare every Unicode property table against the reference
 check-oracle-properties: $(TOOLS)
-	@if ! command -v node >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then \
-		printf "check-oracle-properties: skipped (no node or no python3)\n"; \
-		exit 0; \
-	fi; \
-	python3 tools/oracle/property_diff.py \
-		--driver $(APP_DIR)/tools/grx_properties$(EXE_EXTENSION)
+	@$(REQUIRE_PYTHON3)
+	$(call run-oracle,node,python3 tools/oracle/property_diff.py \
+		--driver $(APP_DIR)/tools/grx_properties$(EXE_EXTENSION))
 
 check-oracle-folds: ## Compare the case-fold orbits against perl
 check-oracle-folds: $(TOOLS)
@@ -1385,11 +1386,8 @@ check-oracle-determinism: ## Fail if the ECMAScript oracle answers a row two way
 # there for, on the row that found it, and that the answer it produces is
 # the one pcre2test and perl agree with. One node process.
 check-oracle-determinism:
-	@if ! command -v node >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then \
-		printf "check-oracle-determinism: skipped (no node or no python3)\n"; \
-		exit 0; \
-	fi; \
-	python3 tools/oracle/node_runner.py
+	@$(REQUIRE_PYTHON3)
+	$(call run-oracle,node,python3 tools/oracle/node_runner.py)
 
 check-oracle-env: ## Fail if the oracle pin table or its reader has rotted
 # In TEST_GATES while every gate that consults an oracle is not, and the
@@ -1426,11 +1424,9 @@ check-oracle-iterate: ## Compare the search-all loop against node and perl
 # run their own loop - matchAll and `while (/$re/g)` - which is why not pcre2,
 # whose loop its caller writes.
 check-oracle-iterate: $(TOOLS)
-	@if ! command -v node >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then \
-		printf "check-oracle-iterate: skipped (no node or no python3)\n"; \
-		exit 0; \
-	fi; \
-	python3 tools/oracle/iterate_diff.py --seed $(ORACLE_SEED)
+	@$(REQUIRE_PYTHON3)
+	$(call run-oracle,node$(comma)perl,python3 tools/oracle/iterate_diff.py \
+		--seed $(ORACLE_SEED))
 
 check-oracle-sed: ## Compare the POSIX and GNU replacement templates against sed
 check-oracle-sed: $(TOOLS)
@@ -1442,26 +1438,23 @@ check-oracle-sed: $(TOOLS)
 
 check-oracle-string-properties: ## Compare the properties of strings against the reference
 check-oracle-string-properties: $(TOOLS)
-	@if ! command -v node >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then \
-		printf "check-oracle-string-properties: skipped (no node or no python3)\n"; \
-		exit 0; \
-	fi; \
-	python3 tools/oracle/string_property_diff.py
+	@$(REQUIRE_PYTHON3)
+	$(call run-oracle,node,python3 tools/oracle/string_property_diff.py)
 
 vectors: ## Regenerate every dialect's conformance vectors
 vectors: vectors-ecmascript vectors-pcre vectors-perl vectors-posix
 
-vectors-ecmascript: ## Regenerate the ECMAScript vectors (needs node)
-	@if ! command -v node >/dev/null 2>&1; then \
-		printf "vectors-ecmascript: skipped (no node)\n"; exit 0; \
-	fi; \
-	python3 tools/oracle/make_vectors.py; \
-	python3 tools/oracle/make_long_vectors.py; \
-	if [ -d third_party/test262 ]; then \
-		python3 tools/corpus/import_test262.py; \
-	else \
+vectors-ecmascript: ## Regenerate the ECMAScript vectors from the pinned node
+# Three generators, three provenance lines, deliberately: each writes its own
+# artifact and the header of each records the node that answered it, so a
+# reader of one file is not relying on a line printed over a different one.
+	$(call run-oracle,node,python3 tools/oracle/make_vectors.py)
+	$(call run-oracle,node,python3 tools/oracle/make_long_vectors.py)
+	@if [ ! -d third_party/test262 ]; then \
 		printf "test262 not fetched: run tools/corpus/fetch.sh test262\n"; \
+		exit 0; \
 	fi
+	$(call run-oracle,node,python3 tools/corpus/import_test262.py)
 
 vectors-pcre: ## Re-import PCRE2's testinput corpus (needs pcre2test)
 	@if ! command -v pcre2test >/dev/null 2>&1; then \
@@ -1579,25 +1572,15 @@ check-engine-equivalence: $(APP_DIR)/tools/grx_match$(EXE_EXTENSION)
 
 check-oracle-match: ## Compare what patterns match against the reference implementation
 check-oracle-match: $(TOOLS)
-	@if ! command -v node >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then \
-		printf "check-oracle-match: skipped (no node or no python3)\n"; \
-		exit 0; \
-	fi; \
-	python3 tools/oracle/match_diff.py --seed $(ORACLE_SEED) \
-		--patterns $(ORACLE_PATTERNS) --driver $(APP_DIR)/tools/grx_match$(EXE_EXTENSION)
+	@$(REQUIRE_PYTHON3)
+	$(call run-oracle,node,python3 tools/oracle/match_diff.py --seed $(ORACLE_SEED) \
+		--patterns $(ORACLE_PATTERNS) --driver $(APP_DIR)/tools/grx_match$(EXE_EXTENSION))
 
 check-oracle-syntax: ## Compare accept/reject against the reference implementation
 check-oracle-syntax: $(TOOLS)
-	@if ! command -v node >/dev/null 2>&1; then \
-		printf "check-oracle-syntax: skipped (no node)\n"; \
-		exit 0; \
-	fi; \
-	if ! command -v python3 >/dev/null 2>&1; then \
-		printf "check-oracle-syntax: skipped (no python3)\n"; \
-		exit 0; \
-	fi; \
-	python3 tools/oracle/syntax_diff.py --seed $(ORACLE_SEED) \
-		--count $(ORACLE_COUNT) --driver $(APP_DIR)/tools/grx_syntax$(EXE_EXTENSION)
+	@$(REQUIRE_PYTHON3)
+	$(call run-oracle,node,python3 tools/oracle/syntax_diff.py --seed $(ORACLE_SEED) \
+		--count $(ORACLE_COUNT) --driver $(APP_DIR)/tools/grx_syntax$(EXE_EXTENSION))
 
 examples: ## Build all examples
 examples: $(APP_DIR)/$(TARGET) $(EXAMPLES)
