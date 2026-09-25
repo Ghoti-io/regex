@@ -107,7 +107,31 @@ PROBE = {
                "python 3", None),
     "vim": (["vim", "--version"], "Included patches", "Included patches"),
     "pcre2": (["pcre2test", "-C"], "PCRE2 version", None),
+    # `ldd --version` is how a glibc says what it is; there is no library to
+    # ask directly. It answers for `musl` too, and the IMAGES entry for that
+    # pin says why: musl's regex sources are pinned in tools/corpus/VERSIONS
+    # and hosted on *this* libc, so the two together decide an answer.
+    "glibc": (["ldd", "--version"], "GLIBC", None),
+    "sed": (["sed", "--version"], "GNU sed", None),
 }
+# musl's regex is compiled from sources pinned in tools/corpus/VERSIONS
+# against *this* image's libc, and both halves decide an answer - so the probe
+# names both. `PROBE["musl"] = PROBE["glibc"]` was the first spelling and it
+# made `make check-oracle-posix` print
+#
+#   oracle(container): glibc ldd (Debian GLIBC 2.41...) 2.41,
+#                      musl  ldd (Debian GLIBC 2.41...) 2.41
+#
+# which is *true* - that libc is what decides musl's non-ASCII refusals and
+# its `RE_DUP_MAX` - and unreadable, because a line whose job is to say which
+# two references answered named one of them twice. The pin checked is still
+# the libc; what changed is that the line says which musl is on it.
+PROBE["musl"] = (
+    ["sh", "-c",
+     "printf 'musl %s on ' "
+     "\"$(sed -n 's/^musl //p' tools/corpus/VERSIONS | head -1)\"; "
+     "ldd --version | head -1"],
+    "GLIBC", None)
 
 
 def _probe(name, default=None):

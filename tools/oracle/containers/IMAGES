@@ -172,3 +172,38 @@ pcre2	localhost/ghoti-regex-oracle-pcre2:10.46	PCRE2 version 10.46	The PCRE dial
 # behaviour *and* a newer UCD at the same time, which is two readings in one
 # raise - so it is its own commit.
 python	docker.io/library/python:3.13.5-slim@sha256:4c2cf9917bd1cbacc5e9b07320025bdb7cdf2df7b0ceaccb55e9dd7e30987419	python 3.13.5, UCD 15.1.0	The Python dialect: `re`, `re.split` and `re.sub`
+
+# The POSIX userland: three references, one image, and that is deliberate -
+# `compress`'s shape and for its reason. These are not three references that
+# happen to be convenient together; they are three faces of one Debian
+# userland, and pinning them apart would pin nothing. See
+# containers/posix/Dockerfile.
+#
+# glibc is the oracle for `gnu-bre` and `gnu-ere`, reached through C because
+# POSIX has no reference *binary* the way pcre2test and perl are binaries:
+# tools/oracle/posix_match.c calls regcomp/regexec, compiled inside the image.
+# tools/corpus/VERSIONS pins the rxspencer corpus to glibc-2.41 because glibc
+# is also the oracle *for* those vectors - a corpus imported from one version
+# and answered by another measures the difference between them.
+glibc	localhost/ghoti-regex-oracle-posix:deb13	GLIBC 2.41	The GNU BRE and ERE front ends, and Spencer's vectors
+
+# musl's regex, which is TRE's lineage and so a second *opinion* rather than a
+# second spelling of glibc's. **Two pins decide its answers and neither is
+# enough alone.** The sources are pinned in tools/corpus/VERSIONS (v1.2.6) and
+# fetched; but tools/oracle/musl_match.c compiles them against *glibc's*
+# headers and links glibc's mbtowc, iswctype and towlower, so the libc named
+# here decides the rest - including the exclusion that makes the driver
+# decline any byte >= 0x80, which exists because glibc's mbtowc refuses one in
+# the C locale where musl's would decode UTF-8.
+musl	localhost/ghoti-regex-oracle-posix:deb13	GLIBC 2.41	musl v1.2.6's regex, hosted on this image's glibc
+
+# GNU sed, which defines the POSIX and GNU replacement templates: POSIX's
+# regular expressions say nothing about substitution and sed's `s` command is
+# what does. The same caveat as glibc's - GNU sed defines what POSIX leaves
+# undefined - and sed_diff.py is split along the dialects so that a template
+# using a construct a dialect does not have is never asked.
+#
+# The one reference here whose CLI cannot take a batch on stdin, so the loop
+# runs inside the container through tools/oracle/sed_match.py rather than the
+# container being started 396 times.
+sed	localhost/ghoti-regex-oracle-posix:deb13	sed (GNU sed) 4.9	The POSIX and GNU replacement template grammars

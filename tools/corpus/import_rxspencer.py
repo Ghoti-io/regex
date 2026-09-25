@@ -48,7 +48,7 @@ GNU genuinely departs from the POSIX behaviour Spencer wrote down, that shows
 up here.
 
 Usage:
-    tools/corpus/import_rxspencer.py [--corpus FILE] [--driver PATH]
+    tools/corpus/import_rxspencer.py [--corpus FILE] [--out DIR]
                                      [--musl-driver PATH] [--out DIR]
                                      [--posix-out DIR] [--report N]
 
@@ -65,6 +65,11 @@ import os
 import re
 import subprocess
 import sys
+
+sys.path.insert(0, os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "oracle"))
+import oracle_env
+import posix_runner
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
@@ -192,13 +197,13 @@ def ask(driver, requests):
         lines.append("%s\t%s\t%s" % (flags,
             binascii.hexlify(pattern).decode(),
             binascii.hexlify(subject).decode()))
-    finished = subprocess.run([driver], input="\n".join(lines) + "\n",
+    finished = subprocess.run(driver, input="\n".join(lines) + "\n",
         capture_output=True, text=True, check=True)
     answers = finished.stdout.splitlines()
     if len(answers) != len(requests):
         raise SystemExit("posix_match answered %d of %d requests"
                          % (len(answers), len(requests)))
-    return answers, finished.stderr.strip()
+    return answers, oracle_env.reference_stderr(finished.stderr).strip()
 
 
 def spans_of(answer):
@@ -402,16 +407,17 @@ def write_file(path, dialect, corpus, oracle_line, note, records):
         handle.write("\n".join(records))
 
 
-def find_driver(explicit, name="posix_match"):
-    if explicit:
-        return explicit
-    for platform in ("linux", "mac", "win64", "win32"):
-        for build in ("release", "debug"):
-            path = os.path.join(ROOT, "build", platform, build, "apps",
-                "tools", name)
-            if os.path.exists(path):
-                return path
-    return None
+def find_driver(name="posix_match"):
+    """The reference driver, compiled inside the image that pins its libc.
+
+    There is nothing to look for on disk any more and no `--driver` to point
+    at one: which glibc answers is a pin, in tools/oracle/containers/IMAGES,
+    and the corpus pin in tools/corpus/VERSIONS is deliberately the matching
+    release - glibc is the oracle *for* these vectors as well as the subject
+    of them, so importing at one version and answering at another measures
+    the gap between the two.
+    """
+    return posix_runner.command(name)
 
 
 def ref_for(name):
@@ -427,9 +433,6 @@ def ref_for(name):
 def main(argv):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--corpus", default=None)
-    parser.add_argument("--driver", default=None)
-    parser.add_argument("--musl-driver", default=None,
-        help="tools/oracle/musl_match; without it the POSIX half is skipped")
     parser.add_argument("--out", default=None)
     parser.add_argument("--posix-out", default=None)
     parser.add_argument("--report", type=int, default=12,
@@ -444,11 +447,7 @@ def main(argv):
             "corpus not found: %s\nrun tools/corpus/fetch.sh glibc\n" % corpus)
         return 2
 
-    driver = find_driver(args.driver)
-    if not driver or not os.path.exists(driver):
-        sys.stderr.write(
-            "the posix_match tool was not found; run `make tools` first\n")
-        return 2
+    driver = find_driver()
 
     # Every case is built first and asked in one batch, so that the driver is
     # started once and the answers line up with the requests by position.
@@ -482,10 +481,10 @@ def main(argv):
     # are never written down on their own - only the cases where it and glibc
     # agree become POSIX vectors - so a machine without it loses the POSIX
     # half and nothing else.
-    musl_driver = find_driver(args.musl_driver, "musl_match")
+    musl_driver = find_driver("musl_match")
     musl_answers = None
     musl_version = None
-    if musl_driver and os.path.exists(musl_driver):
+    if musl_driver is not None:
         musl_answers, musl_version = ask(musl_driver, requests)
 
     written = collections.Counter()

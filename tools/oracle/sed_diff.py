@@ -31,6 +31,9 @@ import os
 import subprocess
 import sys
 
+import oracle_env
+import posix_runner
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 
@@ -80,37 +83,31 @@ def ask_ours(driver, dialect, requests):
 
 
 def ask_sed(basic, requests):
-    """One sed process per case: the `s` command's delimiter is the problem.
+    """sed's answers, through the pinned sed, one container for the run.
 
-    A template or a pattern may contain any character, so no delimiter is
-    safe in general. Passing the script on argv with a delimiter chosen per
-    case, and refusing the case when nothing is free, is the honest way to
-    do it - and in practice every case here has one.
+    It used to fork a sed per case from this process. The `s` command's
+    delimiter is why there is a loop at all - a template or a pattern may
+    contain any character, so no delimiter is safe in general, and the honest
+    thing is to choose one per case and decline the case when nothing is free.
+
+    The loop is unchanged; it moved into tools/oracle/sed_match.py, which runs
+    it *inside* the image. A process per case is cheap on the host and fatal
+    in a container (CONTAINERS.md 2.7): 396 cases at 200ms of container start
+    each is eighty seconds for a gate that finishes in under one.
     """
-    answers = []
-    for pattern, subject, template in requests:
-        delimiter = None
-        for candidate in "/,#%@^!~":
-            if candidate not in pattern and candidate not in template:
-                delimiter = candidate
-                break
-        if delimiter is None:
-            answers.append("skip no delimiter")
-            continue
-        script = "s%s%s%s%s%sg" % (
-            delimiter, pattern, delimiter, template, delimiter)
-        command = ["sed"]
-        if not basic:
-            command.append("-E")
-        command += ["--", script]
-        finished = subprocess.run(command, input=subject, capture_output=True,
-            text=True)
-        if finished.returncode != 0:
-            answers.append("template")
-        else:
-            # sed writes a line, and adds the newline the subject had not.
-            answers.append(finished.stdout.rstrip("\n"))
-    return answers
+    lines = "".join("%d\t%s\t%s\t%s\n" % (
+        1 if basic else 0,
+        binascii.hexlify(pattern.encode()).decode(),
+        binascii.hexlify(template.encode()).decode(),
+        binascii.hexlify(subject.encode()).decode())
+        for pattern, subject, template in requests)
+    finished = subprocess.run(posix_runner.sed_command(), input=lines,
+        capture_output=True, text=True)
+    if finished.returncode != 0:
+        sys.stderr.write("the sed driver failed:\n%s\n"
+            % oracle_env.reference_stderr(finished.stderr).strip()[:600])
+        return []
+    return finished.stdout.split("\n")[:len(requests)]
 
 
 def to_basic(pattern):

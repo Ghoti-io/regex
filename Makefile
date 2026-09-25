@@ -534,15 +534,6 @@ endif
 MUSL_REF := $(shell awk '$$1 == "musl" { print $$2; exit }' tools/corpus/VERSIONS)
 MUSL_SRC := third_party/musl/$(MUSL_REF)/src/regex
 MUSL_UNITS := $(MUSL_SRC)/regcomp.c $(MUSL_SRC)/regexec.c $(MUSL_SRC)/tre-mem.c
-MUSL_MATCH := $(APP_DIR)/tools/musl_match$(EXE_EXTENSION)
-
-# Joined to the tool list only when the fetch has happened, so that `make
-# tools` on a fresh clone builds what it can rather than failing on what it
-# has not got. The checks that want it say so and skip when it is absent.
-ifneq ($(wildcard $(MUSL_SRC)/regcomp.c),)
-MUSL_AVAILABLE := 1
-endif
-
 # Strict ISO C, because under a GNU dialect glibc's <limits.h> would define
 # RE_DUP_MAX as 0x7fff over musl's 255; tools/oracle/musl-include/regex.h
 # refuses to compile without it rather than let that pass silently. -w
@@ -577,14 +568,18 @@ PCRE2_SRC := third_party/pcre2/$(PCRE2_REF)
 # ask it the same question it asks a reference implementation. Built on
 # demand rather than by `all`, because they are development tools and are not
 # installed.
+# The three oracle drivers are excluded: each is compiled *inside* the image
+# that pins its reference (tools/oracle/{pcre2,posix}_runner.py), because an
+# oracle answers for somebody else's implementation and must not be able to
+# reach this one. posix_match.c was the one that fell through to the generic
+# rule below and so linked $(REGEXLIBRARY) - 29 grx_* symbols and 2.7 MB,
+# against 16 KB and none when built the way its two siblings already were.
 TOOL_SOURCES := $(shell find tools -type f -name '*.c' -not -path 'tools/jsonschema/*' \
-	-not -name 'musl_match.c' -not -name 'pcre2_match.c' 2>/dev/null)
+	-not -name 'musl_match.c' -not -name 'pcre2_match.c' \
+	-not -name 'posix_match.c' 2>/dev/null)
 TOOLS := $(patsubst tools/%.c,$(APP_DIR)/tools/%$(EXE_EXTENSION),$(notdir $(TOOL_SOURCES)))
 TOOLS := $(patsubst tools/oracle/%.c,$(APP_DIR)/tools/%$(EXE_EXTENSION),$(TOOL_SOURCES))
 TOOLS := $(patsubst tools/limits/%.c,$(APP_DIR)/tools/%$(EXE_EXTENSION),$(TOOLS))
-ifdef MUSL_AVAILABLE
-TOOLS += $(MUSL_MATCH)
-endif
 # The JSON Schema suite runner links `text`, so it joins the list only when
 # pkg-config found it.
 JSONSCHEMA_TOOL_SOURCES := $(shell find tools/jsonschema -type f -name '*.c' 2>/dev/null)
@@ -770,16 +765,6 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/oracle/%.c $(APP_DIR)/$(STATIC_TARGET)
 	@printf "\n### Compiling Tool: $* ###\n"
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(INCLUDE) -o $@ $< $(LDFLAGS) $(REGEXLIBRARY) $(CUTIL_LIBS)
-
-# musl's regex compiled straight into the driver: three of its translation
-# units and ours, no library of ours linked, because an oracle answers for
-# somebody else's implementation and must not be able to reach this one.
-$(MUSL_MATCH): tools/oracle/musl_match.c tools/oracle/musl-include/regex.h \
-		$(MUSL_UNITS)
-	@printf "\n### Compiling Tool: musl_match ###\n"
-	@mkdir -p $(@D)
-	$(CC) $(MUSL_CFLAGS) -DGRX_MUSL_REF='"$(MUSL_REF)"' -o $@ \
-		tools/oracle/musl_match.c $(MUSL_UNITS)
 
 $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/limits/%.c $(APP_DIR)/$(STATIC_TARGET) \
 		| $(APP_DIR)/$(TARGET)
@@ -1079,10 +1064,7 @@ SOAK_SEEDS ?= 20
 SOAK_FROM ?= 1
 
 check-oracle-soak: $(TOOLS)
-	@if ! command -v python3 >/dev/null 2>&1; then \
-		printf "check-oracle-soak: skipped (no python3)\n"; \
-		exit 0; \
-	fi; \
+	@$(REQUIRE_PYTHON3); \
 	status=0; \
 	out=$$(mktemp); \
 	last=$$(( $(SOAK_FROM) + $(SOAK_SEEDS) - 1 )); \
@@ -1188,11 +1170,8 @@ check-oracle-callouts: $(TOOLS)
 
 check-oracle-posix: ## Compare the POSIX and GNU front ends against glibc
 check-oracle-posix: $(TOOLS)
-	@if ! command -v python3 >/dev/null 2>&1; then \
-		printf "check-oracle-posix: skipped (no python3)\n"; \
-		exit 0; \
-	fi; \
-	python3 tools/oracle/posix_diff.py
+	@$(REQUIRE_PYTHON3)
+	$(call run-oracle,glibc$(comma)musl,python3 tools/oracle/posix_diff.py)
 
 check-oracle-submatch: ## Compare which spans the groups get, against glibc and musl
 # posix_diff.py asks whether the same text matched; this asks which group got
@@ -1204,11 +1183,9 @@ check-oracle-submatch: ## Compare which spans the groups get, against glibc and 
 # where both references agree and POSIX says otherwise. See
 # documentation/dialects.md sections 5.1 and 6.
 check-oracle-submatch: $(TOOLS)
-	@if ! command -v python3 >/dev/null 2>&1; then \
-		printf "check-oracle-submatch: skipped (no python3)\n"; \
-		exit 0; \
-	fi; \
-	python3 tools/oracle/submatch_diff.py --strict
+	@$(REQUIRE_PYTHON3)
+	$(call run-oracle,glibc$(comma)musl,python3 tools/oracle/submatch_diff.py \
+		--strict)
 
 check-oracle-python: ## Compare the Python front end against CPython's `re`
 # The only oracle here that runs in-process: `re` is importable by the tool
@@ -1349,10 +1326,7 @@ check-oracle-exclusions: ## Put each differential's exclusions their own control
 # that the narrowing is a thing that can fail rather than a thing that was
 # once argued for in a comment.
 check-oracle-exclusions:
-	@if ! command -v python3 >/dev/null 2>&1; then \
-		printf "check-oracle-exclusions: skipped (no python3)\n"; \
-		exit 0; \
-	fi; \
+	@$(REQUIRE_PYTHON3); \
 	python3 tools/oracle/check_exclusions.py
 
 check-oracle-iterate: ## Compare the search-all loop against node and perl
@@ -1369,11 +1343,8 @@ check-oracle-iterate: $(TOOLS)
 
 check-oracle-sed: ## Compare the POSIX and GNU replacement templates against sed
 check-oracle-sed: $(TOOLS)
-	@if ! command -v sed >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then \
-		printf "check-oracle-sed: skipped (no sed or no python3)\n"; \
-		exit 0; \
-	fi; \
-	python3 tools/oracle/sed_diff.py
+	@$(REQUIRE_PYTHON3)
+	$(call run-oracle,sed,python3 tools/oracle/sed_diff.py)
 
 check-oracle-string-properties: ## Compare the properties of strings against the reference
 check-oracle-string-properties: $(TOOLS)
@@ -1410,9 +1381,8 @@ vectors-posix: $(TOOLS)
 	@if [ ! -d third_party/glibc ]; then \
 		printf "vectors-posix: skipped (run tools/corpus/fetch.sh glibc)\n"; \
 		exit 0; \
-	fi; \
-	python3 tools/corpus/import_rxspencer.py \
-		--driver $(APP_DIR)/tools/posix_match$(EXE_EXTENSION)
+	fi
+	$(call run-oracle,glibc$(comma)musl,python3 tools/corpus/import_rxspencer.py)
 
 vectors-perl: ## Re-import Perl's re_tests corpus, answered by the pinned perl
 # The corpus and the perl that answers it are two pins and they move
@@ -1493,10 +1463,7 @@ JSON_SCHEMA_EXPECT ?= $(if $(filter draft7,$(JSON_SCHEMA_DRAFT)),46,51)
 
 check-limits: ## Report what real patterns cost against grx_limits_default()
 check-limits: $(TOOLS)
-	@if ! command -v python3 >/dev/null 2>&1; then \
-		printf "check-limits: skipped (no python3)\n"; \
-		exit 0; \
-	fi; \
+	@$(REQUIRE_PYTHON3); \
 	python3 tools/limits/measure.py \
 		--driver $(APP_DIR)/tools/grx_limits$(EXE_EXTENSION) \
 		--matcher $(APP_DIR)/tools/grx_match$(EXE_EXTENSION)

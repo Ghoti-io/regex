@@ -18,6 +18,7 @@ must catch - because a checker whose assertion no longer reaches its subject
 reports the same clean line as one that passes.
 """
 
+import ast
 import os
 import sys
 
@@ -101,6 +102,78 @@ def check_reference_stderr():
         fail("reference_stderr: it changed text that has nothing to remove")
 
 
+# Where a reference's stderr is *kept* rather than discarded. Five generated
+# corpora record it in their headers, which is where perl's warnings about
+# `(?!)+` and node's own version line come from.
+STDERR_KEEPERS = (
+    "tools/oracle/make_vectors.py",
+    "tools/oracle/make_long_vectors.py",
+    "tools/corpus/import_test262.py",
+    "tools/corpus/import_re_tests.py",
+    "tools/corpus/import_rxspencer.py",
+)
+
+
+def check_kept_stderr_is_filtered():
+    """Every site that keeps a reference's stderr runs it through the filter.
+
+    Found the hard way, twice: the container engine here is a shell script
+    that prints a banner before exec'ing podman, and it landed in
+    `tests/data/vectors/perl/re_tests.rxt` and then - after that one was
+    fixed - in all four of the rxspencer vectors, where it also broke the
+    header across three lines and failed the suite. A one-time fix removes the
+    instances; only a check stops the next one.
+
+    **Read as a syntax tree, not as lines**, and the first version of this was
+    line-based and reported `make_long_vectors.py` as unfiltered because the
+    call is split over two lines:
+
+        version = oracle_env.reference_stderr(
+            finished.stderr).strip()...
+
+    The `.stderr` is on a line the function name is not on. That is the whole
+    family in `makefile-checker-reads-lines`: the text is line-oriented and
+    the structure is not, and a checker for a structural property needs to
+    read the structure. It was caught because the control was armed first -
+    unfiltering a second site printed both, the planted one and the false one.
+
+    The sweep is over a named list rather than a glob, so a *new* site is not
+    covered by it. The second half is what makes that visible rather than
+    silent: each listed file must actually contain a stderr read, so a file
+    that stops keeping stderr fails here and comes off the list on purpose.
+    """
+    root = os.path.dirname(os.path.dirname(HERE))
+    for name in STDERR_KEEPERS:
+        path = os.path.join(root, name)
+        if not os.path.exists(path):
+            fail("%s: listed as keeping a reference's stderr and is gone"
+                 % name)
+            continue
+        tree = ast.parse(open(path, encoding="utf-8").read())
+
+        # Everything textually inside a reference_stderr(...) call.
+        filtered = set()
+        for node in ast.walk(tree):
+            if (isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "reference_stderr"):
+                for inner in ast.walk(node):
+                    filtered.add(id(inner))
+
+        reads = [node for node in ast.walk(tree)
+                 if isinstance(node, ast.Attribute) and node.attr == "stderr"
+                 and not (isinstance(node.value, ast.Name)
+                          and node.value.id == "sys")]
+        if not reads:
+            fail("%s: listed as keeping a reference's stderr and does not"
+                 % name)
+            continue
+        for node in reads:
+            if id(node) not in filtered:
+                fail("%s:%d: keeps a reference's stderr unfiltered"
+                     % (name, node.lineno))
+
+
 def check_mode_is_closed():
     """An unknown GHOTI_ORACLE_MODE raises rather than picking one."""
     saved = oracle_env.MODE
@@ -121,6 +194,7 @@ def main():
     check_every_pin_can_be_asked(table)
     check_probe_fallback()
     check_reference_stderr()
+    check_kept_stderr_is_filtered()
     check_mode_is_closed()
     if FAILURES:
         sys.stderr.write("\033[0;31m\n### The oracle pin table is wrong ###"
@@ -128,8 +202,9 @@ def main():
         for message in FAILURES:
             sys.stderr.write("  %s\n" % message)
         return 1
-    print("oracle pins: %d references, all askable; IMAGES parses; "
-          "the stderr filter fires both ways." % len(table))
+    print("oracle pins: %d references, all askable; IMAGES parses; the "
+          "stderr filter fires both ways and reaches all %d sites that keep "
+          "a reference's stderr." % (len(table), len(STDERR_KEEPERS)))
     return 0
 
 

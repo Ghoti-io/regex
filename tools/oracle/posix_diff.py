@@ -54,6 +54,8 @@ import re
 import subprocess
 import sys
 
+import posix_runner
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 
@@ -325,15 +327,23 @@ def find(name):
 
 
 def compare(dialect, seed, patterns, examples):
-    drivers = {"glibc": find("posix_match"), "musl": find("musl_match")}
+    # Both reference drivers are compiled inside the pinned image against
+    # that image's glibc, so there is nothing here for `make tools` to have
+    # built and nothing to look for on disk. musl is the one that can still
+    # be genuinely absent: its sources are fetched rather than committed, so
+    # a clone that has not run `tools/corpus/fetch.sh musl` has no second
+    # POSIX opinion to offer - the property cannot exist, which is the one
+    # shape of skip CONTAINERS.md 2.5 allows.
+    drivers = {"glibc": posix_runner.command("posix_match"),
+               "musl": posix_runner.command("musl_match")}
     ours = find("grx_match")
-    if not drivers["glibc"] or not ours:
+    if not ours:
         sys.stderr.write("run `make tools` first\n")
         return None
     wanted = DECIDED_BY[dialect]
     if "musl" in wanted and not drivers["musl"]:
-        print("%s: skipped (no musl_match; run tools/corpus/fetch.sh musl "
-              "and `make tools`)" % dialect)
+        print("%s: skipped (musl's sources are not fetched; run "
+              "tools/corpus/fetch.sh musl)" % dialect)
         return 0
 
     rng = random.Random(seed)
@@ -347,7 +357,7 @@ def compare(dialect, seed, patterns, examples):
     cases = [(flag + newline, pattern, subject)
              for newline in NEWLINE_MODES
              for pattern in sorted(built) for subject in SUBJECTS]
-    answers = {name: ask([drivers[name]], cases) for name in wanted}
+    answers = {name: ask(drivers[name], cases) for name in wanted}
     mine = ask([ours, dialect], cases)
     if any(len(rows) != len(cases) for rows in answers.values()) \
             or len(mine) != len(cases):
