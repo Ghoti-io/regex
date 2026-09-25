@@ -6,7 +6,7 @@
 # name, hyphens for spaces, a doubled space, an unknown name, and a
 # name of the right shape for a range it does not fall in.
 #
-# Rows for characters Perl's UCD 15.0.0 does not have are left out:
+# Rows for characters Perl's UCD 17.0.0 does not have are left out:
 # those are a version difference rather than a disagreement, the
 # same skew unicode.md section 1 describes.
 dialect: perl
@@ -21,6 +21,11 @@ pattern: ^(?:\\N{LATIN SMALL LETTER IOTA WITH STROKE})$
 flags: 
 subject: \u1D7C
 expect: 0-3
+
+pattern: ^(?:\\N{LARGE TYPE PIECE UPPER TERMINAL})$
+flags: 
+subject: \u{1CE1C}
+expect: 0-4
 
 pattern: ^(?:\\N{LATIN SMALL LETTER QP DIGRAPH})$
 flags: 
@@ -65,6 +70,11 @@ expect: 0-4
 pattern: ^(?:\\N{PAHAWH HMONG CLAN SIGN TSAB})$
 flags: 
 subject: \u{16B86}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-13E95})$
+flags: 
+subject: \u{13E95}
 expect: 0-4
 
 pattern: ^(?:\\N{HANGUL JONGSEONG NIEUN-SIOS})$
@@ -117,6 +127,11 @@ flags:
 subject: \uA475
 expect: 0-3
 
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-13774})$
+flags: 
+subject: \u{13774}
+expect: 0-4
+
 pattern: ^(?:\\N{HANGUL DOUBLE DOT TONE MARK})$
 flags: 
 subject: \u302F
@@ -142,6 +157,11 @@ flags:
 subject: \u1D34
 expect: 0-3
 
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-13883})$
+flags: 
+subject: \u{13883}
+expect: 0-4
+
 pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH O032})$
 flags: 
 subject: \u{13280}
@@ -161,6 +181,16 @@ pattern: ^(?:\\N{LEFTWARDS OPEN-HEADED ARROW})$
 flags: 
 subject: \u21FD
 expect: 0-3
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-13DBB})$
+flags: 
+subject: \u{13DBB}
+expect: 0-4
+
+pattern: ^(?:\\N{TULU-TIGALARI LETTER I})$
+flags: 
+subject: \u{11382}
+expect: 0-4
 
 pattern: ^(?:\\N{DUPLOYAN LETTER SLOAN ON})$
 flags: 
@@ -412,6 +442,11 @@ flags:
 subject: \uA54A
 expect: 0-3
 
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-13738})$
+flags: 
+subject: \u{13738}
+expect: 0-4
+
 pattern: ^(?:\\N{ARABIC CURLY DAMMATAN})$
 flags: 
 subject: \u08E8
@@ -507,6 +542,11 @@ flags:
 subject: \u09A7
 expect: 0-3
 
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-143B9})$
+flags: 
+subject: \u{143B9}
+expect: 0-4
+
 pattern: ^(?:\\N{SIGNWRITING HAND-HINGE INDEX THUMB OPEN})$
 flags: 
 subject: \u{1D8EE}
@@ -521,6 +561,11 @@ pattern: ^(?:\\N{DEVANAGARI OM})$
 flags: 
 subject: \u0950
 expect: 0-3
+
+pattern: ^(?:\\N{LARGE TYPE PIECE CROSSBAR})$
+flags: 
+subject: \u{1CE1F}
+expect: 0-4
 
 pattern: ^(?:\\N{CIRCLED LATIN CAPITAL LETTER S})$
 flags: 
@@ -542,6 +587,11 @@ flags:
 subject: \u29C5
 expect: 0-3
 
+pattern: ^(?:\\N{GURUNG KHEMA LETTER VA})$
+flags: 
+subject: \u{1610F}
+expect: 0-4
+
 pattern: ^(?:\\N{TAGALOG VOWEL SIGN U})$
 flags: 
 subject: \u1713
@@ -557,9 +607,19 @@ flags:
 subject: \u1DE8
 expect: 0-3
 
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-14129})$
+flags: 
+subject: \u{14129}
+expect: 0-4
+
 pattern: ^(?:\\N{TANGUT COMPONENT-033})$
 flags: 
 subject: \u{18820}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-13719})$
+flags: 
+subject: \u{13719}
 expect: 0-4
 
 pattern: ^(?:\\N{SYMBOL FOR END OF MEDIUM})$
@@ -587,6 +647,11 @@ flags:
 subject: \u0B05
 expect: 0-3
 
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-13ADB})$
+flags: 
+subject: \u{13ADB}
+expect: 0-4
+
 pattern: ^(?:\\N{OTTOMAN SIYAQ NUMBER THREE THOUSAND})$
 flags: 
 subject: \u{1ED1E}
@@ -607,15 +672,30 @@ flags:
 subject: \u{1F5C8}
 expect: 0-4
 
+pattern: ^(?:\\N{BLOCK OCTANT-2347})$
+flags: 
+subject: \u{1CD43}
+expect: 0-4
+
 pattern: ^(?:\\N{BAMUM LETTER PHASE-E YUEQ})$
 flags: 
 subject: \u{169B2}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-1433E})$
+flags: 
+subject: \u{1433E}
 expect: 0-4
 
 pattern: ^(?:\\N{CJK COMPATIBILITY IDEOGRAPH-FA30})$
 flags: 
 subject: \uFA30
 expect: 0-3
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-142EC})$
+flags: 
+subject: \u{142EC}
+expect: 0-4
 
 pattern: ^(?:\\N{NYIAKENG PUACHUE HMONG SIGN FOR THING})$
 flags: 
@@ -682,10 +762,20 @@ flags:
 subject: \u{1D861}
 expect: 0-4
 
+pattern: ^(?:\\N{TULU-TIGALARI VOWEL SIGN VOCALIC LL})$
+flags: 
+subject: \u{113C0}
+expect: 0-4
+
 pattern: ^(?:\\N{MEETEI MAYEK VOWEL SIGN VISARGA})$
 flags: 
 subject: \uAAF5
 expect: 0-3
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-13623})$
+flags: 
+subject: \u{13623}
+expect: 0-4
 
 pattern: ^(?:\\N{PHAGS-PA LETTER DA})$
 flags: 
@@ -697,10 +787,20 @@ flags:
 subject: \u{1F5B0}
 expect: 0-4
 
+pattern: ^(?:\\N{BLOCK OCTANT-23578})$
+flags: 
+subject: \u{1CDC1}
+expect: 0-4
+
 pattern: ^(?:\\N{CYRILLIC CAPITAL LETTER EL WITH MIDDLE HOOK})$
 flags: 
 subject: \u0520
 expect: 0-2
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-135D7})$
+flags: 
+subject: \u{135D7}
+expect: 0-4
 
 pattern: ^(?:\\N{LYCIAN LETTER A})$
 flags: 
@@ -722,9 +822,19 @@ flags:
 subject: \u1FF7
 expect: 0-3
 
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-13BD6})$
+flags: 
+subject: \u{13BD6}
+expect: 0-4
+
 pattern: ^(?:\\N{MEROITIC CURSIVE NUMBER NINE})$
 flags: 
 subject: \u{109C8}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-13667})$
+flags: 
+subject: \u{13667}
 expect: 0-4
 
 pattern: ^(?:\\N{BRAILLE PATTERN DOTS-34567})$
@@ -736,6 +846,11 @@ pattern: ^(?:\\N{BOX DRAWINGS LIGHT DOWN AND LEFT})$
 flags: 
 subject: \u2510
 expect: 0-3
+
+pattern: ^(?:\\N{BLOCK OCTANT-234})$
+flags: 
+subject: \u{1CD08}
+expect: 0-4
 
 pattern: ^(?:\\N{ANATOLIAN HIEROGLYPH A301})$
 flags: 
@@ -807,6 +922,11 @@ flags:
 subject: \u1E05
 expect: 0-3
 
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-140EB})$
+flags: 
+subject: \u{140EB}
+expect: 0-4
+
 pattern: ^(?:\\N{CAPITULUM})$
 flags: 
 subject: \u2E3F
@@ -841,6 +961,11 @@ pattern: ^(?:\\N{HEBREW LETTER HE WITH MAPIQ})$
 flags: 
 subject: \uFB34
 expect: 0-3
+
+pattern: ^(?:\\N{OUTLINED LATIN CAPITAL LETTER V})$
+flags: 
+subject: \u{1CCEB}
+expect: 0-4
 
 pattern: ^(?:\\N{LINEAR A SIGN A534})$
 flags: 
@@ -897,6 +1022,11 @@ flags:
 subject: \u{133F5}
 expect: 0-4
 
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-13711})$
+flags: 
+subject: \u{13711}
+expect: 0-4
+
 pattern: ^(?:\\N{COMBINING OLD PERMIC LETTER NENOE})$
 flags: 
 subject: \u{10379}
@@ -920,6 +1050,11 @@ expect: 0-4
 pattern: ^(?:\\N{SIGNWRITING HAND-HINGE INDEX MIDDLE LITTLE})$
 flags: 
 subject: \u{1D8A6}
+expect: 0-4
+
+pattern: ^(?:\\N{OL ONAL LETTER UR})$
+flags: 
+subject: \u{1E5E7}
 expect: 0-4
 
 pattern: ^(?:\\N{SIGNWRITING ROTATION-WALLPLANE DOUBLE HITTING FRONT WALL})$
@@ -951,6 +1086,11 @@ pattern: ^(?:\\N{ARABIC LIGATURE YEH WITH HAMZA ABOVE WITH JEEM ISOLATED FORM})$
 flags: 
 subject: \uFC00
 expect: 0-3
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-1399E})$
+flags: 
+subject: \u{1399E}
+expect: 0-4
 
 pattern: ^(?:\\N{MODIFIER LETTER EXTRA-LOW TONE BAR})$
 flags: 
@@ -987,6 +1127,11 @@ flags:
 subject: \u{1D7F4}
 expect: 0-4
 
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-13A19})$
+flags: 
+subject: \u{13A19}
+expect: 0-4
+
 pattern: ^(?:\\N{IMPERIAL ARAMAIC SECTION SIGN})$
 flags: 
 subject: \u{10857}
@@ -1012,6 +1157,11 @@ flags:
 subject: \u2387
 expect: 0-3
 
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-143DD})$
+flags: 
+subject: \u{143DD}
+expect: 0-4
+
 pattern: ^(?:\\N{ARABIC LETTER MEEM WITH DOT ABOVE})$
 flags: 
 subject: \u0765
@@ -1020,6 +1170,11 @@ expect: 0-2
 pattern: ^(?:\\N{TANGUT COMPONENT-068})$
 flags: 
 subject: \u{18843}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-134A2})$
+flags: 
+subject: \u{134A2}
 expect: 0-4
 
 pattern: ^(?:\\N{BLACK SLIGHTLY SMALL CIRCLE})$
@@ -1031,6 +1186,11 @@ pattern: ^(?:\\N{CJK COMPATIBILITY IDEOGRAPH-FA89})$
 flags: 
 subject: \uFA89
 expect: 0-3
+
+pattern: ^(?:\\N{GARAY CAPITAL LETTER LA})$
+flags: 
+subject: \u{10D58}
+expect: 0-4
 
 pattern: ^(?:\\N{KHAROSHTHI LETTER KKA})$
 flags: 
@@ -1046,6 +1206,11 @@ pattern: ^(?:\\N{CJK COMPATIBILITY IDEOGRAPH-FA81})$
 flags: 
 subject: \uFA81
 expect: 0-3
+
+pattern: ^(?:\\N{TOLONG SIKI LETTER PH})$
+flags: 
+subject: \u{11DB7}
+expect: 0-4
 
 pattern: ^(?:\\N{ARABIC LIGATURE LAM WITH JEEM WITH JEEM FINAL FORM})$
 flags: 
@@ -1167,6 +1332,11 @@ flags:
 subject: \uD7F8
 expect: 0-3
 
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-13886})$
+flags: 
+subject: \u{13886}
+expect: 0-4
+
 pattern: ^(?:\\N{ANATOLIAN HIEROGLYPH A215A})$
 flags: 
 subject: \u{144F7}
@@ -1187,6 +1357,11 @@ flags:
 subject: \u{11023}
 expect: 0-4
 
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-1427C})$
+flags: 
+subject: \u{1427C}
+expect: 0-4
+
 pattern: ^(?:\\N{YI SYLLABLE BBOP})$
 flags: 
 subject: \uA068
@@ -1205,6 +1380,11 @@ expect: 0-4
 pattern: ^(?:\\N{MIAO LETTER YI TA})$
 flags: 
 subject: \u{16F0D}
+expect: 0-4
+
+pattern: ^(?:\\N{GARAY DIGIT ONE})$
+flags: 
+subject: \u{10D41}
 expect: 0-4
 
 pattern: ^(?:\\N{PAGES})$
@@ -1282,6 +1462,11 @@ flags:
 subject: \u1EAE
 expect: 0-3
 
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-141E2})$
+flags: 
+subject: \u{141E2}
+expect: 0-4
+
 pattern: ^(?:\\N{SIGNWRITING HAND-FLAT BETWEEN PALM FACINGS})$
 flags: 
 subject: \u{1D85B}
@@ -1327,6 +1512,11 @@ flags:
 subject: \u{1200E}
 expect: 0-4
 
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-13928})$
+flags: 
+subject: \u{13928}
+expect: 0-4
+
 pattern: ^(?:\\N{RUMI DIGIT NINE})$
 flags: 
 subject: \u{10E68}
@@ -1341,6 +1531,11 @@ pattern: ^(?:\\N{DIGIT ZERO})$
 flags: 
 subject: 0
 expect: 0-1
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-13664})$
+flags: 
+subject: \u{13664}
+expect: 0-4
 
 pattern: ^(?:\\N{AEGEAN NUMBER EIGHT THOUSAND})$
 flags: 
@@ -1382,6 +1577,11 @@ flags:
 subject: \u1B8D
 expect: 0-3
 
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-14157})$
+flags: 
+subject: \u{14157}
+expect: 0-4
+
 pattern: ^(?:\\N{CHEROKEE LETTER WA})$
 flags: 
 subject: \u13E9
@@ -1406,6 +1606,11 @@ pattern: ^(?:\\N{ARABIC LETTER SEEN WITH INVERTED V})$
 flags: 
 subject: \u077E
 expect: 0-2
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-13462})$
+flags: 
+subject: \u{13462}
+expect: 0-4
 
 pattern: ^(?:\\N{SIGNWRITING HAND-ANGLE INDEX THUMB OUT})$
 flags: 
@@ -1437,6 +1642,11 @@ flags:
 subject: \u{12254}
 expect: 0-4
 
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-1406E})$
+flags: 
+subject: \u{1406E}
+expect: 0-4
+
 pattern: ^(?:\\N{SOGDIAN COMBINING CURVE BELOW})$
 flags: 
 subject: \u{10F4B}
@@ -1445,6 +1655,11 @@ expect: 0-4
 pattern: ^(?:\\N{MODI DIGIT EIGHT})$
 flags: 
 subject: \u{11658}
+expect: 0-4
+
+pattern: ^(?:\\N{ORTHOGONAL CROSSHATCH FILL})$
+flags: 
+subject: \u{1CC42}
 expect: 0-4
 
 pattern: ^(?:\\N{LINEAR A SIGN A582})$
@@ -1462,6 +1677,11 @@ flags:
 subject: \uA889
 expect: 0-3
 
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-14295})$
+flags: 
+subject: \u{14295}
+expect: 0-4
+
 pattern: ^(?:\\N{KHAROSHTHI LETTER TTHA})$
 flags: 
 subject: \u{10A1B}
@@ -1470,6 +1690,11 @@ expect: 0-4
 pattern: ^(?:\\N{MODIFIER LETTER SMALL G WITH HOOK})$
 flags: 
 subject: \u{10793}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-1431E})$
+flags: 
+subject: \u{1431E}
 expect: 0-4
 
 pattern: ^(?:\\N{CJK COMPATIBILITY IDEOGRAPH-2F963})$
@@ -1481,6 +1706,11 @@ pattern: ^(?:\\N{COMBINING CYRILLIC TITLO LEFT HALF})$
 flags: 
 subject: \uFE2E
 expect: 0-3
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-14165})$
+flags: 
+subject: \u{14165}
+expect: 0-4
 
 pattern: ^(?:\\N{YI SYLLABLE DA})$
 flags: 
@@ -1500,6 +1730,11 @@ expect: 0-3
 pattern: ^(?:\\N{CUNEIFORM SIGN AB TIMES HA})$
 flags: 
 subject: \u{1200F}
+expect: 0-4
+
+pattern: ^(?:\\N{TODHRI LETTER LA})$
+flags: 
+subject: \u{105D5}
 expect: 0-4
 
 pattern: ^(?:\\N{CUNEIFORM SIGN DA TIMES TAK4})$
@@ -1542,9 +1777,19 @@ flags:
 subject: \u{110E6}
 expect: 0-4
 
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-137B9})$
+flags: 
+subject: \u{137B9}
+expect: 0-4
+
 pattern: ^(?:\\N{SIGNWRITING HAND-FIST LITTLE TOUCHES THUMB})$
 flags: 
 subject: \u{1D899}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-142C9})$
+flags: 
+subject: \u{142C9}
 expect: 0-4
 
 pattern: ^(?:\\N{TILDE WITH DOT ABOVE})$
@@ -1560,6 +1805,11 @@ expect: 0-3
 pattern: ^(?:\\N{CJK COMPATIBILITY IDEOGRAPH-2F891})$
 flags: 
 subject: \u{2F891}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-141D8})$
+flags: 
+subject: \u{141D8}
 expect: 0-4
 
 pattern: ^(?:\\N{ANATOLIAN HIEROGLYPH A251})$
@@ -1597,6 +1847,16 @@ flags:
 subject: \u{18B22}
 expect: 0-4
 
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-13E78})$
+flags: 
+subject: \u{13E78}
+expect: 0-4
+
+pattern: ^(?:\\N{GARAY VOWEL SIGN EE})$
+flags: 
+subject: \u{10D4D}
+expect: 0-4
+
 pattern: ^(?:\\N{CANADIAN SYLLABICS CARRIER EE})$
 flags: 
 subject: \u1408
@@ -1605,6 +1865,11 @@ expect: 0-3
 pattern: ^(?:\\N{MEDEFAIDRIN CAPITAL LETTER K})$
 flags: 
 subject: \u{16E4C}
+expect: 0-4
+
+pattern: ^(?:\\N{UPPER LEFT QUADRANT CHESS KNIGHT})$
+flags: 
+subject: \u{1CCCA}
 expect: 0-4
 
 pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH M019})$
@@ -1627,6 +1892,11 @@ flags:
 subject: \u{11295}
 expect: 0-4
 
+pattern: ^(?:\\N{BERIA ERFE CAPITAL LETTER ERIGO})$
+flags: 
+subject: \u{16EB1}
+expect: 0-4
+
 pattern: ^(?:\\N{YI SYLLABLE NZIE})$
 flags: 
 subject: \uA2F2
@@ -1640,6 +1910,11 @@ expect: 0-2
 pattern: ^(?:\\N{SIGNWRITING MOVEMENT-DIAGONAL AWAY MEDIUM})$
 flags: 
 subject: \u{1D956}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT COMPONENT-847})$
+flags: 
+subject: \u{18DCE}
 expect: 0-4
 
 pattern: ^(?:\\N{MEROITIC CURSIVE LOGOGRAM IMN})$
@@ -1807,10 +2082,20 @@ flags:
 subject: \u21D7
 expect: 0-3
 
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-137C7})$
+flags: 
+subject: \u{137C7}
+expect: 0-4
+
 pattern: ^(?:\\N{YI SYLLABLE GOP})$
 flags: 
 subject: \uA1ED
 expect: 0-3
+
+pattern: ^(?:\\N{TAI YO LETTER O})$
+flags: 
+subject: \u{1E6E7}
+expect: 0-4
 
 pattern: ^(?:\\N{CANADIAN SYLLABICS WEST-CREE SWI})$
 flags: 
@@ -1827,15 +2112,30 @@ flags:
 subject: \u{11163}
 expect: 0-4
 
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-13E26})$
+flags: 
+subject: \u{13E26}
+expect: 0-4
+
 pattern: ^(?:\\N{TANGUT COMPONENT-471})$
 flags: 
 subject: \u{189D6}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-135EF})$
+flags: 
+subject: \u{135EF}
 expect: 0-4
 
 pattern: ^(?:\\N{TIBETAN LETTER MA})$
 flags: 
 subject: \u0F58
 expect: 0-3
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-143AB})$
+flags: 
+subject: \u{143AB}
+expect: 0-4
 
 pattern: ^(?:\\N{MANDAIC VOCALIZATION MARK})$
 flags: 
@@ -1927,6 +2227,11 @@ flags:
 subject: \u{11363}
 expect: 0-4
 
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-142B4})$
+flags: 
+subject: \u{142B4}
+expect: 0-4
+
 pattern: ^(?:\\N{CUNEIFORM SIGN DAG KISIM5 TIMES IR PLUS LU})$
 flags: 
 subject: \u{12062}
@@ -1955,6 +2260,11 @@ expect: 0-4
 pattern: ^(?:\\N{HENTAIGANA LETTER RA-1})$
 flags: 
 subject: \u{1B0ED}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-13F08})$
+flags: 
+subject: \u{13F08}
 expect: 0-4
 
 pattern: ^(?:\\N{CUNEIFORM SIGN GA2 TIMES KU3 PLUS AN})$
@@ -2002,6 +2312,11 @@ flags:
 subject: \u{100E3}
 expect: 0-4
 
+pattern: ^(?:\\N{SIDETIC LETTER N04})$
+flags: 
+subject: \u{10943}
+expect: 0-4
+
 pattern: ^(?:\\N{CANADIAN SYLLABICS KO})$
 flags: 
 subject: \u146F
@@ -2017,9 +2332,19 @@ flags:
 subject: \u{189E1}
 expect: 0-4
 
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-13F2E})$
+flags: 
+subject: \u{13F2E}
+expect: 0-4
+
 pattern: ^(?:\\N{LEFT HALF CIRCLE WITH FOUR DOTS})$
 flags: 
 subject: \u{1F903}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-13CB2})$
+flags: 
+subject: \u{13CB2}
 expect: 0-4
 
 pattern: ^(?:\\N{CUNEIFORM SIGN UD GUNU})$
@@ -2097,6 +2422,11 @@ flags:
 subject: \u{1895C}
 expect: 0-4
 
+pattern: ^(?:\\N{BOTTOM HALF RIGHT-FACING RUNNER FRAME-2})$
+flags: 
+subject: \u{1CDEB}
+expect: 0-4
+
 pattern: ^(?:\\N{YI SYLLABLE CIP})$
 flags: 
 subject: \uA2B1
@@ -2122,10 +2452,20 @@ flags:
 subject: \u3000
 expect: 0-3
 
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-143D4})$
+flags: 
+subject: \u{143D4}
+expect: 0-4
+
 pattern: ^(?:\\N{WHITE RIGHT-POINTING SMALL TRIANGLE})$
 flags: 
 subject: \u25B9
 expect: 0-3
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-13BC6})$
+flags: 
+subject: \u{13BC6}
+expect: 0-4
 
 pattern: ^(?:\\N{MENDE KIKAKUI SYLLABLE M018 DU})$
 flags: 
@@ -2140,6 +2480,11 @@ expect: 0-3
 pattern: ^(?:\\N{NANDINAGARI LETTER KA})$
 flags: 
 subject: \u{119AE}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-13C96})$
+flags: 
+subject: \u{13C96}
 expect: 0-4
 
 pattern: ^(?:\\N{TAI THAM LETTER LOW HA})$
@@ -2162,6 +2507,16 @@ flags:
 subject: \uFBE9
 expect: 0-3
 
+pattern: ^(?:\\N{LARGE TYPE PIECE STEM-34})$
+flags: 
+subject: \u{1CE4A}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-14265})$
+flags: 
+subject: \u{14265}
+expect: 0-4
+
 pattern: ^(?:\\N{YI SYLLABLE GGAX})$
 flags: 
 subject: \uA21B
@@ -2181,6 +2536,11 @@ pattern: ^(?:\\N{SYRIAC LETTER SADHE})$
 flags: 
 subject: \u0728
 expect: 0-2
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-140C8})$
+flags: 
+subject: \u{140C8}
+expect: 0-4
 
 pattern: ^(?:\\N{CYRILLIC CAPITAL LETTER YERU})$
 flags: 
@@ -2297,9 +2657,24 @@ flags:
 subject: \u{1B2D9}
 expect: 0-4
 
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-1372F})$
+flags: 
+subject: \u{1372F}
+expect: 0-4
+
 pattern: ^(?:\\N{MUSICAL SYMBOL KIEVAN QUARTER NOTE STEM UP})$
 flags: 
 subject: \u{1D1E5}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-13C17})$
+flags: 
+subject: \u{13C17}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-13E9C})$
+flags: 
+subject: \u{13E9C}
 expect: 0-4
 
 pattern: ^(?:\\N{BAMUM LETTER PHASE-A MOOMPUQ})$
@@ -2310,6 +2685,11 @@ expect: 0-4
 pattern: ^(?:\\N{TANGUT COMPONENT-581})$
 flags: 
 subject: \u{18A44}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-13E5B})$
+flags: 
+subject: \u{13E5B}
 expect: 0-4
 
 pattern: ^(?:\\N{PHAGS-PA LETTER LA})$
@@ -2457,6 +2837,11 @@ flags:
 subject: \u128C
 expect: 0-3
 
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-1388C})$
+flags: 
+subject: \u{1388C}
+expect: 0-4
+
 pattern: ^(?:\\N{BAMUM LETTER PHASE-A MBAQ})$
 flags: 
 subject: \u{16856}
@@ -2487,6 +2872,11 @@ flags:
 subject: \u1FA2
 expect: 0-3
 
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-13475})$
+flags: 
+subject: \u{13475}
+expect: 0-4
+
 pattern: ^(?:\\N{ARABIC LIGATURE SHADDA WITH DAMMATAN ISOLATED FORM})$
 flags: 
 subject: \uFC5E
@@ -2507,9 +2897,19 @@ flags:
 subject: \u150D
 expect: 0-3
 
+pattern: ^(?:\\N{SEPARATED BLOCK SEXTANT-134})$
+flags: 
+subject: \u{1CE5D}
+expect: 0-4
+
 pattern: ^(?:\\N{CHORASMIAN NUMBER TWENTY})$
 flags: 
 subject: \u{10FCA}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-13913})$
+flags: 
+subject: \u{13913}
 expect: 0-4
 
 pattern: ^(?:\\N{SOCKS})$
@@ -2520,6 +2920,16 @@ expect: 0-4
 pattern: ^(?:\\N{MEROITIC CURSIVE NUMBER THREE HUNDRED THOUSAND})$
 flags: 
 subject: \u{109EF}
+expect: 0-4
+
+pattern: ^(?:\\N{BLOCK OCTANT-2478})$
+flags: 
+subject: \u{1CDB5}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-13715})$
+flags: 
+subject: \u{13715}
 expect: 0-4
 
 pattern: ^(?:\\N{MODIFIER LETTER SMALL HENG WITH HOOK})$
@@ -2550,6 +2960,11 @@ expect: 0-4
 pattern: ^(?:\\N{MASARAM GONDI VIRAMA})$
 flags: 
 subject: \u{11D45}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-134C7})$
+flags: 
+subject: \u{134C7}
 expect: 0-4
 
 pattern: ^(?:\\N{ARABIC LIGATURE LAM WITH MEEM INITIAL FORM})$
@@ -2597,6 +3012,11 @@ flags:
 subject: \u{13362}
 expect: 0-4
 
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-138B2})$
+flags: 
+subject: \u{138B2}
+expect: 0-4
+
 pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH F023})$
 flags: 
 subject: \u{13117}
@@ -2610,6 +3030,11 @@ expect: 0-4
 pattern: ^(?:\\N{DUPLOYAN LETTER D S})$
 flags: 
 subject: \u{1BC0D}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-13EBF})$
+flags: 
+subject: \u{13EBF}
 expect: 0-4
 
 pattern: ^(?:\\N{WHITE LEFT POINTING BACKHAND INDEX})$
@@ -2652,6 +3077,11 @@ flags:
 subject: \uA676
 expect: 0-3
 
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-13E38})$
+flags: 
+subject: \u{13E38}
+expect: 0-4
+
 pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH R004})$
 flags: 
 subject: \u{132B5}
@@ -2682,6 +3112,11 @@ flags:
 subject: \u209A
 expect: 0-3
 
+pattern: ^(?:\\N{TULU-TIGALARI LETTER NYA})$
+flags: 
+subject: \u{1139B}
+expect: 0-4
+
 pattern: ^(?:\\N{IMPERIAL ARAMAIC LETTER DALETH})$
 flags: 
 subject: \u{10843}
@@ -2692,6 +3127,11 @@ flags:
 subject: \u{1D1BA}
 expect: 0-4
 
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-13991})$
+flags: 
+subject: \u{13991}
+expect: 0-4
+
 pattern: ^(?:\\N{BYZANTINE MUSICAL SYMBOL OXEIA NEO})$
 flags: 
 subject: \u{1D048}
@@ -2700,6 +3140,11 @@ expect: 0-4
 pattern: ^(?:\\N{AEGEAN NUMBER ONE THOUSAND})$
 flags: 
 subject: \u{10122}
+expect: 0-4
+
+pattern: ^(?:\\N{KIRAT RAI LETTER DA})$
+flags: 
+subject: \u{16D54}
 expect: 0-4
 
 pattern: ^(?:\\N{PAU CIN HAU LETTER RA})$
@@ -2722,6 +3167,11 @@ flags:
 subject: \u{1F7C9}
 expect: 0-4
 
+pattern: ^(?:\\N{KIRAT RAI LETTER DHA})$
+flags: 
+subject: \u{16D55}
+expect: 0-4
+
 pattern: ^(?:\\N{TANGUT COMPONENT-411})$
 flags: 
 subject: \u{1899A}
@@ -2735,6 +3185,16 @@ expect: 0-2
 pattern: ^(?:\\N{PRINCESS})$
 flags: 
 subject: \u{1F478}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-14218})$
+flags: 
+subject: \u{14218}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-137B7})$
+flags: 
+subject: \u{137B7}
 expect: 0-4
 
 pattern: ^(?:\\N{BALINESE PAMADA LANTANG})$
@@ -2797,6 +3257,11 @@ flags:
 subject: \u{1F911}
 expect: 0-4
 
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-1370C})$
+flags: 
+subject: \u{1370C}
+expect: 0-4
+
 pattern: ^(?:\\N{YI SYLLABLE NJYR})$
 flags: 
 subject: \uA449
@@ -2825,6 +3290,11 @@ expect: 0-3
 pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH T033A})$
 flags: 
 subject: \u{1332F}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT COMPONENT-826})$
+flags: 
+subject: \u{18DB9}
 expect: 0-4
 
 pattern: ^(?:\\N{SINGLE LEFT-POINTING ANGLE QUOTATION MARK})$
@@ -2887,9 +3357,19 @@ flags:
 subject: \u{1F1A7}
 expect: 0-4
 
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-1400F})$
+flags: 
+subject: \u{1400F}
+expect: 0-4
+
 pattern: ^(?:\\N{CUNEIFORM SIGN KA TIMES GISH})$
 flags: 
 subject: \u{12380}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-13A05})$
+flags: 
+subject: \u{13A05}
 expect: 0-4
 
 pattern: ^(?:\\N{DIGIT ONE FULL STOP})$
@@ -2900,6 +3380,11 @@ expect: 0-3
 pattern: ^(?:\\N{OLD SOUTH ARABIAN LETTER LAMEDH})$
 flags: 
 subject: \u{10A61}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-13EE4})$
+flags: 
+subject: \u{13EE4}
 expect: 0-4
 
 pattern: ^(?:\\N{MODIFIER LETTER LOW UP ARROWHEAD})$
@@ -2957,9 +3442,19 @@ flags:
 subject: \u{1F852}
 expect: 0-4
 
+pattern: ^(?:\\N{SUNUWAR LETTER CHELAP})$
+flags: 
+subject: \u{11BDD}
+expect: 0-4
+
 pattern: ^(?:\\N{BAMUM LETTER PHASE-D NGGWAEN})$
 flags: 
 subject: \u{16933}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-142C2})$
+flags: 
+subject: \u{142C2}
 expect: 0-4
 
 pattern: ^(?:\\N{WIDE-HEADED SOUTH EAST LIGHT BARB ARROW})$
@@ -2987,6 +3482,11 @@ flags:
 subject: \u{18877}
 expect: 0-4
 
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-138BD})$
+flags: 
+subject: \u{138BD}
+expect: 0-4
+
 pattern: ^(?:\\N{GREEK SMALL LETTER ALPHA WITH DASIA AND VARIA AND YPOGEGRAMMENI})$
 flags: 
 subject: \u1F83
@@ -3002,9 +3502,19 @@ flags:
 subject: \u{1B038}
 expect: 0-4
 
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-135CD})$
+flags: 
+subject: \u{135CD}
+expect: 0-4
+
 pattern: ^(?:\\N{PSALTER PAHLAVI LETTER SADHE})$
 flags: 
 subject: \u{10B8F}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-13EFA})$
+flags: 
+subject: \u{13EFA}
 expect: 0-4
 
 pattern: ^(?:\\N{PSALTER PAHLAVI NUMBER TWENTY})$
@@ -3056,6 +3566,11 @@ pattern: ^(?:\\N{KATAKANA LETTER WA})$
 flags: 
 subject: \u30EF
 expect: 0-3
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-14226})$
+flags: 
+subject: \u{14226}
+expect: 0-4
 
 pattern: ^(?:\\N{DUPLOYAN LETTER K})$
 flags: 
@@ -3252,6 +3767,11 @@ flags:
 subject: \u{11D7C}
 expect: 0-4
 
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-13706})$
+flags: 
+subject: \u{13706}
+expect: 0-4
+
 pattern: ^(?:\\N{ARABIC FATHA MEDIAL FORM})$
 flags: 
 subject: \uFE77
@@ -3261,6 +3781,11 @@ pattern: ^(?:\\N{REJANG LETTER SA})$
 flags: 
 subject: \uA93C
 expect: 0-3
+
+pattern: ^(?:\\N{OL ONAL LETTER A})$
+flags: 
+subject: \u{1E5D6}
+expect: 0-4
 
 pattern: ^(?:\\N{GREEK SMALL LETTER RHO WITH DASIA})$
 flags: 
@@ -3292,6 +3817,11 @@ flags:
 subject: \u{132BA}
 expect: 0-4
 
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-1402B})$
+flags: 
+subject: \u{1402B}
+expect: 0-4
+
 pattern: ^(?:\\N{MODIFIER LETTER HALF TRIANGULAR COLON})$
 flags: 
 subject: \u02D1
@@ -3305,6 +3835,11 @@ expect: 0-4
 pattern: ^(?:\\N{DUPLOYAN DOUBLE MARK})$
 flags: 
 subject: \u{1BC9E}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-13D82})$
+flags: 
+subject: \u{13D82}
 expect: 0-4
 
 pattern: ^(?:\\N{BAMUM LETTER PHASE-F KO})$
@@ -3351,6 +3886,11 @@ pattern: ^(?:\\N{DOUBLE PRECEDES})$
 flags: 
 subject: \u2ABB
 expect: 0-3
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-1406C})$
+flags: 
+subject: \u{1406C}
+expect: 0-4
 
 pattern: ^(?:\\N{ARABIC LETTER U})$
 flags: 
@@ -3401,6 +3941,11 @@ pattern: ^(?:\\N{GREEK CAPITAL LETTER NU})$
 flags: 
 subject: \u039D
 expect: 0-2
+
+pattern: ^(?:\\N{IRENE})$
+flags: 
+subject: \u{1CEC7}
+expect: 0-4
 
 pattern: ^(?:\\N{YI SYLLABLE HMIEX})$
 flags: 
@@ -3477,6 +4022,11 @@ flags:
 subject: \uA1D7
 expect: 0-3
 
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-1433C})$
+flags: 
+subject: \u{1433C}
+expect: 0-4
+
 pattern: ^(?:\\N{KAWI SIGN CANDRABINDU})$
 flags: 
 subject: \u{11F00}
@@ -3520,6 +4070,11 @@ expect: 0-3
 pattern: ^(?:\\N{LINEAR B IDEOGRAM VESSEL B214})$
 flags: 
 subject: \u{100ED}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-141CA})$
+flags: 
+subject: \u{141CA}
 expect: 0-4
 
 pattern: ^(?:\\N{TIRHUTA LETTER UU})$
@@ -3567,6 +4122,11 @@ flags:
 subject: \u{12FA2}
 expect: 0-4
 
+pattern: ^(?:\\N{HORIZONTAL CAPACITOR})$
+flags: 
+subject: \u{1CC13}
+expect: 0-4
+
 pattern: ^(?:\\N{MARCHEN LETTER TA})$
 flags: 
 subject: \u{11C7A}
@@ -3612,10 +4172,20 @@ flags:
 subject: \u{13097}
 expect: 0-4
 
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-143D5})$
+flags: 
+subject: \u{143D5}
+expect: 0-4
+
 pattern: ^(?:\\N{HALFWIDTH HANGUL LETTER EU})$
 flags: 
 subject: \uFFDA
 expect: 0-3
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-1406D})$
+flags: 
+subject: \u{1406D}
+expect: 0-4
 
 pattern: ^(?:\\N{CANADIAN SYLLABICS CARRIER KKU})$
 flags: 
@@ -3692,6 +4262,11 @@ flags:
 subject: \u0643
 expect: 0-2
 
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-1354C})$
+flags: 
+subject: \u{1354C}
+expect: 0-4
+
 pattern: ^(?:\\N{LYCIAN LETTER S})$
 flags: 
 subject: \u{10296}
@@ -3700,6 +4275,11 @@ expect: 0-4
 pattern: ^(?:\\N{CUNEIFORM SIGN LAK-617 TIMES TE})$
 flags: 
 subject: \u{12508}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-134E5})$
+flags: 
+subject: \u{134E5}
 expect: 0-4
 
 pattern: ^(?:\\N{MENDE KIKAKUI SYLLABLE M089 DEE})$
@@ -3720,6 +4300,11 @@ expect: 0-4
 pattern: ^(?:\\N{CUNEIFORM NUMERIC SIGN NINE U})$
 flags: 
 subject: \u{12414}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-142FD})$
+flags: 
+subject: \u{142FD}
 expect: 0-4
 
 pattern: ^(?:\\N{TANGUT COMPONENT-526})$
@@ -3812,6 +4397,11 @@ flags:
 subject: \u{10ACB}
 expect: 0-4
 
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-13A84})$
+flags: 
+subject: \u{13A84}
+expect: 0-4
+
 pattern: ^(?:\\N{BYZANTINE MUSICAL SYMBOL YPOKRISIS DIPLI})$
 flags: 
 subject: \u{1D00B}
@@ -3820,6 +4410,11 @@ expect: 0-4
 pattern: ^(?:\\N{SYMBOL FOR MARKS CHAPTER})$
 flags: 
 subject: \u{1F545}
+expect: 0-4
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-140E2})$
+flags: 
+subject: \u{140E2}
 expect: 0-4
 
 pattern: ^(?:\\N{THAI CHARACTER LO CHULA})$
@@ -3857,10 +4452,25 @@ flags:
 subject: \u{10387}
 expect: 0-4
 
+pattern: ^(?:\\N{BLOCK OCTANT-127})$
+flags: 
+subject: \u{1CD38}
+expect: 0-4
+
+pattern: ^(?:\\N{SQUARE SPIRAL FROM TOP RIGHT})$
+flags: 
+subject: \u{1CC7D}
+expect: 0-4
+
 pattern: ^(?:\\N{ARABIC LIGATURE RAHIMAHUM ALLAAH})$
 flags: 
 subject: \uFD4F
 expect: 0-3
+
+pattern: ^(?:\\N{EGYPTIAN HIEROGLYPH-139F1})$
+flags: 
+subject: \u{139F1}
+expect: 0-4
 
 pattern: ^(?:\\N{COMBINING LATIN SMALL LETTER X})$
 flags: 
@@ -3896,6 +4506,11 @@ pattern: ^(?:\\N{YI SYLLABLE SSAT})$
 flags: 
 subject: \uA331
 expect: 0-3
+
+pattern: ^(?:\\N{LARGE TYPE PIECE LOWER HALF VERTEX OF M})$
+flags: 
+subject: \u{1CE30}
+expect: 0-4
 
 pattern: ^(?:\\N{TIBETAN MARK GTER YIG MGO -UM RNAM BCAD MA})$
 flags: 
@@ -5127,6 +5742,36 @@ flags:
 subject: \u{122D5}
 expect: 0-4
 
+pattern: ^(?:\\N{CUNEIFORM SIGN KALAM})$
+flags: 
+subject: \u{12327}
+expect: 0-4
+
+pattern: ^(?:\\N{BAMUM LETTER PHASE-A MAEMGBIEE})$
+flags: 
+subject: \u{1680B}
+expect: 0-4
+
+pattern: ^(?:\\N{BAMUM LETTER PHASE-B PUNGGAAM})$
+flags: 
+subject: \u{16881}
+expect: 0-4
+
+pattern: ^(?:\\N{BAMUM LETTER PHASE-B NGGOM})$
+flags: 
+subject: \u{1688E}
+expect: 0-4
+
+pattern: ^(?:\\N{BAMUM LETTER PHASE-C SHETFON})$
+flags: 
+subject: \u{168DC}
+expect: 0-4
+
+pattern: ^(?:\\N{BAMUM LETTER PHASE-E NGGOP})$
+flags: 
+subject: \u{1697D}
+expect: 0-4
+
 pattern: ^(?:\\N{MEDEFAIDRIN CAPITAL LETTER H})$
 flags: 
 subject: \u{16E56}
@@ -5155,6 +5800,16 @@ expect: 0-4
 pattern: ^(?:\\N{BYZANTINE MUSICAL SYMBOL FTHORA SKLIRON CHROMA VASIS})$
 flags: 
 subject: \u{1D0C5}
+expect: 0-4
+
+pattern: ^(?:\\N{MENDE KIKAKUI SYLLABLE M172 MBO})$
+flags: 
+subject: \u{1E899}
+expect: 0-4
+
+pattern: ^(?:\\N{MENDE KIKAKUI SYLLABLE M174 MBOO})$
+flags: 
+subject: \u{1E89A}
 expect: 0-4
 
 pattern: ^(?:\\N{VS17})$
@@ -6805,6 +7460,16 @@ expect: 0-4
 pattern: ^(?:\\N{TANGUT IDEOGRAPH-17001})$
 flags: 
 subject: \u{17001}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-187FE})$
+flags: 
+subject: \u{187FE}
+expect: 0-4
+
+pattern: ^(?:\\N{TANGUT IDEOGRAPH-187FF})$
+flags: 
+subject: \u{187FF}
 expect: 0-4
 
 pattern: ^(?:\\N{TANGUT IDEOGRAPH-17126})$

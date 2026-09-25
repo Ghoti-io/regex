@@ -53,24 +53,23 @@ SUBJECTS = [
 
 # Rows this oracle cannot answer for this library, and why.
 #
-# Perl 5.40.1 carries UCD 15.0.0 - `Unicode::UCD::UnicodeVersion()` says so -
-# and these tables are 17.0.0, so three rules exist here that Perl has never
-# seen. That is not a disagreement about the algorithm; it is two different
-# editions of it, and documentation/unicode.md section 1 already warns about
-# the same skew in the other direction. Each entry names the rule, the
-# version that introduced it, and the subject it shows up on, so that a later
-# Perl catching up is a matter of deleting a line and regenerating.
+# **Four entries were here until 2026-09-25 and the pin raise retired them.**
+# Perl 5.40.1 carried UCD 15.0.0 against these tables' 17.0.0, so three rules
+# existed here that it had never seen - GB9c (Unicode 15.1), LB15c (16) and
+# LB21a's HH class (17), one of them on two subjects, which is why the count
+# of entries and the count of rules were never the same number. That was not
+# a disagreement about the algorithm; it was two editions of it, and
+# documentation/unicode.md section 1 warns about the same skew in the other
+# direction.
 #
-# That day has arrived and is a decision rather than a chore: perl 5.44.0 is
-# the current stable release and `lib/unicore/version` in it reads 17.0.0,
-# which is exactly the UCD these tables are generated from. Raising the pin
-# in tools/corpus/VERSIONS would retire the first four entries here - three
-# rules, one of them on two subjects, which is why the count of entries and
-# the count of rules are not the same number. It
-# would also re-import t/re/re_tests from a different release, which is why
-# it is not done in passing.
+# 5.44.0 reads 17.0.0 in `lib/unicore/version`, which is exactly the UCD
+# these tables are generated from, so the four are gone and **46 rows are
+# compared that were not**. check_oracle_ucd() below is what made that a
+# deletion rather than an archaeology: it named the four entries the raise
+# retired, from the data, before anything was changed.
 #
-# The last entry is not a version difference but a defect in the oracle, and
+# The two entries left are not version differences but a defect in the
+# oracle, and
 # it is written down rather than worked around silently. Searched for on
 # 2026-09-20 and not found: the perl5 issue tracker has nothing matching
 # `\b{lb}`, nothing matching the other bound types that is this, and nothing
@@ -82,24 +81,14 @@ SUBJECTS = [
 #     perl -e 'print "x" =~ /\b{lb}|(?!)/ ? "match" : "NO MATCH", "\n"'  # match
 #
 # `(?!)` never matches, so the two patterns cannot differ - and they do. The
-# engine has it right and the optimisation in front of it does not.
+# engine has it right and the optimisation in front of it does not. Re-run
+# against 5.44.0 on 2026-09-25 when the pin moved: **still present**, the
+# same two answers. So these two entries are not waiting on an upgrade.
 # The fourth field is the Unicode version that introduced the rule, or None
 # where the row is out for a reason no upgrade fixes. check_oracle_ucd()
 # reads it, so raising the pin names its own consequences instead of leaving
 # them to be counted by hand.
 EXCLUSIONS = [
-    (("gcb", "g"), "\u0915\u094d\u0937",
-     "GB9c, the Indic conjunct break, is Unicode 15.1 and Perl has 15.0",
-     "15.1"),
-    (("gcb", "g"), "\u0915\u094d\u0915",
-     "GB9c, the Indic conjunct break, is Unicode 15.1 and Perl has 15.0",
-     "15.1"),
-    (("lb",), "subtract .5 now",
-     "LB15c, the decimal mark after a space, is Unicode 16",
-     "16.0"),
-    (("lb",), "\u05d0-\u05d1",
-     "LB21a's HH class, the unambiguous hyphen, is Unicode 17",
-     "17.0"),
     (("lb",), "x",
      "perl finds no \\b{lb} at all in a one-character subject, though the "
      "boundary is there: `.\\b{lb}` matches at that same position. A defect "
@@ -165,7 +154,7 @@ def escape(text):
 # exclusion note still confidently naming a version perl no longer carries.
 # An exclusion outliving its reason is a blindfold, and it reads exactly like
 # a considered decision.
-ORACLE_UCD_VERSION = "15.0.0"
+ORACLE_UCD_VERSION = "17.0.0"
 
 
 def check_oracle_ucd():

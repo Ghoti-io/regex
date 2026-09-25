@@ -244,10 +244,14 @@ with a message the way `make check-unicode-tables` does.
 The second gate is `tests/data/vectors/perl/boundaries.rxt`, generated from
 Perl by `tools/corpus/make_boundary_vectors.py`. It answers a different
 question - what the *dialect* does with the ends of the subject, with an
-empty subject, and with the negated spellings. Perl 5.40.1 carries UCD 15.0.0
-where these tables are 17.0.0, so the rows whose answer changed between those
-editions are excluded by name, each with the rule and the version that
-introduced it written beside it.
+empty subject, and with the negated spellings. Perl carried UCD 15.0.0 against
+these tables' 17.0.0 until 2026-09-25, so the rows whose answer changed
+between those editions were excluded by name, each with the rule and the
+version that introduced it written beside it. **The pin moved to perl 5.44.0,
+which reads 17.0.0 exactly, and those four exclusions are gone: 46 rows are
+compared that were not.** Two exclusions remain and neither is version skew -
+they are a defect in perl's unanchored search for `\b{lb}` in a one-character
+subject, re-checked against 5.44.0 and still present.
 
 ## 6. Property names
 

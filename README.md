@@ -10,14 +10,19 @@ backtracker with a memo and the linear bound back.
 
 **Status: under construction.** Nine dialects parse, compile and match on
 all three engines: ECMAScript in its legacy, `u` and `v` modes, checked
-against Node 22; PCRE2 and Perl against pcre2 10.46 and perl 5.40.1;
+against Node 24; PCRE2 and Perl against pcre2 10.46 and perl 5.44.0;
 `posix-bre`, `posix-ere`, `gnu-bre` and `gnu-ere` against glibc and musl;
 Python against CPython 3.13; and Vim against both of vim's own engines,
-`set re=1` and `set re=2`.
+`set re=1` and `set re=2`. Every one of those references runs in a **pinned
+container image** rather than being whatever the machine has installed -
+[`tools/oracle/containers/IMAGES`](tools/oracle/containers/IMAGES) is the
+list, and `make oracle-version` prints what would answer.
 `text` validates JSON Schema's `pattern` and `patternProperties` through
-this library. Of 37,212 conformance vectors, **every dialect passes 100%**,
-Perl over the 5,975 of its 5,983 whose expectation is sound: the other eight
-are defects in Perl itself, excluded from the denominator and each named in
+this library. Of 37,396 conformance vectors, **every dialect passes 100%
+except Perl**, which passes 6,159 of 6,164: five are a gap - perl 5.44 made
+its `\l`, `\u`, `\L`, `\U` and `\F` escapes operators of the pattern and
+this library has not built them - and eight more are defects in Perl itself,
+excluded from the denominator and each named in
 `tests/data/vectors/known-gaps.txt` with the reproduction that demonstrates
 it. There are no gaps left in that file. Two of the nine have no vector
 corpus and are gated by a generator alone: Python, because CPython removed
@@ -209,12 +214,13 @@ Nothing is allocated for the caller to free on a failing call.
 | The `text` seam for JSON Schema | working - `pattern` and `patternProperties` validate through this library |
 
 **Conformance.** Sixteen differential checks, each against whichever
-implementation *defines* the thing it asks about: Node 22 for ECMAScript,
-pcre2 10.46 and perl 5.40.1 for the Perl family, glibc and musl for POSIX and
-GNU, GNU sed for the POSIX replacement grammar, and CPython 3.13 for Python -
-that last one running *in-process* rather than as a subprocess, which is why
-it asks 600,000 rows in under four seconds where the others ask tens of
-thousands. `make check-oracles` runs all sixteen. A few are described below; [testing.md](documentation/testing.md)
+implementation *defines* the thing it asks about: Node 24 for ECMAScript,
+pcre2 10.46 and perl 5.44.0 for the Perl family, glibc and musl for POSIX and
+GNU, GNU sed for the POSIX replacement grammar, and CPython 3.13 for Python.
+Every one of them runs in a pinned image, so what a green run names is a set
+of versions rather than a set of programs that happened to be installed;
+`make check-oracles` runs all sixteen and each prints which reference
+answered it above its numbers. A few are described below; [testing.md](documentation/testing.md)
 §5 has every one, and says for each what was broken on purpose to prove the
 check can fail.
 
@@ -329,7 +335,7 @@ cannot mean "the suite ran nothing".
 | --- | --- | --- |
 | ECMAScript, from Node 22 and test262 | 28,559 | **100%** |
 | PCRE2, from pcre2test 10.46's `testinput1` and `testinput2` | 1,869 | **100%** |
-| Perl, from `re_tests` under Perl 5.40, and generated boundary, case-folding and character-name vectors | 5,983 | **100%** of 5,975; 8 excluded |
+| Perl, from `re_tests` under Perl 5.44, and generated boundary, case-folding and character-name vectors | 6,164 | **99.92%**; 5 gaps, 8 excluded |
 | GNU ERE, from Spencer's test set answered by glibc 2.41 | 270 | **100%** |
 | GNU BRE, the same set read as a basic RE | 159 | **100%** |
 | POSIX ERE, the same set where glibc 2.41 and musl 1.2.6 agree | 245 | **100%** |
@@ -383,10 +389,12 @@ compiler uses to choose among its repeat opcodes and those differ in whether
 they restore a capture offset on failure. **Two** are a branch reset defect,
 [#24577](https://github.com/Perl/perl5/issues/24577), a regression in 5.38
 through 5.44 fixed upstream on 2026-07-22 by
-[#24588](https://github.com/Perl/perl5/pull/24588); the pinned 5.40.1 reports
+[#24588](https://github.com/Perl/perl5/pull/24588); the pinned perl reports
 group 1 of `(?|(a)|(b))` against "b" as `"b"` and then its own `(?(1)x|y)`
 reads that same group as unset, so one interpreter calls it set and unset in
-two lines. Both are re-checked when the pinned reference versions move.
+two lines. Both are re-checked when the pinned reference versions move, and
+that has now happened once: the pin went to 5.44.0 on 2026-09-25 and both
+are still wrong there, the fix having landed in blead after 5.44 shipped.
 
 The POSIX and GNU rows have no gaps left. Twelve of them closed in one
 session and eleven were mislabelled: one was leftmost-longest, which the

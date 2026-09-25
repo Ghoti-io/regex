@@ -69,29 +69,50 @@ test262 35d566604512cba908054eec49f85e64a59f3091
 # section 5.1 and what this library implements.
 pcre2 pcre2-10.46
 
-# Perl/perl5. t/re/re_tests, from the release matching the perl on this
-# machine: 5.40.1.
+# Perl/perl5. t/re/re_tests.
 #
-# Which is to say this pin was not chosen - it followed what Debian 13 ships
-# (5.40.1-6+deb13u1, a current security build, not a stale one). Worth
-# knowing before raising it, checked 2026-09-20:
+# **Raised from v5.40.1 to v5.44.0 on 2026-09-25**, corpus and reference
+# together, because they have to move together: importing from one release
+# and answering with another measures the gap between them.
 #
-#   - 5.40.1 carries UCD 15.0.0. These tables are 17.0.0, so three
-#     segmentation rules exist here that this perl has never seen: GB9c
-#     (Unicode 15.1), LB15c (16) and LB21a's HH class (17). Forty-six rows of
-#     tests/data/vectors/perl/boundaries.rxt are excluded for that reason,
-#     each named in tools/corpus/make_boundary_vectors.py.
-#   - 5.44.0 is the current stable release and carries UCD 17.0.0 - an exact
-#     match with tools/unicode/UCD_VERSION. Raising the pin to it would
-#     retire those forty-six exclusions.
-#   - The direction matters more than the distance. An oracle *behind* the
-#     tables is harmless and documented: the newer rules simply do not fire
-#     for it. An oracle *ahead* of them would disagree across the whole
-#     corpus, which is what documentation/unicode.md section 1 warns about.
-#     So if this moves, UCD_VERSION moves with it or before it, never after.
+# The old pin was not chosen, it followed what Debian 13 ships - and the
+# reason to leave it was that only one perl can be installed, which stopped
+# being true when tools/oracle/containers/IMAGES started deciding which one
+# answers.
 #
-# A second reason, found 2026-09-20 and unrelated to Unicode: 5.40.1 carries a
-# known branch reset defect. Perl/perl5#24577, "Regex branch reset (?|...)
+# What the raise bought, measured rather than predicted, and every count is
+# an exclusion that stopped being needed:
+#
+#   boundaries.rxt   46 rows come back. 5.40.1 carried UCD 15.0.0 against
+#                    these tables' 17.0.0, so three segmentation rules -
+#                    GB9c (15.1), LB15c (16) and LB21a's HH class (17) -
+#                    did not exist for it. 5.44.0 reads 17.0.0 exactly.
+#   check-oracle-folds
+#                    2,932 code points compared where 5.40.1 gave 2,822:
+#                    110 that were "unassigned there" are answerable now.
+#   check-oracle-numeric-properties
+#                    144 values compared where 5.40.1 gave 142, and the 111
+#                    code points it called NaN are answered.
+#   check-oracle-script-runs
+#                    fewer rows where pcre2 and perl disagree, for the same
+#                    reason: the two now read one edition of UTS #39.
+#
+# Zero new disagreements anywhere. perl_diff, split_diff, iterate_diff and
+# perl_syntax_diff are byte-identical across the two perls.
+#
+# The direction mattered more than the distance and still does. An oracle
+# *behind* the tables is harmless and documented: the newer rules simply do
+# not fire for it. An oracle *ahead* of them would disagree across the whole
+# corpus, which is what documentation/unicode.md section 1 warns about. So
+# this moved only because UCD_VERSION was already at 17.0.0 - never the
+# other way round.
+#
+# A second reason for care, found 2026-09-20 and unrelated to Unicode, and
+# **it survives the raise**: 5.44.0 carries the branch reset defect too, which
+# was re-checked on 2026-09-25 by running all three reproducers below against
+# it - abzb, 0 and 1, the same wrong answers 5.40.1 gives. The two
+# known-gaps.txt rows stay `reference-defect`, and their instruction to
+# re-check when this pin moves has now been carried out once. Perl/perl5#24577, "Regex branch reset (?|...)
 # fails with backrefs" - a regression introduced in 5.38, present through
 # 5.44, closed 2026-07-22. Its own reproducer on this machine gives the wrong
 # answer:
@@ -131,7 +152,7 @@ pcre2 pcre2-10.46
 #   perl -e 'print "abb" =~ s{^(?|(a)|(b)) (?|(a)|(b)) ((\2)*)}{${&}z}xr'
 #
 # prints abzb on 5.40.1 and printed abbz on 5.36.
-perl v5.40.1
+perl v5.44.0
 
 # bminor/glibc (the git mirror of sourceware's glibc). posix/rxspencer/tests,
 # Henry Spencer's regular expression test set, which is what plan.md's WP-25

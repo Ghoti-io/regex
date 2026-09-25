@@ -41,9 +41,9 @@ this design was written on; a CI job installs the rest
 | POSIX ERE | `posix-ere` | IEEE Std 1003.1-2024 | XBD chapter 9.4 | glibc `regcomp(REG_EXTENDED)` (available) |
 | GNU BRE | `gnu-bre` | GNU grep 3.11 / sed 4.9 | GNU grep manual, "Regular Expressions"; glibc manual, "GNU Regular Expression Compiling" | `grep -G`, `sed` (available) |
 | GNU ERE | `gnu-ere` | GNU grep 3.11 / sed 4.9 | same | `grep -E`, `sed -E` (available) |
-| Perl | `perl` | Perl 5.40.1 | `perlre`, `perlrebackslash`, `perlrecharclass` for 5.40 | `perl` (available); `t/re/re_tests` |
+| Perl | `perl` | Perl 5.44.0 | `perlre`, `perlrebackslash`, `perlrecharclass` for 5.44 | `perl` (pinned, `tools/oracle/containers/IMAGES`); `t/re/re_tests` |
 | PCRE2 | `pcre` | PCRE2 10.46 | `pcre2pattern(3)`, `pcre2syntax(3)` for 10.46 | `pcre2test` 10.46 (available); `testdata/testinput1`, `testinput2` |
-| ECMAScript | `ecmascript` | ECMA-262 16th edition (ES2025) | clause 22.2 *RegExp (Regular Expression) Objects*; Annex B.1.2 *Regular Expressions Patterns* | Node 22.23 / V8 12.4, Unicode 17.0 (available); test262 |
+| ECMAScript | `ecmascript` | ECMA-262 16th edition (ES2025) | clause 22.2 *RegExp (Regular Expression) Objects*; Annex B.1.2 *Regular Expressions Patterns* | Node 24.21 / V8 13.6, Unicode 17.0 (pinned); test262 |
 | Python | `python` | CPython 3.13.5 | `re` module documentation, 3.13 | `python3` (available), **in-process**; no corpus - see below |
 | Java | `java` | JDK 21 | `java.util.regex.Pattern` javadoc, 21 | OpenJDK (install) |
 | .NET | `dotnet` | .NET 8 | "Regular Expression Language - Quick Reference"; "Regular expression options" | .NET SDK (install) |
@@ -727,11 +727,15 @@ plus `_`, which takes `No` with PCRE2 and refuses every mark and every
 connector but the underscore. It was Annex C's set here until 2026-09-24,
 wrong by 3,506 code points.
 
-The comparisons are restricted to the 286,719 code points perl 5.40.1,
-pcre2test 10.46 and UCD 17.0.0 all call assigned, and that restriction is
-what makes the figures mean anything: unrestricted, this library knows 4,803
-code points pcre2 has not heard of and 10,615 perl has not, and a sweep
-measures the Unicode release rather than the rule. Four differences survive
+The comparisons are restricted to the code points perl, pcre2test 10.46 and
+UCD 17.0.0 all call assigned, and that restriction is what makes the figures
+mean anything: unrestricted, a sweep measures the Unicode release rather than
+the rule. The figures below were taken against perl 5.40.1, where the
+intersection was **286,719** code points and this library knew 4,803 pcre2
+had not heard of and 10,615 perl had not; the pin moved to 5.44.0 on
+2026-09-25, which carries UCD 17.0.0 exactly, so the perl half of that
+restriction is now empty and only pcre2's remains. Re-take the figures before
+quoting them. Four differences survive
 the restriction and all four are *version* differences rather than
 deviations: U+0295 is `Ll` in both references and `Lo` in UCD 17.0.0, and 33
 combining Latin letters gained Other_Alphabetic in 17.0.0, so `[[:lower:]]`
@@ -1593,7 +1597,7 @@ answer.
 | Python | **`\z` is refused**, where CPython 3.14 accepts it as the preferred spelling of `\Z` | A gap rather than a deviation: 3.13 refuses it too, which is why the gate was green until the second pin was added. 148 rows of `GHOTI_ORACLE_ALIAS=python=python-next make check-oracle-python`, counted there under a rule the tool establishes with a probe before it excuses anything | `GRX_ERR_SYNTAX` |
 | Python | **`\B` does not match at position 0 of an empty subject**, where CPython 3.14 does | perl, pcre2 and V8 have always matched there, and so does this library in every dialect *except* `python`, where it follows 3.13. So this is one dialect's rule one release out of date rather than a matcher defect. 17 rows of `check-oracle-python` under the second pin, 37 of `check-oracle-split` and 1 of `check-oracle-replace` | - |
 | Perl | `(?{ })`, `(??{ })` | code execution | `GRX_ERR_UNSUPPORTED` |
-| Perl | `\N{name}` resolves against UCD 17.0.0, so a name Perl's UCD 15.0.0 does not carry works here and not there | version skew, the same as [unicode.md](unicode.md) §1's. Over a 2,531-name differential the two agree everywhere they share a Unicode version: of 204 disagreements, 196 name characters perl has not been told about and 8 are `NameAliases.txt` corrections newer than its tables, and **none** is a name perl resolves and this library does not | - |
+| Perl | ~~`\N{name}` resolves against UCD 17.0.0, so a name Perl's UCD 15.0.0 does not carry works here and not there~~ **Retired 2026-09-25**: the pin moved to perl 5.44.0, which carries UCD 17.0.0 exactly | The skew was real and is gone rather than resolved: over a 2,531-name differential the two had agreed everywhere they shared a Unicode version, with 196 of 204 disagreements naming characters perl had not been told about, 8 `NameAliases.txt` corrections newer than its tables, and **none** a name perl resolved and this library did not. `tools/corpus/make_name_vectors.py` reports `0 skipped as UCD version skew` now, where it skipped before | - |
 | PCRE2 | `(?{ })` is not a construct it has at all | pcre2test: "unrecognized character after (? or (?-" | `GRX_ERR_SYNTAX` |
 | Perl | `(?[ ])` accepts one unmatched `)` after a complete operand; this does not | `(?[ [a]) ])` compiles in perl 5.40.1 and is an error in pcre2test. Perl refuses two of them, a leading one, and an unmatched `(` - so it is one stray close parenthesis and no more, which is an off-by-one in its accounting rather than a rule to follow. Everything else about the two grammars is the same, which is not what this row used to say: it claimed Perl's "nests and takes different operands", and perl refuses a textual `(?[ (?[ [a] ]) ])` - what it nests is an *interpolated* `qr//`, which a pattern arriving as text cannot be. Compared over 13,440 generated rows | `GRX_ERR_SYNTAX` |
 | Perl, PCRE2 | What an extended class **ignores** differs, and is followed | Perl skips all of `Pattern_White_Space` - all eleven code points probed - and takes `#` comments to the next **line feed**, which CR, VT and U+2028 do not end; pcre2test refuses a literal newline inside `(?[ ])` with error 216 and refuses `#` outright. U+00A0 is ignored by neither, which is the case that says the rule is the property and not a notion of "space" | - |
