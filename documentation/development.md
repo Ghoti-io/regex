@@ -216,8 +216,15 @@ Adding a dialect is therefore:
    *for that engine*, and reading it with somebody else's grammar would tell
    them it is when it is not.
 4. A section in [dialects.md](dialects.md) naming the reference document, and
-   an oracle installed so that `tools/oracle/probe.py` can fill its profile
-   cells by running the real implementation rather than by reading a manual.
+   an oracle *pinned* - a row in
+   [`tools/oracle/containers/IMAGES`](../tools/oracle/containers/IMAGES) and,
+   where there is no official image, a Containerfile beside it - so that
+   `tools/oracle/probe.py` can fill its profile cells by running the real
+   implementation rather than by reading a manual. "Installed" is what this
+   used to say, and it is the weaker requirement in both directions: it
+   leaves out the dialects whose references nobody wants on their laptop
+   (Java, Ruby, .NET), and it accepts a program of the right *name* - which
+   is how the `gnu-ere` probe column came to be answered by ugrep.
 5. Tests for whatever is *definitional* about it - the thing that makes it a
    separate dialect rather than an alias for one already there.
 

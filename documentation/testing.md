@@ -25,17 +25,22 @@ and built by the conformance lane ([plan.md](plan.md)).
 
 ## 2. Oracles
 
-| Oracle | Drives | Driver | Gate |
-| --- | --- | --- | --- |
-| Node 22.23 (V8, Unicode 17.0) | ECMAScript | `tools/oracle/node.js`: `new RegExp(p, flags).exec(s)` with `d` for indices; converts UTF-16 indices to UTF-8 byte offsets | `GRX_ORACLE_NODE` |
-| Perl 5.40 | Perl | `tools/oracle/perl.pl`: `@-`/`@+`, `%+` | `GRX_ORACLE_PERL` |
-| pcre2test 10.46 | PCRE2 | `tools/oracle/pcre2.py` writing pcre2test input and reading its output; `grep -P` is not enough (line-oriented, no spans) | `GRX_ORACLE_PCRE2TEST` |
-| CPython 3.13.5 | Python | **no driver process**: `tools/oracle/python_diff.py` imports `re` and calls it directly, converting CPython's character offsets to UTF-8 byte offsets the way `node_match.mjs` converts UTF-16 ones. `split_diff.py` and `replace_diff.py` do the same for `re.split` and `re.sub` | available |
-| glibc 2.41 `regcomp` | GNU BRE/ERE | `tools/oracle/posix_match.c`, built by the Makefile when present | `GRX_ORACLE_POSIX` |
-| musl 1.2.6 `regcomp` | POSIX BRE/ERE, with glibc | `tools/oracle/musl_match.c`: musl's own regex sources, fetched by `tools/corpus/fetch.sh musl` and compiled into the driver. Hosted on glibc, so it declines a NUL (musl has no `REG_STARTEND`) and any byte >= 0x80 (the host's `mbtowc`). Never decides alone - see below | `GRX_ORACLE_MUSL` |
-| GNU grep 3.11, sed 4.9 | GNU BRE/ERE (single-line subjects) | `tools/oracle/gnu.sh` | `GRX_ORACLE_GNU` |
-| Vim 9.1 | Vim | `tools/oracle/vim_diff.py`: **one** `vim -es` for a whole run, reading a file of cases and writing a file of answers, through `matchstrpos()` and `matchlist()`. It asks vim's *other* engine (`set re=1`) about the rows that came back different, because vim ships two and they do not always agree | available |
-| OpenJDK 21, .NET 8, Ruby 3.3, Go 1.22, Rust `regex` 1.10, Tcl 8.6, Emacs 29 | tiers 2-4 | one driver each, same output form | one gate each |
+Every version below is a **pin**, in
+[`tools/oracle/containers/IMAGES`](../tools/oracle/containers/IMAGES), not an
+observation of this machine - see §2.1.
+
+| Oracle | Drives | Driver |
+| --- | --- | --- |
+| node 22.23.2 (V8 12.4.254.21, Unicode 17.0) | ECMAScript | `tools/oracle/node_match.mjs` and its siblings, through `node_runner.py`, which adds `--regexp-interpret-all`: without it V8's interpreter and its compiled code disagree and a row's answer depends on how many rows preceded it |
+| perl v5.40.1 | Perl | `tools/corpus/perl_match.pl`: `@-`/`@+`, `%+`. A second pin, `perl-next` (v5.44.0, UCD 17.0.0), is reachable with `GHOTI_ORACLE_ALIAS=perl=perl-next` |
+| PCRE2 10.46 | PCRE2 | `tools/oracle/pcre2_match.c`, compiled **inside** the image against its libpcre2-dev and run there. pcre2test reports matched *text* rather than offsets and omits a trailing group that did not participate, which is most of what a match comparison asks; `pcre2test` itself answers the corpus import and the probe |
+| python 3.13.5 (UCD 15.1.0) | Python | `tools/oracle/python_match.py`, the same batch protocol as the rest, in three modes for `re`, `re.split` and `re.sub`. Converts CPython's character offsets to UTF-8 byte offsets the way `node_match.mjs` converts UTF-16 ones |
+| glibc 2.41 `regcomp` | GNU BRE/ERE | `tools/oracle/posix_match.c`, compiled inside the image. Nothing of this library is linked into it |
+| musl v1.2.6 `regcomp` | POSIX BRE/ERE, with glibc | `tools/oracle/musl_match.c`: musl's own regex sources, fetched by `tools/corpus/fetch.sh musl`, compiled into the driver **against the image's glibc** - so it declines a NUL (musl has no `REG_STARTEND`) and any byte >= 0x80 (that glibc's `mbtowc`). Never decides alone - see below |
+| GNU sed 4.9 | the POSIX and GNU replacement templates | `tools/oracle/sed_match.py`, which runs sed's per-case loop *inside* the image: sed's `s` command takes one script and one subject, so it is the one reference here with no batch protocol of its own |
+| GNU grep 3.11 | the `gnu-ere` probe column | `tools/oracle/probe.py`. Only "did a line match", which is all `grep -c` can answer |
+| vim, patches 1-1244 | Vim | `tools/oracle/vim_diff.py`: **one** `vim -es` for a whole run, reading a file of cases and writing a file of answers, through `matchstrpos()` and `matchlist()`. It asks vim's *other* engine (`set re=1`) about the rows that came back different, because vim ships two and they do not always agree. `vim_runner.py` is the one place its command line is spelled |
+| OpenJDK, .NET, Ruby, Go, Rust `regex`, Tcl, Emacs | tiers 2-4 | one driver each, same output form. **None is installed on the machine this was written on**, and with the references in images that is no longer what decides whether they can be asked |
 
 Every driver reads a pattern, a flag string and a subject from a JSON line
 and prints one JSON line: `{"ok":true,"spans":[[0,3],[1,2],null]}`,
@@ -45,9 +50,15 @@ its runtime's indexing and the runner should not.
 
 Regeneration is `make vectors-<dialect>`, which runs the generator scripts
 against the gated oracle and rewrites `tests/data/vectors/<dialect>/`. The
-vectors are committed; `make test` never needs an oracle. A CI job with the
-oracles installed regenerates and fails on a diff, which is how an oracle
-upgrade is noticed rather than absorbed.
+vectors are committed; `make test` never needs an oracle. A CI job with a
+container engine regenerates and fails on a diff, which is how an oracle
+upgrade is noticed rather than absorbed - and with the references pinned that
+job needs nothing installed beyond the engine, which is most of the point.
+
+That gate does not exist yet, and the gap is measurable: regenerating the
+ECMAScript vectors today rewrites 3,742 lines of `generated.rxt`, because the
+corpus and its generator have drifted apart with nothing watching. The perl,
+PCRE2 and POSIX corpora do regenerate byte-identical.
 
 ### 2.1 Where a reference comes from
 
@@ -669,8 +680,8 @@ the other half, two quantified groups next to each other.
 `tools/oracle/vim_diff.py`, WP-36's gate. vim cannot be imported, so the
 saving is one fork for a *run* rather than one per case: vim reads a file of
 cases and writes a file of answers, which is what makes tens of thousands of
-rows possible against a reference `probe.py` was starting a process per case
-for. `make check-oracle-vim` runs it with `--strict`. Current standing:
+rows possible against a reference `probe.py` starts a process per case for
+(22 cases, so it can afford to). `make check-oracle-vim` runs it with `--strict`. Current standing:
 **1,080,000 rows over thirty seeds, no disagreements** - with 801 rows
 excluded as vim artifacts, 1,407 where its two engines disagree and `set
 re=1` gives this library's answer, and 21 where they disagree and neither
