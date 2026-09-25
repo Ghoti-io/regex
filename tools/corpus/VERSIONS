@@ -193,8 +193,32 @@ glibc glibc-2.41
 # stops being true, the MIT notice has to travel with it.
 musl v1.2.6
 
-# A defect in Node v22.23.2 / V8 12.4.254.21, found at seed 4009 of the
-# replacement soak and minimised to one pattern with no alternation in it:
+# **Raised to node 24.21.0 / V8 13.6.233.17 on 2026-09-25, and the defect
+# below is gone with it.** The reproducer run 40 times in a fresh process
+# gives 1-4 every time on V8 13.6 and on V8 14.1 (node 25) *without*
+# `--regexp-interpret-all`, where V8 12.4 gives 1-4 once and no match
+# thereafter. So the version boundary this entry says was measured rather
+# than read off a changelog is now measured from the other side too.
+#
+# The flag stays. It costs nothing, `make check-oracle-determinism` still
+# asserts that the answer is 1-4 rather than merely stable, and a gate that
+# goes on passing is better than a workaround somebody has to remember to
+# remove.
+#
+# **What the raise found is a gap of ours rather than a defect of theirs.**
+# V8 13.6 implements ES2025's duplicate named capture groups -
+# `(?<n>a)|(?<n>b)` is legal where the two cannot both participate - and this
+# library refuses it in `ecmascript`, `pcre` and `python` while accepting it
+# in `perl`, which is right for the other three and one release out of date
+# for ECMAScript. 576 rows of check-oracle-replace, one pattern, counted in a
+# named bucket and recorded in documentation/dialects.md section 6. Nothing
+# else moved: match_diff, syntax_diff, iterate_diff, split_diff,
+# property_diff and string_property_diff are byte-identical across node 22,
+# 24 and 25.
+#
+# The defect, for the record, in Node v22.23.2 / V8 12.4.254.21, found at
+# seed 4009 of the replacement soak and minimised to one pattern with no
+# alternation in it:
 #
 #   /(?:(?=a)a)*\B../u  over "\nabc" from offset 1
 #
@@ -249,9 +273,12 @@ musl v1.2.6
 #           against a version number it does not state.
 #   CPython 3.13.5, and `unicodedata` reports UCD **15.1.0** - two releases
 #           behind the 17.0.0 in tools/unicode/UCD_VERSION.
-#   Node    22.23.2 / V8 12.4.254.21, ICU 78.2, Unicode **17.0** - an exact
+#   Node    24.21.0 / V8 13.6.233.17, ICU 78.3, Unicode **17.0** - an exact
 #           match with ours, which is why check-oracle-properties can compare
 #           whole property tables against it and check-oracle-python cannot.
+#           (22.23.2 / V8 12.4.254.21 until 2026-09-25; the ICU release moved
+#           and the Unicode version did not, which is why the raise changed
+#           no property answer.)
 #
 # The CPython gap is the one with teeth, and the measurement that matters is
 # not the gap itself but what the subjects can reach: **5,650 code points
@@ -271,4 +298,4 @@ musl v1.2.6
 # than in this file, which they are not.
 vim 9.1.1244
 cpython 3.13.5
-node v22.23.2
+node v24.21.0

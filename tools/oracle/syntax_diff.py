@@ -30,6 +30,7 @@ import itertools
 import json
 import os
 import random
+import re
 import subprocess
 import sys
 import node_runner
@@ -146,6 +147,80 @@ def astral_in_the_pattern(rows, reference, ours):
     return {index for index, accepted in zip(wanted, again) if accepted}
 
 
+# `(?i:`, `(?-i:`, `(?im-s:` - ECMAScript's RegExp Modifiers, Stage 4 and
+# shipped in V8 12.5. The letters are ECMAScript's own three, and at least one
+# has to be present on one side of the `-`, which is what keeps this from
+# matching `(?:` itself.
+MODIFIER_GROUP = re.compile(r"\(\?(?![:=!<])(?:[ims]*-[ims]+|[ims]+-?):")
+
+NAMED_GROUP = re.compile(r"\(\?<([A-Za-z_$][^>]*)>")
+
+
+def neutralise(pattern):
+    """The same pattern with both unbuilt ES constructs spelled a built way.
+
+    A modifier group becomes a plain `(?:`; a repeated group name becomes a
+    fresh one. Both keep the pattern's shape - same parentheses, same atoms -
+    so a pattern that still fails to parse afterwards failed for some other
+    reason, which is the whole point of asking.
+    """
+    out = MODIFIER_GROUP.sub("(?:", pattern)
+    seen = {}
+    def rename(match):
+        name = match.group(1)
+        seen[name] = seen.get(name, 0) + 1
+        if seen[name] == 1:
+            return match.group(0)
+        return "(?<%s_%d>" % (name, seen[name])
+    return NAMED_GROUP.sub(rename, out)
+
+
+def unbuilt_es_construct(driver, rows, reference, ours):
+    r"""Rows where a construct this library has not built is the whole
+    difference.
+
+    Two of them, both ECMAScript rules newer than this library's parser and
+    both found the day the node pin moved from V8 12.4 to V8 13.6, which
+    refused them too:
+
+      duplicate named capture groups   `(?<n>a)|(?<n>b)` - legal where the two
+                                       cannot both participate
+      RegExp Modifiers                 `(?i:a)`, `(?-i:a)`, `(?im-s:a)`
+
+    documentation/dialects.md section 6 carries both, and they are *gaps* -
+    work this library has not done - rather than deviations it has chosen. The
+    count is printed rather than folded into the total, so a reader sees what
+    the run did not compare.
+
+    **Asked rather than assumed**, the way astral_in_the_pattern() is asked,
+    and mirrored: that one rewrites the pattern and asks *node* whether the
+    rewrite is why it refused; this rewrites the pattern and asks *this
+    library* whether the rewrite is why it refused. A row is kept only where
+    we rejected, node accepted, and spelling the construct a way this library
+    has built makes it accept. A pattern that still fails after the rewrite
+    failed for another reason and stays a disagreement - which is what stops
+    `GRX_DIAG_INVALID_GROUP_SYNTAX`, a diagnostic for `(?` followed by
+    anything meaningless, from becoming a licence.
+    """
+    wanted = [index for index, ((flags, pattern), expected, verdict)
+        in enumerate(zip(rows, reference, ours))
+        if expected and verdict != "ok"
+            and (MODIFIER_GROUP.search(pattern)
+                 or _has_repeated_name(pattern))]
+    if not wanted:
+        return set()
+    again = ask_library(driver, [(rows[index][0], neutralise(rows[index][1]))
+        for index in wanted])
+    if len(again) != len(wanted):
+        return set()
+    return {index for index, verdict in zip(wanted, again) if verdict == "ok"}
+
+
+def _has_repeated_name(pattern):
+    names = NAMED_GROUP.findall(pattern)
+    return len(names) != len(set(names))
+
+
 def main(argv):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--seed", type=int, default=1)
@@ -182,12 +257,13 @@ def main(argv):
         return 2
 
     astral = astral_in_the_pattern(rows, reference, ours)
+    unbuilt = unbuilt_es_construct(driver, rows, reference, ours)
 
     disagreements = {}
     capped = 0
     for index, ((flags, pattern), expected, verdict) in enumerate(
             zip(rows, reference, ours)):
-        if index in astral:
+        if index in astral or index in unbuilt:
             continue
         # The driver refuses a pattern longer than its buffer rather than
         # parsing the prefix. That must stop the gate rather than count as a
@@ -219,9 +295,10 @@ def main(argv):
 
     print("\n%d patterns x %d flag sets = %d cases; %d capped by a limit and "
           "not compared; %d an astral character in the pattern; "
+          "%d an ECMAScript construct this library has not built; "
           "%d disagreements"
           % (len(patterns), len(FLAG_SETS), len(rows), capped, len(astral),
-             total))
+             len(unbuilt), total))
     return 1 if total else 0
 
 

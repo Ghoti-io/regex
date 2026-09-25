@@ -10,7 +10,8 @@ a few executions, and **the two paths do not always agree**. Found at seed
 is 1-4 on the first execution in a fresh process and *no match* on every
 execution after it. `--regexp-interpret-all` gives 1-4 always and
 `--no-regexp-tier-up`, which compiles immediately, gives no match always,
-so the tier-up is the whole of it. Node v22.23.2, V8 12.4.254.21.
+so the tier-up is the whole of it. Node v22.23.2, V8 12.4.254.21 - the
+version this tree pinned until 2026-09-25.
 
 1-4 is the right answer: pcre2test 10.46 and perl 5.40.1 both say so, and
 so does this library. The compiled path is wrong.
@@ -22,12 +23,19 @@ to where it lands in a batch - and a differential whose reference is
 order-dependent is not measuring anything it claims to. Every generator
 here therefore asks Node through this module.
 
-It is fixed in a later V8 and not in this one: the same reproducer run
-200 times in Chrome 153.0.8010.36 gives 1-4 every time, by a plain
-`.exec` and by a sticky one. Present in 12.4.254.21, gone by Chrome
-153's V8, and Node 22 carries the older branch. No public report
-matching it was found, so which change fixed it is unknown - the version
-boundary is measured, not read off a changelog.
+**Fixed in the V8 this tree now pins, and the flag stays anyway.** The pin
+moved to node 24.21.0 / V8 13.6.233.17 on 2026-09-25, where the reproducer
+below gives 1-4 forty times out of forty *without* the flag; V8 14.1 (node
+25) too. So the version boundary, which was measured from one side only -
+200 runs in Chrome 153.0.8010.36, a much later V8 - is now measured from
+both. No public report matching it was found, so which change fixed it is
+still unknown; what is known is where it is and is not.
+
+Keeping the flag costs one argument and buys two things. `check_determinism`
+below asserts the answer is *1-4*, not merely stable, so it is still a live
+assertion about this V8 rather than a ritual. And a workaround that goes on
+passing is better than one somebody has to remember to remove: the day this
+pin moves to a V8 that has regressed, the gate says so.
 
 The defect itself is recorded in tools/corpus/VERSIONS and in
 documentation/dialects.md section 6, because a flag that quietly works

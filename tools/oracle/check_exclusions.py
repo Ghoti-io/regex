@@ -540,6 +540,85 @@ block("perl_diff.reference_defect (perl)",
 # empty rather than merely unexamined.
 
 
+# --------------------------------------------------------------------
+# ECMAScript: ES2025's duplicate named capture groups.
+# --------------------------------------------------------------------
+# V8 13.6 implements the rule and this library does not, so replace_diff
+# counts those rows rather than calling them disagreements. The *rule* is
+# "the two groups cannot both participate", which is a question about the
+# whole disjunction tree; the predicate recognises the narrower shape the
+# corpus actually holds and must refuse everything beside it - including
+# `(?<n>a)(?<n>b)`, which node refuses too, and the two spellings where the
+# `|` is an ordinary character.
+#
+# Each `True` row below was put to node 24 and accepted; each `False` row that
+# holds a repeated name was put to it and refused. A predicate excusing rows
+# a reference would have answered is the failure this whole file is for.
+block("replace_diff.es2025_duplicate_named_groups",
+    lambda pattern: replace_diff.es2025_duplicate_named_groups(pattern),
+    [
+    ("two groups of one name in different alternatives, which node accepts",
+     (r"(?<n>a)|(?<n>b)",), True),
+    ("the same inside a non-capturing group",
+     (r"(?:(?<n>a)|(?<n>b))c",), True),
+    ("the same with text before the second",
+     (r"(?<n>a)|x(?<n>b)",), True),
+    ("two groups of one name in sequence, which node refuses",
+     (r"(?<n>a)(?<n>b)",), False),
+    ("two names that differ",
+     (r"(?<n>a)|(?<m>b)",), False),
+    ("a `|` inside a class is not alternation",
+     (r"(?<n>a[|](?<n>b))",), False),
+    ("an escaped `|` is not alternation either",
+     (r"(?<n>a\|(?<n>b))",), False),
+    ("no named group at all",
+     (r"(a)|(b)",), False),
+])
+
+
+# --------------------------------------------------------------------
+# ECMAScript: RegExp Modifiers, and what `neutralise()` may rewrite.
+# --------------------------------------------------------------------
+# syntax_diff's exclusion is a second *measurement* - it rewrites the pattern
+# and asks this library again - so what needs controls is the rewrite, not the
+# verdict. A MODIFIER_GROUP that matched `(?:` would neutralise patterns that
+# hold no modifier at all and excuse whatever else was wrong with them; one
+# that matched nothing would leave the rows as disagreements, which is the
+# loud direction and the one this file is less worried about.
+block("syntax_diff.MODIFIER_GROUP",
+    lambda pattern: bool(syntax_diff.MODIFIER_GROUP.search(pattern)),
+    [
+    ("a modifier group node 24 accepts", (r"(?i:a)",), True),
+    ("removing a flag", (r"(?-i:a)",), True),
+    ("adding and removing", (r"(?im-s:a)",), True),
+    ("an empty body", (r"(?i:)",), True),
+    ("a plain non-capturing group", (r"(?:a)",), False),
+    ("a lookahead", (r"(?=a)",), False),
+    ("a negative lookahead", (r"(?!a)",), False),
+    ("a lookbehind", (r"(?<=a)",), False),
+    ("a named group", (r"(?<n>a)",), False),
+    ("a flag letter no dialect here has", (r"(?x:a)",), False),
+])
+
+# The rewrite itself. It has to keep the pattern's shape - same parentheses,
+# same atoms - or a row could pass the re-ask for a reason that is not the
+# construct.
+block("syntax_diff.neutralise",
+    lambda pattern, expected: syntax_diff.neutralise(pattern) == expected,
+    [
+    ("a modifier group becomes a plain one",
+     (r"(?i:a)b", r"(?:a)b"), True),
+    ("a repeated name gets a fresh one",
+     (r"(?<n>a)|(?<n>b)", r"(?<n>a)|(?<n_2>b)"), True),
+    ("both at once",
+     (r"(?i:(?<n>a))|(?<n>b)", r"(?:(?<n>a))|(?<n_2>b)"), True),
+    ("a pattern with neither is unchanged",
+     (r"(a)|(b)", r"(a)|(b)"), True),
+    ("distinct names are left alone",
+     (r"(?<n>a)|(?<m>b)", r"(?<n>a)|(?<m>b)"), True),
+])
+
+
 block("script_run_diff.is_pcre2_han_defect",
     lambda subject: script_run_diff.is_pcre2_han_defect(subject),
     [
