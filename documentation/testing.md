@@ -365,6 +365,44 @@ side is asked. Properties the reference cannot spell - the binary properties
 outside ECMA-262's table 69 - are counted and skipped, because which
 spellings each side accepts is the syntax check's question.
 
+### The cell width check
+
+`make check-vim-widths` regenerates `src/unicode/display.c`'s table from
+whatever vim is on the machine and diffs it - 1,112,062 code points, 0
+disagreements against vim 9.1.
+
+Every other table here is generated from the UCD and gated by
+`make check-unicode-tables`. This one cannot be, and the reason is the point:
+**it is not Unicode data.** It is vim's, it disagrees with East_Asian_Width
+on hundreds of code points, and regenerating it from the UCD is precisely the
+defect to guard against - `\%23v` has to report the column vim would, so
+Tangut drawn in one cell and emoji drawn in two are the table being right.
+Until this gate existed the file header's provenance sentence was the only
+evidence, the harness that measured it was not in the repository, and nothing
+recorded which vim it came from.
+
+The probe is the character's **contribution after a base**,
+`strdisplaywidth("a" . c) - 1`, and not the width of a lone one.
+`strdisplaywidth()` of an isolated combining character is vim's escape
+rendering - `<180b>` is six columns - which is a question about drawing an
+unprintable rather than about cells. Nine code points differ that way and
+none is a disagreement. The delta is what `grx_display_cell_width(c, 0)`
+answers, and for everything that is not a combining character the two
+readings are identical.
+
+Two code points are excluded, each a different question rather than a
+disagreement, and the differ asserts they still *are* different so that a
+third cannot be absorbed silently: U+0000, because `nr2char(0, 1)` is a
+zero-length string and vim cannot hold NUL in one; and U+0009, because
+`strdisplaywidth()` applies the tab stop while this library splits that
+between `grx_display_cell_width()` and `grx_display_column_after()`.
+
+`ambiwidth` is pinned to `single` in the dumper. It is a user setting, so a
+vim with `set ambiwidth=double` answers differently for every East Asian
+Ambiguous code point - a dialect this library does not offer and must not
+acquire from whoever happens to run the gate. That is the same class of pin
+as the `encoding` and `iskeyword` ones in `tools/oracle/vim_diff.py`.
+
 ### The case-fold orbit check
 
 `make check-oracle-folds` compares the fold table as a **partition**: not

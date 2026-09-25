@@ -26,7 +26,19 @@
  *
  * **This is not Unicode data.** It is vim 9.1's, measured with
  * `strdisplaywidth()` over all 1,114,112 code points - a table of its own
- * that resembles East_Asian_Width and is not it. The library needs it for
+ * that resembles East_Asian_Width and is not it.
+ *
+ * That sentence is a *check* rather than a claim: `make check-vim-widths`
+ * regenerates the whole table from whatever vim is on the machine and
+ * diffs it, which is the nearest this file can come to the
+ * `make check-unicode-tables` that gates every other table here. It could
+ * not be one of those, because regenerating this from the UCD is exactly
+ * the defect to guard against - East_Asian_Width would make `\%23v` report
+ * the wrong column for Tangut and for a good deal of emoji.
+ *
+ * Until 2026-09-24 the harness that measured it was not in the repository
+ * and nothing recorded which vim it came from, so the provenance above was
+ * the only evidence the table was right. The library needs it for
  * exactly one construct, `\%23v`, which asks whether the *screen* column
  * here is 23; the shared assertion that answers it is
  * GRX_ASSERT_SCREEN_COLUMN, and no engine knows which dialect wrote it.
