@@ -32,7 +32,9 @@ import argparse
 import binascii
 import os
 import random
+import platform
 import re
+import unicodedata
 import subprocess
 import sys
 import warnings
@@ -127,6 +129,12 @@ REFUSED = [
 # Subjects short enough that a disagreement is readable and varied enough to
 # reach the boundary rules: newlines for `^`/`$`/`\Z`, non-ASCII for the
 # shorthands and the folding, and the empty string.
+_UCD_PIN = os.path.join(os.path.dirname(os.path.dirname(
+    os.path.dirname(os.path.abspath(__file__)))), "tools", "unicode",
+    "UCD_VERSION")
+UCD_VERSION = (open(_UCD_PIN).read().strip()
+    if os.path.exists(_UCD_PIN) else "unknown")
+
 SUBJECTS = [
     "", "a", "b", "ab", "ba", "aa", "aab", "abab", "abc", "c",
     "a\n", "\na", "a\nb", "\n", "a\n\n", "aaa", "aaaa",
@@ -347,6 +355,21 @@ def main():
         head = line.split()[0] if line else "empty"
         kinds[head] = kinds.get(head, 0) + 1
     shape = ", ".join("%d %s" % (kinds[k], k) for k in sorted(kinds))
+    # CPython vendors its own UCD, and it is a THIRD version - independent of
+    # both this library's tables and of the Unicode release the patterns are
+    # written against. On the machine this was written for it is 15.1.0 where
+    # ours is 17.0.0, two releases, and 5,650 code points have a different
+    # general category between them. None of SUBJECTS lands in that set, so
+    # the disagreement count below is not being suppressed by the skew - but
+    # that is a property of the subject list rather than of the comparison,
+    # and it is one an added subject can silently lose. Adding a character
+    # assigned since 15.1.0 would make `re` answer from its own tables and
+    # this differential report a disagreement that is the reference's age
+    # rather than a defect here. So the version is printed every run: a
+    # denominator the reader can see beats a limitation recorded elsewhere.
+    print("python_diff: reference re from CPython %s, unicodedata UCD %s "
+        "(ours: %s)" % (platform.python_version(), unicodedata.unidata_version,
+        UCD_VERSION))
     print("python_diff: %d rows (%s), %d disagreements"
         % (len(cases), shape, len(disagreements)))
     for (flags, pattern, subject), them, us in disagreements[:args.examples]:

@@ -220,3 +220,49 @@ musl v1.2.6
 # flag: the flag stays needed for as long as the oracle is this Node, and
 # when Node moves to a V8 that has the fix the gate goes on passing and
 # nothing has to be remembered.
+
+# Three references were in daily use here with no pinned record, found
+# 2026-09-24 by applying a peer's rule to this file: a reference that vendors
+# its own Unicode tables carries a THIRD version, independent of both this
+# library's tables and of the release its patterns were written against, and
+# it is that third one that decides the answers.
+#
+# This file recorded five references - test262, pcre2, perl, glibc, musl. It
+# named neither vim nor CPython at all, and mentioned Node only in the prose
+# about the V8 defect. Between them those three answer 177,580 rows a run
+# plus two whole-plane table gates, so a reader taking this file as the list
+# of what this library is measured against was reading a list missing three
+# of eight.
+#
+# The vendored versions, measured rather than assumed:
+#
+#   vim     9.1, patches 1-948, 950-1230, 1242, 1244. Its character tables
+#           are its own, in src/mbyte.c, and it publishes no UCD version for
+#           them - which is why check-vim-widths and check-vim-classes exist:
+#           they compare 1.1M code points against vim itself rather than
+#           against a version number it does not state.
+#   CPython 3.13.5, and `unicodedata` reports UCD **15.1.0** - two releases
+#           behind the 17.0.0 in tools/unicode/UCD_VERSION.
+#   Node    22.23.2 / V8 12.4.254.21, ICU 78.2, Unicode **17.0** - an exact
+#           match with ours, which is why check-oracle-properties can compare
+#           whole property tables against it and check-oracle-python cannot.
+#
+# The CPython gap is the one with teeth, and the measurement that matters is
+# not the gap itself but what the subjects can reach: **5,650 code points
+# have a different general category between 15.1.0 and 17.0.0**, and
+# python_diff's 37 subjects contain 18 distinct characters, **none** of which
+# is one of them. So its 0 disagreements over 111,000 rows is honest about
+# the constructs and silent about the tables - the axis rule again, where a
+# subject reaches a table only through a construct, so a differential tests
+# the construct everywhere and the table at one code point.
+#
+# That safety is a property of the subject list, not of the comparison, and
+# an added subject can lose it without anything saying so. A character
+# assigned since 15.1.0 would have `re` answer from its own tables and the
+# differential report a disagreement that is the reference's age rather than
+# a defect here. python_diff.py therefore prints both versions on every run,
+# so the limitation is in the output a reader is already looking at rather
+# than in this file, which they are not.
+vim 9.1.1244
+cpython 3.13.5
+node v22.23.2
