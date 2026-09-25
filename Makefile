@@ -816,6 +816,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 .PHONY: check-oracle-soak
 .PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-dump-names check-readme-example check-tables check-status-line check-oracle-syntax check-oracle-match check-oracle-soak check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-perl-syntax check-oracle-script-runs check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
 	check-oracle-properties check-oracle-numeric-properties \
+	check-oracle-folds \
 	check-oracle-string-properties check-oracle-posix check-oracle-sed \
 	check-oracle-exclusions check-oracle-determinism \
 	check-oracles \
@@ -911,6 +912,7 @@ $(BENCH_DIR)/glibc: tools/bench/regex_bench.c
 check-oracles: ## Run every differential check against the reference implementation
 check-oracles: check-oracle-syntax check-oracle-match check-oracle-properties \
 	check-oracle-numeric-properties check-oracle-string-properties \
+	check-oracle-folds \
 	check-oracle-posix check-oracle-submatch \
 	check-oracle-perl check-oracle-perl-syntax check-oracle-python \
 	check-oracle-vim \
@@ -996,6 +998,15 @@ check-oracle-properties: $(TOOLS)
 	fi; \
 	python3 tools/oracle/property_diff.py \
 		--driver $(APP_DIR)/tools/grx_properties$(EXE_EXTENSION)
+
+check-oracle-folds: ## Compare the case-fold orbits against perl
+check-oracle-folds: $(TOOLS)
+	@if ! command -v perl >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then \
+		printf "check-oracle-folds: skipped (no perl or no python3)\n"; \
+		exit 0; \
+	fi; \
+	python3 tools/oracle/fold_diff.py \
+		--driver $(APP_DIR)/tools/grx_folds$(EXE_EXTENSION)
 
 check-oracle-numeric-properties: ## Compare the Numeric_Value tables against perl
 check-oracle-numeric-properties: $(TOOLS)

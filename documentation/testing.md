@@ -365,6 +365,42 @@ side is asked. Properties the reference cannot spell - the binary properties
 outside ECMA-262's table 69 - are counted and skipped, because which
 spellings each side accepts is the syntax check's question.
 
+### The case-fold orbit check
+
+`make check-oracle-folds` compares the fold table as a **partition**: not
+which code points fold, but which ones fold *together*. That is the half the
+property check above cannot reach. `Changes_When_Casefolded` is one of its
+457 properties and agrees exactly, and a table that folded `A` to `b` would
+still pass it - the set of code points that change under folding would be
+identical.
+
+Perl is the oracle because `fc()` gives the answer without a pattern: two
+code points are case-equivalent exactly when their full fold keys are equal,
+so grouping by `fc()` is the partition itself, with nothing a matching bug
+could bend. This library's side is `tools/oracle/grx_folds`, which walks
+`grx_unicode_fold_orbit()`.
+
+Two restrictions, and both are the difference between measuring the tables
+and measuring something else:
+
+* **Depth.** `fc()` is the *full* casefold and the orbit table is the
+  *simple* one. A code point whose only fold is multi-code-point - U+00DF to
+  "ss", U+0149 to U+02BC U+006E - is a singleton here and a group member
+  there, which is two questions rather than a disagreement. The 104 of them
+  are found by asking perl which keys are multi-code-point, never by a list
+  in the differ: a list would go stale at the next UCD without saying so.
+* **Version.** This library is UCD 17.0.0 and perl 5.40.1 is older. The
+  restriction is on the whole **orbit**, not on the code point, and the
+  difference is not academic - U+019B is assigned in perl and its partner
+  U+A7DC is not, so perl calls U+019B uncased and restricting per code point
+  reports four disagreements that are all UCD 17.0.0 additions. A relation
+  is comparable only when the reference has heard of both ends of it.
+
+2,822 code points compared, 1,396 orbits, 104 and 110 skipped for those two
+reasons, 0 disagreements. Armed before it was believed: a driver that splits
+one orbit, one that merges two, and one that names a wrong partner are each
+reported and each exit 1.
+
 ### The numeric property check
 
 `make check-oracle-numeric-properties` does the same job for `\p{nv=...}`,
