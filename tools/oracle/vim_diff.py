@@ -503,6 +503,20 @@ def holds_composing(subject):
     src/unicode/display.c, measured - but the two agree on everything a
     subject here is built from, and what this needs is "might the cluster
     rules be in play", not the set itself.
+
+    That agreement is now checked rather than asserted, because CPython
+    carries its own UCD and it is behind ours: unicodedata 15.1.0 against
+    the pinned 17.0.0, two releases. Every distinct character in this
+    file's literals - 127 of them - was compared against field 3 of
+    third_party/ucd/17.0.0/UnicodeData.txt on the boolean this function
+    actually uses, and none disagrees.
+
+    The condition that would break it: a subject built from a character
+    whose combining class was assigned between 15.1.0 and the pinned
+    version. This is a filter and not a verdict, so a wrong answer does not
+    produce a wrong comparison - it moves a case into or out of an
+    exclusion, which is the quieter failure. Re-run the comparison when
+    adding a subject above U+FFFF or any mark.
     """
     return any(unicodedata.combining(c) for c in subject[1:])
 
