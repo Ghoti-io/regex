@@ -424,6 +424,40 @@ ALL_TEST_GATES := check-symbols check-layering check-aliasing \
 	check-tables check-status-line check-corpus-seeds
 TEST_GATES ?= $(ALL_TEST_GATES)
 
+# What a gate that IS a python3 script does when there is no python3.
+#
+# It used to print "<gate>: skipped" and exit 0, in seven places. That is the
+# failure check-json-schema-suite already names in its own recipe: a gate
+# without its precondition is not running weaker, it is not running at all,
+# and a green `make test` that means "seven gates never executed" is worse
+# than a red one, because nothing in the output says so. None of the seven is
+# an oracle differential - every one needs only the interpreter, and the
+# scripts are milliseconds - so "the reference engine might be absent" is not
+# the trade here.
+#
+# The opt-out is per-gate and goes in the command line rather than in a
+# boolean, which is what ALL_TEST_GATES/TEST_GATES are spelled as two
+# variables for: the machine without python3 can still run the suite, but the
+# choice to drop a gate is visible in what was typed rather than buried in
+# the output of a run that looked like it passed.
+#
+# Used as the first command of a recipe, so $@ is the gate being guarded.
+# The `#` in the banner is escaped as `\#`: this is a variable assignment,
+# where make lexes `#` as the start of a comment and silently truncates the
+# rest of the value. The identical text is safe in a recipe line, which is
+# where it lived before, so moving it here changed how it was read.
+REQUIRE_PYTHON3 = if ! command -v python3 >/dev/null 2>&1; then \
+		printf "\033[0;31m\n\#\#\# $@: python3 is missing \#\#\#\033[0m\n" >&2; \
+		printf "\nThis gate is a python3 script. Without an interpreter it does\n" >&2; \
+		printf "not check less - it checks nothing, and used to say so only by\n" >&2; \
+		printf "printing \"skipped\" and exiting 0.\n\n" >&2; \
+		printf "If this machine genuinely has no python3, drop the gate for the\n" >&2; \
+		printf "run, so that the choice is visible in the command rather than in\n" >&2; \
+		printf "the output of one that looked like it passed:\n\n" >&2; \
+		printf "  make test TEST_GATES='\$$(filter-out $@,\$$(ALL_TEST_GATES))'\n\n" >&2; \
+		exit 1; \
+	fi
+
 # Every target that runs the suites carries them - `test`, `test-quiet`,
 # `test-valgrind`, `test-valgrind-quiet` - because a gate that hangs off one
 # spelling of "run the tests" is a gate for whoever types that spelling. It
@@ -1417,10 +1451,7 @@ check-engine-equivalence: ## Fail if two engines disagree about one program
 # Only the one driver, not $(TOOLS): this check consults no reference
 # implementation, and `make test` should not have to build the tools that do.
 check-engine-equivalence: $(APP_DIR)/tools/grx_match$(EXE_EXTENSION)
-	@if ! command -v python3 >/dev/null 2>&1; then \
-		printf "check-engine-equivalence: skipped (no python3)\n"; \
-		exit 0; \
-	fi; \
+	@$(REQUIRE_PYTHON3); \
 	python3 tools/oracle/engine_diff.py --seed $(ORACLE_SEED) \
 		--patterns $(ORACLE_PATTERNS) --driver $(APP_DIR)/tools/grx_match$(EXE_EXTENSION)
 
@@ -1503,10 +1534,7 @@ BELOW_THE_IR := src/exec/*.c src/exec/*.h src/compile/codegen.c \
 	src/compile/program.c
 
 check-diagnostics: ## Fail if a diagnostic exists that no code path produces
-	@if ! command -v python3 >/dev/null 2>&1; then \
-		printf "check-diagnostics: skipped (no python3)\n"; \
-		exit 0; \
-	fi; \
+	@$(REQUIRE_PYTHON3); \
 	python3 tools/check_diagnostics.py
 
 check-layering: ## Fail if an engine knows which dialect it is running
@@ -1546,10 +1574,7 @@ check-tables: ## Fail if a markdown table has a row of the wrong width
 # gets the count wrong in a way no build step notices. Milliseconds, and no
 # reference implementation.
 check-tables:
-	@if ! command -v python3 >/dev/null 2>&1; then \
-		printf "check-tables: skipped (no python3)\n"; \
-		exit 0; \
-	fi; \
+	@$(REQUIRE_PYTHON3); \
 	python3 tools/check_tables.py
 
 check-status-line: ## Fail if README's status paragraph disagrees with the code
@@ -1569,10 +1594,7 @@ check-status-line: ## Fail if README's status paragraph disagrees with the code
 # GRX_SYNTAX_COUNT, and compares both numbers against the prose. It costs
 # milliseconds and needs no reference implementation.
 check-status-line:
-	@if ! command -v python3 >/dev/null 2>&1; then \
-		printf "check-status-line: skipped (no python3)\n"; \
-		exit 0; \
-	fi; \
+	@$(REQUIRE_PYTHON3); \
 	python3 tools/check_status_line.py
 
 check-corpus-seeds: ## Fail if a fuzz corpus directory cannot hold a seed
@@ -1593,10 +1615,7 @@ check-corpus-seeds: ## Fail if a fuzz corpus directory cannot hold a seed
 # Milliseconds, and the harness list comes from tests/fuzz/fuzz_*.cpp so that
 # a new harness is covered on the day it lands.
 check-corpus-seeds:
-	@if ! command -v python3 >/dev/null 2>&1; then \
-		printf "check-corpus-seeds: skipped (no python3)\n"; \
-		exit 0; \
-	fi; \
+	@$(REQUIRE_PYTHON3); \
 	python3 tools/check_corpus_seeds.py
 
 check-dump-names: ## Fail if a dump's name table is shorter than its enum
@@ -1607,10 +1626,7 @@ check-dump-names: ## Fail if a dump's name table is shorter than its enum
 # guard and return "?", so nothing warns. Seven of twenty-eight tables were
 # short when this was written, one of them for long enough that every IR
 # assertion dumped under the wrong name.
-	@if ! command -v python3 >/dev/null 2>&1; then \
-		printf "check-dump-names: skipped (no python3)\n"; \
-		exit 0; \
-	fi; \
+	@$(REQUIRE_PYTHON3); \
 	python3 tools/check_dump_names.py
 
 check-readme-example: ## Fail if the README's example does not compile and run
@@ -1664,10 +1680,7 @@ check-vim-widths: $(TOOLS)
 		--driver $(APP_DIR)/tools/grx_widths$(EXE_EXTENSION)
 
 check-unicode-tables: ## Fail if the committed Unicode tables are not what the generator produces
-	@if ! command -v python3 >/dev/null 2>&1; then \
-		printf "check-unicode-tables: skipped (no python3)\n"; \
-		exit 0; \
-	fi; \
+	@$(REQUIRE_PYTHON3); \
 	if ! python3 tools/unicode/test_gen.py >/dev/null 2>&1; then \
 		printf "\033[0;31m\n### The Unicode generator's own tests fail ###\033[0m\n" >&2; \
 		python3 tools/unicode/test_gen.py >&2 || true; \
