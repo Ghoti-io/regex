@@ -230,10 +230,6 @@ extern const size_t grx_unicode_ea_range_count;
 extern const GRX_UnicodeBreakRange grx_unicode_epcn_ranges[];
 extern const size_t grx_unicode_epcn_range_count;
 
-/** Simple case folding: CaseFolding.txt statuses C and S. */
-extern const GRX_UnicodeCaseMap grx_unicode_fold_map[];
-extern const size_t grx_unicode_fold_map_count;
-
 /**
  * Full case folding: CaseFolding.txt status F, the folds of more than one
  * code point.
@@ -270,11 +266,6 @@ extern const size_t grx_unicode_es_legacy_orbit_member_count;
  * replacement template asking for "the next character in upper case" means
  * - Vim's `\u` and `\U`.
  */
-extern const GRX_UnicodeCaseMap grx_unicode_simple_upper_map[];
-extern const size_t grx_unicode_simple_upper_map_count;
-extern const GRX_UnicodeCaseMap grx_unicode_simple_lower_map[];
-extern const size_t grx_unicode_simple_lower_map_count;
-
 /** Character names for `\N{NAME}`: the word dictionary, then the names.
  *
  * A name is a run of tokens in `grx_unicode_name_tokens`, from its entry in

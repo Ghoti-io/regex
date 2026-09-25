@@ -1433,10 +1433,6 @@ extern const size_t grx_unicode_ea_range_count;
 extern const GRX_UnicodeBreakRange grx_unicode_epcn_ranges[];
 extern const size_t grx_unicode_epcn_range_count;
 
-/** Simple case folding: CaseFolding.txt statuses C and S. */
-extern const GRX_UnicodeCaseMap grx_unicode_fold_map[];
-extern const size_t grx_unicode_fold_map_count;
-
 /**
  * Full case folding: CaseFolding.txt status F, the folds of more than one
  * code point.
@@ -1473,11 +1469,6 @@ extern const size_t grx_unicode_es_legacy_orbit_member_count;
  * replacement template asking for "the next character in upper case" means
  * - Vim's `\\u` and `\\U`.
  */
-extern const GRX_UnicodeCaseMap grx_unicode_simple_upper_map[];
-extern const size_t grx_unicode_simple_upper_map_count;
-extern const GRX_UnicodeCaseMap grx_unicode_simple_lower_map[];
-extern const size_t grx_unicode_simple_lower_map_count;
-
 /** Character names for `\\N{NAME}`: the word dictionary, then the names.
  *
  * A name is a run of tokens in `grx_unicode_name_tokens`, from its entry in
@@ -1695,19 +1686,9 @@ def write_case(out_dir, tables):
     with open(path, "w", encoding="utf-8", newline="\n") as out:
         out.write(HEADER_NOTICE % tables["version"])
         out.write('\n#include "tables_internal.h"\n\n')
-        emit_map(out, "grx_unicode_fold_map", tables["folds"])
         emit_full_folds(out, tables["full_folds"])
         emit_orbits(out, "grx_unicode_fold_orbit", tables["fold_orbits"])
         emit_map(out, "grx_unicode_es_legacy_map", tables["es_map"])
-        # Simple_Uppercase_Mapping and Simple_Lowercase_Mapping, straight
-        # from UnicodeData.txt fields 12 and 13. Both were read here from
-        # the start and spent only on the ECMAScript canonicalisation above;
-        # Vim's `:s` replacement needs them as themselves, because `\u` and
-        # `\U` there apply the *simple* mapping - U+01F3 uppercases to
-        # U+01F1 and not to the titlecase U+01F2, and U+00DF and U+FB01 have
-        # no simple uppercase and are left alone.
-        emit_map(out, "grx_unicode_simple_upper_map", tables["simple_upper"])
-        emit_map(out, "grx_unicode_simple_lower_map", tables["simple_lower"])
         emit_orbits(
             out, "grx_unicode_es_legacy_orbit", tables["es_orbits"])
 

@@ -34,6 +34,8 @@
 #include <ghoti.io/regex/macros.h>
 
 #include <ghoti.io/regex/core.h>
+#include <ghoti.io/unicode/case.h>
+#include <ghoti.io/unicode/set.h>
 #include <stddef.h>
 #include <string.h>
 
@@ -226,29 +228,51 @@ GRX_Result grx_named_set(
       // `\p{Lowercase}` is 2,595 code points, `\p{Ll}` is 2,233 and this is
       // 1,478, because Other_Lowercase carries the modifier letters and the
       // small Roman numerals and neither of those has an uppercase to map
-      // to. Measured against vim 9.1 a code point at a time over all
-      // 1,112,064: `[[:upper:]]` is exactly the simple lowercase map's
-      // domain, and `[[:lower:]]` exactly the simple uppercase map's plus
-      // U+00DF.
+      // to. Measured against vim a code point at a time over all 1,112,064:
+      // `[[:upper:]]` is exactly the simple lowercase map's domain, and
+      // `[[:lower:]]` exactly the simple uppercase map's plus U+00DF.
       //
       // The *simple* map and not `Changes_When_Uppercased`, which is the
-      // full mapping and 102 code points wider: U+0149, U+01F0, U+0390 and
-      // the rest uppercase to more than one code point, and vim - having
-      // one code point to put in the cell - calls them neither case.
+      // full mapping: U+0149, U+01F0, U+0390 and the rest uppercase to more
+      // than one code point, and vim - having one code point to put in the
+      // cell - calls them neither case. **75 code points wider, not the 102
+      // this comment used to say**, re-derived when the tables moved to the
+      // unicode library; and the asymmetry is the other half that sentence
+      // lost, because `Changes_When_Lowercased` is the simple lowercase
+      // map's domain *exactly*, to the code point. So the filter below is
+      // doing real work in one direction and none in the other, and is
+      // applied in both so that neither depends on that staying true.
       //
-      // Built from the map's domain rather than from a table of its own,
-      // so it follows the UCD this library carries rather than freezing
-      // vim's. Where vim is older the two differ by exactly the code points
-      // vim has not heard of - 28 of them for `[[:upper:]]` against UCD
-      // 17.0.0, every one unassigned there.
-      const GRX_UnicodeCaseMap * map = (set == GRX_SET_CASE_MAPPED_LOWER)
-          ? grx_unicode_simple_upper_map : grx_unicode_simple_lower_map;
-      size_t count = (set == GRX_SET_CASE_MAPPED_LOWER)
-          ? grx_unicode_simple_upper_map_count
-          : grx_unicode_simple_lower_map_count;
+      // Built from the mapping rather than from a table of its own, so it
+      // follows the UCD the suite carries rather than freezing vim's. Where
+      // vim is older the two differ by exactly the code points vim has not
+      // heard of - 28 of them for `[[:upper:]]` against UCD 17.0.0, every
+      // one unassigned there.
+      //
+      // The property is the *enumeration* and the simple mapping is the
+      // *predicate*: Changes_When_Uppercased is 1,580 ranges to walk where
+      // the whole code space is 1.1 million, so this asks a small set and
+      // filters it rather than scanning everything.
+      const char * property = (set == GRX_SET_CASE_MAPPED_LOWER)
+          ? "Changes_When_Uppercased" : "Changes_When_Lowercased";
+      GUNI_Property which = 0;
+      uint32_t yes = 0;
+      if (guni_property_by_name(property, strlen(property), &which) != GUNI_OK
+          || guni_value_by_name(which, "Y", 1, &yes) != GUNI_OK) {
+        return GRX_ERR_INTERNAL;
+      }
       GRX_Result result = GRX_OK;
-      for (size_t i = 0; result == GRX_OK && i < count; i++) {
-        result = grx_charclass_add_range(cls, map[i].from, map[i].from, limits);
+      for (uint32_t code = 0; result == GRX_OK && code <= GRX_CODEPOINT_MAX;
+          code++) {
+        if (!guni_set_contains(which, yes, code)) {
+          continue;
+        }
+        uint32_t mapped = (set == GRX_SET_CASE_MAPPED_LOWER)
+            ? guni_to_upper_simple(code) : guni_to_lower_simple(code);
+        if (mapped == code) {
+          continue;
+        }
+        result = grx_charclass_add_range(cls, code, code, limits);
       }
       if (result == GRX_OK && set == GRX_SET_CASE_MAPPED_LOWER) {
         // U+00DF LATIN SMALL LETTER SHARP S. Confirmed in vim rather than

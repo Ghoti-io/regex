@@ -32,6 +32,7 @@
 
 #include <ghoti.io/regex/macros.h>
 
+#include <ghoti.io/unicode/case.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -96,18 +97,15 @@ static size_t orbit_lookup(const GRX_UnicodeOrbit * index, size_t count,
 }
 
 uint32_t grx_unicode_fold_simple(uint32_t codepoint) {
-  return map_lookup(
-      grx_unicode_fold_map, grx_unicode_fold_map_count, codepoint);
+  return guni_case_fold_simple(codepoint);
 }
 
 uint32_t grx_unicode_upper_simple(uint32_t codepoint) {
-  return map_lookup(grx_unicode_simple_upper_map,
-      grx_unicode_simple_upper_map_count, codepoint);
+  return guni_to_upper_simple(codepoint);
 }
 
 uint32_t grx_unicode_lower_simple(uint32_t codepoint) {
-  return map_lookup(grx_unicode_simple_lower_map,
-      grx_unicode_simple_lower_map_count, codepoint);
+  return guni_to_lower_simple(codepoint);
 }
 
 size_t grx_unicode_fold_orbit(
@@ -116,8 +114,19 @@ size_t grx_unicode_fold_orbit(
     return 0;
   }
 
-  return orbit_lookup(grx_unicode_fold_orbits, grx_unicode_fold_orbit_count,
-      grx_unicode_fold_orbit_members, codepoint, out);
+  // GRX_FOLD_ORBIT_MAX is this library's bound on an orbit and the unicode
+  // library states the same one differently - it reports what it needs and
+  // writes nothing when the buffer is short. Asking for the size first
+  // would be a second lookup; the orbit cannot exceed the bound, so a
+  // refusal here would be a defect rather than an input, and the answer
+  // that cannot invent a match is the code point alone.
+  size_t count = 0;
+  if (guni_case_orbit(codepoint, out, GRX_FOLD_ORBIT_MAX, &count) != GUNI_OK
+      || count == 0) {
+    out[0] = codepoint;
+    return 1;
+  }
+  return count;
 }
 
 /**
