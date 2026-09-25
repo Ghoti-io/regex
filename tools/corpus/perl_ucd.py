@@ -11,8 +11,23 @@ It lives in one module because there are two callers. A probe written twice
 is a probe that will disagree with itself later; see the same argument in
 `tools/oracle/vim_diff.py`, where one `VIM_COMMAND` exists so that a script
 added later cannot be built without the setting the others have.
+
+The perl it asks is the pinned one, through `tools/oracle/oracle_env.py`, for
+the reason this module exists at all: the number is read out of the
+interpreter that is about to answer the rows rather than out of prose, and a
+host perl is not that interpreter. `tools/corpus/VERSIONS` records the gap -
+Debian 13's 5.40.1 carries UCD 15.0.0 and `perl-next` carries 17.0.0 - and it
+is this function's answer that decides which of the 46 boundary rows are
+excluded, so asking the wrong perl would silently regenerate the corpus for a
+version that did not answer it.
 """
+import os
 import subprocess
+import sys
+
+sys.path.insert(0, os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "oracle"))
+import oracle_env
 
 
 def perl_ucd_version():
@@ -24,10 +39,11 @@ def perl_ucd_version():
     them decides whether a disagreement can be a defect.
     """
     try:
-        done = subprocess.run(["perl", "-MUnicode::UCD", "-e",
-            "print Unicode::UCD::UnicodeVersion()"], capture_output=True,
+        done = subprocess.run(oracle_env.command("perl",
+            ["perl", "-MUnicode::UCD", "-e",
+             "print Unicode::UCD::UnicodeVersion()"]), capture_output=True,
             text=True, timeout=60)
-    except (OSError, subprocess.TimeoutExpired):
+    except (OSError, subprocess.TimeoutExpired, oracle_env.OracleUnavailable):
         return None
     if done.returncode != 0:
         return None

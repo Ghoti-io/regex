@@ -40,6 +40,7 @@ ORACLE = os.path.join(ROOT, "tools", "oracle")
 sys.path.insert(0, ORACLE)
 
 import make_vectors
+import oracle_env
 
 # The flag letters this library's Perl alphabet accepts. `a` is ASCII-restrict,
 # which WP-21 has not built, so a row carrying it is skipped rather than
@@ -131,9 +132,10 @@ def ask_perl(rows):
         lines.append("%s\t%s\t%s" % (flags,
             pattern.encode("utf-8").hex(), subject.encode("utf-8").hex()))
     finished = subprocess.run(
-        ["perl", os.path.join(HERE, "perl_match.pl")],
+        oracle_env.command("perl", ["perl", os.path.join(HERE, "perl_match.pl")]),
         input="\n".join(lines) + "\n", capture_output=True, text=True)
-    return finished.stdout.strip("\n").split("\n"), finished.stderr.strip()
+    return (finished.stdout.strip("\n").split("\n"),
+            oracle_env.reference_stderr(finished.stderr).strip())
 
 
 def main(argv):

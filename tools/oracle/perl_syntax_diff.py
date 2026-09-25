@@ -34,6 +34,8 @@ import os
 import subprocess
 import sys
 
+import oracle_env
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 
@@ -166,7 +168,7 @@ def main(argv):
         return 2
 
     mine = ask([ours, "perl"], CONSTRUCTS)
-    yours = ask(["perl", theirs], CONSTRUCTS)
+    yours = ask(oracle_env.command("perl", ["perl", theirs]), CONSTRUCTS)
     if len(mine) != len(CONSTRUCTS) or len(yours) != len(CONSTRUCTS):
         sys.stderr.write("a driver answered %d and %d of %d requests\n"
                          % (len(mine), len(yours), len(CONSTRUCTS)))

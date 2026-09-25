@@ -35,6 +35,8 @@ import os
 import subprocess
 import sys
 
+import oracle_env
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 
@@ -85,7 +87,8 @@ def ask_library(driver, values):
 def ask_perl(values):
     """The code points perl gives each value, and every numeric code point."""
     names = [value.split("=", 1)[1] for value in values]
-    finished = subprocess.run(["perl", "-e", PERL_SOURCE],
+    finished = subprocess.run(
+        oracle_env.command("perl", ["perl", "-e", PERL_SOURCE]),
         input="".join(name + "\n" for name in names),
         capture_output=True, text=True, check=True)
 
@@ -129,11 +132,14 @@ def main(argv):
         sys.stderr.write(
             "the grx_properties tool was not found; run `make tools` first\n")
         return 2
-    try:
-        subprocess.run(["perl", "-e", "1"], capture_output=True, check=True)
-    except (OSError, subprocess.CalledProcessError):
-        sys.stderr.write("numeric_property_diff: skipped (no perl)\n")
-        return 0
+    # No `command -v perl` here, and nothing that turns a missing reference
+    # into `return 0`. The reference is resolved and versioned by
+    # tools/oracle/oracle_run.py before this runs, and `oracle_env.command`
+    # raises rather than falling back if it cannot be reached - so a run that
+    # gets this far has a perl whose version has been checked against
+    # tools/oracle/containers/IMAGES. What used to be here asked whether
+    # something called perl was on PATH and exited 0 when it was not, which
+    # is the shape CONTAINERS.md section 2.5 is about.
 
     values = subprocess.run([driver, "--list-numeric"], capture_output=True,
         text=True, check=True).stdout.split()

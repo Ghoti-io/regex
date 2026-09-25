@@ -31,6 +31,8 @@ import random
 import subprocess
 import sys
 
+import oracle_env
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 
@@ -177,7 +179,7 @@ def main(argv):
 
     mine = ask([ours, "pcre"], subjects, pattern)
     theirs = ask([pcre2], subjects, pattern)
-    yours = ask(["perl", perl], subjects, pattern)
+    yours = ask(oracle_env.command("perl", ["perl", perl]), subjects, pattern)
     if len({len(mine), len(theirs), len(yours), len(subjects)}) != 1:
         sys.stderr.write("a driver answered %d, %d and %d of %d requests\n"
                          % (len(mine), len(theirs), len(yours), len(subjects)))

@@ -49,6 +49,70 @@ vectors are committed; `make test` never needs an oracle. A CI job with the
 oracles installed regenerates and fails on a diff, which is how an oracle
 upgrade is noticed rather than absorbed.
 
+### 2.1 Where a reference comes from
+
+A reference runs in a **pinned container image**, not on whatever this machine
+happens to have installed. The pins are
+[`tools/oracle/containers/IMAGES`](../tools/oracle/containers/IMAGES), one
+line per reference; `tools/oracle/oracle_env.py` is the only place a reference
+is spelled, and every gate goes through `tools/oracle/oracle_run.py`, which
+resolves the reference and asks its version *before* the gate runs and prints
+what answered above the gate's numbers:
+
+```
+$ make check-oracle-perl-syntax
+oracle(container): perl perl v5.40.1
+perl-syntax: 183 constructs, 1 known deviations, 0 stale entries, 0 disagreements
+```
+
+The argument for it is in [notes/suite/CONTAINERS.md], and this library
+supplied the finding that pays for it: `check-oracle-vim` took `&encoding`
+from `$LANG`, which no file here recorded, and answered **1,855 of 50,980
+rows** wrongly at its own defaults on a shell with `LANG=C`. The environment
+was invisible until it had to be written down. The same argument applies to
+every row of the table above that this machine cannot run at all - OpenJDK,
+Ruby, .NET, Go - which stay unasked only because installing them is a
+decision about this laptop rather than about the library.
+
+Four things it is built around:
+
+- **No silent fallback.** `GHOTI_ORACLE_MODE` is `container` (the default) or
+  `host`. There is deliberately no "try the container, fall back to the host":
+  a gate whose reference is not the one it names is worse than one that did
+  not run, because it prints the same green line.
+- **No `command -v`.** That asks whether something of the right name is on
+  `PATH`, which is not the question; the question is whether this gate can
+  reach the reference it names, and the only honest way to answer it is to
+  reach. A missing reference is an error naming what is missing, not a
+  `skipped` line and an exit status of 0.
+- **The pin names what decides an answer**, which for a reference carrying
+  bundled Unicode tables is the data version rather than the release. Two
+  pins on one reference are spelled `perl` and `perl-next`, and
+  `GHOTI_ORACLE_ALIAS=perl=perl-next` asks the second one the first's
+  questions - which is how the 46 boundary rows excluded for perl's UCD 15.0.0
+  can be measured against a perl that has the rules.
+- **Paths mean the same on both sides.** The repository is bind-mounted at its
+  own path, read-only, with `--network none`. A tool that needs to write says
+  so explicitly, so one that forgets fails on a missing path rather than
+  writing where nobody looks.
+
+| command | what it is for |
+| --- | --- |
+| `make oracle-version` | resolve every pin and print what would answer |
+| `make oracle-images` | build the references that have no official image |
+| `make oracle-clean` | remove this library's built-here images (stock ones are left) |
+| `make check-oracles ORACLE_MODE=host` | this machine's own tools, printed as `host, unpinned` with the pin named beside it |
+| `make check-oracles ORACLE_REQUIRED=0` | decline loudly instead of failing |
+
+`make check-oracle-env` is the one oracle target inside `make test`, and the
+difference is that it consults no reference: it checks that `IMAGES` parses
+into the fields its reader expects, that every pin has a way of being asked
+its version, and that the filter which keeps the container engine's own
+chatter out of a generated corpus header still fires. Each of its checks is
+paired with a planted violation it must catch.
+
+[notes/suite/CONTAINERS.md]: the workspace's notes, outside this repository.
+
 ## 3. The vector format
 
 `tests/data/vectors/<dialect>/<source>.rxt`. Line-oriented, records

@@ -42,6 +42,8 @@ import random
 import subprocess
 import sys
 
+import oracle_env
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 
@@ -138,7 +140,8 @@ def ask_perl(rows):
     lines = "".join("%s\t%s\t%s\n" % (
         flags, pattern.encode("utf-8").hex(), subject.encode("utf-8").hex())
         for flags, pattern, subject in rows)
-    finished = subprocess.run(["perl", script, "all"], input=lines,
+    finished = subprocess.run(
+        oracle_env.command("perl", ["perl", script, "all"]), input=lines,
         capture_output=True, text=True, check=True)
     return finished.stdout.splitlines()
 

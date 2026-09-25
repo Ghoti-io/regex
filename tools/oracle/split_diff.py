@@ -65,6 +65,8 @@ import random
 import subprocess
 import sys
 
+import oracle_env
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 
@@ -185,7 +187,8 @@ def ask_perl(rows):
     # Without it the harness dies decoding a warning about the very input it
     # was built to send.
     finished = subprocess.run(
-        ["perl", os.path.join(ROOT, "tools", "corpus", "perl_split.pl")],
+        oracle_env.command("perl",
+            ["perl", os.path.join(ROOT, "tools", "corpus", "perl_split.pl")]),
         input=wire(rows), capture_output=True, text=True, check=True,
         errors="replace")
     return [parse_ours(line) for line in finished.stdout.splitlines()]

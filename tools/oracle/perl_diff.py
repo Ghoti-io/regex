@@ -38,6 +38,8 @@ import re
 import subprocess
 import sys
 
+import oracle_env
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 
@@ -533,7 +535,7 @@ def reference_command(dialect):
             print("%s: skipped (tools/corpus/perl_match.pl is missing)"
                   % dialect)
             return None
-        return ["perl", script]
+        return oracle_env.command("perl", ["perl", script])
     driver = find("pcre2_match")
     if not driver:
         # Not an error. The driver needs pcre2's header, which arrives with

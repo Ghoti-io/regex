@@ -1,0 +1,70 @@
+# The oracle references, pinned.
+#
+# One line per reference, tab-separated: <name> <image-ref> <version> <what it
+# answers>. The last field is prose, which is why the separator is a tab.
+#
+# **This file is the other half of `tools/corpus/VERSIONS`, and the two pin
+# opposite directions.** That file pins the *corpora* - which commit of
+# test262, which release of perl's `re_tests` - and it is honest about pinning
+# them to whatever Debian 13 gives: "from the release that matches the
+# pcre2test on this machine", "the ref matches the glibc on this machine".
+# This file pins the *reference that answers*, so that the two can be moved
+# deliberately and together. A corpus imported from one version and answered
+# by another measures the gap between them and reports it as a defect here.
+#
+# Two kinds of pin and they are not the same guarantee (CONTAINERS.md section
+# 2.6). A stock image is pinned by digest and the digest is the whole
+# guarantee: a tag can be moved under you and a digest cannot, so a green run
+# names a set of bytes rather than a set of names. An image **built here**
+# cannot be - two builds of one Dockerfile are not two copies of one image -
+# so what is pinned instead is everything the build reads, and the run-time
+# version check is the real guarantee.
+#
+# The version field is what the reference must say it is when asked, and it
+# names **what decides an answer** rather than what the package is called.
+# For a reference carrying bundled Unicode tables that is the data version:
+# `tools/corpus/VERSIONS` records that vim, CPython and node were in daily use
+# here with no pinned record at all, answering 177,580 rows a run between
+# them, and that a reference vendoring its own tables carries a third version
+# independent of both this library's and the standard's.
+#
+# Raising a pin is deliberate, and is its own commit. A new reference version
+# is new answers, and a new answer that disagrees is a finding to triage
+# rather than a regression to fix - so containerising a reference and raising
+# it are two changes, and doing both at once means the next disagreement
+# cannot be attributed to either.
+
+# perl, for the Perl-family front end and for four tables it is the only
+# reference to. `GRX_SYNTAX_PERL` means "what perl does" rather than what a
+# document says, so this is a definition rather than a second opinion.
+#
+# **5.40.1 because that is where the corpus came from.** `tools/corpus/VERSIONS`
+# pins `perl v5.40.1` and `tests/data/vectors/perl/` was imported from that
+# release's `re_tests`; this pin and that one move together or not at all.
+# Debian 13 ships 5.40.1 too, so this entry changes no answer on this machine -
+# which is the point of landing it before the raise below.
+perl	docker.io/library/perl:5.40.1-slim@sha256:741d8a6d6e1aef546c29fb55173d6c7db1205f603e4d7b968186c7fc96b6126c	perl v5.40.1	Perl-family match and syntax, case-fold orbits, Numeric_Value, script runs, splitting and iteration
+
+# A second perl, not a replacement, and the payoff CONTAINERS.md section 2.3
+# names. 5.40.1 carries UCD 15.0.0 and these tables are 17.0.0, so three
+# segmentation rules exist here that this perl has never seen - GB9c (15.1),
+# LB15c (16) and LB21a's HH (17) - and **46 rows of
+# tests/data/vectors/perl/boundaries.rxt are excluded** for that reason, each
+# named in tools/corpus/make_boundary_vectors.py. 5.44.0 carries UCD 17.0.0
+# exactly, which is what retires them.
+#
+# Measured rather than assumed, through this image:
+#
+#   perl -e 'my @g = ("\x{915}\x{94D}\x{937}" =~ /(\X)/g); print scalar @g'
+#   # 5.40.1 -> 2     5.44.0 -> 1     (GB9c, Unicode 15.1)
+#
+# Debian 13 ships 5.40.1 and only one perl can be installed, so before this
+# file existed there was no way to ask the second one anything.
+#
+#   GHOTI_ORACLE_ALIAS=perl=perl-next make check-oracle-perl-syntax
+#
+# It is **not** the gating pin, and the reason is the corpus rather than the
+# release: raising the pin here without re-importing `re_tests` and
+# regenerating the boundary vectors would answer a 5.40.1 corpus with a 5.44.0
+# perl. What it is for is the reading between the two.
+perl-next	docker.io/library/perl:5.44.0-slim@sha256:76d5a0d6f19a3841668e44a67ecb680fc8cd8e3fac4388dd01f48750031bb524	perl v5.44.0	The same questions one UCD ahead - and past Perl/perl5#24577

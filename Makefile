@@ -421,7 +421,8 @@ TESTFLAGS := `PKG_CONFIG_PATH=$(PKG_CONFIG_LOOKUP_PATH) pkg-config --libs --cfla
 ALL_TEST_GATES := check-symbols check-layering check-aliasing \
 	check-unicode-tables check-dump-names check-readme-example \
 	check-diagnostics check-engine-equivalence check-json-schema-suite \
-	check-tables check-status-line check-corpus-seeds check-makefile-hash
+	check-tables check-status-line check-corpus-seeds check-makefile-hash \
+	check-oracle-env
 TEST_GATES ?= $(ALL_TEST_GATES)
 
 # What a gate that IS a python3 script does when there is no python3.
@@ -848,13 +849,13 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 
 # General commands
 .PHONY: check-oracle-soak
-.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-dump-names check-readme-example check-tables check-status-line check-corpus-seeds check-makefile-hash check-oracle-syntax check-oracle-match check-oracle-soak check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-perl-syntax check-oracle-script-runs check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
+.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-dump-names check-readme-example check-tables check-status-line check-corpus-seeds check-makefile-hash check-oracle-env check-oracle-syntax check-oracle-match check-oracle-soak check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-perl-syntax check-oracle-script-runs check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
 	check-oracle-properties check-oracle-numeric-properties \
 	check-oracle-folds \
 	check-vim-widths check-vim-classes \
 	check-oracle-string-properties check-oracle-posix check-oracle-sed \
 	check-oracle-exclusions check-oracle-determinism \
-	check-oracles \
+	check-oracles oracle-version oracle-images oracle-clean \
 	check-limits check-json-schema-suite vectors vectors-ecmascript \
 	vectors-pcre vectors-perl vectors-posix
 # Release build commands
@@ -943,6 +944,124 @@ $(BENCH_DIR)/glibc: tools/bench/regex_bench.c
 	@mkdir -p $(BENCH_DIR)
 	$(CC) $(CFLAGS) -DBENCH_GLIBC -o $@ $<
 
+
+####################################################################
+# Oracles: how a reference is reached, and which one
+####################################################################
+#
+# notes/suite/CONTAINERS.md. Every differential here used to reach for
+# whatever this machine had installed, guarded by `command -v`, and exited 0
+# when it found nothing - thirty-two sites across twenty-nine targets, so a
+# machine without perl got the same green as one that compared 177,580 rows.
+# `command -v vim` also answers the wrong question: it says whether something
+# called vim is on PATH, not whether the vim about to answer will read UTF-8
+# as written, which is CONTAINERS.md finding 1.1 and cost 1,855 wrong rows.
+#
+# The references now run in images pinned in tools/oracle/containers/IMAGES,
+# and every gate goes through tools/oracle/oracle_run.py, which resolves the
+# reference and asks its version *before* the gate runs and prints what
+# answered on the line above the gate's numbers.
+#
+# ORACLE_MODE decides where a reference runs.
+#
+#   container  (default) the pinned image
+#   host                 this machine's own tools, printed as `host, unpinned`
+#                        and with the pin it is not named beside it
+#
+# There is deliberately no fallback between the two. A gate that quietly drops
+# from the pinned reference to whatever is installed prints the same green
+# line for a weaker claim, which is the failure this whole directory exists to
+# prevent.
+#
+# ORACLE_REQUIRED is the fail-closed half, and it defaults to 1 here rather
+# than to 0 as it does in `chron`. The argument is the third of CONTAINERS.md
+# section 2.5's three questions - is there any way to demand the run where it
+# cannot skip - and for this library the answer falls out of where the gates
+# live: none of them is in `make test`, so `make check-oracle-perl` is a
+# command somebody typed on purpose. Softening it is one word:
+#
+#   make check-oracles ORACLE_REQUIRED=0    decline loudly, exit 0
+#   make check-oracles ORACLE_MODE=host     this machine's tools, unpinned
+ORACLE_MODE ?= container
+ORACLE_REQUIRED ?= 1
+GHOTI_CONTAINER_ENGINE ?= docker
+ORACLE_ENV := GHOTI_ORACLE_MODE=$(ORACLE_MODE) \
+	GHOTI_ORACLE_REQUIRED=$(ORACLE_REQUIRED) \
+	GHOTI_CONTAINER_ENGINE=$(GHOTI_CONTAINER_ENGINE)
+
+define run-oracle
+	@$(ORACLE_ENV) python3 tools/oracle/oracle_run.py $(1) -- $(2)
+endef
+
+oracle-version: ## Resolve every pin and print which reference would answer
+oracle-version:
+	@$(ORACLE_ENV) python3 tools/oracle/oracle_env.py
+
+# The naming convention, CONTAINERS.md section 6.1:
+#
+#   ghoti-<library>-oracle-<reference>:<version>   a library's oracle images
+#   ghoti-<purpose>:<base-or-version>              suite-wide toolchains
+#
+# Derived from $(PROJECT) rather than written out, so that the tag a build
+# applies and the prefix `oracle-clean` removes cannot drift apart. This
+# machine also carries home-assistant, espressif/idf, node-red and mosquitto
+# images; the prefix is how a reader of `docker images` tells which ones the
+# libraries put there, and more importantly which ones are not theirs.
+ORACLE_IMAGE_PREFIX := ghoti-$(PROJECT)-oracle-
+
+oracle-images: ## Build the oracle images that are built here rather than pulled
+# Two of the references have no official image. The tag comes out of IMAGES
+# rather than being repeated here, so the thing built and the thing looked for
+# cannot drift.
+#
+# The prefix is enforced where a violation is *created*. An image named
+# outside it is one `oracle-clean` would silently decline to remove, so the
+# two constraints have to agree or the cleanup quietly does nothing.
+oracle-images:
+	@for name in vim pcre2; do \
+		tag=$$(awk -F'\t' -v n="$$name" '$$1 == n {print $$2}' \
+			tools/oracle/containers/IMAGES); \
+		if [ -z "$$tag" ]; then \
+			printf "\033[0;31m### oracle-images: no pin for %s in IMAGES ###\033[0m\n" "$$name" >&2; \
+			exit 1; \
+		fi; \
+		case "$$tag" in \
+		*$(ORACLE_IMAGE_PREFIX)*) ;; \
+		*) printf "\033[0;31m### oracle-images: %s is outside the prefix ###\033[0m\n" "$$tag" >&2; \
+		   printf "\nIMAGES names it %s, which does not carry the\n" "$$tag" >&2; \
+		   printf "convention's prefix %s (CONTAINERS.md 6.1). A library that\n" "$(ORACLE_IMAGE_PREFIX)" >&2; \
+		   printf "names its image outside the prefix is one oracle-clean will\n" >&2; \
+		   printf "decline to remove, so this is refused here rather than\n" >&2; \
+		   printf "discovered later by a cleanup that does nothing.\n\n" >&2; \
+		   exit 1; ;; \
+		esac; \
+		printf "\n### Building the %s oracle image ###\n" "$$name"; \
+		$(GHOTI_CONTAINER_ENGINE) build -t "$$tag" \
+			tools/oracle/containers/$$name || exit 1; \
+	done
+
+# Only this library's own built-here images, and the guard enforces the
+# prefix rather than trusting the pattern: ORACLE_CLEAN_MATCH exists so a test
+# can *narrow* the selection, and widening it reaches nothing because the
+# recipe greps the convention's prefix regardless.
+ORACLE_CLEAN_MATCH ?= $(ORACLE_IMAGE_PREFIX)
+oracle-clean: ## Remove the oracle images built here for this library
+oracle-clean:
+	@found=$$($(GHOTI_CONTAINER_ENGINE) images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null \
+		| grep -F '$(ORACLE_CLEAN_MATCH)' \
+		| grep -E '^(localhost/)?$(ORACLE_IMAGE_PREFIX)' || true); \
+	if [ -z "$$found" ]; then \
+		printf "No %s* images are present.\n" "$(ORACLE_IMAGE_PREFIX)"; \
+	else \
+		for image in $$found; do \
+			printf "  removing %s\n" "$$image"; \
+			$(GHOTI_CONTAINER_ENGINE) rmi "$$image" >/dev/null || exit 1; \
+		done; \
+	fi; \
+	printf "\nThe stock images are left, deliberately: they are pinned by\n"; \
+	printf "digest in tools/oracle/containers/IMAGES, that digest is the whole\n"; \
+	printf "guarantee, and another project on this machine may be pinned to the\n"; \
+	printf "same bytes. Rebuild what this removed with \"make oracle-images\".\n"
 
 check-oracles: ## Run every differential check against the reference implementation
 check-oracles: check-oracle-syntax check-oracle-match check-oracle-properties \
@@ -1037,21 +1156,15 @@ check-oracle-properties: $(TOOLS)
 
 check-oracle-folds: ## Compare the case-fold orbits against perl
 check-oracle-folds: $(TOOLS)
-	@if ! command -v perl >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then \
-		printf "check-oracle-folds: skipped (no perl or no python3)\n"; \
-		exit 0; \
-	fi; \
-	python3 tools/oracle/fold_diff.py \
-		--driver $(APP_DIR)/tools/grx_folds$(EXE_EXTENSION)
+	@$(REQUIRE_PYTHON3)
+	$(call run-oracle,perl,python3 tools/oracle/fold_diff.py \
+		--driver $(APP_DIR)/tools/grx_folds$(EXE_EXTENSION))
 
 check-oracle-numeric-properties: ## Compare the Numeric_Value tables against perl
 check-oracle-numeric-properties: $(TOOLS)
-	@if ! command -v perl >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then \
-		printf "check-oracle-numeric-properties: skipped (no perl or no python3)\n"; \
-		exit 0; \
-	fi; \
-	python3 tools/oracle/numeric_property_diff.py \
-		--driver $(APP_DIR)/tools/grx_properties$(EXE_EXTENSION)
+	@$(REQUIRE_PYTHON3)
+	$(call run-oracle,perl,python3 tools/oracle/numeric_property_diff.py \
+		--driver $(APP_DIR)/tools/grx_properties$(EXE_EXTENSION))
 
 check-oracle-perl: ## Compare the Perl-family front ends against perl and pcre2
 # WP-20's missing half. The rates were measured against two imported corpora;
@@ -1074,11 +1187,8 @@ check-oracle-perl-syntax: ## Ask perl and this library whether each Perl-family 
 # families were accepted here and "not recognized" in perl until this
 # existed, each of them silently.
 check-oracle-perl-syntax: $(TOOLS)
-	@if ! command -v perl >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then \
-		printf "check-oracle-perl-syntax: skipped (no perl or no python3)\n"; \
-		exit 0; \
-	fi; \
-	python3 tools/oracle/perl_syntax_diff.py
+	@$(REQUIRE_PYTHON3)
+	$(call run-oracle,perl,python3 tools/oracle/perl_syntax_diff.py)
 
 check-oracle-script-runs: ## Compare `(*script_run:...)` against pcre2 and perl
 # A table rule needs a table of cases: every pair and triple over an
@@ -1281,6 +1391,17 @@ check-oracle-determinism:
 	fi; \
 	python3 tools/oracle/node_runner.py
 
+check-oracle-env: ## Fail if the oracle pin table or its reader has rotted
+# In TEST_GATES while every gate that consults an oracle is not, and the
+# difference is what the gate needs: no container engine, no reference, no
+# build, milliseconds. tools/oracle/containers/IMAGES is machine-read, so a
+# line that parses into the wrong fields or a pin nothing can ask its version
+# is a defect that no differential reports - a differential that cannot reach
+# its reference declines, which is the loud direction.
+check-oracle-env:
+	@$(REQUIRE_PYTHON3); \
+	python3 tools/oracle/check_oracle_env.py
+
 check-oracle-exclusions: ## Put each differential's exclusions their own controls
 # Every exclusion in this directory narrows a gate, and a gate narrowed too
 # far is green for the same reason a working one is. The generators cannot
@@ -1361,15 +1482,16 @@ vectors-posix: $(TOOLS)
 	python3 tools/corpus/import_rxspencer.py \
 		--driver $(APP_DIR)/tools/posix_match$(EXE_EXTENSION)
 
-vectors-perl: ## Re-import Perl's re_tests corpus (needs perl)
-	@if ! command -v perl >/dev/null 2>&1; then \
-		printf "vectors-perl: skipped (no perl)\n"; exit 0; \
-	fi; \
-	if [ ! -d third_party/perl ]; then \
+vectors-perl: ## Re-import Perl's re_tests corpus, answered by the pinned perl
+# The corpus and the perl that answers it are two pins and they move
+# together: tools/corpus/VERSIONS names the re_tests release and
+# tools/oracle/containers/IMAGES names the interpreter. Importing from one
+# release and answering with another measures the gap between them.
+	@if [ ! -d third_party/perl ]; then \
 		printf "vectors-perl: skipped (run tools/corpus/fetch.sh perl)\n"; \
 		exit 0; \
-	fi; \
-	python3 tools/corpus/import_re_tests.py
+	fi
+	$(call run-oracle,perl,python3 tools/corpus/import_re_tests.py)
 
 # Only the one tool, not $(TOOLS): this is a gate, and a gate that first
 # builds every oracle in the tree is one people learn to skip. It is also a

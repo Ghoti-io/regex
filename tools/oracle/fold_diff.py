@@ -34,6 +34,8 @@ import os
 import subprocess
 import sys
 
+import oracle_env
+
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # fc() is the full casefold, so grouping by it is the case-equivalence
@@ -56,7 +58,7 @@ for my $cp (0 .. 0x10FFFF) {
 
 def perl_partition():
     """Perl's fold groups, its multi-key members, and its unassigned set."""
-    done = subprocess.run(["perl", "-e", PERL_PROGRAM],
+    done = subprocess.run(oracle_env.command("perl", ["perl", "-e", PERL_PROGRAM]),
                           capture_output=True, text=True)
     if done.returncode != 0:
         sys.stderr.write("perl failed: %s\n" % done.stderr[:400])
