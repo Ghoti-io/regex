@@ -1,16 +1,44 @@
 # Unicode data
 
-**Status:** built, except the properties of strings (WP-12). The codec, the
-tables, both foldings, the four segmentation algorithms and both name
-resolvers are in
-`src/unicode`; `make check-unicode-tables` proves the committed tables are
-what the generator produces. Owned by [design.md](design.md) §5.
+**Status:** built, and **most of it now comes from
+[`ghoti.io-unicode`](https://github.com/coreyp1/unicode)** rather than from
+tables generated here. That is phase E of that library's own plan, taken on
+2026-09-25. Owned by [design.md](design.md) §5.
 
-Nothing else in the suite carries Unicode data - `text` parses JSON, YAML
-and CSV without character properties, `cutil` has none, and `ctang` uses
-ICU, which this library will not: ICU is a large dependency for a set of
-tables that a regex engine wants in its own shape. So this library owns its
-tables, and this page is the specification for them.
+The paragraph that used to stand here said "nothing else in the suite
+carries Unicode data ... so this library owns its tables". That was true
+when it was written and had stopped being true: `text` grew its own
+normalisation tables, `ctang` linked ICU for one grapheme iterator, and
+`font` would have been the fourth. One library now answers for all of them,
+and this one is a consumer of it.
+
+What comes from there: case folding and the simple case mappings, the fold
+orbits, the four segmentation algorithms, `\N{NAME}`, and script runs.
+
+What is still generated here, and why each one is:
+
+| | lines | why |
+| --- | --- | --- |
+| the property ranges | ~6,500 | not moved yet; `\p{...}` is the most-used construct here and its lookup carries this library's *dialect* spelling rules, strict and loose, which are not the Unicode library's question |
+| Numeric_Value sets | ~500 | `\p{nv=1/2}` needs the set of code points with a value; the Unicode library answers the value of a code point and has no set for it |
+| the properties of strings | 2,257 | ECMAScript `v` mode's `\p{RGI_Emoji}` and its six companions - 7,906 sequences of more than one code point. The Unicode library has no properties-of-strings API |
+| the reverse full fold | 104 entries | what folds *to* `"ss"`. There is no reverse-fold API, and the domain cannot be bounded by a property: all 104 fold to more than one code point and 23 are outside `Changes_When_Casefolded` |
+| the fold-orbit table | 2,994 | only so that the fold oracle and the unit tests can *enumerate* every orbit; the lookup no longer reads it |
+| the ECMAScript legacy map | 3,482 | not Unicode data at all - it is ES2015's `Canonicalize` for a non-`u` pattern, a compatibility rule, and design.md's phase E row names it as one of the two things that stay |
+| `display.c`, `vim_class.c` | 559 | vim's data, not the UCD's, and versioned by vim rather than by a Unicode release. See [dialects.md](dialects.md) §5.9 |
+
+The first five are asks on the Unicode library rather than reasons to keep
+generating tables here; `notes/regex/TODO.md` carries them with the figures
+that size each one.
+
+**`make check-unicode-agreement` is what keeps the overlap honest.** What is
+left here is a second copy of data the suite already has, which is the exact
+arrangement that puts two versions of one standard in one build. The gate
+compares all 457 property sets and all 144 Numeric_Value properties against
+the Unicode library, code point by code point, and prints both UCD versions
+so a reader can see they match rather than assume it. `make
+check-unicode-tables` still proves the committed tables are what the
+generator produces.
 
 ## 1. Which Unicode
 

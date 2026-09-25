@@ -103,7 +103,10 @@ where their templates part, `vim_substitute` is a `:s` over a string - the
 four magic levels, `\zs`, and a replacement that changes case - and the two
 `json_schema_*` programs are the `text` seam.
 
-The only dependency is [`ghoti.io-cutil`](../cutil), found through pkg-config
+The dependencies are [`ghoti.io-cutil`](../cutil) for the allocator and the
+growable array, and [`ghoti.io-unicode`](../unicode) for the Unicode
+Character Database and the algorithms over it - case folding, segmentation,
+`\N{NAME}` and script runs all read it. Both are found through pkg-config
 and nothing else. Build the suite into a local prefix first:
 
 ```bash

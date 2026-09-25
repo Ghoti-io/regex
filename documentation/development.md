@@ -30,8 +30,8 @@ src/compile/              IR to a program, and the compiled regex
 src/exec/                 The Pike VM, the backtracker and its bit-state form
 src/subst/                Replacement templates and splitting
 src/charclass/            Character-class sets and the canonical class table
-src/unicode/              UTF-8, case folding, property lookup
-src/unicode/tables/       Generated from the UCD; do not edit by hand
+src/unicode/              Property lookup, and the adapters onto ghoti.io-unicode
+src/unicode/tables/       What is still generated here; see unicode.md
 src/regex.c               Version entry points
 tests/unit/               Unit tests (gtest)
 tests/conformance/        The .rxt vector reader and its runner
