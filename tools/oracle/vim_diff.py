@@ -511,12 +511,29 @@ def holds_composing(subject):
     third_party/ucd/17.0.0/UnicodeData.txt on the boolean this function
     actually uses, and none disagrees.
 
-    The condition that would break it: a subject built from a character
-    whose combining class was assigned between 15.1.0 and the pinned
-    version. This is a filter and not a verdict, so a wrong answer does not
-    produce a wrong comparison - it moves a case into or out of an
-    exclusion, which is the quieter failure. Re-run the comparison when
-    adding a subject above U+FFFF or any mark.
+    Two failure modes, and the wider measurement closes only one of them.
+    notes/text/skew-direction.py (a peer's, run here and armed here with a
+    planted ccc on U+0301) compares the two releases directly over every
+    code point assigned in both: 289,394 of them, and the combining class
+    **changed for none**. So no value CPython holds is stale - the "it
+    changed under us" mode is ruled out as a standing property rather than
+    as a fact about the current subject list.
+
+    What that cannot cover is the other mode, because those code points are
+    excluded from it by construction: **46 code points are assigned at
+    17.0.0 and unknown to 15.1.0 while carrying a nonzero combining class**
+    (U+0897, U+1ACF..U+1AFF and others). For one of those, combining()
+    returns 0 because CPython has never heard of it, not because it
+    disagrees - and holds_composing() would answer "nothing composing here"
+    when there is.
+
+    None of this file's 127 characters is one of the 46; that was checked,
+    not assumed. So the condition is now a specific set rather than a
+    vague one: do not build a subject from a character assigned since
+    15.1.0 without re-running the comparison. This is a filter and not a
+    verdict, so the cost of being wrong is a case moving into or out of an
+    exclusion rather than a wrong answer - which is why it still reads
+    unicodedata rather than taking a hard UCD dependency.
     """
     return any(unicodedata.combining(c) for c in subject[1:])
 
