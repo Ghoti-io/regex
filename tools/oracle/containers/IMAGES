@@ -220,3 +220,34 @@ sed	localhost/ghoti-regex-oracle-posix:deb13	sed (GNU sed) 4.9	The POSIX and GNU
 # probe asks it whether a line matches, which is all `grep -c` can answer, and
 # that is why it is a probe column rather than a differential.
 grep	localhost/ghoti-regex-oracle-posix:deb13	grep (GNU grep) 3.11	Whether a line matches, for the gnu-ere probe column
+
+# A second CPython, not a replacement, and the same shape as `perl-next`:
+#
+#   GHOTI_ORACLE_ALIAS=python=python-next make check-oracle-python
+#
+# **It is not the gating pin, and the reason is what it reports.** 3.14
+# changed two rules this library's `python` dialect still reads the 3.13 way,
+# and both are gaps rather than deviations - work not done, recorded in
+# documentation/dialects.md section 6:
+#
+#   \z   accepted as the preferred spelling of \Z, new in 3.14. 3.13 refuses
+#        it and so does this library. 148 rows of check-oracle-python.
+#   \B   matches at position 0 of an empty subject, changed in 3.14. perl,
+#        pcre2 and V8 have always said match and so does this library in
+#        every dialect *except* `python`, where it follows 3.13's no-match.
+#        17 rows of check-oracle-python, 37 of check-oracle-split and 1 of
+#        check-oracle-replace.
+#
+# Moving the gate to 3.14 is a decision about what `GRX_SYNTAX_PYTHON` means
+# rather than a pin bump, which is why it is not taken here. What this pin is
+# for is that the decision can be *measured* - and python_diff.py establishes
+# each rule with a probe before it excuses anything, so the reading is a clean
+# 0 with two named counts rather than 165 rows to sort by hand.
+#
+# 3.15.0rc2 carries UCD 17.0.0, an exact match with tools/unicode/UCD_VERSION,
+# and answers these two rules the same way 3.14 does. It is not pinned here:
+# a release candidate is not a pin to gate on, and unlike `unicode` - where
+# the UCD *is* the subject - this differential's exposure to the UCD is a
+# property of its eighteen subject characters, which tools/corpus/VERSIONS
+# measures. When 3.15 is released this entry moves to it.
+python-next	docker.io/library/python:3.14-slim@sha256:7bf6c3111fe094f8ee1a1cbcdc63c4cfb345b0e3df42d5aa9a90b3b4b022ab6d	python 3.14.7, UCD 16.0.0	The same questions one CPython ahead

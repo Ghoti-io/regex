@@ -222,6 +222,69 @@ def byte_span(subject, span):
     return start, end
 
 
+# Two rules CPython changed in 3.14 that this library's `python` dialect still
+# reads the 3.13 way. Both are gaps - work not done - rather than deviations,
+# and documentation/dialects.md section 6 carries them.
+#
+#   \z        accepted as the preferred spelling of \Z. 3.13 refuses it and
+#             so does this library, which is why the gate was green against
+#             the older pin.
+#   \B        matches at position 0 of an empty subject. 3.13 says no match;
+#             perl, pcre2 and V8 all say match, and so does this library in
+#             every dialect except `python`, where it follows 3.13.
+#
+# **Each is established by a probe before it is used to excuse anything.** The
+# probe asks both sides the minimal case and switches the exclusion on only
+# where the reference does the new thing and this library does the old one -
+# so a CPython that changed its mind back, or a library that caught up, turns
+# the exclusion off and the rows become disagreements again. An exclusion
+# keyed to a version number would go stale in silence; one keyed to a
+# measurement cannot.
+RULE_PROBES = {
+    r"\z": (("", r"a\z", "a"), "compile", None),
+    r"\B on an empty subject": (("", r"\B", ""), "nomatch", "match 0:0"),
+}
+
+
+def rules_in_force(ours_command):
+    """Which of the 3.14 rules this run is actually seeing, measured."""
+    cases = [case for case, _, _ in RULE_PROBES.values()]
+    theirs = ask_python(cases)
+    mine = [normalise_ours(line) for line in ask_ours(ours_command, cases)]
+    if len(theirs) != len(cases) or len(mine) != len(cases):
+        return set()
+    live = set()
+    for name, (_, expect_ours, expect_theirs) in zip(RULE_PROBES,
+            RULE_PROBES.values()):
+        index = list(RULE_PROBES).index(name)
+        if mine[index] != expect_ours:
+            continue
+        if expect_theirs is None:
+            if theirs[index] != expect_ours:
+                live.add(name)
+        elif theirs[index] == expect_theirs:
+            live.add(name)
+    return live
+
+
+def attributable(rule, case, them, us):
+    """Whether this row is the named rule and not something beside it."""
+    flags, pattern, subject = case
+    if rule == r"\z":
+        # We refused the pattern; the reference did not; the pattern holds
+        # the escape. Anything else that made us refuse is still a
+        # disagreement, which is what keeps GRX_DIAG_INVALID_ESCAPE from
+        # becoming a licence for every escape this library has not built.
+        return us == "compile" and them != "compile" and r"\z" in pattern
+    if rule == r"\B on an empty subject":
+        # Only the empty subject, and only where the reference matched at 0
+        # and we did not. A `\B` row over a non-empty subject is a different
+        # question and the two agree on it.
+        return (subject == "" and r"\B" in pattern
+                and us == "nomatch" and them.startswith("match 0:0"))
+    return False
+
+
 def reference_version():
     """What the CPython that answers says it is, release and UCD both."""
     finished = subprocess.run(python_match.command("--version"),
@@ -317,10 +380,18 @@ def main():
             % (len(mine), len(cases)))
         return 2
 
+    live = rules_in_force([ours, "python"])
+    excused = dict.fromkeys(RULE_PROBES, 0)
     disagreements = []
     for case, them, us in zip(cases, theirs, mine):
-        if trim_unset(them) != trim_unset(us):
-            disagreements.append((case, them, us))
+        if trim_unset(them) == trim_unset(us):
+            continue
+        rule = next((name for name in live
+                     if attributable(name, case, them, us)), None)
+        if rule:
+            excused[rule] += 1
+            continue
+        disagreements.append((case, them, us))
 
     # What the reference actually answered, because "0 disagreements" over
     # rows the oracle refused outright would be a gate agreeing about
@@ -351,6 +422,11 @@ def main():
     # make impossible.
     print("python_diff: reference re from %s (our tables: UCD %s)"
         % (reference_version(), UCD_VERSION))
+    if live:
+        print("python_diff: %s"
+            % ", ".join("%d rows are %s, a rule this reference has and this "
+                        "library has not built" % (excused[name], name)
+                        for name in sorted(live)))
     print("python_diff: %d rows (%s), %d disagreements"
         % (len(cases), shape, len(disagreements)))
     for (flags, pattern, subject), them, us in disagreements[:args.examples]:

@@ -31,6 +31,7 @@ sys.path.insert(0, HERE)
 import iterate_diff
 import perl_diff
 import posix_diff
+import python_diff
 import replace_diff
 import script_run_diff
 import syntax_diff
@@ -616,6 +617,51 @@ block("syntax_diff.neutralise",
      (r"(a)|(b)", r"(a)|(b)"), True),
     ("distinct names are left alone",
      (r"(?<n>a)|(?<m>b)", r"(?<n>a)|(?<m>b)"), True),
+])
+
+
+# --------------------------------------------------------------------
+# Python: the two rules CPython 3.14 has and this library has not built.
+# --------------------------------------------------------------------
+# python_diff establishes each rule with a probe before it excuses anything,
+# so what these control is the *attribution* - which rows the rule may be used
+# to explain once it is known to be in force.
+#
+# The probe half was exercised directly rather than here, because it takes a
+# reference: under the 3.14 pin both rules report in force and under 3.13
+# neither does, so the exclusions are inert at the gating pin as a measured
+# fact rather than an assertion.
+#
+# Worth writing down about the corpus: at seed 1 *every* row where this
+# library refuses a pattern 3.14 accepts happens to hold `\z`, so widening the
+# predicate to drop the `\z` test changes no count. The narrowing is therefore
+# controlled here and only here - a run of the differential cannot tell the
+# two predicates apart, which is exactly the case this file exists for.
+block("python_diff.attributable",
+    lambda rule, case, them, us: python_diff.attributable(rule, case, them, us),
+    [
+    ("a pattern holding \\z that we refuse and the reference accepts",
+     (r"\z", ("", r"a\z", "a"), "nomatch", "compile"), True),
+    ("the same shape without \\z is some other escape we have not built",
+     (r"\z", ("", r"a\Q", "a"), "nomatch", "compile"), False),
+    ("a \\z pattern both sides refuse",
+     (r"\z", ("", r"a\z", "a"), "compile", "compile"), False),
+    ("a \\z pattern we accept",
+     (r"\z", ("", r"a\z", "a"), "nomatch", "nomatch"), False),
+    ("\\B over the empty subject, the reference matching at 0",
+     (r"\B on an empty subject", ("", r"\B", ""), "match 0:0", "nomatch"),
+     True),
+    ("\\B over a subject that is not empty is a different question",
+     (r"\B on an empty subject", ("", r"\B", "ab"), "match 0:0", "nomatch"),
+     False),
+    ("an empty subject with no \\B in the pattern",
+     (r"\B on an empty subject", ("", r"a*", ""), "match 0:0", "nomatch"),
+     False),
+    ("\\B over the empty subject where the reference did not match",
+     (r"\B on an empty subject", ("", r"\B", ""), "nomatch", "nomatch"),
+     False),
+    ("a rule name nothing knows",
+     ("nosuch", ("", r"\B", ""), "match 0:0", "nomatch"), False),
 ])
 
 
