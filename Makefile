@@ -1687,8 +1687,21 @@ check-unicode-tables: ## Fail if the committed Unicode tables are not what the g
 		exit 1; \
 	fi; \
 	if [ ! -d "$(UCD_DIR)" ]; then \
-		printf "check-unicode-tables: generator tests pass; table diff skipped (no $(UCD_DIR); run tools/unicode/fetch.sh)\n"; \
-		exit 0; \
+		printf "\033[0;31m\n\#\#\# check-unicode-tables: the UCD is not here \#\#\#\033[0m\n" >&2; \
+		printf "\n%s\n" "$(UCD_DIR)" >&2; \
+		printf "\nThe UCD is not committed - it is somebody else's, and a copy here\n" >&2; \
+		printf "would stop being what everyone else is measured against. The\n" >&2; \
+		printf "version is pinned instead, so fetching is reproducible:\n\n" >&2; \
+		printf "  tools/unicode/fetch.sh\n\n" >&2; \
+		printf "Without it the generator's own tests still ran and passed, but\n" >&2; \
+		printf "the table diff - which is what this gate is for - compared\n" >&2; \
+		printf "nothing. This used to print \"skipped\" and exit 0, so on every\n" >&2; \
+		printf "fresh clone the committed tables went unchecked and the suite\n" >&2; \
+		printf "was green either way.\n\n" >&2; \
+		printf "If this machine genuinely cannot fetch it, drop the gate for the\n" >&2; \
+		printf "run, so that the choice is visible in the command:\n\n" >&2; \
+		printf "  make test TEST_GATES='\$$(filter-out check-unicode-tables,\$$(ALL_TEST_GATES))'\n\n" >&2; \
+		exit 1; \
 	fi; \
 	tmp=$$(mktemp -d) || exit 1; \
 	trap 'rm -rf "$$tmp"' EXIT; \

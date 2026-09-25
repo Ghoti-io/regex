@@ -51,8 +51,17 @@ def is_ignored(path):
 
 
 def main():
+    # These two are skips rather than failures, and the distinction is the
+    # point rather than a convenience. A gate may skip when the property it
+    # checks CANNOT EXIST here; it must fail when the property exists and the
+    # gate merely cannot see it. Without git there are no ignore semantics, so
+    # no seed can be swallowed and there is nothing to be wrong. Contrast the
+    # python3 and UCD preconditions elsewhere in this suite, which were skips
+    # until 2026-09-24: the tables they check can be wrong whether or not the
+    # tool is installed, so exiting 0 there was a green run that had compared
+    # nothing. Do not copy this shape to a gate of that kind.
     if not (ROOT / ".git").exists():
-        print("check-corpus-seeds: skipped (not a git checkout)")
+        print("check-corpus-seeds: skipped (no .git, so no ignore rules apply)")
         return 0
 
     try:
@@ -64,7 +73,7 @@ def main():
             check=True,
         )
     except (subprocess.CalledProcessError, FileNotFoundError):
-        print("check-corpus-seeds: skipped (no usable git)")
+        print("check-corpus-seeds: skipped (no usable git, so no ignore rules apply)")
         return 0
 
     harnesses = sorted(p.name[len("fuzz_"):-len(".cpp")]
