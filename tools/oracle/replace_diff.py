@@ -544,7 +544,6 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
     rejected = 0
     declined = 0
     deviation = 0
-    refused_here = 0
     lazy = 0
     defect = 0
 
@@ -603,14 +602,22 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
             # section 5.11 and counted here.
             lazy += 1
             continue
-        if us == "syntax" and perl_diff.library_deviation(
-                pattern, "ok", "compile"):
-            # A subroutine call to a group defined inside a non-atomic
-            # lookbehind, which this library refuses rather than answering
-            # backwards. perl_diff.py's predicate rather than a second copy
-            # of it; documentation/dialects.md section 6.
-            refused_here += 1
-            continue
+        # There was a branch here calling `perl_diff.library_deviation`, and
+        # that predicate was deleted on 2026-09-24 when both shapes it named
+        # were built - check_exclusions.py records the removal. This caller
+        # was missed, so the line has been an AttributeError waiting for a
+        # row to reach it ever since.
+        #
+        # Nothing reaches it against the pinned node: the branch fires only
+        # where this library refuses a pattern the reference accepts, and
+        # that count is 0. So it is deleted rather than repaired - there is
+        # nothing left for it to exclude, and a row of that shape is a
+        # disagreement, which is what `refused_here` printing 0 has been
+        # asserting all along.
+        #
+        # Seen to fire before it was removed, by pointing the gate at a newer
+        # V8: node 24 accepts `(?<n>a)|(?<n>b)` where node 22 refuses it, and
+        # that crashed here rather than being counted.
         compared += 1
         if us != them:
             disagreements.append((flags, pattern, subject, template, them, us))
@@ -739,12 +746,11 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
     print("%-11s %d rows, %d compared, %d the pattern was rejected, "
           "%d the reference declined, %d the surrogate-pair deviation, "
           "%d the template parsed up front, %d a known reference defect, "
-          "%d this library refuses on purpose, "
           "%d vim's two engines disagree, "
           "%d vim's two engines disagree and neither gives ours, "
           "%d disagreements"
           % (dialect + ":", len(rows), compared, rejected, declined,
-             deviation, lazy, defect, refused_here, split, len(both_axes),
+             deviation, lazy, defect, split, len(both_axes),
              len(disagreements)))
     if not rejected:
         sys.stderr.write(
