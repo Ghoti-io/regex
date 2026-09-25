@@ -27,6 +27,11 @@ import os
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "oracle"))
+import oracle_env
+
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
@@ -149,8 +154,15 @@ def main():
     payload = "".join(
         "i\t%s\t%s\n" % (p.encode("utf-8").hex(), s.encode("utf-8").hex())
         for p, s in table)
-    done = subprocess.run([driver], input=payload, capture_output=True,
-                          text=True, check=True)
+    # Through the pinned perl, not through the script's shebang. Running
+    # `perl_match.pl` as a program hands the interpreter choice to `#!`, so
+    # these three generators were reaching for /usr/bin/perl while every
+    # differential beside them had been converted - a whole class the first
+    # sweep missed, because a shebang-executed script has no "perl" in its
+    # argv to grep for. check_oracle_env.py sweeps for it now.
+    done = subprocess.run(
+        oracle_env.command("perl", ["perl", driver]), input=payload,
+        capture_output=True, text=True, check=True)
     answers = done.stdout.rstrip("\n").split("\n")
     if answers and answers[0].startswith("perl "):
         answers = answers[1:]

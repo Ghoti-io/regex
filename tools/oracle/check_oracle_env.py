@@ -174,6 +174,88 @@ def check_kept_stderr_is_filtered():
                      % (name, node.lineno))
 
 
+# Reference programs that must never be argv[0] of a subprocess here.
+#
+# A `.pl` or `.mjs` run as a program hands the interpreter choice to its
+# shebang, so `subprocess.run([script])` reaches whatever `/usr/bin/env perl`
+# finds - which is the unpinned host. Three corpus generators were doing
+# exactly that while every differential beside them had been converted, and
+# the first sweep missed all three: it grepped for `"perl"` as an argv token,
+# and a shebang-executed script has none.
+REFERENCE_SCRIPTS = ("perl_match.pl", "perl_split.pl", "node_match.mjs",
+                     "node_split.mjs", "node_replace.mjs", "node_syntax.mjs",
+                     "python_match.py", "sed_match.py")
+
+
+def check_no_shebang_execution():
+    """No reference script is run as a program anywhere under tools/.
+
+    The rule is about the *first* element of an argv: `["perl", script]` is
+    pinned because oracle_env decides which perl; `[script]` is not, whatever
+    the script's shebang says. Read as a syntax tree, because the call is
+    often split over lines and because a name in a comment or a docstring is
+    not a call - both of which a line-based sweep gets wrong, as this file
+    found once already.
+
+    **The variable has to be followed.** Every real site spells it
+
+        driver = os.path.join(ROOT, "tools", "corpus", "perl_match.pl")
+        subprocess.run([driver], ...)
+
+    so a sweep that only recognises a literal or a call in argv[0] sees a bare
+    `Name` and passes. The first version of this did exactly that and its
+    control did not fire - which is the only reason it was not shipped blind.
+    Assignments naming a reference script are collected per module first.
+    """
+    root = os.path.dirname(os.path.dirname(HERE))
+    for base, _dirs, files in os.walk(os.path.join(root, "tools")):
+        if "__pycache__" in base:
+            continue
+        for name in sorted(files):
+            if not name.endswith(".py"):
+                continue
+            path = os.path.join(base, name)
+            tree = ast.parse(open(path, encoding="utf-8").read())
+            _sweep_module(tree, os.path.relpath(path, root))
+
+
+def _sweep_module(tree, relative):
+    bound = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and _names_reference_script(node.value):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    bound.add(target.id)
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Call) and node.args):
+            continue
+        if not (isinstance(node.func, ast.Attribute)
+                and node.func.attr in ("run", "Popen", "check_output")):
+            continue
+        first = node.args[0]
+        if not (isinstance(first, ast.List) and first.elts):
+            continue
+        head = first.elts[0]
+        if (_names_reference_script(head)
+                or (isinstance(head, ast.Name) and head.id in bound)):
+            fail("%s:%d: a reference script is argv[0], so its shebang picks "
+                 "the interpreter" % (relative, node.lineno))
+
+
+def _names_reference_script(node):
+    """Whether this expression names one of the reference scripts."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return os.path.basename(node.value) in REFERENCE_SCRIPTS
+    if isinstance(node, ast.Call):
+        # os.path.join(..., "perl_match.pl")
+        for argument in node.args:
+            if (isinstance(argument, ast.Constant)
+                    and isinstance(argument.value, str)
+                    and argument.value in REFERENCE_SCRIPTS):
+                return True
+    return False
+
+
 def check_mode_is_closed():
     """An unknown GHOTI_ORACLE_MODE raises rather than picking one."""
     saved = oracle_env.MODE
@@ -195,6 +277,7 @@ def main():
     check_probe_fallback()
     check_reference_stderr()
     check_kept_stderr_is_filtered()
+    check_no_shebang_execution()
     check_mode_is_closed()
     if FAILURES:
         sys.stderr.write("\033[0;31m\n### The oracle pin table is wrong ###"
@@ -204,7 +287,8 @@ def main():
         return 1
     print("oracle pins: %d references, all askable; IMAGES parses; the "
           "stderr filter fires both ways and reaches all %d sites that keep "
-          "a reference's stderr." % (len(table), len(STDERR_KEEPERS)))
+          "a reference's stderr; no reference script is run by its shebang."
+          % (len(table), len(STDERR_KEEPERS)))
     return 0
 
 
