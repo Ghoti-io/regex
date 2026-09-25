@@ -1224,11 +1224,8 @@ check-oracle-python: ## Compare the Python front end against CPython's `re`
 # `[\d](a)\1` an invalid backreference in perl and pcre as well, and
 # GRX_LOOKBEHIND_FIXED was in the profile and read by nothing.
 check-oracle-python: $(TOOLS)
-	@if ! command -v python3 >/dev/null 2>&1; then \
-		printf "check-oracle-python: skipped (no python3)\n"; \
-		exit 0; \
-	fi; \
-	python3 tools/oracle/python_diff.py --strict
+	@$(REQUIRE_PYTHON3)
+	$(call run-oracle,python,python3 tools/oracle/python_diff.py --strict)
 
 check-oracle-vim: ## Compare the Vim front end against vim itself
 # One vim process for the whole run, not one per case: vim reads a file of
@@ -1270,8 +1267,8 @@ check-oracle-replace: ## Compare every built template grammar against its refere
 # engines disagree are put to `set re=1`, as that tool does.
 check-oracle-replace: $(TOOLS)
 	@$(REQUIRE_PYTHON3)
-	$(call run-oracle,node$(comma)vim,python3 tools/oracle/replace_diff.py \
-		--seed $(ORACLE_SEED))
+	$(call run-oracle,node$(comma)pcre2$(comma)python$(comma)vim,\
+		python3 tools/oracle/replace_diff.py --seed $(ORACLE_SEED))
 
 check-oracle-split: ## Compare grx_regex_split() against ECMAScript's and perl's
 # The last documented surface of the substitution API with no generator
@@ -1287,22 +1284,24 @@ check-oracle-split: ## Compare grx_regex_split() against ECMAScript's and perl's
 # not in ECMAScript, and perl's trailing-empty drop removes *elements* rather
 # than fields, an unset capture among them.
 check-oracle-split: $(TOOLS)
-	@if ! command -v node >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then \
-		printf "check-oracle-split: skipped (no node or no python3)\n"; \
-		exit 0; \
-	fi; \
-	python3 tools/oracle/split_diff.py --seed $(ORACLE_SEED)
-	@if ! command -v perl >/dev/null 2>&1; then \
-		printf "check-oracle-split: perl half skipped (no perl)\n"; \
-		exit 0; \
-	fi; \
-	python3 tools/oracle/split_diff.py --dialect perl --seed $(ORACLE_SEED)
+# One run-oracle per arm, each naming the reference that answers it, rather
+# than one line naming all three: a provenance line printed over an arm that
+# a different reference answered is the thing these lines exist to prevent.
+# The perl half also used to `exit 0` when perl was missing, which meant the
+# python half below it never ran either - a skip in the middle of a recipe
+# stops the recipe.
+	@$(REQUIRE_PYTHON3)
+	$(call run-oracle,node,python3 tools/oracle/split_diff.py \
+		--seed $(ORACLE_SEED))
+	$(call run-oracle,perl,python3 tools/oracle/split_diff.py --dialect perl \
+		--seed $(ORACLE_SEED))
 	@# Python's is a third rule and not a blend of the other two, so it needs
 	@# its own arm: the empty-subject and trailing-field halves are
 	@# ECMAScript's, `maxsplit` is perl's, and every match separates - which
 	@# neither of the others does. Six hand-written cases in tests/unit
 	@# agreed with `re` while 1,848 generated rows did not.
-	python3 tools/oracle/split_diff.py --dialect python --seed $(ORACLE_SEED)
+	$(call run-oracle,python,python3 tools/oracle/split_diff.py \
+		--dialect python --seed $(ORACLE_SEED))
 
 check-oracle-window: ## Compare the search window and its flags against pcre2
 # The six fields of GRX_SearchOptions that decide an answer - begin, end and

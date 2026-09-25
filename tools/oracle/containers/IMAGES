@@ -146,3 +146,29 @@ vim	localhost/ghoti-regex-oracle-vim:9.1.1244	Included patches: 1-1244	The Vim d
 # snapshot.debian.org is the durable answer; it is not worth the weight
 # before then.
 pcre2	localhost/ghoti-regex-oracle-pcre2:10.46	PCRE2 version 10.46	The PCRE dialect, the newline conventions, the callout trace and the search window
+
+# CPython, for the Python dialect - `re`, `re.split` and `re.sub`.
+#
+# **The one reference that used to run in the differential's own process**,
+# which is the shape that cannot be pinned at all: "the reference" was
+# whichever CPython ran the tool. tools/oracle/python_match.py puts `re`
+# behind the same batch protocol every other oracle here speaks, and the
+# speed argument that defended the old shape does not survive measurement -
+# what makes a differential slow is a process per *case*, not a process.
+# Measured over 120,000 cases: 1.16s in-process, 0.97s host subprocess, 1.89s
+# in a container, all three agreeing on all 120,000 answers.
+#
+# **The version field names the UCD as well as the release**, because `re`
+# reads `unicodedata`'s tables and this library's are 17.0.0. The gap has
+# teeth and the measurement is in tools/corpus/VERSIONS: **5,650 code points
+# have a different general category between 15.1.0 and 17.0.0**, and
+# python_diff's safety from that is a property of its subject list - 18
+# distinct characters, none of them one of the 5,650 - rather than of the
+# comparison. An added subject can lose it with nothing saying so, which is
+# why python_diff.py prints both versions on every run.
+#
+# 3.13.5 because that is the CPython tools/corpus/VERSIONS records and the one
+# every count in this gate was taken against. A newer one is new `re`
+# behaviour *and* a newer UCD at the same time, which is two readings in one
+# raise - so it is its own commit.
+python	docker.io/library/python:3.13.5-slim@sha256:4c2cf9917bd1cbacc5e9b07320025bdb7cdf2df7b0ceaccb55e9dd7e30987419	python 3.13.5, UCD 15.1.0	The Python dialect: `re`, `re.split` and `re.sub`

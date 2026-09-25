@@ -66,6 +66,7 @@ import subprocess
 import sys
 
 import oracle_env
+import python_match
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
@@ -151,33 +152,21 @@ def ask_library(driver, rows, dialect):
 
 
 def ask_python(rows):
-    """CPython's `re.split`, in grx_split's output shape.
+    """CPython's `re.split`, through the pinned interpreter.
 
-    In-process, like tools/oracle/python_diff.py and for the same reason.
-    `maxsplit` has no "absent" spelling - the parameter's default *is* zero
-    and zero means no limit - so a row with no limit and a row with a limit
-    of zero are the same question here, where they are opposite questions in
-    ECMAScript.
+    It ran in this process until 2026-09-25, for the reason python_diff.py
+    did, and it moved for the reason python_diff.py moved: the one reference
+    shape that cannot be pinned is the one that is an `import`. The driver
+    prints grx_split's own vocabulary, so `parse_ours` reads both sides.
+
+    The `maxsplit` asymmetry that made this arm worth having is unchanged and
+    now lives in the driver: the parameter's default *is* zero and zero means
+    no limit, so a row with no limit and a row with a limit of zero ask the
+    same question here and opposite ones in ECMAScript.
     """
-    import re as _re
-    out = []
-    for flags, pattern, subject, limit in rows:
-        bits = 0
-        for letter in flags:
-            bits |= {"i": _re.IGNORECASE, "m": _re.MULTILINE,
-                     "s": _re.DOTALL}.get(letter, 0)
-        try:
-            compiled = _re.compile(pattern, bits)
-        except Exception:
-            out.append("compile")
-            continue
-        try:
-            pieces = compiled.split(subject, 0 if limit is None else limit)
-        except Exception:
-            out.append("error")
-            continue
-        out.append(pieces)
-    return out
+    finished = subprocess.run(python_match.command("split"), input=wire(rows),
+        capture_output=True, text=True, check=True)
+    return [parse_ours(line) for line in finished.stdout.splitlines()]
 
 
 def ask_perl(rows):

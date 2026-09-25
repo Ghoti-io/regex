@@ -45,6 +45,7 @@ import sys
 import tempfile
 
 import pcre2_runner
+import python_match
 import vim_runner
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -268,40 +269,23 @@ def parse_driver(line):
 
 
 def ask_python(rows):
-    """CPython's `re.sub`, in the driver's output shape.
+    """CPython's `re.sub`, through the pinned interpreter.
 
-    In-process, for the same reason python_diff.py is. `re` parses the
-    template up front, the way this library does, so a bad template is
-    "syntax" whether or not the pattern matched - which is the one thing
-    that made the pcre arm of this file so hard to compare.
+    It ran in this process until 2026-09-25 and moved for the reason
+    python_diff.py moved. The driver prints grx_replace's own vocabulary, so
+    `parse_driver` reads both sides and the folding that used to happen here
+    happens once, where the call is made: `re` raises the same exception type
+    for a refused pattern and a refused template, so the two are told apart by
+    *where* the call failed - "compile" and "template" respectively, which are
+    the words the driver uses.
     """
-    import re as _re
-    out = []
-    for flags, pattern, subject, template in rows:
-        bits = 0
-        for letter in flags:
-            bits |= {"i": _re.IGNORECASE, "m": _re.MULTILINE,
-                     "s": _re.DOTALL}.get(letter, 0)
-        try:
-            compiled = _re.compile(pattern, bits)
-        except Exception:
-            # "syntax" is what parse_driver() calls a refused *pattern*, so
-            # that the harness's `rejected` counter sees it. A refused
-            # *template* is "template" below. `re` raises the same exception
-            # type for both, which is why the two have to be told apart here
-            # rather than from the message.
-            out.append("syntax")
-            continue
-        try:
-            out.append(compiled.sub(template, subject))
-        except Exception:
-            # The driver spells its template refusal "template"; `re` has one
-            # exception type for all of them. Folded to the driver's word so
-            # that a refusal can be compared as agreement rather than read as
-            # a disagreement about wording - the mistake posix_diff.py made
-            # with `compile 42` against `compile`.
-            out.append("template")
-    return out
+    lines = "".join("%s\t%s\t%s\t%s\n" % (
+        flags, pattern.encode("utf-8").hex(), subject.encode("utf-8").hex(),
+        template.encode("utf-8").hex())
+        for flags, pattern, subject, template in rows)
+    finished = subprocess.run(python_match.command("replace"), input=lines,
+        capture_output=True, text=True, check=True)
+    return [parse_driver(line) for line in finished.stdout.splitlines()]
 
 
 def ask_node(rows):

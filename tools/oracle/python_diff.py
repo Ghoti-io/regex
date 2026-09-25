@@ -32,18 +32,11 @@ import argparse
 import binascii
 import os
 import random
-import platform
-import re
-import unicodedata
 import subprocess
 import sys
-import warnings
 
-# A generated pattern may contain `[[`, which `re` warns about as a possible
-# nested set. It is a warning about the *pattern*, not about this library,
-# and the pattern is one the generator meant to produce - the comparison is
-# whether both sides read it the same way.
-warnings.filterwarnings("ignore", category=FutureWarning)
+import oracle_env
+import python_match
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
@@ -160,8 +153,6 @@ SUBJECTS = [
 # end has a bit for it.
 FLAGSETS = ["", "i", "m", "s", "im", "is", "ms", "ims"]
 
-PY_FLAGS = {"i": re.IGNORECASE, "m": re.MULTILINE, "s": re.DOTALL}
-
 
 def find(name):
     for platform in ("linux", "mac", "win64", "win32"):
@@ -196,48 +187,26 @@ def make_pattern(rng):
 
 
 def ask_python(cases):
-    """The reference, in this process.
+    """The reference, in the pinned image, through python_match.py.
 
-    Returns the same vocabulary grx_match prints, so the two are comparable
-    without a translation step on either side.
+    It used to run in *this* process - `import re` and call it - and the note
+    in the Makefile defended that on speed. The speed argument does not
+    survive measurement (see python_match.py), and the shape it defended is
+    the one that cannot be pinned at all: "the reference" was whichever
+    CPython ran this tool. Everything about the comparison is unchanged; the
+    vocabulary below is still grx_match's, because the driver prints it.
     """
-    out = []
-    compiled = {}
-    for flags, pattern, subject in cases:
-        key = (pattern, flags)
-        if key not in compiled:
-            bits = 0
-            for letter in flags:
-                bits |= PY_FLAGS.get(letter, 0)
-            try:
-                compiled[key] = re.compile(pattern, bits)
-            except Exception:
-                # Every way `re` refuses a pattern is one verdict here, for
-                # the same reason normalise_ours() folds the diagnostic away:
-                # the two sides name their errors differently and the
-                # question being asked is whether both refuse it.
-                compiled[key] = None
-            except RecursionError:
-                compiled[key] = None
-        rx = compiled[key]
-        if rx is None:
-            out.append("compile")
-            continue
-        try:
-            m = rx.search(subject)
-        except Exception:
-            out.append("error")
-            continue
-        if not m:
-            out.append("nomatch")
-            continue
-        fields = []
-        for i in range((rx.groups or 0) + 1):
-            span = m.span(i)
-            fields.append("-" if span == (-1, -1)
-                else "%d:%d" % byte_span(subject, span))
-        out.append("match " + " ".join(fields))
-    return out
+    lines = "".join("%s\t%s\t%s\n" % (flags,
+        binascii.hexlify(pattern.encode()).decode(),
+        binascii.hexlify(subject.encode()).decode())
+        for flags, pattern, subject in cases)
+    finished = subprocess.run(python_match.command(), input=lines,
+        capture_output=True, text=True)
+    if finished.returncode != 0:
+        sys.stderr.write("the python driver failed:\n%s\n"
+            % oracle_env.reference_stderr(finished.stderr).strip()[:600])
+        return []
+    return finished.stdout.splitlines()
 
 
 def byte_span(subject, span):
@@ -251,6 +220,13 @@ def byte_span(subject, span):
     start = len(subject[:span[0]].encode())
     end = len(subject[:span[1]].encode())
     return start, end
+
+
+def reference_version():
+    """What the CPython that answers says it is, release and UCD both."""
+    finished = subprocess.run(python_match.command("--version"),
+        capture_output=True, text=True)
+    return finished.stdout.strip() or "unknown"
 
 
 def ask_ours(command, cases):
@@ -367,9 +343,14 @@ def main():
     # this differential report a disagreement that is the reference's age
     # rather than a defect here. So the version is printed every run: a
     # denominator the reader can see beats a limitation recorded elsewhere.
-    print("python_diff: reference re from CPython %s, unicodedata UCD %s "
-        "(ours: %s)" % (platform.python_version(), unicodedata.unidata_version,
-        UCD_VERSION))
+    # Asked of the reference that answered, not of this process. Before the
+    # differential moved into an image the two were the same interpreter and
+    # the distinction did not exist; now printing `platform.python_version()`
+    # here would name the CPython that generated the cases while the answers
+    # came from another one, which is the exact reading this line exists to
+    # make impossible.
+    print("python_diff: reference re from %s (our tables: UCD %s)"
+        % (reference_version(), UCD_VERSION))
     print("python_diff: %d rows (%s), %d disagreements"
         % (len(cases), shape, len(disagreements)))
     for (flags, pattern, subject), them, us in disagreements[:args.examples]:
