@@ -52,6 +52,7 @@
 #include <ghoti.io/regex/macros.h>
 
 #include <ghoti.io/regex/core.h>
+#include <ghoti.io/unicode/script.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -794,9 +795,9 @@ static int read_backward(const Backtrack * bt, size_t position,
  *
  * One pass, because the rule cannot be decomposed: a sequence can fail
  * while every adjacent pair passes, so a window-at-a-time check over a long
- * span would answer a different question. `GRX_ScriptRunState` is what
- * makes one pass enough - three words carried across the span rather than
- * the span carried in a buffer.
+ * span would answer a different question. `GUNI_ScriptRun` is what makes
+ * one pass enough - a few words carried across the span rather than the
+ * span carried in a buffer.
  *
  * The code points examined are charged to `max_steps`. A script run inside
  * a loop is re-checked on every backtrack into it, so a span the engine
@@ -808,8 +809,8 @@ static int read_backward(const Backtrack * bt, size_t position,
  * instruction does there.
  */
 static int span_is_script_run(Backtrack * bt, size_t from, size_t to) {
-  GRX_ScriptRunState state;
-  grx_unicode_script_run_begin(&state);
+  GUNI_ScriptRun state;
+  guni_script_run_begin(&state);
 
   int ok = 1;
   size_t position = from;
@@ -825,7 +826,7 @@ static int span_is_script_run(Backtrack * bt, size_t from, size_t to) {
     }
     position += width;
     bt->steps++;
-    if (!grx_unicode_script_run_add(&state, codepoint)) {
+    if (!guni_script_run_add(&state, codepoint)) {
       // Charged in full before stopping, so that the cost of finding out is
       // counted whether the answer is yes or no.
       ok = 0;

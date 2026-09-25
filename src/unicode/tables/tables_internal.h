@@ -303,48 +303,6 @@ extern const uint32_t grx_unicode_name_offset[];
 extern const uint32_t grx_unicode_name_codepoint[];
 extern const size_t grx_unicode_name_count;
 
-/**
- * @brief The Script_Extensions set of every code point, as a bitmap.
- *
- * One row per distinct set, `grx_unicode_script_set_words` words of 64 bits
- * each, and `grx_unicode_script_ranges` says which row a code point takes -
- * sorted and non-overlapping, so the lookup is a binary search and the
- * `value` field is the row index rather than a property value.
- *
- * The sets carry UTS #39 section 5.1's **augmentation** already applied:
- * Han also names Japanese, Korean and HanBopomofo; Hiragana and Katakana
- * also name Japanese; Hangul also names Korean; Bopomofo also names
- * HanBopomofo. Those three are virtual scripts that exist nowhere in the
- * UCD and are appended after every real one, so a script's id still means
- * what it meant. With them applied per character, the whole of the script
- * run rule is one set intersection.
- *
- * Three set indices are named because the rule names them: a character
- * whose set is exactly Inherited is always accepted, one whose set is
- * exactly Common is accepted subject to the digit rule, and one whose set
- * is exactly Unknown can only appear in a run shorter than two characters.
- */
-#define GRX_UNICODE_SCRIPT_WORDS 3
-extern const uint64_t grx_unicode_script_sets[][GRX_UNICODE_SCRIPT_WORDS];
-extern const size_t grx_unicode_script_set_count;
-extern const size_t grx_unicode_script_set_words;
-extern const GRX_UnicodeBreakRange grx_unicode_script_ranges[];
-extern const size_t grx_unicode_script_range_count;
-extern const size_t grx_unicode_script_set_common;
-extern const size_t grx_unicode_script_set_inherited;
-extern const size_t grx_unicode_script_set_unknown;
-
-/**
- * @brief The first code point of each block of ten decimal digits.
- *
- * A script run's digits must all come from one set of ten adjacent
- * characters, so what the check needs is each set's zero. The generator
- * asserts that every Nd code point sits in a block of exactly ten whose
- * numeric values run 0 to 9, which is what makes a single sorted array
- * enough.
- */
-extern const uint32_t grx_unicode_digit_zeros[];
-extern const size_t grx_unicode_digit_zero_count;
 
 #ifdef __cplusplus
 }

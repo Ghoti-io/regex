@@ -361,6 +361,25 @@ endif
 endif
 INCLUDE += $(CUTIL_CFLAGS)
 
+# ghoti.io-unicode, for the Unicode Character Database and the algorithms
+# over it: `\p{...}`, `\N{...}`, `\b{...}`, `(*sr:...)` and case folding all
+# read it. Required, exactly as cutil is, and for the same reason - a
+# dependency that can be absent is a feature that can silently vanish.
+#
+# This library generated its own tables until 2026-09-25 and `text` generated
+# a second set and `ctang` linked ICU for a third. One Unicode, one UCD pin:
+# tools/unicode/UCD_VERSION and unicode's tools/ucd/UCD_VERSION must agree,
+# which ../../check-ucd-pins.sh is what checks across the suite.
+UNICODE_PC ?= ghoti.io-unicode$(BRANCH)
+UNICODE_CFLAGS := $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_LOOKUP_PATH) pkg-config --cflags $(UNICODE_PC) 2>/dev/null)
+UNICODE_LIBS := $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_LOOKUP_PATH) pkg-config --libs $(UNICODE_PC) 2>/dev/null)
+ifeq ($(strip $(UNICODE_CFLAGS)),)
+ifndef SKIP_DEP_CHECK
+$(error ghoti.io-unicode was not found by pkg-config. Run ./bootstrap.sh in the parent folder to build and install the suite into a local prefix, then pass the same PREFIX here - or point PKG_CONFIG_PATH at the directory holding its .pc file. There is deliberately no sibling-checkout fallback: a second resolution path that only in-tree builds exercise is one that silently rots.)
+endif
+endif
+INCLUDE += $(UNICODE_CFLAGS)
+
 # ghoti.io-text, for WP-11's JSON Schema seam. Nothing that ships links it:
 # it is needed by examples/json_schema_provider.c, which is the adapter, and
 # by tools/jsonschema, which runs JSON-Schema-Test-Suite through that
@@ -504,7 +523,7 @@ TEST_HELPER_OBJ := $(patsubst tests/%.cpp,$(OBJ_DIR)/tests/%.o,$(TEST_HELPER_SRC
 # --whole-archive because anything registering itself from a constructor is
 # otherwise dropped - a plain archive link only pulls in object files that
 # something references by name.
-REGEXLIBRARY := -Wl,--whole-archive $(APP_DIR)/$(STATIC_TARGET) -Wl,--no-whole-archive $(CUTIL_LIBS)
+REGEXLIBRARY := -Wl,--whole-archive $(APP_DIR)/$(STATIC_TARGET) -Wl,--no-whole-archive $(CUTIL_LIBS) $(UNICODE_LIBS)
 
 # Discover test sources and compute an executable name for each, as
 # "path|name" pairs. test_foo.cpp -> testFoo.
@@ -682,7 +701,7 @@ $(OBJ_DIR)/%.o: src/%.c $(FLAGS_STAMP) | $(LIBVER_GEN)
 $(APP_DIR)/$(TARGET): $(LIBOBJECTS)
 	@printf "\n### Compiling Regex Library ###\n"
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -shared -o $@ $^ $(LDFLAGS) $(CUTIL_LIBS) $(OS_SPECIFIC_LIBRARY_NAME_FLAG)
+	$(CXX) $(CXXFLAGS) -shared -o $@ $^ $(LDFLAGS) $(CUTIL_LIBS) $(UNICODE_LIBS) $(OS_SPECIFIC_LIBRARY_NAME_FLAG)
 
 ifeq ($(OS_NAME), Linux)
 	@ln -f -s $(TARGET) $(APP_DIR)/$(SO_NAME)
@@ -2366,7 +2385,7 @@ LDCONF_INSTALL_PATH ?= /etc/ld.so.conf.d
 # What goes in the .pc Requires: field. Built from the same variables the
 # compile uses, so a dependency on another branch cannot be named one way for
 # the build and another way for consumers.
-PC_REQUIRES := $(CUTIL_PC)
+PC_REQUIRES := $(CUTIL_PC) $(UNICODE_PC)
 
 # Where this project's own .pc file is installed.
 PKGCONFIG_INSTALL_PATH ?= $(PC_INSTALL_PATH)
