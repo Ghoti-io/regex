@@ -107,6 +107,30 @@ node	docker.io/library/node:24-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea4195
 # check-vim-classes and check-vim-widths exist - they compare 1.1M code points
 # against vim itself rather than against a number it does not state - and it
 # is why "which vim" is the whole question for them.
+# **Not raised to 9.2, and the reason is measured rather than cautious.** vim
+# is on 9.2.1129 today, a minor release and 1,129 patches ahead. Built and
+# asked on 2026-09-25:
+#
+#   check-vim-widths     1,112,062 code points, **0 disagreements**
+#   check-oracle-vim     66,580 rows, unchanged
+#   check-vim-classes    **48 disagreements**, and they are one block:
+#                        U+2070..U+209F, Superscripts and Subscripts, which
+#                        9.1 puts in class 1 (punctuation) and 9.2 gives a
+#                        class of its own - `charclass()` returns the code
+#                        point itself for those, the way it does for CJK.
+#
+# So raising this pin is not a pin bump: it means regenerating
+# `src/unicode/vim_class.c`, which changes what `\<`, `\>` and `\k` mean for
+# 48 code points in the Vim dialect. That is a decision about the dialect and
+# a data change to the library, and it belongs in its own commit with its own
+# reading - the same line drawn for `python` above. notes/regex/TODO.md
+# carries it.
+#
+# Reproduce in two commands:
+#
+#   docker build --build-arg VIM_TAG=v9.2.1129 \
+#       -t localhost/ghoti-regex-oracle-vim:9.2.1129 tools/oracle/containers/vim
+#   ...then point the `vim` line here at it and run `make check-vim-classes`
 vim	localhost/ghoti-regex-oracle-vim:9.1.1244	Included patches: 1-1244	The Vim dialect, its nine character classes and its cell widths
 
 # pcre2, for the PCRE dialect - and, alone, for the newline conventions, the
