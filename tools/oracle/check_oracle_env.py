@@ -256,6 +256,93 @@ def _names_reference_script(node):
     return False
 
 
+#: How many cross-module references the sweep below found, for the summary.
+CROSS_REFERENCES = 0
+
+
+def check_cross_module_references():
+    """Every `module.attribute` between these tools resolves to something.
+
+    Python binds an attribute at *use* time, so `perl_diff.library_deviation`
+    on a branch nothing takes is a live AttributeError that no import, no
+    linter pass and no green gate will mention. Twice in two days:
+
+      replace_diff.py -> perl_diff.library_deviation    deleted the day
+                         before, reachable only when this library refuses a
+                         pattern the reference accepts, found by raising the
+                         node pin;
+      check_exclusions.py -> python_diff.attributable   deleted with the
+                         CPython 3.14 exclusions, and check-oracle-exclusions
+                         is not in ALL_TEST_GATES, so `make test` stayed
+                         green.
+
+    Both were one-line deletions whose callers were not swept. This is the
+    sweep, and it is static: for every tool here, every `name.attr` whose
+    `name` is another module in this directory must be defined at that
+    module's top level.
+
+    Conservative on purpose. A module is only checked when it is imported by
+    a plain `import x`; an attribute assigned anywhere at the top level
+    counts, including inside an `if` or a `for`, because a definition this
+    cannot see is a false positive and a false positive in a gate is worse
+    than a narrow one.
+    """
+    global CROSS_REFERENCES
+    modules = {}
+    for entry in sorted(os.listdir(HERE)):
+        if not entry.endswith(".py"):
+            continue
+        name = entry[:-3]
+        try:
+            modules[name] = ast.parse(open(os.path.join(HERE, entry),
+                encoding="utf-8").read())
+        except SyntaxError as why:
+            fail("%s does not parse: %s" % (entry, why))
+    if not modules:
+        fail("no python tools found to sweep, which cannot be right")
+        return
+
+    exported = {}
+    for name, tree in modules.items():
+        names = set()
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef,
+                    ast.ClassDef)):
+                names.add(node.name)
+            elif isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        names.add(target.id)
+            elif isinstance(node, ast.AnnAssign):
+                if isinstance(node.target, ast.Name):
+                    names.add(node.target.id)
+            elif isinstance(node, (ast.Import, ast.ImportFrom)):
+                for alias in node.names:
+                    names.add(alias.asname or alias.name.split(".")[0])
+        exported[name] = names
+
+    for name, tree in modules.items():
+        imported = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name in modules and not alias.asname:
+                        imported.add(alias.name)
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Attribute):
+                continue
+            if not isinstance(node.value, ast.Name):
+                continue
+            target = node.value.id
+            if target not in imported:
+                continue
+            CROSS_REFERENCES += 1
+            if node.attr not in exported[target]:
+                fail("%s.py line %d asks for %s.%s, which %s.py does not "
+                     "define" % (name, node.lineno, target, node.attr,
+                                 target))
+
+
 def check_mode_is_closed():
     """An unknown GHOTI_ORACLE_MODE raises rather than picking one."""
     saved = oracle_env.MODE
@@ -278,6 +365,7 @@ def main():
     check_reference_stderr()
     check_kept_stderr_is_filtered()
     check_no_shebang_execution()
+    check_cross_module_references()
     check_mode_is_closed()
     if FAILURES:
         sys.stderr.write("\033[0;31m\n### The oracle pin table is wrong ###"
@@ -287,8 +375,9 @@ def main():
         return 1
     print("oracle pins: %d references, all askable; IMAGES parses; the "
           "stderr filter fires both ways and reaches all %d sites that keep "
-          "a reference's stderr; no reference script is run by its shebang."
-          % (len(table), len(STDERR_KEEPERS)))
+          "a reference's stderr; no reference script is run by its shebang; "
+          "%d cross-module references all resolve."
+          % (len(table), len(STDERR_KEEPERS), CROSS_REFERENCES))
     return 0
 
 
