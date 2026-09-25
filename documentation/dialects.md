@@ -37,44 +37,50 @@ this design was written on; a CI job installs the rest
 
 | Dialect | Name | Pinned to | Reference | Oracle |
 | --- | --- | --- | --- | --- |
-| POSIX BRE | `posix-bre` | IEEE Std 1003.1-2024 | XBD chapter 9.3 | glibc 2.41 `regcomp()` without `REG_EXTENDED` (available); Spencer's test suite |
-| POSIX ERE | `posix-ere` | IEEE Std 1003.1-2024 | XBD chapter 9.4 | glibc `regcomp(REG_EXTENDED)` (available) |
-| GNU BRE | `gnu-bre` | GNU grep 3.11 / sed 4.9 | GNU grep manual, "Regular Expressions"; glibc manual, "GNU Regular Expression Compiling" | `grep -G`, `sed` (available) |
-| GNU ERE | `gnu-ere` | GNU grep 3.11 / sed 4.9 | same | `grep -E`, `sed -E` (available) |
+| POSIX BRE | `posix-bre` | IEEE Std 1003.1-2024 | XBD chapter 9.3 | glibc 2.41 `regcomp()` without `REG_EXTENDED` (pinned); Spencer's test suite |
+| POSIX ERE | `posix-ere` | IEEE Std 1003.1-2024 | XBD chapter 9.4 | glibc `regcomp(REG_EXTENDED)` (pinned) |
+| GNU BRE | `gnu-bre` | GNU grep 3.11 / sed 4.9 | GNU grep manual, "Regular Expressions"; glibc manual, "GNU Regular Expression Compiling" | `grep -G`, `sed` (pinned) |
+| GNU ERE | `gnu-ere` | GNU grep 3.11 / sed 4.9 | same | `grep -E`, `sed -E` (pinned) |
 | Perl | `perl` | Perl 5.44.0 | `perlre`, `perlrebackslash`, `perlrecharclass` for 5.44 | `perl` (pinned, `tools/oracle/containers/IMAGES`); `t/re/re_tests` |
-| PCRE2 | `pcre` | PCRE2 10.46 | `pcre2pattern(3)`, `pcre2syntax(3)` for 10.46 | `pcre2test` 10.46 (available); `testdata/testinput1`, `testinput2` |
+| PCRE2 | `pcre` | PCRE2 10.46 | `pcre2pattern(3)`, `pcre2syntax(3)` for 10.46 | `pcre2test` 10.46 (pinned); `testdata/testinput1`, `testinput2` |
 | ECMAScript | `ecmascript` | ECMA-262 16th edition (ES2025) | clause 22.2 *RegExp (Regular Expression) Objects*; Annex B.1.2 *Regular Expressions Patterns* | Node 24.21 / V8 13.6, Unicode 17.0 (pinned); test262 |
-| Python | `python` | CPython 3.13.5 | `re` module documentation, 3.13 | `python3` (available), **in-process**; no corpus - see below |
+| Python | `python` | CPython 3.14.7 | `re` module documentation, 3.14 | `python3` (pinned, `tools/oracle/containers/IMAGES`); no corpus - see below |
 | Java | `java` | JDK 21 | `java.util.regex.Pattern` javadoc, 21 | OpenJDK (install) |
 | .NET | `dotnet` | .NET 8 | "Regular Expression Language - Quick Reference"; "Regular expression options" | .NET SDK (install) |
 | Ruby | `ruby` | Ruby 3.3 / Onigmo 6.2 | Onigmo `doc/RE`; Ruby `Regexp` documentation | `ruby` (install) |
 | RE2 | `re2` | Go 1.22 `regexp` | RE2 "Syntax" wiki; Go `regexp/syntax` documentation | `go` (install) |
 | Rust | `rust` | `regex` 1.10 | `regex-syntax` documentation | `cargo` (install) |
 | Tcl | `tcl` | Tcl 8.6 | `re_syntax(n)` | `tclsh` (install) |
-| Vim | `vim` | Vim 9.1 | `:help pattern` | `vim -es` with `matchlist()` (available) |
+| Vim | `vim` | Vim 9.1, patches 1-1244 | `:help pattern` | `vim -es` with `matchlist()` (pinned) |
 | Emacs | `emacs` | GNU Emacs 29 | Elisp Reference Manual, "Regular Expressions" | `emacs --batch` (install) |
 
 ### 2.1 Python's oracle is the only one that is not a subprocess
 
-Every other reference here is driven by spawning it: `pcre2test`, `perl`,
-`node`, a `grep`, a small C program linked against glibc or musl. CPython's
-`re` is importable by the Python program that generates the cases, so a row
-costs a function call rather than a fork. `tools/oracle/python_diff.py` runs
-600,000 rows in under four seconds; the subprocess differentials manage tens
-of thousands in the same time.
+**`re` used to run in the differential's own process**, and this section
+used to defend that on speed: a row cost a function call rather than a fork,
+and 600,000 rows ran in under four seconds where the subprocess differentials
+managed tens of thousands. Both halves of that were true and neither
+survived being looked at.
 
-That is not a footnote about speed. Every defect WP-30 found after the first
-build came out of scaling the run up, and two of them were in code this
-dialect does not own - the prescan lost its group count after a class
-containing an escape, and `GRX_LOOKBEHIND_FIXED` was in the profile and read
-by nothing. Both had been reachable by the Perl-family differentials for as
-long as they had existed.
+The shape is the one reference that cannot be pinned at all: "the reference"
+was whichever CPython happened to run the tool, which on this machine is
+Debian's and is not the one named above. And the speed argument never
+applied - what makes a differential slow is a process per *case*, not a
+process. `tools/oracle/python_match.py` puts `re` behind the same batch
+protocol every other oracle here speaks, paying one fork per run. Measured
+over 120,000 cases: 1.16s in-process, 0.97s as a host subprocess, 1.89s in
+the container, all three agreeing on all 120,000 answers.
+
+What the in-process era did establish still stands, and it was not about
+speed: every defect WP-30 found after the first build came out of scaling
+the run up, and two of them were in code this dialect does not own - the
+prescan lost its group count after a class containing an escape, and
+`GRX_LOOKBEHIND_FIXED` was in the profile and read by nothing. Both had been
+reachable by the Perl-family differentials for as long as they had existed.
 
 **There is no Python corpus.** The plan named `Lib/test/re_tests.py`, which
-CPython removed and which Debian's `python3.13` does not ship in any case -
-`/usr/lib/python3.13/test/` holds `libregrtest` and nothing else. The
-generator is therefore the whole of the gate for this dialect, which is the
-arrangement `posix_diff.py`'s note recommends anyway.
+CPython removed. The generator is therefore the whole of the gate for this
+dialect, which is the arrangement `posix_diff.py`'s note recommends anyway.
 
 ## 3. Features: which constructs exist
 
@@ -147,7 +153,7 @@ references and worth recording now so nobody builds on the wrong row:
 - **Emacs** has no `\d`; digits are `[[:digit:]]` or `[0-9]`. It has no
   lookahead or lookbehind at all.
 - **Python** 3.11 added possessive quantifiers and atomic groups; the
-  scaffold row is right for 3.13.
+  scaffold row is right for 3.14.
 - **Python** has no POSIX classes and no `\p{}`; `[[:alpha:]]` is a class
   containing `[`, `:`, `a`, `l`, `p`, `h` and a stray `]`, with a
   `FutureWarning`.
@@ -470,7 +476,7 @@ Consequences the tests state:
 **Corrected by WP-03's probe.** An earlier version of this page put Perl in
 the `KEEP_LAST_SET` row and gave `((a)|b)+` as the example that shows it,
 with Perl reporting group 2 as `"a"`. Perl 5.40 reports it as **unset**, and
-so does `(?:(a)|b){2}` against `"ab"`. PCRE2 10.46 and Python 3.13 report
+so does `(?:(a)|b){2}` against `"ab"`. PCRE2 10.46 and Python 3.14.7 report
 `"a"`. The page had attributed the `(a*)*` difference - which is the
 empty-iteration axis - to the capture-reset axis as well, and the two are
 independent. `tests/data/probe/report.md` has the transcript.
@@ -872,16 +878,24 @@ hyphen is a sign, and is the one piece of punctuation loose matching must not
 drop. [unicode.md](unicode.md) §6.1 has the rule and where the values come
 from.
 
-**`\B` on an empty subject is Python's alone.** Position 0 of "" has no word
-character on either side, so it is not a word boundary and `\B` holds there -
-which is what perl and Node both answer, and `re.search(r"\B", "")` is
-`None`. Everywhere else the three agree exactly, over "a", "ab", " ", "  ",
-"-", "a b" and "--", so the empty subject is the whole of the difference;
-that is `GRX_Profile::empty_subject_has_no_interior`, and Python's row is
-the only one that sets it. The row was in the code and not on this page
-until 2026-09-24, which is how the axis beside it - whether a subroutine
-call is atomic (§5.21) - came to be wrong for two pinned versions without
-anything saying so.
+**`\B` on an empty subject was Python's alone, and CPython 3.14 ended it.**
+Position 0 of "" has no word character on either side, so it is not a word
+boundary and `\B` holds there - which is what perl and Node have always
+answered. `re.search(r"\B", "")` was `None` through 3.13 and is a match from
+3.14, and every other position already agreed: over "a", "ab", " ", "  ",
+"-", "a b" and "--" the three named the same ones, so the empty subject was
+the whole of the difference and is now none of it.
+
+This library followed 3.13 until 2026-09-25 and follows 3.14 now, so every
+dialect here answers the same thing and there is no axis left. The profile
+field that carried it (`GRX_Profile::empty_subject_has_no_interior`), the IR
+and instruction bits it was spent into, and the guard both engines read are
+all deleted: one dialect's exception is not worth a bit in every compiled
+program once the dialect stops making it.
+
+The row was in the code and not on this page until 2026-09-24, which is how
+the axis beside it - whether a subroutine call is atomic (§5.21) - came to
+be wrong for two pinned versions without anything saying so.
 
 ### 5.10 Iteration after an empty match
 
@@ -1038,7 +1052,7 @@ never reaches it. Here the backslash is dropped.
 | `]` first is a literal | yes | yes | no: `[]` is empty, `[^]` is everything | yes | **probe** | yes, with a warning | yes |
 | Backslash inside brackets | literal | escape | escape | escape | escape | escape | escape |
 | `-` literal at the ends | yes | yes | yes (legacy); `u`: yes; `v`: must be escaped | yes | yes | yes | yes |
-| Class escape as a range endpoint, `[\d-z]` | n/a | PCRE2: error; Perl: `-` literal, with a warning | legacy: union; `u`: error | error (probed: Python 3.13 raises) | error | **probe** | error |
+| Class escape as a range endpoint, `[\d-z]` | n/a | PCRE2: error; Perl: `-` literal, with a warning | legacy: union; `u`: error | error (probed: Python 3.14.7 raises) | error | **probe** | error |
 | `[[:alpha:]]` | yes | yes | no | no | no | yes | yes |
 | Set operations | no | `(?[ ])`: `\|` `+` `&` `-` `^` `!`, nesting to 15 - Perl and PCRE2 alike, differing only in what they ignore (§6) | `v`: `&&`, `--`, nesting, `\q{}` | no | `&&`, nesting | `&&`, nesting | Rust: `&&`, `--`, `~~`, nesting; RE2: no |
 | Reserved double punctuators | - | - | `v`: `&&`, `!!`, `##`, ... must be escaped | - | - | - | - |
@@ -1059,7 +1073,7 @@ never reaches it. Here the backslash is dropped.
 
 | Spelling | Perl/PCRE2 | ECMAScript | Python | Java | .NET | Ruby | RE2/Rust |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `(?<n>...)` | yes | yes | 3.13: no (`(?P<n>)`) | yes | yes | yes | RE2: Go 1.22+; Rust: yes |
+| `(?<n>...)` | yes | yes | 3.14: no (`(?P<n>)`) | yes | yes | yes | RE2: Go 1.22+; Rust: yes |
 | `(?P<n>...)` | yes | no | yes | no | no | no | yes |
 | `(?'n'...)` | yes | no | no | no | yes | yes | no |
 | `\k<n>` | yes | yes | no | yes | yes | yes | no |
@@ -1258,7 +1272,7 @@ rule about the piece boundary rather than about the match - `a*` splitting
 empty matches at either end of it ignored.
 
 Perl's and Python's cells were **probe** and are now measured, by
-`tools/oracle/split_probe.py` against perl 5.40.1 and CPython 3.13; the
+`tools/oracle/split_probe.py` against perl 5.44.0 and CPython 3.14.7; the
 twenty-four cases and their answers are in
 [tests/data/probe/split.md](../tests/data/probe/split.md). Two things came
 out of it that reading the documentation would not have given:
@@ -1594,8 +1608,6 @@ answer.
 | ECMAScript | **The subject is code points, not UTF-16 code units, in *both* modes** | see below | - |
 | ECMAScript | A match cannot begin or end between the halves of a surrogate pair | as above | - |
 | ECMAScript | **The pattern source is code points too**, so a literal astral character written in it is one atom without `u` and not two | ECMA-262's source is UTF-16 code units, so without `u` or `v` a fish written into the pattern is a high surrogate followed by a low one and every postfix operator takes the low half alone. In Node 22.23 `/\u{1F41F}+/` over two fish is 0-2, `/[\u{1F41F}]/` is a class of *two* code units and matches one of them, and `/\u{1F41F}{2}/` is no match; here each is the whole character, 0-8, 0-4 and 0-8. It shows in the accept-or-reject half as a class range: `[\uDC1F-\u{1F41F}]` is DC1F to D83D there, descending, and "Range out of order in character class", where here it is DC1F to 1F41F and ascending. The escaped spelling `[\uDC1F-\uD83D\uDC1F]` is two units on both sides and both refuse it, which is what says this is the source and not the range rule. `v` mode reads the source as code points in both, so it is `u`-less patterns only. `tools/oracle/syntax_diff.py` counts these rows, and asks rather than assumes: it puts a BMP character where the astral one stood and keeps the row only if Node then accepts it | - |
-| Python | **`\z` is refused**, where CPython 3.14 accepts it as the preferred spelling of `\Z` | A gap rather than a deviation: 3.13 refuses it too, which is why the gate was green until the second pin was added. 148 rows of `GHOTI_ORACLE_ALIAS=python=python-next make check-oracle-python`, counted there under a rule the tool establishes with a probe before it excuses anything | `GRX_ERR_SYNTAX` |
-| Python | **`\B` does not match at position 0 of an empty subject**, where CPython 3.14 does | perl, pcre2 and V8 have always matched there, and so does this library in every dialect *except* `python`, where it follows 3.13. So this is one dialect's rule one release out of date rather than a matcher defect. 17 rows of `check-oracle-python` under the second pin, 37 of `check-oracle-split` and 1 of `check-oracle-replace` | - |
 | Perl | `(?{ })`, `(??{ })` | code execution | `GRX_ERR_UNSUPPORTED` |
 | Perl | ~~`\N{name}` resolves against UCD 17.0.0, so a name Perl's UCD 15.0.0 does not carry works here and not there~~ **Retired 2026-09-25**: the pin moved to perl 5.44.0, which carries UCD 17.0.0 exactly | The skew was real and is gone rather than resolved: over a 2,531-name differential the two had agreed everywhere they shared a Unicode version, with 196 of 204 disagreements naming characters perl had not been told about, 8 `NameAliases.txt` corrections newer than its tables, and **none** a name perl resolved and this library did not. `tools/corpus/make_name_vectors.py` reports `0 skipped as UCD version skew` now, where it skipped before | - |
 | PCRE2 | `(?{ })` is not a construct it has at all | pcre2test: "unrecognized character after (? or (?-" | `GRX_ERR_SYNTAX` |

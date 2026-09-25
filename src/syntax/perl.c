@@ -527,9 +527,14 @@ static int python_knows_escape(char c, int in_class) {
   switch (c) {
     // The anchors, which `re` refuses inside a class where PCRE2 refuses
     // them too - so this half agrees and is here only to be complete.
+    //
+    // `\z` joined them in CPython 3.14 as the preferred spelling of `\Z`,
+    // and it is refused inside a class exactly as the other three are:
+    // `re.compile(r"[\z]")` is "bad escape \z", not the letter.
     case 'A':
     case 'B':
     case 'Z':
+    case 'z':
       return !in_class;
     // Characters, shorthands and the two constructs with an argument.
     case 'a': case 'b': case 'd': case 'f': case 'n': case 'r':
@@ -1254,10 +1259,13 @@ static GRX_Result read_escape(GRX_Parser * parser, int in_class, Escape * out) {
         }
       }
       out->kind = ESC_ANCHOR;
-      // Python spells with `\Z` what Perl spells with `\z`, and has no `\z`
-      // at all: `a\Z` does not match "a\n" in `re` and does in perl. One
-      // letter with two meanings rather than a letter one dialect lacks, so
-      // it is a remapping here and not a refusal in python_knows_escape().
+      // Python spells with `\Z` what Perl spells with `\z`: `a\Z` does not
+      // match "a\n" in `re` and does in perl. One letter with two meanings
+      // rather than a letter one dialect lacks, so it is a remapping here
+      // and not a refusal in python_knows_escape(). CPython 3.14 added `\z`
+      // as the preferred spelling of its `\Z`, which is this library's
+      // `\z` already - so that arm needs no dialect test, only the entry in
+      // python_knows_escape() that stops it being refused before it is read.
       out->anchor = c == 'B'   ? GRX_ANCHOR_NOT_WORD_BOUNDARY
           : c == 'A'           ? GRX_ANCHOR_START_SUBJECT
           : c == 'Z'           ? (flavour(parser) == FLAVOUR_PYTHON

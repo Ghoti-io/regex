@@ -290,13 +290,6 @@ typedef enum {
 #define GRX_IR_LOOK_CONDITION GRX_BIT(9)
 
 /**
- * @brief ASSERT: this assertion also requires a non-empty subject.
- *
- * Python's `\B`. Carried to GRX_INST_NEEDS_SUBJECT, where the reasoning is.
- */
-#define GRX_IR_NEEDS_SUBJECT GRX_BIT(10)
-
-/**
  * @brief One node of the intermediate representation.
  *
  * `a`, `b`, `mode`, `min` and `max` are the kind-specific payload:

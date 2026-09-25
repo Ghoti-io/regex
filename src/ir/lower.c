@@ -1778,13 +1778,6 @@ static GRX_Result lower_anchor(
   if (line_anchor) {
     assertion->flags |= GRX_IR_LINE_ANCHOR;
   }
-  // Python's `\B`, spent here so that no engine has to know which dialect
-  // it is running. Only `\B`: `\b` agrees with every other reference on the
-  // empty subject, both answering that there is no boundary there.
-  if (kind == GRX_ASSERT_NOT_WORD_BOUNDARY
-      && low->profile.empty_subject_has_no_interior) {
-    assertion->flags |= GRX_IR_NEEDS_SUBJECT;
-  }
   // Only the assertions that read the newline set care, and only when the
   // convention makes a CR LF pair one terminator. Set here rather than in
   // the engines because it is a property of the pattern's convention, and

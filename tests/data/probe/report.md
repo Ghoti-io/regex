@@ -7,11 +7,11 @@ section 5; each column is a reference implementation, pinned in
 
 | Column | Reference |
 | --- | --- |
-| ecmascript | node 22.23.2, V8 12.4.254.21-node.56, Unicode 17.0 |
+| ecmascript | node 24.21.0, V8 13.6.233.17-node.53, Unicode 17.0 |
 | gnu-ere | grep (GNU grep) 3.11 |
 | pcre2 | PCRE2 version 10.46 2025-08-27 |
-| perl | perl v5.40.1 |
-| python | python 3.13.5, UCD 15.1.0 |
+| perl | perl v5.44.0 |
+| python | python 3.14.7, UCD 16.0.0 |
 | vim | Included patches: 1-1244 |
 
 ## `(a*)*` against "b"

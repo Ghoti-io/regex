@@ -697,10 +697,6 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     // Perl's `/a` part company. See the field's own comment.
     .ascii_classes_fold_ascii = 1,
     .caret_after_final_newline = 1,
-    // `\B` alone: `re.search(r"\B", "")` is None where perl and Node both
-    // match at 0. See the field's own comment for the eight subjects that
-    // say the empty one is the whole of the difference.
-    .empty_subject_has_no_interior = 1,
     // `re.sub`'s template grammar. The sigil is a backslash, as POSIX's is:
     // `\1`, `\g<1>` and `\g<name>` are the three references, `\g<0>` is the
     // whole match and `\0` is NUL rather than the whole match, and an

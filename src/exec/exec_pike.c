@@ -471,12 +471,6 @@ static int assertion_holds(
     case GRX_ASSERT_NOT_WORD_BOUNDARY:
     case GRX_ASSERT_WORD_START:
     case GRX_ASSERT_WORD_END: {
-      // Python's `\B`, carried here as a bit so that this stays a question
-      // about the program rather than about the dialect. Nothing else sets
-      // it, so every other pattern takes the ordinary path.
-      if ((inst->flags & GRX_INST_NEEDS_SUBJECT) && !has_before && !has_after) {
-        return 0;
-      }
       int word_before = has_before && in_class(pike, inst->x, before);
       int word_after = has_after && in_class(pike, inst->x, after);
       if (inst->mode == GRX_ASSERT_WORD_START) {

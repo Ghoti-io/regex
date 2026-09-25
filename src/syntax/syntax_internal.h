@@ -692,18 +692,6 @@ typedef struct GRX_Profile {
   GRX_TemplateSpec template_spec;   ///< The replacement-template grammar.
   int multiline_by_default;         ///< Ruby: `^`/`$` are always line anchors.
   /**
-   * `\B` does not match when the subject is empty.
-   *
-   * Python's, and Python's alone among the references installed here.
-   * Position 0 of "" has no word character on either side, so it is not a
-   * word boundary and `\B` holds there - which is what perl and Node both
-   * answer. CPython answers that it does not, and `re.search(r"\B", "")` is
-   * None. Everywhere else the three agree exactly, over `'a'`, `'ab'`,
-   * `' '`, `'  '`, `'-'`, `'a b'` and `'--'`: the empty subject is the
-   * whole of the difference, which is why this is a flag and not a mode.
-   */
-  int empty_subject_has_no_interior;
-  /**
    * `^` with multiline matches after a newline that ends the subject.
    *
    * ECMA-262 asks one question - is the character before this position a

@@ -163,7 +163,6 @@ TEST(Python, TheEscapeAlphabetIsClosed) {
       {"\\h", "\\h"},
       {"\\H", "\\H"},
       {"\\V", "\\V"},
-      {"\\z", "\\z"},
       {"\\e", "\\e"},
       {"\\cA", "\\cA"},
       {"\\o{101}", "\\o{101}"},
@@ -200,11 +199,19 @@ TEST(Python, TheThreeEscapesSpelledDifferently) {
   EXPECT_EQ(span("\\v", "\n", GRX_SYNTAX_PERL), "0-1");
 
   // `\Z` is the end of the subject here and the position before a final
-  // newline there. Python spells with `\Z` what perl spells with `\z`, and
-  // has no `\z` at all.
+  // newline there: Python spells with `\Z` what perl spells with `\z`.
   EXPECT_EQ(span("a\\Z", "a\n"), "nomatch");
   EXPECT_EQ(span("a\\Z", "a"), "0-1");
   EXPECT_EQ(span("a\\Z", "a\n", GRX_SYNTAX_PERL), "0-1");
+
+  // CPython 3.14 added `\z` as the preferred spelling of that same anchor,
+  // so the two are synonyms here and `\z` is perl's `\z` unchanged. It is
+  // still refused inside a class, where `re` calls it "bad escape \z" -
+  // which is what `\A`, `\B` and `\Z` have always done.
+  EXPECT_EQ(span("a\\z", "a"), "0-1");
+  EXPECT_EQ(span("a\\z", "a\n"), "nomatch");
+  EXPECT_EQ(span("a\\z", "a\n", GRX_SYNTAX_PERL), "nomatch");
+  EXPECT_EQ(accepts("[\\z]"), "refused");
 
   // `\x` takes exactly two digits. `\x{41}`, `\x4` and `\xg` are all
   // "incomplete escape" in `re` and all legal in perl.
@@ -331,18 +338,19 @@ TEST(Python, ACaptureSetInAnEarlierIterationSurvives) {
   EXPECT_EQ(group("((a)|b)+", "ab", 2), "0-1");
 }
 
-TEST(Python, NotAWordBoundaryNeedsASubject) {
+TEST(Python, NotAWordBoundaryMatchesTheEmptySubject) {
   // `\B` asks whether a position is *not* a word boundary, and position 0
-  // of "" has no word character on either side - so perl and Node both
-  // match there. CPython does not, and that one position is the whole of
-  // the difference: over "a", "ab", " ", "  ", "-", "a b" and "--" the
-  // three name the same positions.
-  EXPECT_EQ(span("\\B", ""), "nomatch");
+  // of "" has no word character on either side - so it holds there. That is
+  // what perl and Node have always answered; CPython answered the opposite
+  // until 3.14, which is the release this dialect now follows, so the empty
+  // subject is no longer the one position where the three disagree.
+  EXPECT_EQ(span("\\B", ""), "0-0");
   EXPECT_EQ(span("\\B", "", GRX_SYNTAX_PERL), "0-0");
   EXPECT_EQ(span("\\B", "ab"), "1-1");
   EXPECT_EQ(span("\\B", "a"), "nomatch");
   EXPECT_EQ(span("\\B", " "), "0-0");
-  // `\b` agrees with everyone, including on the empty subject.
+  // `\b` agrees with everyone, including on the empty subject, and did so
+  // before 3.14 as well: only `\B` moved.
   EXPECT_EQ(span("\\b", ""), "nomatch");
   EXPECT_EQ(span("\\b", "a"), "0-0");
 }

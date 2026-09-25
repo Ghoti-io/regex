@@ -180,11 +180,23 @@ pcre2	localhost/ghoti-regex-oracle-pcre2:10.46	PCRE2 version 10.46	The PCRE dial
 # comparison. An added subject can lose it with nothing saying so, which is
 # why python_diff.py prints both versions on every run.
 #
-# 3.13.5 because that is the CPython tools/corpus/VERSIONS records and the one
-# every count in this gate was taken against. A newer one is new `re`
-# behaviour *and* a newer UCD at the same time, which is two readings in one
-# raise - so it is its own commit.
-python	docker.io/library/python:3.13.5-slim@sha256:4c2cf9917bd1cbacc5e9b07320025bdb7cdf2df7b0ceaccb55e9dd7e30987419	python 3.13.5, UCD 15.1.0	The Python dialect: `re`, `re.split` and `re.sub`
+# **3.14.7, raised from 3.13.5 on 2026-09-25 together with the two rules it
+# changed.** The raise was held back when the reference was containerised,
+# because a newer CPython is new `re` behaviour *and* a newer UCD at once and
+# that is two readings in one commit. Both were then taken separately:
+#
+#   `\z`   accepted as the preferred spelling of `\Z`, and refused inside a
+#          class exactly as `\A`, `\B` and `\Z` are. 148 rows.
+#   `\B`   matches at position 0 of an empty subject, which is what perl,
+#          pcre2 and V8 have always answered and what this library answers in
+#          every other dialect. 17 rows here, 37 of check-oracle-split, 1 of
+#          check-oracle-replace.
+#
+# The UCD half moved 15.1.0 -> 16.0.0 and changed no answer: the differential
+# ran 111,000 rows against 3.14.7 with 0 disagreements outside those two
+# rules, which is the eighteen-subject property above holding across the
+# raise rather than a guarantee that it will hold across the next one.
+python	docker.io/library/python:3.14.7-slim@sha256:7bf6c3111fe094f8ee1a1cbcdc63c4cfb345b0e3df42d5aa9a90b3b4b022ab6d	python 3.14.7, UCD 16.0.0	The Python dialect: `re`, `re.split` and `re.sub`
 
 # The POSIX userland: three references, one image, and that is deliberate -
 # `compress`'s shape and for its reason. These are not three references that
@@ -238,29 +250,29 @@ grep	localhost/ghoti-regex-oracle-posix:deb13	grep (GNU grep) 3.11	Whether a lin
 #
 #   GHOTI_ORACLE_ALIAS=python=python-next make check-oracle-python
 #
-# **It is not the gating pin, and the reason is what it reports.** 3.14
-# changed two rules this library's `python` dialect still reads the 3.13 way,
-# and both are gaps rather than deviations - work not done, recorded in
-# documentation/dialects.md section 6:
+# **It is never the gating pin**, and that is the whole of the difference
+# between the two entries. This one exists so that a release can be read
+# before anything commits to it: the gate stays where it is, and one
+# environment variable asks the next CPython the same 111,000 questions.
 #
-#   \z   accepted as the preferred spelling of \Z, new in 3.14. 3.13 refuses
-#        it and so does this library. 148 rows of check-oracle-python.
-#   \B   matches at position 0 of an empty subject, changed in 3.14. perl,
-#        pcre2 and V8 have always said match and so does this library in
-#        every dialect *except* `python`, where it follows 3.13's no-match.
-#        17 rows of check-oracle-python, 37 of check-oracle-split and 1 of
-#        check-oracle-replace.
+# **It earned itself, and the raise above is what it bought.** Pinned at
+# 3.14.7 it reported two rules and their exact costs - `\z` at 148 rows and
+# `\B` on the empty subject at 17 here, 37 of check-oracle-split and 1 of
+# check-oracle-replace - with 0 disagreements outside them. That is a
+# decision brought to the point of being taken rather than a pile of rows to
+# sort, and on 2026-09-25 it was taken: `python` is 3.14.7 and this library
+# implements both rules.
 #
-# Moving the gate to 3.14 is a decision about what `GRX_SYNTAX_PYTHON` means
-# rather than a pin bump, which is why it is not taken here. What this pin is
-# for is that the decision can be *measured* - and python_diff.py establishes
-# each rule with a probe before it excuses anything, so the reading is a clean
-# 0 with two named counts rather than 165 rows to sort by hand.
+# So this entry moves one ahead again, to **3.15.0rc2**. A release candidate
+# would be the wrong thing to gate on and is exactly the right thing to read,
+# which is the distinction the previous revision of this comment collapsed -
+# it declined the rc on the ground that "a release candidate is not a pin to
+# gate on", which is true and is not what this pin does. When 3.15 is
+# released this entry moves to it and nothing else changes.
 #
-# 3.15.0rc2 carries UCD 17.0.0, an exact match with tools/unicode/UCD_VERSION,
-# and answers these two rules the same way 3.14 does. It is not pinned here:
-# a release candidate is not a pin to gate on, and unlike `unicode` - where
-# the UCD *is* the subject - this differential's exposure to the UCD is a
-# property of its eighteen subject characters, which tools/corpus/VERSIONS
-# measures. When 3.15 is released this entry moves to it.
-python-next	docker.io/library/python:3.14-slim@sha256:7bf6c3111fe094f8ee1a1cbcdc63c4cfb345b0e3df42d5aa9a90b3b4b022ab6d	python 3.14.7, UCD 16.0.0	The same questions one CPython ahead
+# It carries UCD 17.0.0, an exact match with tools/unicode/UCD_VERSION, so
+# the reading it gives has no UCD skew in it at all - the first time that has
+# been true of a CPython here. The gating pin's own skew is 16.0.0 against
+# 17.0.0 and is a property of the differential's eighteen subject characters
+# rather than of the comparison; tools/corpus/VERSIONS measures it.
+python-next	docker.io/library/python:3.15-rc-slim@sha256:4c269ae51995d15c7115f3403bde620e5aa5387ca5b865e56a61a4a24c9ffb49	python 3.15.0rc2, UCD 17.0.0	The same questions one CPython ahead
