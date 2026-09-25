@@ -403,6 +403,29 @@ Ambiguous code point - a dialect this library does not offer and must not
 acquire from whoever happens to run the gate. That is the same class of pin
 as the `encoding` and `iskeyword` ones in `tools/oracle/vim_diff.py`.
 
+### The vim character class check
+
+`make check-vim-classes` does for `src/unicode/vim_class.c` what the check
+above does for the widths: regenerates vim's nine-class table from whatever
+vim is present and diffs it. 1,112,063 code points, 0 disagreements against
+vim 9.1; U+0000 and the surrogates are unaskable and both dumpers write them
+as the same sentinel, so a mismatch in *which* are unaskable is itself a
+disagreement.
+
+This is the table with the most to lose from an unpinned option, and it is
+the one that proves the family matters. `charclass()` consults the buffer's
+chartab for a code point below 256, so **'iskeyword' decides the answer
+there** - and `vim -u NONE` leaves vim Vi-compatible, where 'iskeyword'
+defaults to `@,48-57,_` rather than the `@,48-57,_,192-255` vim's own help
+calls the Vim default. U+00D7 and U+00F7 are the only members of 192-255
+that vim's `@` does not cover, so they are exactly the two the mode decides,
+and they sat in this table as punctuation until 2026-09-24 because the
+one-off sweep that built it ran without the pin.
+
+That is not a hypothetical control: reverting those two entries makes this
+gate report `U+000D7 vim class 2, ours 1` and exit 1. It would have caught
+the defect on the day the table was written.
+
 ### The case-fold orbit check
 
 `make check-oracle-folds` compares the fold table as a **partition**: not

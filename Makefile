@@ -817,7 +817,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 .PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-dump-names check-readme-example check-tables check-status-line check-oracle-syntax check-oracle-match check-oracle-soak check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-perl-syntax check-oracle-script-runs check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
 	check-oracle-properties check-oracle-numeric-properties \
 	check-oracle-folds \
-	check-vim-widths \
+	check-vim-widths check-vim-classes \
 	check-oracle-string-properties check-oracle-posix check-oracle-sed \
 	check-oracle-exclusions check-oracle-determinism \
 	check-oracles \
@@ -914,7 +914,7 @@ check-oracles: ## Run every differential check against the reference implementat
 check-oracles: check-oracle-syntax check-oracle-match check-oracle-properties \
 	check-oracle-numeric-properties check-oracle-string-properties \
 	check-oracle-folds \
-	check-vim-widths \
+	check-vim-widths check-vim-classes \
 	check-oracle-posix check-oracle-submatch \
 	check-oracle-perl check-oracle-perl-syntax check-oracle-python \
 	check-oracle-vim \
@@ -1620,6 +1620,15 @@ check-readme-example: $(APP_DIR)/$(STATIC_TARGET) | $(APP_DIR)/$(TARGET)
 		exit 1; \
 	fi; \
 	printf "The README example compiles, runs and prints Corey.\n"
+
+check-vim-classes: ## Fail if vim_class.c's nine classes are not what vim answers
+check-vim-classes: $(TOOLS)
+	@if ! command -v vim >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then \
+		printf "check-vim-classes: skipped (no vim or no python3)\n"; \
+		exit 0; \
+	fi; \
+	python3 tools/check_vim_classes.py \
+		--driver $(APP_DIR)/tools/grx_vim_classes$(EXE_EXTENSION)
 
 check-vim-widths: ## Fail if display.c's cell widths are not what vim answers
 check-vim-widths: $(TOOLS)

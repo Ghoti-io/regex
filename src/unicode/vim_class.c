@@ -31,6 +31,10 @@
  * position differ in *wordness*; vim asks whether they differ in *class*,
  * and it has nine:
  *
+ * `make check-vim-classes` regenerates this whole table from vim and diffs
+ * it, which is the only thing that can: it is vim's data rather than the
+ * UCD's, so `make check-unicode-tables` has nothing to regenerate it from.
+ *
  * | class | what is in it | code points |
  * | --- | --- | --- |
  * | 0 | blank - the space, the tab, NUL, U+00A0 | 22 |
