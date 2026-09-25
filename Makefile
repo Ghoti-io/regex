@@ -441,7 +441,7 @@ ALL_TEST_GATES := check-symbols check-layering check-aliasing \
 	check-unicode-tables check-dump-names check-readme-example \
 	check-diagnostics check-engine-equivalence check-json-schema-suite \
 	check-tables check-status-line check-corpus-seeds check-makefile-hash \
-	check-oracle-env
+	check-oracle-env check-unicode-agreement
 TEST_GATES ?= $(ALL_TEST_GATES)
 
 # What a gate that IS a python3 script does when there is no python3.
@@ -814,7 +814,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 
 # General commands
 .PHONY: check-oracle-soak
-.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-dump-names check-readme-example check-tables check-status-line check-corpus-seeds check-makefile-hash check-oracle-env check-oracle-syntax check-oracle-match check-oracle-soak check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-perl-syntax check-oracle-script-runs check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
+.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-unicode-agreement check-dump-names check-readme-example check-tables check-status-line check-corpus-seeds check-makefile-hash check-oracle-env check-oracle-syntax check-oracle-match check-oracle-soak check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-perl-syntax check-oracle-script-runs check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
 	check-oracle-properties check-oracle-numeric-properties \
 	check-oracle-folds \
 	check-vim-widths check-vim-classes check-vim-sets \
@@ -1744,6 +1744,10 @@ check-vim-widths: $(TOOLS)
 	@$(REQUIRE_PYTHON3)
 	$(call run-oracle,vim,python3 tools/check_vim_widths.py \
 		--driver $(APP_DIR)/tools/grx_widths$(EXE_EXTENSION))
+
+check-unicode-agreement: ## Fail if a table this library still owns disagrees with ghoti.io-unicode
+check-unicode-agreement: $(TOOLS)
+	@$(APP_DIR)/tools/grx_unicode_agree$(EXE_EXTENSION)
 
 check-unicode-tables: ## Fail if the committed Unicode tables are not what the generator produces
 # UCD_VERSION is `$(shell cat ...)` of the whole pin file, so an empty or
