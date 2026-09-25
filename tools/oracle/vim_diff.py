@@ -496,6 +496,66 @@ def normalise_ours(line, subject):
     return "match %s %s" % (whole, " ".join(json.dumps(g) for g in groups))
 
 
+def _pinned_ccc(cp):
+    """Canonical_Combining_Class for one code point, from the pinned UCD.
+
+    Consulted only for characters the host CPython does not know, so the
+    common path never opens a file and the tool keeps working in a tree
+    where the UCD has not been fetched unless a subject actually needs it.
+    """
+    if _pinned_ccc.table is None:
+        table, pending = {}, None
+        path = os.path.join(HERE, "..", "..", "third_party", "ucd",
+            open(os.path.join(HERE, "..", "unicode", "UCD_VERSION"),
+                encoding="utf-8").read().strip(), "UnicodeData.txt")
+        for line in open(path, encoding="utf-8"):
+            f = line.split(";")
+            if len(f) < 4:
+                continue
+            c, name, ccc = int(f[0], 16), f[1], int(f[3])
+            if name.endswith(", First>"):
+                pending = (c, ccc)
+            elif name.endswith(", Last>"):
+                for x in range(pending[0], c + 1):
+                    table[x] = pending[1]
+                pending = None
+            else:
+                table[c] = ccc
+        _pinned_ccc.table = table
+    return _pinned_ccc.table.get(cp, 0)
+
+
+_pinned_ccc.table = None
+
+
+def _combining(c):
+    """combining() for one character, correct for a character CPython lacks.
+
+    unicodedata.combining() returns 0 for an unassigned code point, and
+    "unassigned" here means unassigned in the HOST's UCD - 15.1.0 against
+    our pinned 17.0.0. 46 code points are assigned at 17.0.0, unknown to
+    15.1.0 and carry a nonzero combining class (U+0897, U+1ACF..U+1AEB,
+    U+10D69.., U+113CE.., U+1E5EE..), and for those the host answers 0
+    because it has never heard of them rather than because they do not
+    compose.
+
+    That direction of error is the silent one. holds_composing() deciding
+    False sends a row to `candidates`, where vim's old engine may excuse it
+    - so a mark the host does not know would let a genuine disagreement be
+    absorbed by an exclusion. Deciding True merely counts a row that must
+    then be explained.
+
+    Answering "unknown means composing" would be conservative and wrong
+    often: 9,988 code points are new since 15.1.0 and only 46 of them
+    compose. U+187F8, a subject in this file, is one of the other 9,942.
+    So the pin is consulted for exactly the characters the host cannot
+    answer for, which is the smallest set that is also correct.
+    """
+    if unicodedata.category(c) == "Cn":
+        return _pinned_ccc(ord(c))
+    return unicodedata.combining(c)
+
+
 def holds_composing(subject):
     """Whether the subject carries a composing character after something.
 
@@ -535,7 +595,7 @@ def holds_composing(subject):
     exclusion rather than a wrong answer - which is why it still reads
     unicodedata rather than taking a hard UCD dependency.
     """
-    return any(unicodedata.combining(c) for c in subject[1:])
+    return any(_combining(c) for c in subject[1:])
 
 
 def is_forward_reference_artifact(pattern, them, us):
