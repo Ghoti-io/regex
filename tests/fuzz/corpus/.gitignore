@@ -1,5 +1,13 @@
 # The corpus grows as the fuzzer runs; only the checked-in seeds are tracked.
+#
+# `!*/` rather than a named directory: `*` excludes the per-harness directories
+# themselves, and git will not look inside an excluded directory, so a `.seed`
+# under one that is not re-included is invisible - `git status` stays clean and
+# the fixture is silently absent. This rule named `pattern/` alone, which was
+# the only harness that had seeds, so the same file under `crossengine/` or
+# `subject/` was dropped. Re-including every directory instead means a fourth
+# harness does not have to remember to amend this file.
 *
 !.gitignore
+!*/
 !*.seed
-!pattern/

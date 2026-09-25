@@ -421,7 +421,7 @@ TESTFLAGS := `PKG_CONFIG_PATH=$(PKG_CONFIG_LOOKUP_PATH) pkg-config --libs --cfla
 ALL_TEST_GATES := check-symbols check-layering check-aliasing \
 	check-unicode-tables check-dump-names check-readme-example \
 	check-diagnostics check-engine-equivalence check-json-schema-suite \
-	check-tables check-status-line
+	check-tables check-status-line check-corpus-seeds
 TEST_GATES ?= $(ALL_TEST_GATES)
 
 # Every target that runs the suites carries them - `test`, `test-quiet`,
@@ -814,7 +814,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 
 # General commands
 .PHONY: check-oracle-soak
-.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-dump-names check-readme-example check-tables check-status-line check-oracle-syntax check-oracle-match check-oracle-soak check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-perl-syntax check-oracle-script-runs check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
+.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-dump-names check-readme-example check-tables check-status-line check-corpus-seeds check-oracle-syntax check-oracle-match check-oracle-soak check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-perl-syntax check-oracle-script-runs check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
 	check-oracle-properties check-oracle-numeric-properties \
 	check-oracle-folds \
 	check-vim-widths check-vim-classes \
@@ -1574,6 +1574,30 @@ check-status-line:
 		exit 0; \
 	fi; \
 	python3 tools/check_status_line.py
+
+check-corpus-seeds: ## Fail if a fuzz corpus directory cannot hold a seed
+# tests/fuzz/corpus/.gitignore ignores `*` - the corpus grows to tens of
+# thousands of files and none of them belong here - and re-includes the
+# hand-written seeds with `!*.seed`. The catch is that `*` excludes the
+# per-harness directories as well, and git does not descend into an excluded
+# directory, so a negation on a file inside one never gets the chance to
+# match. A seed put there is invisible: `git add` refuses it and `git status`
+# stays clean, so the fixture is absent and nothing says so.
+#
+# The rule named `pattern/`, the only harness that had seeds when it was
+# written, so `crossengine/` and `subject/` were both in that state. This is
+# the kind of staleness whose trigger is somewhere else entirely - adding a
+# fuzz harness, three directories away - which is exactly when nobody has a
+# reason to open a .gitignore.
+#
+# Milliseconds, and the harness list comes from tests/fuzz/fuzz_*.cpp so that
+# a new harness is covered on the day it lands.
+check-corpus-seeds:
+	@if ! command -v python3 >/dev/null 2>&1; then \
+		printf "check-corpus-seeds: skipped (no python3)\n"; \
+		exit 0; \
+	fi; \
+	python3 tools/check_corpus_seeds.py
 
 check-dump-names: ## Fail if a dump's name table is shorter than its enum
 # Every dump here turns an enumerator into a word through a positional
