@@ -267,6 +267,29 @@ SUBJECTS = [
     # them keyword characters, which is what no word set could see.
     "日x", "x日", "日日", "aあ", "あア",
     "⠁a", "a😀", "한ㄱ", "日 x", "一あb",
+    # The two code points where vim's *width* table is not East_Asian_Width,
+    # added 2026-09-24. `\%v` counts screen columns, so these rows are the
+    # only ones here that ask display.c a question its answer could get
+    # wrong: every other subject above agrees with the property, so the
+    # column arithmetic was checked and the table behind it never was. If
+    # cell_widths were replaced with East_Asian_Width tomorrow the gate
+    # stayed green, which is the same hole the classes had one property
+    # over - see the comment above `×` below.
+    #
+    # They point opposite ways on purpose, because one direction does not
+    # cover the other:
+    #
+    #   U+187F8 TANGUT IDEOGRAPH  UCD 17.0.0 says Wide, vim draws ONE cell.
+    #     vim's table predates the block's extension; it stands for 145
+    #     Other_Letter across Tangut and Khitan.
+    #   U+23ED BLACK RIGHT-POINTING DOUBLE TRIANGLE WITH VERTICAL BAR
+    #     UCD 17.0.0 says Neutral, vim draws TWO. It stands for 165
+    #     Other_Symbol, and being emoji-shaped is exactly why the 😀 above
+    #     does not cover it - that one agrees with the property.
+    #
+    # Alone and beside Latin, so `\%1v`, `\%2v` and `\%3v` separate the
+    # readings rather than only the total.
+    "\U000187F8", "a\U000187F8b", "⏭", "a⏭b",
     # The code points where vim's classes are not the Unicode properties,
     # added 2026-09-24 after a hand sweep found two defects this gate could
     # not see. It reported 0 disagreements over 50,980 rows while `\k` was
