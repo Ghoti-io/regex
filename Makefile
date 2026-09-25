@@ -971,26 +971,40 @@ oracle-images: ## Build the oracle images that are built here rather than pulled
 # so that adding a reference is adding a directory and an IMAGES line and
 # nothing else - a list in two places is a list that will disagree with
 # itself.
+#
+# The tag is found by the *image name* rather than by the pin name, because
+# the two are not one-to-one: `containers/posix/` builds one image that four
+# pins name - glibc, musl, sed and grep - which is `compress`'s shape and for
+# its reason, that they are four faces of one Debian userland. Keying on the
+# pin name looked right while every directory happened to have a pin of the
+# same name, and failed the moment one did not.
 oracle-images:
 	@for dir in tools/oracle/containers/*/; do \
 		[ -d "$$dir" ] || continue; \
 		name=$$(basename "$$dir"); \
-		tag=$$(awk -F'\t' -v n="$$name" '$$1 == n {print $$2}' \
+		tag=$$(awk -F'\t' -v want="$(ORACLE_IMAGE_PREFIX)$$name:" \
+			'$$0 !~ /^#/ && index($$2, want) {print $$2; exit}' \
 			tools/oracle/containers/IMAGES); \
 		if [ -z "$$tag" ]; then \
-			printf "\033[0;31m### oracle-images: no pin for %s in IMAGES ###\033[0m\n" "$$name" >&2; \
+			stray=$$(awk -F'\t' -v n="$$name" \
+				'$$0 !~ /^#/ && $$1 == n {print $$2; exit}' \
+				tools/oracle/containers/IMAGES); \
+			if [ -n "$$stray" ]; then \
+				printf "\033[0;31m### oracle-images: %s is outside the prefix ###\033[0m\n" "$$stray" >&2; \
+				printf "\nIMAGES names it %s, which does not carry the\n" "$$stray" >&2; \
+				printf "convention's prefix %s (CONTAINERS.md 6.1). A library\n" "$(ORACLE_IMAGE_PREFIX)" >&2; \
+				printf "that names its image outside the prefix is one\n" >&2; \
+				printf "oracle-clean will decline to remove, so this is refused\n" >&2; \
+				printf "here rather than discovered later by a cleanup that\n" >&2; \
+				printf "does nothing.\n\n" >&2; \
+			else \
+				printf "\033[0;31m### oracle-images: no pin names %s%s ###\033[0m\n" "$(ORACLE_IMAGE_PREFIX)" "$$name" >&2; \
+				printf "\ntools/oracle/containers/%s/ builds an image no line of\n" "$$name" >&2; \
+				printf "IMAGES refers to, so nothing would ever run it. Add the\n" >&2; \
+				printf "reference there, or delete the directory.\n\n" >&2; \
+			fi; \
 			exit 1; \
 		fi; \
-		case "$$tag" in \
-		*$(ORACLE_IMAGE_PREFIX)*) ;; \
-		*) printf "\033[0;31m### oracle-images: %s is outside the prefix ###\033[0m\n" "$$tag" >&2; \
-		   printf "\nIMAGES names it %s, which does not carry the\n" "$$tag" >&2; \
-		   printf "convention's prefix %s (CONTAINERS.md 6.1). A library that\n" "$(ORACLE_IMAGE_PREFIX)" >&2; \
-		   printf "names its image outside the prefix is one oracle-clean will\n" >&2; \
-		   printf "decline to remove, so this is refused here rather than\n" >&2; \
-		   printf "discovered later by a cleanup that does nothing.\n\n" >&2; \
-		   exit 1; ;; \
-		esac; \
 		printf "\n### Building the %s oracle image ###\n" "$$name"; \
 		$(GHOTI_CONTAINER_ENGINE) build -t "$$tag" "$$dir" || exit 1; \
 	done
