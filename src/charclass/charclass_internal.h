@@ -106,6 +106,23 @@ GRX_Result grx_charclass_add_ranges(GRX_CharClass * cls,
     const GRX_CharRange * ranges, size_t count, const GRX_Limits * limits);
 
 /**
+ * @brief Add every code point of a resolved Unicode property.
+ *
+ * The one place that materialises a property's ranges, so that the buffer
+ * they land in is written down once rather than at each of the three call
+ * sites that used to read the table directly. The ranges come from
+ * ghoti.io-unicode; `grx_unicode_property_ranges()` says what bounds them.
+ *
+ * @param cls The class. NULL is invalid.
+ * @param property The index grx_unicode_property_lookup() returned.
+ * @param limits Caps to apply. NULL applies none.
+ * @return GRX_OK, or what grx_unicode_property_ranges() and
+ *   grx_charclass_add_range() return.
+ */
+GRX_Result grx_charclass_add_property(GRX_CharClass * cls, uint32_t property,
+    const GRX_Limits * limits);
+
+/**
  * @brief The set operations, each replacing `cls` with the result.
  *
  * Both operands are read as the sets they *denote*, so a negated class

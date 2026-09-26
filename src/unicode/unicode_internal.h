@@ -36,9 +36,12 @@
 #include <ghoti.io/regex/macros.h>
 
 #include <ghoti.io/regex/core.h>
+#include <ghoti.io/unicode/set.h>
 #include <stddef.h>
 #include <stdint.h>
 
+// For GRX_CODEPOINT_MAX. The ranges a property covers are GUNI_Range now and
+// not GRX_CharRange, so this is no longer the type it was included for.
 #include "../core/range_internal.h"
 
 #ifdef __cplusplus
@@ -519,14 +522,63 @@ GRX_Result grx_unicode_property_lookup(const char * name, size_t name_length,
     uint32_t * out_property);
 
 /**
+ * @brief The most ranges any one property's set needs.
+ *
+ * Grapheme_Base is the widest in UCD 17.0.0 at 904, and it is 904 on both
+ * sides of the migration rather than by luck: the Unicode library merges
+ * runs that touch and so did the generator, so the same set has the same
+ * shape however it is stored. The next two are the derived routes -
+ * `\p{Indic_Conjunct_Break}` at 434 and the widest Numeric_Value, `nv=2`,
+ * at 155.
+ *
+ * A bound rather than an allocation, because a property is resolved on the
+ * compile path and this keeps `\p{L}` costing no heap at all, as it did
+ * while the ranges were `.rodata`. It is checked rather than trusted: a set
+ * that outgrows it is refused with GRX_ERR_LIMIT and the requirement, and
+ * `Property.EveryTableIsSortedDisjointAndCounted` asks every record for its
+ * ranges, so a UCD that grew one past this fails the suite rather than
+ * silently answering with a truncated set.
+ */
+#define GRX_PROPERTY_RANGES_MAX 1024
+
+/**
  * @brief The code points a resolved property covers.
  *
+ * The ranges are ghoti.io-unicode's, materialised into the caller's buffer
+ * rather than pointed at: this library holds no property ranges of its own
+ * (see property.c). Sorted, disjoint and non-adjacent, whichever route the
+ * record takes.
+ *
+ * Ask with `cap` 0 and `out` NULL to learn the count first, which is the
+ * Unicode library's own output contract and is why it is repeated here.
+ *
  * @param property The index grx_unicode_property_lookup() returned.
- * @param out_count Receives the range count. Required.
- * @return The first range, or NULL for an index out of range.
+ * @param out Receives the ranges. May be NULL when `cap` is 0.
+ * @param cap How many ranges `out` holds.
+ * @param out_count Receives the number of ranges. Required.
+ * @return GRX_OK; GRX_ERR_LIMIT when `cap` was too small, with `out_count`
+ *   set to the requirement; GRX_ERR_INVALID for an index out of range; and
+ *   GRX_ERR_INTERNAL for a record the Unicode library cannot resolve, which
+ *   means two UCD releases in one build.
  */
-const GRX_CharRange * grx_unicode_property_ranges(
-    uint32_t property, size_t * out_count);
+GRX_Result grx_unicode_property_ranges(
+    uint32_t property, GUNI_Range * out, size_t cap, size_t * out_count);
+
+/**
+ * @brief Whether one code point has a resolved property.
+ *
+ * The question a parser asks - `(?[ ])`'s ignorable whitespace, and
+ * ECMAScript's identifier rules - and it is not "materialise the set and
+ * search it": every route but Numeric_Value has a membership test of its
+ * own in the Unicode library, and a Numeric_Value is arithmetic on the code
+ * point. So this allocates nothing and touches no range list.
+ *
+ * @param property The index grx_unicode_property_lookup() returned.
+ * @param codepoint The code point.
+ * @return 1 when it is a member; 0 when it is not, and for an index out of
+ *   range.
+ */
+int grx_unicode_property_contains(uint32_t property, uint32_t codepoint);
 
 /**
  * @brief The canonical long name of a resolved property, for a dump.
@@ -547,6 +599,34 @@ const char * grx_unicode_property_name(uint32_t property);
  * @return The count, or 0 for an index out of range.
  */
 size_t grx_unicode_property_total(uint32_t property);
+
+/**
+ * @brief The fingerprint of the code points the UCD files give a property.
+ *
+ * The one thing left here that says which code points a property has. The
+ * ranges are the Unicode library's, so a gate that asked this library for
+ * them and the Unicode library for them would be asking one source twice;
+ * eight bytes the generator computed from the UCD is what keeps the two
+ * readings comparable, and what a release mismatch shows up in.
+ *
+ * @param property The index grx_unicode_property_lookup() returned.
+ * @return The digest, or 0 for an index out of range.
+ */
+uint64_t grx_unicode_property_digest(uint32_t property);
+
+/**
+ * @brief The same fingerprint, over a range list in hand.
+ *
+ * FNV-1a 64 over each range's two code points, little end first - the
+ * generator's `digest_ranges()` in C. Both sides canonicalise a set the same
+ * way (sorted, disjoint, and two ranges that touch merged into one), so
+ * equal sets give equal digests and there is nothing to normalise here.
+ *
+ * @param ranges The ranges. May be NULL only when `count` is 0.
+ * @param count How many.
+ * @return The digest.
+ */
+uint64_t grx_unicode_range_digest(const GUNI_Range * ranges, size_t count);
 
 /**
  * @brief Resolve a property *of strings* by name.

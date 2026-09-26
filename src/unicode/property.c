@@ -21,19 +21,41 @@
 /**
  * @file
  *
- * Resolving `\p{...}` to a set of code points.
+ * Resolving `\p{...}`: the spelling here, the code points in the suite.
  *
- * Two spelling rules over one set of tables. ECMAScript requires the exact
- * canonical name or a listed alias and rejects everything else as a
- * SyntaxError; Perl and PCRE2 ignore case, underscores, hyphens and spaces.
- * Both are binary searches, the second over a table the generator emitted
- * with the loose spelling already applied, so that this file never has to
- * normalise a table entry at run time - only the caller's text.
+ * Two layers, and the split between them is the whole design of this file.
+ *
+ * **The spelling is this library's**, because the dialects disagree about
+ * it. ECMAScript requires the exact canonical name or a listed alias and
+ * rejects everything else as a SyntaxError; Perl and PCRE2 ignore case,
+ * underscores, hyphens and spaces; `\p{L&}` is Cased_Letter in both and a
+ * key no loose table could hold; `\p{nv=-1/2}` is a different set from
+ * `\p{nv=1/2}` because a numeric value is compared by arithmetic and the
+ * hyphen loose matching drops is a sign. None of that is a property of the
+ * UCD - it is a property of the four grammars - so it stays, as two binary
+ * searches over tables the generator emitted with each rule already applied.
+ *
+ * **The code points are ghoti.io-unicode's.** A resolved record says which
+ * question to put to it and nothing more: a property value, a
+ * General_Category mask, the complement of a value, or a numeric value over
+ * the domain a property encloses. This library holds no ranges at all, so a
+ * `\p{Greek}` and a `guni_set_contains()` in one program cannot answer
+ * differently - not because a gate compares them, but because there is only
+ * one table.
+ *
+ * What the records still carry is `total`, the generator's own count of what
+ * the UCD files say. That is deliberate: it is the one figure here derived
+ * without asking the library that answers, so the test summing a property's
+ * ranges against it compares two readings of the UCD rather than comparing
+ * the generator with itself, which is what it did while both came from the
+ * same run.
  */
 
 #include <ghoti.io/regex/macros.h>
 
 #include <ghoti.io/regex/core.h>
+#include <ghoti.io/unicode/char.h>
+#include <ghoti.io/unicode/set.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -478,18 +500,395 @@ GRX_Result grx_unicode_property_lookup(const char * name, size_t name_length,
   return GRX_ERR_SYNTAX;
 }
 
-const GRX_CharRange * grx_unicode_property_ranges(
-    uint32_t property, size_t * out_count) {
-  if (!out_count) {
-    return NULL;
-  }
-  *out_count = 0;
+// --------------------------------------------------------------------------
+// The code points, which are ghoti.io-unicode's
+// --------------------------------------------------------------------------
+
+/**
+ * The domain a Numeric_Value is looked for in.
+ *
+ * `guni_numeric_value()` answers for one code point, and `\p{nv=1/2}` needs
+ * the set - the shape mismatch that kept this property's ranges here through
+ * the first pass of the migration. It is closed without an API addition the
+ * same way the domain of a simple case mapping was: **a property is the
+ * enumeration and the function is the predicate.** Numeric_Type is None for
+ * every code point that has no numeric value and for no code point that has
+ * one, exhaustively checked in both directions, so its three other values
+ * enclose the whole domain - 262 ranges and 2,023 code points to walk rather
+ * than 1,114,112.
+ *
+ * The three together are 262 ranges in UCD 17.0.0, and they are gathered
+ * into one list and sorted so that the filter below runs in code point
+ * order - which is what makes its output sorted and coalesced without a
+ * pass of its own, and is the whole reason the domain is materialised
+ * rather than walked a value at a time.
+ */
+#define GRX_NUMERIC_DOMAIN_MAX 512
+
+/**
+ * The General_Category *groups*, which are not values.
+ *
+ * `\p{L}` is five categories. The Unicode library spells a group as a mask
+ * rather than giving it a value, because a value would have put a fake
+ * member in its General_Category enum - so the eight groups are the one kind
+ * of property here that is not reached by name.
+ *
+ * @return The mask, or 0 for a General_Category value that is a real one.
+ */
+static uint32_t gc_mask_for(const char * name) {
+  if (!strcmp(name, "Other")) { return GUNI_GC_MASK_C; }
+  if (!strcmp(name, "Letter")) { return GUNI_GC_MASK_L; }
+  if (!strcmp(name, "Cased_Letter")) { return GUNI_GC_MASK_LC; }
+  if (!strcmp(name, "Mark")) { return GUNI_GC_MASK_M; }
+  if (!strcmp(name, "Number")) { return GUNI_GC_MASK_N; }
+  if (!strcmp(name, "Punctuation")) { return GUNI_GC_MASK_P; }
+  if (!strcmp(name, "Symbol")) { return GUNI_GC_MASK_S; }
+  if (!strcmp(name, "Separator")) { return GUNI_GC_MASK_Z; }
+  return 0;
+}
+
+/**
+ * The UCD properties this library reads as binary ones, and what they exclude.
+ *
+ * `\p{Indic_Conjunct_Break}` asks a yes/no question of an enumerated
+ * property, and the set it means is every code point whose InCB is not None.
+ * That is not a Unicode-library value, so the record cannot be reached the
+ * way the other 447 are; it is the complement of one.
+ *
+ * A table of one, rather than an `if`, because this is a *shape* the UCD
+ * produces whenever a file lists an enumerated property's non-default runs
+ * and a dialect spells the name alone - and because a second one appearing
+ * should be a row here rather than another branch. check-unicode-agreement
+ * names any record that resolves to nothing, so a second one cannot arrive
+ * unnoticed.
+ */
+static const struct {
+  const char * name;
+  const char * excluded;
+} binary_readings[] = {
+  {"Indic_Conjunct_Break", "None"},
+};
+
+/** How one record's code points are reached. */
+typedef enum {
+  ROUTE_SET,     ///< One property value's set.
+  ROUTE_NOT,     ///< Everything one property value leaves out.
+  ROUTE_MASK,    ///< A General_Category group, as a mask.
+  ROUTE_NUMERIC  ///< One Numeric_Value over the Numeric_Type domain.
+} Route;
+
+/** A record, turned into the question to ask ghoti.io-unicode. */
+typedef struct {
+  Route route;
+  GUNI_Property property;  ///< ROUTE_SET and ROUTE_NOT.
+  uint32_t value;          ///< ROUTE_SET and ROUTE_NOT.
+  uint32_t mask;           ///< ROUTE_MASK.
+  int64_t numerator;       ///< ROUTE_NUMERIC; carries the sign.
+  int64_t denominator;     ///< ROUTE_NUMERIC; always positive.
+} Resolved;
+
+/**
+ * Turn a property index into the question its code points answer.
+ *
+ * @return GRX_OK; GRX_ERR_INVALID for an index that names no record; and
+ *   GRX_ERR_INTERNAL when the Unicode library does not know a name this
+ *   library's own table holds, which is a build with two UCD releases in it
+ *   rather than anything a pattern did.
+ */
+static GRX_Result resolve(uint32_t property, Resolved * out) {
   if (property >= grx_unicode_property_count) {
-    return NULL;
+    return GRX_ERR_INVALID;
+  }
+  const GRX_UnicodeProperty * record = &grx_unicode_properties[property];
+  memset(out, 0, sizeof *out);
+
+  if (record->kind == GRX_UPROP_NV) {
+    // The record's identity *is* its rational, and the numeric table is the
+    // only place it is written down. 144 entries, walked once per pattern.
+    for (size_t i = 0; i < grx_unicode_numeric_value_count; i++) {
+      if (grx_unicode_numeric_values[i].property == property) {
+        out->route = ROUTE_NUMERIC;
+        out->numerator = grx_unicode_numeric_values[i].numerator;
+        out->denominator = grx_unicode_numeric_values[i].denominator;
+        return GRX_OK;
+      }
+    }
+    return GRX_ERR_INTERNAL;
   }
 
-  *out_count = grx_unicode_properties[property].count;
-  return &grx_unicode_ranges[grx_unicode_properties[property].first];
+  if (record->kind == GRX_UPROP_GC) {
+    uint32_t mask = gc_mask_for(record->name);
+    if (mask) {
+      out->route = ROUTE_MASK;
+      out->mask = mask;
+      return GRX_OK;
+    }
+  }
+
+  const char * name = record->name;
+  const char * value = "Y";
+  switch (record->kind) {
+    case GRX_UPROP_GC:     name = "General_Category";  value = record->name; break;
+    case GRX_UPROP_SCRIPT: name = "Script";            value = record->name; break;
+    case GRX_UPROP_SCX:    name = "Script_Extensions"; value = record->name; break;
+    default: break;
+  }
+
+  if (guni_property_by_name(name, strlen(name), &out->property) != GUNI_OK) {
+    return GRX_ERR_INTERNAL;
+  }
+
+  for (size_t i = 0; i < sizeof binary_readings / sizeof *binary_readings;
+      i++) {
+    if (!strcmp(record->name, binary_readings[i].name)) {
+      const char * excluded = binary_readings[i].excluded;
+      if (guni_value_by_name(out->property, excluded, strlen(excluded),
+              &out->value) != GUNI_OK) {
+        return GRX_ERR_INTERNAL;
+      }
+      out->route = ROUTE_NOT;
+      return GRX_OK;
+    }
+  }
+
+  if (guni_value_by_name(out->property, value, strlen(value), &out->value)
+      != GUNI_OK) {
+    return GRX_ERR_INTERNAL;
+  }
+  out->route = ROUTE_SET;
+  return GRX_OK;
+}
+
+/**
+ * Complement a sorted, disjoint, non-adjacent range list in place.
+ *
+ * Safe in place because each input yields at most one output and only when
+ * there is a gap before it, so the write index never overtakes the read
+ * index - and the range being read is copied out before it is written over.
+ * That is also why the loop needs no bounds check: `written` stays at or
+ * below the input index throughout, and the input already fitted.
+ *
+ * The tail is the one output with no input, and the one that can be one past
+ * a buffer that exactly fitted the input - so it is counted whether or not
+ * it is written, and `cap` is what decides which.
+ */
+static GRX_Result complement_in_place(
+    GUNI_Range * ranges, size_t count, size_t cap, size_t * out_count) {
+  uint32_t next = 0;
+  size_t written = 0;
+  for (size_t i = 0; i < count; i++) {
+    uint32_t low = ranges[i].first;
+    uint32_t high = ranges[i].last;
+    if (low > next) {
+      ranges[written].first = next;
+      ranges[written].last = low - 1;
+      written++;
+    }
+    next = high + 1;
+  }
+  // The tail. Not reached by anything shipped - InCB is None at U+10FFFF, so
+  // the excluded set covers the top of the code space and there is nothing
+  // above it - and kept because this is a complement rather than a special
+  // case of one. Put in a position to work rather than assumed: pointing
+  // `binary_readings` at InCB's Linker instead of its None makes the set end
+  // U+11F43-U+10FFFF with this arm and U+11A9A-U+11F41 without it.
+  if (next <= GRX_CODEPOINT_MAX) {
+    if (written < cap) {
+      ranges[written].first = next;
+      ranges[written].last = GRX_CODEPOINT_MAX;
+    }
+    written++;
+  }
+  *out_count = written;
+  return written <= cap ? GRX_OK : GRX_ERR_LIMIT;
+}
+
+/** The code points whose Numeric_Value is exactly this rational. */
+static GRX_Result numeric_ranges(const Resolved * resolved, GUNI_Range * out,
+    size_t cap, size_t * out_count) {
+  GUNI_Property type;
+  uint32_t none = 0;
+  if (guni_property_by_name("Numeric_Type", 12, &type) != GUNI_OK
+      || guni_value_by_name(type, "None", 4, &none) != GUNI_OK) {
+    return GRX_ERR_INTERNAL;
+  }
+
+  // Every Numeric_Type but None, gathered and put in code point order. The
+  // values are disjoint, so ordering by `first` orders them completely.
+  GUNI_Range domain[GRX_NUMERIC_DOMAIN_MAX];
+  size_t domain_count = 0;
+  uint32_t values = guni_property_value_count(type);
+  for (uint32_t value = 0; value < values; value++) {
+    if (value == none) {
+      continue;
+    }
+    size_t count = 0;
+    if (guni_set_ranges(type, value, domain + domain_count,
+            GRX_NUMERIC_DOMAIN_MAX - domain_count, &count) != GUNI_OK) {
+      return GRX_ERR_INTERNAL;
+    }
+    domain_count += count;
+  }
+  for (size_t i = 1; i < domain_count; i++) {
+    GUNI_Range key = domain[i];
+    size_t j = i;
+    while (j && domain[j - 1].first > key.first) {
+      domain[j] = domain[j - 1];
+      j--;
+    }
+    domain[j] = key;
+  }
+
+  // One pass in code point order, so a run of members is one range and two
+  // runs that meet across a domain boundary are one range too. `written`
+  // counts what the set needs whether or not there was room for it, which is
+  // what lets a caller ask with a cap of 0 and be told the answer.
+  size_t written = 0;
+  uint32_t low = 0;
+  uint32_t high = 0;
+  int open = 0;
+  for (size_t i = 0; i < domain_count; i++) {
+    for (uint32_t code = domain[i].first; code <= domain[i].last; code++) {
+      int64_t numerator = 0;
+      uint32_t denominator = 0;
+      if (!guni_numeric_value(code, &numerator, &denominator)
+          || numerator != resolved->numerator
+          || (int64_t)denominator != resolved->denominator) {
+        continue;
+      }
+      if (open && code == high + 1) {
+        high = code;
+        continue;
+      }
+      if (open) {
+        if (written < cap) {
+          out[written].first = low;
+          out[written].last = high;
+        }
+        written++;
+      }
+      low = code;
+      high = code;
+      open = 1;
+    }
+  }
+  if (open) {
+    if (written < cap) {
+      out[written].first = low;
+      out[written].last = high;
+    }
+    written++;
+  }
+
+  *out_count = written;
+  return written <= cap ? GRX_OK : GRX_ERR_LIMIT;
+}
+
+GRX_Result grx_unicode_property_ranges(
+    uint32_t property, GUNI_Range * out, size_t cap, size_t * out_count) {
+  if (!out_count || (!out && cap)) {
+    return GRX_ERR_INVALID;
+  }
+  *out_count = 0;
+
+  Resolved resolved;
+  GRX_Result result = resolve(property, &resolved);
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  size_t count = 0;
+  switch (resolved.route) {
+    case ROUTE_MASK:
+      if (guni_gc_mask_ranges(resolved.mask, out, cap, &count) != GUNI_OK) {
+        *out_count = count;
+        return GRX_ERR_LIMIT;
+      }
+      break;
+
+    case ROUTE_SET:
+      if (guni_set_ranges(resolved.property, resolved.value, out, cap, &count)
+          != GUNI_OK) {
+        *out_count = count;
+        return GRX_ERR_LIMIT;
+      }
+      break;
+
+    case ROUTE_NOT: {
+      // The excluded value's own ranges land in the caller's buffer and are
+      // turned inside out there. The complement of N ranges is N + 1 of
+      // them, less one for each end of the code space the excluded set
+      // already covers - which two membership questions settle exactly, so
+      // that a caller asking with a cap of 0 is told the requirement rather
+      // than a bound one too large.
+      if (guni_set_ranges(resolved.property, resolved.value, out, cap, &count)
+          != GUNI_OK) {
+        *out_count = count + 1
+            - (guni_set_contains(resolved.property, resolved.value, 0) ? 1 : 0)
+            - (guni_set_contains(
+                   resolved.property, resolved.value, GRX_CODEPOINT_MAX)
+                    ? 1 : 0);
+        return GRX_ERR_LIMIT;
+      }
+      result = complement_in_place(out, count, cap, &count);
+      if (result != GRX_OK) {
+        *out_count = count;
+        return result;
+      }
+
+      break;
+    }
+
+    case ROUTE_NUMERIC:
+      // `count` is what the set needs whether or not it fitted, so it is
+      // reported either way - a refusal that says nothing about the
+      // requirement leaves a caller asking with a cap of 0 no better off
+      // than it started.
+      result = numeric_ranges(&resolved, out, cap, &count);
+      if (result != GRX_OK) {
+        *out_count = count;
+        return result;
+      }
+      break;
+
+    default:
+      return GRX_ERR_INTERNAL;
+  }
+
+  *out_count = count;
+  return GRX_OK;
+}
+
+int grx_unicode_property_contains(uint32_t property, uint32_t codepoint) {
+  Resolved resolved;
+  if (resolve(property, &resolved) != GRX_OK) {
+    return 0;
+  }
+
+  switch (resolved.route) {
+    case ROUTE_MASK:
+      return guni_gc_mask_contains(resolved.mask, codepoint) ? 1 : 0;
+    case ROUTE_SET:
+      return guni_set_contains(resolved.property, resolved.value, codepoint)
+          ? 1 : 0;
+    case ROUTE_NOT:
+      return guni_set_contains(resolved.property, resolved.value, codepoint)
+          ? 0 : 1;
+    case ROUTE_NUMERIC: {
+      // The one route with no membership test of its own: a Numeric_Value is
+      // arithmetic, so the question is asked of the code point directly and
+      // the domain never enters into it.
+      int64_t numerator = 0;
+      uint32_t denominator = 0;
+      if (!guni_numeric_value(codepoint, &numerator, &denominator)) {
+        return 0;
+      }
+      return numerator == resolved.numerator
+          && (int64_t)denominator == resolved.denominator;
+    }
+    default:
+      return 0;
+  }
 }
 
 const char * grx_unicode_property_name(uint32_t property) {
@@ -506,6 +905,28 @@ size_t grx_unicode_property_total(uint32_t property) {
   }
 
   return grx_unicode_properties[property].total;
+}
+
+uint64_t grx_unicode_property_digest(uint32_t property) {
+  if (property >= grx_unicode_property_count) {
+    return 0;
+  }
+
+  return grx_unicode_properties[property].digest;
+}
+
+uint64_t grx_unicode_range_digest(const GUNI_Range * ranges, size_t count) {
+  uint64_t value = 0xCBF29CE484222325ULL;
+  for (size_t i = 0; i < count; i++) {
+    const uint32_t words[2] = {ranges[i].first, ranges[i].last};
+    for (size_t w = 0; w < 2; w++) {
+      for (unsigned shift = 0; shift < 32; shift += 8) {
+        value ^= (words[w] >> shift) & 0xFFu;
+        value *= 0x100000001B3ULL;
+      }
+    }
+  }
+  return value;
 }
 
 // --------------------------------------------------------------------------

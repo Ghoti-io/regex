@@ -32,6 +32,9 @@
 /** The longest property name this tool will read. */
 #define MAX_NAME 256
 
+/** One property's code points, materialised from ghoti.io-unicode. */
+static GUNI_Range ranges[GRX_PROPERTY_RANGES_MAX];
+
 int main(int argc, char ** argv) {
   if (argc > 1 && strcmp(argv[1], "--list-numeric") == 0) {
     for (uint32_t index = 0; index < grx_unicode_property_count; index++) {
@@ -107,11 +110,18 @@ int main(int argc, char ** argv) {
     }
 
     size_t count = 0;
-    const GRX_CharRange * ranges
-        = grx_unicode_property_ranges(property, &count);
+    if (grx_unicode_property_ranges(
+            property, ranges, GRX_PROPERTY_RANGES_MAX, &count) != GRX_OK) {
+      // Not "unknown": the name resolved and the set did not come back, so
+      // reporting it as a name nobody has would put a real fault into the
+      // bucket the harness counts as agreement.
+      fprintf(stderr, "%s: resolved but has no set (%zu ranges needed)\n",
+          line, count);
+      return 1;
+    }
     printf("%s\t", line);
     for (size_t i = 0; i < count; i++) {
-      printf("%s%X-%X", i ? " " : "", ranges[i].low, ranges[i].high);
+      printf("%s%X-%X", i ? " " : "", ranges[i].first, ranges[i].last);
     }
     printf("\n");
   }

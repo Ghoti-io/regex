@@ -170,10 +170,7 @@ static int has_property(const char * name, uint32_t codepoint) {
     return 0;
   }
 
-  size_t count = 0;
-  const GRX_CharRange * ranges
-      = grx_unicode_property_ranges(property, &count);
-  return grx_range_contains(ranges, count, codepoint);
+  return grx_unicode_property_contains(property, codepoint);
 }
 
 // --------------------------------------------------------------------------

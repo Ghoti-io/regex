@@ -619,14 +619,9 @@ TEST(CharClass, ARealPropertyGoesInAsRanges) {
   uint32_t property = 0;
   ASSERT_EQ(grx_unicode_property_lookup("Lu", 2, nullptr, 0,
                 GRX_PROPERTY_STRICT, &property), GRX_OK);
-  size_t count = 0;
-  const GRX_CharRange * ranges
-      = grx_unicode_property_ranges(property, &count);
-  ASSERT_GT(count, 0u);
 
   Class cls;
-  ASSERT_EQ(grx_charclass_add_ranges(cls.get(), ranges, count, nullptr),
-      GRX_OK);
+  ASSERT_EQ(grx_charclass_add_property(cls.get(), property, nullptr), GRX_OK);
   EXPECT_EQ(grx_charclass_size(cls.get()),
       grx_unicode_property_total(property));
   EXPECT_TRUE(grx_charclass_contains(cls.get(), 'A'));
@@ -638,9 +633,16 @@ TEST(CharClass, ARealPropertyGoesInAsRanges) {
       GRX_OK);
   EXPECT_TRUE(grx_charclass_contains(cls.get(), 'a'));
 
-  EXPECT_EQ(grx_charclass_add_ranges(nullptr, ranges, count, nullptr),
+  static const GRX_CharRange one[] = {{'q', 'q'}};
+  EXPECT_EQ(grx_charclass_add_ranges(nullptr, one, 1, nullptr),
       GRX_ERR_INVALID);
   EXPECT_EQ(grx_charclass_add_ranges(cls.get(), nullptr, 1, nullptr),
+      GRX_ERR_INVALID);
+  EXPECT_EQ(grx_charclass_add_property(nullptr, property, nullptr),
+      GRX_ERR_INVALID);
+  // A property index that names no record is refused rather than adding an
+  // empty set, which would read as "this property has no members".
+  EXPECT_EQ(grx_charclass_add_property(cls.get(), UINT32_MAX, nullptr),
       GRX_ERR_INVALID);
 }
 

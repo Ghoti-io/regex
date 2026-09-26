@@ -35,8 +35,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "../../core/range_internal.h"
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -55,19 +53,32 @@ typedef enum {
 } GRX_UPropKind;
 
 /**
- * @brief One Unicode property, as a slice of the shared range array.
+ * @brief One Unicode property: its spelling, and how its set is reached.
  *
- * `total` is the code-point count the UCD's own trailer states, carried
- * across so that a C test can check the table against the standard's
- * arithmetic rather than against the generator that produced it
- * (documentation/unicode.md section 4).
+ * The code points are **not** here. They are ghoti.io-unicode's, asked for
+ * by the name and kind below (see property.c), so that a `\p{...}` and a
+ * `guni_set_contains()` in the same program cannot answer differently. What
+ * a record holds is this library's own view of the property: the canonical
+ * long name a dump prints, the kind that says which question to put to the
+ * Unicode library, and `total`.
+ *
+ * `total` and `digest` are what is left of the ranges, and they are what
+ * keeps the two readings of the UCD comparable now that only one of them is
+ * stored. `total` is the figure a human can check against somebody else -
+ * Node reports 1,886 code points in `\p{Lu}` for Unicode 17.0, and so does
+ * this - and `digest` is the one that makes "the same set" mean the same
+ * *members* rather than the same number of them. Both are the generator's,
+ * derived from the UCD files without asking the library that answers, so
+ * `Property.EverySetIsTheOneTheUCDFilesGive` compares two readings of one
+ * release instead of comparing the generator with itself - which is what it
+ * did while the ranges it summed and the total it summed them against both
+ * came from the same run (documentation/unicode.md section 4).
  */
 typedef struct GRX_UnicodeProperty {
   const char * name;  ///< The canonical long name.
   uint8_t kind;       ///< A @ref GRX_UPropKind.
-  uint32_t first;     ///< Index of the first range in grx_unicode_ranges.
-  uint32_t count;     ///< Number of ranges.
   uint32_t total;     ///< Code points the property covers.
+  uint64_t digest;    ///< FNV-1a 64 over the ranges the UCD files give it.
 } GRX_UnicodeProperty;
 
 /**
@@ -82,21 +93,6 @@ typedef struct GRX_UnicodeName {
   uint16_t kind;      ///< A @ref GRX_UPropKind.
   uint16_t property;  ///< Index into grx_unicode_properties.
 } GRX_UnicodeName;
-
-/**
- * @brief One run of code points sharing a break property value.
- *
- * Sorted by `low` and non-overlapping, so a lookup is a binary search. Only
- * the runs a UCD file lists are here; a code point in none of them has the
- * property's default, which is value 0 in every one of these tables - Other
- * for the UAX #29 properties, XX for line breaking, None for
- * Indic_Conjunct_Break.
- */
-typedef struct GRX_UnicodeBreakRange {
-  uint32_t low;   ///< First code point of the run.
-  uint32_t high;  ///< Last code point of the run.
-  uint32_t value; ///< The property value, as the matching enum numbers it.
-} GRX_UnicodeBreakRange;
 
 /** @brief One entry of a case-mapping table. */
 typedef struct GRX_UnicodeCaseMap {
@@ -152,9 +148,6 @@ typedef struct GRX_UnicodeStringSet {
   uint32_t first;    ///< Index of its first sequence.
   uint32_t count;    ///< Sequences in it.
 } GRX_UnicodeStringSet;
-
-extern const GRX_CharRange grx_unicode_ranges[];
-extern const size_t grx_unicode_range_count;
 
 /** Properties of strings: the flat code points, the sequences, the sets. */
 extern const uint32_t grx_unicode_string_points[];

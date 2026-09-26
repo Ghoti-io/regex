@@ -160,9 +160,7 @@ static GRX_Result add_property_named(Lowering * low, const char * name,
     return result;
   }
 
-  size_t count = 0;
-  const GRX_CharRange * ranges = grx_unicode_property_ranges(property, &count);
-  return grx_charclass_add_ranges(out, ranges, count, low->limits);
+  return grx_charclass_add_property(out, property, low->limits);
 }
 
 /**
@@ -642,10 +640,7 @@ static GRX_Result item_base_set(Lowering * low, const GRX_ClassItem * item,
         // two resolvers disagree - an internal fault, not a user's error.
         return fail(low, GRX_DIAG_INTERNAL, node);
       }
-      size_t count = 0;
-      const GRX_CharRange * ranges
-          = grx_unicode_property_ranges(property, &count);
-      return grx_charclass_add_ranges(out, ranges, count, low->limits);
+      return grx_charclass_add_property(out, property, low->limits);
     }
 
     case GRX_CLASS_ITEM_POSIX:

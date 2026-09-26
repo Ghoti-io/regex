@@ -164,6 +164,7 @@
 #define GRX_CharClass GHOTIIO_REGEX(GRX_CharClass)
 #define GRX_ClassRef GHOTIIO_REGEX(GRX_ClassRef)
 #define GRX_ClassTable GHOTIIO_REGEX(GRX_ClassTable)
+#define grx_charclass_add_property GHOTIIO_REGEX(grx_charclass_add_property)
 #define grx_charclass_add_range GHOTIIO_REGEX(grx_charclass_add_range)
 #define grx_charclass_add_ranges GHOTIIO_REGEX(grx_charclass_add_ranges)
 #define grx_charclass_canonicalize GHOTIIO_REGEX(grx_charclass_canonicalize)
@@ -264,7 +265,6 @@
 
 // Code-point ranges, the shape every set in the library has.
 #define GRX_CharRange GHOTIIO_REGEX(GRX_CharRange)
-#define grx_range_contains GHOTIIO_REGEX(grx_range_contains)
 
 // Dialects.
 #define GRX_Frontend GHOTIIO_REGEX(GRX_Frontend)
@@ -316,8 +316,12 @@
 #define grx_unicode_lower_simple GHOTIIO_REGEX(grx_unicode_lower_simple)
 #define grx_unicode_property_lookup GHOTIIO_REGEX(grx_unicode_property_lookup)
 #define grx_unicode_property_name GHOTIIO_REGEX(grx_unicode_property_name)
+#define grx_unicode_property_contains                                         \
+  GHOTIIO_REGEX(grx_unicode_property_contains)
+#define grx_unicode_property_digest GHOTIIO_REGEX(grx_unicode_property_digest)
 #define grx_unicode_property_ranges GHOTIIO_REGEX(grx_unicode_property_ranges)
 #define grx_unicode_property_total GHOTIIO_REGEX(grx_unicode_property_total)
+#define grx_unicode_range_digest GHOTIIO_REGEX(grx_unicode_range_digest)
 #define grx_unicode_string_set_lookup GHOTIIO_REGEX(grx_unicode_string_set_lookup)
 #define grx_unicode_string_set_size GHOTIIO_REGEX(grx_unicode_string_set_size)
 #define grx_unicode_string_set_at GHOTIIO_REGEX(grx_unicode_string_set_at)
@@ -384,8 +388,6 @@
 #define grx_unicode_properties GHOTIIO_REGEX(grx_unicode_properties)
 #define grx_unicode_property_count                                            \
   GHOTIIO_REGEX(grx_unicode_property_count)
-#define grx_unicode_range_count GHOTIIO_REGEX(grx_unicode_range_count)
-#define grx_unicode_ranges GHOTIIO_REGEX(grx_unicode_ranges)
 #define grx_unicode_strict_name_count                                         \
   GHOTIIO_REGEX(grx_unicode_strict_name_count)
 #define grx_unicode_strict_names GHOTIIO_REGEX(grx_unicode_strict_names)

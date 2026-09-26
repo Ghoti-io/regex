@@ -168,6 +168,29 @@ def count_codepoints(ranges):
     return sum(high - low + 1 for low, high in ranges)
 
 
+def digest_ranges(ranges):
+    """FNV-1a 64 over a normalised range list.
+
+    The ranges themselves are not emitted any more - they are
+    ghoti.io-unicode's - so this is what is left to compare the two readings
+    of the UCD by. A count would not do it: two different sets of the same
+    size pass a count, and "the library that answers agrees with the files
+    the generator read" has to mean the same *members*, not the same number
+    of them. Eight bytes a property says that, and cannot be mistaken for a
+    source a lookup could read.
+
+    FNV because it is four lines in both languages and the generator's copy
+    and the C copy have to agree exactly; nothing here is adversarial.
+    """
+    value = 0xCBF29CE484222325
+    for low, high in ranges:
+        for word in (low, high):
+            for shift in (0, 8, 16, 24):
+                value ^= (word >> shift) & 0xFF
+                value = (value * 0x100000001B3) & 0xFFFFFFFFFFFFFFFF
+    return value
+
+
 # ---------------------------------------------------------------------------
 # UCD file parsing
 #
@@ -846,14 +869,6 @@ def c_string(text):
     return '"%s"' % text.replace("\\", "\\\\").replace('"', '\\"')
 
 
-def emit_ranges(out, ranges, per_line=4):
-    """Write range initialisers, several to a line to keep the file short."""
-    for start in range(0, len(ranges), per_line):
-        chunk = ranges[start:start + per_line]
-        out.write("  " + " ".join(
-            "{0x%04X,0x%04X}," % (low, high) for low, high in chunk) + "\n")
-
-
 def normalise_loose(name):
     """UAX #44 section 5.9.2 loose matching: fold case, drop `_`, `-`, space."""
     return "".join(
@@ -1084,8 +1099,6 @@ def write_header(out_dir, tables):
 #include <stddef.h>
 #include <stdint.h>
 
-#include "../../core/range_internal.h"
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -1104,19 +1117,32 @@ typedef enum {
 } GRX_UPropKind;
 
 /**
- * @brief One Unicode property, as a slice of the shared range array.
+ * @brief One Unicode property: its spelling, and how its set is reached.
  *
- * `total` is the code-point count the UCD's own trailer states, carried
- * across so that a C test can check the table against the standard's
- * arithmetic rather than against the generator that produced it
- * (documentation/unicode.md section 4).
+ * The code points are **not** here. They are ghoti.io-unicode's, asked for
+ * by the name and kind below (see property.c), so that a `\\p{...}` and a
+ * `guni_set_contains()` in the same program cannot answer differently. What
+ * a record holds is this library's own view of the property: the canonical
+ * long name a dump prints, the kind that says which question to put to the
+ * Unicode library, and `total`.
+ *
+ * `total` and `digest` are what is left of the ranges, and they are what
+ * keeps the two readings of the UCD comparable now that only one of them is
+ * stored. `total` is the figure a human can check against somebody else -
+ * Node reports 1,886 code points in `\\p{Lu}` for Unicode 17.0, and so does
+ * this - and `digest` is the one that makes "the same set" mean the same
+ * *members* rather than the same number of them. Both are the generator's,
+ * derived from the UCD files without asking the library that answers, so
+ * `Property.EverySetIsTheOneTheUCDFilesGive` compares two readings of one
+ * release instead of comparing the generator with itself - which is what it
+ * did while the ranges it summed and the total it summed them against both
+ * came from the same run (documentation/unicode.md section 4).
  */
 typedef struct GRX_UnicodeProperty {
   const char * name;  ///< The canonical long name.
   uint8_t kind;       ///< A @ref GRX_UPropKind.
-  uint32_t first;     ///< Index of the first range in grx_unicode_ranges.
-  uint32_t count;     ///< Number of ranges.
   uint32_t total;     ///< Code points the property covers.
+  uint64_t digest;    ///< FNV-1a 64 over the ranges the UCD files give it.
 } GRX_UnicodeProperty;
 
 /**
@@ -1131,21 +1157,6 @@ typedef struct GRX_UnicodeName {
   uint16_t kind;      ///< A @ref GRX_UPropKind.
   uint16_t property;  ///< Index into grx_unicode_properties.
 } GRX_UnicodeName;
-
-/**
- * @brief One run of code points sharing a break property value.
- *
- * Sorted by `low` and non-overlapping, so a lookup is a binary search. Only
- * the runs a UCD file lists are here; a code point in none of them has the
- * property's default, which is value 0 in every one of these tables - Other
- * for the UAX #29 properties, XX for line breaking, None for
- * Indic_Conjunct_Break.
- */
-typedef struct GRX_UnicodeBreakRange {
-  uint32_t low;   ///< First code point of the run.
-  uint32_t high;  ///< Last code point of the run.
-  uint32_t value; ///< The property value, as the matching enum numbers it.
-} GRX_UnicodeBreakRange;
 
 /** @brief One entry of a case-mapping table. */
 typedef struct GRX_UnicodeCaseMap {
@@ -1201,9 +1212,6 @@ typedef struct GRX_UnicodeStringSet {
   uint32_t first;    ///< Index of its first sequence.
   uint32_t count;    ///< Sequences in it.
 } GRX_UnicodeStringSet;
-
-extern const GRX_CharRange grx_unicode_ranges[];
-extern const size_t grx_unicode_range_count;
 
 /** Properties of strings: the flat code points, the sequences, the sets. */
 extern const uint32_t grx_unicode_string_points[];
@@ -1304,24 +1312,26 @@ extern const size_t grx_unicode_es_legacy_orbit_member_count;
 """ % c_string(tables["version"]))
 
 
-def write_ranges(out_dir, tables):
-    path = os.path.join(out_dir, "tables_ranges.c")
+def write_properties(out_dir, tables):
+    path = os.path.join(out_dir, "tables_properties.c")
     properties = tables["properties"]
 
-    # One flat range array shared by every property, so that a property is
-    # two integers rather than its own symbol, and the linker sees one object
-    # instead of several hundred.
-    flat = []
-    records = []
-    for prop in properties:
-        records.append({
-            "name": prop["name"],
-            "kind": prop["kind"],
-            "first": len(flat),
-            "count": len(prop["ranges"]),
-            "total": count_codepoints(prop["ranges"]),
-        })
-        flat.extend(prop["ranges"])
+    # No ranges. Every one of these sets is ghoti.io-unicode's, reached from
+    # the name and kind below; what is emitted is the spelling layer, which
+    # is this library's own because the dialects disagree about it, plus each
+    # property's code-point count.
+    #
+    # The ranges are still *built* above, and `total` is what they are built
+    # for: the generator's count of what the UCD files say, against which the
+    # Unicode library's set is checked at run time. Dropping the count with
+    # the ranges would have left the two readings of the UCD with nothing
+    # between them.
+    records = [{
+        "name": prop["name"],
+        "kind": prop["kind"],
+        "total": count_codepoints(prop["ranges"]),
+        "digest": digest_ranges(prop["ranges"]),
+    } for prop in properties]
 
     # Name tables. A property's value spellings and a binary property's own
     # name resolve the same way, so they share one table keyed by (name, kind).
@@ -1379,16 +1389,11 @@ def write_ranges(out_dir, tables):
         out.write(HEADER_NOTICE % tables["version"])
         out.write('\n#include "tables_internal.h"\n\n')
 
-        out.write("const GRX_CharRange grx_unicode_ranges[] = {\n")
-        emit_ranges(out, flat)
-        out.write("};\n")
-        out.write("const size_t grx_unicode_range_count = %d;\n\n" % len(flat))
-
         out.write("const GRX_UnicodeProperty grx_unicode_properties[] = {\n")
         for record in records:
-            out.write("  {%s, %s, %d, %d, %d},\n" % (
+            out.write("  {%s, %s, %d, 0x%016XULL},\n" % (
                 c_string(record["name"]), KIND_NAMES[record["kind"]],
-                record["first"], record["count"], record["total"]))
+                record["total"], record["digest"]))
         out.write("};\n")
         out.write("const size_t grx_unicode_property_count = %d;\n\n"
                   % len(records))
@@ -1576,13 +1581,14 @@ def main(argv):
     os.makedirs(out_dir, exist_ok=True)
     tables = build_tables(ucd, args.version)
     write_header(out_dir, tables)
-    write_ranges(out_dir, tables)
+    write_properties(out_dir, tables)
     write_case(out_dir, tables)
     write_strings(out_dir, tables)
 
     total_ranges = sum(len(prop["ranges"]) for prop in tables["properties"])
     sys.stderr.write(
-        "UCD %s: %d properties, %d ranges, %d folds, %d fold orbits, "
+        "UCD %s: %d properties over %d ranges (counted, not emitted - the "
+        "sets are ghoti.io-unicode's), %d folds, %d fold orbits, "
         "%d string properties over %d sequences\n" % (
             args.version, len(tables["properties"]), total_ranges,
             len(tables["folds"]), len(tables["fold_orbits"]),

@@ -320,6 +320,36 @@ GRX_Result grx_charclass_add_ranges(GRX_CharClass * cls,
   return GRX_OK;
 }
 
+GRX_Result grx_charclass_add_property(GRX_CharClass * cls, uint32_t property,
+    const GRX_Limits * limits) {
+  if (!cls) {
+    return GRX_ERR_INVALID;
+  }
+
+  // Eight kilobytes of stack on the compile path, and the reason it is here
+  // rather than allocated: `\p{L}` cost no heap while the ranges were in
+  // .rodata, and a property resolved once per pattern is not worth making
+  // that untrue. GRX_PROPERTY_RANGES_MAX says what bounds it and what
+  // happens to a set that outgrows it.
+  GUNI_Range ranges[GRX_PROPERTY_RANGES_MAX];
+  size_t count = 0;
+  GRX_Result result = grx_unicode_property_ranges(
+      property, ranges, GRX_PROPERTY_RANGES_MAX, &count);
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  for (size_t i = 0; i < count; i++) {
+    result = grx_charclass_add_range(
+        cls, ranges[i].first, ranges[i].last, limits);
+    if (result != GRX_OK) {
+      return result;
+    }
+  }
+
+  return GRX_OK;
+}
+
 GRX_Result grx_charclass_union(GRX_CharClass * cls, const GRX_CharClass * other,
     const GRX_Limits * limits) {
   return sweep(cls, other, CLASS_OP_UNION, limits);

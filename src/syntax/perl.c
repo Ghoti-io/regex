@@ -2983,14 +2983,7 @@ static int pattern_white_space(uint32_t code) {
       != GRX_OK) {
     return 0;
   }
-  size_t count = 0;
-  const GRX_CharRange * ranges = grx_unicode_property_ranges(property, &count);
-  for (size_t i = 0; ranges && i < count; i++) {
-    if (code >= ranges[i].low && code <= ranges[i].high) {
-      return 1;
-    }
-  }
-  return 0;
+  return grx_unicode_property_contains(property, code);
 }
 
 /**

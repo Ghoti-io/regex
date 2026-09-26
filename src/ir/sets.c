@@ -107,10 +107,7 @@ static GRX_Result add_property(
     return GRX_ERR_INTERNAL; // A name this file wrote; it must resolve.
   }
 
-  size_t count = 0;
-  const GRX_CharRange * ranges
-      = grx_unicode_property_ranges(property, &count);
-  return grx_charclass_add_ranges(cls, ranges, count, limits);
+  return grx_charclass_add_property(cls, property, limits);
 }
 
 GRX_Result grx_named_set(

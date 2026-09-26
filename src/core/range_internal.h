@@ -21,13 +21,18 @@
 /**
  * @file
  *
- * One inclusive code-point range, and membership in a sorted array of them.
+ * One inclusive code-point range, and the largest code point there is.
  *
- * Its own header because two modules that must not depend on each other both
- * need it: the character-class module builds these arrays, and the Unicode
- * tables are these arrays. Putting the type in either one would make the
- * other include it, and the dependency that matters - a caseless class is
- * closed over the Unicode fold orbits - only runs one way.
+ * Its own header because the character-class module builds arrays of these
+ * and the parser, the IR and the engines all read them, so putting the type
+ * in the class module would make everything include it.
+ *
+ * It held a binary search over such an array too, until the Unicode
+ * properties stopped being arrays here and became questions put to
+ * ghoti.io-unicode: the last caller of `grx_range_contains()` was
+ * ECMAScript's `\p{...}` membership test, which asks
+ * `grx_unicode_property_contains()` now. What was left was a function whose
+ * only caller was its own test, which is a thing the suite makes look alive.
  */
 
 #ifndef GHOTI_IO_GRX_SRC_CORE_RANGE_INTERNAL_H
@@ -50,21 +55,6 @@ typedef struct GRX_CharRange {
   uint32_t low;  ///< First code point in the range.
   uint32_t high; ///< Last code point in the range.
 } GRX_CharRange;
-
-/**
- * @brief Whether a sorted, disjoint range array contains a code point.
- *
- * A binary search, which is the whole reason every set in this library is
- * kept sorted and disjoint: a property of 700 ranges costs ten comparisons
- * rather than 700.
- *
- * @param ranges The ranges. May be NULL only when `count` is 0.
- * @param count Number of ranges.
- * @param codepoint The code point to test.
- * @return Non-zero when some range covers it.
- */
-int grx_range_contains(
-    const GRX_CharRange * ranges, size_t count, uint32_t codepoint);
 
 #ifdef __cplusplus
 }

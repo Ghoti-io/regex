@@ -378,10 +378,20 @@ bool has(const std::string & name, uint32_t codepoint,
   if (property == UINT32_MAX) {
     return false;
   }
+  return grx_unicode_property_contains(property, codepoint) != 0;
+}
+
+/** One property's code points. Every route must fit the declared bound. */
+std::vector<GUNI_Range> ranges_of(uint32_t property) {
+  std::vector<GUNI_Range> ranges(GRX_PROPERTY_RANGES_MAX);
   size_t count = 0;
-  const GRX_CharRange * ranges
-      = grx_unicode_property_ranges(property, &count);
-  return grx_range_contains(ranges, count, codepoint) != 0;
+  if (grx_unicode_property_ranges(
+          property, ranges.data(), ranges.size(), &count)
+      != GRX_OK) {
+    return {};
+  }
+  ranges.resize(count);
+  return ranges;
 }
 
 } // namespace
@@ -670,30 +680,157 @@ TEST(Property, EveryTableIsSortedDisjointAndCounted) {
   // an unsorted array does not fail loudly; it returns the wrong answer for
   // some code points and the right one for others, which is the shape of
   // defect a spot check never finds.
+  //
+  // It is also the check that every record resolves. The ranges come from
+  // ghoti.io-unicode now, and a record it cannot name yields no ranges at
+  // all rather than an error a pattern would show - `\p{Whatever}` would
+  // quietly match nothing - so asking all 601 here is what makes that loud.
   for (uint32_t index = 0;; index++) {
-    size_t count = 0;
-    const GRX_CharRange * ranges
-        = grx_unicode_property_ranges(index, &count);
     const char * name = grx_unicode_property_name(index);
     if (!name) {
       EXPECT_GT(index, 0u) << "no properties were generated at all";
       break;
     }
+    std::vector<GUNI_Range> ranges(GRX_PROPERTY_RANGES_MAX);
+    size_t count = 0;
+    ASSERT_EQ(grx_unicode_property_ranges(
+                  index, ranges.data(), ranges.size(), &count),
+        GRX_OK) << name << " needs " << count << " ranges";
 
     size_t total = 0;
     for (size_t i = 0; i < count; i++) {
-      ASSERT_LE(ranges[i].low, ranges[i].high) << name << " range " << i;
-      ASSERT_LE(ranges[i].high, GRX_CODEPOINT_MAX) << name;
+      ASSERT_LE(ranges[i].first, ranges[i].last) << name << " range " << i;
+      ASSERT_LE(ranges[i].last, GRX_CODEPOINT_MAX) << name;
       if (i) {
-        // Strictly greater than the previous high *plus one*: two ranges
+        // Strictly greater than the previous last *plus one*: two ranges
         // that merely touch would be one range, and leaving them separate
         // would mean the same set had two spellings.
-        ASSERT_GT(ranges[i].low, ranges[i - 1].high + 1)
+        ASSERT_GT(ranges[i].first, ranges[i - 1].last + 1)
             << name << " range " << i;
       }
-      total += ranges[i].high - ranges[i].low + 1;
+      total += ranges[i].last - ranges[i].first + 1;
     }
     EXPECT_EQ(total, grx_unicode_property_total(index)) << name;
+  }
+}
+
+TEST(Property, EverySetIsTheOneTheUCDFilesGive) {
+  // The check that survived the ranges leaving. `total` and the ranges it
+  // was summed against used to come from the same generator run, so this
+  // compared the generator with itself and would have passed whatever the
+  // ranges held; now the ranges are ghoti.io-unicode's and both figures are
+  // the generator's reading of third_party/ucd/17.0.0, so it compares two
+  // readings of one release - which is the only thing that catches a build
+  // holding two.
+  //
+  // The digest is what makes it about *members*: a count alone passes two
+  // different sets of the same size, and "the same size" is not what
+  // `\p{Greek}` has to mean.
+  for (uint32_t index = 0;; index++) {
+    const char * name = grx_unicode_property_name(index);
+    if (!name) {
+      break;
+    }
+    std::vector<GUNI_Range> ranges = ranges_of(index);
+    EXPECT_EQ(grx_unicode_range_digest(ranges.data(), ranges.size()),
+        grx_unicode_property_digest(index))
+        << name << ": " << ranges.size()
+        << " ranges from the Unicode library are not the set the UCD files "
+           "give";
+  }
+}
+
+TEST(Property, ASetTooWideForTheBufferIsRefusedRatherThanTruncated) {
+  // The arm of the bound. Grapheme_Base is the widest property at 904
+  // ranges, so asking for it with room for 903 is the case a UCD one range
+  // past GRX_PROPERTY_RANGES_MAX would hit - and the answer has to be a
+  // refusal carrying the requirement, not a set that is nearly right.
+  uint32_t property = resolve("Grapheme_Base", GRX_PROPERTY_STRICT);
+  ASSERT_NE(property, UINT32_MAX);
+  std::vector<GUNI_Range> ranges(GRX_PROPERTY_RANGES_MAX);
+  size_t needed = 0;
+  ASSERT_EQ(grx_unicode_property_ranges(
+                property, ranges.data(), ranges.size(), &needed),
+      GRX_OK);
+  ASSERT_GT(needed, 1u);
+
+  size_t reported = 0;
+  EXPECT_EQ(grx_unicode_property_ranges(
+                property, ranges.data(), needed - 1, &reported),
+      GRX_ERR_LIMIT);
+  EXPECT_EQ(reported, needed);
+
+  // And the count-first shape the contract names, which is how a caller
+  // sizes a buffer without guessing.
+  reported = 0;
+  EXPECT_EQ(
+      grx_unicode_property_ranges(property, nullptr, 0, &reported),
+      GRX_ERR_LIMIT);
+  EXPECT_EQ(reported, needed);
+}
+
+TEST(Property, TheDerivedRoutesAnswerTheSameWayTwice) {
+  // Two properties are not one of the Unicode library's sets and are built
+  // here from one: `\p{Indic_Conjunct_Break}` is the complement of InCB
+  // None, and a Numeric_Value is a filter over Numeric_Type's domain. Both
+  // have a range list and a membership test written separately, so the two
+  // can disagree - which no gate outside this one would notice, because the
+  // membership test is what a parser calls and the range list is what a
+  // class is built from.
+  // By index rather than by name, because `\p{Indic_Conjunct_Break}` is one
+  // of the sixteen records this library's own resolver refuses - it is a
+  // real UCD property and ECMA-262's binary list is closed - so a lookup is
+  // not a way to reach it. The table is.
+  for (const char * name : {"Indic_Conjunct_Break", "1/2", "2"}) {
+    uint32_t property = UINT32_MAX;
+    for (uint32_t index = 0; grx_unicode_property_name(index); index++) {
+      if (!strcmp(grx_unicode_property_name(index), name)) {
+        property = index;
+        break;
+      }
+    }
+    ASSERT_NE(property, UINT32_MAX) << name;
+
+    std::vector<GUNI_Range> ranges = ranges_of(property);
+    ASSERT_FALSE(ranges.empty()) << name;
+
+    // The count-first shape, which neither derived route gets for free: a
+    // complement's size is not its excluded set's, and a filter's is not its
+    // domain's. A caller sizing a buffer from this and then finding it one
+    // short is the failure it has to not have.
+    size_t counted = 0;
+    EXPECT_EQ(grx_unicode_property_ranges(property, nullptr, 0, &counted),
+        GRX_ERR_LIMIT) << name;
+    EXPECT_EQ(counted, ranges.size()) << name;
+
+    // And one short, which is the figure a caller is most likely to have got
+    // wrong: for the complement that is a buffer the *excluded* set does not
+    // fit in either, so the requirement is reported from a route that never
+    // ran.
+    std::vector<GUNI_Range> narrow(ranges.size() - 1);
+    counted = 0;
+    EXPECT_EQ(grx_unicode_property_ranges(
+                  property, narrow.data(), narrow.size(), &counted),
+        GRX_ERR_LIMIT) << name;
+    EXPECT_EQ(counted, ranges.size()) << name;
+
+    size_t members = 0;
+    for (const GUNI_Range & range : ranges) {
+      members += range.last - range.first + 1;
+      EXPECT_TRUE(grx_unicode_property_contains(property, range.first))
+          << name << " U+" << std::hex << range.first;
+      EXPECT_TRUE(grx_unicode_property_contains(property, range.last))
+          << name << " U+" << std::hex << range.last;
+      if (range.first) {
+        EXPECT_FALSE(grx_unicode_property_contains(property, range.first - 1))
+            << name << " U+" << std::hex << range.first - 1;
+      }
+      if (range.last < GRX_CODEPOINT_MAX) {
+        EXPECT_FALSE(grx_unicode_property_contains(property, range.last + 1))
+            << name << " U+" << std::hex << range.last + 1;
+      }
+    }
+    EXPECT_EQ(members, grx_unicode_property_total(property)) << name;
   }
 }
 
@@ -714,23 +851,15 @@ TEST(Property, RejectsArgumentsItCannotUse) {
   EXPECT_EQ(grx_unicode_property_lookup(huge.data(), huge.size(), nullptr, 0,
                 GRX_PROPERTY_LOOSE, &property), GRX_ERR_SYNTAX);
 
-  EXPECT_EQ(grx_unicode_property_ranges(UINT32_MAX, nullptr), nullptr);
+  size_t count = 0;
+  EXPECT_EQ(grx_unicode_property_ranges(UINT32_MAX, nullptr, 0, &count),
+      GRX_ERR_INVALID);
+  EXPECT_EQ(grx_unicode_property_ranges(0, nullptr, 0, nullptr),
+      GRX_ERR_INVALID);
+  EXPECT_EQ(grx_unicode_property_contains(UINT32_MAX, 'a'), 0);
   EXPECT_EQ(grx_unicode_property_name(UINT32_MAX), nullptr);
   EXPECT_EQ(grx_unicode_property_total(UINT32_MAX), 0u);
-}
-
-TEST(Property, RangeContainsHandlesTheEmptyAndNullCases) {
-  EXPECT_EQ(grx_range_contains(nullptr, 0, 'a'), 0);
-  EXPECT_EQ(grx_range_contains(nullptr, 5, 'a'), 0);
-
-  const GRX_CharRange ranges[] = {{'a', 'c'}, {'x', 'x'}};
-  EXPECT_EQ(grx_range_contains(ranges, 0, 'a'), 0);
-  EXPECT_NE(grx_range_contains(ranges, 2, 'a'), 0);
-  EXPECT_NE(grx_range_contains(ranges, 2, 'b'), 0);
-  EXPECT_NE(grx_range_contains(ranges, 2, 'c'), 0);
-  EXPECT_EQ(grx_range_contains(ranges, 2, 'd'), 0);
-  EXPECT_NE(grx_range_contains(ranges, 2, 'x'), 0);
-  EXPECT_EQ(grx_range_contains(ranges, 2, 'y'), 0);
+  EXPECT_EQ(grx_unicode_property_digest(UINT32_MAX), 0u);
 }
 
 TEST(Fold, TheOrbitTableCanBeWalkedAsWellAsQueried) {
