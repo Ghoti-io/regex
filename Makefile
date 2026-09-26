@@ -436,11 +436,32 @@ TESTFLAGS := `PKG_CONFIG_PATH=$(PKG_CONFIG_LOOKUP_PATH) pkg-config --libs --cfla
 # on a command line. `TEST_GATES='$$(filter-out <gate>,$$(TEST_GATES))'` is
 # not: a command-line assignment is recursively expanded, so a TEST_GATES
 # that names itself is a recursion error rather than a subtraction.
+#
+# `test-asan` is in the list and is not spelled `check-`, which is the point:
+# it is the whole suite again under ASan and UBSan, and it was reachable only
+# by typing its name. That is how it came to be unbuildable for a day - four
+# link lines missed $(UNICODE_LIBS) when the dependency landed, and nothing
+# said so, because a target `make test` does not reach fails silently for as
+# long as nobody types it. A sanitizer gate outside the default run is a gate
+# nobody runs.
+#
+# The cost, measured on 2026-09-26 at -j8 rather than guessed, because "it
+# roughly doubles the run" was the standing reason for leaving it out:
+#
+#   make test  before   cold 24s, warm  7s
+#   make test-asan alone cold 55s, warm 23s
+#   make test  after     cold 78s, warm 32s
+#
+# The third line is measured too, not added up from the first two. So the
+# feared 2x is real - it is nearer 3x - and 78 seconds is what it buys heap,
+# leak and UB coverage over 51 suites and 37,396 conformance vectors with.
+# The ratio was the reason to leave it out and the absolute figure is why
+# that reason does not hold.
 ALL_TEST_GATES := check-symbols check-layering check-aliasing \
 	check-unicode-tables check-dump-names check-readme-example \
 	check-diagnostics check-engine-equivalence check-json-schema-suite \
 	check-tables check-status-line check-corpus-seeds check-makefile-hash \
-	check-oracle-env check-unicode-agreement
+	check-oracle-env check-unicode-agreement test-asan
 TEST_GATES ?= $(ALL_TEST_GATES)
 
 # What a gate that IS a python3 script does when there is no python3.
@@ -465,6 +486,33 @@ TEST_GATES ?= $(ALL_TEST_GATES)
 # where make lexes `#` as the start of a comment and silently truncates the
 # rest of the value. The identical text is safe in a recipe line, which is
 # where it lived before, so moving it here changed how it was read.
+# What the sanitizer gate does when the runtime is not there.
+#
+# `$(CC) -print-file-name=libasan.so` answers with the bare name when it
+# cannot find the file, so LD_PRELOAD gets `libasan.so`, every sanitized
+# binary refuses to start, and 32 suites fail at once for a reason that reads
+# as a broken machine rather than as a missing package. That was survivable
+# while `test-asan` was typed by hand and is not now that it is in every
+# `make test`, so the condition is tested rather than discovered.
+#
+# `command -v $(CC)` is not the question and neither is "does the flag
+# exist": the question is whether the file the compiler names is a file. A
+# guard that answered the easier question would exit 0 on exactly the machine
+# this is for.
+REQUIRE_ASAN_RUNTIME = if [ ! -f "$(ASAN_RUNTIME)" ]; then \
+		printf "\033[0;31m\n\#\#\# $@: the ASan runtime is missing \#\#\#\033[0m\n" >&2; \
+		printf "\n%s -print-file-name=libasan.so answered:\n\n  %s\n\n" \
+			"$(CC)" "$(ASAN_RUNTIME)" >&2; \
+		printf "which is not a file, so the compiler could not find it. Every\n" >&2; \
+		printf "sanitized binary would refuse to start and all 32 suites would\n" >&2; \
+		printf "fail at once, which reads as a broken machine.\n\n" >&2; \
+		printf "Install the sanitizer runtime for this compiler (libasan on\n" >&2; \
+		printf "Debian), or drop the gate for the run so that the choice is\n" >&2; \
+		printf "visible in the command rather than in the output:\n\n" >&2; \
+		printf "  make test TEST_GATES='\$$(filter-out test-asan,\$$(ALL_TEST_GATES))'\n\n" >&2; \
+		exit 1; \
+	fi
+
 REQUIRE_PYTHON3 = if ! command -v python3 >/dev/null 2>&1; then \
 		printf "\033[0;31m\n\#\#\# $@: python3 is missing \#\#\#\033[0m\n" >&2; \
 		printf "\nThis gate is a python3 script. Without an interpreter it does\n" >&2; \
@@ -484,11 +532,15 @@ REQUIRE_PYTHON3 = if ! command -v python3 >/dev/null 2>&1; then \
 # same hole and this is that fix swept here. `test-debug` and
 # `test-valgrind-debug` re-enter through those, so they inherit it.
 #
-# Two are exempt, for the same reason and deliberately: `test-asan` and
+# The relation runs one way for two of them, deliberately: `test-asan` and
 # `coverage` build a *different* library - the sanitizer runtime and gcov's
 # `mangle_path` are symbols check-symbols is right to reject in a shipping
-# library and wrong to reject there. coverage clears TEST_GATES on its
-# sub-make; test-asan never named them.
+# library and wrong to reject there - so neither carries the gates. coverage
+# clears TEST_GATES on its sub-make; test-asan simply does not name them.
+#
+# `test-asan` is now itself one of the gates, which is not a contradiction:
+# the gates do not apply *to* it, and it applies to everything that runs the
+# suites. It has no TEST_GATES prerequisite, so there is no cycle.
 
 # How much of the pattern space `make check-oracle-syntax` walks. The default
 # is a few seconds; a soak before a milestone raises the count and varies the
@@ -2258,6 +2310,7 @@ ASAN_RUNTIME := $(shell $(CC) -print-file-name=libasan.so 2>/dev/null)
 
 test-asan: ## Build with ASan+UBSan and run the test suite
 test-asan: $(ASAN_TEST_EXECUTABLES)
+	@$(REQUIRE_ASAN_RUNTIME)
 	@for test_exe in $(ASAN_TEST_EXECUTABLES); do \
 		test_name=$$(basename $$test_exe $(EXE_EXTENSION)); \
 		printf "\033[0;30;43m\n### Running %s (ASan+UBSan) ###\033[0m\n\n" "$$test_name"; \

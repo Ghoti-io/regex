@@ -2102,6 +2102,7 @@ when the gate changes:
 | `make test` | a failing `EXPECT_EQ` in the *first* test binary, not the last | non-zero, naming the suite |
 | `make test-quiet` | a *crash* in one binary, not an assertion failure | non-zero; the TOTAL line must not say PASS |
 | `make test-valgrind` | a `malloc` never freed, in the first binary | non-zero, naming the suite |
+| `make test` | a `malloc` never freed, which the release suite passes | non-zero from the `test-asan` gate, LeakSanitizer naming the line |
 | `make test-asan` | a write past a heap allocation | non-zero, ASan report |
 | `make test-asan` | a signed integer overflow | non-zero, UBSan report, no "clean" line |
 | `make test-asan` | `(int)1e30`, a float cast that does not fit | non-zero, UBSan report |
@@ -2115,6 +2116,26 @@ when the gate changes:
 
 **The first binary, not the last**, is the point of the first two rows: the
 defect they guard against is invisible if the fault is injected at the end.
+
+**`make test` has a leak row of its own** because `test-asan` is one of the
+gates in `ALL_TEST_GATES` as of 2026-09-26, and that row is the arming of
+that: a `malloc` never freed passes `make test TEST_GATES=` and fails
+`make test`. Until then the sanitizers were reachable only by typing
+`test-asan`, which is how four link lines came to miss `$(UNICODE_LIBS)` and
+leave the target unbuildable for a day without the suite noticing - a target
+`make test` does not reach is unarmed until somebody types its name. Measured
+before adding it rather than argued about: `make test` was 24s cold and 7s
+warm, `test-asan` alone 55s and 23s, and the two together are 78s and 32s.
+Nearer 3x than the 2x that was the standing reason to leave it out, and 78
+seconds is the figure that decides it.
+
+The gates do not apply *to* `test-asan` - it builds a different library, whose
+sanitizer symbols `check-symbols` is right to reject in a shipping one - so
+it carries no `TEST_GATES` prerequisite and there is no cycle. A machine
+without the ASan runtime now fails with the package to install and the
+per-gate opt-out, rather than with 32 suites refusing to start, which reads
+as a broken machine; armed with
+`make test-asan ASAN_RUNTIME=/nonexistent/libasan.so`.
 
 **A crash, not an assertion failure**, is the point of the third, and it was
 added because the gate failed it. `test-quiet` decided its verdict from the
