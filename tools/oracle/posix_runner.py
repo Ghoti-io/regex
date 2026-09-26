@@ -16,8 +16,8 @@ sources and glibc. Neither can reach the implementation it answers for.
 
 **sed is the exception this module's third function exists for.** Every other
 reference in this tree already speaks a batch protocol - one process, one
-case per line - and CONTAINERS.md section 2.7 is clear that per-case
-container cost is the one cost that is fatal. `sed` cannot: its `s` command
+case per line - and a process per case is the one cost that is fatal.
+`sed` cannot: its `s` command
 runs one script over one subject. So `sed_match.py` runs the loop inside the
 container and the container is still started once per run. 396 cases at 200ms
 of container start each would have been eighty seconds for a gate that takes
@@ -84,8 +84,7 @@ def command(which):
     Returns None for musl when its sources are not fetched, which is the one
     genuine skip here: musl's regex is not committed to this repository and a
     clone that has not run `tools/corpus/fetch.sh musl` has no second POSIX
-    opinion to offer. The property cannot exist, so the gate may skip - the
-    predicate CONTAINERS.md 2.5 states.
+    opinion to offer. The property cannot exist, so the gate may skip.
     """
     if which == "posix_match":
         inner = POSIX_BUILD + " >&2 && exec /tmp/posix_match"

@@ -3,7 +3,7 @@
 
     oracle_run.py <name>[,<name>...] -- <command> [args...]
 
-Two jobs, from the pattern in `notes/suite/CONTAINERS.md`.
+Two jobs.
 
 **Prove it, then print it.** The reference is resolved and asked its version
 *before* the gate runs, and that version is printed on the line above the
@@ -18,13 +18,12 @@ error naming what is missing. Without it the gate still declines to run, but
 declines *loudly*, with the word SKIPPED and a reason, having actually tried
 rather than having read `command -v`.
 
-That distinction is the point of the exercise, and this library is the reason
-CONTAINERS.md section 2.5 is worded the way it is: thirty-two `command -v`
+That distinction is the point of the exercise: thirty-two `command -v`
 guards here printed `skipped (no perl)` and exited 0, so a machine without a
 reference got the same green as a machine that compared 177,580 rows.
 `command -v vim` also answers the wrong question - it asks whether something
 called vim is on PATH, not whether the vim about to answer will read UTF-8 the
-way the subjects were written, which is finding 1.1 and cost 1,855 wrong rows.
+way the subjects were written, which cost 1,855 wrong rows.
 The only honest way to answer the second is to reach for the reference.
 """
 

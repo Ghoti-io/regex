@@ -183,7 +183,7 @@ def compare(dialect, examples):
     # be genuinely absent: its sources are fetched rather than committed, so
     # a clone that has not run `tools/corpus/fetch.sh musl` has no second
     # POSIX opinion to offer - the property cannot exist, which is the one
-    # shape of skip CONTAINERS.md 2.5 allows.
+    # shape of skip that is allowed.
     drivers = {"glibc": posix_runner.command("posix_match"),
                "musl": posix_runner.command("musl_match")}
     ours = find("grx_match")

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """How an oracle is spelled, so that no tool here spells one itself.
 
-The pattern is the suite-wide one in `notes/suite/CONTAINERS.md`; `unicode`
-landed it first, then `chron`, `font` and `compress`. This library is where it
+`unicode` landed the pattern first, then `chron`, `font` and `compress`.
+This library is where it
 was prototyped and the last to take it, which is backwards given what it has
 to gain: eight references answer questions here - perl, node, CPython, vim,
 pcre2, glibc, musl and sed - and until this file existed every one of them was
@@ -12,7 +12,7 @@ pcre2, glibc, musl and sed - and until this file existed every one of them was
 That is not a hypothetical cost. `tools/corpus/VERSIONS` pins five corpora to
 the releases Debian 13 gives, and says so; the three references it did not
 name at all (vim, CPython, node) answer 177,580 rows a run between them. And
-finding 1.1 of CONTAINERS.md is this library's: the vim differential's answers
+The vim differential's answers
 depended on `$LANG`, which no file here recorded, and 1,855 of 50,980 rows
 were wrong at the gate's own defaults because of it.
 

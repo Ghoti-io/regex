@@ -136,8 +136,7 @@ void check_file(const char * name, GRX_BreakKind kind, size_t expected_rows) {
   printf("%s: %zu rows\n", name, rows.size());
 
   // Exact, not a floor. UCD 17.0.0's counts, which is the version
-  // ucd_path() pins and tools/check-ucd-pins.sh holds all three libraries
-  // to. A truncated download, a half-written file or a silently bumped UCD
+  // ucd_path() pins. A truncated download, a half-written file or a silently bumped UCD
   // each change this number, and each of those used to read as a pass:
   // `ASSERT_GT(rows.size(), 100u)` let a file lose 99% of its cases and
   // still count. Bumping the UCD is meant to fail here - the new counts are

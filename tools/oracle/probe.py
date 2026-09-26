@@ -244,8 +244,7 @@ def probe_vim(cases):
             "call writefile([string(m)], '/dev/stdout')\n"
             "qa!\n" % (json.dumps(subject), json.dumps(pattern)))
         # Through vim_runner, so this driver gets the `encoding` and
-        # `iskeyword` pins the differentials have - it had neither, which is
-        # CONTAINERS.md finding 1.1 in a third file. `set nocompatible` is
+        # `iskeyword` pins the differentials have - it had neither. `set nocompatible` is
         # kept because it is what this driver asked for; it sets 'iskeyword'
         # to the same value the pin does, so the two agree rather than
         # fighting.

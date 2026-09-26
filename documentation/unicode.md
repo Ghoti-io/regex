@@ -28,8 +28,8 @@ What is still generated here, and why each one is:
 | `display.c`, `vim_class.c` | 559 | vim's data, not the UCD's, and versioned by vim rather than by a Unicode release. See [dialects.md](dialects.md) §5.9 |
 
 The first five are asks on the Unicode library rather than reasons to keep
-generating tables here; `notes/regex/TODO.md` carries them with the figures
-that size each one.
+generating tables here. The figures that size each one are in the table
+above.
 
 **`make check-unicode-agreement` is what keeps the overlap honest.** What is
 left here is a second copy of data the suite already has, which is the exact

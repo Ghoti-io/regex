@@ -27,8 +27,7 @@ Three things are pinned, and each is an *option* rather than a mode:
 
   encoding   vim takes `&encoding` from the locale, so a container with no
              LANG, or a developer with LANG=C, reads one UTF-8 character as
-             two. This is CONTAINERS.md finding 1.1, and at this gate's
-             defaults it was 1,855 of 50,980 rows.
+             two. At this gate's defaults that was 1,855 of 50,980 rows.
   iskeyword  `vim -u NONE` leaves vim **Vi-compatible**, where 'iskeyword' is
              `@,48-57,_` rather than the `@,48-57,_,192-255` vim's own help
              calls the Vim default. `\\<`, `\\>` and `\\k` are defined from it.

@@ -581,10 +581,9 @@ def holds_composing(subject):
     actually uses, and none disagrees.
 
     Two failure modes, and the wider measurement closes only one of them.
-    notes/text/skew-direction.py (a peer's, run here and armed here with a
-    planted ccc on U+0301) compares the two releases directly over every
-    code point assigned in both: 289,394 of them, and the combining class
-    **changed for none**. So no value CPython holds is stale - the "it
+    A comparison of the two releases over every code point assigned in both,
+    289,394 of them, found the combining class **changed for none**. So no
+    value CPython holds is stale - the "it
     changed under us" mode is ruled out as a standing property rather than
     as a fact about the current subject list.
 

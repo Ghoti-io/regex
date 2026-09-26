@@ -5,8 +5,8 @@ Every other reference in this tree answers a whole run in one process. sed
 cannot: its `s` command runs one script over one subject, so `sed_diff.py`
 started a process per case. On the host that was cheap enough to ignore; with
 the reference in a pinned image it would be 396 container starts for a gate
-that finishes in under a second, and CONTAINERS.md section 2.7 names per-case
-container cost as the one cost that is fatal.
+that finishes in under a second, and a process per case is the one cost
+that is fatal.
 
 So the loop moved here, and here runs *inside* the image. This file answers no
 regular-expression question of its own - it decides nothing, it only spells

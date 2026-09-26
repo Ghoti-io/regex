@@ -92,7 +92,7 @@ def ask_sed(basic, requests):
 
     The loop is unchanged; it moved into tools/oracle/sed_match.py, which runs
     it *inside* the image. A process per case is cheap on the host and fatal
-    in a container (CONTAINERS.md 2.7): 396 cases at 200ms of container start
+    in a container: 396 cases at 200ms of container start
     each is eighty seconds for a gate that finishes in under one.
     """
     lines = "".join("%d\t%s\t%s\t%s\n" % (

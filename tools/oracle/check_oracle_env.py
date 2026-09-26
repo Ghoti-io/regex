@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Fail if the oracle pin table or the code that reads it has rotted.
 
-`tools/oracle/containers/IMAGES` is machine-read, not documentation
-(notes/suite/CONTAINERS.md section 2.2 surveyed every pin file in the suite
-and found the same). What reads it is `oracle_env.py`, and both can go wrong
+`tools/oracle/containers/IMAGES` is machine-read, not documentation. What
+reads it is `oracle_env.py`, and both can go wrong
 in ways no differential would report, because a differential that cannot
 reach its reference declines rather than lying - so the failure is silent in
 the other direction: a pin that parses into the wrong fields, a reference with

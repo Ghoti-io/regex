@@ -76,8 +76,8 @@ oracle(container): perl perl v5.40.1
 perl-syntax: 183 constructs, 1 known deviations, 0 stale entries, 0 disagreements
 ```
 
-The argument for it is in [notes/suite/CONTAINERS.md], and this library
-supplied the finding that pays for it: `check-oracle-vim` took `&encoding`
+This library supplied the finding that pays for pinning the environment:
+`check-oracle-vim` took `&encoding`
 from `$LANG`, which no file here recorded, and answered **1,855 of 50,980
 rows** wrongly at its own defaults on a shell with `LANG=C`. The environment
 was invisible until it had to be written down. The same argument applies to
@@ -121,8 +121,6 @@ into the fields its reader expects, that every pin has a way of being asked
 its version, and that the filter which keeps the container engine's own
 chatter out of a generated corpus header still fires. Each of its checks is
 paired with a planted violation it must catch.
-
-[notes/suite/CONTAINERS.md]: the workspace's notes, outside this repository.
 
 ## 3. The vector format
 

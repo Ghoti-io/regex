@@ -12,8 +12,7 @@
 # deliberately and together. A corpus imported from one version and answered
 # by another measures the gap between them and reports it as a defect here.
 #
-# Two kinds of pin and they are not the same guarantee (CONTAINERS.md section
-# 2.6). A stock image is pinned by digest and the digest is the whole
+# Two kinds of pin and they are not the same guarantee. A stock image is pinned by digest and the digest is the whole
 # guarantee: a tag can be moved under you and a digest cannot, so a green run
 # names a set of bytes rather than a set of names. An image **built here**
 # cannot be - two builds of one Dockerfile are not two copies of one image -
@@ -84,8 +83,7 @@ perl	docker.io/library/perl:5.44.0-slim@sha256:76d5a0d6f19a3841668e44a67ecb680fc
 node	docker.io/library/node:24-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6	V8 13.6.233.17-node.53, Unicode 17.0	The ECMAScript dialect, and every Unicode property table
 
 # vim, for the Vim dialect and for two whole-plane tables. **Built here: there
-# is no official vim image**, which makes it the other kind of pin
-# (CONTAINERS.md section 2.6). What is pinned is everything the build reads -
+# is no official vim image**, which makes it the other kind of pin. What is pinned is everything the build reads -
 # the base by digest, vim's source by tag - and the run-time check below is
 # the real guarantee.
 #

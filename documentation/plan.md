@@ -636,7 +636,7 @@ to the narrow ranges with a plausible answer coming out. `(?aT)` exists to
 narrow exactly that class, so it had nothing to narrow.
 
 A full sweep of all fourteen POSIX names against pcre2test came with it and
-found more, which `notes/regex/TODO.md` carries: the seam is `punct`,
+found more. The seam is `punct`,
 `graph`, `print` and `lower`, and it is a separate piece of work.
 
 **The other deviation §6 carried for PCRE2 is built too**, the same day: a

@@ -14,9 +14,7 @@
  *
  * So this is the gate design.md asked for and deferred twice - "the sweep
  * sums match regex's property.c for every property both have" - and it is
- * only possible because both libraries pin UCD 17.0.0. The suite-level
- * check-ucd-pins.sh is what keeps that true; this is what makes it mean
- * something.
+ * only possible because both libraries pin UCD 17.0.0.
  *
  * What is compared, exhaustively:
  *

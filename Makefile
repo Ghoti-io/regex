@@ -123,7 +123,7 @@ else ifeq ($(findstring MINGW32_NT,$(UNAME_S)),MINGW32_NT)  # 32-bit Windows
 
 # TODO(windows): the Windows branches in this file were adapted from model's,
 # which were adapted from image's, and have never been run, nor has GRX_API's
-# dllexport/dllimport switching. See WINDOWS-TODO.md.
+# dllexport/dllimport switching.
 else ifeq ($(findstring MINGW64_NT,$(UNAME_S)),MINGW64_NT)  # 64-bit Windows
 	OS_NAME := Windows
 	LIB_EXTENSION := dll
@@ -368,8 +368,7 @@ INCLUDE += $(CUTIL_CFLAGS)
 #
 # This library generated its own tables until 2026-09-25 and `text` generated
 # a second set and `ctang` linked ICU for a third. One Unicode, one UCD pin:
-# tools/unicode/UCD_VERSION and unicode's tools/ucd/UCD_VERSION must agree,
-# which ../../check-ucd-pins.sh is what checks across the suite.
+# tools/unicode/UCD_VERSION and unicode's tools/ucd/UCD_VERSION must agree.
 UNICODE_PC ?= ghoti.io-unicode$(BRANCH)
 UNICODE_CFLAGS := $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_LOOKUP_PATH) pkg-config --cflags $(UNICODE_PC) 2>/dev/null)
 UNICODE_LIBS := $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_LOOKUP_PATH) pkg-config --libs $(UNICODE_PC) 2>/dev/null)
@@ -914,13 +913,13 @@ $(BENCH_DIR)/glibc: tools/bench/regex_bench.c
 # Oracles: how a reference is reached, and which one
 ####################################################################
 #
-# notes/suite/CONTAINERS.md. Every differential here used to reach for
+# Every differential here used to reach for
 # whatever this machine had installed, guarded by `command -v`, and exited 0
 # when it found nothing - thirty-two sites across twenty-nine targets, so a
 # machine without perl got the same green as one that compared 177,580 rows.
 # `command -v vim` also answers the wrong question: it says whether something
 # called vim is on PATH, not whether the vim about to answer will read UTF-8
-# as written, which is CONTAINERS.md finding 1.1 and cost 1,855 wrong rows.
+# as written, and that cost 1,855 wrong rows.
 #
 # The references now run in images pinned in tools/oracle/containers/IMAGES,
 # and every gate goes through tools/oracle/oracle_run.py, which resolves the
@@ -939,11 +938,9 @@ $(BENCH_DIR)/glibc: tools/bench/regex_bench.c
 # prevent.
 #
 # ORACLE_REQUIRED is the fail-closed half, and it defaults to 1 here rather
-# than to 0 as it does in `chron`. The argument is the third of CONTAINERS.md
-# section 2.5's three questions - is there any way to demand the run where it
-# cannot skip - and for this library the answer falls out of where the gates
-# live: none of them is in `make test`, so `make check-oracle-perl` is a
-# command somebody typed on purpose. Softening it is one word:
+# than to 0 as it does in `chron`. None of these gates is in `make test`, so
+# `make check-oracle-perl` is a command somebody typed on purpose. Softening
+# it is one word:
 #
 #   make check-oracles ORACLE_REQUIRED=0    decline loudly, exit 0
 #   make check-oracles ORACLE_MODE=host     this machine's tools, unpinned
@@ -966,7 +963,7 @@ oracle-version: ## Resolve every pin and print which reference would answer
 oracle-version:
 	@$(ORACLE_ENV) python3 tools/oracle/oracle_env.py
 
-# The naming convention, CONTAINERS.md section 6.1:
+# The naming convention:
 #
 #   ghoti-<library>-oracle-<reference>:<version>   a library's oracle images
 #   ghoti-<purpose>:<base-or-version>              suite-wide toolchains
@@ -1011,7 +1008,7 @@ oracle-images:
 			if [ -n "$$stray" ]; then \
 				printf "\033[0;31m### oracle-images: %s is outside the prefix ###\033[0m\n" "$$stray" >&2; \
 				printf "\nIMAGES names it %s, which does not carry the\n" "$$stray" >&2; \
-				printf "convention's prefix %s (CONTAINERS.md 6.1). A library\n" "$(ORACLE_IMAGE_PREFIX)" >&2; \
+				printf "convention's prefix %s. A library\n" "$(ORACLE_IMAGE_PREFIX)" >&2; \
 				printf "that names its image outside the prefix is one\n" >&2; \
 				printf "oracle-clean will decline to remove, so this is refused\n" >&2; \
 				printf "here rather than discovered later by a cleanup that\n" >&2; \

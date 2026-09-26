@@ -138,8 +138,7 @@ def main(argv):
     # raises rather than falling back if it cannot be reached - so a run that
     # gets this far has a perl whose version has been checked against
     # tools/oracle/containers/IMAGES. What used to be here asked whether
-    # something called perl was on PATH and exited 0 when it was not, which
-    # is the shape CONTAINERS.md section 2.5 is about.
+    # something called perl was on PATH and exited 0 when it was not.
 
     values = subprocess.run([driver, "--list-numeric"], capture_output=True,
         text=True, check=True).stdout.split()

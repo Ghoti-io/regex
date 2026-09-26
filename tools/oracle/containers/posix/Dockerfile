@@ -21,7 +21,7 @@
 # What is pinned is the base by digest. Debian 13 fixes all three - glibc
 # 2.41, GNU sed 4.9 - and the run-time version check in oracle_env.py is what
 # makes that a guarantee rather than an expectation, because an image built
-# here cannot be pinned by its own digest (CONTAINERS.md 2.6).
+# here cannot be pinned by its own digest.
 #
 # gcc and libc6-dev because both drivers are compiled *inside* here, at run
 # time, from sources in the mounted tree: the image is deliberately ignorant
@@ -31,8 +31,8 @@
 # one differential in this tree whose reference cannot take a batch on stdin
 # - `sed` runs one script over one subject - so tools/oracle/sed_match.py
 # runs the loop *inside* the container and the container is still started
-# once per run. Without it 396 cases would be 396 container starts, and
-# CONTAINERS.md 2.7 is clear that per-case is the one cost that is fatal.
+# once per run. Without it 396 cases would be 396 container starts, and a
+# process per case is the one cost that is fatal.
 
 FROM docker.io/library/debian@sha256:7792b1f7702a86946cd518db72b6a407302c3e9bc1635634368b878189e8221c
 
