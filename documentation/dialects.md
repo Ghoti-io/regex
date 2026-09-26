@@ -1,4 +1,4 @@
-# The dialect specification
+# Dialects
 
 **Status:** design. This page is the authority the parser and the engines
 are written against, per [design.md](design.md) §4. Two kinds of cell appear
@@ -10,22 +10,20 @@ WP-03 in [plan.md](plan.md)). No code is written against a **probe** cell.
 The feature rows in [`src/syntax/syntax.c`](../src/syntax/syntax.c) remain
 provisional until §3 below replaces them.
 
-## 1. Tiers
+## 1. What is implemented
 
-Sixteen dialects are named. They are not equal in demand, in difficulty, or
-in how well they can be checked, and they are delivered in this order:
+Sixteen dialects are named in `GRX_Syntax`, so the enum does not move when
+one of them is added.
 
-| Tier | Dialects | Why this tier |
-| --- | --- | --- |
-| 1 | **ECMAScript**, then **PCRE2**, **Perl**, **POSIX BRE/ERE** and **GNU BRE/ERE** | ECMAScript is the first consumer's dialect ([design.md](design.md) §1.1). PCRE2 and Perl are the widest feature set, so building them builds the engine. POSIX is the other match semantics (leftmost-longest) and the other lexical family (escaped operators), so after tier 1 the architecture has met every kind of variation it will meet. Every tier-1 dialect has an oracle on this machine. |
-| 2 | Python, Java, .NET, Ruby | Perl-family syntax with their own profiles; mostly profile rows and small hooks once tier 1 exists. Python has an oracle here; the others need one installed. |
-| 3 | RE2 (Go), Rust | Deliberate subsets of tier 1. Almost entirely profile work; the value is that a pattern accepted under `GRX_SYNTAX_RE2` is one the linear engine is guaranteed to run. |
-| 4 | Tcl, Vim, Emacs | Lexically furthest from the others (Tcl's directors, Vim's magic levels, Emacs's syntax classes), each needing hooks of its own. Vim has an oracle here. |
+| Dialects | Status |
+| --- | --- |
+| **ECMAScript**, **PCRE2**, **Perl**, **Python**, **Vim**, **POSIX BRE/ERE**, **GNU BRE/ERE** | Implemented. Each has an oracle on this machine. |
+| Java, .NET, Ruby, RE2 (Go), Rust, Tcl, Emacs | Not implemented. Selecting one is `GRX_ERR_UNSUPPORTED` with `GRX_DIAG_DIALECT_NOT_IMPLEMENTED`, never a silent fallback to another dialect. |
 
-A dialect is *listed* in `GRX_Syntax` from the start so that the enum is
-stable; until its tier ships, selecting it is `GRX_ERR_UNSUPPORTED` with the
-diagnostic `GRX_DIAG_DIALECT_NOT_IMPLEMENTED`, never a silent fallback to
-another dialect.
+A pattern accepted under `GRX_SYNTAX_RE2`, once that dialect exists, is one
+the linear engine is guaranteed to run. RE2 and Rust are deliberate subsets
+of the dialects above. Java, .NET and Ruby are the Perl family with their
+own profiles. Tcl and Emacs are lexically furthest from the others.
 
 ## 2. References and oracles
 
@@ -85,11 +83,12 @@ dialect, which is the arrangement `posix_diff.py`'s note recommends anyway.
 ## 3. Features: which constructs exist
 
 `GRX_Feature` says whether a dialect *has* a construct. The scaffold's 25
-bits are extended to cover what tiers 1 and 2 need; the values below for
-tier 1 are from the reference documents, with the dialect's own spelling
-where it is not the common one. Tier 2-4 rows are corrected where the
-scaffold's provisional table is known to be wrong and otherwise stay
-provisional until their tier.
+bits are extended to cover the implemented dialects and the Perl-family
+dialects that are not. The values below for the implemented dialects are
+from the reference documents, with the dialect's own spelling where it is
+not the common one. Rows for dialects that are not implemented are corrected
+where the scaffold's provisional table is known to be wrong and otherwise
+stay provisional until that dialect is implemented.
 
 New bits, in addition to the scaffold's:
 
@@ -110,7 +109,7 @@ New bits, in addition to the scaffold's:
 | `EMPTY_CLASS` | `[]` is an empty class rather than the start of a class containing `]` |
 | `NEGATED_EMPTY_CLASS` | `[^]` matches any code point |
 
-**Tier 1, from the references:**
+**The implemented dialects, from the references:**
 
 | Feature | POSIX BRE | POSIX ERE | GNU BRE | GNU ERE | Perl 5.40 | PCRE2 10.46 | ECMAScript 2025 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -147,7 +146,7 @@ New bits, in addition to the scaffold's:
 | NAMED_CHAR | - | - | - | - | `\N{U+..}`, `\N{name}` | `\N{U+..}` only | - |
 | EMPTY_CLASS / NEGATED_EMPTY_CLASS | - | - | - | - | - | - | both |
 
-Corrections to the scaffold's provisional rows for later tiers, from the
+Corrections to the scaffold's provisional rows for dialects that are not implemented, from the
 references and worth recording now so nobody builds on the wrong row:
 
 - **Emacs** has no `\d`; digits are `[[:digit:]]` or `[0-9]`. It has no
@@ -1584,7 +1583,7 @@ of the group.
 Every place this library knowingly differs from the implementation a
 dialect names. A deviation has a reason and, where it is a restriction, a
 diagnostic. This list is the one that §4's answer 3 refers to; it is meant
-to be complete for every shipped tier.
+to be complete for every implemented dialect.
 
 **Three rows record something that is not a difference**, and they are kept
 because each is a question a reader of this page will ask: `(*BSR_ANYCRLF)`
@@ -1603,7 +1602,7 @@ answer.
 | all | `{m,n}` bounds above `max_repeat_count`, and expansions above `max_program_size`, are refused | bounded compile time | `GRX_ERR_LIMIT` |
 | all | No locale; POSIX classes and case folding are C-locale ASCII or Unicode, never `LC_CTYPE` | [unicode.md](unicode.md) §7 | - |
 | ECMAScript | Lone surrogates cannot occur in the subject | UTF-8 | - |
-| ECMAScript | V8's regexp interpreter and its compiled code disagree, and this library is the interpreter's | `/(?:(?=a)a)*\B../u` over "\nabc" from offset 1 is 1-4 on the first execution in a fresh Node process and **no match** on every execution after it, so the answer depends on how many times the pattern has run. `--regexp-interpret-all` gives 1-4 always and `--no-regexp-tier-up` gives no match always, which places it in the tier-up. 1-4 is right: pcre2test 10.46 and perl 5.40.1 both give it, and it is what ordered alternation requires - the same pattern's first alternative alone matches 1-4 there too. Found at seed 4009 of the replacement soak; the oracle now runs with the interpreter, because a reference whose answer moves with the execution count cannot settle anything. Fixed in a later V8 and not in this one: the same reproducer run 200 times in Chrome 153.0.8010.36 is 1-4 every time. Present in V8 12.4.254.21, which is what Node 22 carried; **gone in V8 13.6.233.17, which is the pin since 2026-09-25** - the same reproducer is 1-4 forty times out of forty there without the flag, and on V8 14.1 too, so the boundary is now measured from both sides. No public report matching it was found, so which change fixed it is still unknown. The flag stays: `check-oracle-determinism` asserts the answer is 1-4 rather than merely stable, so it remains a live assertion about whichever V8 is pinned. `tools/corpus/VERSIONS` and `tools/oracle/node_runner.py` | - |
+| ECMAScript | V8's regexp interpreter and its compiled code disagree, and this library is the interpreter's | `/(?:(?=a)a)*\B../u` over "\nabc" from offset 1 is 1-4 on the first execution in a fresh Node process and **no match** on every execution after it, so the answer depends on how many times the pattern has run. `--regexp-interpret-all` gives 1-4 always and `--no-regexp-tier-up` gives no match always, which places the disagreement in V8's optimizing compiler. 1-4 is right: pcre2test 10.46 and perl 5.40.1 both give it, and it is what ordered alternation requires - the same pattern's first alternative alone matches 1-4 there too. Found at seed 4009 of the replacement soak; the oracle now runs with the interpreter, because a reference whose answer moves with the execution count cannot settle anything. Fixed in a later V8 and not in this one: the same reproducer run 200 times in Chrome 153.0.8010.36 is 1-4 every time. Present in V8 12.4.254.21, which is what Node 22 carried; **gone in V8 13.6.233.17, which is the pin since 2026-09-25** - the same reproducer is 1-4 forty times out of forty there without the flag, and on V8 14.1 too, so the boundary is now measured from both sides. No public report matching it was found, so which change fixed it is still unknown. The flag stays: `check-oracle-determinism` asserts the answer is 1-4 rather than merely stable, so it remains a live assertion about whichever V8 is pinned. `tools/corpus/VERSIONS` and `tools/oracle/node_runner.py` | - |
 | ECMAScript | **RegExp Modifiers are not built**: `(?i:a)`, `(?-i:a)`, `(?im-s:a)` | Stage 4, shipped in V8 12.5; this library reports `GRX_DIAG_INVALID_GROUP_SYNTAX`. Found by raising the node pin from V8 12.4, which refused them too, so the gate had been green over a construct neither side had. 122 of the 230 rows `tools/oracle/syntax_diff.py` now counts separately, and the classification is a second measurement rather than a pattern match: the modifier group is rewritten as a plain `(?:` and the row is kept only if this library then accepts it. A gap rather than a deviation - there is no argument for not having it | `GRX_ERR_SYNTAX` |
 | ECMAScript | **Duplicate named capture groups are refused**, where ES2025 allows them in alternatives that cannot both participate | `(?<n>a)|(?<n>b)` compiles in V8 13.6 and answers `{n: "b"}` for "b"; here it is `GRX_ERR_...` 34. `(?<n>a)(?<n>b)` is an error in both, which is the rule: the restriction is on groups that could *both* be set. perl has always allowed duplicate names and this library follows it there, and pcre2 refuses without `PCRE2_DUPNAMES` and `re` refuses outright, so this is one dialect's rule out of date rather than a missing feature. Found by raising the node pin from V8 12.4, which refused it too; 576 rows of `check-oracle-replace`, one pattern, counted in its own bucket by `tools/oracle/replace_diff.py` and controlled in `check_exclusions.py` | `GRX_ERR_SYNTAX` |
 | ECMAScript | Repeat counts are limited (the grammar admits 2^53 - 1) | as above | `GRX_ERR_LIMIT` |
@@ -2177,7 +2176,7 @@ above. The third is harmless in practice and is reported anyway, because the
 alternative is to start deciding which bullets were meant loosely, and a
 lint that does that is a lint nobody can rely on.
 
-## 9. Notes for the rest of tier 1
+## 9. Notes for the rest of the implemented dialects
 
 Facts that shape the front end and are easy to get wrong; each becomes a
 test.

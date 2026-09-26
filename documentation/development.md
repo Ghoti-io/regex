@@ -1,20 +1,16 @@
-# Development
+# Layout
 
-**Status:** describes what exists. The target layout, the pipeline and the
-engines are specified in [design.md](design.md), which takes precedence where
-the two differ; this page is corrected as each work package in
-[plan.md](plan.md) lands.
+This page is the layout of the code. The pipeline and the engines are in
+[design.md](design.md). Which dialects compile is in
+[dialects.md](dialects.md).
 
-**Landed:** Phase 0, Phase 1 and Phase 2 of [plan.md](plan.md), WP-11
-included. A
-pattern in any of ECMAScript's three modes - legacy, Unicode and UnicodeSets -
-parses, lowers, compiles and matches on whichever of the three engines can run
-it, and `grx_regex_replace()`, `grx_regex_split()` and
-`grx_regex_search_next()` apply the dialect's own rules for templates, pieces
-and what follows an empty match. Every other dialect is named and reports
-`GRX_ERR_UNSUPPORTED`; conditionals, recursion and the backtracking control
-verbs compile as far as they can and are then refused, rather than
-approximated.
+Nine dialects compile and match: ECMAScript (legacy, Unicode and UnicodeSets),
+PCRE2, Perl, POSIX BRE and ERE, GNU BRE and ERE, Python, and Vim. Java, .NET,
+Ruby, RE2, Rust, Tcl and Emacs are named and report `GRX_ERR_UNSUPPORTED`.
+Conditionals, recursion and the backtracking control verbs compile as far as
+they can and are then refused, rather than approximated. `grx_regex_replace()`,
+`grx_regex_split()` and `grx_regex_search_next()` apply the dialect's own
+rules for templates, pieces and what follows an empty match.
 
 ## Layout
 

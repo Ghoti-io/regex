@@ -1,9 +1,9 @@
-# The plan of attack
+# Plan
 
-**Status:** design. This is the order of work and the split into packages
-that different teams can take without stepping on each other. It is derived
-from [design.md](design.md); when the two disagree, the design wins and this
-page is corrected.
+This is the order the work was planned in. What compiles today is in
+[dialects.md](dialects.md), which wins where a phase heading below is behind
+the code. The design is in [design.md](design.md); when this page and that
+one disagree, the design wins.
 
 ## 1. How the work is organised
 
@@ -40,10 +40,10 @@ Phase 0  Foundations              WP-01 .. WP-05      all lanes, all parallel
 Phase 1  ECMAScript + engines     WP-06 .. WP-11      → M1: JSON Schema ready
 Phase 2  Full ECMAScript, safety  WP-12 .. WP-17      → M2: ECMAScript complete
 Phase 3  PCRE2 and Perl           WP-18 .. WP-22      → M3
-Phase 4  POSIX and GNU            WP-23 .. WP-26      → M4: tier 1 complete
-Phase 5  Tier 2                   WP-30 .. WP-33
-Phase 6  Tier 3                   WP-34 .. WP-35
-Phase 7  Tier 4                   WP-36 .. WP-38, WP-44, WP-45
+Phase 4  POSIX and GNU            WP-23 .. WP-26      → M4: the implemented dialects
+Phase 5  Python, Java, .NET, Ruby WP-30 .. WP-33
+Phase 6  RE2 and Rust             WP-34 .. WP-35
+Phase 7  Tcl, Vim, Emacs          WP-36 .. WP-38, WP-44, WP-45
 Phase 8  Performance, translation WP-40 .. WP-43
 ```
 
@@ -85,7 +85,7 @@ operations of §5, `grx_utf8_validate()`, reverse decoding,
 **WP-03 The semantic probe suite.** *conformance, M.* **Landed for the
 dialects this machine can run** - Node, Perl, Python, pcre2test, GNU-style
 grep and Vim. The cells for Java, .NET, Ruby, Go, Rust, Tcl and Emacs stay
-marked **probe** until their tier installs an oracle, which is the point:
+marked **probe** until that dialect is implemented and an oracle is installed, which is the point:
 a dialect this machine cannot run is a dialect this library cannot claim.
 `tools/oracle/`: one
 driver per available oracle (Node, Perl, Python, pcre2test, glibc `regcomp`
@@ -95,8 +95,8 @@ runs the discriminating cases of [testing.md](testing.md) §5 through every
 driver and writes a report; then **every `probe` cell in
 [dialects.md](dialects.md) §5 replaced by a value with the oracle's answer
 cited**. Also a CI recipe installing the absent oracles (OpenJDK, .NET,
-Ruby, Go, Rust, Tcl, Emacs) so tier 2-4 probes can run when their tier
-starts. *Done:* no `probe` cell remains for tier 1; the report is
+Ruby, Go, Rust, Tcl, Emacs) so those probes can run when the dialect
+is implemented. *Done:* no `probe` cell remains for the implemented dialects; the report is
 committed under `tests/data/probe/`. *Depends on:* nothing.
 
 **WP-04 Conformance infrastructure.** *conformance, M.* **Landed**, less
@@ -510,11 +510,11 @@ the short-circuit that stops `\(a*\)*\1` walking an exponential tree and
 musl refuses such patterns outright, so no two references could decide the
 answer anyway. [dialects.md](dialects.md) §6 carries that row.
 
-**M4 - tier 1 complete.** Every tier-1 dialect at its published
+**M4 - the implemented dialects.** Every implemented dialect at its published
 conformance rate with every deviation listed; the invariants of
 [design.md](design.md) §9 all enforced by a test; the API frozen.
 
-### Phase 5: tier 2
+### Phase 5: Python, Java, .NET and Ruby
 
 One package per dialect, each *front ends, S-M* plus *conformance, S*:
 **WP-30 Python** - **Built.** **WP-31 Java**, **WP-32 .NET**,
@@ -562,13 +562,13 @@ has **closed** - so the entry is gone and the diagnostic has a producer. It
 is the argument against removing a public enumerator because nothing
 currently reaches it.
 
-### Phase 6: tier 3
+### Phase 6: RE2 and Rust
 
 **WP-34 RE2 and Go**, **WP-35 Rust**: profile rows and hooks; the value
 is the guarantee that a pattern accepted under these dialects is regular,
 and a test that says so.
 
-### Phase 7: tier 4
+### Phase 7: Tcl, Vim and Emacs
 
 **WP-36 Vim**: built 2026-09-23. The magic-level hook was indeed the work,
 and it needed four new front-end hooks rather than one, because the four
@@ -744,7 +744,7 @@ hold:
 
 ## 5. What "done" means for the first stable release
 
-- M4: every tier-1 dialect done by §4.
+- M4: every implemented dialect done by §4.
 - Every invariant in [design.md](design.md) §9 has a named test or check.
 - Limits measured (WP-14) and their measurements published.
 - The three fuzzers soaked 24 hours before the tag.

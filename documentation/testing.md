@@ -40,7 +40,7 @@ observation of this machine - see §2.1.
 | GNU sed 4.9 | the POSIX and GNU replacement templates | `tools/oracle/sed_match.py`, which runs sed's per-case loop *inside* the image: sed's `s` command takes one script and one subject, so it is the one reference here with no batch protocol of its own |
 | GNU grep 3.11 | the `gnu-ere` probe column | `tools/oracle/probe.py`. Only "did a line match", which is all `grep -c` can answer |
 | vim 9.2, patches 1-1129 | Vim | `tools/oracle/vim_diff.py`: **one** `vim -es` for a whole run, reading a file of cases and writing a file of answers, through `matchstrpos()` and `matchlist()`. It asks vim's *other* engine (`set re=1`) about the rows that came back different, because vim ships two and they do not always agree. `vim_runner.py` is the one place its command line is spelled |
-| OpenJDK, .NET, Ruby, Go, Rust `regex`, Tcl, Emacs | tiers 2-4 | one driver each, same output form. **None is installed on the machine this was written on**, and with the references in images that is no longer what decides whether they can be asked |
+| OpenJDK, .NET, Ruby, Go, Rust `regex`, Tcl, Emacs | Java, .NET, Ruby, RE2, Rust, Tcl, Emacs | one driver each, same output form. **None is installed on the machine this was written on**, and with the references in images that is no longer what decides whether they can be asked |
 
 Every driver reads a pattern, a flag string and a subject from a JSON line
 and prints one JSON line: `{"ok":true,"spans":[[0,3],[1,2],null]}`,

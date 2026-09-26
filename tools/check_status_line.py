@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
-"""Fail if README.md's status paragraph disagrees with the code.
+"""Fail if README.md's Status section disagrees with the code.
 
-The paragraph names two numbers - how many dialects are built and how many
-report GRX_ERR_UNSUPPORTED - and it has lagged behind the code four times,
-each time in the safe direction and each time sitting above a Status table
-that already contradicted it.
+The section names two numbers - how many dialects compile and match, and how
+many report GRX_ERR_UNSUPPORTED - and that claim has lagged behind the code.
 
-The reason it lags is structural rather than careless: the paragraph goes
+The reason it lags is structural rather than careless: the section goes
 stale when *another* file changes, so the moment it needs re-reading is the
 moment nobody has any reason to open it. "Check it when you edit it" cannot
 catch that. Counting is the only thing that can.
@@ -51,19 +49,19 @@ def total_dialects():
 
 
 def claimed():
-    """The two numbers the README's status paragraph states."""
+    """The two numbers the README's Status section states."""
     text = (ROOT / "README.md").read_text()
-    # Only the status paragraph, not the parenthetical below it that
-    # recounts every time this has been wrong.
-    start = text.index("**Status:")
-    end = text.index("(This paragraph has been wrong")
-    paragraph = text[start:end]
+    start = text.index("## Status")
+    rest = text[start + len("## Status"):]
+    end = rest.find("\n## ")
+    paragraph = rest if end < 0 else rest[:end]
 
     works = re.search(
-        r"\*\*Status:[^*]*\*\*\s+(\w+) dialects parse, compile and match",
+        r"(\w+) dialects\b[^.]*compile and match",
         paragraph)
     unsupported = re.search(
-        r"other (\w+)\s+dialects are named and report", paragraph)
+        r"other (\w+)\b[^.]*report",
+        paragraph)
     return (
         WORDS.get(works.group(1).lower()) if works else None,
         WORDS.get(unsupported.group(1).lower()) if unsupported else None,
@@ -78,17 +76,17 @@ def main():
     problems = []
     if says_built is None:
         problems.append(
-            "could not find \"<N> dialects parse, compile and match\" in the "
-            "status paragraph")
+            "could not find \"<N> dialects ... compile and match\" in the "
+            "Status section")
     elif says_built != built:
         problems.append(
-            f"README says {says_built} dialects parse, compile and match; "
+            f"README says {says_built} dialects compile and match; "
             f"grx_frontend_for() answers for {built}")
 
     if says_unsupported is None:
         problems.append(
-            "could not find \"the other <N> dialects are named and report\" "
-            "in the status paragraph")
+            "could not find \"the other <N> ... report\" in the "
+            "Status section")
     elif says_unsupported != total - built:
         problems.append(
             f"README says {says_unsupported} dialects report "
@@ -99,7 +97,7 @@ def main():
         for problem in problems:
             print(f"check-status-line: {problem}", file=sys.stderr)
         print(
-            "check-status-line: README.md's status paragraph is the one that "
+            "check-status-line: README.md's Status section is the one that "
             "lags; update it rather than this checker.",
             file=sys.stderr)
         return 1

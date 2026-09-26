@@ -1,11 +1,8 @@
-# The master design
+# Design
 
-**Status:** design. Everything below the dialect table is unwritten; this
-page says what will exist and why, so the work can be split across teams
-without each team first having to agree the architecture with the others.
-Where it disagrees with the scaffold as committed - the headers, the internal
-headers, `development.md` - this page wins, and the scaffold changes to match
-in the same commit as the code that needs it.
+This page is the design: the pipeline from pattern text to a program, the
+engines, and the rules for memory, limits and errors. Which dialects compile,
+and what each one means, is in [dialects.md](dialects.md).
 
 Companion pages, each owned by this one:
 
@@ -14,7 +11,7 @@ Companion pages, each owned by this one:
 | [dialects.md](dialects.md) | What each syntax accepts and what it means; the semantic profile per dialect; deviations |
 | [unicode.md](unicode.md) | The Unicode data: which version, which tables, how they are generated and checked |
 | [testing.md](testing.md) | How correctness is established: oracles, conformance vectors, cross-engine checks, fuzzing |
-| [plan.md](plan.md) | The order of work, the work packages, and what "done" means for each |
+| [plan.md](plan.md) | The order the work was planned in. What compiles is in [dialects.md](dialects.md) |
 
 ## 1. What the library is for
 
@@ -122,7 +119,7 @@ record when one of them is wanted.
   for single characters. Every dialect's "current locale" is Unicode.
 - **Perl code blocks** `(?{ ... })` and `(??{ ... })`. They run Perl.
 - **.NET balancing groups** `(?<open-close>...)` are deferred to the .NET
-  tier ([plan.md](plan.md)); they are a capture-stack semantics no other
+  dialect ([plan.md](plan.md)); they are a capture-stack semantics no other
   dialect has.
 - **Partial matching** (PCRE2's `PCRE2_PARTIAL_SOFT`/`HARD`). Reserved as a
   future flag on the search request; nothing in the engines precludes it.
@@ -531,8 +528,8 @@ a rewrite: the captures have to come out the same.
 
 #### 3.5.5 Later: prefilters and a lazy DFA
 
-Both are speed, not correctness, and are phased after every dialect in tier
-one is conformant ([plan.md](plan.md)). Their interfaces are fixed now: the
+Both are speed, not correctness, and are phased after every implemented
+dialect is conformant ([plan.md](plan.md)). Their interfaces are fixed now: the
 facts in §3.3 carry the literal prefix, the required literal and the
 first-byte set, and engine selection consults them. A lazy DFA (RE2's
 strategy: DFA for "is there a match and where does it end", then the Pike VM
