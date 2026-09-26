@@ -1,7 +1,7 @@
 # Unicode data
 
 **Status:** built, and **most of it now comes from
-[`ghoti.io-unicode`](https://github.com/coreyp1/unicode)** rather than from
+[`ghoti.io-unicode`](https://github.com/Ghoti-io/unicode)** rather than from
 tables generated here. That is phase E of that library's own plan, taken on
 2026-09-25. Owned by [design.md](design.md) §5.
 

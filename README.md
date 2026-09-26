@@ -98,7 +98,7 @@ installs `ghoti.io-regex-dev` instead.
 ## Building the library
 
 [cutil](https://github.com/Ghoti-io/cutil) and
-[unicode](https://github.com/coreyp1/unicode) must already be installed
+[unicode](https://github.com/Ghoti-io/unicode) must already be installed
 where pkg-config can see them. Case folding, segmentation, `\N{NAME}` and
 script runs read the Unicode library. A dependency it cannot find is a hard
 error naming the fix.
@@ -160,7 +160,7 @@ Found through pkg-config, and the installed `.pc` file names them, so a
 program that links `ghoti.io-regex-0` links these too.
 
 - [ghoti.io-cutil](https://github.com/Ghoti-io/cutil) — the allocator.
-- [ghoti.io-unicode](https://github.com/coreyp1/unicode) — case folding, segmentation, `\N{NAME}` and script runs.
+- [ghoti.io-unicode](https://github.com/Ghoti-io/unicode) — case folding, segmentation, `\N{NAME}` and script runs.
 
 `text` is optional, and the dependency points the other way: `text` does
 not depend on `regex`. This library fills in the provider `text` uses for
