@@ -746,13 +746,15 @@ hold:
 4. The pattern fuzzer has run eight hours clean with the dialect selected.
 5. `grx_options_parse()` accepts its alphabet and its replacement template
    grammar is implemented.
-6. `examples/` has one example in the dialect. Six of them so far:
+6. `examples/` has one example in the dialect. Seven of them:
    `regex_info` and the two JSON Schema programs are ECMAScript's,
    `posix_stream` is a grep and a sed across the four POSIX and GNU rows,
    `perl_extract` is PCRE2's and Perl's - the same pattern under both,
    because the place they part is the template rather than the pattern -
-   and `vim_substitute` is a `:s` over a string, where the grammar is
-   chosen inside the pattern and the replacement changes case.
+   `vim_substitute` is a `:s` over a string, where the grammar is
+   chosen inside the pattern and the replacement changes case, and
+   `python_split` is `re.split` and `re.sub`, because Python's splitting rule
+   is a third one rather than a variant of the other two.
 
 **Where the nine stand against those six, measured 2026-09-26.** None meets
 all of them, and the list is here rather than in a note because a definition
@@ -775,7 +777,7 @@ limits. That found a real defect. The re-run after the fix was parked at
 and the eight other dialects have not been asked; `GRX_FUZZ_SYNTAX=<dialect>`
 exists so that each can be, in a private prefix, on wall clock.
 
-Condition 6 is met by eight: Python has no `examples/` program.
+Condition 6 is met by all nine: `python_split` was the last one missing.
 
 Conditions 1, 2 and 5 hold for the nine that compile and match. The five
 remaining known gaps are one feature - perl 5.44 made `\l`, `\u`, `\L`,

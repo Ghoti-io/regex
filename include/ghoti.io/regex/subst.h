@@ -156,11 +156,29 @@ GRX_API GRX_Result grx_regex_replace(const GRX_Regex * regex,
 /**
  * @brief Divide a subject at every match.
  *
- * ECMAScript's rule (22.2.6.14) - for every dialect, not only for an
- * ECMAScript regex, because the dialects that have a split of their own
- * disagree as a matter of their library rather than of their grammar
- * (documentation/dialects.md section 5.16). It is more particular than it
- * looks:
+ * **The rule is the regex's dialect's**, and there are three of them - three
+ * answers rather than two and a blend (documentation/dialects.md section
+ * 5.16). A caller who assumed one would be wrong about the other two:
+ *
+ * - **ECMAScript** (22.2.6.14), described below, and what every dialect
+ *   without a splitting library of its own is given.
+ * - **Perl**, which drops the trailing empty *elements* unless `limit` is
+ *   positive: `,` over `",a,"` is two pieces there and three under
+ *   ECMAScript's rule.
+ * - **Python**, whose `limit` counts **splits** rather than pieces and keeps
+ *   the remainder as the last one - `,` over `"a,b,c"` with `limit` 1 is
+ *   `a` and `b,c`, where ECMAScript's is `a` alone - and which yields two
+ *   empty pieces for an empty subject the pattern matches, where the other
+ *   two yield none.
+ *
+ * This paragraph said "ECMAScript's rule, for every dialect" until
+ * 2026-09-26, and it had been wrong since Python's splitting rule landed.
+ * The sentence carried its own justification - that a dialect's own split
+ * "disagrees as a matter of its library rather than of its grammar" - which
+ * is why nobody re-read it when the third rule arrived. A stale claim in a
+ * public header is the one a caller reads first.
+ *
+ * ECMAScript's rule is more particular than it looks:
  *
  * - Capturing groups appear in the output between the pieces around them, so
  *   `(\d)` splitting `"a1b"` yields `a`, `1`, `b`.
@@ -175,8 +193,10 @@ GRX_API GRX_Result grx_regex_replace(const GRX_Regex * regex,
  * @param regex The regex. NULL is invalid.
  * @param subject The bytes to split. May be NULL only when `length` is 0.
  * @param length Length of `subject` in bytes.
- * @param limit The most pieces to produce; GRX_NPOS for no limit. Zero
- *   yields none, which is ECMAScript's rule for `split(re, 0)`.
+ * @param limit What the dialect's rule counts, and GRX_NPOS for no limit:
+ *   the most *pieces* to produce under ECMAScript's rule and Perl's, where
+ *   zero yields none - ECMAScript's `split(re, 0)` - and the most *splits*
+ *   to make under Python's, where the remainder is kept as the last piece.
  * @param options The window, search flags, engine and limits. NULL uses the
  *   defaults.
  * @param allocator Allocator for the result. NULL uses the default.

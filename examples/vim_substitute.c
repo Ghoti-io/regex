@@ -102,8 +102,11 @@ int main(int argc, char ** argv) {
     // The diagnostic names the construct and the offset. For this dialect
     // that is usually "the level in force here spells that operator the
     // other way".
-    fprintf(stderr, "%s: %s at byte %zu of the pattern\n", argv[0],
-        error.message, error.offset);
+    // The message already carries the offset - grx_error_set() composes
+    // "<what> at offset <n>" - so naming it again printed "at offset 0 at
+    // byte 0". Which *text* the offset is into is the part the message does
+    // not say, and is what a caller with a pattern and a template needs.
+    fprintf(stderr, "%s: %s (in the pattern)\n", argv[0], error.message);
     grx_regex_free(regex);
     return 1;
   }

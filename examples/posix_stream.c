@@ -110,8 +110,7 @@ int main(int argc, char ** argv) {
       != GRX_OK) {
     // The diagnostic names the construct and the offset, which for a basic
     // RE is usually "that operator wanted a backslash".
-    fprintf(stderr, "%s: %s at byte %zu of the pattern\n", argv[0],
-        error.message, error.offset);
+    fprintf(stderr, "%s: %s (in the pattern)\n", argv[0], error.message);
     grx_regex_free(regex);
     return 1;
   }

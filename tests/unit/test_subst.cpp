@@ -625,6 +625,76 @@ TEST(Split, PerlSplitsLikePerl) {
       "[\"a\",\"b\",\"\",\"\"]");
 }
 
+TEST(Split, PythonSplitsLikePython) {
+  // The third rule, and it had no unit test at all until 2026-09-26 -
+  // `tools/oracle/split_diff.py --dialect python` was the whole of the gate,
+  // which is a gate that needs a container engine. Every expectation below
+  // was taken from the pinned CPython 3.14.7 through
+  // `tools/oracle/python_match.py split`, not from this library.
+  //
+  // It is a third *answer* and not a blend: on four of the seven rows below
+  // it agrees with neither ECMAScript nor perl.
+  const GRX_Syntax python = GRX_SYNTAX_PYTHON;
+  const size_t none = GRX_NPOS;
+
+  // 1. `maxsplit` counts SPLITS, and the remainder is the last piece. The
+  //    same number means opposite things in the two libraries: ECMAScript's
+  //    second argument is a cap on *pieces* and throws the rest away.
+  EXPECT_EQ(split_into(",", "a,b,c", 1, GRX_ENGINE_AUTO, python),
+      "[\"a\",\"b,c\"]");
+  EXPECT_EQ(split_into(",", "a,b,c", 2, GRX_ENGINE_AUTO, python),
+      "[\"a\",\"b\",\"c\"]");
+  EXPECT_EQ(split_into(",", "a,b,c", 1), "[\"a\"]");
+  // A capture between the pieces does not count against it, because it is
+  // not a split.
+  EXPECT_EQ(split_into("(,)", "a,b,c", 1, GRX_ENGINE_AUTO, python),
+      "[\"a\",\",\",\"b,c\"]");
+
+  // 2. Zero means NO LIMIT, as perl's does and as ECMAScript's does not -
+  //    the one spelling that means "none at all" there.
+  EXPECT_EQ(split_into(",", "a,b,c", 0, GRX_ENGINE_AUTO, python),
+      "[\"a\",\"b\",\"c\"]");
+  EXPECT_EQ(split_into(",", "a,b,c", 0), "[]");
+
+  // 3. Trailing empties are KEPT, where perl drops them.
+  EXPECT_EQ(split_into(",", "a,b,,", none, GRX_ENGINE_AUTO, python),
+      "[\"a\",\"b\",\"\",\"\"]");
+  EXPECT_EQ(split_into("(a)|(b)", "xa", none, GRX_ENGINE_AUTO, python),
+      "[\"x\",\"a\",null,\"\"]");
+  EXPECT_EQ(split_into(",", ",a,", none, GRX_ENGINE_AUTO, python),
+      "[\"\",\"a\",\"\"]");
+
+  // 4. An empty subject: one empty piece, unless the pattern matches empty,
+  //    in which case TWO. perl gives none either way and ECMAScript gives
+  //    one and none - so all three differ here, which is the row that makes
+  //    "a third rule" more than a manner of speaking.
+  EXPECT_EQ(split_into(",", "", none, GRX_ENGINE_AUTO, python), "[\"\"]");
+  EXPECT_EQ(split_into("x*", "", none, GRX_ENGINE_AUTO, python),
+      "[\"\",\"\"]");
+  EXPECT_EQ(split_into("x*", ""), "[]");
+
+  // 5. Every match separates, INCLUDING a zero-width one where a piece
+  //    begins. That is the rule `re` gained in 3.7, and it is the opposite
+  //    of ECMAScript's - which is why `x*` over "ab" is four pieces here and
+  //    two there.
+  EXPECT_EQ(split_into("x*", "ab", none, GRX_ENGINE_AUTO, python),
+      "[\"\",\"a\",\"b\",\"\"]");
+  EXPECT_EQ(split_into("b*", "abc", none, GRX_ENGINE_AUTO, python),
+      "[\"\",\"a\",\"\",\"c\",\"\"]");
+  EXPECT_EQ(split_into("x*", "ab"), "[\"a\",\"b\"]");
+  EXPECT_EQ(split_into("b*", "abc"), "[\"a\",\"c\"]");
+  // Including one at the very end of the subject, which perl needs a
+  // positive limit to show and ECMAScript never looks for.
+  EXPECT_EQ(split_into("$", "aab", none, GRX_ENGINE_AUTO, python),
+      "[\"aab\",\"\"]");
+  EXPECT_EQ(split_into("$", "aab"), "[\"aab\"]");
+
+  // The rule all three share, so that making Python differ did not make it
+  // differ everywhere.
+  EXPECT_EQ(split_into("(,)", "a,b", none, GRX_ENGINE_AUTO, python),
+      "[\"a\",\",\",\"b\"]");
+}
+
 /**
  * `split /^/` is `split /^/m`, and which patterns that covers.
  *

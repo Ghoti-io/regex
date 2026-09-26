@@ -87,9 +87,8 @@ static int compile(GRX_Syntax syntax, const char * pattern) {
     if (error.message[0]) {
       fprintf(stderr, ": %s", error.message);
     }
-    if (error.offset != GRX_NPOS) {
-      fprintf(stderr, " (at offset %zu)", error.offset);
-    }
+    // Not the offset again: `error.message` already ends in "at offset <n>",
+    // which grx_error_set() composes. This printed it twice.
     fprintf(stderr, "\n");
     return 1;
   }

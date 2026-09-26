@@ -78,9 +78,9 @@ Corey
 ```
 
 `examples/regex_info.c` prints what a dialect has and tries a pattern in it.
-`examples/posix_stream.c`, `perl_extract.c` and `vim_substitute.c` are one
-program per family. `examples/json_schema_provider.c` is this engine behind
-`text`'s JSON Schema `pattern` keyword.
+`examples/posix_stream.c`, `perl_extract.c`, `vim_substitute.c` and
+`python_split.c` are one program per family. `examples/json_schema_provider.c`
+is this engine behind `text`'s JSON Schema `pattern` keyword.
 
 ## Compile and link
 

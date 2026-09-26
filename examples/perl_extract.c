@@ -41,8 +41,8 @@ static GRX_Regex * compile(const char * pattern, GRX_Syntax syntax,
   if (grx_regex_compile_with_allocator(pattern, strlen(pattern), syntax,
           options, NULL, NULL, &error, &regex)
       != GRX_OK) {
-    fprintf(stderr, "%s refused: %s (byte %zu)\n", grx_syntax_name(syntax),
-        error.message, error.offset);
+    fprintf(stderr, "%s refused: %s\n", grx_syntax_name(syntax),
+        error.message);
     grx_regex_free(regex);
     return NULL;
   }
