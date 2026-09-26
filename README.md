@@ -182,6 +182,40 @@ JSON Schema `pattern` and `patternProperties`.
 The nine dialects above compile and match on whichever of the three engines
 can run the pattern. The other seven report `GRX_ERR_UNSUPPORTED`.
 
+### Conformance
+
+`make test` runs 45,890 checked-in conformance vectors and prints this table.
+Every expectation in them is a reference implementation's, taken from the
+pinned oracle in `tools/oracle/containers/IMAGES`; none is this library's own
+output. The corpora are committed, so the run needs no oracle, no container
+engine and no network.
+
+| Dialect | Vectors | Pass | Notes |
+| --- | ---: | ---: | --- |
+| `ecmascript` | 28,559 | 100.00% | test262, plus generated from node 24.21 |
+| `perl` | 6,164 | 99.92% | perl 5.44's `re_tests`; 5 known gaps, 8 excluded |
+| `vim` | 6,317 | 100.00% | generated from vim 9.2.1129 |
+| `python` | 2,177 | 100.00% | generated from CPython 3.14.7 |
+| `pcre` | 1,869 | 100.00% | PCRE2 10.46's `testinput` |
+| `gnu-ere` | 270 | 100.00% | Spencer's cases, answered by glibc 2.41 |
+| `posix-ere` | 245 | 100.00% | Spencer's cases, where glibc and musl agree |
+| `gnu-bre` | 159 | 100.00% | as `gnu-ere` |
+| `posix-bre` | 135 | 100.00% | as `posix-ere` |
+
+Read the denominators with the rates: they differ by two orders of magnitude,
+and 100% of 135 vectors is a smaller claim than 100% of 28,559.
+
+The five known gaps are one feature - perl 5.44 made `\l`, `\u`, `\L`, `\U`,
+`\F` and `\E` pattern operators - and they are **in** the denominator, named
+one by one in `tests/data/vectors/known-gaps.txt`. The eight excluded rows are
+ones where the reference's own answer is demonstrably wrong; each carries the
+reproduction in that file, and the count is printed beside the rate wherever
+the rate appears, because a rate that rose because rows left the denominator
+has to say so.
+
+A rate is not the whole of "done" for a dialect: [documentation/plan.md](documentation/plan.md)
+§4 lists six conditions and this is one of them.
+
 ## License
 
 LGPL-3.0-only. See [COPYING.LESSER](COPYING.LESSER) for the license, and

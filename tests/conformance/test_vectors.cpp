@@ -740,6 +740,70 @@ TEST(Conformance, EveryVectorAgreesWithItsOracle) {
       << "no vectors were found under " << grxtest::data("vectors");
 }
 
+TEST(Conformance, TheRateReadmePublishesIsTheRateTheRunnerFinds) {
+  // design.md invariant 5 and plan.md section 4's third condition both say
+  // the pass rate is *published*. For a long time it was published only in
+  // plan.md, in the past tense of a work package - `gnu-ere` at 98.15% and
+  // three more like it - and every one of them had stopped being true, the
+  // twelve known-gap entries behind them having been closed one at a time
+  // with nothing to notice that the number three directories away had moved.
+  //
+  // So the table moved to README.md, and this is what stops it going the same
+  // way. It is `check-status-line`'s argument applied to a second claim on
+  // the same page: a figure whose trigger is somewhere else entirely - a
+  // vector file regenerated, a known gap closed - is exactly the figure
+  // nobody has a reason to re-read.
+  std::vector<std::string> failures;
+  std::map<std::string, Tally> by_dialect;
+  run_directory(grxtest::data("vectors"), &failures, &by_dialect);
+
+  const std::string readme = grxtest::read_file(grxtest::repo("README.md"));
+  ASSERT_FALSE(readme.empty()) << "README.md could not be read";
+
+  size_t rows = 0;
+  for (const auto & entry : by_dialect) {
+    size_t run = entry.second.passed + entry.second.failed + entry.second.gaps;
+    if (!run) {
+      continue;
+    }
+
+    // `| `<dialect>` | <count> | <rate>% |`, with the count written with
+    // thousands separators the way a person reads it.
+    std::string marker = "| `" + entry.first + "` |";
+    size_t at = readme.find(marker);
+    ASSERT_NE(at, std::string::npos)
+        << entry.first << " has vectors and no row in README's table";
+    size_t end = readme.find('\n', at);
+    std::string row = readme.substr(at, end - at);
+
+    std::string digits;
+    for (char c : row.substr(marker.size())) {
+      if (c == '|') {
+        break;
+      }
+      if (c >= '0' && c <= '9') {
+        digits += c;
+      }
+    }
+    EXPECT_EQ(digits, std::to_string(run))
+        << entry.first << ": README says " << digits << " vectors, the runner "
+        << "ran " << run << " (" << row << ")";
+
+    char rate[32];
+    snprintf(rate, sizeof(rate), "%.2f%%",
+        100.0 * (double)entry.second.passed / (double)run);
+    EXPECT_NE(row.find(rate), std::string::npos)
+        << entry.first << ": README does not say " << rate << " (" << row
+        << ")";
+    rows++;
+  }
+
+  // Arming, and the direction that matters: a table with no rows in it at all
+  // would agree with every dialect vacuously.
+  EXPECT_EQ(rows, by_dialect.size());
+  EXPECT_GE(rows, 9u) << "fewer dialects checked than the tree has corpora";
+}
+
 TEST(Conformance, EveryVectorAgreesAgainWhenEveryArenaMoves) {
   // The same corpus through an allocator whose `realloc` always relocates
   // the block, scribbling over the old one first.

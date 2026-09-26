@@ -1947,6 +1947,21 @@ Run by `make test` alongside `check-symbols`:
   against. Prose is deliberately not checked: a page that has to be
   word-for-word correct is a page nobody edits.
   **To check the gate itself:** change a digit in one of the dump examples.
+- **The pass rate README publishes is the one the runner finds.**
+  `Conformance.TheRateReadmePublishesIsTheRateTheRunnerFinds` reads README's
+  table and compares every dialect's vector count and percentage against the
+  tally it just computed. **Built.** design.md invariant 5 and plan.md §4's
+  third condition both require the rate to be *published*, and for a long
+  time the only place it was published was plan.md, in the past tense of a
+  work package: `gnu-ere` at 98.15% and three more like it, every one of them
+  no longer true, the twelve known-gap entries behind them having been closed
+  one at a time with nothing to notice that a figure three directories away
+  had moved. This is `check-status-line`'s argument applied to a second claim
+  on the same page - a figure whose trigger is somewhere else entirely is
+  exactly the figure nobody has a reason to re-read.
+  **To check the gate itself:** change a digit in one of the table's counts or
+  rates; both halves are compared, and a table with no rows at all fails on
+  the row count.
 - **No STUB-marked test survives the stub it marks:** a test whose comment
   says `STUB` for a function whose implementation no longer returns
   `GRX_ERR_UNSUPPORTED` fails. **Not built, and no longer needed for the

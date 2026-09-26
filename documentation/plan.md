@@ -415,9 +415,20 @@ The bit-state engine cannot do it at all and says so
 
 **WP-25 POSIX and GNU conformance.** *conformance, M.* **Landed** for GNU.
 Spencer's test suite converted, with glibc as the oracle through
-`tools/oracle/posix_match.c`; 429 vectors, `gnu-ere` at 98.15% and `gnu-bre`
-at 99.37%. grep and sed were not needed - both read glibc's regex, so they
-are the same oracle behind another command. *Depends on:* WP-04.
+`tools/oracle/posix_match.c`; 429 vectors, **`gnu-ere` and `gnu-bre` at
+100.00%** (270 and 159). grep and sed were not needed - both read glibc's
+regex, so they are the same oracle behind another command. *Depends on:*
+WP-04.
+
+Those two figures read 98.15% and 99.37% here after they stopped being true.
+They were the rate on the day WP-25 landed, written in the past tense of a
+work package and then read as the present state of the library: `git log -p`
+on `tests/data/vectors/known-gaps.txt` shows twelve distinct `gnu-*` and
+`posix-*` entries added over its history and every one of them since removed,
+so that all thirteen entries in it today are `perl`'s. A rate published in a
+work package is a rate nobody re-derives, which is why
+[README.md](../README.md) carries the table now and `make test` prints it on
+every run - the figure and the command that produces it in the same place.
 
 **Landed** for POSIX too, as far as it can be. musl's regex sources are
 fetched and compiled into `tools/oracle/musl_match.c`, giving a second
@@ -427,7 +438,8 @@ POSIX either. Its basic RE takes `\|`, `\+` and `\?` exactly as glibc's
 does, and it refuses the `[[.x.]]` and `[[=x=]]` POSIX requires. So neither
 reference can decide alone, and the method is their agreement: 380 `posix-*`
 vectors from the 420 of Spencer's 463 cases the two answer identically,
-`posix-ere` at 97.96% and `posix-bre` at 99.26%. The 41 they answer
+**`posix-ere` and `posix-bre` at 100.00%** (245 and 135; 97.96% and 99.26%
+when this was written). The 41 they answer
 differently are recorded as open questions rather than settled by picking a
 side, and the 8 using a construct these dialects do not have are left out
 because there the *dialect* differs and neither oracle speaks for it.
@@ -741,6 +753,35 @@ hold:
    because the place they part is the template rather than the pattern -
    and `vim_substitute` is a `:s` over a string, where the grammar is
    chosen inside the pattern and the replacement changes case.
+
+**Where the nine stand against those six, measured 2026-09-26.** None meets
+all of them, and the list is here rather than in a note because a definition
+of done with no reading beside it is a definition nobody checks.
+
+Condition 3 is met by all nine for the first time: every dialect now has a
+committed corpus, a published rate, and every failure named -
+[README.md](../README.md) carries the table and `make test` prints it. Python
+and Vim had no corpus at all until this date, which meant the condition could
+not be evaluated for them rather than that they failed it; their only gate
+needed a container.
+
+Condition 4 is met by none. Vim's is the only dialect a soak has been pointed
+at, and it has been run twice: the first finished its eight hours with
+2,978,555 runs, no crash and no leak, and left two slow units in
+`artifacts/` - one of them 138 seconds, which the harness's own docstring
+says is a failure, since a pattern must not make the matcher run past its
+limits. That found a real defect. The re-run after the fix was parked at
+5h06m of its 8. So the condition has been attempted once and met zero times,
+and the eight other dialects have not been asked; `GRX_FUZZ_SYNTAX=<dialect>`
+exists so that each can be, in a private prefix, on wall clock.
+
+Condition 6 is met by eight: Python has no `examples/` program.
+
+Conditions 1, 2 and 5 hold for the nine that compile and match. The five
+remaining known gaps are one feature - perl 5.44 made `\l`, `\u`, `\L`,
+`\U`, `\F` and `\E` pattern operators - whose template half WP-22 already
+records as absent, so one piece of work takes condition 3 to 100% across the
+board.
 
 ## 5. What "done" means for the first stable release
 
