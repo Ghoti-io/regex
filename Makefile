@@ -1713,7 +1713,7 @@ check-readme-example: $(APP_DIR)/$(STATIC_TARGET) | $(APP_DIR)/$(TARGET)
 	fi
 	@$(CC) $(CFLAGS) $(INCLUDE) -o $(BUILD_DIR)/docs/readme_example \
 		$(BUILD_DIR)/docs/readme_example.c $(LDFLAGS) $(REGEXLIBRARY) \
-		$(CUTIL_LIBS) || { \
+		$(CUTIL_LIBS) $(UNICODE_LIBS) || { \
 		printf "\033[0;31m\n### The README's example does not compile ###\033[0m\n" >&2; \
 		exit 1; \
 	}
@@ -2217,7 +2217,8 @@ $(ASAN_OBJ_DIR)/%.o: src/%.c $(ASAN_FLAGS_STAMP)
 $(ASAN_APP_DIR)/$(ASAN_TARGET): $(ASAN_LIBOBJECTS)
 	@printf "\n### Linking ASan+UBSan Regex Library ###\n"
 	@mkdir -p $(@D)
-	$(CXX) $(ASAN_CXXFLAGS) -shared -o $@ $^ $(ASAN_LDFLAGS) $(CUTIL_LIBS)
+	$(CXX) $(ASAN_CXXFLAGS) -shared -o $@ $^ $(ASAN_LDFLAGS) $(CUTIL_LIBS) \
+		$(UNICODE_LIBS)
 
 $(ASAN_OBJ_DIR)/tests/%.o: tests/%.cpp $(ASAN_FLAGS_STAMP)
 	@printf "\n### Compiling ASan Test: $* ###\n"
@@ -2241,7 +2242,7 @@ $(ASAN_APP_DIR)/$2$(EXE_EXTENSION): $$(ASAN_TEST_OBJ_$1) $(ASAN_TEST_HELPER_OBJ)
 		$(ASAN_APP_DIR)/$(ASAN_TARGET)
 	@printf "\n### Linking ASan Test: $2 ###\n"
 	@mkdir -p $$(@D)
-	$(CXX) $(ASAN_CXXFLAGS) -o $$@ $$(ASAN_TEST_OBJ_$1) $(ASAN_TEST_HELPER_OBJ) $(ASAN_LDFLAGS) $(ASAN_REGEXLIBRARY) $(CUTIL_LIBS) $(TESTFLAGS)
+	$(CXX) $(ASAN_CXXFLAGS) -o $$@ $$(ASAN_TEST_OBJ_$1) $(ASAN_TEST_HELPER_OBJ) $(ASAN_LDFLAGS) $(ASAN_REGEXLIBRARY) $(CUTIL_LIBS) $(UNICODE_LIBS) $(TESTFLAGS)
 endef
 
 $(foreach pair,$(TEST_PAIRS),\
@@ -2343,7 +2344,7 @@ $$(FUZZ_APP_DIR)/$1: tests/fuzz/$1.cpp $$(FUZZ_OBJECTS)
 	@mkdir -p $$(@D) $$(FUZZ_CORPUS)/$2
 	@printf "\n### Building fuzz harness: $1 ###\n"
 	$$(FUZZ_CXX) $$(FUZZ_BIN_FLAGS) -std=c++20 -w $$(INCLUDE) \
-		-o $$@ $$< $$(FUZZ_OBJECTS) $(CUTIL_LIBS)
+		-o $$@ $$< $$(FUZZ_OBJECTS) $(CUTIL_LIBS) $(UNICODE_LIBS)
 
 fuzz-run-$2: ## Run the $2 fuzzer for $$(FUZZ_TIME) seconds
 fuzz-run-$2: $$(FUZZ_APP_DIR)/$1
