@@ -1,0 +1,13 @@
+# The self-test's own known-gaps file, read by the same reader that reads
+# tests/data/vectors/known-gaps.txt and exercising the three things that one
+# cannot: a counted `gap`, an entry whose record has started passing, and an
+# entry naming a record no corpus has.
+#
+# Its rows are fixtures. The reasons below argue for nothing, because there
+# is nothing to argue: the records they name are wrong on purpose.
+#
+# dialect TAB flags TAB pattern TAB subject TAB category TAB reason
+ecmascript		gapped	gapped	gap	fixture: counted as a gap, so that the `gap` category has a reader
+ecmascript		defect	defect	reference-defect	fixture: excluded, so that the reference-defect category has a reader
+ecmascript		closed	closed	gap	fixture: this record passes, so the runner must report that the entry is stale
+ecmascript		absent	absent	gap	fixture: no record has this key, so the runner must report the entry as naming nothing

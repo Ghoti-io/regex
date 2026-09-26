@@ -466,6 +466,20 @@ span, and an `expect: refused` on a pattern that compiles. The last is there
 because `refused` asserts less than every other expectation, and a check that
 asserts little is the one worth making sure asserts something.
 
+**And a `known-gaps.txt` of its own**, added when the last real gap closed.
+`tests/data/vectors/known-gaps.txt` now holds nothing but reference defects,
+so three of the gap reader's paths had no reader left: the `gap` category
+itself, the failure raised when a *listed* record starts passing, and the
+failure raised when an entry names a record the corpus does not have. Each has
+a fixture in `gaps.rxt` and a line in the self-test's own file, and the test
+asserts the counted gap and the exclusion as well as the failures - so a
+runner that quietly stopped counting either denominator would still be red.
+
+Four records fail there and five failures are reported, which is not a
+discrepancy: the fifth is the entry naming no record, and the counter counts
+records. The suite fails on the list, not on the tally, and the test asserts
+both numbers so that stays true.
+
 ### The property check
 
 `make check-oracle-properties` asks this library and the reference which code
@@ -1285,16 +1299,16 @@ that should stop the tool with a message rather than look like a hung
 build.
 
 Two things this differential does not ask, both recorded in the file rather
-than left as silence. `\Q...\E` is double-quotish processing that happens
-when perl tokenises its *source*, and this generator asks perl for the
-`quoted` reading, where that pass has not run: `qr/$p/` with `$p` holding
-`\Qa.b\E` matches nothing at all. `perl_match.pl` can be asked for the
-`source` reading instead and `import_re_tests.py` asks for it, but a generator
-built from *this library's* grammar should not - it would compare two
-different pattern texts on every row rather than two implementations of one.
-So the deviation is excluded here, checkably: the row counts as quoting only
-if perl's answer to the pattern is this library's answer to the letters, and
-anything else is still reported. And `x` is left out of the flag sweep
+than left as silence. The first is the double-quotish family - `\Q...\E` and
+the case transforms `\U`, `\L`, `\F`, `\u`, `\l` - which perl applies when
+it tokenises its *source*. `perl_match.pl` can be asked for that reading, and
+`import_re_tests.py` asks for it, but this generator stays on `quoted` on
+purpose: it generates from *this library's* grammar and compares matches, and
+asking perl for the source reading while generating a source-level operator
+would compare two different pattern texts on every row rather than two
+implementations of one. The gate for that family is the corpus - the
+`/`-delimited `re_tests` rows, which are the reading - and
+`tests/unit/test_perl.cpp`. And `x` is left out of the flag sweep
 because `grx_match.c` maps flag letters to `GRX_Option` bits and has no
 extended-mode bit among them, so a row with `x` would ask perl one question
 and this library another.

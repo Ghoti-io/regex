@@ -82,6 +82,7 @@
 #define CTRL GRX_FEATURE_CONTROL_ESCAPE
 #define SUBR GRX_FEATURE_SUBROUTINE
 #define VERB GRX_FEATURE_BACKTRACK_CONTROL
+#define CASE GRX_FEATURE_CASE_TRANSFORM
 
 // One row per GRX_Syntax constant. Designated initialisers, so the rows may
 // be reordered without breaking and a row that is simply missing is zero
@@ -137,7 +138,7 @@ static const GRX_SyntaxSpec spec_table[GRX_SYNTAX_COUNT] = {
     // skip_extended_ignorable() is where that lives.
     .features = ALT | REP | LAZY | POSS | NCAP | NAME | BREF | LAH | LBH
         | ATOM | COND | RECU | FLAG | CMNT | PCLS | UPRP | CSET | WORD
-        | ANCH | QUOT | HEX | OCT | CTRL | SUBR,
+        | ANCH | QUOT | HEX | OCT | CTRL | SUBR | CASE,
     // perl warns "Quantifier {n,m} with n > m can't match" and compiles it
     // anyway, as a group that never matches. pcre2test refuses the same
     // pattern outright.

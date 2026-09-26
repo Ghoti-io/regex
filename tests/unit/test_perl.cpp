@@ -11,7 +11,7 @@
  * the oracle was asked.
  *
  * The accept/reject behaviour as a whole is checked by the imported corpora:
- * 1,884 records from pcre2test's own test files and 1,707 from Perl's
+ * 1,884 records from pcre2test's own test files and 1,726 from Perl's
  * `re_tests`. What is here is what a corpus cannot state - which node came
  * out, which diagnostic was reported, and which of two constructs a spelling
  * turned into.
@@ -19,6 +19,7 @@
  * Copyright 2026 by Corey Pennycuff
  */
 
+#include <cctype>
 #include <cstring>
 #include <string>
 
@@ -3324,6 +3325,174 @@ TEST(Perl, TheFamilyBitIsTheFiveLettersTogether) {
       utf_ucp | GRX_OPT_ASCII_POSIX_DIGIT));
   EXPECT_FALSE(matches_with("[[:xdigit:]]", "\xef\xbc\x90",
       utf_ucp | GRX_OPT_ASCII_POSIX_DIGIT));
+}
+
+TEST(Perl, ACaseTransformIsAnOperatorOverThePatternSource) {
+  // `\U`, `\L`, `\F`, `\u` and `\l` are perl's, applied by the pass that
+  // reads a pattern typed in a program rather than by its engine - a sibling
+  // of `\Q...\E` and not a construct of the grammar. Every answer below is
+  // perl 5.44.0's, asked through tools/corpus/perl_match.pl with the
+  // `source` reading, which is the reading a `/`-delimited row of
+  // `t/re/re_tests` means.
+  //
+  // A run lasts until `\E`.
+  EXPECT_EQ(span_of("\\Uab\\E", "AB", GRX_SYNTAX_PERL), "0-2");
+  EXPECT_EQ(span_of("\\Uab\\E", "ab", GRX_SYNTAX_PERL), "nomatch");
+  EXPECT_EQ(span_of("\\LABC\\E", "abc", GRX_SYNTAX_PERL), "0-3");
+  // ...or, with no `\E`, until the end of the pattern.
+  EXPECT_EQ(span_of("\\Uab", "AB", GRX_SYNTAX_PERL), "0-2");
+  EXPECT_EQ(span_of("\\LABC", "abc", GRX_SYNTAX_PERL), "0-3");
+  // `\F` is the fold, which for these letters is the lowercase.
+  EXPECT_EQ(span_of("\\FAB\\E", "ab", GRX_SYNTAX_PERL), "0-2");
+
+  // `\u` and `\l` transform one character.
+  EXPECT_EQ(span_of("\\uab", "Ab", GRX_SYNTAX_PERL), "0-2");
+  EXPECT_EQ(span_of("\\uab", "ab", GRX_SYNTAX_PERL), "nomatch");
+  EXPECT_EQ(span_of("\\lAB", "aB", GRX_SYNTAX_PERL), "0-2");
+
+  // The runs do not nest and do not stack: a second one replaces the first,
+  // and one `\E` ends everything. perl warns "Useless use of \E" about the
+  // second `\E` here, which is how one can see that.
+  EXPECT_EQ(span_of("\\Ua\\Lb\\Ec\\E", "Abc", GRX_SYNTAX_PERL), "0-3");
+
+  // A pending one-character operator wins over a run for its character, and
+  // survives another run opening in front of it.
+  EXPECT_EQ(span_of("\\u\\Lab", "Ab", GRX_SYNTAX_PERL), "0-2");
+  EXPECT_EQ(span_of("\\l\\Uab", "aB", GRX_SYNTAX_PERL), "0-2");
+  // But not `\E`, which cancels it. This asymmetry is measured, not derived:
+  // `\u\Lab` matches "Ab" and `\u\Eab` does not.
+  EXPECT_EQ(span_of("\\u\\Eab", "Ab", GRX_SYNTAX_PERL), "nomatch");
+  EXPECT_EQ(span_of("\\u\\Eab", "ab", GRX_SYNTAX_PERL), "0-2");
+  EXPECT_EQ(span_of("\\U\\Ea", "a", GRX_SYNTAX_PERL), "0-1");
+
+  // An operator with nothing after it to transform is an empty match, not an
+  // error.
+  EXPECT_EQ(span_of("\\U", "x", GRX_SYNTAX_PERL), "0-0");
+  EXPECT_EQ(span_of("\\u", "x", GRX_SYNTAX_PERL), "0-0");
+  EXPECT_EQ(span_of("a\\Eb", "ab", GRX_SYNTAX_PERL), "0-2");
+
+  // The transform is over the source, so it reaches through every construct
+  // the source happens to contain: a group, a range, a quantifier's target.
+  EXPECT_EQ(span_of("\\U(ab)\\E", "AB", GRX_SYNTAX_PERL), "0-2");
+  EXPECT_EQ(span_of("\\U[a-z]\\E", "A", GRX_SYNTAX_PERL), "0-1");
+  EXPECT_EQ(span_of("\\U[a-z]\\E", "a", GRX_SYNTAX_PERL), "nomatch");
+  EXPECT_EQ(span_of("[\\Ua-c\\E]", "B", GRX_SYNTAX_PERL), "0-1");
+  EXPECT_EQ(span_of("\\Uab\\E*", "ABB", GRX_SYNTAX_PERL), "0-3");
+  // And through a `\Q` run in that order, whose characters are literals
+  // getting the same treatment every other literal gets: "A\.B".
+  EXPECT_EQ(span_of("\\U\\Qa.b\\E", "A.B", GRX_SYNTAX_PERL), "0-3");
+  EXPECT_EQ(span_of("\\U\\Qa.b\\E", "AxB", GRX_SYNTAX_PERL), "nomatch");
+}
+
+TEST(Perl, OneCharacterCaseOperatorsTransformTheNextCharacterAndNotTheNextAtom) {
+  // The case that decides how the two are implemented. perl's is a pass over
+  // *text*, so `\u` upper-cases whatever character stands next even when the
+  // grammar makes that character an operator - and `[` has no case, so
+  // `\u[ab]` is `[ab]`.
+  //
+  // Read as "the next literal" instead it would be `[Ab]`, which is a
+  // different language and is what perl says it is not: "a" matches there
+  // and "A" does not.
+  EXPECT_EQ(span_of("\\u[ab]", "a", GRX_SYNTAX_PERL), "0-1");
+  EXPECT_EQ(span_of("\\u[ab]", "A", GRX_SYNTAX_PERL), "nomatch");
+  // The same for a group's parenthesis and for a quantifier.
+  EXPECT_EQ(span_of("\\u(ab)", "ab", GRX_SYNTAX_PERL), "0-2");
+  EXPECT_EQ(span_of("a\\u*", "aaa", GRX_SYNTAX_PERL), "0-3");
+}
+
+TEST(Perl, WhatACaseTransformRefusesRatherThanApproximate) {
+  // perl's pass upper-cases the pattern's *text*, so inside `\U` an escape
+  // becomes a different escape: `\U\d\E` is `\D` and matches "x" rather
+  // than "5", and `\U\x{df}\E` is the syntax error "Unescaped left brace"
+  // because the `x` was upper-cased and `\X{DF}` is not a pattern.
+  //
+  // Neither is a rule about the language; each is a fact about a textual
+  // pass. So this library says the construct exists and is not built, which
+  // is the one answer that is neither perl's nor a silent substitute for it.
+  for (const char * pattern : {"\\U\\d\\E", "\\U\\w\\E", "\\U\\p{L}\\E",
+      "\\U\\x{df}\\E", "\\U\\n\\E", "\\u\\d", "[\\U\\d\\E]",
+      "\\U[[:lower:]]\\E"}) {
+    Attempt attempt = compile(pattern, GRX_SYNTAX_PERL);
+    EXPECT_EQ(attempt.result, GRX_ERR_UNSUPPORTED) << pattern;
+    EXPECT_EQ(attempt.diag, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED) << pattern;
+    grx_regex_free(attempt.regex);
+  }
+
+  // A code point whose full mapping is longer than one code point, for the
+  // same reason: perl's `\Uß` is "SS", two characters of pattern from one,
+  // and the simple mapping that would fit leaves `ß` alone. Matching `ß`
+  // where the reference matches "SS" is the approximation this refuses.
+  Attempt sharp = compile("\\U\xc3\x9f\\E", GRX_SYNTAX_PERL);
+  EXPECT_EQ(sharp.result, GRX_ERR_UNSUPPORTED);
+  EXPECT_EQ(sharp.diag, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED);
+  grx_regex_free(sharp.regex);
+  // The control: the same letter with no transform over it is an ordinary
+  // literal, so the refusal is the transform's and not the character's.
+  EXPECT_EQ(span_of("\xc3\x9f", "\xc3\x9f", GRX_SYNTAX_PERL), "0-2");
+
+  // A case operator *inside* a `\Q` run is the other order, and it is still
+  // live in perl - `\Q\Ua\E\E` matches "A" there, not the four characters
+  // `\Ua`. Here the run's characters are already literals by the time the
+  // `\U` is reached, so the run is refused rather than read two ways.
+  Attempt inside = compile("\\Q\\Ua\\E\\E", GRX_SYNTAX_PERL);
+  EXPECT_EQ(inside.result, GRX_ERR_UNSUPPORTED);
+  EXPECT_EQ(inside.diag, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED);
+  grx_regex_free(inside.regex);
+  // ...and a `\Q` run with no case operator in it is untouched, which is the
+  // control that the guard is keyed on the operator and not on `\Q`.
+  EXPECT_EQ(span_of("\\Qa.b\\E", "a.b", GRX_SYNTAX_PERL), "0-3");
+}
+
+TEST(Perl, OnlyPerlHasTheCaseTransformAndOnlyFiveLettersSpellIt) {
+  // Swept rather than asserted one letter at a time, because the question is
+  // which letters are in the family and a spot check answers a different
+  // one. The five are `\L`, `\U`, `\F`, `\l` and `\u`; `\E` ends a run and
+  // is not itself a transform.
+  //
+  // Swept on the upper-casing direction, because that is the one no other
+  // escape can fake: the pattern is `\<letter>ab`, so a letter that reaches
+  // "AB" upper-cased two characters and a letter that reaches "Ab"
+  // upper-cased one. Every other escape in this dialect leaves "ab" as it is,
+  // whatever else it does, and "ab" matches neither subject.
+  //
+  // Both directions of both claims, so a letter that stops transforming and a
+  // letter that starts are each a failure.
+  for (char letter = 'A'; letter <= 'z'; letter++) {
+    if (!isalpha((unsigned char)letter)) {
+      continue;
+    }
+    std::string pattern = std::string("\\") + letter + "ab";
+    EXPECT_EQ(span_of(pattern, "AB", GRX_SYNTAX_PERL) == "0-2",
+        letter == 'U') << pattern << " against AB";
+    EXPECT_EQ(span_of(pattern, "Ab", GRX_SYNTAX_PERL) == "0-2",
+        letter == 'u') << pattern << " against Ab";
+  }
+
+  // The three lower-casing spellings, asserted rather than swept: "ab"
+  // lower-cases to itself, so no sweep over it can separate `\L` from an
+  // escape that simply matched.
+  EXPECT_EQ(span_of("\\LAB\\E", "ab", GRX_SYNTAX_PERL), "0-2");
+  EXPECT_EQ(span_of("\\FAB\\E", "ab", GRX_SYNTAX_PERL), "0-2");
+  EXPECT_EQ(span_of("\\lAB\\E", "aB", GRX_SYNTAX_PERL), "0-2");
+  EXPECT_EQ(span_of("\\lAB\\E", "ab", GRX_SYNTAX_PERL), "nomatch");
+
+  // And not in the two dialects that share this front end. PCRE2 refuses all
+  // sixteen letters of the wider family with an error of its own - 137, which
+  // names `\F \L \l \N{name} \U \u` - and CPython calls each a bad escape.
+  // documentation/dialects.md section 9 has the measured table.
+  for (const char * pattern : {"\\Uab\\E", "\\Lab\\E", "\\Fab\\E", "\\uab",
+      "\\lab"}) {
+    EXPECT_NE(compile_result(pattern, GRX_SYNTAX_PCRE), GRX_OK) << pattern;
+    EXPECT_NE(compile_result(pattern, GRX_SYNTAX_PYTHON), GRX_OK) << pattern;
+    // Refused as syntax, not as something PCRE2 has and this library lacks:
+    // PCRE2 does not have it either.
+    EXPECT_NE(compile_result(pattern, GRX_SYNTAX_PCRE), GRX_ERR_UNSUPPORTED)
+        << pattern;
+  }
+  // `\E` stays harmless in all three, as it was before this construct
+  // existed: a `\E` with no run open is what perl and pcre2test both accept.
+  EXPECT_EQ(span_of("a\\Eb", "ab", GRX_SYNTAX_PCRE), "0-2");
+  EXPECT_EQ(span_of("a\\Eb", "ab", GRX_SYNTAX_PERL), "0-2");
 }
 
 int main(int argc, char ** argv) {

@@ -264,10 +264,58 @@ GRX_Result grx_parse_literal_extend(
   return GRX_OK;
 }
 
+/**
+ * Apply Perl's source-level case transform, where one is in force.
+ *
+ * Here rather than in the Perl front end for the same reason `in_quote()` is
+ * here: the front end owns the spelling and the shared parser owns every
+ * place a literal is made. Two of those places are the front end's and one is
+ * not - `\Q...\E` takes each character as a literal in grx_parse_atom(),
+ * without asking a hook, so a transform living only in the hook missed
+ * `\U\Qa.b\E`, which is "A\.B" in perl.
+ *
+ * Every dialect but Perl leaves `case_mode` and `case_one` zero, which makes
+ * this nothing for them; GRX_FEATURE_CASE_TRANSFORM is what says so and only
+ * Perl's row carries it.
+ */
+static GRX_Result apply_case_transform(GRX_Parser * parser,
+    uint32_t * codepoint, size_t offset, size_t length) {
+  int mode = 0;
+  if (parser->case_one && parser->case_one_at == offset) {
+    mode = parser->case_one;
+    parser->case_one = 0;
+  }
+  else if (parser->case_mode) {
+    mode = parser->case_mode;
+  }
+  if (!mode) {
+    return GRX_OK;
+  }
+
+  uint32_t mapped = 0;
+  if (grx_unicode_case_transform(*codepoint, mode, &mapped) != 1) {
+    // `\Uß` is "SS" in perl: one character of pattern becomes two, which a
+    // literal built from one code point cannot hold. Refused rather than
+    // mapped simply, because the simple mapping of `ß` is `ß`, and matching
+    // `ß` where the reference matches "SS" is the silent approximation this
+    // library does not make.
+    return grx_parse_fail(
+        parser, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, offset, length);
+  }
+  *codepoint = mapped;
+  return GRX_OK;
+}
+
 GRX_Result grx_parse_literal_node(GRX_Parser * parser, uint32_t codepoint,
     size_t offset, size_t length, uint32_t * out_node) {
   if (!parser || !out_node) {
     return GRX_ERR_INVALID;
+  }
+
+  GRX_Result cased
+      = apply_case_transform(parser, &codepoint, offset, length);
+  if (cased != GRX_OK) {
+    return cased;
   }
 
   // PCRE2's HASCRORLF. Set at the two places a literal code point enters a
@@ -1278,6 +1326,9 @@ GRX_Result grx_parse_pattern(const char * pattern, size_t length,
     .in_lookbehind = 0,
     .in_lookaround = 0,
     .quote_end = GRX_NPOS,
+    .case_mode = 0,
+    .case_one = 0,
+    .case_one_at = GRX_NPOS,
     .bsr_anycrlf = 0,
   };
   GRX_Result result = grx_syntax_spec(syntax, &parser.spec);

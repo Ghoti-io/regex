@@ -1,0 +1,25 @@
+# Deliberately wrong, and deliberately *listed*. The three records here are
+# what arms the known-gaps.txt machinery: without them the file beside this
+# one could hold nothing but reference defects - which is what it holds now
+# that the last real gap is closed - and the `gap` category, the
+# already-passes check and the stale-entry check would all be code no test
+# reaches.
+dialect: ecmascript
+
+# Listed as a gap: wrong, counted, and not a failure.
+pattern: gapped
+flags:
+subject: gapped
+expect: 1-6
+
+# Listed as a reference defect: wrong, excluded from the denominator.
+pattern: defect
+flags:
+subject: defect
+expect: 1-6
+
+# Listed, and right. The entry has to go, so this is a failure.
+pattern: closed
+flags:
+subject: closed
+expect: 0-6

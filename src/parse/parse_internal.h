@@ -647,6 +647,37 @@ typedef struct GRX_Parser {
    * grx_parse_atom() and this is what tells the escape hook where it is.
    */
   int dialect_state;
+
+  /**
+   * Perl's source-level case transform: which run is in force.
+   *
+   * 0, or `'L'`, `'U'` or `'F'` - the operator that opened it. They do not
+   * nest and do not stack: a second one replaces the first, and `\E` ends
+   * whatever is open. `qr/\Ua\Lb\Ec\E/` is `(?^:Abc)` and perl warns
+   * "Useless use of \E" about the second `\E`, which is how one can tell
+   * that nothing was left for it to close.
+   *
+   * Here for the same reason `quote_end` is: what a front end owns is the
+   * spelling, and "every literal from here to there is upper-cased" has to
+   * outlive the construct it started in. `[\LA]B\Ec` is `(?^:[a]bc)` in
+   * perl - the run opens inside a bracket expression and closes three
+   * characters after it ends - so a variable local to the class reader
+   * cannot hold it.
+   */
+  int case_mode;
+  /**
+   * The same, for the two that transform one character rather than a run.
+   *
+   * 0, or `'l'` or `'u'`. `case_one_at` is the offset it applies to, which
+   * is what makes it faithful rather than nearly so: perl's is a pass over
+   * *text*, so `\u` upper-cases whatever character comes next even when
+   * that character is an operator, and `\u[ab]` is `[ab]` and not `[Ab]`.
+   * Keyed on the offset, the transform simply never fires for a character
+   * the grammar consumed as something other than a literal - which is the
+   * same answer, arrived at without a rule of its own.
+   */
+  int case_one;
+  size_t case_one_at; ///< The offset `case_one` applies to.
 } GRX_Parser;
 
 /**

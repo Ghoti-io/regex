@@ -33,6 +33,7 @@
 #include <ghoti.io/regex/macros.h>
 
 #include <ghoti.io/unicode/case.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -106,6 +107,57 @@ uint32_t grx_unicode_upper_simple(uint32_t codepoint) {
 
 uint32_t grx_unicode_lower_simple(uint32_t codepoint) {
   return guni_to_lower_simple(codepoint);
+}
+
+size_t grx_unicode_case_transform(
+    uint32_t codepoint, int mode, uint32_t * out) {
+  if (!out) {
+    return 0;
+  }
+
+  // Asked one code point at a time, so the context-sensitive conditions -
+  // `Final_Sigma` and the three that look at a preceding `I` - see no
+  // context and give the unconditional mapping. That is the right answer
+  // here and not an approximation: the transform is applied to a *pattern*,
+  // where the characters around a literal are operators rather than text,
+  // and perl's own pass has the same blindness for the same reason - it runs
+  // before anything knows which characters will end up adjacent in a
+  // subject.
+  uint32_t mapped[GUNI_CASE_MAX_EXPANSION];
+  size_t length = 0;
+  GUNI_Result result;
+  switch (mode) {
+    case 'U':
+      result = guni_to_upper_at(&codepoint, 1, 0, GUNI_LANG_NONE, mapped,
+          GUNI_CASE_MAX_EXPANSION, &length);
+      break;
+    case 'L':
+    case 'l':
+      result = guni_to_lower_at(&codepoint, 1, 0, GUNI_LANG_NONE, mapped,
+          GUNI_CASE_MAX_EXPANSION, &length);
+      break;
+    case 'u':
+      result = guni_to_title_at(&codepoint, 1, 0, GUNI_LANG_NONE, mapped,
+          GUNI_CASE_MAX_EXPANSION, &length);
+      break;
+    case 'F':
+      result = guni_case_fold(&codepoint, 1, false, NULL, mapped,
+          GUNI_CASE_MAX_EXPANSION, &length);
+      break;
+    default:
+      return 0;
+  }
+  if (result != GUNI_OK || length == 0) {
+    // A code point the library will not map is left as it is rather than
+    // dropped: an unassigned or surrogate code point has no case, and a
+    // transform that erased it would change what the pattern matches.
+    *out = codepoint;
+    return 1;
+  }
+  if (length == 1) {
+    *out = mapped[0];
+  }
+  return length;
 }
 
 size_t grx_unicode_fold_orbit(

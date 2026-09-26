@@ -272,7 +272,24 @@ typedef enum {
   GRX_FEATURE_OCTAL_ESCAPE = GRX_BIT(21),  ///< `\077`, `\o{77}`.
   GRX_FEATURE_CONTROL_ESCAPE = GRX_BIT(22), ///< `\cA`.
   GRX_FEATURE_SUBROUTINE = GRX_BIT(23),    ///< `(?&name)`.
-  GRX_FEATURE_BACKTRACK_CONTROL = GRX_BIT(24) ///< `(*SKIP)`, `(*FAIL)`.
+  GRX_FEATURE_BACKTRACK_CONTROL = GRX_BIT(24), ///< `(*SKIP)`, `(*FAIL)`.
+  /**
+   * @brief Case transforms over the pattern text: `\U`, `\L`, `\F`, `\u`,
+   *        `\l`, ended by `\E`.
+   *
+   * A sibling of GRX_FEATURE_QUOTING rather than a separate idea: both are
+   * operators of the *source* the pattern was written in rather than of the
+   * pattern, and Perl applies both in the same pass before its engine sees a
+   * character. `qr/[\lAB]c/` is `(?^:[aB]c)`; the same six characters
+   * arriving through a variable are `(?^:[\lAB]c)`, because a variable's
+   * contents are not rescanned.
+   *
+   * Separate bits because the two do not travel together. PCRE2 has `\Q`
+   * and refuses `\U` with an error of its own - error 137 names
+   * `\F \L \l \N{name} \U \u` - and so does Python, so only Perl's row
+   * carries this one.
+   */
+  GRX_FEATURE_CASE_TRANSFORM = GRX_BIT(25)
 } GRX_Feature;
 
 /**

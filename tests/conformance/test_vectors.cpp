@@ -856,22 +856,50 @@ TEST(Conformance, TheRunnerFailsAVectorThatIsWrong) {
   // one claims a pattern is refused when it compiles, because `expect:
   // refused` asserts less than the other expectations and a check that
   // asserts little is the one to make sure asserts something.
+  //
+  // Beside them, `gaps.rxt` and a `known-gaps.txt` of its own arm the three
+  // things the real known-gaps file no longer can. It held five `gap` rows
+  // until the Perl case transform closed the last of them, and what is left
+  // is reference defects - so the `gap` category, the check that a listed
+  // record which has started passing is a failure, and the check that an
+  // entry naming no record at all is a failure were about to become code no
+  // test reaches. Two more failures come from there, which is why this
+  // expects five.
   std::vector<std::string> failures;
   std::map<std::string, Tally> by_dialect;
   Tally total = run_directory(
       grxtest::data("vectors_selftest"), &failures, &by_dialect);
 
-  EXPECT_EQ(total.failed, 3u)
+  // Four records fail; the fifth failure is the entry that names no record
+  // at all, which the counter does not see because the counter counts
+  // records. Both halves matter, so both are asserted: the suite fails on
+  // the *list*, not on the tally.
+  EXPECT_EQ(total.failed, 4u)
       << "the deliberately wrong vectors were not caught";
   EXPECT_GT(total.passed, 0u) << "the correct vectors beside it should pass";
-  ASSERT_EQ(failures.size(), 3u) << [&] {
+  // One counted gap and one exclusion, from records that are wrong and
+  // listed. These are the two denominators the real corpus's rate is built
+  // from, and a runner that stopped counting either would still be green.
+  EXPECT_EQ(total.gaps, 1u) << "a listed gap was not counted as one";
+  EXPECT_EQ(total.reference_defects, 1u)
+      << "a listed reference defect was not excluded";
+  ASSERT_EQ(failures.size(), 5u) << [&] {
     std::string joined;
     for (const std::string & failure : failures) {
       joined += "\n" + failure;
     }
     return joined;
   }();
-  EXPECT_NE(failures[0].find("expected"), std::string::npos) << failures[0];
+  // Searched rather than indexed: the files are read in directory order, so
+  // which failure is first is not this test's to know.
+  bool named_a_span = false;
+  for (const std::string & failure : failures) {
+    if (failure.find("expected 0-3") != std::string::npos) {
+      named_a_span = true;
+    }
+  }
+  EXPECT_TRUE(named_a_span)
+      << "the wrong-span record failed for some other reason";
   bool named_the_groups = false;
   for (const std::string & failure : failures) {
     if (failure.find("expected groups") != std::string::npos) {
@@ -888,6 +916,23 @@ TEST(Conformance, TheRunnerFailsAVectorThatIsWrong) {
   }
   EXPECT_TRUE(named_the_refusal)
       << "the wrong `expect: refused` record failed for some other reason";
+
+  bool named_the_stale_entry = false;
+  bool named_the_absent_record = false;
+  for (const std::string & failure : failures) {
+    if (failure.find("listed in known-gaps.txt and passes")
+        != std::string::npos) {
+      named_the_stale_entry = true;
+    }
+    if (failure.find("names a record the corpus does not have")
+        != std::string::npos) {
+      named_the_absent_record = true;
+    }
+  }
+  EXPECT_TRUE(named_the_stale_entry)
+      << "an entry whose record passes was not reported";
+  EXPECT_TRUE(named_the_absent_record)
+      << "an entry naming no record was not reported";
 }
 
 // --------------------------------------------------------------------------

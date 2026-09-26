@@ -2223,15 +2223,45 @@ when a pattern arrives from a variable and the double-quote pass has already
 run - and perl *warns* when it does it, which is a reference saying it does
 not know what the construct means rather than defining it.
 
-**By the same rule, `\l \u \L \U \F` should be implemented, and are
-not.** In perl source they are operators of the pattern text: `qr/[\lAB]c/`
-is `(?^:[aB]c)` and `qr/[\LA]B\Ec/` is `(?^:[a]bc)` - a blunt case
-transform that crosses a bracket expression, which is what perl's own
-re_tests calls "\l works in []" and "Straddling [ \L ] \E works". It is
-blunt in both directions: `\U\d\E` is `\D`, `\U\p{L}\E` is `\P{L}`,
-and `\U\x{e9}\E` is a *syntax error*, perl having uppercased the `x`. `\E`
-ends every pending operator and not only the innermost - `\Ua\Lb\Ec\E` is
-`Abc` and not `AbC`. §6 carries the five vectors this costs.
+**By the same rule, `\l \u \L \U \F` are implemented, in the `perl`
+dialect and in no other** (GRX_FEATURE_CASE_TRANSFORM, on Perl's row alone).
+In perl source they are operators of the pattern text: `qr/[\lAB]c/` is
+`(?^:[aB]c)` and `qr/[\LA]B\Ec/` is `(?^:[a]bc)` - a case transform that
+crosses a bracket expression, which is what perl's own re_tests calls "\l
+works in []" and "Straddling [ \L ] \E works". `\E` ends every pending
+operator and not only the innermost: `\Ua\Lb\Ec\E` is `Abc` and not `AbC`,
+and perl warns "Useless use of \E" about the second `\E`, which is how one
+can see that the first ended everything.
+
+Two rules of it were measured rather than derived, because a summary of the
+construct gets both wrong. `\E` cancels a pending `\u` where another
+operator does not: `\u\Lab` matches "Ab" and `\u\Eab` does not. And `\u`
+transforms the next *character*, not the next atom, so `\u[ab]` is `[ab]`
+and not `[Ab]` - "a" matches there and "A" does not, because upper-casing a
+`[` changes nothing. This library keys the one-character operators on the
+offset they apply to, which gives that answer without a rule about which
+characters are operators.
+
+Where perl's answer is a fact about a textual pass rather than about the
+language, this library refuses rather than copy it or quietly differ, with
+`GRX_ERR_UNSUPPORTED` and `GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED`. Four such
+places, each measured:
+
+| Under `\U`, this | perl 5.44.0 | here |
+| --- | --- | --- |
+| an escape: `\U\d\E`, `\U\p{L}\E` | `\D`, `\P{L}` - the escape's own letter is upper-cased | refused |
+| `\U\x{e9}\E` | the syntax error "Unescaped left brace", perl having made it `\X{E9}` | refused |
+| `\U[[:lower:]]\E` | `[[:LOWER:]]`, which compiles and matches nothing | refused |
+| `\Uß` | "SS" - one character of pattern becomes two | refused; the simple mapping would leave `ß` alone, which is a different language |
+
+And one where the order is reversed: a case operator *inside* a `\Q` run is
+still live in perl - `\Q\Ua\E\E` matches "A" there - where here the run's
+characters are already literals by the time the `\U` is reached, so the run
+is refused. The other order needs nothing: `\U\Qa.b\E` is "A\.B" in both,
+because a quoted character is a literal and goes through the same transform
+every other literal does.
+
+§6's five known-gap rows are gone with this, and `perl` reads 100.00%.
 
 **PCRE2 10.46.** What follows was written from pcre2pattern and corrected by
 pcre2test, which is the only reason several of these lines are right. Five of

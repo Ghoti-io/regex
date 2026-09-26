@@ -93,6 +93,14 @@ CONSTRUCTS = [
     "\\d", "\\D", "\\w", "\\W", "\\s", "\\S", "\\h", "\\H", "\\v", "\\V",
     "\\R", "\\N", "\\X", "\\C", "\\A", "\\z", "\\Z", "\\b", "\\B", "\\G",
     "\\K", "\\Q*\\E", "\\x41", "\\x{41}", "\\cA", "\\e", "\\a", "\\o{101}",
+    # The case transforms, which are perl's and not PCRE2's. Both sides
+    # *accept* each of these, so what this file measures - the accept/refuse
+    # split - is all it can say about them: under the `quoted` reading this
+    # driver uses, perl passes the letter through with a warning, and here
+    # they are the operators documentation/dialects.md section 9 describes.
+    # The reading is what separates the two answers and the `re_tests`
+    # corpus is what asks about it.
+    "\\Uab\\E", "\\Lab\\E", "\\Fab\\E", "\\uab", "\\lab", "[\\lAB]",
     "\\b{wb}", "\\b{sb}", "\\b{gcb}", "\\b{lb}", "\\B{wb}",
     # Properties and named characters.
     "\\pL", "\\PL", "\\p{L}", "\\p{^L}", "\\p{L&}", "\\p{Latin}",

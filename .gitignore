@@ -14,6 +14,13 @@ build
 # what the conformance runner reads to tell a named gap from a regression, so
 # a clone without it would fail 261 vectors that this one passes.
 !tests/data/vectors/*.txt
+# And its self-test twin, for the same reason one layer down: the self-test
+# corpus is what proves the runner can fail a record at all, and since the
+# last real gap closed it is the only reader the `gap` category has. Left
+# ignored, a fresh clone would carry the deliberately-wrong records in
+# `gaps.rxt` with nothing listing them, so the file that exists to make the
+# runner go red would make it go red for the wrong reason.
+!tests/data/vectors_selftest/*.txt
 
 # IDE / CTest run output (not used by project Makefile)
 Testing

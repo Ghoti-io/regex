@@ -310,6 +310,26 @@ size_t grx_unicode_fold_full(
     uint32_t codepoint, uint32_t out[GRX_FULL_FOLD_MAX]);
 
 /**
+ * @brief Perl's source-level case transform applied to one code point.
+ *
+ * What `\U`, `\L`, `\F`, `\u` and `\l` do to a literal, for the front end
+ * that reads them (GRX_FEATURE_CASE_TRANSFORM). The *full* mapping is asked
+ * for, not the simple one, because perl's is `uc` over the pattern text and
+ * `uc("\x{df}")` is "SS": a transform that reported `ß` unchanged would
+ * differ from the reference without saying so.
+ *
+ * @param codepoint The code point.
+ * @param mode `'U'`, `'L'` or `'F'` for a run, `'u'` or `'l'` for the two
+ *        that transform one character. Any other value is 0.
+ * @param out Receives the mapping when it is one code point. Required.
+ * @return How many code points the full mapping produces. Only 1 leaves
+ *         @p out written; a larger count says the transform would lengthen
+ *         the pattern, which the caller refuses rather than approximates.
+ */
+size_t grx_unicode_case_transform(
+    uint32_t codepoint, int mode, uint32_t * out);
+
+/**
  * @brief Every code point whose full fold is exactly this sequence.
  *
  * The reverse of grx_unicode_fold_full(), and the question lowering asks to

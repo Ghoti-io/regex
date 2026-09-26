@@ -193,7 +193,7 @@ engine and no network.
 | Dialect | Vectors | Pass | Notes |
 | --- | ---: | ---: | --- |
 | `ecmascript` | 28,559 | 100.00% | test262, plus generated from node 24.21 |
-| `perl` | 6,173 | 99.77% | perl 5.44's `re_tests`; 14 known gaps, 8 excluded |
+| `perl` | 6,173 | 100.00% | perl 5.44's `re_tests`; 8 excluded |
 | `vim` | 6,317 | 100.00% | generated from vim 9.2.1129 |
 | `python` | 2,177 | 100.00% | generated from CPython 3.14.7 |
 | `pcre` | 1,869 | 100.00% | PCRE2 10.46's `testinput` |
@@ -205,17 +205,16 @@ engine and no network.
 Read the denominators with the rates: they differ by two orders of magnitude,
 and 100% of 135 vectors is a smaller claim than 100% of 28,559.
 
-The fourteen known gaps are one feature - Perl's `\U`, `\L`, `\F`, `\u` and
-`\l` as operators over the pattern *source* - and they are **in** the
-denominator, named one by one in `tests/data/vectors/known-gaps.txt`. Nine of
-them are new here and are not a regression: they are rows the corpus had been
-unable to ask, because the driver read every pattern the way an interpolated
-variable reads and the importer dropped the subject that told the two readings
-apart. The eight excluded rows are
-ones where the reference's own answer is demonstrably wrong; each carries the
-reproduction in that file, and the count is printed beside the rate wherever
-the rate appears, because a rate that rose because rows left the denominator
-has to say so.
+There are no known gaps. Where there were five, there is now `\U`, `\L`,
+`\F`, `\u` and `\l` - Perl's case transforms over the pattern source, the
+operators its own `re_tests` calls "\l works in []". The eight excluded rows
+are ones where the reference's own answer is demonstrably wrong; each carries
+the reproduction in `tests/data/vectors/known-gaps.txt`, and the count is
+printed beside the rate wherever the rate appears, because a rate that rose
+because rows left the denominator has to say so. A gap that is closed is
+removed from that file in the commit that closes it, and the runner fails on
+an entry whose record has started passing, so the file cannot drift into a
+list of what once was.
 
 A rate is not the whole of "done" for a dialect: [documentation/plan.md](documentation/plan.md)
 §4 lists six conditions and this is one of them.

@@ -436,8 +436,22 @@ def boundary_end_of_subject(pattern, them, subject, ours):
     return False
 
 
+# The double-quotish operators: the ones perl applies when it tokenises its
+# *source* and this library applies when it reads the pattern text. `\Q` and
+# `\E` are quoting; `\L`, `\U`, `\F`, `\l` and `\u` are the case transforms
+# (documentation/dialects.md section 9, GRX_FEATURE_CASE_TRANSFORM).
+#
+# All seven are here because all seven have the same shape of deviation, and
+# writing only the two that the generator's alphabet happens to reach would
+# leave a false disagreement waiting for whoever adds the others to it. This
+# driver asks perl for the `quoted` reading - see documentation/testing.md
+# section 5 for why - and under that reading perl passes each of them through
+# as the letter.
+SOURCE_OPERATORS = "QELUFlu"
+
+
 def as_letters(pattern):
-    r"""The pattern perl reads, where `\Q` and `\E` are unknown escapes.
+    r"""The pattern perl reads, where the source operators are unknown escapes.
 
     perl passes an unrecognized alphabetic escape through as the letter -
     with a warning - so `[\Qa-z\E]` is `[Qa-zE]` there, which is why it
@@ -450,7 +464,8 @@ def as_letters(pattern):
         character = pattern[index]
         if character == "\\" and index + 1 < len(pattern):
             following = pattern[index + 1]
-            out.append(following if following in "QE" else character + following)
+            out.append(following if following in SOURCE_OPERATORS
+                else character + following)
             index += 2
             continue
         out.append(character)
@@ -459,7 +474,7 @@ def as_letters(pattern):
 
 
 def holds_quoting(pattern):
-    r"""Whether the pattern writes `\Q` or `\E` as an escape of its own."""
+    r"""Whether the pattern writes one of the source operators as an escape."""
     return as_letters(pattern) != pattern
 
 

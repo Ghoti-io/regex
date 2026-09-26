@@ -1509,6 +1509,190 @@ static GRX_Result plain_node(GRX_Parser * parser, GRX_NodeKind kind,
   return GRX_OK;
 }
 
+// --------------------------------------------------------------------------
+// Perl's source-level case transform
+// --------------------------------------------------------------------------
+
+/**
+ * Which case operator stands here, if one does.
+ *
+ * `\L`, `\U` and `\F` open a run that lasts until `\E` or the end of the
+ * pattern; `\l` and `\u` transform one character. They are not atoms and
+ * produce no node, which is why they are read where `\Q` is read rather than
+ * in the escape reader.
+ *
+ * `\E` is deliberately not here: it already has a reader, because it also
+ * ends a `\Q` run, and one `\E` ends whichever of the two is open. Those
+ * readers call end_case_run().
+ *
+ * @return The operator's letter, or 0.
+ */
+static int case_operator_at(const GRX_Parser * parser) {
+  if (!(parser->spec.features & GRX_FEATURE_CASE_TRANSFORM)
+      || byte_at(parser, 0) != '\\') {
+    return 0;
+  }
+  switch (byte_at(parser, 1)) {
+    case 'L': case 'U': case 'F': case 'l': case 'u':
+      return byte_at(parser, 1);
+    default:
+      return 0;
+  }
+}
+
+/**
+ * Note that a pending one-character operator now applies further along.
+ *
+ * Another case operator does not cancel a pending `\u`: perl's pass deletes
+ * all of them from the text, so `\u\Labc` lower-cases "bc" and still
+ * upper-cases the `a` that the two operators stood in front of. Moving the
+ * offset forward past each operator as it is consumed is what says so, and it
+ * is why the offset is stored rather than a count.
+ */
+static void case_one_follows(GRX_Parser * parser) {
+  if (parser->case_one) {
+    parser->case_one_at = parser->position;
+  }
+}
+
+/** Consume the operator case_operator_at() found. */
+static void take_case_operator(GRX_Parser * parser, int letter) {
+  parser->position += 2;
+  if (letter == 'l' || letter == 'u') {
+    parser->case_one = letter;
+  }
+  else {
+    // They do not nest: a second run replaces the first rather than pushing
+    // onto it. `qr/\Ua\Lb\Ec\E/` is `(?^:Abc)` - the `c` is untouched - and
+    // perl warns "Useless use of \E" about the second `\E`, which is how one
+    // can see that the first ended everything.
+    parser->case_mode = letter;
+  }
+  case_one_follows(parser);
+}
+
+/**
+ * What `\E` does to a case transform, wherever `\E` is read.
+ *
+ * It ends both kinds, which is not symmetrical with the other operators and
+ * is measured rather than guessed: `\u\Lab` matches "Ab", so `\L` leaves a
+ * pending `\u` alone, and `\u\Eab` does *not* match "Ab", so `\E` cancels
+ * it. perl 5.44.0, both under the source reading.
+ */
+static void end_case_run(GRX_Parser * parser) {
+  parser->case_mode = 0;
+  parser->case_one = 0;
+  parser->case_one_at = GRX_NPOS;
+}
+
+/**
+ * Whether a case operator stands anywhere in `[from, to)`.
+ *
+ * Asked when a `\Q` run opens, because a case operator *inside* one is still
+ * live in perl and is not here: `\Q\Ua\E\E` matches "A" there, where this
+ * parser would take the `\U` for two of the literals the run is made of.
+ * Refusing the run is what keeps that from being a silent wrong answer. The
+ * other order - `\U\Qa.b\E`, which is "A\.B" - needs nothing, because the
+ * run's characters go through the same transform every other literal does.
+ */
+static int case_operator_within(
+    const GRX_Parser * parser, size_t from, size_t to) {
+  if (!(parser->spec.features & GRX_FEATURE_CASE_TRANSFORM)) {
+    return 0;
+  }
+  for (size_t i = from; i + 1 < to && i + 1 < parser->length; i++) {
+    if (parser->text[i] != '\\') {
+      continue;
+    }
+    switch (parser->text[i + 1]) {
+      case 'L': case 'U': case 'F': case 'l': case 'u':
+        return 1;
+      default:
+        i++; // An escaped backslash: the next byte is not an operator.
+        break;
+    }
+  }
+  return 0;
+}
+
+/** Whether a transform is in force for something read at `offset`. */
+static int case_transform_here(const GRX_Parser * parser, size_t offset) {
+  return parser->case_mode
+      || (parser->case_one && parser->case_one_at == offset);
+}
+
+/**
+ * Apply whatever transform is in force to a class member's code point.
+ *
+ * The ordinary literal path has its own copy of this in
+ * grx_parse_literal_node(), because `\Q...\E` builds literals there without
+ * asking a hook. A class *member* is built here and nowhere else, so this is
+ * the other of the two places a code point enters a pattern.
+ *
+ * Keyed on `offset` rather than on "the next literal", because perl's is a
+ * pass over *text*: `\u` upper-cases the character that comes next whatever
+ * the grammar goes on to make of it, so `\u[ab]` upper-cases the `[` - which
+ * changes nothing - and is `[ab]`, not `[Ab]`. A transform that fires only
+ * when the offset matches gets that for free, with no rule about which
+ * characters are operators.
+ */
+static GRX_Result case_transform(GRX_Parser * parser, uint32_t * codepoint,
+    size_t offset, size_t length) {
+  int mode = 0;
+  if (parser->case_one && parser->case_one_at == offset) {
+    mode = parser->case_one;
+    parser->case_one = 0;
+  }
+  else if (parser->case_mode) {
+    mode = parser->case_mode;
+  }
+  if (!mode) {
+    return GRX_OK;
+  }
+
+  uint32_t mapped = 0;
+  if (grx_unicode_case_transform(*codepoint, mode, &mapped) != 1) {
+    // `\Uß` is "SS" in perl: one character of pattern becomes two, and a
+    // literal built from one code point cannot hold that. Refused rather
+    // than mapped simply, because the simple mapping of `ß` is `ß` and
+    // matching `ß` where the reference matches "SS" is the silent
+    // approximation this front end does not make.
+    return grx_parse_fail(
+        parser, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, offset, length);
+  }
+  *codepoint = mapped;
+  return GRX_OK;
+}
+
+/**
+ * Refuse a construct a transform in force would have rewritten, not matched.
+ *
+ * perl's pass upper-cases the *source*, so inside `\U` an escape is a
+ * different escape: `\U\d\E` is `\D`, `\U\p{L}\E` is `\P{L}`, and
+ * `\U\x{e9}\E` is the syntax error "Unescaped left brace" because `\X{E9}`
+ * is not a pattern. The same goes for a POSIX class, whose name is
+ * upper-cased into one that does not exist.
+ *
+ * None of those is a rule about the language; each is a fact about a textual
+ * pass. So this library does neither of the two things that would be wrong -
+ * it does not copy perl's answer, and it does not quietly give a different
+ * one - and says instead that the construct exists and is not built. Every
+ * letter of the family is listed in documentation/dialects.md section 9 with
+ * what perl and pcre2 answer.
+ *
+ * @param start The offset the construct begins at, for the diagnostic.
+ * @param length How many bytes to name.
+ */
+static GRX_Result refuse_under_case_transform(
+    GRX_Parser * parser, size_t start, size_t length) {
+  if (!case_transform_here(parser, start)) {
+    return GRX_OK;
+  }
+
+  return grx_parse_fail(
+      parser, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, start, length);
+}
+
 /**
  * The code point runs `\R` stands for.
  *
@@ -1556,6 +1740,10 @@ static GRX_Result newline_set_node(GRX_Parser * parser, size_t start,
 
 static GRX_Result pcre_atom_escape(GRX_Parser * parser, uint32_t * out_node) {
   size_t start = parser->position - 1;
+  GRX_Result blocked = refuse_under_case_transform(parser, start, 2);
+  if (blocked != GRX_OK) {
+    return blocked;
+  }
   Escape escape;
   GRX_Result result = read_escape(parser, 0, &escape);
   if (result != GRX_OK) {
@@ -1840,6 +2028,12 @@ static GRX_Result read_class_atom(GRX_Parser * parser, GRX_ClassItem * out,
     if (result != GRX_OK) {
       return result;
     }
+    // A `\Q` run inside a `\U` run is still upper-cased: perl applies both
+    // in one pass, left to right, so `\U\Qa.b\E` is "A\.B".
+    result = case_transform(parser, &quoted, start, parser->position - start);
+    if (result != GRX_OK) {
+      return result;
+    }
     *out = (GRX_ClassItem) {
       .kind = GRX_CLASS_ITEM_SINGLE,
       .flags = 0,
@@ -1870,6 +2064,13 @@ static GRX_Result read_class_atom(GRX_Parser * parser, GRX_ClassItem * out,
     int matched = 0;
     GRX_Result result = read_posix_class(parser, out, &matched);
     if (matched || result != GRX_OK) {
+      if (matched) {
+        GRX_Result blocked = refuse_under_case_transform(
+            parser, start, parser->position - start);
+        if (blocked != GRX_OK) {
+          return blocked;
+        }
+      }
       return result;
     }
   }
@@ -1888,6 +2089,10 @@ static GRX_Result read_class_atom(GRX_Parser * parser, GRX_ClassItem * out,
           break;
         }
       }
+      if (case_operator_within(parser, parser->position, end)) {
+        return grx_parse_fail(parser, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED,
+            start, end - start);
+      }
       *quote_end = end;
       *out_is_item = 0;
       return GRX_OK;
@@ -1896,14 +2101,35 @@ static GRX_Result read_class_atom(GRX_Parser * parser, GRX_ClassItem * out,
         && byte_at(parser, 0) == 'E') {
       parser->position++;
       *quote_end = 0;
+      end_case_run(parser);
       *out_is_item = 0;
       return GRX_OK;
     }
+    parser->position = start;
+    int letter = case_operator_at(parser);
+    if (letter) {
+      // A case operator inside a bracket expression, which is where perl's
+      // own re_tests calls the construct "\l works in []". It produces no
+      // member: `[\lAB]c` is `[aB]c`, a class of two.
+      take_case_operator(parser, letter);
+      *out_is_item = 0;
+      return GRX_OK;
+    }
+    GRX_Result blocked = refuse_under_case_transform(parser, start, 2);
+    if (blocked != GRX_OK) {
+      return blocked;
+    }
+    parser->position = start + 1;
     return pcre_class_escape(parser, out);
   }
 
   uint32_t codepoint = 0;
   GRX_Result result = grx_parse_take(parser, &codepoint);
+  if (result != GRX_OK) {
+    return result;
+  }
+
+  result = case_transform(parser, &codepoint, start, parser->position - start);
   if (result != GRX_OK) {
     return result;
   }
@@ -1946,6 +2172,9 @@ static void skip_class_ignorable(GRX_Parser * parser, size_t * quote_end) {
           break;
         }
       }
+      // A case operator inside the run is refused where the item reader
+      // reaches it; this one only skips, so it leaves the run for that
+      // reader rather than reporting from a function that cannot fail.
       *quote_end = end;
       if (end > parser->position) {
         return;
@@ -1955,6 +2184,12 @@ static void skip_class_ignorable(GRX_Parser * parser, size_t * quote_end) {
     if (byte_at(parser, 0) == '\\' && byte_at(parser, 1) == 'E') {
       parser->position += 2;
       *quote_end = 0;
+      end_case_run(parser);
+      continue;
+    }
+    int letter = case_operator_at(parser);
+    if (letter) {
+      take_case_operator(parser, letter);
       continue;
     }
     return;
@@ -3051,6 +3286,7 @@ static void skip_extended_ignorable(GRX_Parser * parser) {
     if ((parser->spec.features & GRX_FEATURE_QUOTING)
         && byte_at(parser, 0) == '\\' && byte_at(parser, 1) == 'E') {
       parser->position += 2;
+      end_case_run(parser);
       continue;
     }
     if ((parser->spec.features & GRX_FEATURE_QUOTING)
@@ -4559,6 +4795,9 @@ static GRX_Result pcre_literal_atom(GRX_Parser * parser, uint32_t codepoint,
     }
   }
 
+  // The transform, where one is in force, is applied by
+  // grx_parse_literal_node() - every literal goes through it, including the
+  // ones `\Q...\E` makes without asking this hook.
   return grx_parse_literal_node(parser, codepoint, offset, length, out_node);
 }
 
@@ -4633,8 +4872,14 @@ static GRX_Result pcre_skip_ignorable(GRX_Parser * parser) {
     // `\Q` on its own a silent nothing, where `re` calls both "bad escape".
     if ((parser->spec.features & GRX_FEATURE_QUOTING)
         && byte_at(parser, 0) == '\\' && byte_at(parser, 1) == 'Q') {
+      size_t opener = parser->position;
       parser->position += 2;
       parser->quote_end = quote_run_end(parser);
+      if (case_operator_within(parser, parser->position, parser->quote_end)) {
+        parser->quote_end = GRX_NPOS;
+        return grx_parse_fail(parser, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED,
+            opener, parser->position - opener);
+      }
       if (parser->quote_end > parser->position) {
         return GRX_OK;
       }
@@ -4643,8 +4888,15 @@ static GRX_Result pcre_skip_ignorable(GRX_Parser * parser) {
     }
     if ((parser->spec.features & GRX_FEATURE_QUOTING)
         && byte_at(parser, 0) == '\\' && byte_at(parser, 1) == 'E') {
-      // A `\E` with no run open. Harmless in both references.
+      // A `\E` with no run open. Harmless in both references - perl warns
+      // "Useless use of \E" and compiles it.
       parser->position += 2;
+      end_case_run(parser);
+      continue;
+    }
+    int case_letter = case_operator_at(parser);
+    if (case_letter) {
+      take_case_operator(parser, case_letter);
       continue;
     }
     if (!(parser->options & GRX_OPT_EXTENDED)) {

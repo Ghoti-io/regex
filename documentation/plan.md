@@ -779,11 +779,20 @@ exists so that each can be, in a private prefix, on wall clock.
 
 Condition 6 is met by all nine: `python_split` was the last one missing.
 
-Conditions 1, 2 and 5 hold for the nine that compile and match. The five
-remaining known gaps are one feature - perl 5.44 made `\l`, `\u`, `\L`,
-`\U`, `\F` and `\E` pattern operators - whose template half WP-22 already
-records as absent, so one piece of work takes condition 3 to 100% across the
-board.
+Conditions 1, 2, 3 and 5 hold for the nine that compile and match. There are
+no known gaps left: the five that remained were one feature - Perl's `\U`,
+`\L`, `\F`, `\u` and `\l` as operators over the pattern source - and it is
+built, so every dialect reads 100.00%. What is *not* built is the template
+half, which WP-22 records as absent and which no vector asks for; the two
+halves turned out to be separate code in `src/subst/subst.c` rather than one
+construct, and closing the pattern half closed the gaps on its own.
+
+Closing the last gap left `tests/data/vectors/known-gaps.txt` holding nothing
+but reference defects, which would have made the `gap` category, the
+already-passes check and the stale-entry check code no test reaches. So
+`tests/data/vectors_selftest/` now carries a `known-gaps.txt` of its own with
+a fixture for each - the file whose whole job is arming the runner's own
+failure paths.
 
 ## 5. What "done" means for the first stable release
 
