@@ -454,7 +454,7 @@ TESTFLAGS := `PKG_CONFIG_PATH=$(PKG_CONFIG_LOOKUP_PATH) pkg-config --libs --cfla
 #
 # The third line is measured too, not added up from the first two. So the
 # feared 2x is real - it is nearer 3x - and 78 seconds is what it buys heap,
-# leak and UB coverage over 51 suites and 45,890 conformance vectors with
+# leak and UB coverage over 51 suites and 45,904 conformance vectors with
 # (37,396 when the figure was taken; the Python and Vim corpora landed since,
 # and re-deriving a count beside a timing is cheaper than wondering).
 # The ratio was the reason to leave it out and the absolute figure is why

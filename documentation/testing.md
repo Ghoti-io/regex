@@ -32,7 +32,7 @@ observation of this machine - see §2.1.
 | Oracle | Drives | Driver |
 | --- | --- | --- |
 | node 22.23.2 (V8 12.4.254.21, Unicode 17.0) | ECMAScript | `tools/oracle/node_match.mjs` and its siblings, through `node_runner.py`, which adds `--regexp-interpret-all`: without it V8's interpreter and its compiled code disagree and a row's answer depends on how many rows preceded it |
-| perl v5.40.1 | Perl | `tools/corpus/perl_match.pl`: `@-`/`@+`, `%+`. A second pin, `perl-next` (v5.44.0, UCD 17.0.0), is reachable with `GHOTI_ORACLE_ALIAS=perl=perl-next` |
+| perl v5.40.1 | Perl | `tools/corpus/perl_match.pl`: `@-`/`@+`, `%+`, and a fourth field naming the **reading** - `quoted` (the bytes are the pattern, which is what interpolating a variable gives) or `source` (the pattern as typed between `/` delimiters, so perl's double-quotish pass runs first). The two disagree and which one a corpus means is the corpus's property; see §4. A second pin, `perl-next` (v5.44.0, UCD 17.0.0), is reachable with `GHOTI_ORACLE_ALIAS=perl=perl-next` |
 | PCRE2 10.46 | PCRE2 | `tools/oracle/pcre2_match.c`, compiled **inside** the image against its libpcre2-dev and run there. pcre2test reports matched *text* rather than offsets and omits a trailing group that did not participate, which is most of what a match comparison asks; `pcre2test` itself answers the corpus import and the probe |
 | python 3.13.5 (UCD 15.1.0) | Python | `tools/oracle/python_match.py`, the same batch protocol as the rest, in three modes for `re`, `re.split` and `re.sub`. Converts CPython's character offsets to UTF-8 byte offsets the way `node_match.mjs` converts UTF-16 ones |
 | glibc 2.41 `regcomp` | GNU BRE/ERE | `tools/oracle/posix_match.c`, compiled inside the image. Nothing of this library is linked into it |
@@ -1284,12 +1284,17 @@ and control verbs can generate a pattern that runs for a very long time, and
 that should stop the tool with a message rather than look like a hung
 build.
 
-Two things the transport cannot carry, both recorded in the file rather than
-left as silence. `\Q...\E` is double-quotish processing that happens when
-perl tokenises its *source*, so a pattern arriving in a variable - the only
-way a driver can pass one - never goes through it, and `qr/$p/` with `$p`
-holding `\Qa.b\E` matches nothing at all; the construct is checked in
-`tests/unit/test_perl.cpp` instead. And `x` is left out of the flag sweep
+Two things this differential does not ask, both recorded in the file rather
+than left as silence. `\Q...\E` is double-quotish processing that happens
+when perl tokenises its *source*, and this generator asks perl for the
+`quoted` reading, where that pass has not run: `qr/$p/` with `$p` holding
+`\Qa.b\E` matches nothing at all. `perl_match.pl` can be asked for the
+`source` reading instead and `import_re_tests.py` asks for it, but a generator
+built from *this library's* grammar should not - it would compare two
+different pattern texts on every row rather than two implementations of one.
+So the deviation is excluded here, checkably: the row counts as quoting only
+if perl's answer to the pattern is this library's answer to the letters, and
+anything else is still reported. And `x` is left out of the flag sweep
 because `grx_match.c` maps flag letters to `GRX_Option` bits and has no
 extended-mode bit among them, so a row with `x` would ask perl one question
 and this library another.
@@ -2047,13 +2052,40 @@ absent.
   `tools/corpus/perl_match.pl` - Perl as a matching oracle in the same shape
   as `node_match.mjs`, converting character offsets to UTF-8 byte offsets -
   and the corpus's own `y/n/c` is used only to check that the importer read
-  the row correctly.
+  the row correctly. 1,726 records of 1,972 rows read.
+
+  **The pattern column's delimiter is part of the question.** `regexp.t`
+  wraps a bare column in *single* quotes and passes a `/`-delimited column
+  through with its delimiters, and in Perl a single-quote delimiter suppresses
+  the double-quotish pass where a slash keeps it. So `\U`, `\l` and `\Q` are
+  operators over the text in one form and letters handed to the engine in the
+  other, and the delimiter is read out into the reading `perl_match.pl` is
+  asked for rather than discarded. 287 of the imported rows are `source` and
+  1,444 are `quoted`.
+
+  This was wrong until 2026-09-26, and the way it was wrong is the reason
+  importers report their drops. The driver interpolated, so every row was read
+  the `quoted` way; `re_tests` has two subjects per pattern, of which one
+  usually agrees under both readings and one does not; and the importer
+  *drops* a row whose own `y/n/c` disagrees with the oracle, on the argument
+  that the likeliest cause is a misread row. So it dropped exactly the
+  discriminating subject of each pattern and kept the agreeing one - nine
+  records, and with them the only rows that could have failed. Fixing the
+  reading took the drops from 14 to 5 and changed no expectation that was
+  already there.
 
   The subject column is a double-quoted Perl string, and its escapes are
   decoded here rather than by handing the text to `eval`: a test corpus is
   still data, and a tool that can be made to run what it reads is a tool with
   a different threat model. A row using an escape this does not know is
   skipped and counted.
+
+  The `source` reading is the one exception to that rule, and it is deliberate:
+  what it measures *is* perl's own pass over the text, so perl has to do the
+  reading. A paraphrase would not be the pass - `\U\x{e9}\E` is a syntax
+  error there, because the pass upper-cases the `x` of an escape it does not
+  itself decode - and nothing short of perl predicts that. It runs in the
+  pinned container, with the tree mounted read-only and no network.
 
 - **CPython `re_tests.py`**: the same format as Perl's, in Python. Not yet
   imported; WP-30.

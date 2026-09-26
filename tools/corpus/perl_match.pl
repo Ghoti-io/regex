@@ -2,12 +2,14 @@
 #
 # Perl as a matching oracle, in the shape the other drivers here use.
 #
-# Reads `<flags>\t<pattern hex>\t<subject hex>` lines and writes one answer
-# per line:
+# Reads `<flags>\t<pattern hex>\t<subject hex>[\t<reading>]` lines and writes
+# one answer per line:
 #
 #   match <start>:<end> ...   one span per group, `-` for a group that is unset
 #   nomatch
 #   compile                   the pattern was refused
+#   unrepresentable           this driver cannot put the pattern in a `qr//`
+#                             under the reading asked for (see below)
 #
 # With `all` as the first argument it runs perl's own search-all loop instead
 # and answers
@@ -20,6 +22,28 @@
 # thing being compared *is* the loop: which match follows an empty one is
 # perl's iteration rule, and reimplementing it in this file would compare two
 # copies of one idea rather than two implementations.
+#
+# The fourth field is the **reading**: how Perl is to arrive at the pattern.
+# It is not a detail of the transport. Perl has two, they disagree, and which
+# one a corpus means is a property of the corpus:
+#
+#   quoted   the default, and what every other driver here does. The bytes are
+#            the pattern. Perl reaches this by interpolating a variable, and a
+#            variable's contents are not rescanned, so the regex engine is
+#            handed the characters as they arrived.
+#
+#   source   the pattern as *typed in a program* between `/` delimiters, so
+#            Perl's double-quotish pass runs over it first and the engine is
+#            handed that pass's output. `\U`, `\L`, `\F`, `\u`, `\l`, `\E`
+#            and `\Q` are operators of that pass and of nothing else.
+#
+# The difference is neither a version difference nor a harness artefact.
+# `qr/[\lAB]c/` is `(?^:[aB]c)` and `qr/$text/` with those same six characters
+# in `$text` is `(?^:[\lAB]c)` - on one Perl, in one run. Perl's own
+# `t/re/re_tests` needs both: `regexp.t` wraps a bare pattern column in single
+# quotes, which suppresses the pass, and passes a `/`-delimited column through
+# with its delimiters, which does not. A driver with one reading answers 367 of
+# that corpus's rows as though they had been written the other way.
 #
 # Hex for the same reason tools/oracle/grx_match.c uses it: a pattern or a
 # subject may contain a newline, a NUL, or bytes that are not valid UTF-8, and
@@ -46,6 +70,43 @@ my $MAX_MATCHES = 100000;
 
 my $find_all = @ARGV && $ARGV[0] eq "all";
 
+# The delimiters the `source` reading may borrow, in the order it tries them.
+# All non-paired, so there is no nesting rule to get wrong. `'` is left out
+# because a single-quote delimiter is precisely what *suppresses* the pass this
+# reading exists to run, and `?` because `m?...?` is gone.
+my @SOURCE_DELIMITERS = split //, '/!,|%=:;~+*-@';
+
+# Perl's reading of a pattern typed in a program: `eval` on a `qr//` built
+# around the text.
+#
+# Perl has to do it. A reimplementation here would be a paraphrase of the pass
+# rather than the pass - `\U\x{e9}\E` is a *syntax error*, because the pass
+# uppercases the `x` of an escape it does not itself decode and `\X{E9}` is not
+# a pattern - and no summary of the rule predicts that. So the text is spliced
+# into source and evaluated, which is running data as code; it runs in the
+# pinned container, with the tree mounted read-only and no network, and the
+# alternative is to answer a different question from the one the corpus asks.
+#
+# Returns the compiled regex, or undef and a word saying why not.
+sub source_regex {
+  my ($text) = @_;
+  # A trailing run of an odd number of backslashes escapes whatever follows
+  # it, so every candidate delimiter would be escaped rather than closing.
+  # Perl cannot write such a pattern either; it is unterminated there too.
+  my ($trailing) = $text =~ /(\\*)\z/;
+  if (length($trailing) % 2) {
+    return (undef, "unrepresentable");
+  }
+  for my $delimiter (@SOURCE_DELIMITERS) {
+    next if index($text, $delimiter) >= 0;
+    my $regex = eval "qr$delimiter$text$delimiter";
+    return (defined $regex ? ($regex, undef) : (undef, "compile"));
+  }
+  # Thirteen delimiters and the pattern holds all of them. No row of any
+  # corpus here does; saying so beats guessing at an escape.
+  return (undef, "unrepresentable");
+}
+
 # A character offset becomes a byte offset by measuring the UTF-8 length of
 # everything before it.
 sub spans_of {
@@ -65,9 +126,13 @@ sub spans_of {
 
 while (my $line = <STDIN>) {
   chomp $line;
-  my ($flags, $pattern_hex, $subject_hex) = split /\t/, $line, 3;
+  my ($flags, $pattern_hex, $subject_hex, $reading) = split /\t/, $line, 4;
   $flags = "" unless defined $flags;
   $subject_hex = "" unless defined $subject_hex;
+  $reading = "quoted" unless defined $reading && length $reading;
+  if ($reading ne "quoted" && $reading ne "source") {
+    die "perl_match.pl: no such reading: $reading\n";
+  }
 
   my $pattern_bytes = pack("H*", $pattern_hex);
   my $subject_bytes = pack("H*", $subject_hex);
@@ -101,7 +166,18 @@ while (my $line = <STDIN>) {
   # perfectly valid `(?:)()` once a group is put around it, so every
   # unbalanced-parenthesis row came back as a match.
   my $prefix = length($inline) ? "(?$inline)" : "";
-  my $regex = eval { qr/$prefix$pattern/ };
+  my $regex;
+  if ($reading eq "source") {
+    my $why;
+    ($regex, $why) = source_regex($prefix . $pattern);
+    if (!defined $regex) {
+      print "$why\n";
+      next;
+    }
+  }
+  else {
+    $regex = eval { qr/$prefix$pattern/ };
+  }
   if (!defined $regex) {
     print "compile\n";
     next;

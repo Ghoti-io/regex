@@ -111,26 +111,37 @@ def decode_subject(text):
 
 
 def split_pattern(column):
-    """The pattern text and its flags.
+    r"""The pattern text, its flags, and the reading its delimiter selects.
 
     regexp.t wraps a bare column in single quotes, so most rows are literal
     text with no flags; a row that starts with a delimiter carries its own,
     and the trailing letters are the flags.
+
+    The delimiter is not decoration. It decides whether Perl's double-quotish
+    pass runs over the pattern, and therefore whether `\U`, `\l` and `\Q` are
+    operators over the text or letters handed to the engine - regexp.t's own
+    single quotes suppress the pass, and a `/`-delimited column keeps it. So
+    the delimiter is read out and turned into the reading perl_match.pl is
+    asked for, rather than discarded. 367 of this corpus's rows are
+    `/`-delimited, and answering them with the wrong reading answers a
+    question the corpus is not asking.
     """
     if column and column[0] in "'/\"":
         delimiter = column[0]
         end = column.rfind(delimiter)
         if end <= 0:
-            return None, None
-        return column[1:end], column[end + 1:]
-    return column, ""
+            return None, None, None
+        reading = "quoted" if delimiter == "'" else "source"
+        return column[1:end], column[end + 1:], reading
+    return column, "", "quoted"
 
 
 def ask_perl(rows):
     lines = []
-    for flags, pattern, subject in rows:
-        lines.append("%s\t%s\t%s" % (flags,
-            pattern.encode("utf-8").hex(), subject.encode("utf-8").hex()))
+    for flags, pattern, subject, reading in rows:
+        lines.append("%s\t%s\t%s\t%s" % (flags,
+            pattern.encode("utf-8").hex(), subject.encode("utf-8").hex(),
+            reading))
     finished = subprocess.run(
         oracle_env.command("perl", ["perl", os.path.join(HERE, "perl_match.pl")]),
         input="\n".join(lines) + "\n", capture_output=True, text=True)
@@ -182,7 +193,7 @@ def main(argv):
                 # library has no opinion about.
                 stats["skipped: annotated verdict (%s)" % (verdict or "-")] += 1
                 continue
-            pattern, flags = split_pattern(pattern_column)
+            pattern, flags, reading = split_pattern(pattern_column)
             if pattern is None:
                 stats["skipped: pattern column this importer cannot parse"] += 1
                 continue
@@ -210,8 +221,10 @@ def main(argv):
             if subject is None:
                 stats["skipped: escape this importer does not decode"] += 1
                 continue
-            rows.append(("".join(sorted(set(flags))), pattern, subject))
+            rows.append(("".join(sorted(set(flags))), pattern, subject,
+                reading))
             claimed.append(verdict)
+            stats["reading: %s" % reading] += 1
 
     answers, version = ask_perl(rows)
     if len(answers) != len(rows):
@@ -221,12 +234,20 @@ def main(argv):
 
     body = []
     disagreements = []
-    for (flags, pattern, subject), verdict, answer in zip(
+    for (flags, pattern, subject, reading), verdict, answer in zip(
             rows, claimed, answers):
+        if answer == "unrepresentable":
+            # perl_match.pl could not put the pattern between `qr//`
+            # delimiters under the source reading. Counted rather than
+            # answered the other way, because the other way is the reading
+            # that was wrong.
+            stats["skipped: no delimiter for the source reading"] += 1
+            continue
         oracle = ("c" if answer == "compile"
             else "n" if answer == "nomatch" else "y")
         if oracle != verdict:
-            disagreements.append((pattern, flags, subject, verdict, oracle))
+            disagreements.append(
+                (pattern, flags, subject, reading, verdict, oracle))
             continue
         record = ["pattern: " + make_vectors.escape(pattern),
                   "flags: " + flags]
@@ -263,9 +284,10 @@ def main(argv):
     width = max(len(k) for k in stats)
     for key in sorted(stats):
         sys.stderr.write("%-*s %6d\n" % (width, key, stats[key]))
-    for pattern, flags, subject, verdict, oracle in disagreements[:20]:
-        sys.stderr.write("  /%s/%s on %r: corpus says %s, perl says %s\n"
-            % (pattern, flags, subject, verdict, oracle))
+    for pattern, flags, subject, reading, verdict, oracle in \
+            disagreements[:20]:
+        sys.stderr.write("  /%s/%s on %r (%s): corpus says %s, perl says %s\n"
+            % (pattern, flags, subject, reading, verdict, oracle))
     if len(disagreements) > 20:
         sys.stderr.write("  ... and %d more\n" % (len(disagreements) - 20))
     sys.stderr.write("\n%s: %d records\n" % (path, len(body)))
