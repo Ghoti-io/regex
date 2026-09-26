@@ -1852,7 +1852,21 @@ static GRX_Result read_class_atom(GRX_Parser * parser, GRX_ClassItem * out,
     return GRX_OK;
   }
 
-  if (byte_at(parser, 0) == '[') {
+  // Only for a dialect that HAS `[:alpha:]`. The feature bit was right and
+  // nothing read it: `GRX_SYNTAX_PYTHON`'s row in syntax.c carries no PCLS,
+  // because `re` has no POSIX classes at all - `[[:alpha:]]` there is a class
+  // holding `[`, `:`, `a`, `l`, `p` and `h` followed by a literal `]`, which
+  // is what dialects.md section 3 says and what CPython does. This reader ran
+  // for every Perl-family dialect regardless, so `\p{L}` was refused for
+  // Python (a closed escape alphabet says so) while `[[:alpha:]]` was
+  // silently accepted as a class of letters. Found by the Python vector
+  // corpus: `[[:alpha:]]` over "a" is no match in `re` and was 0-1 here.
+  //
+  // With the bit consulted, the `[` falls through to the ordinary literal
+  // path below, which is the whole of `re`'s reading. `[[.a.]]` and `[[=a=]]`
+  // follow it for the same reason.
+  if (byte_at(parser, 0) == '['
+      && (parser->spec.features & GRX_FEATURE_POSIX_CLASS)) {
     int matched = 0;
     GRX_Result result = read_posix_class(parser, out, &matched);
     if (matched || result != GRX_OK) {
@@ -4381,7 +4395,17 @@ static GRX_Result pcre_group_open(GRX_Parser * parser, GRX_GroupOpen * out) {
     // pcre2test reports as "unrecognized character after (? or (?-". Saying
     // "not implemented yet" there would promise a construct the dialect does
     // not have.
-    if (flavour(parser) == FLAVOUR_PCRE) {
+    //
+    // **Python is the same case and was reading the perl arm**, which is the
+    // reason this tests for perl rather than against pcre now. `re` has no
+    // embedded code either - it answers "unknown extension ?{" - and of the
+    // eighteen constructs `python_diff.py` lists as refused by both sides,
+    // this was the only one this library refused with GRX_ERR_UNSUPPORTED
+    // instead of GRX_ERR_SYNTAX. The differential could not see it: it folds
+    // every refusal to one verdict, because the question there is whether
+    // both sides refuse. The Python vector corpus states which refusal, and
+    // that is what found it.
+    if (flavour(parser) != FLAVOUR_PERL) {
       return grx_parse_fail(parser, GRX_DIAG_INVALID_GROUP_SYNTAX, start, 3);
     }
     return grx_parse_fail(

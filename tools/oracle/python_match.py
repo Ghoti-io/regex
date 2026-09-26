@@ -51,7 +51,29 @@ import warnings
 # because a warning is raised where the call is made.
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-FLAGS = {"i": re.IGNORECASE, "m": re.MULTILINE, "s": re.DOTALL}
+# Every letter this dialect's alphabet has, and the lookup FAILS on one it
+# does not know rather than contributing zero.
+#
+# `.get(letter, 0)` was the shape, and it is the sweep-that-cannot-see: a
+# caller asking with `a` got `re` run with no flags at all and an answer to a
+# different question, with nothing said. No gate was corrupted by it, because
+# `python_diff.py` leaves `a` out of its FLAGSETS and the split and replace
+# arms use `("", "i", "m", "s", ...)` - but `make_python_vectors.py` asked
+# with `a`, and three vectors were written down carrying Unicode answers under
+# a flag that is supposed to take Unicode away. A driver that silently drops
+# an argument cannot be told from one that honours it.
+#
+# `re.LOCALE` is deliberately absent: it is invalid for a `str` pattern, which
+# is the whole of this dialect (dialects.md section 5.15), so `L` is a letter
+# no caller may pass and an unknown letter is now an error.
+FLAGS = {
+    "a": re.ASCII,
+    "i": re.IGNORECASE,
+    "m": re.MULTILINE,
+    "s": re.DOTALL,
+    "u": re.UNICODE,
+    "x": re.VERBOSE,
+}
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -100,7 +122,10 @@ def compile_pattern(pattern, flags, cache):
     if key not in cache:
         bits = 0
         for letter in flags:
-            bits |= FLAGS.get(letter, 0)
+            if letter not in FLAGS:
+                raise SystemExit(
+                    "python_match.py: no such re flag: %r" % letter)
+            bits |= FLAGS[letter]
         try:
             cache[key] = re.compile(pattern, bits)
         except RecursionError:

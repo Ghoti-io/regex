@@ -21,6 +21,7 @@
  */
 
 #include <cstring>
+#include <vector>
 #include <string>
 
 #include "test_helpers.h"
@@ -469,6 +470,95 @@ TEST(Python, QuotingIsGatedOnTheFeatureBit) {
   EXPECT_EQ(accepts("[\\Qa\\E]"), "refused");
   EXPECT_EQ(accepts("\\Q"), "refused");
   EXPECT_EQ(accepts("\\E"), "refused");
+}
+
+TEST(Python, PosixClassesAreGatedOnTheFeatureBit) {
+  // The same shape as the `\Q` case above, found the same way and one table
+  // row over: GRX_FEATURE_POSIX_CLASS is absent from Python's row in
+  // syntax.c and the bracket-expression reader never consulted it, so
+  // `[[:alpha:]]` was a class of letters here. In `re` it is a class holding
+  // `[`, `:`, `a`, `l`, `p` and `h`, followed by a literal `]` - so it
+  // matches "a]" and not "a", which is dialects.md section 3's row and what
+  // CPython 3.14.7 does.
+  //
+  // The differential could not see it: `python_diff.py` puts `[[:alpha:]]`
+  // in neither its atom list nor its refusal list, because it is a pattern
+  // both sides *accept* and read differently, which is the one kind of
+  // disagreement a vocabulary has to spell on purpose. The Python vector
+  // corpus states the answer, and that is what found it.
+  EXPECT_EQ(span("[[:alpha:]]", "a"), "nomatch");
+  EXPECT_EQ(span("[[:alpha:]]", "a]"), "0-2");
+  EXPECT_EQ(span("[[:alpha:]]", "[]"), "0-2");
+  EXPECT_EQ(span("[[:alpha:]]", "x]"), "nomatch");
+  // Equivalence classes and collating elements follow it, for the same
+  // reason: they are not constructs this dialect has, so the `[` is a `[`.
+  EXPECT_EQ(accepts("[[=a=]]"), "ok");
+  EXPECT_EQ(accepts("[[.a.]]"), "ok");
+  // And the two dialects whose row carries the bit are unchanged.
+  EXPECT_EQ(span("[[:alpha:]]", "a", GRX_SYNTAX_PERL), "0-1");
+  EXPECT_EQ(span("[[:alpha:]]", "a", GRX_SYNTAX_PCRE), "0-1");
+  EXPECT_EQ(why("[[=a=]]", GRX_SYNTAX_PERL), GRX_DIAG_NOT_IN_DIALECT);
+}
+
+TEST(Python, EmbeddedCodeIsNotAConstructThisDialectHasEither) {
+  // `(?{...})` is perl's, and perl is the only dialect here that has it. The
+  // arm that decides which refusal to give tested for PCRE2 by name, so
+  // Python read perl's: "construct is not implemented yet", which promises a
+  // construct `re` does not have and will not get - it answers "unknown
+  // extension ?{".
+  //
+  // Of the eighteen constructs python_diff.py lists as refused by both
+  // sides, this was the only one refused with GRX_ERR_UNSUPPORTED instead of
+  // GRX_ERR_SYNTAX, and the differential folds every refusal to one verdict
+  // because the question there is whether both refuse. A vector states
+  // *which*.
+  EXPECT_EQ(why("(?{code})"), GRX_DIAG_INVALID_GROUP_SYNTAX);
+  EXPECT_EQ(why("(??{code})"), GRX_DIAG_INVALID_GROUP_SYNTAX);
+  EXPECT_EQ(why("(?{code})", GRX_SYNTAX_PCRE), GRX_DIAG_INVALID_GROUP_SYNTAX);
+  EXPECT_EQ(why("(?{code})", GRX_SYNTAX_PERL),
+      GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED);
+}
+
+TEST(Python, EveryRefusalIsASyntaxRefusal) {
+  // `GRX_ERR_UNSUPPORTED` is a *promise*: it says this dialect has the
+  // construct and this library has not built it. For a construct the dialect
+  // does not have, that promise is false and a caller that tells "your
+  // pattern is wrong" from "this library is incomplete" is told the wrong
+  // thing.
+  //
+  // Three instances of exactly that were found on one day - Python's `(?{}`,
+  // Python's `[[:alpha:]]`, and Vim's `\%[a\|b]` - and all three were found
+  // by accident, by a corpus that happened to assert more than its oracle
+  // had said. So here is the sweep, per construct, over the vocabulary the
+  // differential owns: every entry of `python_diff.REFUSED` is a construct
+  // `re` refuses, so none of them is a construct this dialect has.
+  //
+  // The list is READ from the differential rather than copied here, because a
+  // copy is a list that drifts and the entry added next week is the one the
+  // sweep would not cover.
+  const std::vector<std::string> refused = grxtest::python_string_list(
+      grxtest::repo("tools/oracle/python_diff.py"), "REFUSED");
+  ASSERT_GT(refused.size(), 40u)
+      << "python_diff.REFUSED could not be read; the sweep would be empty";
+
+  size_t checked = 0;
+  for (const std::string & pattern : refused) {
+    Attempt attempt = compile(pattern, GRX_SYNTAX_PYTHON);
+    grx_regex_free(attempt.regex);
+    if (attempt.result == GRX_OK) {
+      // A fragment that happens to be a valid pattern standing alone. The
+      // differential splices these into a larger pattern, so being valid
+      // alone is not a contradiction and is not this sweep's question.
+      continue;
+    }
+    checked++;
+    EXPECT_NE(attempt.result, GRX_ERR_UNSUPPORTED)
+        << pattern << ": refused as \"" << grx_diag_string(attempt.diag)
+        << "\", which promises a construct `re` does not have";
+  }
+  // Arming: a sweep whose every row took the `continue` above would pass
+  // while asserting nothing.
+  EXPECT_GT(checked, 40u) << "almost nothing in the list was refused at all";
 }
 
 int main(int argc, char ** argv) {

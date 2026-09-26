@@ -419,6 +419,64 @@ private:
   long moves_ = 0;
 };
 
+/**
+ * The string literals of a Python list, read out of one of the oracle tools.
+ *
+ * For the sweeps that have to cover a vocabulary the differentials own. A
+ * list copied into C++ is a list that drifts: the entry somebody adds to
+ * `python_diff.REFUSED` next week is the entry the sweep does not cover, and
+ * nothing says so. Reading the source is the same arrangement
+ * tests/unit/test_docs.cpp uses for the documents, and for the same reason -
+ * the check belongs beside the code it is comparing against.
+ *
+ * Deliberately a small parser and not a Python one: it finds `<name> = [`,
+ * reads to the first `]` that begins a line, and takes every double-quoted
+ * run in between, honouring `\\` and `\"` and nothing else. The lists it is
+ * pointed at are flat lists of double-quoted literals with `\\` escapes, and
+ * a caller checks the size it got back so that a list this cannot read is a
+ * failure rather than an empty sweep.
+ */
+inline std::vector<std::string> python_string_list(
+    const std::string & path, const std::string & name) {
+  std::vector<std::string> out;
+  const std::string text = read_file(path);
+  size_t at = text.find("\n" + name + " = [");
+  if (at == std::string::npos) {
+    return out;
+  }
+  at = text.find('[', at);
+  size_t end = text.find("\n]", at);
+  if (end == std::string::npos) {
+    return out;
+  }
+
+  for (size_t i = at; i < end; i++) {
+    if (text[i] == '#') {
+      // A comment may hold a quote of its own, and every one of these lists
+      // has comments in it.
+      i = text.find('\n', i);
+      if (i == std::string::npos) {
+        break;
+      }
+      continue;
+    }
+    if (text[i] != '"') {
+      continue;
+    }
+    std::string value;
+    i++;
+    while (i < end && text[i] != '"') {
+      if (text[i] == '\\' && i + 1 < end) {
+        i++;
+      }
+      value += text[i];
+      i++;
+    }
+    out.push_back(value);
+  }
+  return out;
+}
+
 } // namespace grxtest
 
 #endif // GHOTI_IO_GRX_TEST_HELPERS_H

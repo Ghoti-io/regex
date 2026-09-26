@@ -23,6 +23,7 @@
 
 #include <cstring>
 #include <string>
+#include <vector>
 
 #include "test_helpers.h"
 
@@ -590,11 +591,23 @@ TEST(Vim, WhatAnOptionalSequenceMemberMayNotBe) {
   EXPECT_EQ(why("\\va%[b+]"), GRX_DIAG_NOTHING_TO_REPEAT);
   // No alternation, no branch operator, and no group - the last of which
   // is `set re=1`; the default engine takes one. dialects.md section 6.
-  EXPECT_EQ(why("a\\%[b\\|c]"), GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED);
-  EXPECT_EQ(why("a\\%[b\\&c]"), GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED);
-  EXPECT_EQ(why("a\\%[\\(bc\\)]"), GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED);
-  EXPECT_EQ(why("a\\%[\\%(bc\\)]"), GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED);
-  EXPECT_EQ(why("a\\%[b\\%[cd]]"), GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED);
+  //
+  // GRX_DIAG_NOT_IN_DIALECT and not CONSTRUCT_NOT_IMPLEMENTED, which these
+  // read until 2026-09-26. Every one of these is an error in *vim*, in both
+  // of its engines - which is what the three lines of comment above this
+  // block already said - so there is nothing here for this library to build
+  // and "not implemented yet" promised a construct the dialect will never
+  // have. `\z(` and `\z1` in this dialect answer the same way. The
+  // difference is visible to a caller: one is a pattern that will never be
+  // valid and the other is a promise.
+  EXPECT_EQ(why("a\\%[b\\|c]"), GRX_DIAG_NOT_IN_DIALECT);
+  EXPECT_EQ(why("a\\%[b\\&c]"), GRX_DIAG_NOT_IN_DIALECT);
+  EXPECT_EQ(why("a\\%[\\(bc\\)]"), GRX_DIAG_NOT_IN_DIALECT);
+  EXPECT_EQ(why("a\\%[\\%(bc\\)]"), GRX_DIAG_NOT_IN_DIALECT);
+  EXPECT_EQ(why("a\\%[b\\%[cd]]"), GRX_DIAG_NOT_IN_DIALECT);
+  // And the result code, which is the half a caller branches on.
+  EXPECT_EQ(accepts("a\\%[b\\|c]"), "refused");
+  EXPECT_EQ(compile("a\\%[b\\|c]", GRX_SYNTAX_VIM).result, GRX_ERR_SYNTAX);
   // And not empty, where a collection's `[]` is two characters.
   EXPECT_EQ(why("a\\%[]"), GRX_DIAG_EMPTY_CLASS);
 }
@@ -1111,6 +1124,45 @@ TEST(Vim, AComposingCharacterThatBeginsAnAtomIsRefused) {
   // beside a base is dropped, but one that begins an atom still asks for
   // the rule above.
   EXPECT_EQ(accepts("\\Z.\u0301"), "refused");
+}
+
+TEST(Vim, EveryRefusalIsASyntaxRefusalButTheOneConstructVimHas) {
+  // The sibling of `Python.EveryRefusalIsASyntaxRefusal`, and the same
+  // argument: `GRX_ERR_UNSUPPORTED` promises that this dialect has the
+  // construct and this library has not built it, so answering it for a
+  // construct vim itself refuses is a false promise.
+  //
+  // `vim_diff.REFUSED` is read rather than copied, so an entry added there is
+  // swept without anyone remembering to. `a\%[b\|c]` was in it and was
+  // answered UNSUPPORTED while the reader's own comment recorded that vim
+  // refuses it too.
+  const std::vector<std::string> refused = grxtest::python_string_list(
+      grxtest::repo("tools/oracle/vim_diff.py"), "REFUSED");
+  ASSERT_GT(refused.size(), 15u)
+      << "vim_diff.REFUSED could not be read; the sweep would be empty";
+
+  size_t checked = 0;
+  for (const std::string & pattern : refused) {
+    Attempt attempt = compile(pattern, GRX_SYNTAX_VIM);
+    grx_regex_free(attempt.regex);
+    if (attempt.result == GRX_OK) {
+      continue;
+    }
+    checked++;
+    EXPECT_NE(attempt.result, GRX_ERR_UNSUPPORTED)
+        << pattern << ": refused as \"" << grx_diag_string(attempt.diag)
+        << "\", which promises a construct vim does not have";
+  }
+  EXPECT_GT(checked, 15u) << "almost nothing in the list was refused at all";
+
+  // And the exception, which is the whole reason this sweep is over the
+  // refused vocabulary rather than over every construct: `~` IS a vim
+  // construct - the last `:s` replacement - and it is one this library will
+  // never have, because "the last substitution" is E33 in the only state a
+  // library ever has. UNSUPPORTED is the true answer there, and `\~` is the
+  // literal tilde in both. It is not in `vim_diff.REFUSED` for that reason.
+  EXPECT_EQ(compile("~", GRX_SYNTAX_VIM).result, GRX_ERR_UNSUPPORTED);
+  EXPECT_EQ(accepts("\\~"), "ok");
 }
 
 int main(int argc, char ** argv) {

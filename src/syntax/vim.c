@@ -1368,7 +1368,15 @@ static GRX_Result read_optional_sequence(
     }
     if (member_opener_is_refused(parser)) {
       parser->dialect_state = outer_state;
-      return grx_parse_fail(parser, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED,
+      // GRX_DIAG_NOT_IN_DIALECT and not CONSTRUCT_NOT_IMPLEMENTED, which is
+      // what this said. The comment above already records that
+      // `a\%[b\|c]`, `a\%[\(bc\)]` and `a\%[\%(bc\)]` are errors in
+      // *vim*, in both of its engines - so there is nothing here for this
+      // library to build, and "not implemented yet" promised a construct the
+      // dialect will never have. `\z(` and `\z1` in this dialect already
+      // answer the same way, and the difference is visible to a caller: one
+      // is a pattern that will never be valid and the other is a promise.
+      return grx_parse_fail(parser, GRX_DIAG_NOT_IN_DIALECT,
           parser->position, 2);
     }
     if (count == sizeof(members) / sizeof(*members)) {
