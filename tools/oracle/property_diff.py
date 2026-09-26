@@ -6,6 +6,14 @@ documentation/plan.md WP-09 calls "the real check on WP-02". For each
 property this library accepts, it asks both implementations which code points
 match `\\p{...}` - all 1,114,112 of them - and reports the first differences.
 
+A name one side cannot spell is reported by *which* side could not, in three
+buckets rather than one. That matters more than it sounds: the single bucket
+this replaced was printed as "the reference does not spell", and every one of
+the 16 names in it is refused by this library too - so the line named node
+for a gap both share, and the third case, a name the reference resolves and
+this library does not, had nowhere to be reported and would have been counted
+as agreement.
+
 This is stronger than importing test262's generated property-escapes files,
 and needs nothing cloned. Those files are themselves generated from the UCD,
 so they check that a table agrees with the UCD; this checks that it agrees
@@ -148,17 +156,28 @@ def main(argv):
 
     disagreements = []
     compared = 0
-    unsupported = 0
+    neither = []
+    reference_only = []
+    ours_only = []
 
     for name in names:
         theirs = reference.get(name)
         mine = ours.get(name)
-        if theirs == "unsupported" or mine == "unsupported":
-            # The reference does not have this spelling. That is not a
-            # disagreement about the *data*: this library's loose resolver
-            # accepts names ECMAScript does not, and syntax_diff.py is what
-            # checks which spellings each side accepts.
-            unsupported += 1
+        # A name that one side cannot spell yields no comparison, and *which*
+        # side could not is three different findings. This used to be one
+        # counter printed as "the reference does not spell", which named node
+        # for a gap that is mostly shared: all 16 of the names it covered are
+        # refused here too, so the line blamed the reference for something
+        # this library does equally. An exclusion bucket that names the wrong
+        # cause is one nobody thinks to look inside.
+        if theirs == "unsupported" and mine == "unsupported":
+            neither.append(name)
+            continue
+        if theirs == "unsupported":
+            reference_only.append(name)
+            continue
+        if mine == "unsupported":
+            ours_only.append(name)
             continue
 
         compared += 1
@@ -190,10 +209,32 @@ def main(argv):
             print("  only here:             "
                   + " ".join("U+%04X" % c for c in only_mine))
 
-    print("\n%d properties, %d compared, %d the reference does not spell, "
+    # `ours_only` is the one of the three that is a defect. `--list` prints
+    # this library's own property table, so a name in it that the reference
+    # resolves and this library does not is a gap here by construction -
+    # there is no benign reading of it, and it is 0 today.
+    if ours_only:
+        print("\nnames the reference resolves and this library does not:")
+        for name in ours_only:
+            print("  \\p{%s}" % name)
+
+    print("\n%d properties, %d compared, %d neither side spells, "
+          "%d only the reference refuses, %d only this library refuses, "
           "%d disagreements"
-          % (len(names), compared, unsupported, len(disagreements)))
-    return 1 if disagreements else 0
+          % (len(names), compared, len(neither), len(reference_only),
+             len(ours_only), len(disagreements)))
+    if neither:
+        # Named rather than counted, because the count alone reads as the
+        # reference's gap. These are records in this library's property table
+        # that no pattern in any dialect here can reach: real UCD properties
+        # outside ECMA-262's closed binary list, which the strict resolver is
+        # right to reject and the loose table inherits the rejection from.
+        # `check-unicode-agreement` still compares their code points, because
+        # it walks the table by index rather than by name.
+        print("  neither side spells: " + " ".join(neither))
+    if reference_only:
+        print("  only the reference refuses: " + " ".join(reference_only))
+    return 1 if disagreements or ours_only else 0
 
 
 if __name__ == "__main__":

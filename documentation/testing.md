@@ -434,9 +434,31 @@ generated, and it needs nothing cloned.
 
 Surrogates are excluded on both sides: `String.fromCodePoint` of a lone
 surrogate matches nothing in JavaScript and UTF-8 cannot hold one, so neither
-side is asked. Properties the reference cannot spell - the binary properties
-outside ECMA-262's table 69 - are counted and skipped, because which
-spellings each side accepts is the syntax check's question.
+side is asked.
+
+A property one side cannot spell yields no comparison, and **which** side
+could not is three separate findings, reported separately. That is a
+correction: it was one counter printed as "16 the reference does not spell",
+and all 16 are refused by *this library* too - they are real UCD properties
+outside ECMA-262's closed binary list, which the strict resolver is right to
+reject and the loose table inherits the rejection from. The line named node
+for a gap both share, which is an exclusion bucket nobody thinks to look
+inside. Measured against node 24.21.0: 16 neither side spells, 0 only the
+reference refuses, 0 only this library refuses.
+
+The third bucket is the one that matters and had nowhere to be reported.
+`--list` prints this library's *own* property table, so a name in it that
+node resolves and this library does not is a gap here by construction - there
+is no benign reading - and it **fails the gate**, where the single counter
+would have absorbed it as agreement. Both new buckets were armed in one run,
+by swapping `Hex_Digit` for `Other_Alphabetic` in `ECMA262_BINARY`: node
+resolves `\p{Hex_Digit}` and the patched library does not, which is named and
+exits non-zero, while `\p{Other_Alphabetic}` lands in "only the reference
+refuses" and correctly does not fail.
+
+The 16 are still gated for their *code points* - `check-unicode-agreement`
+walks the property table by index rather than by name, which is how they were
+noticed in the first place.
 
 ### The two-readings check
 
