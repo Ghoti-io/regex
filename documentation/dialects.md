@@ -2202,6 +2202,37 @@ lint that does that is a lint nobody can rely on.
 Facts that shape the front end and are easy to get wrong; each becomes a
 test.
 
+**Perl 5.44.0: an unrecognized alphabetic escape is the letter, and there
+are sixteen of them.** Measured across all 52 letters on 2026-09-26, against
+perl, pcre2test and this library at once:
+
+| Escape | perl | PCRE2 10.46 | here |
+| --- | --- | --- | --- |
+| `\i \j \l \m \q \u \y \F \I \J \L \M \O \T \U \Y` | the letter, with "Unrecognized escape … passed through in regex" | refused - error 137 naming `\F \L \l \N{name} \U \u`, error 103 for the rest | refused, as PCRE2 |
+| `\C` | refused | **one data unit** | refused - a PCRE2 construct this library does not have, and the only cell in the sweep where it refuses something pcre2 accepts |
+| `\x` with no digits | NUL | error 178 | refused |
+
+Two things follow, and the second is the one that matters.
+
+**This library follows PCRE2 here, and that is the same choice it makes for
+`\Q`.** A pattern is *text* to this library and there is no interpolation
+step, so the reading it implements is the one a perl author's *source* gets:
+`\Qa.b\E` quotes, because that is what a perl author writing it in a regex
+literal gets. perl's engine-side "pass the letter through" is what happens
+when a pattern arrives from a variable and the double-quote pass has already
+run - and perl *warns* when it does it, which is a reference saying it does
+not know what the construct means rather than defining it.
+
+**By the same rule, `\l \u \L \U \F` should be implemented, and are
+not.** In perl source they are operators of the pattern text: `qr/[\lAB]c/`
+is `(?^:[aB]c)` and `qr/[\LA]B\Ec/` is `(?^:[a]bc)` - a blunt case
+transform that crosses a bracket expression, which is what perl's own
+re_tests calls "\l works in []" and "Straddling [ \L ] \E works". It is
+blunt in both directions: `\U\d\E` is `\D`, `\U\p{L}\E` is `\P{L}`,
+and `\U\x{e9}\E` is a *syntax error*, perl having uppercased the `x`. `\E`
+ends every pending operator and not only the innermost - `\Ua\Lb\Ec\E` is
+`Abc` and not `AbC`. §6 carries the five vectors this costs.
+
 **PCRE2 10.46.** What follows was written from pcre2pattern and corrected by
 pcre2test, which is the only reason several of these lines are right. Five of
 them the documentation did not settle: `\x` with no digits is an error in
