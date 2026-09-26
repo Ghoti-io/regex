@@ -47,6 +47,24 @@ enum class Expectation {
    * corpus that cannot catch us refusing too much.
    */
   Compiles,
+  /**
+   * Compiling must fail, and which failure is not asserted.
+   *
+   * The dual of Compiles, and it exists because most references here fold
+   * every refusal into one verdict: `re.compile` raises one exception type,
+   * vim's `matchstrpos()` throws, `pcre2_compile` is asked through a driver
+   * that prints "compile". A record saying `expect: error syntax` over one of
+   * those is asserting something the oracle did not say - that the refusal is
+   * a *syntax* refusal rather than `GRX_ERR_UNSUPPORTED` - and which of the
+   * two this library gives is a rule of its own API, not of the reference.
+   *
+   * That distinction is worth a gate and it is not this one:
+   * tests/unit/test_python.cpp and test_vim.cpp sweep each dialect's refused
+   * vocabulary for the code, with the exceptions named. A generated corpus is
+   * the wrong place for it, because a corpus asserts per row what a sweep
+   * asserts per construct.
+   */
+  Refused,
 };
 
 /**
@@ -91,6 +109,31 @@ struct Record {
   Expectation expectation = Expectation::NoMatch;
   std::vector<Span> spans; ///< For Expectation::Spans.
   GRX_Result error = GRX_OK; ///< For Expectation::Error.
+
+  /**
+   * Each group's expected *text*, for a reference that states no spans.
+   *
+   * Every other reference here answers in offsets: node, pcre2test, perl,
+   * glibc and CPython all name where each group started and stopped. **vim
+   * does not, and has no API that does** - `matchstrpos()` gives the span of
+   * the whole match and `matchlist()` gives the submatches as strings, so a
+   * vector generated from vim can state the whole match exactly and each
+   * group only by its contents. Recording spans for those groups would mean
+   * taking them from *this library*, which is the one thing a vector must
+   * never do: it would write down the current behaviour as the rule.
+   *
+   * So a record may carry `groups:` instead, and when it does the runner
+   * checks each group's text rather than its offsets. That is weaker, and
+   * the weakness is stated rather than hidden: a wrong span that cuts the
+   * same bytes out of the subject passes such a record.
+   *
+   * `-` is the entry for a group that did not participate **or** matched
+   * empty, because vim gives `''` for both and cannot be asked which. A
+   * group past the end of this list is checked the same way, so a trailing
+   * run of unset groups need not be written out.
+   */
+  std::vector<std::string> groups;
+  bool has_groups = false; ///< Whether a `groups:` line was present.
 
   /** Engines to ask; empty means every eligible one. */
   std::vector<GRX_Engine> engines;

@@ -180,8 +180,9 @@ expect: 0-$
   asserting the wrong thing and passing.
 - `expect`: `<start>-<end>` per group, `-` for a group that did not
   participate; `nomatch`; `error <syntax|unsupported|limit|invalid>`;
-  `limit` for a search that must hit a limit; or `compiles`, which asserts
-  that the pattern compiles and nothing else. Either end of a span may be
+  `limit` for a search that must hit a limit; `compiles`, which asserts that
+  the pattern compiles and nothing else; or `refused`, which asserts that it
+  does not and says nothing about which failure. Either end of a span may be
   `$`, meaning the subject's length.
 
   `compiles` exists because a corpus can say more about syntax than about
@@ -192,6 +193,37 @@ expect: 0-$
   *rejections*, and a syntax corpus of rejections alone cannot catch a
   parser that refuses too much, which is the likelier failure for a front
   end being written from a specification.
+
+  `refused` is its dual, and it exists because most references here fold
+  every refusal into one verdict: `re.compile` raises one exception type,
+  vim's `matchstrpos()` throws, `pcre2_compile` is asked through a driver that
+  prints `compile`. A record saying `error syntax` over one of those asserts
+  something the oracle did not say - that the refusal is a *syntax* refusal
+  rather than `GRX_ERR_UNSUPPORTED` - and which of the two this library gives
+  is a rule of its own API, not of the reference.
+
+  That distinction is worth a gate, and a generated corpus is the wrong one:
+  a corpus asserts it per row, where what wants asserting is one fact per
+  construct. `Python.EveryRefusalIsASyntaxRefusal` and its Vim sibling sweep
+  each dialect's refused vocabulary for the code, reading the list out of the
+  differential that owns it so that an entry added there is swept without
+  anyone remembering to. `GRX_ERR_UNSUPPORTED` is a *promise* - this dialect
+  has the construct, this library has not built it - and three constructs
+  were answering it falsely when the sweep was written.
+- `groups:` states each group's **text** instead of its span, `-` for a group
+  that did not participate or matched empty. For vim, and only for vim: every
+  other reference here answers in offsets, and vim has no API that does -
+  `matchstrpos()` gives the whole match's span, `matchlist()` gives the
+  submatches as strings, `matchstrlist()`'s `submatches` are strings too. So a
+  vim vector pins the whole match exactly and each group by its contents.
+  Taking the group spans from *this library* instead would write today's
+  behaviour down as the rule, which is the one thing a vector must not do.
+
+  It is weaker, and the weakness is stated rather than hidden: a wrong span
+  that cuts the same bytes out of the subject passes such a record. `-` covers
+  two cases because vim answers `''` for both and cannot be asked which. A
+  space inside a group is `\x20` and a group whose whole text is `-` is
+  `\x2D`, or the field could not be told from the separator and the sentinel.
 - `repeat: <n>`: the subject is `subject:` repeated `n` times. A megabyte of
   `a` written out is a record nobody reads, and the whole design requirement
   here is that a record can be pasted into a bug report - so
@@ -404,19 +436,35 @@ rule, and would then pass forever. `tools/oracle/make_vectors.py` asks Node
 and writes down the answer; if this library disagrees, the vector fails, which
 is the correct outcome whichever side is wrong.
 
-The corpus is in two files, for two reasons. `named.rxt` holds the cases worth
-writing down by name - the two loop rules, the two foldings, the `$` rule,
-the shorthands, the lookbehinds - each of which a random corpus would reach
-only by accident. `generated.rxt` holds the random ones, which reach
-combinations nobody would think to write.
+Each generated corpus is in two files, for two reasons. `named.rxt` holds the
+cases worth writing down by name - the two loop rules, the two foldings, the
+`$` rule, the shorthands, the lookbehinds - each of which a random corpus
+would reach only by accident. `generated.rxt` holds the random ones, which
+reach combinations nobody would think to write.
 
-`tests/data/vectors_selftest/` is how the runner is kept honest. It holds a
-record whose expectation is deliberately wrong, and a test that *expects the
-runner to fail it*. Without that, "the conformance suite passes" would be
-indistinguishable from "the conformance suite ran nothing" - which is the
+Three dialects are generated this way - ECMAScript, Python and Vim - and four
+are imported from an upstream corpus. Python and Vim were the two with
+**nothing committed at all** until 2026-09-26: they have no corpus to import,
+and that was taken to settle the generated question too, so their only gate
+needed a container and a machine without one checked them with unit tests.
+The first run of each new corpus failed records that the live differential is
+structurally unable to see - three defects between them, all of the same
+shape, all recorded in §5 beside the differential each belongs to.
+
+`tests/data/vectors_selftest/` is how the runner is kept honest. It holds
+records whose expectations are deliberately wrong, and a test that *expects
+the runner to fail them*. Without that, "the conformance suite passes" would
+be indistinguishable from "the conformance suite ran nothing" - which is the
 failure mode a corpus discovered by directory walk is most prone to, and the
 one section 9 of this page is about. The runner separately refuses to pass
 when it found no vectors at all.
+
+**One wrong record per thing the runner checks**, because a field the runner
+parses and never compares is a field every vector in the tree asserts
+nothing with. There are three: a wrong span, a wrong `groups:` beside a right
+span, and an `expect: refused` on a pattern that compiles. The last is there
+because `refused` asserts less than every other expectation, and a check that
+asserts little is the one worth making sure asserts something.
 
 ### The property check
 
@@ -907,6 +955,39 @@ as often as not, and vim compiles a collection with a corrupted
 `[[:foo:]]*a` does not match "a". Thousands of those would put a floor under
 the disagreement count and hide the next real one under it.
 
+**It is no longer the only gate for this dialect either.**
+`tools/oracle/make_vim_vectors.py` writes vim's answers into
+`tests/data/vectors/vim/` - 74 named records and 6,243 generated ones. Two
+things make it weaker than the other corpora and both are stated in its own
+header rather than left to be discovered.
+
+vim has **no API that gives a submatch a position**, so a record pins the
+whole match exactly and each group by its text; §3's `groups:` field is that,
+and the alternative would have been taking the spans from this library, which
+is a vector recording today's behaviour as the rule.
+
+And its exclusions are decided from the **pattern text alone**, where the
+differential's are decided by comparing both answers. That is deliberate: a
+corpus whose contents depend on what this library answered at generation time
+is one that quietly shrinks after a regression, so the row that would have
+reported the regression is the row that stops being written. The cost is that
+it declines every pattern containing a `@` - which is every postfix operator
+vim has, and where five of the seven measured artifacts live - along with
+`\%23l*`, `\v\_^*` and the two spellings of a bare multi vim refuses.
+`check-oracle-vim` covers all of those and this corpus says it does not.
+
+The one exclusion that is a measurement rather than a shape is asked of vim:
+a row its two engines answer differently is dropped, because vim has no
+single answer to write down. Four of the named cases go that way, and they
+are named in the generator rather than left to the header's count -
+`[[:lower:]]` and `[[:upper:]]` over U+2170, U+01C5 and U+24B6, where `set
+re=2` matches and `set re=1` does not.
+
+Its first run failed nine records, all one defect: `a\%[b\|c]` was refused
+with `GRX_ERR_UNSUPPORTED` while the reader's own comment recorded that vim
+refuses it too, in both engines. "Not implemented yet" promises a construct
+the dialect will never have.
+
 **Two defects it found were not in this dialect.** A lookaround restored the
 live capture slots when its body's path was abandoned and left the *shadow*
 spans - the ones a backreference reads - where the body had written them, so
@@ -966,6 +1047,31 @@ made the gate unable to ask whether *this library* enforced it. It did not:
 and was read by nothing. Four variable-width atoms later, the gate found it
 in one run. A generator written from what the reference does is a generator
 that cannot find where the implementation diverges.
+
+**It is no longer the only gate for this dialect.**
+`tools/oracle/make_python_vectors.py` writes `re`'s answers into
+`tests/data/vectors/python/` - 90 named records and 2,087 generated ones - so
+`make test` checks the dialect on a machine with no container engine, where
+before it had unit tests and nothing else. The first run of that corpus
+failed six records and two of them were defects the differential is
+structurally unable to see: `[[:alpha:]]` is a class of six literal
+characters in `re` and was a class of letters here, because
+`GRX_FEATURE_POSIX_CLASS` is absent from Python's row and the bracket reader
+never consulted it - a pattern both sides *accept* and read differently,
+which a vocabulary has to spell on purpose; and `(?{code})` was refused with
+`GRX_ERR_UNSUPPORTED`, because the arm choosing between the two refusals
+tested for PCRE2 by name and Python read perl's - and the differential folds
+every refusal into one verdict, so "which refusal" is a question it cannot
+ask. The other four were the driver's, below.
+
+**`python_match.py` silently dropped a flag it did not know.** `FLAGS.get(
+letter, 0)` meant a caller asking with `a` got `re` run with no flags at all
+and an answer to a different question. No gate was corrupted by it - no
+caller passes `a`, because `python_diff.FLAGSETS` leaves it out under a
+comment saying the front end has no bit for it, which stopped being true when
+`GRX_OPT_ASCII_CLASSES` was added - but the vector generator did ask, and
+wrote three records claiming `re.ASCII` leaves `\w` matching "é". An unknown
+letter is a hard failure now.
 
 Two other defects it found were in shared code and had been reachable by the
 Perl-family differentials for as long as those had existed: the prescan lost

@@ -42,14 +42,14 @@ this design was written on; a CI job installs the rest
 | Perl | `perl` | Perl 5.44.0 | `perlre`, `perlrebackslash`, `perlrecharclass` for 5.44 | `perl` (pinned, `tools/oracle/containers/IMAGES`); `t/re/re_tests` |
 | PCRE2 | `pcre` | PCRE2 10.46 | `pcre2pattern(3)`, `pcre2syntax(3)` for 10.46 | `pcre2test` 10.46 (pinned); `testdata/testinput1`, `testinput2` |
 | ECMAScript | `ecmascript` | ECMA-262 16th edition (ES2025) | clause 22.2 *RegExp (Regular Expression) Objects*; Annex B.1.2 *Regular Expressions Patterns* | Node 24.21 / V8 13.6, Unicode 17.0 (pinned); test262 |
-| Python | `python` | CPython 3.14.7 | `re` module documentation, 3.14 | `python3` (pinned, `tools/oracle/containers/IMAGES`); no corpus - see below |
+| Python | `python` | CPython 3.14.7 | `re` module documentation, 3.14 | `python3` (pinned, `tools/oracle/containers/IMAGES`); no corpus to import, a generated one - see below |
 | Java | `java` | JDK 21 | `java.util.regex.Pattern` javadoc, 21 | OpenJDK (install) |
 | .NET | `dotnet` | .NET 8 | "Regular Expression Language - Quick Reference"; "Regular expression options" | .NET SDK (install) |
 | Ruby | `ruby` | Ruby 3.3 / Onigmo 6.2 | Onigmo `doc/RE`; Ruby `Regexp` documentation | `ruby` (install) |
 | RE2 | `re2` | Go 1.22 `regexp` | RE2 "Syntax" wiki; Go `regexp/syntax` documentation | `go` (install) |
 | Rust | `rust` | `regex` 1.10 | `regex-syntax` documentation | `cargo` (install) |
 | Tcl | `tcl` | Tcl 8.6 | `re_syntax(n)` | `tclsh` (install) |
-| Vim | `vim` | Vim 9.2, patches 1-1129 | `:help pattern` | `vim -es` with `matchlist()` (pinned) |
+| Vim | `vim` | Vim 9.2, patches 1-1129 | `:help pattern` | `vim -es` with `matchlist()` (pinned); no corpus to import, a generated one |
 | Emacs | `emacs` | GNU Emacs 29 | Elisp Reference Manual, "Regular Expressions" | `emacs --batch` (install) |
 
 ### 2.1 Python's oracle is the only one that is not a subprocess
@@ -76,9 +76,30 @@ prescan lost its group count after a class containing an escape, and
 `GRX_LOOKBEHIND_FIXED` was in the profile and read by nothing. Both had been
 reachable by the Perl-family differentials for as long as they had existed.
 
-**There is no Python corpus.** The plan named `Lib/test/re_tests.py`, which
-CPython removed. The generator is therefore the whole of the gate for this
-dialect, which is the arrangement `posix_diff.py`'s note recommends anyway.
+**There is no Python corpus to import.** The plan named
+`Lib/test/re_tests.py`, which CPython removed. So the generator is the whole
+of what *can* be asked for this dialect, which is the arrangement
+`posix_diff.py`'s note recommends anyway.
+
+**That sentence used to end "the generator is therefore the whole of the gate",
+and the "therefore" was doing work it could not do.** Having no upstream
+corpus to import says nothing about having a committed one: ECMAScript has
+both, and `tests/data/vectors/ecmascript/generated.rxt` is node's answers to
+patterns nobody wrote. What actually followed from it was that Python - and
+Vim, for the same reason - had **nothing committed at all**, so their only
+gate needed a container to run, and on a machine without one they had unit
+tests and nothing else. `tools/oracle/make_python_vectors.py` and
+`make_vim_vectors.py` close that: `make vectors-python` and `make vectors-vim`
+write the reference's answers into `tests/data/vectors/`, and `make test`
+reads them with no oracle present.
+
+Vim's corpus is the weaker of the two and says so in its own header, because
+**vim has no API that gives a submatch a position**: `matchstrpos()` answers
+for the whole match and `matchlist()` answers in strings. So a vim record
+pins the whole match exactly and each group by its text - the `groups:` field
+in [testing.md](testing.md) §3 - and it declines to record any pattern
+containing a `@`, which is where five of vim's seven measured artifacts live.
+`check-oracle-vim` still covers those.
 
 ## 3. Features: which constructs exist
 

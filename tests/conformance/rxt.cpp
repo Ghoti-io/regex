@@ -180,6 +180,10 @@ bool parse_expectation(
     record->expectation = Expectation::Compiles;
     return true;
   }
+  if (value == "refused") {
+    record->expectation = Expectation::Refused;
+    return true;
+  }
   if (value.rfind("error", 0) == 0) {
     record->expectation = Expectation::Error;
     std::string which = trim(value.substr(5));
@@ -227,6 +231,37 @@ bool parse_expectation(
   if (record->spans.empty()) {
     *out_error = "an expect: with no spans; use nomatch";
     return false;
+  }
+  return true;
+}
+
+/**
+ * Parse a `groups:` field of space-separated group texts.
+ *
+ * `-` is a group that did not participate or matched empty; vim reports `''`
+ * for both and there is no third answer to record. Every other field is the
+ * group's text in the same escape alphabet `pattern:` and `subject:` use, so
+ * a space inside a group is `\x20` and a group whose whole text is `-` is
+ * `\x2D`. Without that, a field could not be told from the sentinel and the
+ * reader would silently accept the wrong thing.
+ */
+bool parse_groups(
+    const std::string & value, Record * record, std::string * out_error) {
+  record->has_groups = true;
+  record->groups.clear();
+
+  std::istringstream fields(value);
+  std::string field;
+  while (fields >> field) {
+    if (field == "-") {
+      record->groups.push_back(std::string());
+      continue;
+    }
+    std::string decoded;
+    if (!decode_field(field, &decoded, out_error)) {
+      return false;
+    }
+    record->groups.push_back(decoded);
   }
   return true;
 }
@@ -581,6 +616,12 @@ bool read_vector_file(
     }
     else if (key == "options") {
       if (!parse_options(value, &record, &failure)) {
+        *out_error = path + ":" + std::to_string(line_number) + ": " + failure;
+        return false;
+      }
+    }
+    else if (key == "groups") {
+      if (!parse_groups(value, &record, &failure)) {
         *out_error = path + ":" + std::to_string(line_number) + ": " + failure;
         return false;
       }

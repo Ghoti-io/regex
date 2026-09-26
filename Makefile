@@ -454,7 +454,9 @@ TESTFLAGS := `PKG_CONFIG_PATH=$(PKG_CONFIG_LOOKUP_PATH) pkg-config --libs --cfla
 #
 # The third line is measured too, not added up from the first two. So the
 # feared 2x is real - it is nearer 3x - and 78 seconds is what it buys heap,
-# leak and UB coverage over 51 suites and 37,396 conformance vectors with.
+# leak and UB coverage over 51 suites and 45,890 conformance vectors with
+# (37,396 when the figure was taken; the Python and Vim corpora landed since,
+# and re-deriving a count beside a timing is cheaper than wondering).
 # The ratio was the reason to leave it out and the absolute figure is why
 # that reason does not hold.
 ALL_TEST_GATES := check-symbols check-layering check-aliasing \
@@ -873,7 +875,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 	check-oracle-exclusions check-oracle-determinism \
 	check-oracles oracle-version oracle-images oracle-clean \
 	check-limits check-json-schema-suite vectors vectors-ecmascript \
-	vectors-pcre vectors-perl vectors-posix
+	vectors-pcre vectors-perl vectors-posix vectors-python vectors-vim
 # Release build commands
 .PHONY: all install test test-quiet test-asan test-valgrind test-valgrind-quiet test-watch uninstall watch
 # Debug build commands
@@ -1439,7 +1441,15 @@ check-oracle-string-properties: $(TOOLS)
 	$(call run-oracle,node,python3 tools/oracle/string_property_diff.py)
 
 vectors: ## Regenerate every dialect's conformance vectors
-vectors: vectors-ecmascript vectors-pcre vectors-perl vectors-posix
+# "Every dialect" and this line named four targets, while the tree held five
+# corpora and nine dialects that compile and match. `vectors-posix` writes
+# both the posix and the gnu corpora, so the count was never the same as the
+# list - and Python and Vim had no corpus at all, so their only gate was a
+# live differential and a machine without containers checked them with unit
+# tests and nothing else. Six targets, seven corpora, nine dialects; the two
+# still missing are the two the POSIX importer covers.
+vectors: vectors-ecmascript vectors-pcre vectors-perl vectors-posix \
+	vectors-python vectors-vim
 
 vectors-ecmascript: ## Regenerate the ECMAScript vectors from the pinned node
 # Three generators, three provenance lines, deliberately: each writes its own
@@ -1470,6 +1480,25 @@ vectors-posix: $(TOOLS)
 		exit 0; \
 	fi
 	$(call run-oracle,glibc$(comma)musl,python3 tools/corpus/import_rxspencer.py)
+
+vectors-python: ## Regenerate the Python vectors from the pinned CPython
+# No corpus to import: the plan named `Lib/test/re_tests.py` and CPython
+# removed it, which is why dialects.md section 2.1 said this dialect had
+# none. That is an argument about an *upstream* corpus and was standing in
+# for the generated one as well.
+vectors-python:
+	@$(REQUIRE_PYTHON3)
+	$(call run-oracle,python,python3 tools/oracle/make_python_vectors.py)
+
+vectors-vim: ## Regenerate the Vim vectors from the pinned vim
+# Two vim processes per file, not one: the second asks `set re=1`, because a
+# row vim's two engines answer differently is a row vim has no single answer
+# for and there is nothing to write down. See the generator's own note for
+# what else it declines to record, and why that is decided from the pattern
+# text rather than from what this library said.
+vectors-vim:
+	@$(REQUIRE_PYTHON3)
+	$(call run-oracle,vim,python3 tools/oracle/make_vim_vectors.py)
 
 vectors-perl: ## Re-import Perl's re_tests corpus, answered by the pinned perl
 # The corpus and the perl that answers it are two pins and they move

@@ -70,6 +70,10 @@ std::string describe(const grxtest::Record & record) {
       return "limit";
     case grxtest::Expectation::Error:
       return std::string("error ") + grx_result_string(record.error);
+    case grxtest::Expectation::Refused:
+      return "refused";
+    case grxtest::Expectation::Compiles:
+      return "compiles";
     case grxtest::Expectation::Spans:
     default: {
       std::string out;
@@ -101,7 +105,13 @@ bool spans_agree(const grxtest::Record & record, const GRX_Match * match) {
   if (grx_match_count(match) < record.spans.size()) {
     return false;
   }
-  for (size_t i = record.spans.size(); i < grx_match_count(match); i++) {
+  // ...unless the record states the groups as text instead, in which case
+  // groups_agree() below owns every group past the ones spelled here and
+  // this rule would contradict it: a vim record says `expect: 0-3` for the
+  // whole match and `groups:` for the rest, and the groups it names are
+  // exactly the ones that did participate.
+  for (size_t i = record.spans.size();
+      !record.has_groups && i < grx_match_count(match); i++) {
     GRX_Capture capture;
     grx_match_group(match, i, &capture);
     if (capture.start != GRX_NPOS) {
@@ -122,6 +132,72 @@ bool spans_agree(const grxtest::Record & record, const GRX_Match * match) {
     }
   }
   return true;
+}
+
+/** One group's text, or the empty string when it did not participate. */
+std::string group_text(
+    const grxtest::Record & record, const GRX_Match * match, size_t index) {
+  if (index >= grx_match_count(match)) {
+    return std::string();
+  }
+  GRX_Capture capture;
+  grx_match_group(match, index, &capture);
+  if (capture.start == GRX_NPOS) {
+    return std::string();
+  }
+  return record.subject.substr(capture.start, capture.end - capture.start);
+}
+
+/**
+ * Whether the groups agree with a record that states their text.
+ *
+ * Only for a `groups:` record - see rxt.h for why vim needs one. Group 0 is
+ * not checked here: the whole match's span is in `expect:` and is exact, so
+ * checking its text as well would assert less about the same thing.
+ *
+ * A group past the end of the list must be unset or empty, which is the same
+ * rule the listed ones are held to. That is what stops a record with two
+ * groups written down from being silent about a third.
+ */
+bool groups_agree(const grxtest::Record & record, const GRX_Match * match) {
+  size_t highest = grx_match_count(match);
+  if (record.groups.size() + 1 > highest) {
+    highest = record.groups.size() + 1;
+  }
+  for (size_t i = 1; i < highest; i++) {
+    std::string expected = i - 1 < record.groups.size()
+        ? record.groups[i - 1]
+        : std::string();
+    if (group_text(record, match, i) != expected) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** The group texts as a record writes them, for a failure message. */
+std::string describe_groups(const std::vector<std::string> & groups) {
+  std::string out;
+  for (size_t i = 0; i < groups.size(); i++) {
+    if (i) {
+      out += " ";
+    }
+    out += groups[i].empty() ? std::string("-") : "'" + groups[i] + "'";
+  }
+  return out.empty() ? std::string("(none)") : out;
+}
+
+/** The match's group texts, in the same shape. */
+std::string describe_groups(
+    const grxtest::Record & record, const GRX_Match * match) {
+  std::vector<std::string> texts;
+  for (size_t i = 1; i < grx_match_count(match); i++) {
+    texts.push_back(group_text(record, match, i));
+  }
+  while (!texts.empty() && texts.back().empty()) {
+    texts.pop_back();
+  }
+  return describe_groups(texts);
 }
 
 /**
@@ -198,6 +274,25 @@ Outcome run_record(const grxtest::Record & record) {
         outcome.reason = std::string("expected it to compile, got ")
             + grx_result_string(compiled) + " (" + grx_diag_string(error.diag)
             + ")";
+      }
+    }
+    grx_regex_free(regex);
+    return outcome;
+  }
+
+  if (record.expectation == grxtest::Expectation::Refused) {
+    // Which refusal is deliberately not asserted - see rxt.h. A dialect with
+    // no front end at all refuses everything, so it would pass every record
+    // here while answering nothing; that is a skip, exactly as it is below.
+    if (compiled == GRX_ERR_UNSUPPORTED && !dialect_is_built(record.syntax)) {
+      outcome.skipped = true;
+      outcome.reason
+          = std::string(grx_syntax_name(record.syntax)) + ": no front end yet";
+    }
+    else {
+      outcome.passed = compiled != GRX_OK;
+      if (!outcome.passed) {
+        outcome.reason = "expected it to be refused, and it compiled";
       }
     }
     grx_regex_free(regex);
@@ -316,6 +411,12 @@ Outcome run_record(const grxtest::Record & record) {
       outcome.passed = false;
       outcome.reason = engine_name + ": expected " + describe(record)
           + ", got " + describe(match);
+    }
+    else if (record.has_groups && !groups_agree(record, match)) {
+      outcome.passed = false;
+      outcome.reason = engine_name + ": expected groups "
+          + describe_groups(record.groups) + ", got "
+          + describe_groups(record, match);
     }
 
     std::string spans = matched ? describe(match) : "nomatch";
@@ -650,7 +751,7 @@ TEST(Conformance, EveryVectorAgreesAgainWhenEveryArenaMoves) {
   // pointer held across a growth therefore passes every test, valgrind and
   // ASan, until one day a pattern is a few nodes longer.
   //
-  // 33,829 vectors is the widest net this library has, so it is the one
+  // The whole corpus is the widest net this library has, so it is the one
   // worth pointing at the question. Under ASan the stale read is a
   // use-after-free; here it is 0xDD, and a vector whose answer is made of
   // 0xDD does not match its oracle.
@@ -679,18 +780,27 @@ TEST(Conformance, EveryVectorAgreesAgainWhenEveryArenaMoves) {
 
 TEST(Conformance, TheRunnerFailsAVectorThatIsWrong) {
   // testing.md section 9: the gates are themselves tested. This corpus holds
-  // one record whose expectation is deliberately wrong; the runner must
+  // records whose expectations are deliberately wrong; the runner must
   // notice. Without this, "the conformance suite passes" would be
   // indistinguishable from "the conformance suite ran nothing".
+  //
+  // Three of them, and they are wrong about different things. One has the
+  // wrong span, which is what every corpus here states. One has the right
+  // span and the wrong `groups:` - the text form a vim vector has to use -
+  // because a runner that parsed that field and never compared it would pass
+  // every vim vector in the tree while checking only their whole matches. And
+  // one claims a pattern is refused when it compiles, because `expect:
+  // refused` asserts less than the other expectations and a check that
+  // asserts little is the one to make sure asserts something.
   std::vector<std::string> failures;
   std::map<std::string, Tally> by_dialect;
   Tally total = run_directory(
       grxtest::data("vectors_selftest"), &failures, &by_dialect);
 
-  EXPECT_EQ(total.failed, 1u)
-      << "the deliberately wrong vector was not caught";
+  EXPECT_EQ(total.failed, 3u)
+      << "the deliberately wrong vectors were not caught";
   EXPECT_GT(total.passed, 0u) << "the correct vectors beside it should pass";
-  ASSERT_EQ(failures.size(), 1u) << [&] {
+  ASSERT_EQ(failures.size(), 3u) << [&] {
     std::string joined;
     for (const std::string & failure : failures) {
       joined += "\n" + failure;
@@ -698,6 +808,22 @@ TEST(Conformance, TheRunnerFailsAVectorThatIsWrong) {
     return joined;
   }();
   EXPECT_NE(failures[0].find("expected"), std::string::npos) << failures[0];
+  bool named_the_groups = false;
+  for (const std::string & failure : failures) {
+    if (failure.find("expected groups") != std::string::npos) {
+      named_the_groups = true;
+    }
+  }
+  EXPECT_TRUE(named_the_groups)
+      << "the wrong `groups:` record failed for some other reason";
+  bool named_the_refusal = false;
+  for (const std::string & failure : failures) {
+    if (failure.find("expected it to be refused") != std::string::npos) {
+      named_the_refusal = true;
+    }
+  }
+  EXPECT_TRUE(named_the_refusal)
+      << "the wrong `expect: refused` record failed for some other reason";
 }
 
 // --------------------------------------------------------------------------
@@ -792,6 +918,26 @@ TEST(Rxt, ReadsARecordAndItsOptionalFields) {
 
   EXPECT_NE(file.records[5].options & GRX_OPT_CASELESS, 0u);
   EXPECT_NE(file.records[5].options & GRX_OPT_DOTALL, 0u);
+
+  // `groups:` - the text form. The sentinel and the two escapes it forces
+  // are the whole of what a reader can get wrong here: a `-` read as a group
+  // whose text is "-", or a `\x20` left as four characters, would each make
+  // a vim vector assert something other than what vim said.
+  ASSERT_GE(file.records.size(), 8u);
+  EXPECT_FALSE(file.records[0].has_groups);
+  EXPECT_TRUE(file.records[6].has_groups);
+  ASSERT_EQ(file.records[6].groups.size(), 3u);
+  EXPECT_EQ(file.records[6].groups[0], "a");
+  EXPECT_EQ(file.records[6].groups[1], "");
+  EXPECT_EQ(file.records[6].groups[2], "c");
+
+  ASSERT_EQ(file.records[7].groups.size(), 2u);
+  EXPECT_EQ(file.records[7].groups[0], " ");
+  EXPECT_EQ(file.records[7].groups[1], "-");
+
+  ASSERT_GE(file.records.size(), 9u);
+  EXPECT_EQ(file.records[8].expectation, grxtest::Expectation::Refused);
+  EXPECT_FALSE(file.records[8].has_subject);
 }
 
 TEST(Rxt, RejectsAnOptionItDoesNotKnow) {

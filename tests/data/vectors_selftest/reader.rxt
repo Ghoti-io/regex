@@ -37,3 +37,27 @@ options: caseless
 flags: s
 subject: b
 expect: 0-1
+
+# `groups:` states each group's TEXT rather than its span, for vim, whose
+# `matchlist()` answers in strings and which has no positional API for a
+# submatch at all. `-` is a group that did not participate or matched empty,
+# because vim gives '' for both.
+pattern: (a)(b)?(c)
+flags:
+subject: ac
+expect: 0-2
+groups: a - c
+
+# A space and a lone `-` have to be escaped, or the field could not be told
+# from the separator and from the sentinel.
+pattern: x( )(-)
+flags:
+subject: x -
+expect: 0-3
+groups: \x20 \x2D
+
+# `expect: refused` says only that compiling must fail, which is all a
+# reference that throws one exception for every bad pattern has said.
+pattern: [a-z
+flags:
+expect: refused

@@ -123,6 +123,26 @@ def escape(text):
     return "".join(out)
 
 
+def escape_group(text):
+    """One group's text, in the alphabet a `groups:` field reads.
+
+    `escape()` plus the two things that field adds: every space is escaped
+    rather than only the edge ones, because the field is space-separated, and
+    a group whose whole text is `-` is escaped too, because that is the
+    sentinel for "did not participate or matched empty". Without either, the
+    reader would silently accept something other than what the oracle said.
+
+    Here rather than in `make_vim_vectors.py`, which is its only caller today,
+    because this module owns the format's escaping and two spellings of one
+    alphabet is the shape that drifts.
+    """
+    if text == "":
+        return "-"
+    if text == "-":
+        return "\\x2D"
+    return escape(text).replace(" ", "\\x20")
+
+
 def unescape(text):
     """The inverse, for the named cases, which are written escaped."""
     return text.encode("utf-8").decode("unicode_escape") \

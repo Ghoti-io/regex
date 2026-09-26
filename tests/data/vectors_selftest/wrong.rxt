@@ -13,3 +13,21 @@ pattern: abc
 flags:
 subject: xabcy
 expect: 0-3
+
+# Deliberately wrong in its `groups:` rather than its `expect:`, which is a
+# second thing the runner has to be able to fail: the span is right and the
+# group text is not, so a runner that read `groups:` and never compared it
+# would pass this record.
+pattern: (a)(c)
+flags:
+subject: ac
+expect: 0-2
+groups: a b
+
+# And the third thing the runner has to be able to fail: a record claiming a
+# pattern is refused when it compiles. Without this arm, `expect: refused`
+# would be a line that can never fail, which is the shape of a gate that
+# tests nothing.
+pattern: abc
+flags:
+expect: refused

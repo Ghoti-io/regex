@@ -30,7 +30,7 @@
  * anywhere and is a clean `heap-use-after-free` under ASan.
  *
  * The widest run of this is not here but in tests/conformance, which puts
- * all 33,829 vectors through the same allocator.
+ * every vector through the same allocator - 45,890 of them.
  *
  * Copyright 2026 by Corey Pennycuff
  */
