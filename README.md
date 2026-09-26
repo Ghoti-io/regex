@@ -160,7 +160,7 @@ Found through pkg-config, and the installed `.pc` file names them, so a
 program that links `ghoti.io-regex-0` links these too.
 
 - [ghoti.io-cutil](https://github.com/Ghoti-io/cutil) — the allocator.
-- [ghoti.io-unicode](https://github.com/Ghoti-io/unicode) — case folding, segmentation, `\N{NAME}` and script runs.
+- [ghoti.io-unicode](https://github.com/Ghoti-io/unicode) — the Unicode Character Database: every `\p{...}` set, case folding, segmentation, `\N{NAME}` and script runs.
 
 `text` is optional, and the dependency points the other way: `text` does
 not depend on `regex`. This library fills in the provider `text` uses for

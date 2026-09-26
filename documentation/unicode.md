@@ -1,9 +1,10 @@
 # Unicode data
 
-**Status:** built, and **most of it now comes from
+**Status:** built, and **the Unicode Character Database now comes from
 [`ghoti.io-unicode`](https://github.com/Ghoti-io/unicode)** rather than from
 tables generated here. That is phase E of that library's own plan, taken on
-2026-09-25. Owned by [design.md](design.md) §5.
+2026-09-25 and finished on 2026-09-26 when the property ranges went. Owned by
+[design.md](design.md) §5.
 
 The paragraph that used to stand here said "nothing else in the suite
 carries Unicode data ... so this library owns its tables". That was true
@@ -12,32 +13,53 @@ normalisation tables, `ctang` linked ICU for one grapheme iterator, and
 `font` would have been the fourth. One library now answers for all of them,
 and this one is a consumer of it.
 
-What comes from there: case folding and the simple case mappings, the fold
-orbits, the four segmentation algorithms, `\N{NAME}`, and script runs.
+What comes from there: every `\p{...}` set, case folding and the simple case
+mappings, the fold orbits, the four segmentation algorithms, `\N{NAME}`, and
+script runs. **There are no code-point ranges in this library any more.**
 
 What is still generated here, and why each one is:
 
 | | lines | why |
 | --- | --- | --- |
-| the property ranges | ~6,500 | not moved yet; `\p{...}` is the most-used construct here and its lookup carries this library's *dialect* spelling rules, strict and loose, which are not the Unicode library's question |
-| Numeric_Value sets | ~500 | `\p{nv=1/2}` needs the set of code points with a value; the Unicode library answers the value of a code point and has no set for it |
+| the property *spellings* | ~2,500 | not UCD data but grammar: ECMAScript resolves a strict name and a closed list of binary properties, Perl and PCRE2 a loose one, `\p{L&}` is a key no loose table can hold, and `\p{nv=-1/2}` is compared by arithmetic. Four dialects' rules over one set of names, and the sets they resolve to are the Unicode library's |
 | the properties of strings | 2,257 | ECMAScript `v` mode's `\p{RGI_Emoji}` and its six companions - 7,906 sequences of more than one code point. The Unicode library has no properties-of-strings API |
 | the reverse full fold | 104 entries | what folds *to* `"ss"`. There is no reverse-fold API, and the domain cannot be bounded by a property: all 104 fold to more than one code point and 23 are outside `Changes_When_Casefolded` |
 | the fold-orbit table | 2,994 | only so that the fold oracle and the unit tests can *enumerate* every orbit; the lookup no longer reads it |
 | the ECMAScript legacy map | 3,482 | not Unicode data at all - it is ES2015's `Canonicalize` for a non-`u` pattern, a compatibility rule, and design.md's phase E row names it as one of the two things that stay |
 | `display.c`, `vim_class.c` | 559 | vim's data, not the UCD's, and versioned by vim rather than by a Unicode release. See [dialects.md](dialects.md) §5.9 |
 
-The first five are asks on the Unicode library rather than reasons to keep
-generating tables here. The figures that size each one are in the table
-above.
+Two of the four gaps that kept data here closed without an API addition,
+both the same way - **a property is the enumeration and a function is the
+predicate**:
 
-**`make check-unicode-agreement` is what keeps the overlap honest.** What is
-left here is a second copy of data the suite already has, which is the exact
-arrangement that puts two versions of one standard in one build. The gate
-compares all 457 property sets and all 144 Numeric_Value properties against
-the Unicode library, code point by code point, and prints both UCD versions
-so a reader can see they match rather than assume it. `make
-check-unicode-tables` still proves the committed tables are what the
+- `\p{nv=1/2}` needs a *set* and `guni_numeric_value()` answers for a code
+  point. Numeric_Type is None for every code point with no numeric value and
+  for no code point with one, so its three other values enclose the whole
+  domain: 262 ranges and 2,023 code points to filter rather than 1,114,112
+  to scan.
+- Vim's `[[:upper:]]` asks whether a code point *has* a case counterpart,
+  which is not a property. `Changes_When_Uppercased` is the enumeration and
+  the simple mapping the predicate: 1,580 members to filter.
+
+The two that remain - properties of strings, and the reverse full fold - are
+asks on the Unicode library rather than reasons to keep generating tables
+here. The figures that size each one are in the table above.
+
+**`make check-unicode-agreement` is what keeps the two readings honest**, and
+what it compares changed when the ranges left. It cannot ask this library for
+a property's code points and the Unicode library for the same property's code
+points, because those are now one source and it would report "identical"
+whatever was wrong. What each property record still carries is the
+generator's own reading of the UCD files: `total`, the code-point count, and
+`digest`, an FNV-1a 64 over the ranges the generator built. The gate asks the
+Unicode library for all 601 sets - 144 Numeric_Value properties among them,
+which were never compared as sets before - and checks both figures, so a
+build holding two UCD releases fails rather than answers. It prints both
+versions too, so a reader can see they match rather than assume it.
+
+The digest rather than the count alone is the point: two different sets of
+the same size pass a count, and "the same set" has to mean the same members.
+`make check-unicode-tables` still proves the committed tables are what the
 generator produces.
 
 ## 1. Which Unicode
@@ -87,18 +109,27 @@ five-and-six-byte forms and every truncated sequence - and
 
 ## 3. The tables
 
-Every table is a sorted array of disjoint inclusive code-point ranges,
-`GRX_CharRange {low, high}` as the scaffold has it, so that a class built
-from a property is a copy of a range array and membership is the same binary
-search the character-class module already does.
+A property's code points are a sorted, disjoint, non-adjacent array of
+inclusive ranges, and **none of those arrays is in this library**: they are
+materialised from ghoti.io-unicode into the caller's buffer by
+`grx_unicode_property_ranges()`, which is what `grx_charclass_add_property()`
+calls once per `\p{...}` at compile time. `GRX_PROPERTY_RANGES_MAX` bounds
+the buffer at 1,024 - Grapheme_Base is the widest property at 904 - and a set
+that outgrew it would be refused with its requirement rather than truncated.
 
 This page originally also specified a two-level trie beside the ranges for
 the hot lookups. There is none, and there is no hot lookup for it to serve:
 every property and every fold is resolved *at compile time*, into the
 canonical class an instruction names, so an engine never looks a property up
-while matching. A trie would be a second representation of the same data
-with no caller. It goes in if and when a lookup appears on a matching path -
-derived in the generator from the ranges, never written by hand.
+while matching. Where a *single* code point is the question - `(?[ ])`'s
+ignorable whitespace, ECMAScript's identifier rules -
+`grx_unicode_property_contains()` puts it to the Unicode library directly and
+no array is built at all.
+
+The table below is what the *generator* reads, which is not the same list as
+what it writes. It still reads every one of these files, because the
+spellings, the code-point counts and the digests all come from them; what it
+no longer writes is the ranges.
 
 | Table | Source file(s) | Used by |
 | --- | --- | --- |
@@ -135,18 +166,26 @@ a slice of that index. `RGI_Emoji` is UTS #51's ED-27, the union of the other
 six, and its slice is the whole array - so it costs three integers rather
 than a second copy of 3,953 sequences.
 
-Size, measured at UCD 17.0.0 rather than estimated: 457 properties over
-24,086 ranges, **183 KB** of `.rodata` for the ranges and the property
-records, **39 KB** of relocated pointers for the name tables, and **106 KB**
-for the two case tables and their orbits, and **80 KB** for the properties of
-strings (3,953 sequences over 12,389 code points) - **408 KB** in total,
-against the 200 KB this page first guessed. The gap is the name tables, which were not
-in the estimate, and the orbit index, which carries a twelve-byte record for
-every one of the 2,994 code points in a multi-member orbit. Both are
-compressible and neither is on a hot path; the note is here so that a later
-decision to compress them is made against a number. What remains
-unacceptable is generating any of it at build time, which would put Python
-and the network in the build.
+Size, measured at UCD 17.0.0 with `size -A` on the objects rather than
+estimated:
+
+| | bytes |
+| --- | --- |
+| 601 property records and the 144 Numeric_Value rationals | 3,528 |
+| the four spelling tables (relocated pointers, and the strings) | 51,746 |
+| the two case tables and their orbits | 96,480 |
+| the properties of strings, 3,953 sequences over 12,389 code points | 81,490 |
+| vim's own data - `display.c` and `vim_class.c` | 10,344 |
+| | **243,588** |
+
+The property ranges were **212,072 bytes** of that before they left, and are
+0 now; what is left of them is 601 totals and 601 digests, inside the first
+row. The largest remaining item is a case table this page has always
+described as compressible, and the second is a UCD file the Unicode library
+has no API for yet. Neither is on a hot path; the figures are here so that a
+later decision to compress them is made against a number rather than a
+guess. What remains unacceptable is generating any of it at build time,
+which would put Python and the network in the build.
 
 ## 4. Generation and checking
 
@@ -170,11 +209,23 @@ correctness bug in every dialect at once, and a C test that checks
 The C tests then check the *generated* tables against facts stated in the
 standard, not against the generator: U+0041 is `Lu`, U+00DF folds to itself
 under simple folding (its full fold is the two-code-point `ss`, which is
-exactly the case simple folding leaves alone), U+212A folds to `k`, U+FEFF
-is in ECMAScript's `\s` and not in `White_Space`, and the range count of
-each General_Category value matches the count in `DerivedGeneralCategory.txt`'s
-own `# Total code points` trailer, which the generator copies into the
-table as a constant for exactly this purpose.
+exactly the case simple folding leaves alone), U+212A folds to `k`, and
+U+FEFF is in ECMAScript's `\s` and not in `White_Space`.
+
+The last of them used to be stated here as "the range count of each
+General_Category value matches the count in `DerivedGeneralCategory.txt`'s
+own `# Total code points` trailer, which the generator copies into the table
+as a constant for exactly this purpose". That was not what happened. The
+generator *counts its own ranges* - `count_codepoints()`, never the trailer -
+so while the ranges were emitted beside the count, the test that summed them
+and compared was comparing one generator run with itself and would have
+passed whatever the ranges held. It is a real check now and for a different
+reason: the ranges come from the Unicode library and `total` is the
+generator's reading of the UCD, so the two sides of it are two readings of
+one release. `Property.EverySetIsTheOneTheUCDFilesGive` adds the digest,
+which is the same comparison about members rather than about size. The
+figure that is genuinely checked against somebody else is `\p{Lu}` = 1,886,
+which is what Node reports for Unicode 17.0.
 
 Beyond that the tables are checked against shipping engines, which is the
 question a conformance rate is actually about:
@@ -345,6 +396,16 @@ cross-multiplies: the largest value is 10^16 and the largest denominator 320,
 and their product is close enough to the top of `int64_t` to be worth not
 relying on. A value that overflows, or that the UCD does not carry, is
 `GRX_ERR_SYNTAX` - which is what perl answers too, rather than an empty set.
+
+**The 144 rationals are all that is stored; the code points are not.**
+`guni_numeric_value()` answers for one code point and there is no set-valued
+call, which reads like a reason to keep 1,979 ranges here and is not: the
+domain is enumerable. Numeric_Type is `None` for every code point with no
+numeric value and for no code point with one - checked in both directions
+over all 1,114,112 - so its three other values enclose the whole domain in
+262 ranges, and `\p{nv=1/2}` is that domain walked in code point order with
+`guni_numeric_value()` as the filter. 2,023 code points to ask about, once
+per pattern. The widest value, `nv=2`, is 155 ranges.
 
 The source is `DerivedNumericValues.txt` and not `UnicodeData.txt` field 8.
 Its header defines Numeric_Value as the first of `kAccountingNumeric`,

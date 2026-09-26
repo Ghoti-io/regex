@@ -438,6 +438,38 @@ side is asked. Properties the reference cannot spell - the binary properties
 outside ECMA-262's table 69 - are counted and skipped, because which
 spellings each side accepts is the syntax check's question.
 
+### The two-readings check
+
+`make check-unicode-agreement` is the gate that exists because the Unicode
+data **left**. Every `\p{...}` set is ghoti.io-unicode's now, so the obvious
+gate - ask this library for a property's code points, ask the Unicode library
+for the same property's code points, compare - would be asking one source
+twice and printing "601 identical" whatever was wrong. That is the
+self-consistency shape: a sweep can look thorough and be reading its own
+output back.
+
+What it compares instead is the generator's *reading* of
+`third_party/ucd/17.0.0` against the library's answer, through the two
+figures each property record still carries: `total`, the code-point count,
+and `digest`, an FNV-1a 64 over the ranges the generator built. Two readings
+of one release, which is only possible because both libraries pin it - and
+the digest rather than the count alone, because two different sets of the
+same size pass a count.
+
+It also asks all 601 records rather than the 457 the Node check reaches. The
+144 Numeric_Value properties were never compared as *sets* by anything before
+this; they had no set on either side to compare, and now one of them is
+derived here from a domain the Unicode library encloses.
+
+Third, it is what makes an unresolvable record loud. A property whose name
+the Unicode library does not know yields no code points rather than an error,
+and `\p{Whatever}` would quietly match nothing - so a record that resolves to
+nothing is reported as a failure and never counted as a comparison.
+`Property.EveryTableIsSortedDisjointAndCounted` asks the same question inside
+`make test`, so a fresh clone with no containers is not the case that misses
+it. Both were armed: renaming one record to a name ghoti.io-unicode does not
+have fails the suite, the conformance vectors and this gate together.
+
 ### The cell width check
 
 `make check-vim-widths` regenerates `src/unicode/display.c`'s table from
