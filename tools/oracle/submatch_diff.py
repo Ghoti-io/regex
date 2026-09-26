@@ -145,6 +145,71 @@ BASIC_FLAG = {"gnu-ere": "", "gnu-bre": "b",
               "posix-ere": "", "posix-bre": "b"}
 
 
+def spans_of(line):
+    """The group spans of a `match` line, or None for anything else."""
+    return line.split()[1:] if line.startswith("match ") else None
+
+
+def is_empty_span(field):
+    """Whether a span is set and zero-width. `-` is not: it is *unset*."""
+    if field == "-":
+        return False
+    low, high = field.split(":")
+    return low == high
+
+
+def explain_split(glibc, musl, ours):
+    """Why our answer is neither reference's, or None when it cannot be said.
+
+    A row where glibc and musl disagree has two answers to choose between, and
+    this library need not choose the same one for every *group*: the references
+    can differ on more than one axis at a time, and then agreeing with one of
+    them about the assignment and the other about participation produces a
+    third span list while inventing nothing. That is the case for all 178 such
+    rows today, and it is the `both axes` bucket `vim_diff.py` prints for the
+    same reason.
+
+    Three mechanisms, and a row is explained when every group difference is
+    one of them:
+
+      - `glibc`, `musl`: this group's span is that reference's, exactly.
+      - `unset-where-both-empty`: we say the group did not participate, and
+        the two references each give it a zero-width span **in a different
+        place**. `(()|a)(|a)` over "a" is the shape: glibc takes the empty
+        branch and puts the inner `()` at 0:0; musl takes the `a` branch, in
+        which `()` never runs, and still reports it at 1:1. POSIX.1 says an
+        unmatched subexpression's offsets are -1, so the references are each
+        wrong here and disagreeing about where - which is why this is a
+        mechanism rather than a disagreement.
+
+    Anything else is a span this library produced that neither reference gives
+    for that group, and **that** is the finding the exit status carries.
+    """
+    ours_spans = spans_of(ours)
+    their_spans = spans_of(glibc)
+    musl_spans = spans_of(musl)
+    if not (ours_spans and their_spans and musl_spans):
+        return None
+    if not len(ours_spans) == len(their_spans) == len(musl_spans):
+        return None
+
+    mechanisms = set()
+    for mine, theirs, musls in zip(ours_spans, their_spans, musl_spans):
+        if mine == theirs and mine == musls:
+            continue
+        if mine == theirs:
+            mechanisms.add("glibc")
+            continue
+        if mine == musls:
+            mechanisms.add("musl")
+            continue
+        if mine == "-" and is_empty_span(theirs) and is_empty_span(musls):
+            mechanisms.add("unset-where-both-empty")
+            continue
+        return None
+    return "+".join(sorted(mechanisms)) if mechanisms else "identical"
+
+
 def normalise_ours(line):
     """grx_match's answer in the shape the POSIX drivers write theirs."""
     if line.startswith("match "):
@@ -228,21 +293,40 @@ def compare(dialect, examples):
                 normalise_ours(us)))
             continue
         compared += 1
-        mine = normalise_ours(us)
-        if theirs[0] == mine:
+        ours = normalise_ours(us)
+        if theirs[0] == ours:
             continue
         wanted = POSIX_EXACT.get((dialect, case[1], case[2]))
         if wanted is not None:
             # Both references agree and both are wrong. Counted, and still
             # checked: the answer has to be the one POSIX's rule gives.
-            if wanted == mine:
+            if wanted == ours:
                 exact.append((case[1], case[2]))
                 continue
-        disagreements.append((case[1], case[2], theirs[0], mine))
+        disagreements.append((case[1], case[2], theirs[0], ours))
 
     for pattern, subject, them, us in disagreements[:examples]:
         print("  %-26s on %-8s oracle=%-24s ours=%s"
               % (repr(pattern), repr(subject), them, us))
+
+    # The rows where this library sides with neither reference, classified by
+    # *why*. Siding with neither is a third answer and belongs in the exit
+    # status - which is what `script_run_diff.py` does and this tool did not,
+    # for 178 of 15,246 cases, while its own note above said that siding with
+    # neither "would be" the finding. It is carried here as the residue: a
+    # third answer that can be assembled from the two references group by
+    # group is the two-axis case, and one that cannot is a span nothing gave.
+    explained = {}
+    unexplained = []
+    for pattern, subject, glibc, musl, us in splits:
+        if us in (glibc, musl):
+            continue
+        mechanism = explain_split(glibc, musl, us)
+        if mechanism is None:
+            unexplained.append((pattern, subject, glibc, musl, us))
+            continue
+        explained[mechanism] = explained.get(mechanism, 0) + 1
+
     tally = ""
     if exact:
         tally += (", %d where both references agree and POSIX says otherwise"
@@ -258,12 +342,30 @@ def compare(dialect, examples):
           "%s, %d disagreements%s"
           % (dialect, len(patterns), len(SUBJECTS), len(cases), compared,
              " and ".join(oracles), len(disagreements), tally))
+    for mechanism, count in sorted(explained.items()):
+        print("  siding with neither: %d rows, per group %s"
+              % (count, mechanism))
+    for pattern, subject, glibc, musl, us in unexplained[:examples]:
+        print("  [no mechanism] %-26s on %-8s" % (repr(pattern), repr(subject)))
+        print("      glibc: %s" % glibc)
+        print("       musl: %s" % musl)
+        print("       ours: %s" % us)
+    if len(unexplained) > examples:
+        print("  ... and %d more with no mechanism"
+              % (len(unexplained) - examples))
+
     missing = len(
         [key for key in POSIX_EXACT if key[0] == dialect]) - len(exact)
     if missing:
         sys.stderr.write("%s: %d of the POSIX_EXACT rows were not produced; "
             "the list or the atoms have gone stale\n" % (dialect, missing))
-    return (len(disagreements) + missing, len(splits))
+    if unexplained:
+        sys.stderr.write("%s: %d rows where this library sides with neither "
+            "reference and the answer cannot be assembled from theirs - a "
+            "span nothing gave for that group. That bucket is empty on a "
+            "healthy run; decide what each is rather than letting the count "
+            "carry them.\n" % (dialect, len(unexplained)))
+    return (len(disagreements) + missing + len(unexplained), len(splits))
 
 
 def main(argv):

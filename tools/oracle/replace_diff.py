@@ -829,7 +829,27 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
             "%s: no generated pattern was rejected, so the accept/reject "
             "half was never asked\n" % dialect)
         return None
-    return len(disagreements)
+    if both_axes:
+        # Siding with neither reference is a third answer to a two-sided
+        # question, and it belongs in the exit status. `vim_diff.py` asserts
+        # its own copy of this bucket empty and says why: a category with no
+        # expected size is where a defect goes to be quiet, and the comment
+        # above promising these are "printed rather than swallowed" so a
+        # person can see them is the promise that failed when four rows
+        # arrived under a wrong locale and nobody did.
+        #
+        # This file had the print and not the assertion, which makes four
+        # differentials with this bucket and, until now, two behaviours:
+        # `script_run_diff.py` and `vim_diff.py` fail on it,
+        # `submatch_diff.py` and this one printed it and exited 0. One rule,
+        # one family.
+        sys.stderr.write(
+            "%s: %d rows where vim's two engines disagree and neither gives "
+            "this library's answer. That bucket is empty on a healthy run, "
+            "so these are either a defect here or a vim behaviour nothing "
+            "has classified yet - decide which, rather than letting the "
+            "count carry them.\n" % (dialect, len(both_axes)))
+    return len(disagreements) + len(both_axes)
 
 
 def main(argv):

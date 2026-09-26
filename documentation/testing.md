@@ -810,6 +810,55 @@ look like a clean result: POSIX basic REs have no alternation, so the
 empty-branch half of this question cannot be spelled in one. Its cases ask
 the other half, two quantified groups next to each other.
 
+#### Siding with neither reference
+
+**The third addition is the one that was missing, and its own comment said
+so.** "Which side we came down on is recorded, because siding with neither
+*would be*" the finding - and then siding with neither was recorded and
+nothing was done with it: 178 of 15,246 `posix-ere` rows, exit 0. Its sibling
+`script_run_diff.py` does `return 1 if disagreements or sided["neither"] or
+unexplained else 0` over the same bucket, so one rule had two behaviours in
+one directory.
+
+Failing outright on all 178 would have been the wrong repair, because they
+are not noise. A row where glibc and musl disagree has two answers to choose
+between, and this library need not choose the same one **for every group**:
+the two references can differ on more than one axis at once, and then
+agreeing with one about the assignment and the other about participation
+produces a third span list while inventing nothing. So each such row is
+classified by mechanism, and the exit status carries the residue - a span this
+library produced that neither reference gives for that group. That bucket is
+**0** today and all 178 fall into two mechanisms:
+
+| Rows | Per group |
+| --- | --- |
+| 149 | musl's span, and `unset` where both references give an empty one |
+| 21 | glibc's span for some groups, musl's for others |
+| 8 | both of those in one row |
+
+`unset-where-both-empty` is worth spelling out, because it is the interesting
+one. `(()|a)(|a)` over "a": glibc takes the empty first branch and puts the
+inner `()` at 0:0; musl takes the `a` branch, in which `()` never runs, and
+*still* reports it - at 1:1. POSIX.1 says an unmatched subexpression's offsets
+are −1, so both references are wrong here and they disagree about where. This
+library says the group did not participate. That is a third answer to a
+two-sided question and it is the right one, which is exactly why it needed a
+mechanism rather than a counter.
+
+**To check the gate itself:** delete the `unset-where-both-empty` arm from
+`explain_split()` and 157 rows move to "no mechanism" and the gate fails.
+
+**And the sweep found a fourth member of the family.**
+`tools/oracle/replace_diff.py` prints `vim's two engines disagree and neither
+gives ours` - the same bucket, under vim's two engines rather than glibc and
+musl - and returned only its disagreement count. `vim_diff.py` asserts its
+copy empty and explains why: a category with no expected size is where a
+defect goes to be quiet, and the promise that these are "printed rather than
+swallowed so a person can see them" is the promise that failed when four rows
+arrived under a wrong locale and nobody looked. Four differentials, one rule
+now. It is 0 in all four dialects there; forcing vim's engine splits into it
+makes it 10 and the gate fails.
+
 ### The Vim differential
 
 `tools/oracle/vim_diff.py`, WP-36's gate. vim cannot be imported, so the
