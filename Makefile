@@ -463,6 +463,7 @@ ALL_TEST_GATES := check-symbols check-layering check-aliasing \
 	check-unicode-tables check-dump-names check-readme-example \
 	check-diagnostics check-engine-equivalence check-json-schema-suite \
 	check-tables check-status-line check-corpus-seeds check-makefile-hash \
+	check-generated-header-deps \
 	check-oracle-env check-unicode-agreement test-asan
 TEST_GATES ?= $(ALL_TEST_GATES)
 
@@ -785,17 +786,17 @@ endif
 
 # Test sources live in tests/ and tests/unit/; the object name comes from the
 # basename either way, so the executable name matches.
-$(OBJ_DIR)/tests/%.o: tests/%.cpp $(FLAGS_STAMP)
+$(OBJ_DIR)/tests/%.o: tests/%.cpp $(FLAGS_STAMP) | $(LIBVER_GEN)
 	@printf "\n### Compiling Test: $* ###\n"
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(INCLUDE) -Itests -DGRX_TEST_DATA=\"$(TEST_DATA)\" -DGRX_REPO_ROOT=\"$(REGEX_ROOT)\" -c $< -MMD -MP -MF $(@:.o=.d) -o $@
 
-$(OBJ_DIR)/tests/%.o: tests/conformance/%.cpp $(FLAGS_STAMP)
+$(OBJ_DIR)/tests/%.o: tests/conformance/%.cpp $(FLAGS_STAMP) | $(LIBVER_GEN)
 	@printf "\n### Compiling Test: $* ###\n"
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(INCLUDE) -Itests -DGRX_TEST_DATA=\"$(TEST_DATA)\" -DGRX_REPO_ROOT=\"$(REGEX_ROOT)\" -c $< -MMD -MP -MF $(@:.o=.d) -o $@
 
-$(OBJ_DIR)/tests/%.o: tests/unit/%.cpp $(FLAGS_STAMP)
+$(OBJ_DIR)/tests/%.o: tests/unit/%.cpp $(FLAGS_STAMP) | $(LIBVER_GEN)
 	@printf "\n### Compiling Test: $* ###\n"
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(INCLUDE) -Itests -DGRX_TEST_DATA=\"$(TEST_DATA)\" -DGRX_REPO_ROOT=\"$(REGEX_ROOT)\" -c $< -MMD -MP -MF $(@:.o=.d) -o $@
@@ -868,7 +869,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 
 # General commands
 .PHONY: check-oracle-soak
-.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-unicode-agreement check-dump-names check-readme-example check-tables check-status-line check-corpus-seeds check-makefile-hash check-oracle-env check-oracle-syntax check-oracle-match check-oracle-soak check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-perl-syntax check-oracle-script-runs check-doc-claims check-wide-classes check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
+.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-unicode-agreement check-dump-names check-readme-example check-tables check-status-line check-corpus-seeds check-makefile-hash check-generated-header-deps check-oracle-env check-oracle-syntax check-oracle-match check-oracle-soak check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-perl-syntax check-oracle-script-runs check-doc-claims check-wide-classes check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
 	check-oracle-properties check-oracle-numeric-properties \
 	check-oracle-folds \
 	check-vim-widths check-vim-classes check-vim-sets \
@@ -1849,6 +1850,20 @@ check-makefile-hash:
 	@$(REQUIRE_PYTHON3); \
 	python3 tools/check_makefile_hash.py
 
+check-generated-header-deps: ## Fail if an object rule can skip libver_gen.h
+# One of the nine object rules named $(LIBVER_GEN) and eight did not, which a
+# warm tree hides entirely: the header is already on disk from the last build.
+# A clean checkout building anything that does not go through the release
+# library fails on every object at once - found by cloning onto another machine
+# to run the fuzz soak, where `make fuzz-pattern` said `fatal error:
+# 'ghoti.io/regex/libver_gen.h' file not found` nine times. The Makefile
+# already argues "all nine or none" for the flag stamps twenty lines under the
+# rule that got this right; the principle was written down beside one rule and
+# that did not put it on the others.
+check-generated-header-deps:
+	@$(REQUIRE_PYTHON3); \
+	python3 tools/check_generated_header_deps.py
+
 check-dump-names: ## Fail if a dump's name table is shorter than its enum
 # Every dump here turns an enumerator into a word through a positional
 # table, and a name left out does not leave a hole at the end - it shifts
@@ -2377,7 +2392,7 @@ endif
 # were added to an enum and the sanitizer suite failed against a table it had
 # compiled before they existed. A stale sanitizer build is worse than no
 # sanitizer build, because it reports on something other than the tree.
-$(ASAN_OBJ_DIR)/%.o: src/%.c $(ASAN_FLAGS_STAMP)
+$(ASAN_OBJ_DIR)/%.o: src/%.c $(ASAN_FLAGS_STAMP) | $(LIBVER_GEN)
 	@printf "\n### Compiling (ASan+UBSan): $< ###\n"
 	@mkdir -p $(@D)
 	$(CC) $(ASAN_CFLAGS) $(INCLUDE) -c $< -MMD -MP -MF $(@:.o=.d) -o $@
@@ -2388,17 +2403,17 @@ $(ASAN_APP_DIR)/$(ASAN_TARGET): $(ASAN_LIBOBJECTS)
 	$(CXX) $(ASAN_CXXFLAGS) -shared -o $@ $^ $(ASAN_LDFLAGS) $(CUTIL_LIBS) \
 		$(UNICODE_LIBS)
 
-$(ASAN_OBJ_DIR)/tests/%.o: tests/%.cpp $(ASAN_FLAGS_STAMP)
+$(ASAN_OBJ_DIR)/tests/%.o: tests/%.cpp $(ASAN_FLAGS_STAMP) | $(LIBVER_GEN)
 	@printf "\n### Compiling ASan Test: $* ###\n"
 	@mkdir -p $(@D)
 	$(CXX) $(ASAN_CXXFLAGS) $(INCLUDE) -Itests -DGRX_TEST_DATA=\"$(TEST_DATA)\" -DGRX_REPO_ROOT=\"$(REGEX_ROOT)\" -c $< -MMD -MP -MF $(@:.o=.d) -o $@
 
-$(ASAN_OBJ_DIR)/tests/%.o: tests/conformance/%.cpp $(ASAN_FLAGS_STAMP)
+$(ASAN_OBJ_DIR)/tests/%.o: tests/conformance/%.cpp $(ASAN_FLAGS_STAMP) | $(LIBVER_GEN)
 	@printf "\n### Compiling ASan Test: $* ###\n"
 	@mkdir -p $(@D)
 	$(CXX) $(ASAN_CXXFLAGS) $(INCLUDE) -Itests -DGRX_TEST_DATA=\"$(TEST_DATA)\" -DGRX_REPO_ROOT=\"$(REGEX_ROOT)\" -c $< -MMD -MP -MF $(@:.o=.d) -o $@
 
-$(ASAN_OBJ_DIR)/tests/%.o: tests/unit/%.cpp $(ASAN_FLAGS_STAMP)
+$(ASAN_OBJ_DIR)/tests/%.o: tests/unit/%.cpp $(ASAN_FLAGS_STAMP) | $(LIBVER_GEN)
 	@printf "\n### Compiling ASan Test: $* ###\n"
 	@mkdir -p $(@D)
 	$(CXX) $(ASAN_CXXFLAGS) $(INCLUDE) -Itests -DGRX_TEST_DATA=\"$(TEST_DATA)\" -DGRX_REPO_ROOT=\"$(REGEX_ROOT)\" -c $< -MMD -MP -MF $(@:.o=.d) -o $@
@@ -2496,7 +2511,7 @@ FUZZ_MAX_LEN ?= 65536
 # only way the long end is ever reached.
 FUZZ_LEN_CONTROL ?= 1
 
-$(FUZZ_OBJ_DIR)/%.o: src/%.c $(FUZZ_FLAGS_STAMP)
+$(FUZZ_OBJ_DIR)/%.o: src/%.c $(FUZZ_FLAGS_STAMP) | $(LIBVER_GEN)
 	@mkdir -p $(@D)
 	@$(FUZZ_CC) $(FUZZ_LIB_FLAGS) -std=c17 -w $(INCLUDE) -c $< -MMD -MP -MF $(@:.o=.d) -o $@
 
