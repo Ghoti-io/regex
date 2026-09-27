@@ -566,9 +566,15 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     // library invented.
     .template_spec = {
       .sigil = '$',
+      // CASE_ESCAPES and CASE_FULL, and the pair is perl's alone here: vim has
+      // the same six letters with the *simple* mapping, and PCRE2 has them
+      // only under PCRE2_SUBSTITUTE_EXTENDED, which this library does not
+      // expose (WP-22). Measured against the pinned perl through
+      // tools/corpus/perl_subst.pl a spelling at a time.
       .features = GRX_TMPL_NUMBER | GRX_TMPL_NUMBER_BRACED
           | GRX_TMPL_NAME_PLUS_BRACE | GRX_TMPL_WHOLE | GRX_TMPL_PREFIX
-          | GRX_TMPL_SUFFIX | GRX_TMPL_BACKSLASH_ESCAPE,
+          | GRX_TMPL_SUFFIX | GRX_TMPL_BACKSLASH_ESCAPE
+          | GRX_TMPL_CASE_ESCAPES,
       .missing = GRX_TMPL_MISSING_EMPTY,
     },
   },

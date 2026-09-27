@@ -1031,7 +1031,7 @@ at all.
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | ECMAScript (`String.prototype.replace`) | `$n`, `$nn` (1-99) | `$<name>` (only if the regex has named groups) | `$&`, `` $` ``, `$'` | `$$` | literal `$n` | empty | none |
 | PCRE2 (`pcre2_substitute`) | `$n`, `${n}` - every digit, no fallback | `$name`, `${name}`, `$<name>` | `$&`, `$0`, `${0}`, `` $` ``, `$'`, `$_` (the whole subject) | `$$` | error | error, or empty with `SUBSTITUTE_UNSET_EMPTY` (exposed as an option) | extended mode: `\U \L \E \u \l`, and `${n:+a:b}`, `${n:-d}` |
-| Perl (interpolation subset) | `$n`, `${n}`, `\n` (deprecated) | `$+{name}` | `$&`, `` $` ``, `$'` | `\$`, `\\` | empty (undef) | empty | `\U \L \E \u \l \Q` - **perl's, and not built here**: see below |
+| Perl (interpolation subset) | `$n`, `${n}`, `\n` (deprecated) | `$+{name}` | `$&`, `` $` ``, `$'` | `\$`, `\\` | empty (undef) | empty | `\U \L \E \u \l \Q` - **built**, with four rules that are not Vim's; see below |
 | Python (`re.sub`) | `\n`, `\nn` (1-99, no fallback) | `\g<name>`, `\g<n>` | `\g<0>` only | `\\`, `\a \b \f \n \r \t \v`, octal; `\` before a non-alphanumeric keeps **both**; every other letter is an error | error | empty | none |
 | Java (`appendReplacement`) | `$n` (longest valid prefix) | `${name}` | none | `\` quotes the next character | error | empty (**probe**) | none |
 | .NET | `$n`, `${n}` | `${name}` | `$&`, `` $` ``, `$'`, `$+`, `$_` | `$$` | literal | empty | none |
@@ -1043,26 +1043,43 @@ at all.
 | Tcl (`regsub`) | `\n` | none | `&`, `\0` | `\\`, `\&` | empty | empty | none |
 | Emacs (`replace-match`) | `\n` | none | `\&` | `\\` | error | empty | none |
 
-**Perl's case operators in a replacement are the one cell of this table that
-states the dialect and not this library.** `\U`, `\L`, `\u`, `\l`, `\E`
-and `\Q` are operators of the interpolated string perl's replacement is, and
-`GRX_TMPL_BACKSLASH_ESCAPE` is tested before them, so `\U` in a Perl template
-is currently the letter "U". Vim's six are built, which is why that row says
-so. WP-22 records the same absence for `PCRE2_SUBSTITUTE_EXTENDED`, and there
-the reason is different: it is an option `pcre2_substitute()` reads only when
-asked and this library does not expose it, so the ordinary grammar is what a
-caller gets.
+**Perl's case operators in a replacement are built, and four of their rules
+are not Vim's** - which share the spelling, the ops and the applier. Each was
+measured against the pinned perl through `tools/corpus/perl_subst.pl` rather
+than inherited:
 
-`tools/corpus/perl_subst.pl` is what will hold the perl half to a
-measurement - perl's replacement is not a template grammar but an interpolated
-string, so the driver splices the template into an `s{}{}` and lets perl
-interpolate it while the pattern still arrives as data. Two of its readings
-are why this is more than wiring: `\U$1` over "ß" is **"SS"**, a full mapping
-where `push_cased()` maps one code point to one, and `\Q` composes with a case
-run in both orders, so it is a second dimension beside the run and the one-shot
-rather than a third value of either. `\Q` escapes an ASCII character that is
-not `[A-Za-z0-9_]` and leaves non-ASCII alone: `\Q` over "é²!" is
-`é²\!`.
+| | Perl | Vim |
+| --- | --- | --- |
+| Letters | six: `\U \L \u \l \E \Q` | seven: `\e` is `\E` too |
+| Mapping | **full**: `\U` over U+00DF is "SS" | simple: U+00DF stands |
+| A one-shot inside a run | ignored: `\Uab\lcd` is "ABCD" | suspends it: "ABcD" |
+| Two one-shots | the **first** wins: `\u\lab` is "Ab" | the last does |
+| `\E` | pops **one**: `\Uab\Qc.d\Ee.f` is `ABC\.DE.F` | clears everything |
+
+The nesting is the part a summary gets wrong. A case run *replaces* a case run
+and a `\Q` *stacks*, which is what decides which entry an `\E` ends:
+`\Q\U$1$2\U$1\E$2` is "ABAbABAb" - the second `\U` deepened nothing, so the
+`\E` left only the `\Q` - while `\Q$1\Q$1\E.x` keeps quoting afterwards.
+Eight templates settled that and all eight agree.
+
+`\Q` escapes every ASCII character that is not `[A-Za-z0-9_]`, and composes
+with a case run in either order: `\Q\U$1` and `\U\Q$1` both give `AB\.C`
+over "ab.c". Above U+007F perl's `quotemeta` is neither that rule nor `\w` -
+U+2028 is escaped and U+00B2 is not, though neither is a word character, and
+U+200D is escaped though it is one - so this library applies the ASCII rule and
+`tools/oracle/replace_diff.py` counts the rows where perl adds a backslash
+above U+007F rather than approximating them.
+
+**What is still not read is the rest of the double-quotish alphabet.** `\t`,
+`\n`, `\e`, `\x41` and `\x{42}` are a tab, a newline, U+001B and two "A"s
+in perl, where `GRX_TMPL_BACKSLASH_ESCAPE` reads each as the bare letter:
+`\Uab\ecd` is "AB" U+001B "CD" there and "ABECD" here. A gap rather than a
+deviation - there is no argument for not having it - and it is in the
+replacement differential's vocabulary so the count is printed rather than the
+shape being absent. WP-22 records the same absence for
+`PCRE2_SUBSTITUTE_EXTENDED`, where the reason is different: that is an option
+`pcre2_substitute()` reads only when asked and this library does not expose it,
+so `\U` in a PCRE2 template is the two characters as written.
 
 **The POSIX and GNU rows are sed's**, because POSIX's regular expressions say
 nothing about substitution and sed's `s` command is what defines one. That
@@ -1658,6 +1675,7 @@ answer.
 | ECMAScript | A match cannot begin or end between the halves of a surrogate pair | as above | - |
 | ECMAScript | **The pattern source is code points too**, so a literal astral character written in it is one atom without `u` and not two | ECMA-262's source is UTF-16 code units, so without `u` or `v` a fish written into the pattern is a high surrogate followed by a low one and every postfix operator takes the low half alone. In Node 22.23 `/\u{1F41F}+/` over two fish is 0-2, `/[\u{1F41F}]/` is a class of *two* code units and matches one of them, and `/\u{1F41F}{2}/` is no match; here each is the whole character, 0-8, 0-4 and 0-8. It shows in the accept-or-reject half as a class range: `[\uDC1F-\u{1F41F}]` is DC1F to D83D there, descending, and "Range out of order in character class", where here it is DC1F to 1F41F and ascending. The escaped spelling `[\uDC1F-\uD83D\uDC1F]` is two units on both sides and both refuse it, which is what says this is the source and not the range rule. `v` mode reads the source as code points in both, so it is `u`-less patterns only. `tools/oracle/syntax_diff.py` counts these rows, and asks rather than assumes: it puts a BMP character where the astral one stood and keeps the row only if Node then accepts it | - |
 | Perl | `(?{ })`, `(??{ })` | code execution | `GRX_ERR_UNSUPPORTED` |
+| Perl | A replacement's double-quotish escapes other than the case operators are the bare letter | perl's replacement is an interpolated string, so `\t` is a tab, `\e` is U+001B and `\x41` is "A" there; `GRX_TMPL_BACKSLASH_ESCAPE` reads each as the letter, which is what gives `\$` and `\\` their meaning. `\Uab\ecd` is "AB" U+001B "CD" in perl and "ABECD" here - the `\e` became an "e" that the `\U` run then upper-cased. A **gap** rather than a deviation: there is no argument for not having it, and the six case operators were built first because they are what §5.11 had listed as absent. In `replace_diff.py`'s perl vocabulary and counted there, so the number is printed rather than the shape being missing | - |
 | PCRE2 | `\C`, one *code unit* | The only construct in this dialect that pcre2test accepts and this library refuses, and it was in no generator and on no page until 2026-09-26 - so the gap was invisible rather than counted. What it costs to build is the reason: under `u` over "é" pcre2test matches **0:1**, half a character, and this library's spans are byte offsets into UTF-8 where a match may not end inside a character ([design.md](design.md) §2). perl agrees with the refusal for its own reason - `\C` is "no longer supported in regex" there since 5.24 - so the construct is PCRE2's alone. `tools/oracle/perl_diff.py` carries `\C`, `a\Cb` and `\C+` and counts the rows: 5,760 of one seed, in the "this library does not implement" column rather than as disagreements | `GRX_ERR_UNSUPPORTED` |
 | Perl | `\x` with no digit is NUL, as perl reads it; PCRE2 and Python refuse it | perl reads every degenerate spelling as U+0000 - `\x`, `a\x`, `\xg`, `\x{}` and `\x{_}` - the last two with a warning this library has no channel for, where pcre2test 10.46 answers "digits missing after \x" to all of them and `re` says "incomplete escape". **This library refused all five everywhere until 2026-09-26**, which was pcre2's answer applied to perl as well, and it contradicted `read_hex()`'s own docstring. Measured a spelling at a time against perl 5.44.0. Not a deviation in either direction now: each dialect answers its own reference | - |
 | Perl | ~~`\N{name}` resolves against UCD 17.0.0, so a name Perl's UCD 15.0.0 does not carry works here and not there~~ **Retired 2026-09-25**: the pin moved to perl 5.44.0, which carries UCD 17.0.0 exactly | The skew was real and is gone rather than resolved: over a 2,531-name differential the two had agreed everywhere they shared a Unicode version, with 196 of 204 disagreements naming characters perl had not been told about, 8 `NameAliases.txt` corrections newer than its tables, and **none** a name perl resolved and this library did not. `tools/corpus/make_name_vectors.py` reports `0 skipped as UCD version skew` now, where it skipped before | - |

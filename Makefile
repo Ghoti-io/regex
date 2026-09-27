@@ -1349,7 +1349,11 @@ check-oracle-replace: ## Compare every built template grammar against its refere
 # WP-16 and WP-22's missing generator. sed_diff.py did this for the POSIX and
 # GNU rows; nothing did it for the two largest template grammars, and it
 # found six defects in the pcre row alone.
-# Four dialects now: `--dialect all` covers ecmascript, pcre, python and vim.
+# Five dialects now: `--dialect all` covers ecmascript, pcre, perl, python and
+# vim. The perl arm arrived last and needed a driver of its own - perl's
+# replacement is an interpolated string rather than a template grammar, so
+# tools/corpus/perl_subst.pl splices the template into an `s{}{}` and lets
+# perl interpolate it while the pattern still arrives as data.
 # Python's arm earned its place at once. Its template grammar had twelve
 # hand-written tests that all passed, and the generator found six rules they
 # had missed - `\u`, `\U`, `\N{...}` and `\x` are pattern escapes there and
@@ -1369,7 +1373,7 @@ check-oracle-replace: ## Compare every built template grammar against its refere
 # engines disagree are put to `set re=1`, as that tool does.
 check-oracle-replace: $(TOOLS)
 	@$(REQUIRE_PYTHON3)
-	$(call run-oracle,node$(comma)pcre2$(comma)python$(comma)vim,\
+	$(call run-oracle,node$(comma)pcre2$(comma)perl$(comma)python$(comma)vim,\
 		python3 tools/oracle/replace_diff.py --seed $(ORACLE_SEED))
 
 check-oracle-split: ## Compare grx_regex_split() against ECMAScript's and perl's

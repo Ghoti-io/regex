@@ -93,7 +93,29 @@ typedef enum {
   GRX_TPL_CASE_UPPER_ONE, ///< `\u`: the next character only.
   GRX_TPL_CASE_LOWER_ONE, ///< `\l`: the next character only.
   GRX_TPL_CASE_UPPER_RUN, ///< `\U`: until a clear.
-  GRX_TPL_CASE_LOWER_RUN  ///< `\L`: until a clear.
+  GRX_TPL_CASE_LOWER_RUN, ///< `\L`: until a clear.
+  /**
+   * `\Q`: quote the metacharacters, until a clear.
+   *
+   * In this enum and not beside it because it is the same *shape* - a state a
+   * marker leaves behind that changes what the rest of the template writes -
+   * and because `\E` ends it, which is the one thing every member here has in
+   * common. It is not a case, and the enum's name is that much wrong; the
+   * alternative was a second enum whose only member is this and a second
+   * op kind to carry it.
+   *
+   * It composes with a case run rather than replacing one: `\Q\U$1` and
+   * `\U\Q$1` both quote *and* upper-case, measured both ways round.
+   */
+  GRX_TPL_CASE_QUOTE_RUN,
+  /**
+   * Closes the enum; not a marker.
+   *
+   * Needed because GRX_TPL_CASE_NONE is a real answer here - it is what `\E`
+   * asks for - so a reader cannot use zero to mean "this letter is not one of
+   * mine". perl_case() returns this.
+   */
+  GRX_TPL_CASE_COUNT
 } GRX_TemplateCase;
 
 /**
@@ -115,6 +137,24 @@ typedef struct GRX_Template {
   GRX_Arena ops;         ///< GRX_TemplateOp, in order.
   const char * text;     ///< The template text; borrowed, not owned.
   size_t length;         ///< Its length in bytes.
+  /**
+   * GRX_TMPL_CASE_FULL, carried from the spec.
+   *
+   * The one fact about the dialect that applying a template needs and the ops
+   * cannot say: `\U` is one op whichever mapping it means. Copied here rather
+   * than passed to the applier beside the template, because every caller of
+   * the applier already has the template and none of them has the spec.
+   */
+  /**
+   * GRX_TMPL_CASE_ESCAPES, carried from the spec.
+   *
+   * The one fact about the dialect that applying a template needs and the ops
+   * cannot say: `\U` is one op whether it means perl's operator or vim's, and
+   * the four ways those differ are on that bit's own documentation. Copied
+   * here rather than passed beside the template, because every caller of the
+   * applier already has the template and none of them has the spec.
+   */
+  uint8_t perl_case_ops;
 } GRX_Template;
 
 /**

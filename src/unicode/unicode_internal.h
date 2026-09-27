@@ -60,6 +60,15 @@ extern "C" {
 #define GRX_FULL_FOLD_MAX 3
 
 /**
+ * @brief The most code points a full case mapping produces.
+ *
+ * The same 3 as @ref GRX_FULL_FOLD_MAX and stated separately, because they
+ * are two bounds that happen to agree: one is a fold's and one is `uc`'s,
+ * and U+FB03 folds to three where U+0390 upper-cases to three.
+ */
+#define GRX_CASE_TRANSFORM_MAX 3
+
+/**
  * @brief The most code points that can share one full fold.
  *
  * The sources of a single-code-point target are its simple orbit, so this
@@ -321,13 +330,20 @@ size_t grx_unicode_fold_full(
  * @param codepoint The code point.
  * @param mode `'U'`, `'L'` or `'F'` for a run, `'u'` or `'l'` for the two
  *        that transform one character. Any other value is 0.
- * @param out Receives the mapping when it is one code point. Required.
- * @return How many code points the full mapping produces. Only 1 leaves
- *         @p out written; a larger count says the transform would lengthen
- *         the pattern, which the caller refuses rather than approximates.
+ * @param out Receives the whole mapping. Required, with room for
+ *   @ref GRX_CASE_TRANSFORM_MAX.
+ * @return How many code points the full mapping produces, at least 1.
+ *
+ * **Both callers read the count and only one reads past @p out[0].** A
+ * pattern's transform refuses a mapping longer than one code point, because
+ * lengthening the pattern would make @ref GRX_Error's offsets name bytes the
+ * caller never wrote; a *replacement's* has no such contract - the output is
+ * a new string - so it writes all of them. This wrote only `out[0]` until the
+ * replacement half existed, which made a two-code-point mapping unreachable
+ * rather than refused.
  */
 size_t grx_unicode_case_transform(
-    uint32_t codepoint, int mode, uint32_t * out);
+    uint32_t codepoint, int mode, uint32_t out[GRX_CASE_TRANSFORM_MAX]);
 
 /**
  * @brief Every code point whose full fold is exactly this sequence.

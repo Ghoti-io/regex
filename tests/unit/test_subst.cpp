@@ -739,3 +739,112 @@ TEST(Split, PerlTreatsABareCaretAsMultiline) {
   // splits nothing.
   EXPECT_EQ(split_into("^", lines), "[\"a\nb\nc\"]");
 }
+
+/**
+ * Perl's replacement case operators.
+ *
+ * Every answer here came from putting the same template to the pinned perl
+ * through tools/corpus/perl_subst.pl, which exists because perl's replacement
+ * is not a template grammar but an interpolated string: `$1`, `\U` and `\Q`
+ * are operators of its double-quotish pass, so asking perl what a replacement
+ * does means letting perl interpolate it.
+ *
+ * Four of these rules separate Perl's operators from Vim's, which share the
+ * spelling and the applier and agree on none of them.
+ */
+TEST(Subst, PerlsReplacementCaseOperators) {
+  const GRX_Syntax perl = GRX_SYNTAX_PERL;
+  const GRX_Syntax vim = GRX_SYNTAX_VIM;
+
+  // The five, over a group and over plain text.
+  EXPECT_EQ(replaced("(.)", "abc", "\\U$1", GRX_REPLACE_GLOBAL,
+                GRX_ENGINE_AUTO, perl), "ABC");
+  EXPECT_EQ(replaced("(\\w+)", "hello world", "\\u$1", GRX_REPLACE_GLOBAL,
+                GRX_ENGINE_AUTO, perl), "Hello World");
+  EXPECT_EQ(replaced("(\\w+)", "AB cd", "\\L$1\\E!", GRX_REPLACE_GLOBAL,
+                GRX_ENGINE_AUTO, perl), "ab! cd!");
+  EXPECT_EQ(replaced("(.)", "A", "\\l$1", GRX_REPLACE_GLOBAL,
+                GRX_ENGINE_AUTO, perl), "a");
+
+  // 1. **The full mapping.** U+00DF upper-cases to "SS": one character in,
+  //    two out. Vim's `\U` leaves it alone, which is the same applier reading
+  //    a different dialect.
+  EXPECT_EQ(replaced("(.)", "\xC3\x9F", "\\U$1", GRX_REPLACE_GLOBAL,
+                GRX_ENGINE_AUTO, perl), "SS");
+  EXPECT_EQ(replaced("(.)", "\xC3\x9F", "\\u$1", GRX_REPLACE_GLOBAL,
+                GRX_ENGINE_AUTO, perl), "Ss");
+  EXPECT_EQ(replaced("\\(.\\)", "\xC3\x9F", "\\U\\1", GRX_REPLACE_GLOBAL,
+                GRX_ENGINE_AUTO, vim), "\xC3\x9F");
+
+  // 2. **A run outranks a one-shot**, where vim's one-shot suspends the run.
+  //    Only *inside* a run: a one-shot armed first still applies, and one
+  //    after an `\E` does too.
+  EXPECT_EQ(replaced("(x)", "x", "\\Uab\\lcd", GRX_REPLACE_GLOBAL,
+                GRX_ENGINE_AUTO, perl), "ABCD");
+  EXPECT_EQ(replaced("\\(x\\)", "x", "\\Uab\\lcd", GRX_REPLACE_GLOBAL,
+                GRX_ENGINE_AUTO, vim), "ABcD");
+  EXPECT_EQ(replaced("(x)", "x", "\\l\\Uab", GRX_REPLACE_GLOBAL,
+                GRX_ENGINE_AUTO, perl), "aB");
+  EXPECT_EQ(replaced("(x)", "x", "\\Uab\\E\\lCD", GRX_REPLACE_GLOBAL,
+                GRX_ENGINE_AUTO, perl), "ABcD");
+
+  // 3. **The first one-shot wins**, where vim's last one does. Not the
+  //    upper-caser: `\l\uAB` is "aB".
+  EXPECT_EQ(replaced("(x)", "x", "\\u\\lab", GRX_REPLACE_GLOBAL,
+                GRX_ENGINE_AUTO, perl), "Ab");
+  EXPECT_EQ(replaced("(x)", "x", "\\l\\uAB", GRX_REPLACE_GLOBAL,
+                GRX_ENGINE_AUTO, perl), "aB");
+  EXPECT_EQ(replaced("(x)", "x", "\\u\\l\\uab", GRX_REPLACE_GLOBAL,
+                GRX_ENGINE_AUTO, perl), "Ab");
+
+  // 4. **They nest and `\E` pops one**, where vim's `\E` clears everything.
+  //    A case run replaces a case run and a `\Q` stacks, which is what
+  //    decides which entry an `\E` ends.
+  EXPECT_EQ(replaced("(x)", "x", "\\Uab\\Qc.d\\Ee.f", GRX_REPLACE_GLOBAL,
+                GRX_ENGINE_AUTO, perl), "ABC\\.DE.F");
+  EXPECT_EQ(replaced("(x)", "x", "\\Q\\Uab\\Ec.d", GRX_REPLACE_GLOBAL,
+                GRX_ENGINE_AUTO, perl), "ABc\\.d");
+  EXPECT_EQ(replaced("(x)", "x", "\\Uab\\Lcd\\Eef", GRX_REPLACE_GLOBAL,
+                GRX_ENGINE_AUTO, perl), "ABcdef");
+  EXPECT_EQ(replaced("(x)", "x", "\\Uab\\Qcd\\Uef\\Egh",
+                GRX_REPLACE_GLOBAL, GRX_ENGINE_AUTO, perl), "ABCDEFgh");
+  EXPECT_EQ(replaced("(x)", "x", "\\Ua\\Qb\\Ec\\Ed", GRX_REPLACE_GLOBAL,
+                GRX_ENGINE_AUTO, perl), "ABCd");
+  EXPECT_EQ(replaced("\\(x\\)", "x", "\\Uab\\ecd", GRX_REPLACE_GLOBAL,
+                GRX_ENGINE_AUTO, vim), "ABcd");
+
+  // `\Q` quotes every ASCII character that is not a word character, and
+  // composes with a case run in either order.
+  EXPECT_EQ(replaced("(.+)", "a.b c-d_e", "\\Q$1", GRX_REPLACE_GLOBAL,
+                GRX_ENGINE_AUTO, perl), "a\\.b\\ c\\-d_e");
+  EXPECT_EQ(replaced("(.+)", "ab.c", "\\Q\\U$1", GRX_REPLACE_GLOBAL,
+                GRX_ENGINE_AUTO, perl), "AB\\.C");
+  EXPECT_EQ(replaced("(.+)", "AB.c", "\\U\\Q$1", GRX_REPLACE_GLOBAL,
+                GRX_ENGINE_AUTO, perl), "AB\\.C");
+
+  // `\e` is **not** a terminator here, which is the sixth letter against
+  // vim's seventh and why the two dialects need two tables. What it *is* in
+  // perl is U+001B - the replacement being double-quotish - and this library
+  // has not built that: `\Uab\ecd` is "AB\x1BCD" in perl and "ABECD" here,
+  // the `\e` having become the letter "e" that the `\U` run then
+  // upper-cased. The same gap covers `\t`, `\n`, `\x41` and `\x{42}`,
+  // which perl decodes and this library reads as the bare letter; dialects.md
+  // section 5.11 records it and `replace_diff.py` counts the rows rather than
+  // leaving them out. Asserted as it is so that building it fails here.
+  EXPECT_EQ(replaced("(x)", "x", "\\Uab\\ecd", GRX_REPLACE_GLOBAL,
+                GRX_ENGINE_AUTO, perl), "ABECD");
+  EXPECT_EQ(replaced("(x)", "x", "a\\tb", GRX_REPLACE_GLOBAL,
+                GRX_ENGINE_AUTO, perl), "atb");
+
+  // And the escape-anything rule still has what is left: `\$` is a dollar
+  // and `\q` is a "q", which is what stops these six from being a licence.
+  EXPECT_EQ(replaced("(x)", "x", "\\$1", GRX_REPLACE_GLOBAL,
+                GRX_ENGINE_AUTO, perl), "$1");
+  EXPECT_EQ(replaced("(x)", "x", "\\qz", GRX_REPLACE_GLOBAL,
+                GRX_ENGINE_AUTO, perl), "qz");
+
+  // PCRE2 has these only under PCRE2_SUBSTITUTE_EXTENDED, which this library
+  // does not expose, so `\U` there is the two characters as written.
+  EXPECT_EQ(replaced("(x)", "x", "\\U$1", GRX_REPLACE_GLOBAL,
+                GRX_ENGINE_AUTO, GRX_SYNTAX_PCRE), "\\Ux");
+}

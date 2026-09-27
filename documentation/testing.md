@@ -1644,11 +1644,32 @@ restore to zero.
 ### The replacement differential
 
 `make check-oracle-replace` runs `tools/oracle/replace_diff.py`, which builds
-patterns *and templates* and puts them through node and `pcre2_substitute()`
-beside this library. `sed_diff.py` had done this for the POSIX and GNU rows
-since WP-23; the two largest template grammars had no generator at all, and
-their rates came from corpora that carry patterns and subjects and no
-templates.
+patterns *and templates* and puts them through node, `pcre2_substitute()`,
+`re.sub`, vim's `substitute()` and perl's `s///g` beside this library.
+`sed_diff.py` had done this for the POSIX and GNU rows since WP-23; the two
+largest template grammars had no generator at all, and their rates came from
+corpora that carry patterns and subjects and no templates.
+
+**The perl arm arrived last, and this page said it could not.** `perl_diff.py`
+has carried the sentence that perl's replacement "cannot be asked through a
+driver", and the reason was right while the conclusion was too strong: perl's
+replacement is not a template grammar, it is an **interpolated string**, so
+asking perl what one does means letting perl interpolate it.
+`tools/corpus/perl_subst.pl` does exactly that - the template is spliced into
+an `s{}{}` and evaluated, while the *pattern* still arrives as data through
+`qr/$pattern/` because that is what a C caller has - in the pinned image with
+the tree read-only and no network, which is the containment
+`perl_match.pl`'s `source` reading already has.
+
+Its template vocabulary is the shortest here, and deliberately: a perl
+replacement is perl, so most of the `$` forms the other rows share mean
+something else. `$0` is `$PROGRAM_NAME`, so a template holding it interpolates
+the driver's own path. `$'` is the postmatch and `'` was perl's package
+separator, so `$'X` is the variable `$X`. `$$` is the process id, not an
+escaped dollar. Each of those cost a run before it was understood, and each is
+asserted in `tests/unit/test_subst.cpp` instead, where what surrounds it is
+controlled - which is the right place for a rule about adjacency and the wrong
+place to discover one.
 
 ECMAScript agreed from the first run and has never disagreed since. The PCRE2
 row had **six** defects, every one of them also an error in the dialects.md
@@ -1658,8 +1679,30 @@ ordinary text where PCRE2 refuses it; `$12` falling back to `$1` and a "2"
 where PCRE2 takes every digit; and a reference to a group that exists and did
 not participate substituting nothing where PCRE2's default is an error.
 
-Three things are excluded, each counted in every run so that an exclusion
-which stops applying is visible rather than silent:
+Eight things are excluded, each counted in every run so that an exclusion
+which stops applying is visible rather than silent. Five of the eight are the
+perl arm's, and four of those are the reference's side of a difference this
+library chose:
+
+- **perl's tokenizer refusing two markers written together.** `"\U\Lab"` is a
+  syntax error in perl and `"\Uab\Lcd"` is "ABcd", so one character between
+  the two markers makes the same pair legal - a lexical quirk rather than a
+  rule about the operators. Asked rather than matched: the row is excused only
+  if perl accepts the *same* template with the pair separated.
+- **`quotemeta` above U+007F**, where perl's rule is neither "not a word
+  character" nor the ASCII one. Compared with exactly those backslashes
+  removed, so a row differing for any other reason stays a disagreement.
+- **Three or more case operators in one template**, where perl's `\E` is
+  matched to its openers by the tokenizer. Three is measured and not chosen:
+  with two or fewer the two agree over every row the generator draws.
+- **A double-quotish escape this library does not decode** - `\t`, `\e`,
+  `\x41` - which is a gap and is in the vocabulary so that the number is
+  printed.
+- **perl's `\Q` in the *pattern*** (dialects.md section 6), where the two
+  sides are matching different patterns and the template question was never
+  reached. `perl_diff.py`'s predicate, not a second copy.
+
+And three shared with the other arms:
 
 - **The surrogate-pair deviation** (dialects.md section 6). A global replace
   visits every position, and ECMA-262 lets a zero-width assertion match

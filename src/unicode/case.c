@@ -110,7 +110,7 @@ uint32_t grx_unicode_lower_simple(uint32_t codepoint) {
 }
 
 size_t grx_unicode_case_transform(
-    uint32_t codepoint, int mode, uint32_t * out) {
+    uint32_t codepoint, int mode, uint32_t out[GRX_CASE_TRANSFORM_MAX]) {
   if (!out) {
     return 0;
   }
@@ -154,8 +154,8 @@ size_t grx_unicode_case_transform(
     *out = codepoint;
     return 1;
   }
-  if (length == 1) {
-    *out = mapped[0];
+  for (size_t i = 0; i < length && i < GRX_CASE_TRANSFORM_MAX; i++) {
+    out[i] = mapped[i];
   }
   return length;
 }

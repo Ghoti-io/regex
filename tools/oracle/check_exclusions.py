@@ -592,6 +592,46 @@ block("syntax_diff._has_repeated_name",
 ])
 
 
+# --------------------------------------------------------------------
+# Perl: the three shapes the replacement arm excuses.
+# --------------------------------------------------------------------
+# All three are the *reference's* side of a difference this library chose, and
+# each is a predicate rather than a verdict, so what needs controls is what the
+# predicate matches and - more to the point - what it must not.
+block("replace_diff.quotemeta_above_ascii",
+    lambda theirs, ours: replace_diff.quotemeta_above_ascii(theirs, ours),
+    [
+    ("a backslash before U+2028, which perl adds and this does not",
+     ("a\\\u2028b", "a\u2028b"), True),
+    ("two of them", ("\\\u2028\\\u2029", "\u2028\u2029"), True),
+    ("nothing above U+007F to strip", ("a\\.b", "a\\.b"), True),
+    ("identical answers", ("abc", "abc"), True),
+    ("a backslash before an ASCII character is not stripped",
+     ("a\\.b", "a.b"), False),
+    ("a difference that is not a backslash at all", ("abc", "abd"), False),
+    ("an extra character beside the backslash",
+     ("a\\\u2028bX", "a\u2028b"), False),
+    ("the other direction, where *we* added the backslash",
+     ("a\u2028b", "a\\\u2028b"), False),
+])
+
+# `\E` is matched to its openers by perl's tokenizer, over source text, and the
+# model here reproduces that for one and two operators. Three is where they
+# part, and the count is what the predicate reads - so the controls are about
+# counting markers and nothing else.
+block("replace_diff.nested_case_operators",
+    lambda template: replace_diff.nested_case_operators(template),
+    [
+    ("three", (r"\U\Q$1\E",), True),
+    ("four", (r"\U\Q$1\U$1\E",), True),
+    ("two is not three", (r"\Q$1\E",), False),
+    ("one", (r"\U$1",), False),
+    ("none", ("$1$2",), False),
+    ("a backslash that is not a marker", (r"\n\t\x41",), False),
+    ("three of the same marker", (r"\Q\Q\Q",), True),
+])
+
+
 block("script_run_diff.is_pcre2_han_defect",
     lambda subject: script_run_diff.is_pcre2_han_defect(subject),
     [

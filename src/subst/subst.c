@@ -484,6 +484,32 @@ static uint32_t vim_control(char c) {
   }
 }
 
+/**
+ * The case operator one of Perl's six letters asks for, or GRX_TPL_CASE_NONE.
+ *
+ * Six and not vim's seven: `\e` is **not** a terminator here. In a perl
+ * replacement `\e` is U+001B, the string being double-quotish, and reading it
+ * as `\E` would make `s/x/\Uab\ecd/` write "ABcd" where perl writes
+ * "AB\x{1b}CD". vim's `\e` and `\E` are the same marker and vim_case() takes
+ * both, which is why the two dialects need two tables rather than one.
+ *
+ * What is still *not* read here is the rest of the double-quotish alphabet -
+ * `\n`, `\t`, `\x41`, `\N{}` - which GRX_TMPL_BACKSLASH_ESCAPE turns into
+ * the bare letter. That is a wider gap than the case operators and is not this
+ * one; dialects.md section 5.11 says so.
+ */
+static GRX_TemplateCase perl_case(char c) {
+  switch (c) {
+    case 'u': return GRX_TPL_CASE_UPPER_ONE;
+    case 'l': return GRX_TPL_CASE_LOWER_ONE;
+    case 'U': return GRX_TPL_CASE_UPPER_RUN;
+    case 'L': return GRX_TPL_CASE_LOWER_RUN;
+    case 'Q': return GRX_TPL_CASE_QUOTE_RUN;
+    case 'E': return GRX_TPL_CASE_NONE;
+    default: return GRX_TPL_CASE_COUNT;
+  }
+}
+
 /** The case change one of vim's six markers asks for. */
 static GRX_TemplateCase vim_case(char c) {
   switch (c) {
@@ -507,6 +533,8 @@ GRX_Result grx_template_parse(const GRX_TemplateSpec * spec,
       GRX_DIAG_OUT_OF_MEMORY);
   out_template->text = text;
   out_template->length = length;
+  out_template->perl_case_ops
+      = (uint8_t)((spec->features & GRX_TMPL_CASE_ESCAPES) ? 1 : 0);
 
   const size_t captures = grx_regex_capture_count(regex);
   const int named = has_named_groups(regex);
@@ -515,6 +543,28 @@ GRX_Result grx_template_parse(const GRX_TemplateSpec * spec,
   size_t i = 0;
   size_t literal_from = 0;
   while (i < length) {
+    if (text[i] == '\\' && (spec->features & GRX_TMPL_CASE_ESCAPES)
+        && i + 1 < length
+        && perl_case(text[i + 1]) != GRX_TPL_CASE_COUNT) {
+      // **Before GRX_TMPL_BACKSLASH_ESCAPE**, which a Perl row also has and
+      // which would otherwise claim the letter: `\U` was the letter "U" in a
+      // Perl template until 2026-09-26 for exactly that reason. The two
+      // cannot be merged, because what is left after these six *is* the
+      // escape-anything rule - `\$` is a dollar and `\q` is a "q".
+      GRX_Result result
+          = emit_literal(out_template, literal_from, i - literal_from);
+      if (result == GRX_OK) {
+        result = emit(out_template, GRX_TPL_CASE,
+            (uint32_t)perl_case(text[i + 1]), 0, 0);
+      }
+      if (result != GRX_OK) {
+        grx_template_clear(out_template);
+        return fail(out_error, GRX_DIAG_OUT_OF_MEMORY, i, 2);
+      }
+      i += 2;
+      literal_from = i;
+      continue;
+    }
     if (text[i] == '\\' && (spec->features & GRX_TMPL_BACKSLASH_ESCAPE)
         && i + 1 < length) {
       // Perl's templates are interpolated strings: `\$` is a literal dollar
@@ -945,14 +995,101 @@ static GRX_Result push(GRX_Arena * out, const char * bytes, size_t length) {
 /**
  * @brief The case state a template's `\u`, `\U` and kin leave behind.
  *
- * Two fields because vim keeps two: a one-character modifier suspends a run
- * for exactly one character and the run resumes after it - `\Uab\lcd` is
- * "ABcD" there. Both are cleared together by `\E` and `\e`.
+ * `run` and `one` because vim keeps two: a one-character modifier suspends a
+ * run for exactly one character and the run resumes after it - `\Uab\lcd` is
+ * "ABcD" there. All three are cleared together by `\E` and `\e`.
+ *
+ * `quote` is a third field and not a third value of the other two, because
+ * `\Q` **composes** with a case run instead of replacing one: `\Q\U$1` and
+ * `\U\Q$1` both quote and upper-case, measured both ways round against the
+ * pinned perl. `full` is not a marker at all - it is the dialect's, from
+ * GRX_TMPL_CASE_FULL - and it is here rather than passed separately so that
+ * push_cased() has one argument to read.
  */
+/**
+ * How deep the markers nest before the applier stops tracking them.
+ *
+ * The two dimensions - a case run (`\U` or `\L`) and quoting (`\Q`) - nest
+ * differently, which took eight templates put to perl to establish and is not
+ * what a summary of the construct would say:
+ *
+ * - **A case run replaces a case run.** `\Q\U$1$2\U$1\E$2` is "ABAbABAb":
+ *   the second `\U` did not deepen anything, so the `\E` left only the `\Q`
+ *   and `$2` came out lower. `\Uab\Lcd\Eef` is "ABcdef" for the same reason.
+ * - **A `\Q` stacks with a `\Q`.** `\Q$1\Q$1\E.x` keeps quoting after the
+ *   `\E`, so two were in force and one was ended.
+ *
+ * So the depth is bounded only by how many `\Q`s a template writes, and this
+ * is the cap. A marker past it is *applied* without being pushed, so the
+ * matching `\E` ends the entry below - a wrong answer for a template with
+ * sixteen unclosed `\Q`s, and the alternative is refusing one at apply time
+ * where there is no diagnostic to carry it. No generator here writes such a
+ * template and no corpus holds one.
+ */
+#define GRX_TPL_CASE_DEPTH 16
+
+/** Whether this marker is a case run rather than a `\Q`. */
+static int is_case_run(uint8_t marker) {
+  return marker == GRX_TPL_CASE_UPPER_RUN || marker == GRX_TPL_CASE_LOWER_RUN;
+}
+
 typedef struct CaseState {
-  uint8_t run; ///< GRX_TemplateCase: UPPER_RUN, LOWER_RUN, or NONE.
-  uint8_t one; ///< GRX_TemplateCase: UPPER_ONE, LOWER_ONE, or NONE.
+  uint8_t one;   ///< GRX_TemplateCase: UPPER_ONE, LOWER_ONE, or NONE.
+  uint8_t perl;  ///< Perl's operators rather than vim's; see GRX_Template.
+  /**
+   * The markers in force, most recently armed last, and how many there are.
+   *
+   * A **stack** because perl's nest and `\E` pops one: `\Uab\Qc.d\Ee.f` is
+   * `ABC\.DE.F`, the `\E` having ended the `\Q` and left the `\U` running,
+   * and a second `\E` ends that. It is two deep because there are two
+   * dimensions and arming one that is in force replaces it; see
+   * GRX_TPL_CASE_DEPTH. vim's markers do not nest at all - its `\E` clears
+   * everything - so `depth` never exceeds 1 there.
+   */
+  uint8_t stack[GRX_TPL_CASE_DEPTH];
+  uint8_t depth;
 } CaseState;
+
+/** The innermost case run in force, or GRX_TPL_CASE_NONE. */
+static uint8_t case_run(const CaseState * state) {
+  for (size_t i = state->depth; i > 0; i--) {
+    uint8_t marker = state->stack[i - 1];
+    if (marker == GRX_TPL_CASE_UPPER_RUN
+        || marker == GRX_TPL_CASE_LOWER_RUN) {
+      return marker;
+    }
+  }
+  return GRX_TPL_CASE_NONE;
+}
+
+/** Whether a `\Q` is in force anywhere in the stack. */
+static int case_quoting(const CaseState * state) {
+  for (size_t i = 0; i < state->depth; i++) {
+    if (state->stack[i] == GRX_TPL_CASE_QUOTE_RUN) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+/**
+ * Whether `\Q` puts a backslash in front of this code point.
+ *
+ * perl's `quotemeta` over an upgraded string escapes every ASCII character
+ * that is not a word character and **nothing** above U+007F: `\Q` over
+ * "a.b c-d_e" is `a\.b\ c\-d_e`, and over "\u00e9\u00b2!" it is
+ * `\u00e9\u00b2\!`. Measured rather than derived from `\w`, which is the
+ * set it looks like and is not: `\w` under UCP holds 144,667 code points
+ * here and this rule holds 63.
+ */
+static int quote_needs_backslash(uint32_t codepoint) {
+  if (codepoint > 0x7F) {
+    return 0;
+  }
+  return !((codepoint >= '0' && codepoint <= '9')
+      || (codepoint >= 'A' && codepoint <= 'Z')
+      || (codepoint >= 'a' && codepoint <= 'z') || codepoint == '_');
+}
 
 /**
  * Append bytes, changing the case of what passes through.
@@ -969,9 +1106,9 @@ typedef struct CaseState {
  */
 static GRX_Result push_cased(CaseState * state, GRX_Arena * out,
     const char * bytes, size_t length) {
-  if (!state->run && !state->one) {
-    // Nothing in force, which is every dialect but Vim and every byte of a
-    // Vim template before its first marker.
+  if (!state->depth && !state->one) {
+    // Nothing in force, which is every dialect without case markers and every
+    // byte of a template that has them before its first one.
     return push(out, bytes, length);
   }
   size_t at = 0;
@@ -990,10 +1127,51 @@ static GRX_Result push_cased(CaseState * state, GRX_Arena * out,
       at++;
       continue;
     }
-    uint8_t apply = state->one ? state->one : state->run;
+    uint8_t apply = state->one ? state->one : case_run(state);
     state->one = GRX_TPL_CASE_NONE;
+
+    // `\Q` first, so that the backslash it inserts is never itself cased -
+    // `\Q\U$1` over "a.b" is `A\.B` in perl and not `A\.B` with a capital
+    // backslash, which is not a thing, but the ordering also decides that the
+    // *escaped* character is the transformed one rather than the other way
+    // round. Measured: `\Q\U$1` and `\U\Q$1` agree.
+    if (case_quoting(state) && quote_needs_backslash(codepoint)) {
+      GRX_Result escaped = push(out, "\\", 1);
+      if (escaped != GRX_OK) {
+        return escaped;
+      }
+    }
+
+    // The full mapping where the dialect asks for it. perl's `\U` over U+00DF
+    // is "SS" - one character in, two out - and vim's is U+00DF, so the two
+    // dialects part here and not in the parser.
+    uint32_t mapped[GRX_CASE_TRANSFORM_MAX];
+    size_t produced = 0;
+    if (apply && state->perl) {
+      int mode = apply == GRX_TPL_CASE_UPPER_RUN ? 'U'
+          : apply == GRX_TPL_CASE_LOWER_RUN ? 'L'
+          : apply == GRX_TPL_CASE_UPPER_ONE ? 'u' : 'l';
+      produced = grx_unicode_case_transform(codepoint, mode, mapped);
+    }
     uint32_t written = codepoint;
-    if (apply == GRX_TPL_CASE_UPPER_ONE || apply == GRX_TPL_CASE_UPPER_RUN) {
+    if (produced > 1) {
+      GRX_Result result = GRX_OK;
+      for (size_t i = 0; i < produced && result == GRX_OK; i++) {
+        char encoded[4];
+        size_t encoded_width = grx_unicode_utf8_encode(mapped[i], encoded);
+        result = push(out, encoded, encoded_width);
+      }
+      if (result != GRX_OK) {
+        return result;
+      }
+      at += width;
+      continue;
+    }
+    if (produced == 1) {
+      written = mapped[0];
+    }
+    else if (apply == GRX_TPL_CASE_UPPER_ONE
+        || apply == GRX_TPL_CASE_UPPER_RUN) {
       written = grx_unicode_upper_simple(codepoint);
     }
     else if (apply == GRX_TPL_CASE_LOWER_ONE
@@ -1028,7 +1206,9 @@ static GRX_Result expand(const GRX_Template * tmpl, const GRX_Match * match,
   // Zero until a GRX_TPL_CASE piece sets it, and then read by every piece
   // that emits text. Per match, which is what vim does: a `\U` does not
   // reach across to the next one.
-  CaseState cased = {GRX_TPL_CASE_NONE, GRX_TPL_CASE_NONE};
+  CaseState cased;
+  memset(&cased, 0, sizeof(cased));
+  cased.perl = tmpl->perl_case_ops;
 
   for (size_t i = 0; i < tmpl->ops.count; i++) {
     const GRX_TemplateOp * op
@@ -1045,14 +1225,60 @@ static GRX_Result expand(const GRX_Template * tmpl, const GRX_Match * match,
         // so `\U\Labc` is "abc" and `\u\labc` is "abc"; `\E` and `\e`
         // clear both, so `\u\Ex` is "x".
         if (op->a == GRX_TPL_CASE_NONE) {
-          cased.run = GRX_TPL_CASE_NONE;
+          // `\E`. One level in perl, everything in vim - which is the
+          // difference a stack exists for; vim's markers replace rather than
+          // nest, so its `\E` empties it.
           cased.one = GRX_TPL_CASE_NONE;
+          if (cased.perl && cased.depth) {
+            cased.depth--;
+          }
+          else if (!cased.perl) {
+            cased.depth = 0;
+          }
         }
-        else if (op->a == GRX_TPL_CASE_UPPER_RUN
+        else if (op->a == GRX_TPL_CASE_QUOTE_RUN
+            || op->a == GRX_TPL_CASE_UPPER_RUN
             || op->a == GRX_TPL_CASE_LOWER_RUN) {
-          cased.run = (uint8_t)op->a;
+          if (!cased.perl) {
+            // vim's replace rather than nest, and it has no `\Q`: one entry
+            // is the whole of its state.
+            cased.stack[0] = (uint8_t)op->a;
+            cased.depth = 1;
+          }
+          else {
+            // A case run *replaces* any case run already in force and moves to
+            // the top, which is what decides which entry an `\E` then ends; a
+            // `\Q` always pushes. Both measured; see GRX_TPL_CASE_DEPTH.
+            if (is_case_run((uint8_t)op->a)) {
+              uint8_t depth = 0;
+              for (uint8_t i = 0; i < cased.depth; i++) {
+                if (!is_case_run(cased.stack[i])) {
+                  cased.stack[depth++] = cased.stack[i];
+                }
+              }
+              cased.depth = depth;
+            }
+            if (cased.depth < GRX_TPL_CASE_DEPTH) {
+              cased.stack[cased.depth++] = (uint8_t)op->a;
+            }
+            else {
+              // Past the cap: applied without being pushed. See the macro.
+              cased.stack[GRX_TPL_CASE_DEPTH - 1] = (uint8_t)op->a;
+            }
+          }
         }
-        else {
+        else if (!(cased.perl && (case_run(&cased) || cased.one))) {
+          // A one-shot, unless this is perl and one is already in force.
+          //
+          // Two ways it can be. A *run*, where perl ignores the one-shot
+          // outright: `\Uab\lcd` is "ABCD" there and "ABcD" in vim. And
+          // another *one-shot*, where perl keeps the first and vim the last:
+          // `\u\lab` is "Ab" in perl - and `\l\uAB` is "aB", and
+          // `\u\l\uab` is "Ab", so it is the first and not the
+          // upper-caser that wins.
+          //
+          // Dropped here rather than in push_cased(), so the state never holds
+          // a marker the dialect would not act on.
           cased.one = (uint8_t)op->a;
         }
         break;

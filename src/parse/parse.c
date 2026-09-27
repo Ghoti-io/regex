@@ -292,8 +292,12 @@ static GRX_Result apply_case_transform(GRX_Parser * parser,
     return GRX_OK;
   }
 
-  uint32_t mapped = 0;
-  if (grx_unicode_case_transform(*codepoint, mode, &mapped) != 1) {
+  // The whole mapping, though only the first is read: the transform writes
+  // every code point it produces now, because the *replacement* half needs
+  // them, and a single uint32_t here would be a buffer one third the size the
+  // callee may write.
+  uint32_t mapped[GRX_CASE_TRANSFORM_MAX] = {0};
+  if (grx_unicode_case_transform(*codepoint, mode, mapped) != 1) {
     // `\Uß` is "SS" in perl: one character of pattern becomes two, which a
     // literal built from one code point cannot hold. Refused rather than
     // mapped simply, because the simple mapping of `ß` is `ß`, and matching
@@ -302,7 +306,7 @@ static GRX_Result apply_case_transform(GRX_Parser * parser,
     return grx_parse_fail(
         parser, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, offset, length);
   }
-  *codepoint = mapped;
+  *codepoint = mapped[0];
   return GRX_OK;
 }
 

@@ -483,6 +483,50 @@ typedef enum {
  */
 #define GRX_TMPL_VIM_ESCAPES GRX_BIT(22)
 
+/**
+ * @brief Perl's replacement case operators: `\U`, `\L`, `\u`, `\l`, `\E`
+ *        and `\Q`.
+ *
+ * Perl's replacement is not a template grammar, it is an **interpolated
+ * string**, so these are the same operators GRX_FEATURE_CASE_TRANSFORM reads
+ * in a pattern, applied to what the template writes. `s/(.)/\U$1/` upper-cases
+ * the group; `\Q` inserts a backslash before every ASCII character that is
+ * not `[A-Za-z0-9_]` and leaves non-ASCII alone.
+ *
+ * Separate from GRX_TMPL_VIM_ESCAPES, which carries vim's six *and* its four
+ * control escapes: `\n` in a Perl replacement is a newline because the string
+ * is double-quotish, and in vim's it is a newline for a different reason, and
+ * neither dialect should be reading the other's list to get there. What the
+ * two share is the applier.
+ *
+ * Tested **before** GRX_TMPL_BACKSLASH_ESCAPE, which is what a Perl row
+ * otherwise reaches first: without that ordering `\U` is the letter "U",
+ * which is what this library answered until 2026-09-26.
+ *
+ * **This bit carries the semantics as well as the spelling**, and there are
+ * four of them, each measured against the pinned perl through
+ * tools/corpus/perl_subst.pl rather than derived from vim's:
+ *
+ * 1. **Six letters, not seven.** `\e` is U+001B here, the replacement being
+ *    double-quotish; vim's `\e` and `\E` are one marker.
+ * 2. **The full mapping.** `\U` over U+00DF is "SS" - one character in, two
+ *    out - where vim's `\U` leaves it alone.
+ * 3. **A run outranks a one-shot.** `\Uab\lcd` is "ABCD" here and "ABcD" in
+ *    vim: a `\l` written while a run is in force does nothing. It is only
+ *    *inside* a run - `\l\Uab` is "aB" and `\Uab\E\lCD` is "ABcD".
+ * 4. **They nest, and `\E` pops one.** `\Uab\Qc.d\Ee.f` is `ABC\.DE.F`:
+ *    the `\E` ended the `\Q` and left the `\U` running, and a second `\E`
+ *    ends that. vim has no `\Q` and its `\E` clears everything.
+ *
+ * One bit rather than four, which is a claim worth stating: there is exactly
+ * one other dialect with these operators and the four facts do not vary
+ * independently across any evidence here. A dialect that had, say, vim's
+ * nesting and perl's mapping would need them apart, and none does.
+ */
+#define GRX_TMPL_CASE_ESCAPES GRX_BIT(23)
+
+
+
 /** @brief What a reference to a group the pattern does not have does. */
 typedef enum {
   GRX_TMPL_MISSING_LITERAL = 0, ///< The text stands as written. ECMAScript.

@@ -54,6 +54,7 @@ ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE)
 
 import match_diff
+import oracle_env
 import perl_diff
 import vim_diff
 import node_runner
@@ -86,6 +87,18 @@ WELL_FORMED = [
 # introduced by `$`, and `$` is an ordinary character in a `re.sub` template.
 PYTHON_WELL_FORMED = ["X", "-", "", "ab", " ", "$1", "$&", "X", "-", " "]
 
+# Perl's, which shares the `$` forms and **not** the escape. A dollar is
+# escaped `\$` there and `$$` is the process id, so WELL_FORMED's `$$` is not a
+# well-formed perl template at all: it interpolates a number nobody wrote and
+# the comparison becomes a comparison of two process ids. Found by running the
+# arm with WELL_FORMED, which is what this list exists to stop.
+PERL_WELL_FORMED = [
+    "X", "-", "", "ab", " ", "X", "-", " ",
+    "$&", "$1", "$2",
+    "$&", "$1",
+]
+
+
 # Spellings `re` refuses. Its template alphabet is closed the way its pattern
 # alphabet is, so an unknown escape is "bad escape" rather than the letter -
 # the difference from sed's rule, which this library had been applying.
@@ -109,10 +122,45 @@ DIALECT_FORMS = {
     # letter - which no other dialect's template does.
     "python": ["\\1", "\\2", "\\g<1>", "\\g<n>", "\\g<0>", "\\0", "\\\\",
                "\\n", "\\t", "\\101", "\\g<01>"],
+    # Perl's. Mostly PCRE2's forms, because the sigil and the references are
+    # the same - and then the six case operators, which are perl's alone here
+    # and which are the reason this arm exists. `\Q` is in twice over, beside
+    # a case run in both orders, because the two compose and the order is what
+    # a reader would expect to matter and does not.
+    # Perl's, and the shortest list here on purpose.
+    #
+    # **A perl replacement is perl**, so most of the `$` vocabulary the other
+    # rows share means something else there and a generator that draws it
+    # measures the language rather than the grammar. Each was tried and each
+    # cost a run:
+    #
+    #   `$0`   is `$PROGRAM_NAME`, so the template interpolates this driver's
+    #          own path. PCRE2's `$0` *is* the whole match, which is why it is
+    #          in that row.
+    #   `$'`   is the postmatch, and `'` was perl's package separator, so `$'X`
+    #          is the variable `$X` - perl warns "Use of uninitialized value"
+    #          and substitutes nothing. A generated template puts text after a
+    #          form constantly.
+    #   `$$`   is the process id, not an escaped dollar. Perl escapes one as
+    #          `\$`.
+    #   `\$`, `\\`, `\t`, `\e`, `\x41` are all *double-quotish*, and a
+    #          trailing one changes how perl parses what follows it.
+    #
+    # So the list is the case operators, plain text and the three references
+    # that mean here what they mean in PCRE2. Everything named above is
+    # asserted in tests/unit/test_subst.cpp instead, where what surrounds it is
+    # controlled - which is the right place for a rule about adjacency and the
+    # wrong place to discover one.
+    "perl": ["$&", "$1", "$2", "$+{n}", "$`",
+             "\\U$1", "\\L$1", "\\u$1", "\\l$1", "\\U$1\\E$2",
+             "\\Uab\\lcd", "\\l\\UAB", "\\u\\Lab",
+             "\\Q$1", "\\Q$1\\E.x", "\\Q\\U$1", "\\U\\Q$1",
+             "\\E$1"],
     # Vim's. `&` is the whole match and `\&` a literal one, `\0` to `\9`
     # name groups a digit at a time, `\n`, `\r`, `\t` and `\b` decode,
-    # and the six case markers are the half of this grammar no other
-    # dialect here has: they emit nothing and change what follows.
+    # and the six case markers are the half of this grammar that Perl's row
+    # also has and no other does - with four of the rules different, which is
+    # what GRX_TMPL_CASE_ESCAPES documents.
     "vim": ["&", "\\&", "\\0", "\\1", "\\2", "\\9", "~", "\\~",
             "\\n", "\\r", "\\t", "\\b", "\\\\", "\\q",
             "\\u", "\\l", "\\U", "\\L", "\\E", "\\e",
@@ -150,6 +198,7 @@ FLAG_SETS = {
     "ecmascript": ("", "u", "i", "m", "iu", "s"),
     "pcre": ("", "i", "m", "s", "x", "im"),
     "python": ("", "i", "m", "s", "im"),
+    "perl": ("", "i", "m", "s", "x", "im"),
     # Vim has no flag string at all: `\c`, `\v` and the rest are pattern
     # syntax, so the alphabet is empty and the only valid value is "".
     "vim": ("",),
@@ -198,6 +247,23 @@ def make_template(dialect, rng):
         # there is no spelling to refuse and nothing for one to measure.
         pieces = ["X", "-", "", "ab", " "] + DIALECT_FORMS[dialect]
         malformed = pieces
+    elif dialect == "perl":
+        # No malformed list either, for a **different** reason worth keeping
+        # apart from vim's. perl's replacement is an interpolated string, so
+        # there is no such thing as a malformed one: every string is a string.
+        # What MALFORMED holds is spellings that are malformed *for the `$`
+        # grammars* - `$$1`, `$<`, `${1` - and several of them are valid perl
+        # that means something else or, under `use strict`, perl code that
+        # fails to compile. `$$1` is a symbolic dereference; the driver reports
+        # "template" for it, which is perl declining to *run* rather than perl
+        # rejecting a template.
+        #
+        # Putting them in this run measured the driver's splicing rather than
+        # the grammar, and the three disagreements it produced were each of
+        # that shape. The accept-or-refuse question is asked of the *pattern*
+        # here instead, which 416 rows of one seed exercise.
+        pieces = PERL_WELL_FORMED + DIALECT_FORMS[dialect]
+        malformed = pieces
     else:
         pieces = WELL_FORMED + DIALECT_FORMS[dialect]
         malformed = MALFORMED
@@ -232,7 +298,11 @@ def make_pattern(dialect, rng):
         import python_diff
         return "".join(rng.choice(python_diff.ATOMS)
                        for _ in range(rng.randint(1, 3)))
-    atoms = perl_diff.ATOMS["pcre"]
+    # perl_diff's own per-dialect list, so the `perl` arm does not draw PCRE2's
+    # constructs: `(*scs:...)` and `\C` are pcre's and perl refuses both, which
+    # arrives here as "the reference refuses the pattern and this library does
+    # not" and buries the template question the run exists to ask.
+    atoms = perl_diff.ATOMS[dialect if dialect in perl_diff.ATOMS else "pcre"]
     return "".join(rng.choice(atoms) for _ in range(rng.randint(1, 3)))
 
 
@@ -370,8 +440,175 @@ def ask_vim(rows, engine=0):
     return answers
 
 
+# Every one of the six, not only the two run markers: `\Q\U` alone is fine
+# and `$1\Q\U$1\Q\U$1` is a syntax error, so which pairs perl refuses
+# depends on what is already in force. The candidate filter is therefore
+# wide and the *second measurement* decides - a row is excused only if perl
+# accepts the same template with the pair separated.
+ADJACENT_MARKERS = re.compile(r"(\\[ULulQE])(\\[ULulQE])")
+
+
+def separate_markers(template):
+    r"""The same template with a character between each pair of case markers.
+
+    The rewrite the second measurement needs: it keeps every marker and every
+    piece of text, and only stops two markers from touching.
+    """
+    return ADJACENT_MARKERS.sub(r"\1X\2", template)
+
+
+# The rest of perl's double-quotish alphabet, which this library has not built:
+# a replacement is an interpolated string there, so `\t` is a tab, `\e` is
+# U+001B and `\x41` is "A", where GRX_TMPL_BACKSLASH_ESCAPE reads each as the
+# bare letter. dialects.md section 5.11 records it.
+#
+# In the vocabulary *and* excluded, rather than left out of both: a gap no
+# generator reaches is a gap nothing counts, and this run prints the number.
+DOUBLE_QUOTISH = re.compile(r"\\[abefnrtx0-7]")
+
+
+def double_quotish_escape(template):
+    r"""Whether the template holds an escape perl decodes and this does not."""
+    return DOUBLE_QUOTISH.search(template) is not None
+
+
+CASE_MARKERS = re.compile(r"\\[ULulQE]")
+
+
+def quotemeta_above_ascii(theirs, ours):
+    r"""Whether the two answers differ only in backslashes before non-ASCII.
+
+    perl's `quotemeta` is **not** "every character that is not `[A-Za-z0-9_]`"
+    above U+007F, and it is not `\w` either. Measured a code point at a time:
+    U+2028 and U+2029 are backslashed and U+00B2 is not, though neither is a
+    word character; U+200D *is* a word character and is backslashed anyway;
+    U+00A0 is backslashed and U+00E9 is not. The rule turns on
+    `Pattern_Syntax`, `Pattern_White_Space` and the code point's block in a way
+    perlfunc states loosely and `pp.c` states exactly.
+
+    So this library applies the ASCII rule, which is the half that is certain -
+    every ASCII non-word character is quoted and every ASCII word character is
+    not, over all 128 - and the rows where perl adds a backslash above U+007F
+    are excluded here rather than approximated. **Not a spelling test**: the two
+    answers are compared with exactly those backslashes removed, so a row
+    differing for any other reason stays a disagreement.
+    """
+    if not isinstance(theirs, str) or not isinstance(ours, str):
+        return False
+    stripped = []
+    index = 0
+    while index < len(theirs):
+        if (theirs[index] == "\\" and index + 1 < len(theirs)
+                and ord(theirs[index + 1]) > 0x7F):
+            index += 1
+            continue
+        stripped.append(theirs[index])
+        index += 1
+    return "".join(stripped) == ours
+
+
+def nested_case_operators(template):
+    r"""Whether the template holds three or more case operators.
+
+    perl's `\E` is matched against its openers by the *tokenizer*, over source
+    text, and the model this library applies - a case run replaces a case run,
+    a `\Q` stacks, `\E` pops the top - reproduces it for one and two operators
+    and parts from it beyond that: `\U\Q$1\U$1\E$2\Q$1\E.x` leaves nothing in
+    force in perl and a `\Q` in force here.
+
+    Three is where it starts, measured rather than chosen: with two or fewer the
+    two agree over every row this generator draws. A template read as *data*
+    cannot reproduce a rule about how perl's lexer paired the operators, which
+    is the same reason `\Q` in a *pattern* is a parser mode here and not a
+    pre-pass.
+    """
+    return len(CASE_MARKERS.findall(template)) >= 3
+
+
+def perl_marker_adjacency_quirk():
+    r"""Whether the pinned perl still refuses two case markers written
+    together.
+
+    A *lexical* quirk of perl's tokenizer and not a rule about what the
+    operators mean, which is why this library does not copy it. The minimal
+    pair says so: `"\U\Lab"` is a syntax error and `"\Uab\Lcd"` is "ABcd",
+    so one character between the two markers makes the same pair legal, and a
+    run replacing a run is what perl then does.
+
+    The exact shape is narrower than "two markers adjacent" and was measured
+    rather than guessed at, which is why no predicate here tries to state it:
+    `\u\Lab`, `\l\UAB` and `\u\lab` are all fine on their own, and
+    `\Uab\lcd\u\Lab` is not - so whether a run is already in force matters
+    as well as what the two markers are. Modelling that would be a second copy
+    of perl's tokenizer; `separate_markers()` asks perl instead.
+
+    This is the control on that asking: if a perl stops refusing `\U\Lab` the
+    whole exclusion has to go, and the gate fails rather than excusing rows for
+    a reason that has expired.
+    """
+    # `q{}` around each literal so this source carries one level of escaping
+    # rather than three: what `eval` receives is a double-quoted perl literal
+    # and the backslashes in it are the ones perl is being asked about.
+    program = (r'my $bad = eval q{"\U\Lab"}; '
+               r'my $good = eval q{"\Uab\Lcd"}; '
+               r'print((!defined $bad && defined $good '
+               r'&& $good eq "ABcd") ? "yes" : "no");')
+    finished = subprocess.run(
+        oracle_env.command("perl", ["perl", "-e", program]),
+        capture_output=True, text=True)
+    if finished.returncode:
+        sys.stderr.write(oracle_env.reference_stderr(finished.stderr))
+        return None
+    return finished.stdout.strip() == "yes"
+
+
+def ask_perl(rows):
+    r"""perl's `s///g`, through tools/corpus/perl_subst.pl.
+
+    **perl_diff.py has said this cannot be done**, and the reason was right
+    while the conclusion was too strong: perl's replacement is not a template
+    grammar, it is an interpolated string, so asking perl what one does means
+    letting perl interpolate it. The driver does exactly that - the pattern
+    arrives as data through `qr/$pattern/` because that is what a C caller has,
+    and the template is spliced into an `s{}{}` because `$1`, `\U` and `\Q`
+    are operators of the double-quotish pass and of nothing else. It runs in
+    the pinned image with the tree read-only and no network, which is the same
+    containment `perl_match.pl`'s `source` reading already has.
+
+    `unrepresentable` is the driver declining a template it cannot splice - an
+    odd run of trailing backslashes, or one holding all thirteen candidate
+    delimiters. Folded to "error" so the row is counted as the reference
+    declining rather than compared, which is what that column is for.
+    """
+    lines = "".join("%s\t%s\t%s\t%s\n" % (
+        flags, pattern.encode("utf-8").hex(), subject.encode("utf-8").hex(),
+        template.encode("utf-8").hex())
+        for flags, pattern, subject, template in rows)
+    finished = subprocess.run(
+        oracle_env.command("perl", ["perl", os.path.join(
+            oracle_env.ROOT, "tools", "corpus", "perl_subst.pl")]),
+        input=lines, capture_output=True, text=True)
+    if finished.returncode:
+        sys.stderr.write(oracle_env.reference_stderr(finished.stderr))
+        return []
+    out = []
+    for line in finished.stdout.splitlines():
+        if line.startswith("ok "):
+            # `ok <count> <hex>`, the shape pcre2_match.c's replace mode has,
+            # so the count is available to the lazy-template exclusion the same
+            # way. perl's `s///g` in scalar context *is* that count.
+            count, _, body = line[3:].partition(" ")
+            out.append((bytes.fromhex(body).decode("utf-8", "replace"),
+                int(count)))
+        elif line == "unrepresentable":
+            out.append(("error", 0))
+        else:
+            out.append((parse_driver(line), 0))
+    return out
+
+
 def ask_library(driver, dialect, rows):
-    """This library's answers, and the raw lines beside them.
+    r"""This library's answers, and the raw lines beside them.
 
     Both, because `parse_driver` folds every refusal to "syntax" - which is
     what the comparison wants, since the references say no more than that -
@@ -542,17 +779,30 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
         theirs = [(answer, 1) for answer in ask_python(rows)]
     elif dialect == "vim":
         theirs = [(answer, 1) for answer in ask_vim(rows)]
+    elif dialect == "perl":
+        theirs = ask_perl(rows)
     else:
         theirs = ask_pcre2(reference, rows)
     mine, raw_mine = ask_library(driver, dialect, rows)
     not_implemented = perl_diff.construct_not_implemented()
+    marker_quirk = False
+    if dialect == "perl":
+        marker_quirk = perl_marker_adjacency_quirk()
+        if marker_quirk is None:
+            return None
     if len(theirs) != len(rows) or len(mine) != len(rows):
         sys.stderr.write("%s: the drivers answered %d and %d of %d requests\n"
             % (dialect, len(theirs), len(mine), len(rows)))
         return None
 
     disagreements = []
+    adjacency = []
     compared = 0
+    tokenizer = 0
+    quotemeta = 0
+    nested = 0
+    quoting = 0
+    quotish = 0
     unimplemented = 0
     rejected = 0
     declined = 0
@@ -617,6 +867,50 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
             # unchanged.
             defect += 1
             continue
+        if (dialect == "perl" and them == "template" and us != "template"
+                and marker_quirk and ADJACENT_MARKERS.search(template)):
+            # Asked below rather than excluded here: the row is the tokenizer
+            # quirk only if perl accepts the *same* template with the two
+            # markers separated. See perl_marker_adjacency_quirk().
+            adjacency.append((flags, pattern, subject, template, them, us))
+            continue
+        if (dialect == "perl" and us != them
+                and perl_diff.holds_quoting(pattern)):
+            # The *pattern* holds one of perl's source operators, so the two
+            # sides are matching different patterns and the template question
+            # was never reached: perl reads `\Q` in a pattern that arrived in a
+            # variable as the letter "Q" (dialects.md section 6), and this
+            # library quotes as PCRE2 does. `perl_diff.py` is where that
+            # deviation is measured and its predicate is used rather than a
+            # second copy.
+            quoting += 1
+            continue
+        if (dialect == "perl" and them == subject and us != them
+                and perl_diff.BOUNDARY_FIRST.match(pattern)):
+            # perl finds no `\b{lb}` or `\b{wb}` at all in a one-character
+            # subject, though the boundary is there - the same defect
+            # tools/corpus/make_boundary_vectors.py excludes by name, seen
+            # through a substitution instead of a match: perl replaced nothing
+            # and this library replaced at the position perl's own engine
+            # agrees is a boundary. `perl_diff.BOUNDARY_FIRST` is the pattern
+            # shape, used rather than copied.
+            defect += 1
+            continue
+        if (dialect == "perl" and us != them
+                and double_quotish_escape(template)):
+            # perl decodes the escape and this library reads the bare letter;
+            # see DOUBLE_QUOTISH. Counted rather than dropped, because a rising
+            # number is the generator finding more of the alphabet.
+            quotish += 1
+            continue
+        if dialect == "perl" and us != them and quotemeta_above_ascii(
+                them, us):
+            quotemeta += 1
+            continue
+        if (dialect == "perl" and us != them
+                and nested_case_operators(template)):
+            nested += 1
+            continue
         if splits_a_surrogate_pair(them):
             deviation += 1
             continue
@@ -654,6 +948,25 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
         compared += 1
         if us != them:
             disagreements.append((flags, pattern, subject, template, them, us))
+
+    # The second pass, and what makes the adjacency exclusion checkable. A row
+    # is the tokenizer quirk only if perl accepts the *same* template with one
+    # character between the two markers: same markers, same text, the one thing
+    # changed being that they no longer touch. A template that still fails
+    # after the rewrite failed for another reason and stays a disagreement,
+    # which is what stops "template" from becoming a licence.
+    if adjacency:
+        again = ask_perl([(flags, pattern, subject, separate_markers(template))
+            for flags, pattern, subject, template, _them, _us in adjacency])
+        if len(again) != len(adjacency):
+            sys.stderr.write("%s: perl answered %d of %d separated "
+                "templates\n" % (dialect, len(again), len(adjacency)))
+            return None
+        for row, (answer, _count) in zip(adjacency, again):
+            if answer == "template":
+                disagreements.append(row)
+            else:
+                tokenizer += 1
 
     if dialect == "ecmascript" and disagreements:
         # The surrogate-pair deviation again, for the rows the check inside
@@ -779,12 +1092,19 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
     print("%-11s %d rows, %d compared, %d the pattern was rejected, "
           "%d the reference declined, %d the surrogate-pair deviation, "
           "%d the template parsed up front, %d a known reference defect, "
+          "%d perl's tokenizer refusing two markers written together, "
+          "%d quotemeta above U+007F, %d three or more case operators, "
+          "%d perl's quoting in the pattern, "
+          "%d a double-quotish escape this library does not decode, "
           "%d this library does not implement, "
           "%d vim's two engines disagree, "
           "%d vim's two engines disagree and neither gives ours, "
           "%d disagreements"
           % (dialect + ":", len(rows), compared, rejected, declined,
-             deviation, lazy, defect, unimplemented, split, len(both_axes),
+             deviation, lazy, defect, tokenizer, quotemeta, nested,
+             quoting, quotish,
+             unimplemented, split,
+             len(both_axes),
              len(disagreements)))
     if not rejected:
         sys.stderr.write(
@@ -830,7 +1150,7 @@ def main(argv):
         sys.stderr.write("run `make tools` first\n")
         return 2
 
-    dialects = ("ecmascript", "pcre", "python", "vim") \
+    dialects = ("ecmascript", "pcre", "perl", "python", "vim") \
         if args.dialect == "all" else (args.dialect,)
     total = 0
     for dialect in dialects:
