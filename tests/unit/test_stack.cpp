@@ -111,15 +111,14 @@ constexpr size_t kCodegenThreadStack = 32u << 20;
  * into the library rather than being called by it, and a pass that spent the
  * whole stack would leave the caller none.
  *
- * Read this bound with the sweep below rather than on its own. Codegen's own
- * cost is about 4.5 KB flat, twenty-five times inside this, and the figure
- * that approaches it is the analysis pass codegen re-enters -
- * grx_ir_can_match_empty() on a repeat body, GRX_ANALYSIS_MAX_DEPTH levels of
- * walk() at some 246 bytes a level, which is 126 KB and would pass this by
- * 641 bytes. So what is asserted against it is codegen's own term and the
- * default limits, never that sum: a bound sized to admit a figure it barely
- * clears is a tolerance rather than a gate, and the analysis pass wants the
- * treatment the matcher got instead - see notes/regex/TODO.md section 14o.
+ * Both compile-time recursions are gone, so this is a bound with room in it
+ * rather than one a figure squeezes past. Generating code for a pattern nested
+ * 1920 deep costs about 5 KB and measuring one about 3.5 KB, against the 130 KB
+ * the two together wanted when each kept its own C frames per level - so what
+ * is asserted here is the whole sum, at fifteen times inside the budget. It was
+ * briefly the difference between the two instead, because while the analysis
+ * pass still recursed the sum cleared 128 KB by 641 bytes and a gate that close
+ * is a tolerance sized to absorb the next regression.
  */
 constexpr size_t kHarnessBudget = 128u * 1024u;
 
@@ -851,28 +850,67 @@ TEST(Stack, GeneratingCodeDoesNotRecurseOverNesting) {
 }
 
 /**
- * And codegen costs the same whatever the analysis it re-enters costs.
+ * Measuring a pattern does not recurse over nesting either.
  *
- * The other recursion on this stack. gen_repeat_step() asks
- * grx_ir_can_match_empty() about its body, so a nested repeat puts walk() in
- * analyze.c underneath codegen and the two share one stack - which is what
- * made the campaign's crash hard to read, and why lowering
- * GRX_ANALYSIS_MAX_DEPTH to 32 left two of the three artifacts crashing.
+ * The other recursion on this stack, and the one that was left when codegen's
+ * went: walk() in src/ir/analyze.c called itself per IR level at some 246
+ * bytes a level, and GRX_ANALYSIS_MAX_DEPTH stopped it at 512 - which is 123
+ * KB, half the harness stack, spent by the pass that only measures. The cap
+ * was a frame count standing in for a byte budget, exactly what
+ * GRX_BACKTRACK_MAX_C_DEPTH replaced in the matcher after somebody measured
+ * it. The cap still refuses what it always refused; reaching it now costs
+ * bytes on the heap.
  *
- * So the figure to pin is the difference, not the sum. Measuring the analysis
- * call on its own and subtracting it leaves codegen's own frames, and those
- * must not grow: measured here they are 4432 bytes from eight levels to
- * nineteen hundred, against a sum that runs from 9 KB to 130 KB.
- *
- * What the sum does say is where the next bound goes. The analysis pass is
- * 246 bytes a level and stops only at GRX_ANALYSIS_MAX_DEPTH, so at a raised
- * max_nesting_depth it wants 126 KB of the 256 KB testing.md section 12
- * allows - the same shape of problem GRX_BACKTRACK_MAX_C_DEPTH was written
- * for, a frame count standing in for a byte budget. That is recorded rather
- * than asserted here, because this file is about codegen and a bound that
- * cleared 126 KB by 641 bytes would be a tolerance, not a gate.
+ * grx_ir_can_match_empty() is the entry point to sweep because codegen asks it
+ * about every repeat body, so it is the one whose cost lands inside a compile.
  */
-TEST(Stack, GeneratingCodeCostsTheSameWhateverTheAnalysisItReentersCosts) {
+TEST(Stack, MeasuringALengthDoesNotRecurseOverNesting) {
+  SKIP_UNLESS_MEASURABLE();
+  const GRX_Limits limits = deep_limits();
+  // Past GRX_ANALYSIS_MAX_DEPTH, because a sweep that stopped short of the cap
+  // would have passed against the recursion too - the cap was what kept the
+  // old cost finite, and 512 levels of it is the figure this is about.
+  const std::vector<size_t> depths = {8, 128, 512, 1024, 1920};
+
+  size_t smallest = 0;
+  size_t largest = 0;
+  for (size_t depth : depths) {
+    const std::string pattern = nested("(?:", depth, "a", ")*");
+    Lowered held = lower(pattern, GRX_SYNTAX_ECMASCRIPT, limits);
+    ASSERT_EQ(held.result, GRX_OK) << "depth " << depth;
+    Measurement m
+        = measure_codegen(held.ir, &limits, analysis_on_thread);
+    release(held);
+
+    ASSERT_TRUE(m.measured) << "depth " << depth;
+    ASSERT_FALSE(m.saturated) << "depth " << depth;
+    if (smallest == 0 || m.bytes < smallest) {
+      smallest = m.bytes;
+    }
+    if (m.bytes > largest) {
+      largest = m.bytes;
+    }
+  }
+
+  EXPECT_LT(largest - smallest, kFrameJitter)
+      << "the analysis pass used between " << smallest << " and " << largest
+      << " bytes of stack for a repeat nested " << depths.front() << " to "
+      << depths.back() << " deep. walk() keeps its stack on the heap; a spread "
+         "this wide means it recursed over the tree again";
+  EXPECT_LT(largest, kHarnessBudget)
+      << "the analysis pass peaks at " << largest << " bytes";
+}
+
+/**
+ * And the two together fit the stack the harnesses run under.
+ *
+ * Codegen re-enters the analysis pass on every repeat body, so a nested repeat
+ * puts both recursions on one stack - which is what made the campaign's crash
+ * hard to read, and why lowering GRX_ANALYSIS_MAX_DEPTH to 32 left two of the
+ * three artifacts crashing. Neither bound alone described the cost; this is the
+ * sum, and it is what testing.md section 12's claim is actually about.
+ */
+TEST(Stack, TheWholeCompilePathFitsTheStackTheHarnessesRunUnder) {
   SKIP_UNLESS_MEASURABLE();
   const GRX_Limits limits = deep_limits();
 
@@ -884,37 +922,28 @@ TEST(Stack, GeneratingCodeCostsTheSameWhateverTheAnalysisItReentersCosts) {
     // which measures max_program_size, and with that raised measures nothing
     // at all before the heat death of the sun.
     const std::string pattern = nested("(?:", depth, "a", ")*");
-    Lowered held = lower(pattern, GRX_SYNTAX_ECMASCRIPT, limits);
-    ASSERT_EQ(held.result, GRX_OK) << "depth " << depth;
-
-    Measurement both = measure_codegen(held.ir, &limits);
-    Measurement analysis
-        = measure_codegen(held.ir, &limits, analysis_on_thread);
-    release(held);
-
-    ASSERT_TRUE(both.measured && analysis.measured) << "depth " << depth;
-    ASSERT_FALSE(both.saturated || analysis.saturated) << "depth " << depth;
-    ASSERT_EQ(both.result, GRX_OK) << "depth " << depth;
-    ASSERT_GT(both.bytes, analysis.bytes)
-        << "depth " << depth
-        << ": codegen measured less than the analysis call it makes, so one "
-           "of the two measurements is not of what it says";
-
-    const size_t own = both.bytes - analysis.bytes;
-    if (smallest == 0 || own < smallest) {
-      smallest = own;
+    Measurement m = codegen_cost(pattern, GRX_SYNTAX_ECMASCRIPT, limits);
+    ASSERT_TRUE(m.measured) << "depth " << depth;
+    ASSERT_FALSE(m.saturated) << "depth " << depth;
+    ASSERT_EQ(m.result, GRX_OK) << "depth " << depth;
+    if (smallest == 0 || m.bytes < smallest) {
+      smallest = m.bytes;
     }
-    if (own > largest) {
-      largest = own;
+    if (m.bytes > largest) {
+      largest = m.bytes;
     }
   }
 
   EXPECT_LT(largest - smallest, kFrameJitter)
-      << "codegen's own frames took between " << smallest << " and " << largest
-      << " bytes over a repeat nested 8 to 1920 deep; gen() keeps its stack "
-         "on the heap, so this is flat or it is recursing again";
+      << "generating code for a nested repeat used between " << smallest
+      << " and " << largest
+      << " bytes; both the generator and the analysis pass it calls keep their "
+         "stacks on the heap, so this is flat or one of them is recursing";
   EXPECT_LT(largest, kHarnessBudget)
-      << "codegen's own frames took " << largest << " bytes";
+      << "the compile path peaks at " << largest
+      << " bytes over a nested repeat, which is over half the 256 KB stack "
+         "testing.md section 12 runs every harness under and leaves the "
+         "caller too little";
 }
 
 /**

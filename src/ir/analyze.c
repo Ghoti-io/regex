@@ -173,6 +173,27 @@ typedef struct {
   unsigned char cache_look[GRX_ANALYSIS_SPAN_CACHE];
   /** What walk() returned for that body, before group_span's own tidying. */
   Span cache_span[GRX_ANALYSIS_SPAN_CACHE];
+  /**
+   * The walk's own stack, one WalkFrame per node being measured.
+   *
+   * On the heap because a C stack runs out and this one grows. walk() used to
+   * call itself - one 240-byte frame per level of nesting at -O2 - and
+   * GRX_ANALYSIS_MAX_DEPTH stopped it at 512, which is 123 KB: half the 256 KB
+   * stack testing.md section 12 runs every harness under, spent by the pass
+   * that only measures. The cap was a frame count standing in for a byte
+   * budget, the way GRX_BACKTRACK_MAX_C_DEPTH was before somebody measured the
+   * matcher. It is unchanged in what it refuses; what changed is that reaching
+   * it now costs bytes that grow rather than frames that run out.
+   */
+  GRX_Arena frames;
+  /**
+   * The span the frame that just finished came back with.
+   *
+   * A recursive walk returned its answer; a driver has to put it somewhere,
+   * and one register is enough because a frame is resumed immediately after
+   * its child pops. Read at the top of every resuming stage and nowhere else.
+   */
+  Span result;
 } Analysis;
 
 /** How deep the walk will go before it gives up rather than overflowing. */
@@ -254,40 +275,6 @@ static void codepoint_widths(const GRX_IR * ir, const GRX_IRNode * node,
 
 static Span walk(Analysis * analysis, uint32_t node_index);
 
-/** The span of a node's children, concatenated. */
-static Span walk_concat(Analysis * analysis, const GRX_IRNode * node) {
-  Span span = {0, 0, 0, 0, 0, 0};
-
-  for (uint32_t child = node->first_child; child != GRX_INDEX_NONE;) {
-    const GRX_IRNode * child_node = grx_ir_node(analysis->ir, child);
-    if (!child_node) {
-      break;
-    }
-    Span part = walk(analysis, child);
-
-    // Anchored at the start if any part *before the first one that can
-    // consume* is anchored: `^a` is anchored and so is `\b^a`, because a
-    // zero-width part in front of the `^` does not move where the match
-    // begins. `a^` is not.
-    if (!span.anchored_start && span.max_length == 0) {
-      span.anchored_start = part.anchored_start;
-    }
-    // Anchored at the end if the last part is, or if an anchored part is
-    // followed only by zero-width ones: `a$` and `a$\b` both are.
-    span.anchored_end = part.anchored_end
-        || (span.anchored_end && part.min_length == 0
-            && part.max_length == 0);
-
-    span.min_length = add_length(span.min_length, part.min_length);
-    span.max_length = add_length(span.max_length, part.max_length);
-    span.unknown_length = span.unknown_length || part.unknown_length;
-    span.accepts = span.accepts || part.accepts;
-    child = child_node->next_sibling;
-  }
-
-  return span;
-}
-
 /**
  * Fold one more alternative into a running span.
  *
@@ -311,26 +298,70 @@ static Span combine_alternative(Span span, Span part) {
   return span;
 }
 
-/** The span of a node's children, as alternatives. */
-static Span walk_alternate(Analysis * analysis, const GRX_IRNode * node) {
-  Span span = {GRX_NPOS, 0, 1, 1, 0, 0};
-  int any = 0;
+/**
+ * One node being measured, and how far through measuring it we are.
+ *
+ * walk() is a loop over a stack of these rather than a function that calls
+ * itself, so a node's locals live here. What used to be a `Span part` in
+ * walk_concat()'s frame and a `Span body` in three of walk()'s own arms is
+ * `span` plus Analysis::result; what used to be the `child` of two loops is
+ * `child` and `next`.
+ *
+ * `next` is read at the same moment the recursion read it - from the child's
+ * node before that child is measured, not after - because that is what the two
+ * loops did and a walk may write a lookbehind span onto a node it passes.
+ */
+typedef struct {
+  uint32_t node;  ///< The IR node this frame measures.
+  uint32_t child; ///< Which child a list is up to, or GRX_INDEX_NONE.
+  uint32_t next;  ///< That child's sibling, taken before it was measured.
+  uint16_t stage; ///< How far it has got; the WALK_* constants below.
+  uint8_t seen;   ///< Alternatives folded so far, saturating at two.
+  uint8_t behind; ///< LOOK: whether it raised `measuring_look_width`.
+  Span span;      ///< The answer being accumulated.
+} WalkFrame;
 
-  for (uint32_t child = node->first_child; child != GRX_INDEX_NONE;) {
-    const GRX_IRNode * child_node = grx_ir_node(analysis->ir, child);
-    if (!child_node) {
-      break;
-    }
-    span = combine_alternative(span, walk(analysis, child));
-    any = 1;
-    child = child_node->next_sibling;
-  }
+/**
+ * The stages a frame passes through.
+ *
+ * One per point where the recursion used to return into the middle of
+ * something. A kind with no child at all is measured entirely in WALK_ENTER
+ * and never reaches another stage, which is most of them.
+ */
+#define WALK_ENTER 0        ///< The dispatch: what kind is this node.
+#define WALK_CONCAT_HEAD 1  ///< About to measure one part of a concatenation.
+#define WALK_CONCAT_PART 2  ///< A part came back; add it on.
+#define WALK_ALT_HEAD 3     ///< About to measure one alternative.
+#define WALK_ALT_PART 4     ///< An alternative came back; fold it in.
+#define WALK_REPEAT_BODY 5  ///< A repeat's body came back; scale it.
+#define WALK_GROUP_BODY 6   ///< A capture, atomic group or script run's body.
+#define WALK_LOOK_BODY 7    ///< A lookaround's body came back; record it.
+#define WALK_SCAN_BODY 8    ///< A scan's body came back; discard it.
+#define WALK_COND_TEST 9    ///< An assertion condition came back; discard it.
+#define WALK_COND_HEAD 10   ///< About to measure one branch of a conditional.
+#define WALK_COND_PART 11   ///< A branch came back; fold it in.
 
-  if (!any) {
-    return (Span) {0, 0, 0, 0, 0, 0};
-  }
-  return span;
-}
+/** What a stage asks the driver to do next. */
+typedef enum {
+  WALK_POP,     ///< This node is measured; `span` is the answer.
+  WALK_DESCEND, ///< Measure the child named, then resume this frame.
+  WALK_AGAIN,   ///< Call this frame again; its stage has moved.
+  /**
+   * Measure the group named, then take that as the answer and pop.
+   *
+   * group_span() rather than a descent, because what it does is not a walk of
+   * a child: it memoises, it guards against a group that is already being
+   * measured, and its own recursion is bounded by
+   * GRX_ANALYSIS_MAX_REFERENCES at thirty-two rather than by the tree.
+   *
+   * It is asked for by the driver rather than called from walk_step() because
+   * it re-enters walk(), which pushes frames and may move the arena - so a
+   * WalkFrame pointer does not survive it. Writing through one anyway is what
+   * the first draft of this did, and ASan called it a heap-use-after-free
+   * while the release build was lucky enough to pass.
+   */
+  WALK_GROUP
+} WalkAction;
 
 /**
  * How long the text a group captured can be.
@@ -425,12 +456,50 @@ static Span group_span(Analysis * analysis, uint32_t group) {
   return span;
 }
 
-static Span walk(Analysis * analysis, uint32_t node_index) {
-  Span span = {0, GRX_NPOS, 0, 0, 0, 0};
+/**
+ * Put one node's frame on the walk's stack, or answer for it without one.
+ *
+ * The two refusals the recursion made on the way in, in the order it made
+ * them: a node index that resolves to nothing is measured as zero-width, and a
+ * node deeper than GRX_ANALYSIS_MAX_DEPTH is not measured at all. Both write
+ * the answer to Analysis::result and push nothing, which is what a caller
+ * resuming from a descent reads either way.
+ *
+ * The third refusal is new and is the price of the heap: an arena that cannot
+ * grow answers the way the depth cap does - nothing is known - and records
+ * GRX_ERR_OOM, so the full pass reports it and the two query entry points
+ * degrade conservatively rather than lying.
+ */
+/**
+ * Prepare an Analysis, and the stack its walk will use.
+ *
+ * Written out because there were three of these, spelled as three
+ * near-identical designated initialisers that had already drifted - two of
+ * them left `has_script_run` and `measuring_look_width` to the zero fill
+ * while the third named them. A pass whose defaults are stated in three
+ * places has three chances to disagree about what conservative means.
+ */
+static void analysis_init(
+    Analysis * analysis, const GRX_IR * ir, GRX_IR * writable) {
+  memset(analysis, 0, sizeof *analysis);
+  analysis->ir = ir;
+  analysis->writable = writable;
+  analysis->failure = GRX_OK;
+  analysis->is_regular = 1;
+  grx_arena_init(
+      &analysis->frames, ir->allocator, sizeof(WalkFrame), 0, GRX_DIAG_NONE);
+}
 
+/** Release what analysis_init() took. */
+static void analysis_done(Analysis * analysis) {
+  grx_arena_clear(&analysis->frames);
+}
+
+static int walk_push(Analysis * analysis, uint32_t node_index) {
   const GRX_IRNode * node = grx_ir_node(analysis->ir, node_index);
   if (!node) {
-    return (Span) {0, 0, 0, 0, 0, 0};
+    analysis->result = (Span) {0, 0, 0, 0, 0, 0};
+    return 0;
   }
   if (analysis->depth >= GRX_ANALYSIS_MAX_DEPTH) {
     // Deeper than the parser's own cap allows, so this is unreachable for a
@@ -441,14 +510,263 @@ static Span walk(Analysis * analysis, uint32_t node_index) {
     // Context-dependent: this says the walk stopped, not what the subtree
     // is, so group_span() must not remember a span computed above it.
     analysis->context_hits++;
-    return (Span) {0, GRX_NPOS, 0, 0, 0, 0};
+    analysis->result = (Span) {0, GRX_NPOS, 0, 0, 0, 0};
+    return 0;
+  }
+
+  WalkFrame frame = {.node = node_index, .child = GRX_INDEX_NONE,
+    .next = GRX_INDEX_NONE, .stage = WALK_ENTER, .seen = 0, .behind = 0,
+    .span = {0, GRX_NPOS, 0, 0, 0, 0}};
+  if (grx_arena_append(&analysis->frames, &frame, NULL) != GRX_OK) {
+    if (analysis->failure == GRX_OK) {
+      analysis->failure = GRX_ERR_OOM;
+    }
+    analysis->is_regular = 0;
+    analysis->context_hits++;
+    analysis->result = (Span) {0, GRX_NPOS, 0, 0, 0, 0};
+    return 0;
   }
   analysis->depth++;
+  return 1;
+}
+
+/**
+ * Take one node's measurement one step further, and say what to do next.
+ *
+ * The switch walk() was. Every arm that had no child finishes in WALK_ENTER,
+ * which is why most of them are unchanged; the six that did recurse hand the
+ * child back to the driver and pick up where they left off.
+ *
+ * **`frame` must not outlive a push.** Nothing called from here may reach
+ * walk(), because a push can move the arena and every arm writes through this
+ * pointer. That is why measuring a group is WALK_GROUP rather than a call to
+ * group_span() - see WalkAction.
+ */
+static WalkAction walk_step(
+    Analysis * analysis, WalkFrame * frame, uint32_t * out_child) {
+  const GRX_IRNode * node = grx_ir_node(analysis->ir, frame->node);
+  if (!node) {
+    frame->span = (Span) {0, 0, 0, 0, 0, 0};
+    return WALK_POP;
+  }
+
+  switch (frame->stage) {
+    case WALK_CONCAT_HEAD: {
+      if (frame->child == GRX_INDEX_NONE) {
+        return WALK_POP;
+      }
+      const GRX_IRNode * child_node = grx_ir_node(analysis->ir, frame->child);
+      if (!child_node) {
+        return WALK_POP; // The loop's `break`: what was gathered stands.
+      }
+      frame->next = child_node->next_sibling;
+      frame->stage = WALK_CONCAT_PART;
+      *out_child = frame->child;
+      return WALK_DESCEND;
+    }
+
+    case WALK_CONCAT_PART: {
+      Span part = analysis->result;
+      Span span = frame->span;
+
+      // Anchored at the start if any part *before the first one that can
+      // consume* is anchored: `^a` is anchored and so is `\b^a`, because a
+      // zero-width part in front of the `^` does not move where the match
+      // begins. `a^` is not.
+      if (!span.anchored_start && span.max_length == 0) {
+        span.anchored_start = part.anchored_start;
+      }
+      // Anchored at the end if the last part is, or if an anchored part is
+      // followed only by zero-width ones: `a$` and `a$\b` both are.
+      span.anchored_end = part.anchored_end
+          || (span.anchored_end && part.min_length == 0
+              && part.max_length == 0);
+
+      span.min_length = add_length(span.min_length, part.min_length);
+      span.max_length = add_length(span.max_length, part.max_length);
+      span.unknown_length = span.unknown_length || part.unknown_length;
+      span.accepts = span.accepts || part.accepts;
+      frame->span = span;
+
+      frame->child = frame->next;
+      frame->stage = WALK_CONCAT_HEAD;
+      return WALK_AGAIN;
+    }
+
+    case WALK_ALT_HEAD: {
+      const GRX_IRNode * child_node = frame->child == GRX_INDEX_NONE
+          ? NULL
+          : grx_ir_node(analysis->ir, frame->child);
+      if (!child_node) {
+        if (!frame->seen) {
+          frame->span = (Span) {0, 0, 0, 0, 0, 0};
+        }
+        return WALK_POP;
+      }
+      frame->next = child_node->next_sibling;
+      frame->stage = WALK_ALT_PART;
+      *out_child = frame->child;
+      return WALK_DESCEND;
+    }
+
+    case WALK_ALT_PART:
+      frame->span = combine_alternative(frame->span, analysis->result);
+      if (frame->seen < 2) {
+        frame->seen++;
+      }
+      frame->child = frame->next;
+      frame->stage = WALK_ALT_HEAD;
+      return WALK_AGAIN;
+
+    case WALK_REPEAT_BODY: {
+      Span body = analysis->result;
+      Span span = {0, GRX_NPOS, 0, 0, 0, 0};
+      span.min_length = scale_length(body.min_length, node->min);
+      span.max_length = node->max == GRX_REPEAT_INF
+          ? (body.max_length ? GRX_NPOS : 0)
+          : scale_length(body.max_length, node->max);
+      // A repeat that must run at least once inherits its body's anchoring;
+      // one that may run zero times does not, because zero iterations match
+      // the empty string anywhere.
+      span.anchored_start = node->min > 0 && body.anchored_start;
+      span.anchored_end = node->min > 0 && body.anchored_end;
+      span.unknown_length = body.unknown_length;
+      span.accepts = body.accepts && node->max != 0;
+      if (node->mode == GRX_REPEAT_POSSESSIVE) {
+        analysis->is_regular = 0;
+      }
+      frame->span = span;
+      return WALK_POP;
+    }
+
+    case WALK_GROUP_BODY:
+      frame->span = analysis->result;
+      return WALK_POP;
+
+    case WALK_LOOK_BODY: {
+      Span body = analysis->result;
+      analysis->measuring_look_width -= frame->behind ? 1u : 0u;
+      // GRX_NPOS is kept rather than skipped. An unbounded body - `(?<=a+)`
+      // - used to leave this at zero, which reads as "no lookbehind" and is
+      // the opposite of the truth: that is the one lookbehind that may need
+      // the whole subject before the start. GRX_NPOS is what
+      // GRX_Facts::max_length already means by unbounded, and because it is
+      // SIZE_MAX no later body can lower it.
+      if (node->mode == GRX_LOOK_BEHIND_POSITIVE
+          || node->mode == GRX_LOOK_BEHIND_NEGATIVE
+          || node->mode == GRX_LOOK_BEHIND_NON_ATOMIC) {
+        if (body.max_length > analysis->max_lookbehind) {
+          analysis->max_lookbehind = body.max_length;
+        }
+        // A body that matches more than one length is the one a dialect may
+        // bound separately: PCRE2 takes `(?<=a{256})` and refuses
+        // `(?<=\d{1,256})`, and the two differ only in this test. A body
+        // whose length could not be worked out at all counts as exceeding
+        // every finite bound, which is pcre2test's answer for
+        // `(a\2)(b\1)(?<=\2)`: a bound nobody can compute is not one.
+        if (body.unknown_length) {
+          analysis->max_variable_lookbehind = GRX_NPOS;
+        }
+        else if (body.min_length != body.max_length
+            && body.max_length > analysis->max_variable_lookbehind) {
+          analysis->max_variable_lookbehind = body.max_length;
+        }
+
+        // What the forward model needs: the starts it may try. Recorded on
+        // the node, because measuring a subtree is this pass and choosing a
+        // model was lowering's, and codegen - which runs after both - is
+        // where the two meet.
+        if (analysis->writable && (node->flags & GRX_IR_LOOK_FORWARD)) {
+          uint32_t offset = GRX_INDEX_NONE;
+          // Vim's `\@123<=`: the match may start at most that many bytes
+          // back, so the span the engine enumerates is the body's own
+          // clipped to it. Both ends, because a body that cannot fit
+          // inside the bound is one the assertion can never satisfy -
+          // `\(ab\)\@1<=c` does not match "abc" in vim - and a minimum
+          // above the maximum is not a span at all.
+          size_t low_end = body.min_length;
+          size_t high_end = body.max_length;
+          if (node->b) {
+            high_end = high_end > node->b ? node->b : high_end;
+            low_end = low_end > high_end ? high_end : low_end;
+          }
+          GRX_Result stored = grx_ir_look_span_set(
+              analysis->writable, &offset, low_end, high_end);
+          if (stored != GRX_OK) {
+            if (analysis->failure == GRX_OK) {
+              analysis->failure = stored;
+            }
+          }
+          else {
+            GRX_IRNode * writable
+                = grx_ir_node(analysis->writable, frame->node);
+            if (writable) {
+              writable->a = offset;
+            }
+          }
+        }
+      }
+      frame->span = (Span) {0, 0, 0, 0, 0, 0};
+      return WALK_POP;
+    }
+
+    case WALK_SCAN_BODY:
+      frame->span = (Span) {0, 0, 0, 0, 0, 0};
+      return WALK_POP;
+
+    case WALK_COND_TEST:
+      // The condition is discarded, being zero-width where it stands; it was
+      // walked so that what it contains still reaches the facts.
+      //
+      // The branches, as alternatives. A conditional with no else-part can
+      // take a zero-length path - `(?(?=a)b)` matches empty where `a` does
+      // not follow - so the absent branch is an alternative of length zero
+      // rather than no alternative at all. The old rewrite spelled that as
+      // an explicit empty node and this says it directly.
+      frame->span = (Span) {GRX_NPOS, 0, 1, 1, 0, 0};
+      frame->seen = 0;
+      frame->child = frame->next;
+      frame->stage = WALK_COND_HEAD;
+      return WALK_AGAIN;
+
+    case WALK_COND_HEAD: {
+      const GRX_IRNode * part = frame->child == GRX_INDEX_NONE
+          ? NULL
+          : grx_ir_node(analysis->ir, frame->child);
+      if (!part) {
+        if (frame->seen < 2) {
+          frame->span = combine_alternative(
+              frame->span, (Span) {0, 0, 1, 1, 0, 0});
+        }
+        if (!frame->seen) {
+          frame->span = (Span) {0, 0, 0, 0, 0, 0};
+        }
+        return WALK_POP;
+      }
+      frame->next = part->next_sibling;
+      frame->stage = WALK_COND_PART;
+      *out_child = frame->child;
+      return WALK_DESCEND;
+    }
+
+    case WALK_COND_PART:
+      frame->span = combine_alternative(frame->span, analysis->result);
+      if (frame->seen < 2) {
+        frame->seen++;
+      }
+      frame->child = frame->next;
+      frame->stage = WALK_COND_HEAD;
+      return WALK_AGAIN;
+
+    case WALK_ENTER:
+    default:
+      break;
+  }
 
   switch (node->kind) {
     case GRX_IR_EMPTY:
-      span = (Span) {0, 0, 0, 0, 0, 0};
-      break;
+      frame->span = (Span) {0, 0, 0, 0, 0, 0};
+      return WALK_POP;
 
     case GRX_IR_CHAR:
     case GRX_IR_CLASS:
@@ -462,8 +780,8 @@ static Span walk(Analysis * analysis, uint32_t node_index) {
       if (analysis->ir->flags & GRX_PROGRAM_UTF) {
         codepoint_widths(analysis->ir, node, &low, &high);
       }
-      span = (Span) {low, high, 0, 0, 0, 0};
-      break;
+      frame->span = (Span) {low, high, 0, 0, 0, 0};
+      return WALK_POP;
     }
 
     case GRX_IR_FOLD_RUN: {
@@ -522,40 +840,30 @@ static Span walk(Analysis * analysis, uint32_t node_index) {
         longest[at % window] = high;
       }
 
-      span = (Span) {shortest[0], longest[0], 0, 0, 0, 0};
-      break;
+      frame->span = (Span) {shortest[0], longest[0], 0, 0, 0, 0};
+      return WALK_POP;
     }
 
     case GRX_IR_CONCAT:
-      span = walk_concat(analysis, node);
-      break;
+      frame->span = (Span) {0, 0, 0, 0, 0, 0};
+      frame->child = node->first_child;
+      frame->stage = WALK_CONCAT_HEAD;
+      return WALK_AGAIN;
 
     case GRX_IR_ALTERNATE:
-      span = walk_alternate(analysis, node);
-      break;
+      frame->span = (Span) {GRX_NPOS, 0, 1, 1, 0, 0};
+      frame->child = node->first_child;
+      frame->stage = WALK_ALT_HEAD;
+      return WALK_AGAIN;
 
-    case GRX_IR_REPEAT: {
-      Span body = walk(analysis, node->first_child);
-      span.min_length = scale_length(body.min_length, node->min);
-      span.max_length = node->max == GRX_REPEAT_INF
-          ? (body.max_length ? GRX_NPOS : 0)
-          : scale_length(body.max_length, node->max);
-      // A repeat that must run at least once inherits its body's anchoring;
-      // one that may run zero times does not, because zero iterations match
-      // the empty string anywhere.
-      span.anchored_start = node->min > 0 && body.anchored_start;
-      span.anchored_end = node->min > 0 && body.anchored_end;
-      span.unknown_length = body.unknown_length;
-      span.accepts = body.accepts && node->max != 0;
-      if (node->mode == GRX_REPEAT_POSSESSIVE) {
-        analysis->is_regular = 0;
-      }
-      break;
-    }
+    case GRX_IR_REPEAT:
+      frame->stage = WALK_REPEAT_BODY;
+      *out_child = node->first_child;
+      return WALK_DESCEND;
 
     case GRX_IR_CAPTURE:
     case GRX_IR_ATOMIC:
-    case GRX_IR_SCRIPT_RUN: {
+    case GRX_IR_SCRIPT_RUN:
       if (node->kind != GRX_IR_CAPTURE) {
         // A script run is not regular for the same reason an atomic group
         // is not: it can refuse a path the automaton already took, and a
@@ -567,20 +875,20 @@ static Span walk(Analysis * analysis, uint32_t node_index) {
       if (node->kind == GRX_IR_SCRIPT_RUN) {
         analysis->has_script_run = 1;
       }
-      span = walk(analysis, node->first_child);
-      break;
-    }
+      frame->stage = WALK_GROUP_BODY;
+      *out_child = node->first_child;
+      return WALK_DESCEND;
 
     case GRX_IR_ASSERT:
-      span = (Span) {0, 0, 0, 0, 0, 0};
+      frame->span = (Span) {0, 0, 0, 0, 0, 0};
       if (node->mode == GRX_ASSERT_START_SUBJECT
           || node->mode == GRX_ASSERT_SEARCH_START) {
-        span.anchored_start = 1;
+        frame->span.anchored_start = 1;
       }
       if (node->mode == GRX_ASSERT_END_SUBJECT) {
-        span.anchored_end = 1;
+        frame->span.anchored_end = 1;
       }
-      break;
+      return WALK_POP;
 
     case GRX_IR_LOOK: {
       analysis->has_lookaround = 1;
@@ -602,71 +910,11 @@ static Span walk(Analysis * analysis, uint32_t node_index) {
                             || node->mode == GRX_LOOK_BEHIND_NEGATIVE
                             || node->mode == GRX_LOOK_BEHIND_NON_ATOMIC)
           && analysis->ir->max_variable_lookbehind == 0;
+      frame->behind = behind_here ? 1u : 0u;
       analysis->measuring_look_width += behind_here ? 1u : 0u;
-      Span body = walk(analysis, node->first_child);
-      analysis->measuring_look_width -= behind_here ? 1u : 0u;
-      // GRX_NPOS is kept rather than skipped. An unbounded body - `(?<=a+)`
-      // - used to leave this at zero, which reads as "no lookbehind" and is
-      // the opposite of the truth: that is the one lookbehind that may need
-      // the whole subject before the start. GRX_NPOS is what
-      // GRX_Facts::max_length already means by unbounded, and because it is
-      // SIZE_MAX no later body can lower it.
-      if (node->mode == GRX_LOOK_BEHIND_POSITIVE
-          || node->mode == GRX_LOOK_BEHIND_NEGATIVE
-          || node->mode == GRX_LOOK_BEHIND_NON_ATOMIC) {
-        if (body.max_length > analysis->max_lookbehind) {
-          analysis->max_lookbehind = body.max_length;
-        }
-        // A body that matches more than one length is the one a dialect may
-        // bound separately: PCRE2 takes `(?<=a{256})` and refuses
-        // `(?<=\d{1,256})`, and the two differ only in this test. A body
-        // whose length could not be worked out at all counts as exceeding
-        // every finite bound, which is pcre2test's answer for
-        // `(a\2)(b\1)(?<=\2)`: a bound nobody can compute is not one.
-        if (body.unknown_length) {
-          analysis->max_variable_lookbehind = GRX_NPOS;
-        }
-        else if (body.min_length != body.max_length
-            && body.max_length > analysis->max_variable_lookbehind) {
-          analysis->max_variable_lookbehind = body.max_length;
-        }
-
-        // What the forward model needs: the starts it may try. Recorded on
-        // the node, because measuring a subtree is this pass and choosing a
-        // model was lowering's, and codegen - which runs after both - is
-        // where the two meet.
-        if (analysis->writable && (node->flags & GRX_IR_LOOK_FORWARD)) {
-          uint32_t offset = GRX_INDEX_NONE;
-          // Vim's `\@123<=`: the match may start at most that many bytes
-          // back, so the span the engine enumerates is the body's own
-          // clipped to it. Both ends, because a body that cannot fit
-          // inside the bound is one the assertion can never satisfy -
-          // `\(ab\)\@1<=c` does not match "abc" in vim - and a minimum
-          // above the maximum is not a span at all.
-          size_t low_end = body.min_length;
-          size_t high_end = body.max_length;
-          if (node->b) {
-            high_end = high_end > node->b ? node->b : high_end;
-            low_end = low_end > high_end ? high_end : low_end;
-          }
-          GRX_Result stored = grx_ir_look_span_set(
-              analysis->writable, &offset, low_end, high_end);
-          if (stored != GRX_OK) {
-            if (analysis->failure == GRX_OK) {
-              analysis->failure = stored;
-            }
-          }
-          else {
-            GRX_IRNode * writable
-                = grx_ir_node(analysis->writable, node_index);
-            if (writable) {
-              writable->a = offset;
-            }
-          }
-        }
-      }
-      span = (Span) {0, 0, 0, 0, 0, 0};
-      break;
+      frame->stage = WALK_LOOK_BODY;
+      *out_child = node->first_child;
+      return WALK_DESCEND;
     }
 
     case GRX_IR_BACKREF:
@@ -679,11 +927,11 @@ static Span walk(Analysis * analysis, uint32_t node_index) {
       if (node->flags & GRX_IR_AMBIGUOUS_REF) {
         // Unless the name it was written with belongs to several groups, in
         // which case it is several lengths and so not one.
-        span = (Span) {0, GRX_NPOS, 0, 0, 1, 0};
-        break;
+        frame->span = (Span) {0, GRX_NPOS, 0, 0, 1, 0};
+        return WALK_POP;
       }
-      span = group_span(analysis, node->a);
-      break;
+      *out_child = node->a;
+      return WALK_GROUP;
 
     case GRX_IR_RECURSE:
       analysis->has_recursion = 1;
@@ -691,14 +939,16 @@ static Span walk(Analysis * analysis, uint32_t node_index) {
       // A call matches what its target matches, which is the same question a
       // backreference asks - and `(?0)`, the whole pattern, is the one that
       // has no answer.
-      span = group_span(analysis, node->a);
-      break;
+      *out_child = node->a;
+      return WALK_GROUP;
 
     case GRX_IR_COND: {
       analysis->is_regular = 0;
       if (node->mode != GRX_COND_ASSERTION) {
-        span = walk_alternate(analysis, node);
-        break;
+        frame->span = (Span) {GRX_NPOS, 0, 1, 1, 0, 0};
+        frame->child = node->first_child;
+        frame->stage = WALK_ALT_HEAD;
+        return WALK_AGAIN;
       }
       // Under GRX_COND_ASSERTION the first child is the *condition*, not a
       // branch. It is walked - so that what it contains still reaches the
@@ -709,40 +959,22 @@ static Span walk(Analysis * analysis, uint32_t node_index) {
       uint32_t condition = node->first_child;
       const GRX_IRNode * first = grx_ir_node(analysis->ir, condition);
       if (!first) {
-        span = (Span) {0, 0, 0, 0, 0, 0};
-        break;
+        frame->span = (Span) {0, 0, 0, 0, 0, 0};
+        return WALK_POP;
       }
-      (void)walk(analysis, condition);
-      // The branches, as alternatives. A conditional with no else-part can
-      // take a zero-length path - `(?(?=a)b)` matches empty where `a` does
-      // not follow - so the absent branch is an alternative of length zero
-      // rather than no alternative at all. The old rewrite spelled that as
-      // an explicit empty node and this says it directly.
-      Span branches = {GRX_NPOS, 0, 1, 1, 0, 0};
-      int seen = 0;
-      for (uint32_t child = first->next_sibling; child != GRX_INDEX_NONE;) {
-        const GRX_IRNode * part = grx_ir_node(analysis->ir, child);
-        if (!part) {
-          break;
-        }
-        branches = combine_alternative(branches, walk(analysis, child));
-        seen++;
-        child = part->next_sibling;
-      }
-      if (seen < 2) {
-        branches = combine_alternative(branches, (Span) {0, 0, 1, 1, 0, 0});
-      }
-      span = seen ? branches : (Span) {0, 0, 0, 0, 0, 0};
-      break;
+      frame->next = first->next_sibling;
+      frame->stage = WALK_COND_TEST;
+      *out_child = condition;
+      return WALK_DESCEND;
     }
 
     case GRX_IR_KEEP:
     case GRX_IR_KEEP_END:
     case GRX_IR_VERB:
       analysis->is_regular = 0;
-      span = (Span) {0, 0, 0, 0, 0, 0};
-      span.accepts = node->mode == GRX_VERB_ACCEPT;
-      break;
+      frame->span = (Span) {0, 0, 0, 0, 0, 0};
+      frame->span.accepts = node->mode == GRX_VERB_ACCEPT;
+      return WALK_POP;
 
     case GRX_IR_SCAN:
       // Zero-width where it stands, whatever its body matches: the body runs
@@ -751,9 +983,9 @@ static Span walk(Analysis * analysis, uint32_t node_index) {
       // facts - `(?<=ab(*scs:(1)cd))` is a fixed-length lookbehind of two,
       // and was refused as variable until this case existed.
       analysis->is_regular = 0;
-      (void)walk(analysis, node->first_child);
-      span = (Span) {0, 0, 0, 0, 0, 0};
-      break;
+      frame->stage = WALK_SCAN_BODY;
+      *out_child = node->first_child;
+      return WALK_DESCEND;
 
     case GRX_IR_CALLOUT:
       // Zero-width, and regular. With no @ref GRX_CalloutFn registered a
@@ -762,32 +994,81 @@ static Span walk(Analysis * analysis, uint32_t node_index) {
       // Pike VM keeps running it. Registering one is what takes a search
       // off that engine, and that is decided per search in exec.c: a fact
       // about a program must not depend on how a caller later runs it.
-      span = (Span) {0, 0, 0, 0, 0, 0};
-      break;
+      frame->span = (Span) {0, 0, 0, 0, 0, 0};
+      return WALK_POP;
 
     case GRX_IR_COUNT:
     default:
       analysis->is_regular = 0;
-      span = (Span) {0, GRX_NPOS, 0, 0, 0, 0};
+      frame->span = (Span) {0, GRX_NPOS, 0, 0, 0, 0};
+      return WALK_POP;
+  }
+}
+
+/**
+ * Measure a subtree: the driver over the frames walk_step() leaves.
+ *
+ * Depth-first, exactly as the recursion was. Re-entrant, because group_span()
+ * calls this from inside a walk and the depth cap is shared across the whole
+ * nest: the loop runs until the stack is back to the depth it was handed, not
+ * until it is empty.
+ */
+static Span walk(Analysis * analysis, uint32_t node_index) {
+  size_t base = analysis->frames.count;
+  if (!walk_push(analysis, node_index)) {
+    return analysis->result;
+  }
+
+  while (analysis->frames.count > base) {
+    WalkFrame * frame
+        = GRX_ARENA_AT(WalkFrame, &analysis->frames, analysis->frames.count - 1);
+    if (!frame) {
       break;
+    }
+
+    uint32_t child = GRX_INDEX_NONE;
+    WalkAction action = walk_step(analysis, frame, &child);
+    if (action == WALK_DESCEND) {
+      // `frame` is dead after this: the arena may have moved. A push that
+      // refuses has already written the answer to Analysis::result, which is
+      // what the resumed stage reads, so both outcomes carry on the same way.
+      (void)walk_push(analysis, child);
+      continue;
+    }
+    if (action == WALK_AGAIN) {
+      continue;
+    }
+    if (action == WALK_GROUP) {
+      // Re-enters walk(), so the frame is refetched rather than written
+      // through; see WalkAction::WALK_GROUP.
+      Span measured = group_span(analysis, child);
+      frame = GRX_ARENA_AT(
+          WalkFrame, &analysis->frames, analysis->frames.count - 1);
+      if (!frame) {
+        break;
+      }
+      frame->span = measured;
+    }
+
+    // A subtree that can reach `(*ACCEPT)` can stop there, so nothing after
+    // the verb is required and the shortest match is the empty string. Applied
+    // here, once, rather than in each combining case: every node that contains
+    // the verb inherits the claim, and every node that does not is untouched.
+    //
+    // In the direction the file's header requires: a minimum that is too small
+    // can only make a caller try a subject it would have skipped, where one
+    // that is too large makes it skip a subject that matches. `(?<=a(*ACCEPT))`
+    // is the lookbehind this exists for - Perl calls it variable-length, and
+    // the candidate-start model has to be told which starts to try.
+    if (frame->span.accepts && frame->span.min_length) {
+      frame->span.min_length = 0;
+    }
+    analysis->result = frame->span;
+    analysis->depth--;
+    analysis->frames.count--;
   }
 
-  // A subtree that can reach `(*ACCEPT)` can stop there, so nothing after
-  // the verb is required and the shortest match is the empty string. Applied
-  // here, once, rather than in each combining case: every node that contains
-  // the verb inherits the claim, and every node that does not is untouched.
-  //
-  // In the direction the file's header requires: a minimum that is too small
-  // can only make a caller try a subject it would have skipped, where one
-  // that is too large makes it skip a subject that matches. `(?<=a(*ACCEPT))`
-  // is the lookbehind this exists for - Perl calls it variable-length, and
-  // the candidate-start model has to be told which starts to try.
-  if (span.accepts && span.min_length) {
-    span.min_length = 0;
-  }
-
-  analysis->depth--;
-  return span;
+  return analysis->result;
 }
 
 GRX_Result grx_analyze_ir(GRX_IR * ir, GRX_Facts * out_facts) {
@@ -797,27 +1078,15 @@ GRX_Result grx_analyze_ir(GRX_IR * ir, GRX_Facts * out_facts) {
 
   grx_facts_init(out_facts);
 
-  Analysis analysis = {
-    .ir = ir,
-    .writable = ir,
-    .failure = GRX_OK,
-    .is_regular = 1,
-    .has_backreference = 0,
-    .has_lookaround = 0,
-    .has_recursion = 0,
-    .has_script_run = 0,
-    .max_lookbehind = 0,
-    .max_variable_lookbehind = 0,
-    .measuring_look_width = 0,
-    .depth = 0,
-    .resolving = {0},
-    .resolving_count = 0,
-  };
+  Analysis analysis;
+  analysis_init(&analysis, ir, ir);
 
   Span span = ir->root == GRX_INDEX_NONE ? (Span) {0, 0, 0, 0, 0, 0}
                                          : walk(&analysis, ir->root);
-  if (analysis.failure != GRX_OK) {
-    return analysis.failure;
+  GRX_Result failure = analysis.failure;
+  analysis_done(&analysis);
+  if (failure != GRX_OK) {
+    return failure;
   }
 
   out_facts->is_regular = analysis.is_regular;
@@ -876,21 +1145,10 @@ int grx_ir_span(const GRX_IR * ir, uint32_t node_index, size_t * out_min,
     return 0;
   }
 
-  Analysis analysis = {
-    .ir = ir,
-    .writable = NULL,
-    .failure = GRX_OK,
-    .is_regular = 1,
-    .has_backreference = 0,
-    .has_lookaround = 0,
-    .has_recursion = 0,
-    .max_lookbehind = 0,
-    .max_variable_lookbehind = 0,
-    .depth = 0,
-    .resolving = {0},
-    .resolving_count = 0,
-  };
+  Analysis analysis;
+  analysis_init(&analysis, ir, NULL);
   Span span = walk(&analysis, node_index);
+  analysis_done(&analysis);
   if (span.unknown_length) {
     // A length nobody can compute is not one to prune with. Saying so is the
     // difference between a guard that skips work and a guard that skips an
@@ -911,20 +1169,9 @@ int grx_ir_can_match_empty(const GRX_IR * ir, uint32_t node_index) {
     return 1;
   }
 
-  Analysis analysis = {
-    .ir = ir,
-    .writable = NULL,
-    .failure = GRX_OK,
-    .is_regular = 1,
-    .has_backreference = 0,
-    .has_lookaround = 0,
-    .has_recursion = 0,
-    .max_lookbehind = 0,
-    .max_variable_lookbehind = 0,
-    .depth = 0,
-    .resolving = {0},
-    .resolving_count = 0,
-  };
+  Analysis analysis;
+  analysis_init(&analysis, ir, NULL);
   Span span = walk(&analysis, node_index);
+  analysis_done(&analysis);
   return span.min_length == 0;
 }

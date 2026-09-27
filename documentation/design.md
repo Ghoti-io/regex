@@ -944,6 +944,20 @@ The things the tests exist to hold. Each is checked somewhere named in
    Codegen keeps its stack on the heap instead, and its cost is now flat -
    about 4.5 KB from eight levels of nesting to nineteen hundred, measured the
    same way.
+
+   The analysis pass went the same way, and for a reason worth stating on its
+   own: it had a bound all along - `GRX_ANALYSIS_MAX_DEPTH`, 512 levels, over
+   which a subtree reads as "nothing is known" - so it never crashed, and the
+   bound was still wrong. 512 frames of `walk()` is 123 KB, half the stack
+   testing.md section 12 gives a harness, spent by the pass that only measures.
+   A frame count is not a byte budget, and nobody had multiplied the two. The
+   cap refuses exactly what it refused before; reaching it costs 3.5 KB of C
+   stack now instead of 123 KB, which also means the cap can be raised or
+   dropped as a question about *analysis* rather than about the stack.
+
+   So the compile path is flat in nesting end to end, at about 8 KB for a
+   pattern nested nineteen hundred deep against the 130 KB the two passes
+   wanted between them.
 7. The Unicode tables regenerate byte-identical from the pinned UCD.
    (`make check-unicode-tables`.)
 

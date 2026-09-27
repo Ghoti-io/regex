@@ -2573,11 +2573,12 @@ this suite already required to compile - 281 KB for 1920 nested
 lookaheads, where it is now 5 KB and flat. Parse, lower and analyse run on
 the caller's thread and only `grx_codegen_program()` runs on the painted
 one, because the parser recurses over nesting too and a figure covering
-both could not say which pass moved. The same split is why one of those
-tests measures `grx_ir_can_match_empty()` separately and asserts the
-difference: codegen re-enters the analysis pass on every repeat body, so
-the two recursions share one stack, and the analysis is the larger term
-once codegen is flat. The measurement is skipped under AddressSanitizer, which relocates
+both could not say which pass moved. Codegen re-enters the analysis pass on every repeat
+body, so the two shared one stack and neither bound alone described the
+cost - which is why `grx_ir_can_match_empty()` is swept on its own as well
+as inside a compile. Both are flat now, so the tests assert the sum: about
+8 KB for a pattern nested 1920 deep, where the two recursions together
+wanted 130 KB. The measurement is skipped under AddressSanitizer, which relocates
 locals to a heap fake stack, and under Valgrind, which counts a deliberate
 write below the stack pointer as an invalid one; the verdicts those runs
 check - that nesting past the cap is a `GRX_ERR_LIMIT` and not a crash - are
