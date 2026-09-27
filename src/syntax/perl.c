@@ -226,6 +226,12 @@ typedef struct {
  * `\x{...}` is any number of hex digits; `\xHH` is *up to* two, so `\x` alone
  * is NUL and `\xg` is NUL followed by a literal `g`. That last rule is the
  * one that differs from ECMAScript, where the digits are required.
+ *
+ * **"Up to two" is perl's rule and perl's alone.** pcre2test 10.46 answers
+ * "digits missing after \x" to every spelling with no digit, and `re` says
+ * "incomplete escape", so the `pcre` and `python` dialects refuse what the
+ * `perl` one reads as NUL. Each spelling was put to the pinned perl one at a
+ * time; see the comment at the refusal below.
  */
 static GRX_Result read_hex(GRX_Parser * parser, size_t start,
     uint32_t * out_value) {
@@ -251,8 +257,11 @@ static GRX_Result read_hex(GRX_Parser * parser, size_t start,
   if (byte_at(parser, 0) == '{') {
     // Perl lets an underscore separate the digits, the way a numeric literal
     // does: `\x{_1_0000}` is U+10000. PCRE2 does not, and says "Malformed
-    // \x{ escape" for the same pattern. Perl also reads `\x{_}` as zero,
-    // which this still refuses: a digit is what the escape is for.
+    // \x{ escape" for the same pattern. Perl also reads `\x{_}` as zero -
+    // and so does this, since 2026-09-26. It refused it until then, on the
+    // ground that "a digit is what the escape is for", and that argument
+    // refuses a bare `\x` too, which perl accepts; see the comment at the
+    // digit-less refusal below.
     int separators = flavour(parser) == FLAVOUR_PERL;
     size_t scan = 1;
     uint32_t value = 0;
@@ -273,7 +282,11 @@ static GRX_Result read_hex(GRX_Parser * parser, size_t start,
       digits++;
       scan++;
     }
-    if (!digits || byte_at(parser, scan) != '}') {
+    if (byte_at(parser, scan) != '}') {
+      return grx_parse_fail(
+          parser, GRX_DIAG_INVALID_HEX_ESCAPE, start, scan + 2);
+    }
+    if (!digits && !separators) {
       return grx_parse_fail(
           parser, GRX_DIAG_INVALID_HEX_ESCAPE, start, scan + 2);
     }
@@ -289,10 +302,29 @@ static GRX_Result read_hex(GRX_Parser * parser, size_t start,
     parser->position++;
   }
   if (!digits) {
-    // pcre2test 10.46: "digits missing after \x". Older PCRE2 read `\x` with
-    // no digits as NUL, and the corpus is what says which of the two this
-    // library has to be.
-    return grx_parse_fail(parser, GRX_DIAG_INVALID_HEX_ESCAPE, start, 2);
+    // **The two references disagree and each dialect follows its own.** perl
+    // reads every degenerate spelling as NUL - `\x`, `a\x`, `\xg`, `\x{}`
+    // and `\x{_}` all match U+0000, the last two with a warning that this
+    // library has no channel for - where pcre2test 10.46 answers "digits
+    // missing after \x" to all of them and `re` says "incomplete escape".
+    //
+    // Refusing it everywhere was pcre2's answer applied to perl as well, and
+    // it contradicted this function's own docstring, which has said "`\x`
+    // alone is NUL" since it was written. Measured a spelling at a time
+    // against perl 5.44.0 rather than read off that sentence, because the
+    // sentence was what went unimplemented.
+    //
+    // This reverses the decision recorded above for `\x{_}` - "a digit is
+    // what the escape is for" - and the reason it reverses is that the same
+    // argument refuses a bare `\x`, which perl accepts. GRX_SYNTAX_PERL
+    // means what perl does rather than what is reasonable; where the two
+    // part, dialects.md section 6 is for saying so, and this is not one of
+    // those places because nothing about it is a defect.
+    if (flavour(parser) != FLAVOUR_PERL) {
+      return grx_parse_fail(parser, GRX_DIAG_INVALID_HEX_ESCAPE, start, 2);
+    }
+    *out_value = 0;
+    return GRX_OK;
   }
   *out_value = value;
   return GRX_OK;

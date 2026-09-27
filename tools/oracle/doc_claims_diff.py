@@ -418,6 +418,60 @@ CLAIMS.append({
            "other reason, and the pair is what rules that out.",
 })
 
+CLAIMS.append({
+    "id": "single-code-unit-splits-a-character",
+    "doc": "documentation/dialects.md",
+    "quote": "under `u` over \"\u00e9\" pcre2test matches **0:1**, half a "
+             "character, and this library's spans are byte offsets into UTF-8 "
+             "where a match may not end inside a character",
+    "labels": {"pcre2": "10.46"},
+    "probes": [
+        {"kind": "match", "flags": "u", "pattern": "\\C",
+         "subject": "\u00e9", "label": "half a character",
+         "perl": "compile", "pcre2": "match 0:1"},
+        {"kind": "match", "flags": "", "pattern": "a\\Cb",
+         "subject": "aXb", "label": "where it is harmless",
+         "perl": "compile", "pcre2": "match 0:3"},
+    ],
+    "why": "Both references are asked, because the row's force comes from "
+           "them parting: pcre2 accepts it and perl refuses it outright, so "
+           "refusing it is PCRE2's gap alone and not a disagreement with the "
+           "whole family. The harmless spelling is probed beside the "
+           "character-splitting one so the row cannot be read as 'pcre2 "
+           "refuses \\C'.",
+})
+
+CLAIMS.append({
+    "id": "digitless-hex-is-nul-in-perl",
+    "doc": "documentation/dialects.md",
+    "quote": "perl reads every degenerate spelling as U+0000 - `\\x`, "
+             "`a\\x`, `\\xg`, `\\x{}` and `\\x{_}`",
+    "labels": {},
+    "probes": [
+        {"kind": "match", "flags": "", "pattern": "\\x", "subject": "\0",
+         "label": "bare", "perl": "match 0:1", "pcre2": "compile"},
+        {"kind": "match", "flags": "", "pattern": "a\\x", "subject": "a\0",
+         "label": "after a literal", "perl": "match 0:2", "pcre2": "compile"},
+        {"kind": "match", "flags": "", "pattern": "\\xg", "subject": "\0g",
+         "label": "stopped by a letter", "perl": "match 0:2",
+         "pcre2": "compile"},
+        {"kind": "match", "flags": "", "pattern": "\\x{}", "subject": "\0",
+         "label": "empty braces", "perl": "match 0:1", "pcre2": "compile"},
+        {"kind": "match", "flags": "", "pattern": "\\x{_}", "subject": "\0",
+         "label": "a separator and no digit", "perl": "match 0:1",
+         "pcre2": "compile"},
+        {"kind": "match", "flags": "", "pattern": "\\x", "subject": "x",
+         "label": "and it is a NUL, not an empty match",
+         "perl": "nomatch", "pcre2": "compile"},
+    ],
+    "why": "Five spellings and both references for each, because the claim is "
+           "that they disagree about all five - and a sixth probe asking "
+           "whether the NUL is really a NUL rather than an empty match, which "
+           "is the reading a span of 0:1 would otherwise not rule out on its "
+           "own. No version label: neither reference has moved on this and "
+           "the row is about the two of them parting.",
+})
+
 CLAIMS += [
     {
         "id": "oracle-table-" + name,

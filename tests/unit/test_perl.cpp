@@ -617,17 +617,68 @@ TEST(Perl, ADigitEscapeIsAReferenceOrOctalByItsWholeValue) {
   grx_regex_free(eight.regex);
 }
 
-TEST(Perl, HexEscapesNeedTheirDigitsInThisVersion) {
-  // pcre2test 10.46: "digits missing after \x". Older PCRE2 read `\x` with no
-  // digits as NUL, and the corpus is what says which of the two this library
-  // has to be - the documentation describes both.
-  Attempt bare = compile("\\x");
-  EXPECT_NE(bare.result, GRX_OK);
-  EXPECT_EQ(bare.diag, GRX_DIAG_INVALID_HEX_ESCAPE);
-  grx_regex_free(bare.regex);
+TEST(Perl, ADigitlessHexEscapeIsNulInPerlAndAnErrorInTheOthers) {
+  // The two references disagree and each dialect follows its own. perl reads
+  // every degenerate spelling as U+0000 - measured one at a time against
+  // 5.44.0, the last two with a warning this library has no channel for -
+  // where pcre2test 10.46 answers "digits missing after \x" to all of them
+  // and `re` says "incomplete escape".
+  //
+  // This library refused all five in every dialect until 2026-09-26, which
+  // was pcre2's answer applied to perl as well, and it contradicted
+  // read_hex()'s own docstring.
+  const char * degenerate[] = {
+    "\\x", "a\\x", "\\xg", "\\x{}", "\\x{_}",
+  };
+  for (const char * pattern : degenerate) {
+    for (GRX_Syntax syntax : {GRX_SYNTAX_PCRE, GRX_SYNTAX_PYTHON}) {
+      Attempt bare = compile(pattern, syntax);
+      EXPECT_NE(bare.result, GRX_OK) << pattern;
+      EXPECT_EQ(bare.diag, GRX_DIAG_INVALID_HEX_ESCAPE) << pattern;
+      grx_regex_free(bare.regex);
+    }
+    Attempt perl = compile(pattern, GRX_SYNTAX_PERL);
+    EXPECT_EQ(perl.result, GRX_OK) << pattern;
+    grx_regex_free(perl.regex);
+  }
 
+  // And what each one *matches* there, which is the half a compile check
+  // cannot state: a NUL, and for two of them a NUL followed by the character
+  // that stopped the digits.
+  EXPECT_EQ(span_of("\\x", std::string("\0", 1), GRX_SYNTAX_PERL), "0-1");
+  EXPECT_EQ(span_of("a\\x", std::string("a\0", 2), GRX_SYNTAX_PERL), "0-2");
+  EXPECT_EQ(span_of("\\xg", std::string("\0g", 2), GRX_SYNTAX_PERL), "0-2");
+  EXPECT_EQ(span_of("\\x{}", std::string("\0", 1), GRX_SYNTAX_PERL), "0-1");
+  EXPECT_EQ(span_of("\\x{_}", std::string("\0", 1), GRX_SYNTAX_PERL), "0-1");
+  EXPECT_EQ(span_of("\\x", "x", GRX_SYNTAX_PERL), "nomatch");
+
+  // A digit still means what it says, in both.
   EXPECT_TRUE(search("\\x41", "A").matched);
   EXPECT_TRUE(search("\\x{1F600}", "\xF0\x9F\x98\x80", GRX_SYNTAX_PERL).matched);
+}
+
+TEST(Perl, TheSingleCodeUnitEscapeIsRefusedInBothDialects) {
+  // `\C` matches one *code unit* in PCRE2, and it is the only construct in
+  // the `pcre` dialect that pcre2test accepts and this library refuses. The
+  // reason is what it would mean here: under `u` over "é" pcre2test matches
+  // 0:1, which is half a character, and this library's spans are byte offsets
+  // into UTF-8 where a match may not end inside one (design.md section 2).
+  //
+  // perl refuses it too, for its own reason - "\C no longer supported in
+  // regex" since 5.24 - so the refusal is only a gap against PCRE2, and
+  // tools/oracle/perl_diff.py counts those rows rather than dropping them.
+  for (const char * pattern : {"\\C", "a\\Cb", "\\C+"}) {
+    for (GRX_Syntax syntax : {GRX_SYNTAX_PERL, GRX_SYNTAX_PCRE}) {
+      Attempt attempt = compile(pattern, syntax);
+      EXPECT_EQ(attempt.result, GRX_ERR_UNSUPPORTED) << pattern;
+      EXPECT_EQ(attempt.diag, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED) << pattern;
+      grx_regex_free(attempt.regex);
+    }
+  }
+
+  // Lower case `\c` is the control escape and is unaffected, which is what
+  // says the refusal is keyed to the letter and not to the pair.
+  EXPECT_TRUE(search("\\cA", "\x01").matched);
 }
 
 // --------------------------------------------------------------------------
@@ -1920,10 +1971,13 @@ TEST(Perl, PerlLetsAnUnderscoreSeparateHexDigits) {
   EXPECT_EQ(compile("\\x{_1_0000}", GRX_SYNTAX_PCRE).diag,
       GRX_DIAG_INVALID_HEX_ESCAPE);
 
-  // A digit is still required. Perl reads `\x{_}` as zero; this refuses it,
-  // which is the one place the two part and is recorded as a deviation
-  // rather than left to be discovered.
-  EXPECT_EQ(compile("\\x{_}", GRX_SYNTAX_PERL).diag,
+  // A digit *was* still required here, and that was this library refusing
+  // what perl accepts. perl reads `\x{_}` as zero and so does this now; the
+  // reversal and its reason are in read_hex(), and
+  // ADigitlessHexEscapeIsNulInPerlAndAnErrorInTheOthers has the whole family.
+  // PCRE2 refuses it, which is what keeps this test about the flavour split.
+  EXPECT_EQ(span_of("\\x{_}", std::string("\0", 1), GRX_SYNTAX_PERL), "0-1");
+  EXPECT_EQ(compile("\\x{_}", GRX_SYNTAX_PCRE).diag,
       GRX_DIAG_INVALID_HEX_ESCAPE);
 }
 

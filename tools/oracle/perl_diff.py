@@ -238,6 +238,20 @@ PCRE_ONLY = [
     "(a)(*scs:(1)a)", "(?<n>a)(*scs:(<n>)a)",
     # PCRE2's own `\\g` spelling, and the callouts.
     "(a)\\g{1}", "(?C)a", "(?C1)a",
+    # `\\C`, one *code unit* - and the one construct in this dialect that
+    # pcre2test accepts and this library refuses. It was not in any generator
+    # and not in dialects.md either until 2026-09-26, so the gap was invisible
+    # rather than counted: `make check-oracle-perl --dialect pcre` reported "0
+    # this library does not implement" while a construct sat outside every
+    # list. Here so that the number is a number.
+    #
+    # Three atoms rather than one. Under `u` over "é" pcre2 matches 0:1, which
+    # is *half a character*, and that is the whole reason this is refused
+    # rather than built: this library's spans are byte offsets into UTF-8 and
+    # a match may not end inside a character. The middle atom is the same
+    # construct where it is harmless, and the third is the quantified form,
+    # which is what a caller writes when they mean "any bytes".
+    "\\C", "a\\Cb", "\\C+",
     # The `a` charset modifiers, WP-46. One letter narrows one thing, and
     # each of these is here with the subject that separates it from the
     # other four: U+0661 for `D`, U+00A0 for `S`, "é" for `W`, and the two
@@ -478,6 +492,26 @@ def holds_quoting(pattern):
     return as_letters(pattern) != pattern
 
 
+def construct_not_implemented():
+    r"""The number `GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED` has in this build.
+
+    Read out of the header rather than typed, the way tools/check_diagnostics.py
+    reads the same enum: the value is a position in a list and inserting an
+    enumerator above it would move it silently.
+    """
+    path = os.path.join(ROOT, "include", "ghoti.io", "regex", "core.h")
+    with open(path, encoding="utf-8") as handle:
+        names = re.findall(r"^\s*(GRX_DIAG_[A-Z0-9_]+)", handle.read(), re.M)
+    ordered = []
+    for name in names:
+        if name != "GRX_DIAG_COUNT" and name not in ordered:
+            ordered.append(name)
+    try:
+        return ordered.index("GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED")
+    except ValueError:
+        return None
+
+
 def reference_defect(dialect, pattern, them, subject=None, ours=None):
     r"""Rows where the *reference* is known to be wrong.
 
@@ -588,6 +622,7 @@ def compare(dialect, ours, seed, patterns, examples):
     disagreements = []
     compared = 0
     unsupported = 0
+    not_implemented = construct_not_implemented()
     declined = 0
     known = 0
     quoting = []
@@ -603,7 +638,18 @@ def compare(dialect, ours, seed, patterns, examples):
         # disagreement about what the construct means. It is counted and
         # printed rather than dropped, because a rising count is the tool
         # saying the generator has found new ground.
-        if us.startswith("unsupported"):
+        #
+        # **Two spellings, and for a year this read only the first.**
+        # `unsupported` is the driver saying no engine can run the *program*;
+        # a construct the parser has not built is `compile <diag>` with
+        # GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, which is the diagnostic whose
+        # name is this bucket's name. Nothing had shown it up because no atom
+        # in either list reached that diagnostic - and the first one that did,
+        # `\C` on 2026-09-26, arrived as 5,760 disagreements rather than as a
+        # count. A bucket that cannot see the answer it is named for is worse
+        # than no bucket: it is a green line over an unasked question.
+        if us.startswith("unsupported") or (not_implemented is not None
+                and us == "compile %d" % not_implemented):
             unsupported += 1
             continue
         compared += 1

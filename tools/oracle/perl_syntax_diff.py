@@ -93,6 +93,10 @@ CONSTRUCTS = [
     "\\d", "\\D", "\\w", "\\W", "\\s", "\\S", "\\h", "\\H", "\\v", "\\V",
     "\\R", "\\N", "\\X", "\\C", "\\A", "\\z", "\\Z", "\\b", "\\B", "\\G",
     "\\K", "\\Q*\\E", "\\x41", "\\x{41}", "\\cA", "\\e", "\\a", "\\o{101}",
+    # The degenerate hex spellings, which perl reads as NUL and PCRE2 refuses.
+    # Here because this gate measures exactly that split and because this
+    # library answered pcre2's way for both dialects until 2026-09-26.
+    "\\x", "a\\x", "\\xg", "\\x{}", "\\x{_}",
     # The case transforms, which are perl's and not PCRE2's. Both sides
     # *accept* each of these, so what this file measures - the accept/refuse
     # split - is all it can say about them: under the `quoted` reading this
