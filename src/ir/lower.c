@@ -2819,6 +2819,12 @@ static GRX_Result lower_sequence(Lowering * low, const GRX_Node * node,
     return result;
   }
 
+  // A run whose plan says it needs no fold run is cleared as a whole, up to
+  // the sibling that ended it: see where these are set for why one answer
+  // covers the rest of the run, and what asking once per literal cost.
+  uint32_t fold_run_cleared_to = GRX_INDEX_NONE;
+  int fold_run_cleared = 0;
+
   for (uint32_t child = node->first_child; child != GRX_INDEX_NONE;) {
     const GRX_Node * child_node = grx_pattern_node(low->pattern, child);
     if (!child_node) {
@@ -2826,13 +2832,17 @@ static GRX_Result lower_sequence(Lowering * low, const GRX_Node * node,
     }
     uint32_t next = child_node->next_sibling;
 
+    if (fold_run_cleared && child == fold_run_cleared_to) {
+      fold_run_cleared = 0;
+    }
+
     // Under full folding, adjacent literals are folded *together*: the
     // parser gives each code point a node of its own, and `sß` against "ßs"
     // only matches because the fold of one may finish inside the fold of
     // the next. Every other folding, and every run that turns out not to
     // need this, takes the ordinary path below.
     if (kind == GRX_IR_CONCAT && full_folding(low->fold)
-        && child_node->kind == GRX_NODE_LITERAL) {
+        && child_node->kind == GRX_NODE_LITERAL && !fold_run_cleared) {
       uint32_t after = child;
       GRX_Arena run;
       grx_arena_init(
@@ -2890,6 +2900,26 @@ static GRX_Result lower_sequence(Lowering * low, const GRX_Node * node,
       if (result != GRX_OK) {
         return storage_failed(low, result, node);
       }
+
+      // The run needs no fold run, and neither does any part of it. `wanted`
+      // is false only when every code point folded to exactly one - so the
+      // fold of a piece of the run is that piece's own code points folded -
+      // and when no span of two or more in that fold is something a single
+      // character folds to. A contiguous piece inherits both: its fold is a
+      // subsequence of the run's, and its spans are a subset of the run's.
+      // So the rest of the run takes the ordinary path below without being
+      // gathered again.
+      //
+      // Asking once per literal instead made this loop quadratic, because
+      // each literal gathered and folded the whole tail after it. Perl is
+      // the one dialect that folds fully, and the pattern fuzzer reaches a
+      // 5,227-character literal run under `/i` within minutes: that unit
+      // spent 3.5 seconds in this function in a release build and 57.6 in
+      // the fuzzer's, folding the same tail 5,226 times. It replays in 77
+      // milliseconds now. Nothing in the suite compiles a pattern that long,
+      // so the term had no reader outside the fuzzer.
+      fold_run_cleared = 1;
+      fold_run_cleared_to = after;
     }
 
     uint32_t lowered = GRX_INDEX_NONE;

@@ -717,6 +717,15 @@ paths. As instructions it is `SPLIT`, `CLASS` and `JMP` - nothing an engine
 had to learn, so all three still run it and a caseless Perl pattern keeps
 the linear-time guarantee.
 
+Most runs need none of this, and finding that out is done **once per run**
+rather than once per literal. The plan asks two questions - is the fold longer
+than the run, and is any span of two or more in the fold something a single
+character folds to - and a "no" to both is inherited by every contiguous piece
+of the run, so the whole run then lowers one class per code point. Asking per
+literal instead made lowering quadratic in the pattern length, which nothing
+in the suite was long enough to notice: a 5,227-character caseless Perl
+pattern took 3.5 seconds to compile.
+
 A *class* is still folded simply. UTS #18 applies full folding to the text a
 pattern spells out and not to the sets it names, and a class matches one
 character, so `[ß]` cannot match two. Perl agrees.

@@ -592,6 +592,94 @@ TEST(Lower, AFullFoldRunBecomesAGraphOfOrdinaryClassMatches) {
   EXPECT_EQ(spans(behind, std::string(sharp_s) + "x"), "2:3");
 }
 
+/**
+ * Bytes a compile asks the allocator for, so that a cost can be asserted
+ * without a clock.
+ *
+ * The quantity below is *scaling*, and an allocation count would not have
+ * shown it: the defect this guards gathered the same tail once per literal,
+ * which costs bytes quadratically while costing allocations only n log n.
+ */
+class ByteCounter {
+public:
+  ByteCounter() {
+    vtable_.ctx = this;
+    vtable_.malloc_fn = [](void * ctx, size_t size) -> void * {
+      static_cast<ByteCounter *>(ctx)->bytes_ += size;
+      return std::malloc(size ? size : 1);
+    };
+    vtable_.calloc_fn = [](void * ctx, size_t nitems, size_t size) -> void * {
+      if (nitems && size && nitems > (size_t)-1 / size) {
+        return nullptr;
+      }
+      static_cast<ByteCounter *>(ctx)->bytes_ += nitems * size;
+      return std::calloc(nitems ? nitems : 1, size ? size : 1);
+    };
+    vtable_.realloc_fn = [](void * ctx, void * ptr, size_t size) -> void * {
+      static_cast<ByteCounter *>(ctx)->bytes_ += size;
+      return std::realloc(ptr, size ? size : 1);
+    };
+    vtable_.free_fn = [](void *, void * ptr) { std::free(ptr); };
+  }
+
+  const GRX_Allocator * get() const { return &vtable_; }
+  unsigned long long bytes() const { return bytes_; }
+
+private:
+  GRX_Allocator vtable_{};
+  unsigned long long bytes_ = 0;
+};
+
+/** Bytes asked for to compile one pattern under Perl's full folding. */
+unsigned long long fold_run_bytes(const std::string & pattern) {
+  ByteCounter counter;
+  GRX_Error error;
+  grx_error_clear(&error);
+  GRX_Regex * regex = nullptr;
+  EXPECT_EQ(grx_regex_compile_with_allocator(pattern.data(), pattern.size(),
+                GRX_SYNTAX_PERL, GRX_OPT_CASELESS, nullptr, counter.get(),
+                &error, &regex),
+      GRX_OK)
+      << error.message;
+  grx_regex_free(regex);
+  return counter.bytes();
+}
+
+TEST(Lower, AClearedFoldRunIsNotGatheredAgainForEveryLiteral) {
+  // A literal run under full folding is planned as a run, and when the plan
+  // says no fold run is needed - which is every run with no full fold in it,
+  // so nearly all of them - that answer covers the whole run, because both
+  // of the conditions it rests on are inherited by every contiguous piece of
+  // it. Asking once per literal instead was quadratic: doubling the pattern
+  // quadrupled the bytes, and a 5,227-character `(?i)` pattern took 3.5
+  // seconds to compile in a release build.
+  //
+  // The assertion is on scaling rather than on a clock or a byte count, so
+  // that it says the same thing on any machine and at any allocator's growth
+  // factor. Doubling a linear compile costs about twice as much; the
+  // quadratic one cost 3.97 times as much, measured, so the bar is three.
+  unsigned long long small = fold_run_bytes("(?i)" + std::string(2000, 'a'));
+  unsigned long long large = fold_run_bytes("(?i)" + std::string(4000, 'a'));
+  ASSERT_GT(small, 0u);
+  EXPECT_LT(large, small * 3)
+      << "twice the literals asked for " << ((double)large / (double)small)
+      << " times the bytes";
+
+  // Correctness either way: the cleared run still folds, a run that does
+  // need the graph still gets it, and - the part the clearing could have
+  // broken - a needed run *after* a cleared one is still found, because the
+  // clearing ends at the sibling that ended the run.
+  const std::string sharp_s = "\xC3\x9F";
+  Compiled cleared("(?i)abcd", "", nullptr, GRX_SYNTAX_PERL);
+  ASSERT_TRUE(cleared.ok());
+  EXPECT_EQ(spans(cleared, "ABCD"), "0:4");
+
+  Compiled after("(?i)ab(x)ss", "", nullptr, GRX_SYNTAX_PERL);
+  ASSERT_TRUE(after.ok());
+  EXPECT_EQ(spans(after, "ABX" + sharp_s), "0:5 2:3");
+  EXPECT_EQ(spans(after, "abxss"), "0:5 2:3");
+}
+
 TEST(Lower, WhichLookbehindModelIsTheDialectsAndNotTheEngines) {
   // documentation/design.md section 3.5.2. There are two ways to match a
   // lookbehind and the dialect picks, because the pick costs what the
