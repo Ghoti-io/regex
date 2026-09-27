@@ -22,11 +22,16 @@
  */
 
 #include <cstdint>
+#include <cstdlib>
 #include <string>
 
 #include "test_helpers.h"
 
 #include "../../src/parse/parse_internal.h"
+// The fuzz harnesses' dialect list, so that the list and the front ends can be
+// checked against each other by something that runs in `make test`. Nothing
+// else here needs it; see TheFuzzCampaignAsksAboutEveryBuiltDialect.
+#include "fuzz/fuzz_syntax.h"
 
 namespace {
 
@@ -681,6 +686,53 @@ TEST(Parse, AnUnbuiltDialectSaysSoRatherThanGuessing) {
     EXPECT_EQ(error.diag, GRX_DIAG_DIALECT_NOT_IMPLEMENTED);
     EXPECT_EQ(parsed, nullptr);
   }
+}
+
+TEST(Parse, TheFuzzCampaignAsksAboutEveryBuiltDialect) {
+  // `tests/fuzz/fuzz_syntax.h` names the dialects a campaign sweeps rather
+  // than walking GRX_SYNTAX_COUNT, because a sweep over the whole enum spends
+  // most of a soak on dialects that refuse every pattern at the first call -
+  // a 974,873-run soak once spent fifteen-sixteenths of itself that way. The
+  // price of naming them is a list that can fall behind the front ends, and
+  // its own docstring says so without anything checking it. This checks it.
+  //
+  // It is not hypothetical. I-Regexp landed on 2026-09-26 and `kBuiltSyntaxes`
+  // got it in the same commit, but the campaign driver in
+  // `.local-regex-soak/campaign/` carried a second copy of the list and did
+  // not: a relaunch would have run nine legs, called them clean, and left the
+  // tenth dialect unasked with nothing anywhere saying so. The driver now
+  // reads the list from the harness itself, which removes that copy; this
+  // test is what keeps the remaining one true.
+  //
+  // Both directions, because they fail differently. A front end missing from
+  // the list is a dialect no fuzzer ever reaches. A dialect in the list with
+  // no front end is worse: eight hours of `GRX_ERR_UNSUPPORTED` at the first
+  // call, reported as that dialect's clean soak.
+  for (int syntax = 0; syntax < GRX_SYNTAX_COUNT; syntax++) {
+    bool has_frontend = grx_frontend_for((GRX_Syntax)syntax) != nullptr;
+    bool in_list = false;
+    for (size_t index = 0; index < kBuiltSyntaxCount; index++) {
+      if (kBuiltSyntaxes[index] == (GRX_Syntax)syntax) {
+        in_list = true;
+      }
+    }
+    EXPECT_EQ(has_frontend, in_list)
+        << grx_syntax_name((GRX_Syntax)syntax)
+        << (has_frontend
+                ? " has a front end and no fuzz campaign would ask for it"
+                : " is in the fuzz list and has no front end");
+  }
+
+  // And the sweep's dispatch wraps, which is what makes the list's length the
+  // only thing about it that has to be right. Read after the environment is
+  // cleared because `fuzz_pick_syntax()` honours GRX_FUZZ_SYNTAX and caches
+  // its answer: a campaign's own environment leaking into `make test` would
+  // otherwise turn this into an assertion about one pinned dialect.
+  unsetenv("GRX_FUZZ_SYNTAX");
+  EXPECT_EQ(fuzz_pick_syntax(0), kBuiltSyntaxes[0]);
+  EXPECT_EQ(fuzz_pick_syntax((uint32_t)kBuiltSyntaxCount - 1),
+      kBuiltSyntaxes[kBuiltSyntaxCount - 1]);
+  EXPECT_EQ(fuzz_pick_syntax((uint32_t)kBuiltSyntaxCount), kBuiltSyntaxes[0]);
 }
 
 TEST(Parse, EveryFrontEndFillsTheHooksTheParserCallsUnconditionally) {

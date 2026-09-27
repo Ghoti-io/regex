@@ -38,6 +38,12 @@
  * have a reader. WP-30 added GRX_SYNTAX_PYTHON here in the same commit that
  * built it; a front end landing without this line is a front end no soak
  * ever fuzzes.
+ *
+ * `Parse.TheFuzzCampaignAsksAboutEveryBuiltDialect` is what stops that being
+ * a matter of remembering. It asserts this list and `grx_frontend_for()`
+ * describe the same set, in both directions, in `make test` - which the
+ * paragraph above asked for without anything checking it until a second copy
+ * of the list, in the campaign driver, did fall a dialect behind.
  */
 static const GRX_Syntax kBuiltSyntaxes[] = {
   GRX_SYNTAX_ECMASCRIPT,
@@ -64,6 +70,21 @@ static void fuzz_read_forced(void) {
   if (!name || !*name) {
     return;
   }
+  // `GRX_FUZZ_SYNTAX=?` prints the list above and exits, so that a campaign
+  // can schedule the dialects this harness really fuzzes instead of carrying a
+  // copy of the list. The copy is what went wrong: the campaign driver in
+  // `.local-regex-soak/campaign/run.sh` named nine dialects for a day after
+  // I-Regexp became the tenth, and nothing said so, because a campaign cannot
+  // notice a dialect it was never told to ask for. `kBuiltSyntaxes` going
+  // stale is a gate - `Parse.TheFuzzCampaignAsksAboutEveryBuiltDialect` - and
+  // a second list going stale was silence.
+  if (name[0] == '?' && !name[1]) {
+    for (size_t i = 0; i < kBuiltSyntaxCount; ++i) {
+      printf("dialect: %s\n", grx_syntax_name(kBuiltSyntaxes[i]));
+    }
+    fflush(stdout);
+    exit(0);
+  }
   // Abort rather than fall back to the sweep: a campaign pinned to a
   // misspelled dialect would otherwise run the sweep for eight hours and be
   // reported as that dialect's result.
@@ -71,6 +92,26 @@ static void fuzz_read_forced(void) {
     fprintf(stderr, "GRX_FUZZ_SYNTAX: unknown dialect %s\n", name);
     abort();
   }
+}
+
+/**
+ * Read `GRX_FUZZ_SYNTAX` before libFuzzer loads the corpus.
+ *
+ * Defined here rather than three times for the same reason the list above is
+ * shared: a decision copied into each harness is a decision that stops being
+ * one. Every fuzz binary is one harness translation unit plus the library, so
+ * this header is included once per binary and this is one definition each.
+ *
+ * Running before the corpus load is what makes `GRX_FUZZ_SYNTAX=?` answerable
+ * as a question - the pattern corpus is 25,000 files, and a list that costs a
+ * corpus load is a list a script will hard-code instead. It also moves the
+ * abort on a misspelled pin to before that load rather than after it.
+ */
+extern "C" int LLVMFuzzerInitialize(int * argc, char *** argv) {
+  (void)argc;
+  (void)argv;
+  fuzz_read_forced();
+  return 0;
 }
 
 /** Whether a campaign pinned one dialect. */

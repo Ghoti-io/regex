@@ -821,7 +821,11 @@ vectors at 100%, from two references rather than one - and was "unmet and not
 attemptable" until the oracle was built a day later, which is a different thing
 from a corpus that fails and was recorded as such while it lasted. Condition 4
 is unmet, as for every dialect; `GRX_FUZZ_SYNTAX=i-regexp` works and the
-harness's dialect list includes it. Condition 5 is the one it stands apart on,
+harness's dialect list includes it - which was true of the harness and not of
+the campaign, whose driver carried a second copy of that list and had nine
+entries in it. The driver now reads the list from the harness and
+`Parse.TheFuzzCampaignAsksAboutEveryBuiltDialect` holds the harness's own copy
+to `grx_frontend_for()`, in both directions. Condition 5 is the one it stands apart on,
 and it is met in the only way it can be: `grx_options_parse()` refuses every
 letter, the dialect having no flag alphabet at all, and there is no replacement
 template grammar to implement because RFC 9485 has none - which is recorded as a
@@ -843,8 +847,10 @@ at, and it has been run twice: the first finished its eight hours with
 says is a failure, since a pattern must not make the matcher run past its
 limits. That found a real defect. The re-run after the fix was parked at
 5h06m of its 8. So the condition has been attempted once and met zero times,
-and the eight other dialects have not been asked; `GRX_FUZZ_SYNTAX=<dialect>`
-exists so that each can be, in a private prefix, on wall clock.
+and the nine other dialects have not been asked; `GRX_FUZZ_SYNTAX=<dialect>`
+exists so that each can be, in a private prefix, on wall clock. How many can be
+asked at once is a measurement rather than a guess, and the one the campaign
+carried had expired: notes/regex/TODO.md §14 has it.
 
 Condition 6 is met by all ten: `python_split` was the last one missing before
 I-Regexp arrived with `iregexp_jsonpath` of its own.

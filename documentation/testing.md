@@ -2496,7 +2496,15 @@ comparing them should not have to open three files.
   WP-23, so each of the six built dialects was getting a thirty-second of
   the campaign instead of an eighth. `GRX_FUZZ_SYNTAX=<dialect>` pins one,
   which is what plan.md §4's fourth condition - eight hours clean *with the
-  dialect selected* - needs in order to be something anyone can run. Bits 3-5
+  dialect selected* - needs in order to be something anyone can run; a name
+  it does not know aborts before the corpus is loaded rather than falling
+  back to the sweep and being reported as that dialect's result.
+  `GRX_FUZZ_SYNTAX=?` prints the list instead of fuzzing, so a campaign
+  script can schedule the dialects the harness really has rather than keeping
+  a copy of the list - the copy fell a dialect behind within a day of
+  I-Regexp landing, and `Parse.TheFuzzCampaignAsksAboutEveryBuiltDialect`
+  now checks the remaining one against `grx_frontend_for()` in both
+  directions. Bits 3-5
   choose the option set, which is the thing that matters: ECMAScript is three
   grammars, not one, and `v` reads `--` as an operator where `u` reads two
   dashes. Bits 6 and 7 tighten two disjoint sets of limits, covering every
