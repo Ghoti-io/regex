@@ -45,6 +45,8 @@ Phase 5  Python, Java, .NET, Ruby WP-30 .. WP-33
 Phase 6  RE2 and Rust             WP-34 .. WP-35
 Phase 7  Tcl, Vim, Emacs          WP-36 .. WP-38, WP-44, WP-45
 Phase 8  Performance, translation WP-40 .. WP-43
+
+Out of band: WP-47 I-Regexp, asked for by `text` rather than by a phase
 ```
 
 Phases 1 and 3 each contain a front-end package and an engine package that
@@ -720,6 +722,56 @@ enumerations agree - 1,108,520 code points, measured on different days
 through different vim functions - is what a unit test now asserts a code
 point at a time, because the boundary is only as right as their agreement.
 
+**WP-47 I-Regexp (RFC 9485)**: **built 2026-09-26**, out of phase order
+because `text` asked for it - JSONPath's `match()` and `search()` (RFC 9535
+§2.4.6, §2.4.7) are specified over I-Regexp and over nothing else, so the
+JSONPath seam cannot be finished without it. It is not on the dialect ladder
+in either direction: I-Regexp is a *format* defined as XSD's syntax less
+three things, not an implementation's dialect, and it is the first entry in
+`GRX_Syntax` with no program to be measured against.
+
+**A checking implementation** (RFC 9485 §3.1), which is the only kind worth
+having here. A non-checking one maps the pattern onto another dialect by the
+rewrites in §5 - and this library already has ECMAScript, so a caller wanting
+that could do it themselves. What they cannot do for themselves is find out
+that their pattern is not interoperable, which is the one thing a checking
+front end adds. `documentation/dialects.md` §10.2 is the table of what it
+refuses, one row per production of Figure 1.
+
+**Two option bits carry the anchoring rather than the front end.** §4 gives
+the dialect XSD's Boolean semantics - the whole string must match - and
+JSONPath wants that *and* a substring search from the same pattern, so a
+front end that wrapped the pattern could answer one question and not the
+other. `GRX_OPT_ANCHORED_END` is new and lowers to a `\z` assertion;
+`GRX_OPT_ANCHORED` already existed, was documented as "match only at the
+start offset", and **was read by nothing at all** - a dialect with no anchors
+of its own is what finally noticed. It is honoured by `exec()` rather than by
+lowering, because a start offset is not offset zero and `\A` would be a
+different rule.
+
+**Three things it found in shared code**, none of them about this dialect:
+
+- Seven vtable hooks are called with no NULL test, so a front end that omits
+  one crashes from inside a parse rather than failing. `a**` was the pattern
+  that found it. `EveryFrontEndFillsTheHooksTheParserCallsUnconditionally` in
+  `tests/unit/test_parse.cpp` is the gate, armed by removing the hook.
+- `grx_regex_replace()` answered `GRX_DIAG_DIALECT_NOT_IMPLEMENTED` for any
+  dialect with no template sigil. That is right for a row not yet written and
+  wrong for a dialect that *has* no replacement grammar - RFC 9485 defines a
+  Boolean match and no substitution - so the two are now told apart, the
+  second being `GRX_DIAG_NOT_IN_DIALECT`.
+- `operator_is_escaped` is documented as "is this operator written with a
+  backslash", and a dialect may instead not *have* the operator: `^` and `$`
+  are ordinary characters here. The hook's contract now names both reasons.
+
+**What is not built is the oracle**, and so there are no conformance vectors:
+this is the only implemented dialect measured against a document rather than
+against a reference this machine can run, which is the weakest arrangement in
+the suite. §10.4 of [dialects.md](dialects.md) names the two that would fix
+it - a published checking implementation for the syntax half, any XSD engine
+for the semantic half, §5.2 making the mapping an identity - and until one is
+pinned `tests/unit/test_iregexp.cpp` is the whole of the evidence.
+
 ### Phase 8: performance and translation
 
 **WP-40 Prefilters**: literal prefix, required literal via `memmem`,
@@ -756,9 +808,25 @@ hold:
    `python_split` is `re.split` and `re.sub`, because Python's splitting rule
    is a third one rather than a variant of the other two.
 
-**Where the nine stand against those six, measured 2026-09-26.** None meets
+**Where the ten stand against those six, measured 2026-09-26.** None meets
 all of them, and the list is here rather than in a note because a definition
 of done with no reading beside it is a definition nobody checks.
+
+**I-Regexp is the tenth and stands apart on three of the six**, so it is
+stated first rather than folded into counts that would then need a footnote
+each. Conditions 1 and 2 hold: its profile row cites the RFC for every cell
+that has a reader and says why the rest have none, and every rule in §10 of
+[dialects.md](dialects.md) has a test. Condition 3 is **unmet and not
+attemptable today** - there is no oracle on this machine to generate vectors
+from, which is a different thing from a corpus that fails, and the README's
+table says so with a rate of `-` rather than a percentage. Condition 4 is
+unmet, as for every dialect; `GRX_FUZZ_SYNTAX=i-regexp` works and the
+harness's dialect list includes it. Condition 5 is met in the only way it
+can be: `grx_options_parse()` refuses every letter, the dialect having no
+flag alphabet at all, and there is no replacement template grammar to
+implement because RFC 9485 has none - which is recorded as a deviation rather
+than as a gap. Condition 6 is met by `examples/iregexp_jsonpath.c`, which is
+`match()` and `search()` over one compiled pattern.
 
 Condition 3 is met by all nine for the first time: every dialect now has a
 committed corpus, a published rate, and every failure named -

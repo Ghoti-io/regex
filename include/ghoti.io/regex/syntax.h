@@ -71,6 +71,18 @@ typedef enum {
   GRX_SYNTAX_TCL,           ///< Tcl's advanced REs (Spencer).
   GRX_SYNTAX_VIM,           ///< Vim's "magic" syntax.
   GRX_SYNTAX_EMACS,         ///< Emacs Lisp regexps.
+  /**
+   * I-Regexp, RFC 9485: the interoperable subset JSONPath requires.
+   *
+   * Last rather than beside the dialect it is a subset of, because these
+   * constants are ABI and a caller compiled against an earlier header holds
+   * the old numbers. It is not a family member either: I-Regexp is defined
+   * as XSD's syntax less three things rather than as anyone's extension of
+   * anyone else, and the front end is a *checking* one - a pattern outside
+   * the ABNF in Figure 1 is GRX_ERR_SYNTAX with an offset, not something
+   * read as ECMAScript.
+   */
+  GRX_SYNTAX_IREGEXP,
   GRX_SYNTAX_COUNT          ///< Closes the enum; not a dialect.
 } GRX_Syntax;
 
@@ -226,7 +238,27 @@ typedef enum {
    * nor any other shorthand. The two names travel together in pcre2test -
    * `(?aT)[[:xdigit:]]` refuses U+FF10 and takes "f".
    */
-  GRX_OPT_ASCII_POSIX_DIGIT = GRX_BIT(21)
+  GRX_OPT_ASCII_POSIX_DIGIT = GRX_BIT(21),
+  /**
+   * @brief Every match must end where the subject ends.
+   *
+   * PCRE2's `PCRE2_ENDANCHORED`, and the other half of GRX_OPT_ANCHORED:
+   * with both set, a pattern matches the whole subject or nothing, which is
+   * the Boolean question XSD and RFC 9485 ask and what JSONPath's `match()`
+   * needs. Without them, `a` matches inside "ab" - which is JSONPath's
+   * `search()`, and the reason this is an option rather than the dialect's
+   * doing. A dialect that anchored its own patterns could answer only one of
+   * the two questions.
+   *
+   * Both are honoured by lowering, as the assertions `\A` and `\z` around
+   * the whole pattern, so they mean the subject and not the line however the
+   * dialect defines a line break: GRX_SEARCH_NOTEOL does not reach them, and
+   * a final newline does not satisfy them. A dialect whose syntax cannot
+   * write those assertions - I-Regexp has no anchors at all - still gets
+   * them from here, because the option belongs to the caller rather than to
+   * the pattern text.
+   */
+  GRX_OPT_ANCHORED_END = GRX_BIT(22)
 } GRX_Option;
 
 /**

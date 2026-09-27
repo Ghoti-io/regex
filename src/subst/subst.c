@@ -40,6 +40,7 @@
 
 #include "../compile/compile_internal.h"
 #include "../core/core_internal.h"
+#include "../parse/parse_internal.h"
 #include "../unicode/unicode_internal.h"
 #include "subst_internal.h"
 
@@ -1419,10 +1420,22 @@ GRX_Result grx_regex_replace(const GRX_Regex * regex, const char * subject,
     return GRX_ERR_INVALID;
   }
   if (!(flags & GRX_REPLACE_LITERAL) && !profile.template_spec.sigil) {
-    // The dialect is named but its template grammar is not written. Refused
-    // rather than run under somebody else's grammar, which would quietly
-    // turn a literal `$1` into a group reference or the reverse.
-    return fail(out_error, GRX_DIAG_DIALECT_NOT_IMPLEMENTED, 0, 0);
+    // No template grammar, and two reasons for that which a caller has to be
+    // able to tell apart. For most dialects here it is work not yet done -
+    // the dialect is named, its row is empty, and the answer is
+    // DIALECT_NOT_IMPLEMENTED. For a dialect that is *built* and still has no
+    // sigil, the grammar does not exist to be written: RFC 9485 defines a
+    // Boolean match over I-Regexp and no substitution at all, so there is no
+    // spelling of "the whole match" to support and never will be.
+    //
+    // Either way the template is refused rather than run under somebody
+    // else's grammar, which would quietly turn a literal `$1` into a group
+    // reference or the reverse. GRX_REPLACE_LITERAL is how a caller replaces
+    // with plain text in a dialect like that, and it is checked first.
+    return fail(out_error,
+        grx_frontend_for(regex->syntax) ? GRX_DIAG_NOT_IN_DIALECT
+                                       : GRX_DIAG_DIALECT_NOT_IMPLEMENTED,
+        0, 0);
   }
 
   GRX_Template tmpl = {0};

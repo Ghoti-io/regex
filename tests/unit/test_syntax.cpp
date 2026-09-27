@@ -135,9 +135,19 @@ TEST(Syntax, EveryDialectHasBoundedRepetition) {
 }
 
 TEST(Syntax, OptionsAreDistinctBits) {
+  // **Every** bit, not the ten the scaffold had. The list named the options
+  // that existed when it was written and thirteen have been added since, so
+  // what it was checking was that the original ten had not collided with each
+  // other - which no edit was ever going to break. A new bit colliding with
+  // an old one is the thing this test is for, and it could not see it.
   const uint32_t options[] = {GRX_OPT_CASELESS, GRX_OPT_MULTILINE,
       GRX_OPT_DOTALL, GRX_OPT_EXTENDED, GRX_OPT_UNGREEDY, GRX_OPT_ANCHORED,
-      GRX_OPT_UTF, GRX_OPT_UCP, GRX_OPT_NO_CAPTURE, GRX_OPT_LITERAL};
+      GRX_OPT_UTF, GRX_OPT_UCP, GRX_OPT_NO_CAPTURE, GRX_OPT_LITERAL,
+      GRX_OPT_UNICODE_SETS, GRX_OPT_EXTENDED_MORE, GRX_OPT_DUPLICATE_NAMES,
+      GRX_OPT_ASCII_CLASSES, GRX_OPT_ASCII_FOLD_SEPARATE,
+      GRX_OPT_NEWLINE_TERMINATES, GRX_OPT_IGNORE_COMBINING,
+      GRX_OPT_ASCII_DIGIT, GRX_OPT_ASCII_SPACE, GRX_OPT_ASCII_WORD,
+      GRX_OPT_ASCII_POSIX, GRX_OPT_ASCII_POSIX_DIGIT, GRX_OPT_ANCHORED_END};
 
   uint32_t seen = 0;
   for (uint32_t option : options) {

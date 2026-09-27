@@ -12,12 +12,13 @@ provisional until §3 below replaces them.
 
 ## 1. What is implemented
 
-Sixteen dialects are named in `GRX_Syntax`, so the enum does not move when
+Seventeen dialects are named in `GRX_Syntax`, so the enum does not move when
 one of them is added.
 
 | Dialects | Status |
 | --- | --- |
 | **ECMAScript**, **PCRE2**, **Perl**, **Python**, **Vim**, **POSIX BRE/ERE**, **GNU BRE/ERE** | Implemented. Each has an oracle on this machine. |
+| **I-Regexp** (RFC 9485) | Implemented, and the only one with no shipped reference: its authority is an ABNF rather than a program (§10). |
 | Java, .NET, Ruby, RE2 (Go), Rust, Tcl, Emacs | Not implemented. Selecting one is `GRX_ERR_UNSUPPORTED` with `GRX_DIAG_DIALECT_NOT_IMPLEMENTED`, never a silent fallback to another dialect. |
 
 A pattern accepted under `GRX_SYNTAX_RE2`, once that dialect exists, is one
@@ -51,6 +52,7 @@ this design was written on; a CI job installs the rest
 | Tcl | `tcl` | Tcl 8.6 | `re_syntax(n)` | `tclsh` (install) |
 | Vim | `vim` | Vim 9.2, patches 1-1129 | `:help pattern` | `vim -es` with `matchlist()` (pinned); no corpus to import, a generated one |
 | Emacs | `emacs` | GNU Emacs 29 | Elisp Reference Manual, "Regular Expressions" | `emacs --batch` (install) |
+| I-Regexp | `i-regexp` | RFC 9485 (October 2023), with its two errata | Figure 1's ABNF; §3 for what it removes from XSD; §4 for the semantics it borrows | **none on this machine.** The grammar is the reference; §10 says what an oracle would be and why one is still wanted |
 
 ### 2.1 Python's oracle is the only one that is not a subprocess
 
@@ -2408,3 +2410,162 @@ throughout, including inside groups by the POSIX subexpression rule.
 as a literal brace. `grep` and `sed` are line-oriented, so the vectors from
 them are single-line subjects; glibc `regcomp()` is the oracle for
 multi-line behaviour and `REG_NEWLINE`.
+
+## 10. I-Regexp (RFC 9485)
+
+I-Regexp is not a program's dialect. It is a *format*: a subset chosen so
+that one pattern means the same thing to many libraries, defined as an XSD
+regular expression less class subtraction, less the multi-character escapes,
+and less Unicode blocks (RFC 9485 §3). JSONPath's `match()` and `search()`
+functions are specified over it (RFC 9535 §2.4.6 and §2.4.7), which is what
+this library is asked for.
+
+**The name.** The RFC's title is *I-Regexp: An Interoperable Regular
+Expression Format*; its §1.1 uses "I-Regexp" as a noun and "I-Regexps" as the
+plural; its grammar's start production is `i-regexp`. It registers no media
+type and no other identifier - §7 has no IANA actions - so there is no more
+official spelling to adopt. `grx_syntax_name()` answers `i-regexp` and
+`grx_syntax_from_name()` ignores case, so the document's own capitalisation
+finds it.
+
+### 10.1 A checking implementation, which is the point
+
+RFC 9485 §3.1 distinguishes a *checking* implementation, which refuses
+everything Figure 1 does not generate, from a non-checking one, which maps the
+pattern onto another library and lets that library decide. It RECOMMENDS
+checking. This front end is a checking one, and that is the only kind worth
+adding to a library that already has ECMAScript: the mapping is three lines a
+caller could have written, and what a caller cannot do for themselves is find
+out that their pattern is not interoperable.
+
+**The mapping in §5.3 is not a translation of the text.** It says to replace
+unescaped dots outside classes with `[^\n\r]` and to envelope the result in
+`^(?:` and `)$`. Applied to raw I-Regexp text, two of its assumptions fail:
+
+| I-Regexp | means | wrapped as ECMAScript | means |
+| --- | --- | --- | --- |
+| `^a$` | the three characters `^`, `a`, `$` | `^(?:^a$)$` | the one character `a` |
+| `\{` | a left brace | `^(?:\{)$` | the same - but a *bare* `{` is legal in neither, for opposite reasons |
+
+`^` and `$` are NormalChars here (`%x00-27` covers `$`, and `%x5E-7A` begins
+at `^`), and the grammar has no anchor at all. That is the single biggest
+difference from every other dialect in this library.
+
+### 10.2 What it refuses, with the production that refuses it
+
+Everything in this table is legal ECMAScript. The middle column is the line of
+Figure 1 that excludes it, which is what a failure should send a reader to.
+
+| Pattern | Why | Diagnostic |
+| --- | --- | --- |
+| `\d` `\D` `\s` `\S` `\w` `\W` | not in `SingleCharEsc`; §3 removes the multi-character escapes because the dialects disagree - XSD's `\d` is `\p{Nd}` and almost everyone else's is `[0-9]` | `INVALID_ESCAPE` |
+| `\i` `\I` `\c` `\C` | XSD's name escapes, absent for the same reason | `INVALID_ESCAPE` |
+| `A` `\x41` `\0` `\cX` `\1` `\b` `\A` `\z` `\Q…\E` | not in `SingleCharEsc`. A non-ASCII character is written as itself; §1.1 makes a pattern a sequence of Unicode scalar values | `INVALID_ESCAPE` |
+| `\$` | also not in `SingleCharEsc` - the character it would escape is not special | `INVALID_ESCAPE` |
+| `\p{IsBasicLatin}` `\p{Letter}` `\p{gc=Lu}` `\p{Script=Latin}` `\p{lu}` | `charProp = IsCategory`, which is 36 case-sensitive names and nothing else. `\p{IsBasicLatin}` is the one §5.1 recommends and cannot spell - erratum 8505 | `UNKNOWN_PROPERTY` |
+| `\p{Cs}` | `Others = %s"C" [ ( %s"c" / %s"f" / %s"n" / %s"o" ) ]` has no `s`, which matches NormalChar skipping the surrogate code points. `\p{Cn}` *is* legal | `UNKNOWN_PROPERTY` |
+| `{` `}` `]` `a{,3}` | `NormalChar` skips `%x5B-5D` and `%x7B-7D`. Each must be written `\{`, `\}`, `\]` - and a `{` that begins no valid quantifier is not a literal brace either | `UNESCAPED_METACHARACTER` |
+| `(?:a)` `(?=a)` `(?<=a)` `(?<n>a)` `(?i)a` `(?i:a)` `(?#c)` `(?>a)` `(?(1)a)` `(?R)` | `atom` has one group production, `( "(" i-regexp ")" )`. There is no flag anywhere in the grammar, so a caseless *pattern* cannot be written | `NOT_IN_DIALECT` |
+| `a*?` `a+?` `a*+` `a**` `a{2}{3}` | `piece = atom [ quantifier ]`: one quantifier, and a quantifier is not an atom. So there is no lazy or possessive form to read a second one as | `DOUBLE_QUANTIFIER` |
+| `[a-z-[aeiou]]` | class subtraction, the first thing §3 removes. It fails at the inner `[`, which is not a `CCchar` | `INVALID_CLASS_ITEM` |
+| `[]` `[]a]` | `charClassExpr` requires an item, and `]` is not a `CCchar`. Neither ECMAScript's empty class nor POSIX's class-containing-`]` | `EMPTY_CLASS` |
+| `[^]` | refused by the restriction stated in prose after Figure 1: by the grammar it would be a positive class whose one member is `^` | `NOT_IN_DIALECT` |
+| `[--a]` `[a-b-c]` | a bare `-` is a member only where the production has one - right after `[` or `[^`, or right before `]` - and is never a range endpoint, `CCchar` skipping `%x2D`. `[\--a]` is that range | `INVALID_CLASS_ITEM` |
+| `[\p{L}-z]` `[a-\p{L}]` | a range's endpoints are `CCchar`s and a `charClassEsc` is not one. Not a union of members either, which is what Perl makes of `[\d-z]` | `CLASS_ESCAPE_IN_RANGE` |
+
+### 10.3 The anchoring is the operation, not the dialect
+
+§4 gives I-Regexp XSD's Boolean semantics, where the whole string must match.
+JSONPath wants that *and* a substring search from the same pattern. So the
+front end anchors nothing, and a caller asks for what they want:
+
+| JSONPath | here |
+| --- | --- |
+| `match(s, p)` | compile with `GRX_OPT_ANCHORED \| GRX_OPT_ANCHORED_END` |
+| `search(s, p)` | compile with neither |
+
+`GRX_OPT_ANCHORED_END` is honoured by lowering, as a `\z` assertion after the
+whole pattern - the end of the subject and not the end of a line, so `abc`
+does not match "abc\n" and `GRX_SEARCH_NOTEOL` does not reach it. That is
+PCRE2's `PCRE2_ENDANCHORED`. `GRX_OPT_ANCHORED` is honoured by the search,
+because what it says is "match only at the start offset" and a start offset is
+not offset zero; an `\A` assertion would be a different rule wherever a search
+begins past the start.
+
+Both are new readers for old options. `GRX_OPT_ANCHORED` had been declared in
+the public header since the scaffold and read by nothing at all, which a
+dialect with no anchors of its own is what finally noticed.
+
+Three cases worth stating, because a caller's own test table will hit them:
+
+- The empty pattern matches only the empty string, so `match("", "")` is true
+  and `match("a", "")` is false - while `search` of it is true for every
+  subject, every string containing the empty substring.
+- `match` is not "does the reported span reach the end". `a|ab` against "ab"
+  reports 0-1 under leftmost-first, and the whole-string answer is still true,
+  because the other branch reaches the end. The assertion is inside the
+  program, so the engine finds that branch.
+- A refused *pattern* and an exhausted *budget* are different answers.
+  JSONPath turns an invalid regexp into `false`; a `GRX_ERR_LIMIT` decided
+  nothing and must not become one.
+
+### 10.4 Cost, and what is not built
+
+§8 names range quantifiers as the expense - `(a{2,4}){2,4}` and
+`a{20,200000}` - and offers three mitigations: refuse nesting, refuse large
+ranges, or detect the consumption. This library takes the third, so both of
+those patterns are valid I-Regexp here and `GRX_Limits` is what refuses them:
+`a{20,200000}` is `GRX_ERR_LIMIT` with `LIMIT_REPEAT_COUNT` at the default
+`max_repeat_count`, and with that raised it is `LIMIT_PROGRAM_SIZE` instead. A
+caller who wants it raises both. Nothing about the cost is ever
+`GRX_ERR_SYNTAX`.
+
+Every I-Regexp is regular - no backreferences and no lookaround - so
+`grx_regex_facts()` reports `is_regular` and the Pike VM runs all of them,
+which is what §8's "linear time and space" aspiration needs.
+
+**What a caller's other options do here.** `grx_options_parse()` refuses every
+letter, the dialect having no flag alphabet, but a caller may still set the
+bits - which this library allows on purpose, a caller not being limited to what
+the pattern text can say (§5.15). Two are worth stating because the answer is
+not obvious:
+
+- `GRX_OPT_CASELESS` folds simply. There is no caseless *pattern* in the
+  grammar, and simple rather than full folding because a fold that makes one
+  pattern character match two subject characters is not something XSD or RFC
+  9485 contemplates: `ß` does not match "ss" here.
+- `GRX_OPT_UNICODE_SETS` changes nothing. It selects ECMAScript's `v`-mode
+  lowering for a class, and `v` differs only for a class with a *string* in
+  it - which this grammar cannot write, having no `\q{...}` and no set
+  operator. Measured, not assumed: the same program, instruction for
+  instruction.
+
+`GRX_OPT_EXTENDED` is inert, as it is for the POSIX and GNU rows: whitespace
+stripping is a front end's `skip_ignorable` and those dialects have none. That
+is a general gap rather than this dialect's - an option accepted and silently
+not honoured - and it is the same shape as `GRX_OPT_ANCHORED`, which this work
+found dead.
+
+**There is no replacement grammar.** RFC 9485 defines a Boolean match and no
+substitution, so the profile has no template sigil and `grx_regex_replace()`
+refuses a template with `GRX_DIAG_NOT_IN_DIALECT` - distinct from the
+`GRX_DIAG_DIALECT_NOT_IMPLEMENTED` a dialect whose template row is merely
+unwritten gets. `GRX_REPLACE_LITERAL` needs no grammar and still works.
+
+**What is not built: an oracle, and so conformance vectors.** Every other
+implemented dialect is measured against a reference this machine can run;
+this one is measured against a document, which is the weakest arrangement in
+the suite - it means the ABNF was read correctly, not that the reading was
+checked. Two oracles exist to be had, and they answer different halves:
+
+- **The syntax half.** A published checking implementation - `iregexp-check`
+  on PyPI is one, a Python binding over a Rust checker - would decide
+  accept-versus-refuse over a generated corpus of near-miss patterns, which is
+  exactly where a hand-read grammar goes wrong.
+- **The semantic half.** §5.2 says any I-Regexp is also an XSD regexp and the
+  mapping is the identity, so any XSD 1.0 or 1.1 engine is a Boolean oracle
+  for what a pattern matches.
+
+Until one of those is pinned, `tests/unit/test_iregexp.cpp` is the whole of
+the evidence, and it is written to quote the production behind each rule so
+that a misreading is visible as a misquotation.

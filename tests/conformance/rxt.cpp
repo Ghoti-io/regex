@@ -311,6 +311,11 @@ bool parse_options(
     {"extended", GRX_OPT_EXTENDED},
     {"ungreedy", GRX_OPT_UNGREEDY},
     {"anchored", GRX_OPT_ANCHORED},
+    // The two halves of a whole-string match, which is the question RFC 9485
+    // and XSD ask and the one a vector for `i-regexp` will need. Spelled here
+    // before any vector uses it, because an option the reader cannot parse is
+    // an expectation a generator cannot write.
+    {"anchored-end", GRX_OPT_ANCHORED_END},
     {"utf", GRX_OPT_UTF},
     {"ucp", GRX_OPT_UCP},
     {"no-capture", GRX_OPT_NO_CAPTURE},

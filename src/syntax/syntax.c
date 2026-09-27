@@ -198,6 +198,27 @@ static const GRX_SyntaxSpec spec_table[GRX_SYNTAX_COUNT] = {
     // ECMAScript, and a prescan that guessed would refuse a valid pattern.
     .allow_empty_class = 1,
   },
+  // I-Regexp, RFC 9485 Figure 1. Three features out of twenty-seven, and the
+  // absences are the specification: no lazy quantifier (`piece = atom
+  // [quantifier]`, and a quantifier is not an atom, so `a*?` is two
+  // quantifiers on one atom), no non-capturing group or any other `(?` form
+  // (`atom` has one group production), no backreference, no lookaround, no
+  // inline flags, no `\Q`, no hex, octal or control escape, no POSIX class,
+  // and no class set operations - class subtraction being one of the three
+  // things the RFC names as removed from XSD.
+  //
+  // What it *has* that ECMAScript's row also has is `\p{...}`, over 36
+  // general-category names and nothing else; src/syntax/iregexp.c holds the
+  // list, because a name outside it is a refusal rather than a lookup.
+  //
+  // `default_options` is UTF and only UTF: an I-Regexp is a sequence of
+  // Unicode scalar values (section 1.1), and RFC 9485 requires full Unicode
+  // support rather than offering it as a mode. Anchoring is deliberately not
+  // here - see GRX_OPT_ANCHORED_END.
+  [GRX_SYNTAX_IREGEXP] = {
+    .features = ALT | REP | UPRP,
+    .default_options = GRX_OPT_UTF,
+  },
   [GRX_SYNTAX_PYTHON] = {
     .features = ALT | REP | LAZY | POSS | NCAP | NAME | BREF | LAH | LBH
         | ATOM | COND | FLAG | SFLG | CMNT | WORD | ANCH | HEX | OCT,
@@ -295,6 +316,12 @@ static const char * const spec_names[GRX_SYNTAX_COUNT] = {
   [GRX_SYNTAX_TCL] = "tcl",
   [GRX_SYNTAX_VIM] = "vim",
   [GRX_SYNTAX_EMACS] = "emacs",
+  // The RFC's own spelling. Its title calls the format "I-Regexp", its
+  // grammar's start rule is `i-regexp`, and it registers no media type and no
+  // other identifier (section 7 has no IANA actions), so there is nothing
+  // more official to borrow. Lower case with a hyphen is this table's house
+  // style, and grx_syntax_from_name() ignores case, so "I-Regexp" finds it.
+  [GRX_SYNTAX_IREGEXP] = "i-regexp",
 };
 
 /**
@@ -675,6 +702,48 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     },
   },
 
+  // I-Regexp. Most of a profile answers "what does this construct mean", and
+  // this dialect does not have most of the constructs - so the cells below
+  // are the few with a reader, and the ones left at zero are left there
+  // because nothing can ask them: there is no `$`, no lookbehind, no
+  // backreference, no `\w`, no `\<` and no composing rule in a grammar that
+  // has no such spelling. A value in those cells would be a value no test
+  // could distinguish from any other.
+  //
+  // What does have a reader:
+  //
+  // - **newlines**, because `.` is defined by them. XSD's `.` excludes CR and
+  //   LF and nothing else, which is ANYCRLF's set of single characters - so
+  //   `.` matches U+2028 here where ECMAScript's `.` does not. The CR LF
+  //   *pair* half of that convention has no reader, the anchors it moves not
+  //   existing.
+  // - **property_match**, which must be STRICT: Figure 1's names are
+  //   `%s`-literals, so `\p{lu}` is not `\p{Lu}` and loose UAX #44 matching
+  //   would accept the spelling the ABNF refuses.
+  // - **subject_is_text**, because the subject is Unicode scalar values.
+  // - **fold**, which the *pattern* cannot ask for - there is no flag in the
+  //   syntax - and a caller can, GRX_OPT_CASELESS being the caller's to set
+  //   in any dialect. Simple folding is the answer then, not full: a full
+  //   fold makes one pattern character match two subject characters, and
+  //   nothing in RFC 9485 or XSD contemplates that.
+  // - **preference**, which is unobservable in the RFC's own terms - it has
+  //   only a Boolean to return - and observable here, because this library
+  //   reports spans. Leftmost-first is what every engine a JSONPath
+  //   implementation is likely to be using does.
+  //
+  // - **template_spec is deliberately absent.** RFC 9485 defines a Boolean
+  //   match and no replacement grammar, so there is no sigil to write here
+  //   and grx_regex_replace() refuses a template in this dialect with
+  //   GRX_DIAG_NOT_IN_DIALECT unless the caller passes GRX_REPLACE_LITERAL.
+  [GRX_SYNTAX_IREGEXP] = {
+    .preference = GRX_PREFER_LEFTMOST_FIRST,
+    .empty_loop = GRX_EMPTY_LOOP_FAIL,
+    .newlines = GRX_NEWLINES_ANYCRLF,
+    .fold = GRX_FOLD_SIMPLE,
+    .fold_utf = GRX_FOLD_SIMPLE,
+    .property_match = GRX_PROPERTY_STRICT,
+    .subject_is_text = 1,
+  },
   [GRX_SYNTAX_PYTHON] = {
     // BREAK, not the FAIL a silent row gets. `(a*)*` against "b" reports
     // group 1 as the empty string in CPython 3.13, as it does in perl and

@@ -3915,6 +3915,38 @@ GRX_Result grx_lower_pattern(const GRX_Pattern * pattern,
   // because the question is the same one: a composing character with
   // something before it is in the middle of a character. They cost nothing
   // to any engine, and nothing at all to the ten dialects that do not ask.
+  // GRX_OPT_ANCHORED_END, as the assertion the caller could not write. A
+  // dialect may have no spelling for the end of the subject - I-Regexp has no
+  // anchors at all, because RFC 9485 gives `^` and `$` back to the literal
+  // characters - and the option is the caller's rather than the pattern's, so
+  // it is applied here where every dialect passes.
+  //
+  // `\z` and not `$`: the end of the subject, not the end of a line, so a
+  // final newline does not satisfy it and no newline convention changes it.
+  // That is PCRE2_ENDANCHORED's meaning and it is what a whole-string Boolean
+  // match needs - XSD's semantics, which RFC 9485 section 4 adopts.
+  //
+  // The start half is not here. GRX_OPT_ANCHORED says "match only at the
+  // start offset", and a start offset is not offset 0: `\A` would be a
+  // different rule wherever a search begins past the start, so exec() honours
+  // that one where the offset is known.
+  if (result == GRX_OK && (low.options & GRX_OPT_ANCHORED_END)) {
+    uint32_t anchored = GRX_INDEX_NONE;
+    result = add(&low, GRX_IR_CONCAT, NULL, &anchored);
+    if (result == GRX_OK) {
+      result = attach(&low, anchored, root);
+    }
+    uint32_t assertion = GRX_INDEX_NONE;
+    if (result == GRX_OK) {
+      result = add(&low, GRX_IR_ASSERT, NULL, &assertion);
+    }
+    if (result == GRX_OK) {
+      grx_ir_node(low.ir, assertion)->mode = (uint8_t)GRX_ASSERT_END_SUBJECT;
+      result = attach(&low, anchored, assertion);
+    }
+    root = anchored;
+  }
+
   if (result == GRX_OK && composing_clusters(&low)) {
     uint32_t guarded = GRX_INDEX_NONE;
     result = add(&low, GRX_IR_CONCAT, NULL, &guarded);

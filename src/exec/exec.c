@@ -379,7 +379,14 @@ static GRX_Result exec(const GRX_Regex * regex, const char * subject,
     .start = options->begin,
     .search_start
         = search_start == GRX_NPOS ? options->begin : search_start,
-    .anchored = anchored,
+    // The caller's GRX_OPT_ANCHORED as well as the operation's. The option
+    // is documented as "match only at the start offset", which is what this
+    // flag is, and until now nothing read it: a caller who set it got an
+    // unanchored search and no diagnostic. Its end-of-subject counterpart,
+    // GRX_OPT_ANCHORED_END, is honoured by lowering instead, because the end
+    // of the subject is something the pattern can assert and a *start
+    // offset* is not.
+    .anchored = anchored || (regex->options & GRX_OPT_ANCHORED) != 0,
     .not_bol = (options->flags & GRX_SEARCH_NOTBOL) != 0,
     .not_eol = (options->flags & GRX_SEARCH_NOTEOL) != 0,
     .empty_rule = (uint8_t)empty_rule,

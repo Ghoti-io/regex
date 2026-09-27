@@ -64,6 +64,8 @@ const GRX_Frontend * grx_frontend_for(GRX_Syntax syntax) {
       return &grx_frontend_gnu_bre;
     case GRX_SYNTAX_GNU_ERE:
       return &grx_frontend_gnu_ere;
+    case GRX_SYNTAX_IREGEXP:
+      return &grx_frontend_iregexp;
     default:
       // Everything in tiers 2 and beyond. Their packages are
       // documentation/plan.md WP-30 and later.

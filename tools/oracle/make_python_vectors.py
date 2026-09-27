@@ -14,7 +14,7 @@ different things. There is no *upstream* corpus to import, which is still
 true and is not going to change; there was also no *generated* one, which was
 not a consequence of it - ECMAScript has both an upstream corpus (test262)
 and a generated one, and Perl, PCRE2 and POSIX each have an upstream one. So
-of the nine dialects that compile and match, Python and Vim were the two with
+of the ten dialects that compile and match, Python and Vim were the two with
 nothing at all committed: their only gate needed a container to run, and on a
 machine without one they had unit tests and nothing else. That is the gap a
 tenth dialect would have repeated.

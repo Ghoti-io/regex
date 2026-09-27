@@ -4,9 +4,10 @@ This page is the layout of the code. The pipeline and the engines are in
 [design.md](design.md). Which dialects compile is in
 [dialects.md](dialects.md).
 
-Nine dialects compile and match: ECMAScript (legacy, Unicode and UnicodeSets),
-PCRE2, Perl, POSIX BRE and ERE, GNU BRE and ERE, Python, and Vim. Java, .NET,
-Ruby, RE2, Rust, Tcl and Emacs are named and report `GRX_ERR_UNSUPPORTED`.
+Ten dialects compile and match: ECMAScript (legacy, Unicode and UnicodeSets),
+PCRE2, Perl, POSIX BRE and ERE, GNU BRE and ERE, Python, Vim, and I-Regexp
+(RFC 9485). Java, .NET, Ruby, RE2, Rust, Tcl and Emacs are named and report
+`GRX_ERR_UNSUPPORTED`.
 Conditionals, recursion and the backtracking control verbs compile as far as
 they can and are then refused, rather than approximated. `grx_regex_replace()`,
 `grx_regex_split()` and `grx_regex_search_next()` apply the dialect's own

@@ -1,6 +1,6 @@
 # Ghoti.io Regex
 
-Regular expressions in C, across sixteen dialects and one parser. Three
+Regular expressions in C, across seventeen dialects and one parser. Three
 engines run the result: a Pike VM that is linear in the subject length, a
 backtracking engine for the constructs no lockstep simulation can express,
 and a bit-state engine that is the backtracker with a memo and the linear
@@ -10,15 +10,16 @@ bound restored.
 
 This is what the library implements.
 
-Nine dialects compile and match: ECMAScript (legacy, `u` and `v`), PCRE2,
-Perl, POSIX BRE and ERE, GNU BRE and ERE, Python, and Vim.
+Ten dialects compile and match: ECMAScript (legacy, `u` and `v`), PCRE2,
+Perl, POSIX BRE and ERE, GNU BRE and ERE, Python, Vim, and I-Regexp
+(RFC 9485, the interoperable subset JSONPath is specified over).
 
 Java, .NET, Ruby, RE2, Rust, Tcl and Emacs are named and report
 `GRX_ERR_UNSUPPORTED`.
 
 | Dialect | What it means here |
 | --- | --- |
-| ECMAScript, PCRE2, Perl, POSIX BRE, POSIX ERE, GNU BRE, GNU ERE, Python, Vim | Compiles and matches, on whichever engine can run the pattern. |
+| ECMAScript, PCRE2, Perl, POSIX BRE, POSIX ERE, GNU BRE, GNU ERE, Python, Vim, I-Regexp | Compiles and matches, on whichever engine can run the pattern. |
 | Java, .NET, Ruby, RE2, Rust, Tcl, Emacs | Named. A pattern reports `GRX_ERR_UNSUPPORTED`. |
 
 ## Before you call it
@@ -179,7 +180,7 @@ JSON Schema `pattern` and `patternProperties`.
 
 ## Status
 
-The nine dialects above compile and match on whichever of the three engines
+The ten dialects above compile and match on whichever of the three engines
 can run the pattern. The other seven report `GRX_ERR_UNSUPPORTED`.
 
 ### Conformance
@@ -201,6 +202,7 @@ engine and no network.
 | `posix-ere` | 245 | 100.00% | Spencer's cases, where glibc and musl agree |
 | `gnu-bre` | 159 | 100.00% | as `gnu-ere` |
 | `posix-bre` | 135 | 100.00% | as `posix-ere` |
+| `i-regexp` | 0 | - | no reference on this machine to generate them from; `documentation/dialects.md` §10.4 says what an oracle would be. The dialect's rules are in `tests/unit/test_iregexp.cpp` instead, against RFC 9485's ABNF |
 
 Read the denominators with the rates: they differ by two orders of magnitude,
 and 100% of 135 vectors is a smaller claim than 100% of 28,559.

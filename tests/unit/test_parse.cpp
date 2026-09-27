@@ -670,7 +670,7 @@ TEST(Parse, AnUnbuiltDialectSaysSoRatherThanGuessing) {
         || syntax == GRX_SYNTAX_PERL || syntax == GRX_SYNTAX_POSIX_BRE
         || syntax == GRX_SYNTAX_POSIX_ERE || syntax == GRX_SYNTAX_GNU_BRE
         || syntax == GRX_SYNTAX_GNU_ERE || syntax == GRX_SYNTAX_PYTHON
-        || syntax == GRX_SYNTAX_VIM) {
+        || syntax == GRX_SYNTAX_VIM || syntax == GRX_SYNTAX_IREGEXP) {
       continue;
     }
     GRX_Pattern * parsed = nullptr;
@@ -680,6 +680,36 @@ TEST(Parse, AnUnbuiltDialectSaysSoRatherThanGuessing) {
     EXPECT_EQ(result, GRX_ERR_UNSUPPORTED) << grx_syntax_name((GRX_Syntax)syntax);
     EXPECT_EQ(error.diag, GRX_DIAG_DIALECT_NOT_IMPLEMENTED);
     EXPECT_EQ(parsed, nullptr);
+  }
+}
+
+TEST(Parse, EveryFrontEndFillsTheHooksTheParserCallsUnconditionally) {
+  // Six of the vtable's hooks are called without a NULL test, and the rest
+  // are optional. A front end that leaves a mandatory one out does not fall
+  // back to a default: it dereferences NULL, from inside a parse, on some
+  // pattern that happens to reach that hook - `a**` was the one that found
+  // it, so the crash was two dialects and a quantifier away from the missing
+  // line.
+  //
+  // This is the cheap version of the fix. The expensive version would be to
+  // give every hook a default, which would mean inventing a default answer
+  // for questions like "what does `(` open here" that only a dialect can
+  // answer. Naming them here instead means the next front end finds out at
+  // `make test` rather than in a fuzzer.
+  for (int syntax = 0; syntax < GRX_SYNTAX_COUNT; syntax++) {
+    const GRX_Frontend * frontend = grx_frontend_for((GRX_Syntax)syntax);
+    if (!frontend) {
+      continue;
+    }
+    const char * name = grx_syntax_name((GRX_Syntax)syntax);
+    EXPECT_NE(frontend->name, nullptr) << name;
+    EXPECT_NE(frontend->atom_escape, nullptr) << name;
+    EXPECT_NE(frontend->class_escape, nullptr) << name;
+    EXPECT_NE(frontend->char_class, nullptr) << name;
+    EXPECT_NE(frontend->group_open, nullptr) << name;
+    EXPECT_NE(frontend->brace_quantifier, nullptr) << name;
+    EXPECT_NE(frontend->literal_atom, nullptr) << name;
+    EXPECT_NE(frontend->check_quantifier_target, nullptr) << name;
   }
 }
 

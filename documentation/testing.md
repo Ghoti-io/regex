@@ -22,6 +22,20 @@ and built by the conformance lane ([plan.md](plan.md)).
 - **Skips are counted, never silent.** A vector skipped because its oracle
   is absent, or its Unicode version is newer than the tables, is reported
   with a count so a green run cannot hide a missing oracle.
+- **One dialect has no oracle, and the exception is stated rather than
+  quietly taken.** I-Regexp (RFC 9485) names no implementation: it is a
+  *format*, defined by an ABNF, and the reference is a document. So its rules
+  are in `tests/unit/test_iregexp.cpp`, each quoting the production it comes
+  from, and it has **no conformance vectors at all** - the README's table
+  gives it a rate of `-` rather than a percentage, because a corpus generated
+  from this library's own answers would record its bugs as requirements.
+  That is the weakest arrangement on this page and it is not where the
+  dialect should stay: [dialects.md](dialects.md) §10.4 names the two oracles
+  that would fix it, one for the syntax half and one for the semantics, and
+  the second is free - §5.2 of the RFC makes every I-Regexp an XSD regexp
+  under the identity mapping, so any XSD engine answers what a pattern
+  matches. Neither is pinned, and both would need a package added to a shared
+  container image, which is a decision of its own.
 
 ## 2. Oracles
 
@@ -443,7 +457,10 @@ would reach only by accident. `generated.rxt` holds the random ones, which
 reach combinations nobody would think to write.
 
 Three dialects are generated this way - ECMAScript, Python and Vim - and four
-are imported from an upstream corpus. Python and Vim were the two with
+are imported from an upstream corpus. The tenth, I-Regexp, has neither: no
+corpus to import and no reference to generate from, which §1 states as the one
+exception to this page's first principle rather than leaving a dialect with an
+empty directory and no explanation. Python and Vim were the two with
 **nothing committed at all** until 2026-09-26: they have no corpus to import,
 and that was taken to settle the generated question too, so their only gate
 needed a container and a machine without one checked them with unit tests.
@@ -1218,6 +1235,10 @@ pair, and nothing compared the two halves: the Vim differential asks
 `GRX_ENGINE_AUTO`, which is one engine per program. The check generates from
 Vim's, Perl's, PCRE2's and Python's vocabularies as well now - nine dialects
 - and the Vim rows alone put 3,214 programs through two engines or more.
+I-Regexp is the one built dialect with no vocabulary here, which is a gap
+rather than a decision: every I-Regexp is regular, so all three engines run
+every one of them and there is more to compare than for any other dialect,
+not less.
 
 Seen to fail, on the code the new rows exist for: making the Pike VM's
 cluster boundary always hold reports 171 disagreements against the

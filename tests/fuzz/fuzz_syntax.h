@@ -49,6 +49,7 @@ static const GRX_Syntax kBuiltSyntaxes[] = {
   GRX_SYNTAX_GNU_ERE,
   GRX_SYNTAX_PYTHON,
   GRX_SYNTAX_VIM,
+  GRX_SYNTAX_IREGEXP,
 };
 static const size_t kBuiltSyntaxCount
     = sizeof(kBuiltSyntaxes) / sizeof(kBuiltSyntaxes[0]);

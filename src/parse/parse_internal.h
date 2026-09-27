@@ -890,6 +890,13 @@ typedef struct GRX_Frontend {
    * usually a literal, which is what the dialect's literal_atom() then
    * makes of it.
    *
+   * There is a second reason to answer non-zero, and I-Regexp is the dialect
+   * with it: the operator may not *exist*. RFC 9485 gives `^` and `$` back
+   * to the literal characters and has no anchor at all, so there is no
+   * escaped spelling either - but what the parser needs to be told is the
+   * same thing, that the bare character is not the operator. The hook is
+   * named for the common case and its effect is the general one.
+   *
    * NULL is "this dialect does not vary", and the spec flag decides.
    */
   int (*operator_is_escaped)(const GRX_Parser * parser, char op);
@@ -960,6 +967,18 @@ typedef struct GRX_Frontend {
 /**
  * @brief The hooks for a dialect, or NULL when it is named but not built.
  *
+ * **Seven of the hooks in the table are mandatory**, the parser calling them
+ * with no NULL test: `atom_escape`, `class_escape`, `char_class`,
+ * `group_open`, `brace_quantifier`, `literal_atom` and
+ * `check_quantifier_target`, plus the `name` a diagnostic prints. Every other
+ * hook is optional and documented as such where it is declared. A front end
+ * that omits a mandatory one crashes rather than falling back to anything,
+ * which is what EveryFrontEndFillsTheHooksTheParserCallsUnconditionally in
+ * tests/unit/test_parse.cpp is for - a front end may legitimately have
+ * nothing to do in one of them and should say so with a stub, the way
+ * src/syntax/posix.c's `class_escape` and src/syntax/iregexp.c's
+ * `check_quantifier_target` do.
+ *
  * @param syntax The dialect.
  * @return Its front end, or NULL.
  */
@@ -985,6 +1004,9 @@ extern const GRX_Frontend grx_frontend_posix_bre;
 extern const GRX_Frontend grx_frontend_posix_ere;
 extern const GRX_Frontend grx_frontend_gnu_bre;
 extern const GRX_Frontend grx_frontend_gnu_ere;
+
+/** @brief I-Regexp, RFC 9485: a checking implementation of Figure 1. */
+extern const GRX_Frontend grx_frontend_iregexp;
 
 // --------------------------------------------------------------------------
 // The services a hook uses. Declared here so that a front end is a table of

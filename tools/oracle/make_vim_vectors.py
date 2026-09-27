@@ -4,7 +4,7 @@ r"""Generate the Vim dialect's `.rxt` conformance vectors from vim itself.
 `vim_diff.py` is the differential: it needs the pinned vim image and runs
 fresh every time. This is the other half - a checked-in corpus that runs in
 `make test` on a machine with no containers, and that turns a rule confirmed
-once into a regression test forever. Of the nine dialects that compile and
+once into a regression test forever. Of the ten dialects that compile and
 match, Vim and Python were the two with nothing at all committed.
 
 **vim states group text, not group offsets, and it has no API that does.**
