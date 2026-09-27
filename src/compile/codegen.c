@@ -178,6 +178,24 @@ typedef struct {
   GRX_Arena frames;
   /** A subtree walk's stack, for capture_span(); uint32_t node indices. */
   GRX_Arena walk;
+  /**
+   * grx_ir_can_match_empty()'s answer per IR node: 0 unknown, 1 yes, 2 no.
+   *
+   * The question is a pure function of the subtree - the call builds a fresh
+   * analysis with an empty resolving set and no lookbehind in progress - so an
+   * answer is good for the whole compile. It was being asked afresh for every
+   * repeat, and a counted repeat asks it again for every copy it expands, which
+   * is how a 2,465-byte pattern spent 15.9 seconds being refused: 2,036 IR
+   * nodes, 92 repeats, 125 backreferences, and each question re-resolving every
+   * one of those references from scratch.
+   *
+   * The memo in src/ir/analyze.c (`cache_span`) does not help, and that is the
+   * lesson worth keeping: it lives on the Analysis struct, and the Analysis is
+   * built per call. It made one analysis cheap and left the number of analyses
+   * alone - so the gate written with it measured a single compile of a single
+   * pattern, which is the one case that was ever fixed.
+   */
+  GRX_Arena node_empty;
 } Codegen;
 
 /** One CALL waiting to be pointed at the block for its target. */
@@ -502,6 +520,26 @@ static GRX_Result emit_capture_reset_late(
     }
   }
   return GRX_OK;
+}
+
+/**
+ * Whether a subtree can match the empty string, asked at most once per node.
+ *
+ * A cache miss falls through to the real answer and a cache that could not be
+ * built falls through every time, so this is a memo and never a second opinion.
+ */
+static int can_match_empty(Codegen * codegen, uint32_t node_index) {
+  unsigned char * slot = node_index == GRX_INDEX_NONE
+      ? NULL
+      : GRX_ARENA_AT(unsigned char, &codegen->node_empty, node_index);
+  if (slot && *slot) {
+    return *slot == 1;
+  }
+  int answer = grx_ir_can_match_empty(codegen->ir, node_index);
+  if (slot) {
+    *slot = answer ? 1u : 2u;
+  }
+  return answer;
 }
 
 /** Generate a concatenation, in reading order or against it. */
@@ -1015,7 +1053,7 @@ static GRX_Result gen_repeat_step(Codegen * codegen, GenFrame * frame,
        */
       frame->u.repeat.empty_first
           = (node->empty_loop == GRX_EMPTY_LOOP_BREAK_FIRST
-                && grx_ir_can_match_empty(codegen->ir, body))
+                && can_match_empty(codegen, body))
           ? 1u
           : 0u;
       frame->u.repeat.pair_reg = 0;
@@ -1096,7 +1134,7 @@ static GRX_Result gen_repeat_step(Codegen * codegen, GenFrame * frame,
       // those in that order, so the copies cannot tread on each other. A body
       // that cannot match empty needs none of it; see stage 10.
       frame->u.repeat.guard
-          = grx_ir_can_match_empty(codegen->ir, frame->u.repeat.body) ? 1u
+          = can_match_empty(codegen, frame->u.repeat.body) ? 1u
                                                                      : 0u;
       frame->u.repeat.reg = frame->u.repeat.empty_first
           ? frame->u.repeat.pair_reg
@@ -1183,7 +1221,7 @@ static GRX_Result gen_repeat_step(Codegen * codegen, GenFrame * frame,
       // make the program unmemoizable: a progress register is history the
       // bit-state engine's (pc, position) key does not capture.
       frame->u.repeat.guard
-          = grx_ir_can_match_empty(codegen->ir, frame->u.repeat.body) ? 1u
+          = can_match_empty(codegen, frame->u.repeat.body) ? 1u
                                                                      : 0u;
       // The late capture reset wants the same number the guard wants - where
       // this iteration began - so one register serves both, and a loop that
@@ -2222,6 +2260,7 @@ GRX_Result grx_codegen_program(const GRX_IR * ir, const GRX_Limits * limits,
     .fixups = {0},
     .frames = {0},
     .walk = {0},
+    .node_empty = {0},
   };
   grx_arena_init(&codegen.fixups, out_program->insts.allocator, sizeof(Fixup),
       limits->max_program_size, GRX_DIAG_LIMIT_PROGRAM_SIZE);
@@ -2229,6 +2268,18 @@ GRX_Result grx_codegen_program(const GRX_IR * ir, const GRX_Limits * limits,
       sizeof(GenFrame), 0, GRX_DIAG_NONE);
   grx_arena_init(&codegen.walk, out_program->insts.allocator,
       sizeof(uint32_t), 0, GRX_DIAG_NONE);
+  // One slot per node, filled with "unknown". A failure to allocate leaves the
+  // arena short and can_match_empty() simply asks every time, which is what it
+  // did before this existed.
+  grx_arena_init(&codegen.node_empty, out_program->insts.allocator,
+      sizeof(unsigned char), 0, GRX_DIAG_NONE);
+  if (grx_arena_reserve(&codegen.node_empty, ir->nodes.count) == GRX_OK) {
+    for (size_t i = 0; i < ir->nodes.count; i++) {
+      if (grx_arena_append(&codegen.node_empty, NULL, NULL) != GRX_OK) {
+        break;
+      }
+    }
+  }
 
   GRX_Result result = copy_classes(&codegen, &ir->classes);
 
@@ -2271,6 +2322,7 @@ GRX_Result grx_codegen_program(const GRX_IR * ir, const GRX_Limits * limits,
   grx_arena_clear(&codegen.fixups);
   grx_arena_clear(&codegen.frames);
   grx_arena_clear(&codegen.walk);
+  grx_arena_clear(&codegen.node_empty);
   if (result != GRX_OK) {
     return result;
   }

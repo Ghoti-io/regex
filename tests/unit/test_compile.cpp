@@ -170,6 +170,71 @@ TEST(Compile, AGroupsLengthIsMeasuredOncePerGroupNotOncePerReference) {
                              "took " << seconds << " s to compile";
 }
 
+TEST(Compile, ASubtreeIsAskedAboutTheEmptyStringOncePerNodeNotOncePerCopy) {
+  // The other half of the memo above, and the half it did not fix.
+  //
+  // `grx_ir_can_match_empty()` is a pure function of a subtree - the call
+  // builds a fresh analysis with an empty resolving set - and codegen asks it
+  // of every repeat body, to decide whether the loop needs a progress guard. A
+  // counted repeat is laid out by expansion, so an inner repeat's body is
+  // walked again for every copy of the outer one, and the question was asked
+  // again with it. The memo in group_span() cannot help: it lives on the
+  // Analysis struct and the Analysis is built per call, so it made one analysis
+  // cheap and left the *number* of analyses alone.
+  //
+  // Which is why the test above did not catch this. It compiles one pattern
+  // once, so it measures a single analysis - the only case that was ever fixed.
+  // This one needs many analyses of the same subtree, and nesting `{1,2}`
+  // sixteen deep over a chain of backreferences is the cheapest way to get
+  // 65,536 copies of one body out of a 381-byte pattern.
+  //
+  // A fuzz artifact found it as 15.9 seconds spent *refusing* a 2,465-byte
+  // pattern - 2,036 IR nodes, 92 repeats, 125 backreferences - which is
+  // notes/regex/TODO.md section 14s. Measured here: 1.37 s before the per-node
+  // cache and 0.017 s after, a factor of eighty.
+  //
+  // Half a second sits between those two populations in both builds, which is
+  // the only property a bound like this needs. Release: 0.017 s fixed against
+  // 1.37 s broken. Under AddressSanitizer, where `make test` also runs it:
+  // 0.141 s fixed, and the broken build would be some eleven. The tightest
+  // margin is therefore the sanitizer's 3.5x, which is why the work here is
+  // sixteen levels and not twenty.
+  std::string pattern = "(a)";
+  for (int group = 1; group <= 40; group++) {
+    pattern += "(\\" + std::to_string(group) + "x)";
+  }
+  std::string inner = "\\41";
+  for (int level = 0; level < 16; level++) {
+    inner = "(?:" + inner + "){1,2}";
+  }
+  pattern += inner;
+
+  GRX_Limits limits;
+  grx_limits_default(&limits);
+  // The expansion is 393,377 instructions, and the program-size cap is not
+  // what this test is about - a refused compile does the same walking.
+  limits.max_program_size = 0;
+
+  GRX_Regex * regex = nullptr;
+  auto start = std::chrono::steady_clock::now();
+  GRX_Result result = grx_regex_compile_with_allocator(pattern.data(),
+      pattern.size(), GRX_SYNTAX_PCRE, GRX_OPT_NONE, &limits, nullptr, nullptr,
+      &regex);
+  auto elapsed = std::chrono::steady_clock::now() - start;
+  EXPECT_EQ(result, GRX_OK);
+  EXPECT_NE(regex, nullptr);
+  grx_regex_free(regex);
+
+  auto seconds
+      = std::chrono::duration_cast<std::chrono::duration<double>>(elapsed)
+            .count();
+  EXPECT_LT(seconds, 0.5)
+      << pattern.size() << "-byte pattern, 16 levels of {1,2} over 40 "
+      << "backreferences, took " << seconds
+      << " s to compile. codegen caches grx_ir_can_match_empty() per IR node; "
+         "a figure this large means it is asking once per expanded copy again";
+}
+
 TEST(Compile, AllocatesNothingOnAFailedCompile) {
   grxtest::CountingAllocator allocator;
 
