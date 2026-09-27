@@ -1031,7 +1031,7 @@ at all.
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | ECMAScript (`String.prototype.replace`) | `$n`, `$nn` (1-99) | `$<name>` (only if the regex has named groups) | `$&`, `` $` ``, `$'` | `$$` | literal `$n` | empty | none |
 | PCRE2 (`pcre2_substitute`) | `$n`, `${n}` - every digit, no fallback | `$name`, `${name}`, `$<name>` | `$&`, `$0`, `${0}`, `` $` ``, `$'`, `$_` (the whole subject) | `$$` | error | error, or empty with `SUBSTITUTE_UNSET_EMPTY` (exposed as an option) | extended mode: `\U \L \E \u \l`, and `${n:+a:b}`, `${n:-d}` |
-| Perl (interpolation subset) | `$n`, `${n}`, `\n` (deprecated) | `$+{name}` | `$&`, `` $` ``, `$'` | `\$`, `\\` | empty (undef) | empty | `\U \L \E \u \l \Q` - **built**, with four rules that are not Vim's; see below |
+| Perl (interpolation subset) | `$n`, `${n}`, `\n` (deprecated) | `$+{name}` | `$&`, `` $` ``, `$'` | `\$`, `\\` | empty (undef) | empty | `\U \L \F \E \u \l \Q` - **built**, with four rules that are not Vim's; see below |
 | Python (`re.sub`) | `\n`, `\nn` (1-99, no fallback) | `\g<name>`, `\g<n>` | `\g<0>` only | `\\`, `\a \b \f \n \r \t \v`, octal; `\` before a non-alphanumeric keeps **both**; every other letter is an error | error | empty | none |
 | Java (`appendReplacement`) | `$n` (longest valid prefix) | `${name}` | none | `\` quotes the next character | error | empty (**probe**) | none |
 | .NET | `$n`, `${n}` | `${name}` | `$&`, `` $` ``, `$'`, `$+`, `$_` | `$$` | literal | empty | none |
@@ -1050,7 +1050,7 @@ than inherited:
 
 | | Perl | Vim |
 | --- | --- | --- |
-| Letters | six: `\U \L \u \l \E \Q` | seven: `\e` is `\E` too |
+| Letters | seven: `\U \L \F \u \l \E \Q`, `\F` being a case **fold** that no other row here has | seven, a different seven: `\e` is `\E` too and there is no `\F` or `\Q` |
 | Mapping | **full**: `\U` over U+00DF is "SS" | simple: U+00DF stands |
 | A one-shot inside a run | ignored: `\Uab\lcd` is "ABCD" | suspends it: "ABcD" |
 | Two one-shots | the **first** wins: `\u\lab` is "Ab" | the last does |
@@ -1069,6 +1069,11 @@ U+2028 is escaped and U+00B2 is not, though neither is a word character, and
 U+200D is escaped though it is one - so this library applies the ASCII rule and
 `tools/oracle/replace_diff.py` counts the rows where perl adds a backslash
 above U+007F rather than approximating them.
+
+**The alphabet was enumerated rather than read**, one escape at a time over
+every printable character, which is how `\F` was found: section 5.11 had
+listed six operators for years and there are seven. The same sweep says what
+is left.
 
 **What is still not read is the rest of the double-quotish alphabet.** `\t`,
 `\n`, `\e`, `\x41` and `\x{42}` are a tab, a newline, U+001B and two "A"s

@@ -813,6 +813,22 @@ TEST(Subst, PerlsReplacementCaseOperators) {
   EXPECT_EQ(replaced("\\(x\\)", "x", "\\Uab\\ecd", GRX_REPLACE_GLOBAL,
                 GRX_ENGINE_AUTO, vim), "ABcd");
 
+  // `\F` is the seventh letter and a third *run*: a case **fold**, which no
+  // other dialect here has and which dialects.md section 5.11 did not list
+  // until the printable alphabet was enumerated against perl. The fold of
+  // U+00DF is "ss" where its lowercase is U+00DF, so it is not `\L` by
+  // another name, and it replaces a case run as `\L` does.
+  EXPECT_EQ(replaced("(.+)", "AB", "\\F$1", GRX_REPLACE_GLOBAL,
+                GRX_ENGINE_AUTO, perl), "ab");
+  EXPECT_EQ(replaced("(.+)", "\xC3\x9F", "\\F$1", GRX_REPLACE_GLOBAL,
+                GRX_ENGINE_AUTO, perl), "ss");
+  EXPECT_EQ(replaced("(.+)", "\xC3\x9F", "\\L$1", GRX_REPLACE_GLOBAL,
+                GRX_ENGINE_AUTO, perl), "\xC3\x9F");
+  EXPECT_EQ(replaced("(.+)", "AB", "\\U$1\\F$1", GRX_REPLACE_GLOBAL,
+                GRX_ENGINE_AUTO, perl), "ABab");
+  EXPECT_EQ(replaced("(.+)", "AB", "\\FAB\\ECD", GRX_REPLACE_GLOBAL,
+                GRX_ENGINE_AUTO, perl), "abCD");
+
   // `\Q` quotes every ASCII character that is not a word character, and
   // composes with a case run in either order.
   EXPECT_EQ(replaced("(.+)", "a.b c-d_e", "\\Q$1", GRX_REPLACE_GLOBAL,

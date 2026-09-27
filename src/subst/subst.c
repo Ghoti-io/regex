@@ -487,7 +487,12 @@ static uint32_t vim_control(char c) {
 /**
  * The case operator one of Perl's six letters asks for, or GRX_TPL_CASE_NONE.
  *
- * Six and not vim's seven: `\e` is **not** a terminator here. In a perl
+ * Seven, and not vim's seven: `\F` is a third *run* - a case fold - which no
+ * other dialect here has, and `\e` is **not** a terminator, which vim's is.
+ * dialects.md section 5.11 listed six for years and the seventh was found by
+ * enumerating the printable alphabet against perl rather than by reading.
+ *
+ * `\e` is **not** a terminator here: In a perl
  * replacement `\e` is U+001B, the string being double-quotish, and reading it
  * as `\E` would make `s/x/\Uab\ecd/` write "ABcd" where perl writes
  * "AB\x{1b}CD". vim's `\e` and `\E` are the same marker and vim_case() takes
@@ -504,6 +509,7 @@ static GRX_TemplateCase perl_case(char c) {
     case 'l': return GRX_TPL_CASE_LOWER_ONE;
     case 'U': return GRX_TPL_CASE_UPPER_RUN;
     case 'L': return GRX_TPL_CASE_LOWER_RUN;
+    case 'F': return GRX_TPL_CASE_FOLD_RUN;
     case 'Q': return GRX_TPL_CASE_QUOTE_RUN;
     case 'E': return GRX_TPL_CASE_NONE;
     default: return GRX_TPL_CASE_COUNT;
@@ -1030,7 +1036,8 @@ static GRX_Result push(GRX_Arena * out, const char * bytes, size_t length) {
 
 /** Whether this marker is a case run rather than a `\Q`. */
 static int is_case_run(uint8_t marker) {
-  return marker == GRX_TPL_CASE_UPPER_RUN || marker == GRX_TPL_CASE_LOWER_RUN;
+  return marker == GRX_TPL_CASE_UPPER_RUN || marker == GRX_TPL_CASE_LOWER_RUN
+      || marker == GRX_TPL_CASE_FOLD_RUN;
 }
 
 typedef struct CaseState {
@@ -1054,8 +1061,7 @@ typedef struct CaseState {
 static uint8_t case_run(const CaseState * state) {
   for (size_t i = state->depth; i > 0; i--) {
     uint8_t marker = state->stack[i - 1];
-    if (marker == GRX_TPL_CASE_UPPER_RUN
-        || marker == GRX_TPL_CASE_LOWER_RUN) {
+    if (is_case_run(marker)) {
       return marker;
     }
   }
@@ -1150,6 +1156,7 @@ static GRX_Result push_cased(CaseState * state, GRX_Arena * out,
     if (apply && state->perl) {
       int mode = apply == GRX_TPL_CASE_UPPER_RUN ? 'U'
           : apply == GRX_TPL_CASE_LOWER_RUN ? 'L'
+          : apply == GRX_TPL_CASE_FOLD_RUN ? 'F'
           : apply == GRX_TPL_CASE_UPPER_ONE ? 'u' : 'l';
       produced = grx_unicode_case_transform(codepoint, mode, mapped);
     }
@@ -1237,8 +1244,7 @@ static GRX_Result expand(const GRX_Template * tmpl, const GRX_Match * match,
           }
         }
         else if (op->a == GRX_TPL_CASE_QUOTE_RUN
-            || op->a == GRX_TPL_CASE_UPPER_RUN
-            || op->a == GRX_TPL_CASE_LOWER_RUN) {
+            || is_case_run((uint8_t)op->a)) {
           if (!cased.perl) {
             // vim's replace rather than nest, and it has no `\Q`: one entry
             // is the whole of its state.

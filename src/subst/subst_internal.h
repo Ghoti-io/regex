@@ -107,6 +107,15 @@ typedef enum {
    * It composes with a case run rather than replacing one: `\Q\U$1` and
    * `\U\Q$1` both quote *and* upper-case, measured both ways round.
    */
+  /**
+   * `\F`: case-fold, until a clear. Perl's, and no other dialect's here.
+   *
+   * A third *run* beside `\U` and `\L` rather than a variant of `\L`: the
+   * fold of U+00DF is "ss" where its lowercase is U+00DF, and the fold of
+   * U+0130 is two code points. It replaces a case run and is replaced by one,
+   * which is what `\U$1\F$1` over "AB" giving "ABab" says.
+   */
+  GRX_TPL_CASE_FOLD_RUN,
   GRX_TPL_CASE_QUOTE_RUN,
   /**
    * Closes the enum; not a marker.

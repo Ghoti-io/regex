@@ -155,6 +155,7 @@ DIALECT_FORMS = {
              "\\U$1", "\\L$1", "\\u$1", "\\l$1", "\\U$1\\E$2",
              "\\Uab\\lcd", "\\l\\UAB", "\\u\\Lab",
              "\\Q$1", "\\Q$1\\E.x", "\\Q\\U$1", "\\U\\Q$1",
+             "\\F$1", "\\F$1\\E$2", "\\U$1\\F$1",
              "\\E$1"],
     # Vim's. `&` is the whole match and `\&` a literal one, `\0` to `\9`
     # name groups a digit at a time, `\n`, `\r`, `\t` and `\b` decode,
@@ -445,7 +446,7 @@ def ask_vim(rows, engine=0):
 # depends on what is already in force. The candidate filter is therefore
 # wide and the *second measurement* decides - a row is excused only if perl
 # accepts the same template with the pair separated.
-ADJACENT_MARKERS = re.compile(r"(\\[ULulQE])(\\[ULulQE])")
+ADJACENT_MARKERS = re.compile(r"(\\[ULFulQE])(\\[ULFulQE])")
 
 
 def separate_markers(template):
@@ -472,7 +473,7 @@ def double_quotish_escape(template):
     return DOUBLE_QUOTISH.search(template) is not None
 
 
-CASE_MARKERS = re.compile(r"\\[ULulQE]")
+CASE_MARKERS = re.compile(r"\\[ULFulQE]")
 
 
 def quotemeta_above_ascii(theirs, ours):
@@ -885,15 +886,24 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
             # second copy.
             quoting += 1
             continue
-        if (dialect == "perl" and them == subject and us != them
+        if (dialect == "perl" and us != them
                 and perl_diff.BOUNDARY_FIRST.match(pattern)):
-            # perl finds no `\b{lb}` or `\b{wb}` at all in a one-character
-            # subject, though the boundary is there - the same defect
-            # tools/corpus/make_boundary_vectors.py excludes by name, seen
-            # through a substitution instead of a match: perl replaced nothing
-            # and this library replaced at the position perl's own engine
-            # agrees is a boundary. `perl_diff.BOUNDARY_FIRST` is the pattern
-            # shape, used rather than copied.
+            # perl's unanchored search skips positions its own engine calls
+            # boundaries: it finds no `\b{lb}` at all in a one-character
+            # subject though `.\b{lb}` matches there, and over "\r\t " it
+            # replaces at two of the four `\b{wb}` positions this library
+            # finds. The same defect tools/corpus/make_boundary_vectors.py
+            # excludes by name, seen through a substitution instead of a match.
+            #
+            # **Coarse, and here is what the coarseness costs**: every row
+            # whose pattern *begins* with one of perl's bound assertions is out
+            # of this comparison, so a real disagreement about a template in
+            # such a pattern would be excluded with them. The narrow form - the
+            # answers differing only at positions perl missed - needs the
+            # substitution count from both sides at each position, which
+            # neither driver reports. `perl_diff.BOUNDARY_FIRST` is the pattern
+            # shape, used rather than copied, and the match differential asks
+            # the precise question over the same atoms.
             defect += 1
             continue
         if (dialect == "perl" and us != them
