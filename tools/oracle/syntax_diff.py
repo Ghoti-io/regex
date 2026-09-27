@@ -34,6 +34,7 @@ import re
 import subprocess
 import sys
 import node_runner
+import oracle_env
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
@@ -68,8 +69,55 @@ TOKENS = [
 FLAG_SETS = ("", "u", "i", "iu", "m", "s", "v", "iv")
 
 
+# The two ES2025 rules the random corpus cannot reach.
+#
+# `corpus()` draws from TOKENS, and a duplicate group *name* needs two
+# occurrences of the same multi-character spelling - which a random draw over
+# tokens does not produce, and which is why the bucket above counted zero for
+# as long as it was a gap bucket and would have gone on counting zero as a
+# defect bucket. The modifier letters are a similar miss: `(?i:` is four
+# tokens in the right order.
+#
+# So the shapes are enumerated. Both sides of each rule are here - the
+# spellings the reference accepts and the ones it refuses - because a list of
+# accepted patterns cannot tell a parser that is too permissive from one that
+# is right.
+ES2025_SHAPES = [
+    # Duplicate names: legal where the two cannot both participate.
+    "(?<n>a)|(?<n>b)",
+    "(?<n>a)|(?<n>b)|(?<n>c)",
+    "(?:(?<n>a)|(?<n>b))\\k<n>",
+    "((?:(?<n>a)|(?<n>b)))",
+    "(?<n>a)*|(?<n>b)",
+    "(?=(?<n>a))|(?<n>b)",
+    "(?i:(?<n>a))|(?<n>b)",
+    # ...and illegal where they can.
+    "(?<n>a)(?<n>b)",
+    "(?<n>a)(?:(?<n>b))",
+    "(?:(?<n>a)|x)(?:(?<n>b)|y)",
+    "(?<n>a)?(?<n>b)",
+    "(?=(?<n>a))(?<n>b)",
+    "(?<n>a)(?!(?<n>b))",
+    "(?<n>x(?<n>y))",
+    "(?:|(?<n>a))(?<n>b)",
+    # The family V8 accepts and this library refuses; see
+    # v8_duplicate_name_defect(). Here so the bucket has a member rather than
+    # being a tripwire nothing can trip.
+    "(?<n>a)(?:b|(?<n>c))",
+    "(?<n>a)(?:x|(?<n>b))",
+    "(?<n>a)(?:b|c(?<n>d))",
+    "(?<n>a)(?:b|(?<n>c)|(?<n>d))",
+    # RegExp Modifiers: the three letters, both lists, and the refusals.
+    "(?i:a)", "(?m:a)", "(?s:a)", "(?im:a)", "(?ims:a)",
+    "(?-i:a)", "(?-ims:a)", "(?i-s:a)", "(?im-s:a)", "(?i-:a)",
+    "(?i:a)b", "a(?i:b)", "(?i:(?-i:a)b)", "(?s:.)", "(?-s:.)", "(?m:^b)",
+    "(?i)a", "(?i-i:a)", "(?ii:a)", "(?x:a)", "(?-:a)", "(?d:a)", "(?u:a)",
+    "(?g:a)", "(?y:a)", "(?v:a)", "(?:i:a)", "(?i a)", "(?i", "(?-",
+]
+
+
 def corpus(seed, count):
-    patterns = set()
+    patterns = set(ES2025_SHAPES)
 
     for length in (1, 2, 3):
         for combination in itertools.product(ALPHABET, repeat=length):
@@ -147,70 +195,88 @@ def astral_in_the_pattern(rows, reference, ours):
     return {index for index, accepted in zip(wanted, again) if accepted}
 
 
-# `(?i:`, `(?-i:`, `(?im-s:` - ECMAScript's RegExp Modifiers, Stage 4 and
-# shipped in V8 12.5. The letters are ECMAScript's own three, and at least one
-# has to be present on one side of the `-`, which is what keeps this from
-# matching `(?:` itself.
-MODIFIER_GROUP = re.compile(r"\(\?(?![:=!<])(?:[ims]*-[ims]+|[ims]+-?):")
-
 NAMED_GROUP = re.compile(r"\(\?<([A-Za-z_$][^>]*)>")
 
 
-def neutralise(pattern):
-    """The same pattern with both unbuilt ES constructs spelled a built way.
+def rename_duplicates(pattern):
+    """The same pattern with every repeated group name made fresh.
 
-    A modifier group becomes a plain `(?:`; a repeated group name becomes a
-    fresh one. Both keep the pattern's shape - same parentheses, same atoms -
-    so a pattern that still fails to parse afterwards failed for some other
-    reason, which is the whole point of asking.
+    Same parentheses, same atoms, one name changed - so a pattern that still
+    fails to parse afterwards failed for some other reason, which is what the
+    rewrite is for.
     """
-    out = MODIFIER_GROUP.sub("(?:", pattern)
     seen = {}
+
     def rename(match):
         name = match.group(1)
         seen[name] = seen.get(name, 0) + 1
         if seen[name] == 1:
             return match.group(0)
         return "(?<%s_%d>" % (name, seen[name])
-    return NAMED_GROUP.sub(rename, out)
+
+    return NAMED_GROUP.sub(rename, pattern)
 
 
-def unbuilt_es_construct(driver, rows, reference, ours):
-    r"""Rows where a construct this library has not built is the whole
-    difference.
+# V8's over-acceptance of a duplicate group name, and the probe that says it
+# is still there.
+#
+# `(?<n>a)(?:b|(?<n>c))` is accepted by V8 13.6 and both groups then take part
+# in one match - over "ac" the first reports "a", the second "c", and
+# `groups.n` is "c". The proposal's own statement of the rule is that a name
+# may be reused only "in different `|` alternatives, so that it's impossible
+# for a single match to actually use the same name multiple times", and here
+# one match uses it twice. `(?:b|(?<n>c))(?<n>a)`, the same pattern with the
+# two halves swapped, is refused - so it is positional rather than a rule.
+#
+# This library implements the stated rule and therefore refuses a family V8
+# accepts. The probe is run rather than assumed: if a later V8 fixes this, the
+# bucket must be empty, and the gate says so instead of quietly excluding
+# rows.
+V8_DUPLICATE_PROBE = "(?<n>a)(?:b|(?<n>c))"
 
-    Two of them, both ECMAScript rules newer than this library's parser and
-    both found the day the node pin moved from V8 12.4 to V8 13.6, which
-    refused them too:
 
-      duplicate named capture groups   `(?<n>a)|(?<n>b)` - legal where the two
-                                       cannot both participate
-      RegExp Modifiers                 `(?i:a)`, `(?-i:a)`, `(?im-s:a)`
+def v8_duplicate_defect_present():
+    """Whether the pinned node still accepts the family and lets both fill."""
+    program = (
+        "let out = 'no';\n"
+        "try {\n"
+        "  const m = new RegExp(%s, 'u').exec('ac');\n"
+        "  if (m && m[1] === 'a' && m[2] === 'c') { out = 'yes'; }\n"
+        "} catch (e) { out = 'no'; }\n"
+        "console.log(out);\n" % json.dumps(V8_DUPLICATE_PROBE))
+    finished = subprocess.run(node_runner.command("-e", program),
+        capture_output=True, text=True)
+    if finished.returncode:
+        sys.stderr.write(oracle_env.reference_stderr(finished.stderr))
+        return None
+    return finished.stdout.strip() == "yes"
 
-    documentation/dialects.md section 6 carries both, and they are *gaps* -
-    work this library has not done - rather than deviations it has chosen. The
-    count is printed rather than folded into the total, so a reader sees what
-    the run did not compare.
 
-    **Asked rather than assumed**, the way astral_in_the_pattern() is asked,
-    and mirrored: that one rewrites the pattern and asks *node* whether the
-    rewrite is why it refused; this rewrites the pattern and asks *this
-    library* whether the rewrite is why it refused. A row is kept only where
-    we rejected, node accepted, and spelling the construct a way this library
-    has built makes it accept. A pattern that still fails after the rewrite
-    failed for another reason and stays a disagreement - which is what stops
-    `GRX_DIAG_INVALID_GROUP_SYNTAX`, a diagnostic for `(?` followed by
-    anything meaningless, from becoming a licence.
+def v8_duplicate_name_defect(driver, rows, reference, ours, present):
+    r"""Rows where V8 accepted a duplicate name this library refuses.
+
+    Not a gap. **This bucket used to be one** - it held two ECMAScript rules
+    newer than this parser, duplicate named capture groups and RegExp
+    Modifiers, and both are built now. Deleting it outright would have been
+    wrong in a way worth recording: its membership test was "we refused, node
+    accepted, and renaming the duplicate makes us accept", which is *also*
+    true of every row of the defect above. A bucket whose reason has been
+    replaced by a reason of the opposite sign is the shape that reports a
+    reference defect as work not done.
+
+    So it is the same test with the sign named, and it is empty unless the
+    probe says the reference still has the defect.
     """
+    if not present:
+        return set()
     wanted = [index for index, ((flags, pattern), expected, verdict)
         in enumerate(zip(rows, reference, ours))
-        if expected and verdict != "ok"
-            and (MODIFIER_GROUP.search(pattern)
-                 or _has_repeated_name(pattern))]
+        if expected and verdict != "ok" and _has_repeated_name(pattern)]
     if not wanted:
         return set()
-    again = ask_library(driver, [(rows[index][0], neutralise(rows[index][1]))
-        for index in wanted])
+    again = ask_library(driver,
+        [(rows[index][0], rename_duplicates(rows[index][1]))
+         for index in wanted])
     if len(again) != len(wanted):
         return set()
     return {index for index, verdict in zip(wanted, again) if verdict == "ok"}
@@ -257,7 +323,12 @@ def main(argv):
         return 2
 
     astral = astral_in_the_pattern(rows, reference, ours)
-    unbuilt = unbuilt_es_construct(driver, rows, reference, ours)
+    present = v8_duplicate_defect_present()
+    if present is None:
+        sys.stderr.write("could not ask node whether it still accepts "
+            "%s; refusing to guess\n" % V8_DUPLICATE_PROBE)
+        return 2
+    unbuilt = v8_duplicate_name_defect(driver, rows, reference, ours, present)
 
     disagreements = {}
     capped = 0
@@ -295,7 +366,8 @@ def main(argv):
 
     print("\n%d patterns x %d flag sets = %d cases; %d capped by a limit and "
           "not compared; %d an astral character in the pattern; "
-          "%d an ECMAScript construct this library has not built; "
+          "%d V8 accepting a duplicate group name both halves of one "
+          "match then fill; "
           "%d disagreements"
           % (len(patterns), len(FLAG_SETS), len(rows), capped, len(astral),
              len(unbuilt), total))

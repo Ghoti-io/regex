@@ -31,10 +31,10 @@ observation of this machine - see §2.1.
 
 | Oracle | Drives | Driver |
 | --- | --- | --- |
-| node 22.23.2 (V8 12.4.254.21, Unicode 17.0) | ECMAScript | `tools/oracle/node_match.mjs` and its siblings, through `node_runner.py`, which adds `--regexp-interpret-all`: without it V8's interpreter and its compiled code disagree and a row's answer depends on how many rows preceded it |
-| perl v5.40.1 | Perl | `tools/corpus/perl_match.pl`: `@-`/`@+`, `%+`, and a fourth field naming the **reading** - `quoted` (the bytes are the pattern, which is what interpolating a variable gives) or `source` (the pattern as typed between `/` delimiters, so perl's double-quotish pass runs first). The two disagree and which one a corpus means is the corpus's property; see §4. A second pin, `perl-next` (v5.44.0, UCD 17.0.0), is reachable with `GHOTI_ORACLE_ALIAS=perl=perl-next` |
+| node 24 (V8 13.6.233.17-node.53, Unicode 17.0) | ECMAScript | `tools/oracle/node_match.mjs` and its siblings, through `node_runner.py`, which adds `--regexp-interpret-all`. In V8 12.4, which Node 22 carried, without it the interpreter and the compiled code disagreed and a row's answer depended on how many rows preceded it; **that is fixed in this V8** and the flag stays anyway, because `check-oracle-determinism` asserts the *answer* rather than merely that it is stable, so it remains a live assertion about whichever V8 is pinned |
+| perl v5.44.0 | Perl | `tools/corpus/perl_match.pl`: `@-`/`@+`, `%+`, and a fourth field naming the **reading** - `quoted` (the bytes are the pattern, which is what interpolating a variable gives) or `source` (the pattern as typed between `/` delimiters, so perl's double-quotish pass runs first). The two disagree and which one a corpus means is the corpus's property; see §4. There was a second pin, `perl-next`, and the raise to 5.44.0 consumed it: it existed so the newer perl could be asked the older one's questions before anyone committed to it, and a second pin with nothing left to read is weight. `python-next` is the same mechanism for a decision not yet taken |
 | PCRE2 10.46 | PCRE2 | `tools/oracle/pcre2_match.c`, compiled **inside** the image against its libpcre2-dev and run there. pcre2test reports matched *text* rather than offsets and omits a trailing group that did not participate, which is most of what a match comparison asks; `pcre2test` itself answers the corpus import and the probe |
-| python 3.13.5 (UCD 15.1.0) | Python | `tools/oracle/python_match.py`, the same batch protocol as the rest, in three modes for `re`, `re.split` and `re.sub`. Converts CPython's character offsets to UTF-8 byte offsets the way `node_match.mjs` converts UTF-16 ones |
+| python 3.14.7 (UCD 16.0.0) | Python | `tools/oracle/python_match.py`, the same batch protocol as the rest, in three modes for `re`, `re.split` and `re.sub`. Converts CPython's character offsets to UTF-8 byte offsets the way `node_match.mjs` converts UTF-16 ones |
 | glibc 2.41 `regcomp` | GNU BRE/ERE | `tools/oracle/posix_match.c`, compiled inside the image. Nothing of this library is linked into it |
 | musl v1.2.6 `regcomp` | POSIX BRE/ERE, with glibc | `tools/oracle/musl_match.c`: musl's own regex sources, fetched by `tools/corpus/fetch.sh musl`, compiled into the driver **against the image's glibc** - so it declines a NUL (musl has no `REG_STARTEND`) and any byte >= 0x80 (that glibc's `mbtowc`). Never decides alone - see below |
 | GNU sed 4.9 | the POSIX and GNU replacement templates | `tools/oracle/sed_match.py`, which runs sed's per-case loop *inside* the image: sed's `s` command takes one script and one subject, so it is the one reference here with no batch protocol of its own |
@@ -72,8 +72,8 @@ what answered above the gate's numbers:
 
 ```
 $ make check-oracle-perl-syntax
-oracle(container): perl perl v5.40.1
-perl-syntax: 183 constructs, 1 known deviations, 0 stale entries, 0 disagreements
+oracle(container): perl perl v5.44.0
+perl-syntax: 189 constructs, 1 known deviations, 0 stale entries, 0 disagreements
 ```
 
 This library supplied the finding that pays for pinning the environment:
@@ -674,15 +674,20 @@ and measuring something else:
   there, which is two questions rather than a disagreement. The 104 of them
   are found by asking perl which keys are multi-code-point, never by a list
   in the differ: a list would go stale at the next UCD without saying so.
-* **Version.** This library is UCD 17.0.0 and perl 5.40.1 is older. The
-  restriction is on the whole **orbit**, not on the code point, and the
-  difference is not academic - U+019B is assigned in perl and its partner
-  U+A7DC is not, so perl calls U+019B uncased and restricting per code point
-  reports four disagreements that are all UCD 17.0.0 additions. A relation
-  is comparable only when the reference has heard of both ends of it.
+* **Version.** A perl older than these tables has never heard of some of
+  these code points, so every comparison is restricted to what perl calls
+  assigned. The restriction is on the whole **orbit**, not on the code point,
+  and the difference is not academic - against perl 5.40.1, U+019B was
+  assigned and its partner U+A7DC was not, so that perl called U+019B uncased
+  and restricting per code point reported four disagreements that were all
+  UCD 17.0.0 additions. A relation is comparable only when the reference has
+  heard of both ends of it. **The pin is 5.44.0 and carries UCD 17.0.0
+  exactly, so this restriction now removes nothing**; the run prints the
+  count, which is zero, and the restriction stays because it is keyed to what
+  perl answers rather than to a version.
 
-2,822 code points compared, 1,396 orbits, 104 and 110 skipped for those two
-reasons, 0 disagreements. Armed before it was believed: a driver that splits
+2,932 code points compared, 1,451 orbits, 104 skipped as a multi-code-point
+fold and 0 for the version, 0 disagreements. Armed before it was believed: a driver that splits
 one orbit, one that merges two, and one that names a wrong partner are each
 reported and each exit 1.
 
@@ -1257,8 +1262,9 @@ imported corpora:
   The rule had pcre2's half only, which refuses everything but `(*ACCEPT)*`.
 
 And three defects of the *references*, each excluded by name and counted
-in the run so the exclusion cannot go quiet: perl 5.40.1's branch-reset
-regression (Perl/perl5#24577), a pcre2 10.46 internal error on a lookbehind
+in the run so the exclusion cannot go quiet: perl 5.44.0's branch-reset
+regression (Perl/perl5#24577), which the raise re-checked and which still
+reproduces, a pcre2 10.46 internal error on a lookbehind
 beside an extended class, and perl's search for a pattern that *begins*
 with `\b{lb}` missing the end of a one-character subject. The first two are
 described in `tools/corpus/VERSIONS`, and the perl exclusions apply to the
@@ -1334,7 +1340,8 @@ pattern that compiles here and would be refused there matches perfectly
 well, so every match-shaped check agrees.
 
 Five construct families were accepted under `GRX_SYNTAX_PERL` and "not
-recognized" in perl 5.40.1 until this existed, all of them PCRE2's: the
+recognized" in perl - 5.40.1 when this was written, and 5.44.0 since -
+until this existed, all of them PCRE2's: the
 nineteen leading directives, callouts `(?C...)`, the `\g<1>` and `\g'name'`
 subroutine spellings, `(?(VERSION>=n))`, `(?J)` and `(?U)`, and the
 non-atomic lookarounds in all four spellings. They arrived the way this
@@ -1358,6 +1365,105 @@ is a two-way gate like `known-gaps.txt`, so the run failed with "remove the
 KNOWN entry" until somebody did. A list of exceptions that can only be
 added to is a list that stops describing anything.
 
+### The wide classes
+
+`make check-wide-classes` runs
+[wide_class_diff.py](../tools/oracle/wide_class_diff.py). `[[:alpha:]]` and
+its thirteen siblings are **table rules**, and a table rule is not tested by
+examples: its whole difficulty is which of 1,112,064 code points it holds. All
+fourteen were swept by hand on 2026-09-24 and **three were wrong** - `punct`
+held 7,766 code points neither reference has, `graph` was missing 164, and
+`word` was missing 236 because a comment paraphrased UTS #18 Annex C's
+`\p{alpha}` as "letters" and the code followed the paraphrase. None of the
+three was visible from the conformance corpus: 37,212 cases hold no
+letter-number, no format character inside `[[:graph:]]` and no non-ASCII
+symbol. This is that sweep as a gate.
+
+Three sweeps, each in its own implementation, one run per class:
+`tools/oracle/grx_classes.c` for this library, `tools/oracle/pcre2_classes.c`
+compiled inside the pinned pcre2 image, and a perl program for perl. Runs
+rather than bitmaps, so the output is readable. `\w` is swept beside
+`[[:word:]]` because they are the same table read through two spellings and
+the two must not drift.
+
+**Each dialect is held to its own reference.** The two disagree with each
+other about three things - pcre2's `\w` takes `\p{No}` and perl's does not,
+perl's takes `Mc`, `Me` and alphabetic `So`, and perl's `[[:graph:]]` counts
+private use - so one shared set cannot satisfy both, and this library carries
+the split as a profile axis (`GRX_WordSet`,
+`posix_graph_takes_private_use`). `perl` must therefore answer perl's set
+exactly and `pcre` pcre2's, which is an assertion the "how far apart are the
+references" figure cannot make.
+
+**Restricted to the 292,531 code points all three call assigned**, measured
+rather than assumed: each side is asked for its own `\P{Cn}`, this library
+included, because assuming this library's half is everything would hide the
+case the restriction exists for.
+
+**One code point is excused, and the excuse is a second measurement.**
+U+0295 is `Ll` in pcre2 10.46 and `Lo` in UCD 17.0.0, so `[[:lower:]]` here
+refuses a code point pcre2 accepts. The gate asks both sides for the code
+point's General_Category before excusing it and prints both answers, so the
+row can be read rather than taken on trust - and a class difference where the
+categories *agree* is a failure, which is the direction that matters.
+
+**The published figures are asserted, not merely printed.** `dialects.md`
+section 5.9 quotes how far the references are apart per class and this tool
+holds the same numbers; a measurement that stops matching fails the gate,
+because those figures were quoted for two days after the pin that produced
+them moved and nothing went red. Armed three ways: the version exclusion
+returning nothing (U+0295 becomes a failure), the `perl` dialect held to
+pcre2's set (1,528 code points of `\w`, 312 of `lower`), and a figure moved
+by 28.
+
+It is not in `make test`: 1,112,065 code points x 15 classes x three
+implementations needs the containers, and it belongs beside the other oracle
+gates.
+
+### The hand-probed claims
+
+`make check-doc-claims` runs
+[doc_claims_diff.py](../tools/oracle/doc_claims_diff.py). Most of what
+[dialects.md](dialects.md) asserts about a reference is checked by a
+generator; a handful of claims are sentences, probed once by hand and written
+down with the version they were taken against. Those had no gate at all, and
+`notes/regex/TODO.md` section 9-probes is the bill: **seven of them still
+named perl 5.40.1 a day after the pin moved to 5.44.0**, and the only reason
+nobody was misled is that all seven happened to carry when they were finally
+re-asked.
+
+Each claim is held in the tool as data, and three things are asserted about
+it:
+
+1. **The sentence is still in the document**, byte for byte. A reworded
+   sentence fails here until the table is updated, which is what stops the
+   tool from describing a page that has moved on.
+2. **The version the sentence names is the version that answers**, resolved
+   through `oracle_env` like every other gate's. Raising a pin turns every
+   sentence quoting the old number red in one run - which is the failure that
+   did not happen on 2026-09-25.
+3. **The reference still answers what the sentence says it does.** That is the
+   part a label sweep cannot do: a pin can move without changing a number in
+   the prose and still change an answer.
+
+22 claims and 54 probes as this is written, over perl, pcre2 and node. What it
+is *not* is a second opinion about this library: every claim here is a claim
+about a reference, and where a sentence also states this library's answer that
+half has a unit test or a vector.
+
+It was armed four ways before it was believed: a stale version label in the
+document, a reworded sentence, a wrong expected answer from a reference, and a
+label that agrees with the document and not with the pin. Each fails with the
+claim's id and what it expected; the control is clean.
+
+**Two of the claims found something rather than carrying.** Asking perl the
+script-run question again produced the six rows in
+[dialects.md](dialects.md) §6 that pcre2 and this library refuse and perl
+does not, and re-asking node the `v`-mode folding claim of §8.6.1 found three
+of its four rows fixed in V8 13.6 - rows a corpus exclusion had been keeping
+out of the match differential, and went on keeping out after the reason
+expired.
+
 ### The script-run differential
 
 `make check-oracle-script-runs` runs
@@ -1371,22 +1477,36 @@ alphabet of 28 characters chosen to hit each clause at least once, plus
 **Both references must agree before either decides.** PCRE2 and Perl
 implement this independently, so a rule they answer identically over
 thousands of cases is a rule rather than an implementation - and where they
-differ there is nothing to hold this library to. 25,037 subjects are decided
+differ there is nothing to hold this library to. 25,750 subjects are decided
 that way, with no disagreement.
 
-The other 727 are the useful part, because "the references disagree" is
+The other 14 are the useful part, because "the references disagree" is
 where a blind spot would go if it were left there. Each is classified by
-which reference this library sides with:
+which reference this library sides with, and **each side has to name a
+shape**:
 
-- **719 side with pcre2**, which carries Unicode 16.0.0 against perl's
-  15.0.0 while these tables are 17.0.0. U+0301's Script_Extensions is the
-  bulk of it: eight named scripts in UCD 17, and something wider in UCD 15.
-  Siding with the *older* UCD would mean these tables are not the ones being
-  read, so the tool fails if any row does.
 - **8 side with perl**, and all eight are one pcre2 defect - it accepts a
   script run mixing Han with two of its companion scripts, which
   pcre2unicode says is not one. The tool carries the shape of that defect
   and fails on a row that sides with perl and is not it.
+- **6 side with pcre2**, and all six are one perl defect, which is new here:
+  perl calls U+E0000 unassigned and gives it
+  `\p{Script_Extensions=Unknown}`, and admits it to a script run anyway,
+  where pcre2 and this library refuse it. The tool carries that shape too and
+  fails on a row that sides with pcre2 and is not it.
+
+**That second bucket had no shape until 2026-09-26, and for a good reason
+that had expired.** While perl carried UCD 15.0.0 against these tables'
+17.0.0 there were **719** rows in it and every one was version skew -
+U+0301's Script_Extensions is eight named scripts in UCD 17 and something
+wider in UCD 15 - so "pcre2 has the newer UCD" was a true sentence about the
+whole bucket and no per-row check was missing anything. The raise to perl
+5.44.0, which reads 17.0.0 exactly, deleted 713 of those rows and left six
+that are not skew at all, and the bucket went on printing the old reason for
+them. The version-skew explanation is now allowed only while perl's UCD
+really is older than `tools/unicode/UCD_VERSION`, which the tool asks through
+`tools/corpus/perl_ucd.py` rather than assuming, and the run says which of
+the two explanations it used.
 
 Proven by planting, twice. Removing the Common early-out - so that a run
 beginning with a full stop constrains every later character to Common -
@@ -1396,7 +1516,15 @@ a run of two or more gives 96 disagreements, 6 of them landing in the
 that. Both were checked by reading the *exit status*, not the output: the
 first time round the status was read through a pipe to `tail` and came back
 0 from `tail`, which is the hazard this page records elsewhere and which
-found its way in here while writing this paragraph.
+found its way in here while writing this paragraph. **Both figures were taken
+while perl carried UCD 15.0.0**, when the unsettled bucket held 727 rows
+rather than 14, so they are a record of the arming rather than numbers to
+expect from a run today.
+
+The pcre2-side check was armed the same way on the day it was added, and
+against the corpus as it now stands: making `perl_admits_unassigned()` return
+false, and separately handing it an empty unassigned set, each put all six of
+its rows into `unexplained` and each exited 1, with the control at 0.
 
 `tools/oracle/perl_diff.py` carries four script-run atoms as well, which is
 a different question: not whether the rule is right but whether
@@ -2502,13 +2630,18 @@ without them skips with a message rather than failing, as
 `tests/data/vectors/perl/boundaries.rxt` is the second gate and answers a
 different question: not where a boundary falls, but what the *dialect* does
 with it. Generated from Perl by `tools/corpus/make_boundary_vectors.py`.
-Perl 5.40.1 carries UCD 15.0.0 and these tables are 17.0.0, so rows whose
-answer changed between those editions are excluded **by name**, with the rule
-and the version beside each - and so is one row where the oracle is simply
-wrong: Perl finds no `\b{lb}` anywhere in a one-character subject, though
-`.\b{lb}` matches at that very position. Excluding a row for a reason that
-is written down and checkable is not the same as excluding whatever failed,
-and the difference is the whole value of the file.
+Rows are excluded **by name**, with the rule and the reason beside each, and
+the generator's fourth field says whether an upgrade would retire the entry.
+Four entries were version skew - Perl 5.40.1 carried UCD 15.0.0 against these
+tables' 17.0.0, so GB9c, LB15c and LB21a's HH class were rules it had never
+seen - and **the raise to 5.44.0, which reads 17.0.0, retired all four and put
+46 rows back into the comparison**. The two that remain are not an edition
+difference but a defect: Perl finds no `\b{lb}` anywhere in a one-character
+subject, though `.\b{lb}` matches at that very position, and re-checking it
+against 5.44.0 found it still present. 939 vectors from 945 rows, 6 left out.
+Excluding a row for a reason that is written down and checkable is not the
+same as excluding whatever failed, and the difference is the whole value of
+the file.
 
 ## 10.1 The limits report
 

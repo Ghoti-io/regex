@@ -34,6 +34,11 @@ import sys
 import oracle_env
 import pcre2_runner
 
+sys.path.insert(0, os.path.join(os.path.dirname(
+    os.path.dirname(os.path.abspath(__file__))), "corpus"))
+
+import perl_ucd
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 
@@ -81,6 +86,54 @@ HAN_COMPANIONS = {
     "Korean": "\uD55C",
     "HanBopomofo": "\u3105",
 }
+
+
+def perl_admits_unassigned(subject, unassigned):
+    r"""Whether this row is perl admitting an unassigned code point to a run.
+
+    The mirror of `is_pcre2_han_defect`, and it did not exist for a year
+    because it did not need to. While perl carried UCD 15.0.0 against these
+    tables' 17.0.0, **every** row where this library sided with pcre2 was
+    UCD skew, 719 of them, and "the newer UCD" was a true sentence about the
+    whole bucket. The raise to 5.44.0, which carries 17.0.0 exactly, deleted
+    713 of those rows and left 6 that are not skew at all: perl calls
+    U+E0000 unassigned and `\p{Script_Extensions=Unknown}` and admits it to
+    a script run anyway, where pcre2 and this library refuse it. The bucket
+    kept its old label and stopped describing its members.
+
+    So the bucket is named by a shape now, the way the perl-siding one
+    already was, and `main()` only lets the UCD-skew explanation stand while
+    perl's UCD is actually older than these tables - which it asks rather
+    than assumes.
+    """
+    return any(character in unassigned for character in subject)
+
+
+def perl_unassigned(characters):
+    """Which of these characters the pinned perl calls unassigned.
+
+    Asked of perl rather than of our own tables, because the claim being
+    excused is a claim about perl: that it calls the code point unassigned
+    and admits it to a script run regardless. Reading it from this library's
+    tables would make the excuse rest on the implementation under test.
+    """
+    program = ('while (my $line = <STDIN>) { chomp $line; '
+               'my $c = chr(hex $line); '
+               'print $c =~ /\\p{Cn}/ ? "1\\n" : "0\\n"; }')
+    ordered = sorted(characters)
+    finished = subprocess.run(
+        oracle_env.command("perl", ["perl", "-e", program]),
+        input="".join("%X\n" % ord(c) for c in ordered),
+        capture_output=True, text=True)
+    if finished.returncode:
+        sys.stderr.write(oracle_env.reference_stderr(finished.stderr))
+        return None
+    answers = finished.stdout.split()
+    if len(answers) != len(ordered):
+        sys.stderr.write("perl answered %d of %d assignedness questions\n"
+                         % (len(answers), len(ordered)))
+        return None
+    return {c for c, answer in zip(ordered, answers) if answer == "1"}
 
 
 def is_pcre2_han_defect(subject):
@@ -191,13 +244,35 @@ def main(argv):
     compared = 0
     # Where the two references differ there is no rule to hold this library
     # to - but there is still something to measure, and leaving it
-    # unmeasured is how a blind spot is built. pcre2 here carries Unicode
-    # 16.0.0 and perl 15.0.0, and these tables are 17.0.0, so the
-    # expectation is that every unsettled row sides with the newer of the
-    # two. A row siding with the older one, or with neither, is the shape
-    # that would mean something is wrong rather than merely old.
+    # unmeasured is how a blind spot is built. **Each side of a split needs a
+    # named shape**, and the pcre2 side went without one for as long as one
+    # sentence covered every member of it: while perl carried UCD 15.0.0
+    # against these tables' 17.0.0, every row this library decided pcre2's
+    # way was skew, so "the newer UCD" was true of the bucket. Six rows
+    # survive the raise to a perl that reads 17.0.0 and not one of them is
+    # skew.
+    #
+    # So the UCD-skew explanation is allowed only while perl's UCD really is
+    # older, which is asked rather than assumed, and every other pcre2-siding
+    # row must be the shape `perl_admits_unassigned` names. A row siding with
+    # neither is a third answer to a two-sided question and is a defect
+    # however the references got there.
     sided = {"pcre2": 0, "perl": 0, "neither": 0}
     unexplained = []
+    unassigned = perl_unassigned({c for subject in subjects for c in subject})
+    if unassigned is None:
+        return 2
+    their_ucd = perl_ucd.perl_ucd_version()
+    if their_ucd is None:
+        sys.stderr.write("could not ask perl for its UCD version, which is "
+                         "what decides whether a version-skew row is "
+                         "explained\n")
+        return 2
+    with open(os.path.join(ROOT, "tools", "unicode", "UCD_VERSION"),
+              encoding="utf-8") as handle:
+        our_ucd = handle.read().strip()
+    skew_possible = tuple(int(p) for p in their_ucd.split(".")) \
+        < tuple(int(p) for p in our_ucd.split("."))
     for subject, us, pcre_answer, perl_answer in zip(
             subjects, mine, theirs, yours):
         a = verdict(pcre_answer)
@@ -211,7 +286,13 @@ def main(argv):
                     else "perl" if mine_says == b else "neither")
             sided[side] += 1
             if side == "perl" and not is_pcre2_han_defect(subject):
-                unexplained.append(subject)
+                unexplained.append((subject, "sides with perl and is not "
+                    "pcre2's Han defect"))
+            if side == "pcre2" and not skew_possible \
+                    and not perl_admits_unassigned(subject, unassigned):
+                unexplained.append((subject, "sides with pcre2, and perl's "
+                    "UCD is not older, and it is not perl admitting an "
+                    "unassigned code point"))
             unsettled.append((subject, a, b, side))
             continue
         compared += 1
@@ -229,21 +310,23 @@ def main(argv):
               % (show(subject), a, b, side))
     for subject, them, us in disagreements[:args.examples]:
         print("  %-44s references=%-8s ours=%s" % (show(subject), them, us))
-    for subject in unexplained[:args.examples]:
-        print("  %-44s sides with perl and is not the Han defect"
-              % show(subject))
+    for subject, why in unexplained[:args.examples]:
+        print("  %-44s %s" % (show(subject), why))
     print("script runs: %d subjects, %d compared against pcre2 and perl "
           "agreeing, %d the two references answer differently "
-          "(ours sides with pcre2 %d - the newer UCD - and with perl %d, "
+          "(ours sides with pcre2 %d - %s - and with perl %d, "
           "all of them pcre2's Han defect; %d with neither, %d unexplained), "
           "%d disagreements"
           % (len(subjects), compared, len(unsettled), sided["pcre2"],
+             ("perl's UCD %s is older than these tables' %s"
+              % (their_ucd, our_ucd)) if skew_possible
+             else "perl admitting an unassigned code point to a run",
              sided["perl"], sided["neither"], len(unexplained),
              len(disagreements)))
     # Siding with neither is a third answer to a two-sided question and is a
-    # defect however the references got there. Siding with *perl* is the
-    # expected answer for exactly one shape - pcre2's Han defect - and the
-    # wrong answer for anything else, because perl carries the older UCD.
+    # defect however the references got there. Siding with either reference
+    # is the expected answer for exactly one shape each, and the wrong answer
+    # for anything else; `unexplained` says which row and which side.
     return 1 if disagreements or sided["neither"] or unexplained else 0
 
 

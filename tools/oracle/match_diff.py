@@ -100,19 +100,28 @@ FLAG_SETS = ("", "u", "i", "iu", "m", "s", "imsu", "v", "iv")
 # is going to be run with `v`, because every one of them is a syntax error
 # without it and a syntax error is a wasted row here.
 #
-# Every operand here is a nested class, or a `\q{}` whose alternatives are
-# all longer than one character, and that is deliberate. Node 22.23 does not case-fold a
-# class-set operand that is a bare character or a one-character `\q{}`, so
-# `[a&&a]` under `iv` does not match "A" there and `[[a]&&a]` does - the same
-# intersection written the other way round. That asymmetry is an
-# implementation defect rather than a rule (documentation/dialects.md section
-# 8.6.1); this library follows the specification, and these rows are kept out
-# of the corpus so the harness measures disagreements that mean something.
+# **No `\q{}` whose alternatives are one character long**, and that single
+# exclusion is what is left of a wider one. Node 22.23 did not case-fold a
+# class-set operand that was a bare character *or* a one-character `\q{}`, so
+# `[a&&a]` under `iv` did not match "A" there while `[[a]&&a]` did - the same
+# intersection written the other way round - and the generator avoided both
+# shapes.
+#
+# **V8 13.6 fixed the bare-character half.** Re-probed 2026-09-26, the day
+# after the pin moved: `[a&&[a]]`, `[a&&a]` and `[a--b]` all match "A" under
+# `iv` now, agreeing with this library and with ECMA-262, so they are in the
+# corpus. `[\q{a}]` over "A" still does not match there, which is the row the
+# exclusion is now for, and `documentation/dialects.md` section 8.6.1 carries
+# it alone. An exclusion whose reference has moved measures nothing and costs
+# coverage: three shapes went untested for a release longer than they needed
+# to.
 SETS_ATOMS = [
     "[[a-c]--[b]]", "[[a-z]&&[b-d]]", "[\\q{ab|cd}]", "[\\q{}]",
     "[\\q{abc|ab|xy}]", "[[a-c][x-z]]", "[^[a-c]]", "[\\q{ab}[c]]",
     "\\p{RGI_Emoji}", "[\\p{Basic_Emoji}]", "[[\\w]--[a-c]]",
     "[[a-z]--[aeiou]--[xyz]]", "[[a]&&[a]]", "[[^a]&&[^b]]", "[\\q{aa}[a]]",
+    # The three V8 13.6 fixed, which had never been asked.
+    "[a&&[a]]", "[a&&a]", "[a--b]", "[[a]&&a]",
 ]
 
 

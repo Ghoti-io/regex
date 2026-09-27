@@ -1,4 +1,4 @@
-# Perl's segmentation boundaries and `\X`, with Perl 5.40 as the
+# Perl's segmentation boundaries and `\X`, with perl v5.44.0 as the
 # oracle. Written by tools/corpus/make_boundary_vectors.py.
 #
 # The algorithms are gated against the Unicode Consortium's own

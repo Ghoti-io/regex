@@ -486,66 +486,6 @@ def is_abandoned_path_artifact(pattern, template):
         or "\\zs" in pattern or "\\ze" in pattern)
 
 
-# ES2025's duplicate named capture groups: `(?<n>a)|(?<n>b)` is legal when
-# the two groups cannot both participate, and an error otherwise. V8 13.6
-# implements it, V8 12.4 did not, and this library does not - `grx_match
-# ecmascript` answers `compile 34` where node 24 matches. The Perl arm is
-# unaffected: perl has always allowed duplicate names and this library follows
-# it there, which is what says this is one dialect's rule rather than a
-# missing feature across the board.
-#
-# Narrow on purpose, and the four probes in check_exclusions.py are the reason
-# it can be: the *rule* is "the two cannot both participate", which is a
-# question about the whole disjunction tree, and reimplementing it here to
-# excuse rows would be a second parser with nothing checking it. What this
-# recognises instead is the shape the corpus actually holds - the same name
-# twice with a top-level `|` between them - and it refuses everything a hand's
-# breadth away, including `(?<n>a)(?<n>b)`, which node refuses too.
-def es2025_duplicate_named_groups(pattern):
-    """Two groups of one name, in different alternatives of one disjunction."""
-    names = re.findall(r"\(\?<([A-Za-z_$][^>]*)>", pattern)
-    repeated = [name for name in set(names) if names.count(name) > 1]
-    if not repeated:
-        return False
-    for name in repeated:
-        first = pattern.index("(?<%s>" % name)
-        second = pattern.index("(?<%s>" % name, first + 1)
-        if not _top_level_bar(pattern, first, second):
-            return False
-    return True
-
-
-def _top_level_bar(pattern, start, end):
-    r"""Whether a `|` lies between two offsets at the outermost group depth.
-
-    Depth counted from `start`, so a `|` inside a group opened before it does
-    not count and one inside a group opened after it does not either. Escapes
-    and classes are skipped, because `\|` and `[|]` are ordinary characters
-    and a predicate that read them as alternation would excuse
-    `(?<n>a[|](?<n>b))`, which node refuses.
-    """
-    depth = 0
-    index = start
-    while index < end:
-        char = pattern[index]
-        if char == "\\":
-            index += 2
-            continue
-        if char == "[":
-            index += 1
-            while index < end and pattern[index] != "]":
-                index += 2 if pattern[index] == "\\" else 1
-            index += 1
-            continue
-        if char == "(":
-            depth += 1
-        elif char == ")":
-            depth -= 1
-        elif char == "|" and depth == 0:
-            return True
-        index += 1
-    return False
-
 
 def compare(dialect, driver, seed, patterns, templates, subjects, examples):
     """One dialect against its reference. None means the run was not made."""
@@ -606,7 +546,6 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
     declined = 0
     deviation = 0
     lazy = 0
-    unimplemented = 0
     defect = 0
 
     for (flags, pattern, subject, template), (them, count), us in \
@@ -680,15 +619,6 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
         # Seen to fire before it was removed, by pointing the gate at a newer
         # V8: node 24 accepts `(?<n>a)|(?<n>b)` where node 22 refuses it, and
         # that crashed here rather than being counted.
-        if (dialect == "ecmascript" and us == "syntax"
-                and es2025_duplicate_named_groups(pattern)):
-            # Named, counted and printed rather than dropped: the reference
-            # implements an ES2025 rule this library does not, and a gate
-            # that hid that behind a silent `continue` would be green for the
-            # reason this whole directory exists to stop. See
-            # documentation/dialects.md section 6.
-            unimplemented += 1
-            continue
         compared += 1
         if us != them:
             disagreements.append((flags, pattern, subject, template, them, us))
@@ -817,12 +747,11 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
     print("%-11s %d rows, %d compared, %d the pattern was rejected, "
           "%d the reference declined, %d the surrogate-pair deviation, "
           "%d the template parsed up front, %d a known reference defect, "
-          "%d this library does not implement, "
           "%d vim's two engines disagree, "
           "%d vim's two engines disagree and neither gives ours, "
           "%d disagreements"
           % (dialect + ":", len(rows), compared, rejected, declined,
-             deviation, lazy, defect, unimplemented, split, len(both_axes),
+             deviation, lazy, defect, split, len(both_axes),
              len(disagreements)))
     if not rejected:
         sys.stderr.write(

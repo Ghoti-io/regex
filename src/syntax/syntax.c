@@ -70,6 +70,7 @@
 #define COND GRX_FEATURE_CONDITIONAL
 #define RECU GRX_FEATURE_RECURSION
 #define FLAG GRX_FEATURE_INLINE_FLAGS
+#define SFLG GRX_FEATURE_SCOPED_FLAGS
 #define CMNT GRX_FEATURE_COMMENT_GROUP
 #define PCLS GRX_FEATURE_POSIX_CLASS
 #define UPRP GRX_FEATURE_UNICODE_PROPERTY
@@ -137,7 +138,7 @@ static const GRX_SyntaxSpec spec_table[GRX_SYNTAX_COUNT] = {
     // agree; what differs is only which characters are ignorable, and
     // skip_extended_ignorable() is where that lives.
     .features = ALT | REP | LAZY | POSS | NCAP | NAME | BREF | LAH | LBH
-        | ATOM | COND | RECU | FLAG | CMNT | PCLS | UPRP | CSET | WORD
+        | ATOM | COND | RECU | FLAG | SFLG | CMNT | PCLS | UPRP | CSET | WORD
         | ANCH | QUOT | HEX | OCT | CTRL | SUBR | CASE,
     // perl warns "Quantifier {n,m} with n > m can't match" and compiles it
     // anyway, as a group that never matches. pcre2test refuses the same
@@ -157,11 +158,16 @@ static const GRX_SyntaxSpec spec_table[GRX_SYNTAX_COUNT] = {
     // byte that cannot be one without it.
     //
     // DUPLICATE_NAMES because perl has no switch for it: `(?<a>x)(?<a>y)`
-    // compiles in 5.40.1 with no pragma and no warning, where pcre2test
-    // refuses it as error 143 "(PCRE2_DUPNAMES not set)" and wants `(?J)`,
-    // and Node 22 refuses it outright. The option existed for `(?J)` and
-    // this row simply has it on - which is the whole of the difference, so
-    // there is no second mechanism.
+    // compiles in 5.44.0 with no pragma and no warning, where pcre2test
+    // refuses it as error 143 "(PCRE2_DUPNAMES not set)" and wants `(?J)`.
+    // The option existed for `(?J)` and this row simply has it on - which is
+    // the whole of the difference, so there is no second mechanism.
+    //
+    // ECMAScript is a third answer and not a second: ES2025 allows the name
+    // twice where no single match could fill both, so its front end decides
+    // per pattern rather than per dialect and leaves this option clear. A
+    // caller that sets it anyway gets the check switched off, which is what
+    // the option says it does.
     .default_options = GRX_OPT_UTF | GRX_OPT_DUPLICATE_NAMES,
     // `[a-\d]` is "a", a literal "-" and a digit in perl, which warns
     // "False [] range" and compiles; pcre2test refuses the same pattern
@@ -175,14 +181,17 @@ static const GRX_SyntaxSpec spec_table[GRX_SYNTAX_COUNT] = {
     // CSET is `(?[...])` here, not `&&` inside brackets: PCRE2 10.45 added
     // the extended class and did not add the Java spelling.
     .features = ALT | REP | LAZY | POSS | NCAP | NAME | BREF | LAH | LBH
-        | ATOM | COND | RECU | FLAG | CMNT | PCLS | UPRP | CSET | WORD | ANCH
+        | ATOM | COND | RECU | FLAG | SFLG | CMNT | PCLS | UPRP | CSET | WORD | ANCH
         | QUOT | HEX | OCT | CTRL | SUBR | VERB,
   },
   [GRX_SYNTAX_ECMASCRIPT] = {
-    // No inline flags: ECMAScript puts them after the closing delimiter, not
-    // inside the pattern, so `(?i)` is a syntax error rather than a flag.
+    // SFLG and not FLAG. ECMAScript puts the regexp's own flags after the
+    // closing delimiter rather than inside the pattern, so a bare `(?i)` is
+    // a syntax error - "Invalid group" in V8 - and ES2025's RegExp Modifiers
+    // are the scoped spelling only: `(?i:a)`, `(?-s:a)`, `(?im-s:a)`, for
+    // `i`, `m` and `s`. That is the deciding case the two bits exist for.
     .features = ALT | REP | LAZY | NCAP | NAME | BREF | LAH | LBH | UPRP
-        | CSET | WORD | HEX | CTRL,
+        | CSET | WORD | HEX | CTRL | SFLG,
     // The only tier-1 dialect where `[]` is an empty class rather than a
     // class containing `]`. Read by the prescan as well as by the front end:
     // `(?2)[]a()b](abc)` has one capturing group in PCRE2 and two in
@@ -191,7 +200,7 @@ static const GRX_SyntaxSpec spec_table[GRX_SYNTAX_COUNT] = {
   },
   [GRX_SYNTAX_PYTHON] = {
     .features = ALT | REP | LAZY | POSS | NCAP | NAME | BREF | LAH | LBH
-        | ATOM | COND | FLAG | CMNT | WORD | ANCH | HEX | OCT,
+        | ATOM | COND | FLAG | SFLG | CMNT | WORD | ANCH | HEX | OCT,
     // A `str` pattern is Unicode in every mode: the subject is a sequence
     // of code points, `\N{...}` is available, and `.` matches a character
     // rather than a byte. `(?a)` does not take this away - it narrows the
@@ -202,6 +211,16 @@ static const GRX_SyntaxSpec spec_table[GRX_SYNTAX_COUNT] = {
     // perl reads each as a lazy `a*`. See the field's own comment.
     .quantifier_suffix_is_adjacent = 1,
   },
+  // **No SFLG below this line**, and that is a statement about what has
+  // been probed rather than about the dialects. GRX_FEATURE_SCOPED_FLAGS
+  // was split out of GRX_FEATURE_INLINE_FLAGS on 2026-09-26 because
+  // ECMAScript has the scoped spelling and not the bare one, and the four
+  // rows above were each asked for both spellings, one dialect at a time.
+  // These have no front end and their profile rows are read off their
+  // reference documents; dialects.md section 5 marks their cells `probe`
+  // for the same reason, and WP-31..WP-37 each begin with the probing.
+  // Setting a bit here from memory is how a table starts answering for a
+  // dialect nobody asked.
   [GRX_SYNTAX_JAVA] = {
     .features = ALT | REP | LAZY | POSS | NCAP | NAME | BREF | LAH | LBH
         | ATOM | FLAG | PCLS | UPRP | CSET | WORD | ANCH | QUOT | HEX | OCT

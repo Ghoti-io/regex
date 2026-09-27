@@ -132,7 +132,7 @@ New bits, in addition to the scaffold's:
 
 **The implemented dialects, from the references:**
 
-| Feature | POSIX BRE | POSIX ERE | GNU BRE | GNU ERE | Perl 5.40 | PCRE2 10.46 | ECMAScript 2025 |
+| Feature | POSIX BRE | POSIX ERE | GNU BRE | GNU ERE | Perl 5.44 | PCRE2 10.46 | ECMAScript 2025 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | ALTERNATION | - | `\|` | `\\|` | `\|` | `\|` | `\|` | `\|` |
 | BOUNDED_REPEAT | `\{m,n\}` | `{m,n}` | `\{m,n\}` | `{m,n}` | yes, and `{,n}` | yes, and `{,n}` | yes; `{,n}` is literal (legacy) or error (`u`) |
@@ -142,12 +142,12 @@ New bits, in addition to the scaffold's:
 | NAMED_CAPTURE | - | - | - | - | `(?<n>)` `(?'n')` `(?P<n>)` | same three | `(?<n>)` |
 | BACKREFERENCE | `\1`-`\9` | - (undefined; glibc accepts) | `\1`-`\9` | `\1`-`\9` (GNU extension) | yes, and `\g{-1}` relative | yes | yes |
 | LOOKAHEAD | - | - | - | - | yes | yes | yes |
-| NON_ATOMIC_LOOKAROUND | - | - | - | - | **-** (probed: perl 5.40.1 answers "Unknown '(*...)' construct 'napla'", and "Sequence (?*...) not recognized") | `(*napla:`, `(*naplb:`, `(?*`, `(?<*` | - |
+| NON_ATOMIC_LOOKAROUND | - | - | - | - | **-** (probed: perl 5.44.0 answers "Unknown '(*...)' construct 'napla'", and "Sequence (?*...) not recognized") | `(*napla:`, `(*naplb:`, `(?*`, `(?<*` | - |
 | LOOKBEHIND | - | - | - | - | yes (§5.4) | yes | yes |
 | ATOMIC_GROUP | - | - | - | - | yes | yes | - |
 | CONDITIONAL | - | - | - | - | yes | yes | - |
 | RECURSION / SUBROUTINE | - | - | - | - | `(?R)`, `(?1)`, `(?&name)`, `(?P>name)` | same, and `\g<1>`, `\g'name'` (probed: perl answers "Unterminated \g... pattern" for those two) | - |
-| INLINE_FLAGS / SCOPED_FLAGS | - | - | - | - | both | both | scoped only (ES2025), and not in Node 22 (probed: `(?i:X)` is "Invalid group"), so refused here |
+| INLINE_FLAGS / SCOPED_FLAGS | - | - | - | - | both | both | scoped only (ES2025): `(?i:...)`, `(?-s:...)`, `(?im-s:...)` for `i`, `m`, `s`. A bare `(?i)` is "Invalid group" in V8 13.6 and a syntax error here |
 | COMMENT_GROUP | - | - | - | - | yes | yes | - |
 | POSIX_CLASS | yes | yes | yes | yes | yes (in brackets) | yes | - |
 | UNICODE_PROPERTY | - | - | - | - | yes | yes | `u`/`v` only |
@@ -162,7 +162,7 @@ New bits, in addition to the scaffold's:
 | BACKTRACK_CONTROL | - | - | - | - | `(*PRUNE)` etc. | yes | - |
 | BRANCH_RESET | - | - | - | - | yes | yes | - |
 | KEEP | - | - | - | - | yes | yes | - |
-| DUPLICATE_NAMES | - | - | - | - | yes, with no pragma and no warning (probed: perl 5.40.1) | `(?J)` | ES2025, and not in Node 22 (probed), so refused here |
+| DUPLICATE_NAMES | - | - | - | - | yes, with no pragma and no warning (probed: perl 5.44.0) | `(?J)` | ES2025: only where no single match could fill both, so across the alternatives of one disjunction and nowhere else |
 | NEWLINE_R, GRAPHEME_X, NOT_NEWLINE_N, HV_SPACE | - | - | - | - | all | all | - |
 | NAMED_CHAR | - | - | - | - | `\N{U+..}`, `\N{name}` | `\N{U+..}` only | - |
 | EMPTY_CLASS / NEGATED_EMPTY_CLASS | - | - | - | - | - | - | both |
@@ -495,14 +495,14 @@ Consequences the tests state:
 
 **Corrected by WP-03's probe.** An earlier version of this page put Perl in
 the `KEEP_LAST_SET` row and gave `((a)|b)+` as the example that shows it,
-with Perl reporting group 2 as `"a"`. Perl 5.40 reports it as **unset**, and
+with Perl reporting group 2 as `"a"`. Perl 5.44 reports it as **unset**, and
 so does `(?:(a)|b){2}` against `"ab"`. PCRE2 10.46 and Python 3.14.7 report
 `"a"`. The page had attributed the `(a*)*` difference - which is the
 empty-iteration axis - to the capture-reset axis as well, and the two are
 independent. `tests/data/probe/report.md` has the transcript.
 
 **Perl's rule is not RESET_EACH either.** The row above says Perl resets, on
-the strength of `((a)|b)+`. Four more patterns, asked of Perl 5.40, say that
+the strength of `((a)|b)+`. Four more patterns, asked of Perl 5.44, say that
 whatever Perl does, "captures inside the atom are cleared at the start of
 each iteration" is not it:
 
@@ -743,9 +743,9 @@ pairs agree:
 
 | Axis | PCRE2 | Perl |
 | --- | --- | --- |
-| `alpha`, `alnum`, `lower`, `upper` | `L`, `L`∪`N`, `Ll`, `Lu` | `Alphabetic`, `Alphabetic`∪`Nd`, `Lowercase`, `Uppercase` - 1,694, 2,373, 312 and 120 code points apart |
-| `\w`, `[[:word:]]`, `\b` | `L`∪`N`∪`Mn`∪`Pc` | Annex C's `alpha`∪`M`∪`Nd`∪`Pc`∪join controls - 1,513 apart, and neither set contains the other |
-| `graph`, `print` | no private use, and six `Cf` dropped by name | private use counts, and all six `Cf` stay - 137,468 and 6 |
+| `alpha`, `alnum`, `lower`, `upper` | `L`, `L`∪`N`, `Ll`, `Lu` | `Alphabetic`, `Alphabetic`∪`Nd`, `Lowercase`, `Uppercase` - 1,731, 2,410, 312 and 120 code points apart |
+| `\w`, `[[:word:]]`, `\b` | `L`∪`N`∪`Mn`∪`Pc` | Annex C's `alpha`∪`M`∪`Nd`∪`Pc`∪join controls - 1,528 apart, and neither set contains the other |
+| `graph`, `print` | no private use, and six `Cf` dropped by name | private use counts, and all six `Cf` stay - 137,474 code points apart for `graph` and 137,473 for `print`, the private-use block being almost all of it |
 | `\h`, `\s`, `blank`, `space` | U+180E is a space, as it was before Unicode 6.3 | it is not |
 
 Python's `re` is a third word set and not a variant of either: `isalnum`
@@ -756,17 +756,23 @@ wrong by 3,506 code points.
 The comparisons are restricted to the code points perl, pcre2test 10.46 and
 UCD 17.0.0 all call assigned, and that restriction is what makes the figures
 mean anything: unrestricted, a sweep measures the Unicode release rather than
-the rule. The figures below were taken against perl 5.40.1, where the
-intersection was **286,719** code points and this library knew 4,803 pcre2
-had not heard of and 10,615 perl had not; the pin moved to 5.44.0 on
-2026-09-25, which carries UCD 17.0.0 exactly, so the perl half of that
-restriction is now empty and only pcre2's remains. Re-take the figures before
-quoting them. Four differences survive
-the restriction and all four are *version* differences rather than
-deviations: U+0295 is `Ll` in both references and `Lo` in UCD 17.0.0, and 33
-combining Latin letters gained Other_Alphabetic in 17.0.0, so `[[:lower:]]`
-and `[[:alpha:]]` here answer differently for them. node, whose Unicode is
-also 17.0, sides with this library on all 34.
+the rule. **`make check-wide-classes` is the instrument**, and every figure on
+this page comes from it rather than from a script somebody ran once: fifteen
+classes over all 1,112,064 code points in perl, in pcre2test under `utf,ucp`
+and here, restricted to the **292,531** each of the three calls assigned. The
+figures used to be a hand sweep against perl 5.40.1 over an intersection of
+286,719, and this paragraph used to say "re-take the figures before quoting
+them", which is what a number with no instrument has to say about itself.
+
+Each dialect is held to *its own* reference there, which is the assertion a
+shared figure cannot make: `perl` answers perl's set exactly and `pcre`
+answers pcre2's, over every one of those 292,531 code points and all fifteen
+classes. **One code point is excused and the gate names it**: U+0295 is `Ll`
+in pcre2 10.46 and `Lo` in UCD 17.0.0, so `[[:lower:]]` here refuses a code
+point pcre2 accepts. That is allowed only because the two references and this
+library are asked for the code point's *General_Category* and the answers
+differ - a second measurement rather than a rule - and node, whose Unicode is
+also 17.0, sides with this library.
 
 **`[[:xdigit:]]` widens under UCP too**, which is easy to miss because the
 widening is not a property. It is 44 code points: the 22 ASCII hexadecimal
@@ -1354,7 +1360,7 @@ spellings above agree with perl.
 
 A negative lookaround succeeds by having its body fail, and the body may have
 captured something on its way to failing. `a(?!(b)c)` against `abd` is the
-whole of it: the body matches the `b`, fails on the `c`, and perl 5.40
+whole of it: the body matches the `b`, fails on the `c`, and perl 5.44
 reports group 1 as `"b"` where pcre2test 10.46 and Node report it unset.
 Probed three ways rather than read from one.
 
@@ -1366,7 +1372,7 @@ it, so there is nothing left to disagree about.
 and it is the one place a *positive* assertion has the question: `(?(?=A)X|Y)`
 does not fail when A fails - it takes the else-branch - so A's writes survive
 the construct and the value decides what they are worth. `^(?(?=(a)b)x|a)`
-against "ay" reports group 1 as `"a"` in perl 5.40.1 and unset in pcre2test,
+against "ay" reports group 1 as `"a"` in perl 5.44.0 and unset in pcre2test,
 which is the same split as `a(?!(b)c)` with the sign moved. So the rule is
 stated on the *body*: when a lookaround's body fails, this value says whether
 what it wrote stands. This library read it off the sign until 2026-09-22 and
@@ -1557,7 +1563,7 @@ goes back into it and tries another way through.
 
 This was a profile axis once, on the strength of pcre2pattern's "a
 recursive call is treated as an atomic group". pcre2test 10.46 does not
-behave that way, and neither does perl 5.40.1:
+behave that way, and neither does perl 5.44.0:
 
 | Pattern | Subject | perl | pcre2test | Here |
 | --- | --- | --- | --- | --- |
@@ -1624,8 +1630,8 @@ answer.
 | all | No locale; POSIX classes and case folding are C-locale ASCII or Unicode, never `LC_CTYPE` | [unicode.md](unicode.md) §7 | - |
 | ECMAScript | Lone surrogates cannot occur in the subject | UTF-8 | - |
 | ECMAScript | V8's regexp interpreter and its compiled code disagree, and this library is the interpreter's | `/(?:(?=a)a)*\B../u` over "\nabc" from offset 1 is 1-4 on the first execution in a fresh Node process and **no match** on every execution after it, so the answer depends on how many times the pattern has run. `--regexp-interpret-all` gives 1-4 always and `--no-regexp-tier-up` gives no match always, which places the disagreement in V8's optimizing compiler. 1-4 is right: pcre2test 10.46 and perl 5.40.1 both give it, and it is what ordered alternation requires - the same pattern's first alternative alone matches 1-4 there too. Found at seed 4009 of the replacement soak; the oracle now runs with the interpreter, because a reference whose answer moves with the execution count cannot settle anything. Fixed in a later V8 and not in this one: the same reproducer run 200 times in Chrome 153.0.8010.36 is 1-4 every time. Present in V8 12.4.254.21, which is what Node 22 carried; **gone in V8 13.6.233.17, which is the pin since 2026-09-25** - the same reproducer is 1-4 forty times out of forty there without the flag, and on V8 14.1 too, so the boundary is now measured from both sides. No public report matching it was found, so which change fixed it is still unknown. The flag stays: `check-oracle-determinism` asserts the answer is 1-4 rather than merely stable, so it remains a live assertion about whichever V8 is pinned. `tools/corpus/VERSIONS` and `tools/oracle/node_runner.py` | - |
-| ECMAScript | **RegExp Modifiers are not built**: `(?i:a)`, `(?-i:a)`, `(?im-s:a)` | Stage 4, shipped in V8 12.5; this library reports `GRX_DIAG_INVALID_GROUP_SYNTAX`. Found by raising the node pin from V8 12.4, which refused them too, so the gate had been green over a construct neither side had. 122 of the 230 rows `tools/oracle/syntax_diff.py` now counts separately, and the classification is a second measurement rather than a pattern match: the modifier group is rewritten as a plain `(?:` and the row is kept only if this library then accepts it. A gap rather than a deviation - there is no argument for not having it | `GRX_ERR_SYNTAX` |
-| ECMAScript | **Duplicate named capture groups are refused**, where ES2025 allows them in alternatives that cannot both participate | `(?<n>a)|(?<n>b)` compiles in V8 13.6 and answers `{n: "b"}` for "b"; here it is `GRX_ERR_...` 34. `(?<n>a)(?<n>b)` is an error in both, which is the rule: the restriction is on groups that could *both* be set. perl has always allowed duplicate names and this library follows it there, and pcre2 refuses without `PCRE2_DUPNAMES` and `re` refuses outright, so this is one dialect's rule out of date rather than a missing feature. Found by raising the node pin from V8 12.4, which refused it too; 576 rows of `check-oracle-replace`, one pattern, counted in its own bucket by `tools/oracle/replace_diff.py` and controlled in `check_exclusions.py` | `GRX_ERR_SYNTAX` |
+| ECMAScript | ~~RegExp Modifiers are not built~~ **Built 2026-09-26** | Stage 4, shipped in V8 12.5, and this library reported `GRX_DIAG_INVALID_GROUP_SYNTAX` until the node pin moved to V8 13.6 and made the gap visible - the gate had been green over a construct neither side had. The 122 rows are compared now, and `syntax_diff.py`'s "construct this library has not built" bucket, which held them and the 12 duplicate-name rows, is gone: what took its place counts the one family V8 accepts and this library refuses, above. Section 8.5 states the rules | - |
+| ECMAScript | V8 accepts a duplicate group name that one match then fills twice; this refuses it | The rule ES2025 states is that a name may be reused only where "it's impossible for a single match to actually use the same name multiple times". `(?<n>a)(?:b|(?<n>c))` is accepted by V8 13.6 and over "ac" it fills both - group 1 `"a"`, group 2 `"c"`, `groups.n` `"c"` - which is a single match using the name twice. It is positional rather than a rule: `(?:b|(?<n>c))(?<n>a)`, the same pattern with its halves swapped, is refused there, and so is `(?<n>a)(?:(?<n>b))`, which differs only in that the second occurrence stands in the *first* alternative. This library implements the stated rule, so it refuses the family and answers `GRX_ERR_SYNTAX` with `GRX_DIAG_DUPLICATE_GROUP_NAME`. `tools/oracle/syntax_diff.py` re-asks node every run whether the defect is still there and counts the rows in a bucket of its own; if a later V8 fixes it the bucket must be empty and the gate says so. 32 rows of `check-oracle-syntax` | `GRX_ERR_SYNTAX` |
 | ECMAScript | Repeat counts are limited (the grammar admits 2^53 - 1) | as above | `GRX_ERR_LIMIT` |
 | ECMAScript | **The subject is code points, not UTF-16 code units, in *both* modes** | see below | - |
 | ECMAScript | A match cannot begin or end between the halves of a surrogate pair | as above | - |
@@ -1633,12 +1639,13 @@ answer.
 | Perl | `(?{ })`, `(??{ })` | code execution | `GRX_ERR_UNSUPPORTED` |
 | Perl | ~~`\N{name}` resolves against UCD 17.0.0, so a name Perl's UCD 15.0.0 does not carry works here and not there~~ **Retired 2026-09-25**: the pin moved to perl 5.44.0, which carries UCD 17.0.0 exactly | The skew was real and is gone rather than resolved: over a 2,531-name differential the two had agreed everywhere they shared a Unicode version, with 196 of 204 disagreements naming characters perl had not been told about, 8 `NameAliases.txt` corrections newer than its tables, and **none** a name perl resolved and this library did not. `tools/corpus/make_name_vectors.py` reports `0 skipped as UCD version skew` now, where it skipped before | - |
 | PCRE2 | `(?{ })` is not a construct it has at all | pcre2test: "unrecognized character after (? or (?-" | `GRX_ERR_SYNTAX` |
-| Perl | `(?[ ])` accepts one unmatched `)` after a complete operand; this does not | `(?[ [a]) ])` compiles in perl 5.40.1 and is an error in pcre2test. Perl refuses two of them, a leading one, and an unmatched `(` - so it is one stray close parenthesis and no more, which is an off-by-one in its accounting rather than a rule to follow. Everything else about the two grammars is the same, which is not what this row used to say: it claimed Perl's "nests and takes different operands", and perl refuses a textual `(?[ (?[ [a] ]) ])` - what it nests is an *interpolated* `qr//`, which a pattern arriving as text cannot be. Compared over 13,440 generated rows | `GRX_ERR_SYNTAX` |
+| Perl | `(?[ ])` accepts one unmatched `)` after a complete operand; this does not | `(?[ [a]) ])` compiles in perl 5.44.0 and is an error in pcre2test. Perl refuses two of them, a leading one, and an unmatched `(` - so it is one stray close parenthesis and no more, which is an off-by-one in its accounting rather than a rule to follow. Everything else about the two grammars is the same, which is not what this row used to say: it claimed Perl's "nests and takes different operands", and perl refuses a textual `(?[ (?[ [a] ]) ])` - what it nests is an *interpolated* `qr//`, which a pattern arriving as text cannot be. Compared over 13,440 generated rows | `GRX_ERR_SYNTAX` |
 | Perl, PCRE2 | What an extended class **ignores** differs, and is followed | Perl skips all of `Pattern_White_Space` - all eleven code points probed - and takes `#` comments to the next **line feed**, which CR, VT and U+2028 do not end; pcre2test refuses a literal newline inside `(?[ ])` with error 216 and refuses `#` outright. U+00A0 is ignored by neither, which is the case that says the rule is the property and not a notion of "space" | - |
 | Perl | Where a failed negative lookaround's body stopped *part way through an iteration*, the group reports the last value an iteration **finished** | §5.17 is followed as written - Perl keeps, ECMAScript and PCRE2 discard - but "what the body last wrote" is only well defined if the body failed between iterations, and Perl states no rule for the rest: it decides on the width of the repeated body, answering `(?!(a){2}$)` and `(?!(aa){2}$)` against "aaa" as unset and 0-2. The rule here answers them 1-2 and 0-2, so the two agree wherever Perl is self-consistent and differ on the narrow case where it is not | - |
 | Perl | A match may not begin before the start of the window, so a `\G` written anywhere but first cannot reach behind it | `\G` holds where the previous match ended, and perl leaves the *start of the scan* alone when the assertion is not the first thing in the pattern: with `pos()` at 2, `a{0,2}?\G(?\|(a)\|(b))\1` over \"aaaa\" is 0-4 there - the `a{0,2}?` consuming the two characters the previous iteration already returned - and `ab\Gc` over \"abc\" is 0-3. PCRE2 answers the first 2-4 under `,global` and the same with an explicit `offset=2`, because a match may not begin before the offset it was given, and this library is PCRE2's: `grx_regex_search_ex` is told where the search begins and a span before it is outside what was asked for. The assertion itself is the same in all three - a pattern whose `\G` leads it answers alike - so what differs is where a match is allowed to start. It costs perl matches this library never reports, not merely earlier starts, and the effect compounds: each match perl reaches back for leaves `pos()` somewhere this library's scan never stood, so the next reach-back begins from there. `\w\Ga|b` over "ababaaa" is 1-2 and 3-4 here and in pcre2test under `,global`, and perl reports 1-2, 1-3, 3-4, 3-5, 4-6, 5-7. `tools/oracle/iterate_diff.py` counts these rows | - |
 | Perl | `\Q...\E` quotes, as it does in PCRE2; in perl it is interpolation and a pattern arriving as text has an unknown escape there | perl does the quoting when the *source* is tokenised, so a pattern that reaches the engine in a variable never went through it and `\Q` is an unrecognized escape - passed through as the letter, with a warning. `\Qa.b\E` in a variable matches \"QaXbE\" there and not \"a.b\"; `[\Qa-z\E]` is `[Qa-zE]`, matching \"Q\" and \"b\" and not \"-\"; and `[a-\Qz\E]` is the reversed range a-Q, which perl calls \"Invalid [] range\". pcre2test, which reads its pattern as source, quotes it and matches \"a.b\" alone. A C API has only the text, so following perl would make `\Q` mean the letter Q and silently change every pattern that uses the construct; the feature table's QUOTING row has said Perl has it since it was written. `tools/oracle/perl_diff.py` generates these rows and checks each one against perl's *own* reading - this library's answer to the pattern with `\Q` and `\E` replaced by their letters - rather than excluding them by spelling, so a defect inside a quoted run is still reported. 615 rows of one seed | - |
-| PCRE2 | A script run may mix Han with **two** of Hiragana/Katakana, Hangul and Bopomofo | pcre2 10.46 accepts the mixture its own manual denies. pcre2unicode says a run may hold "a mixture of Hiragana, Katakana, and Han, or a mixture of Hangul and Han, or a mixture of Bopomofo and Han, but not, for example, a mixture of Hangul and Bopomofo and Han", and pcre2test matches that last one. All twenty two- and three-way combinations of U+6F22, U+304B, U+30AB, U+D55C and U+3105 were put to both references: they agree on fourteen - including `Hiragana+Hangul`, which both refuse, so it is not that Han lets anything through - and differ on exactly the six that mix two families. perl 5.40.1 refuses all six, which is UTS #39 section 5.1, and so does this library | - |
+| PCRE2 | A script run may mix Han with **two** of Hiragana/Katakana, Hangul and Bopomofo | pcre2 10.46 accepts the mixture its own manual denies. pcre2unicode says a run may hold "a mixture of Hiragana, Katakana, and Han, or a mixture of Hangul and Han, or a mixture of Bopomofo and Han, but not, for example, a mixture of Hangul and Bopomofo and Han", and pcre2test matches that last one. All twenty two- and three-way combinations of U+6F22, U+304B, U+30AB, U+D55C and U+3105 were put to both references: they agree on fourteen - including `Hiragana+Hangul`, which both refuse, so it is not that Han lets anything through - and differ on exactly the six that mix two families. perl 5.44.0 refuses all six, which is UTS #39 section 5.1, and so does this library | - |
+| Perl | An unassigned code point may not join a script run; perl admits it | perl gives U+E0000 `\p{Cn}` and `\p{Script_Extensions=Unknown}`, and `^(*sr:.+)$` still matches "0" followed by it - and "0" followed by U+0378, so it is every unassigned code point and not one block. Both references match an unassigned code point *alone*, a run of one being trivially a run; the deviation is letting it join anything. UTS #39 section 5.1 reads the run's Script_Extensions and `Unknown` shares nothing with `Common`, which is why pcre2test 10.46 refuses all of them and so does this library. Six rows of `check-oracle-script-runs`, which carries the shape and fails on a row that sides with pcre2 and is not it. **Found by giving that bucket a shape**: while perl carried UCD 15.0.0 the bucket held 719 rows of genuine version skew and one sentence covered all of them, and the raise to 5.44.0 left these six behind it | - |
 | PCRE2, Perl | `\C`, one code unit | the subject here is code points, and a construct that can land inside a character has no honest approximation | `GRX_ERR_UNSUPPORTED` |
 | PCRE2 | `(*BSR_ANYCRLF)`, `(*BSR_UNICODE)` | built: `\R` is an alternation the parser writes and a directive may only lead the pattern, so the flag is set before the `\R` it governs. `(*BSR_ANYCRLF)\R` refuses a vertical tab and plain `\R` takes one, in pcre2test and here | - |
 | PCRE2 | `(*LIMIT_MATCH=n)` and kin are applied in this library's units, not PCRE2's | the directive is honoured - §7.1 below - but `(*LIMIT_MATCH=n)` lands on `max_steps` and PCRE2's match limit counts calls to its internal match function, so the same `n` buys a different amount of work in each. A pattern that asks for a limit gets one, and the *number* is not portable | `GRX_ERR_LIMIT` |
@@ -2050,16 +2057,25 @@ rather than the `a` that leftmost-first would otherwise prefer.
 - Flags `d`, `g`, `y` have no compile-time meaning: `d` is always
   satisfied, `g` is `grx_regex_search_next()`, `y` is `grx_regex_match()`.
 - Modifiers `(?i:...)`, `(?-i:...)`, `(?i-m:...)` for `i`, `m`, `s` only
-  (ES2025). **Probe resolved:** Node 22.23 rejects all three as
-  `SyntaxError`, with and without `u`. This library therefore rejects them
-  too, because the oracle is what the conformance vectors come from and a
-  library that accepted what the oracle rejects would tell a caller their
-  pattern is valid for an engine that refuses it. When a runtime that
-  implements them is pinned as the oracle, this rule and its test change
-  together. A bare `(?i)` is a syntax error in every version.
-- Duplicate named groups across alternatives (ES2025). **Probe resolved:**
-  Node 22.23 rejects `(?<a>x)|(?<a>y)`, so this library does. Same reason,
-  same change when the oracle moves.
+  (ES2025), **built 2026-09-26**. A letter may not be both set and cleared
+  (`(?i-i:a)` is "Repeated flag in flag group") nor repeated within one list;
+  the empty list is refused only when it is the sole list, so `(?i-:a)`
+  compiles and `(?-:a)` does not; and the `:` is not optional, a bare `(?i)`
+  being a syntax error. That last is why this is a construct of its own
+  rather than the Perl family's inline flags with a shorter alphabet: reading
+  it with the Perl reader would have accepted four spellings ECMAScript has
+  not got. Node 22 rejected all of them and so did this library until the pin
+  moved to node 24 / V8 13.6.
+- Duplicate named groups across alternatives (ES2025), **built 2026-09-26**.
+  The rule is the proposal's own statement of it - a name may be reused only
+  where "it's impossible for a single match to actually use the same name
+  multiple times" - so the check asks whether one match could fill both, which
+  is a question about the alternation nesting and nothing else. It runs over
+  the tree in `es_validate()` rather than at the `(?<`, because at that point
+  the parser has not yet seen the `|` that would make the pair legal.
+  `GRX_OPT_DUPLICATE_NAMES` turns it off, which is what that option
+  documents itself as doing; ECMAScript has no `(?J)` to set it with.
+  **V8 13.6 accepts a family this refuses** - see section 6.
 
 ### 8.6 What the oracle corrected
 
@@ -2124,22 +2140,26 @@ hand-written patterns was what found it.
 ### 8.6.1 Where the oracle is wrong
 
 One `v`-mode rule goes the other way: the oracle is wrong and this library
-does not follow it.
+does not follow it. **It used to be four rows and V8 13.6 fixed three of
+them**, which is recorded here rather than quietly deleted, because the
+exclusion those three justified had been keeping them out of the match corpus
+and went on doing it after the pin moved.
 
-Under `iv`, Node 22.23 does not apply case folding to a class-set operand
-that is a bare character or a one-character `\q{}`:
+Under `iv`, Node does not apply case folding to a class-set operand that is a
+one-character `\q{}`. Until V8 13.6 the same was true of an operand that was
+a bare character:
 
-| Pattern | Subject | Node 22.23 | Here, and ECMA-262 |
-| --- | --- | --- | --- |
-| `[abc]` | `A` | matches | matches |
-| `[[a]&&a]` | `A` | matches | matches |
-| `[a&&[a]]` | `A` | **no match** | matches |
-| `[a&&a]` | `A` | **no match** | matches |
-| `[a--b]` | `A` | **no match** | matches |
-| `[\q{a}]` | `A` | **no match** | matches |
-| `[\q{ss}]` | `SS` | matches | matches |
+| Pattern | Subject | Node 22.23 | Node 24 / V8 13.6 | Here, and ECMA-262 |
+| --- | --- | --- | --- | --- |
+| `[abc]` | `A` | matches | matches | matches |
+| `[[a]&&a]` | `A` | matches | matches | matches |
+| `[a&&[a]]` | `A` | **no match** | matches | matches |
+| `[a&&a]` | `A` | **no match** | matches | matches |
+| `[a--b]` | `A` | **no match** | matches | matches |
+| `[\q{a}]` | `A` | **no match** | **no match** | matches |
+| `[\q{ss}]` | `SS` | matches | matches | matches |
 
-The third and fourth rows are what settle it. `[[a]&&a]` matches and
+The third and fourth rows are what settled it. `[[a]&&a]` matches and
 `[a&&[a]]` does not, and those two are the same intersection written in the
 opposite order. Set intersection is commutative; no reading of 22.2.1 makes
 one of them fold and the other not. It is an implementation defect, and
@@ -2297,7 +2317,7 @@ modes; `\h \H \v \V \R \N \X`; `\C` (single code unit: refused,
 `GRX_ERR_UNSUPPORTED`); auto-possessification is an optimisation and has no
 semantic effect, so it is not modelled.
 
-**Perl 5.40.** As PCRE2 minus verbs-with-arguments differences, and minus
+**Perl 5.44.** As PCRE2 minus verbs-with-arguments differences, and minus
 **every leading directive**: `(*UTF)`, `(*UCP)`, `(*CRLF)` and kin,
 `(*NO_AUTO_POSSESS)` and kin, and `(*LIMIT_MATCH=d)` and kin are each
 "Unknown verb pattern" in perl. All nineteen probed there rather than read

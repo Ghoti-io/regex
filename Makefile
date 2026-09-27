@@ -648,6 +648,7 @@ PCRE2_SRC := third_party/pcre2/$(PCRE2_REF)
 # against 16 KB and none when built the way its two siblings already were.
 TOOL_SOURCES := $(shell find tools -type f -name '*.c' -not -path 'tools/jsonschema/*' \
 	-not -name 'musl_match.c' -not -name 'pcre2_match.c' \
+	-not -name 'pcre2_classes.c' \
 	-not -name 'posix_match.c' 2>/dev/null)
 TOOLS := $(patsubst tools/%.c,$(APP_DIR)/tools/%$(EXE_EXTENSION),$(notdir $(TOOL_SOURCES)))
 TOOLS := $(patsubst tools/oracle/%.c,$(APP_DIR)/tools/%$(EXE_EXTENSION),$(TOOL_SOURCES))
@@ -867,7 +868,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 
 # General commands
 .PHONY: check-oracle-soak
-.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-unicode-agreement check-dump-names check-readme-example check-tables check-status-line check-corpus-seeds check-makefile-hash check-oracle-env check-oracle-syntax check-oracle-match check-oracle-soak check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-perl-syntax check-oracle-script-runs check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
+.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-unicode-agreement check-dump-names check-readme-example check-tables check-status-line check-corpus-seeds check-makefile-hash check-oracle-env check-oracle-syntax check-oracle-match check-oracle-soak check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-perl-syntax check-oracle-script-runs check-doc-claims check-wide-classes check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
 	check-oracle-properties check-oracle-numeric-properties \
 	check-oracle-folds \
 	check-vim-widths check-vim-classes check-vim-sets \
@@ -1110,7 +1111,8 @@ check-oracles: check-oracle-syntax check-oracle-match check-oracle-properties \
 	check-oracle-posix check-oracle-submatch \
 	check-oracle-perl check-oracle-perl-syntax check-oracle-python \
 	check-oracle-vim \
-	check-oracle-script-runs check-oracle-newlines check-oracle-callouts \
+	check-oracle-script-runs check-doc-claims check-wide-classes \
+	check-oracle-newlines check-oracle-callouts \
 	check-oracle-sed \
 	check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
 	check-oracle-exclusions check-oracle-determinism \
@@ -1231,6 +1233,40 @@ check-oracle-script-runs: $(TOOLS)
 	@$(REQUIRE_PYTHON3)
 	$(call run-oracle,perl$(comma)pcre2,python3 tools/oracle/script_run_diff.py \
 		--seed $(ORACLE_SEED))
+
+check-wide-classes: ## Sweep every POSIX class and `\w` against perl and pcre2
+# A table rule is not tested by examples, and these fourteen were swept by hand
+# once - on 2026-09-24, which found three of them wrong by 7,766, 164 and 236
+# code points, none of it visible from the conformance corpus. This is that
+# sweep as a gate.
+#
+# It also re-takes the figures dialects.md section 5.9 quotes for how far the
+# two references are apart, which were measured against perl 5.40.1 over an
+# intersection that release defined and which that page itself says to re-take
+# before quoting. Each dialect is held to *its own* reference, which is the
+# assertion the shared figures cannot make: the two disagree about `\w` and
+# `[[:graph:]]`, and this library carries that as a profile axis.
+#
+# 1,112,065 code points x 15 classes x three implementations, so it is slower
+# than the other gates and is not in `make test`.
+check-wide-classes: $(TOOLS)
+	@$(REQUIRE_PYTHON3)
+	$(call run-oracle,perl$(comma)pcre2,python3 tools/oracle/wide_class_diff.py \
+		--driver $(APP_DIR)/tools/grx_classes$(EXE_EXTENSION))
+
+check-doc-claims: ## Re-ask the references every hand-probed claim the docs state
+# The claims a generator cannot make. Most of what dialects.md says about a
+# reference is asserted by a differential; a handful are sentences probed once
+# by hand and written down with the version they were taken against, and those
+# had no gate at all. Seven of them still named perl 5.40.1 a day after the
+# pin moved to 5.44.0 and the only reason nobody was misled is that all seven
+# happened to carry - see notes/regex/TODO.md section 9-probes.
+#
+# Needs no build of ours: every claim here is a claim about a reference, and
+# where a sentence also states this library's answer that half has a unit test.
+check-doc-claims:
+	@$(REQUIRE_PYTHON3)
+	$(call run-oracle,perl$(comma)pcre2$(comma)node,python3 tools/oracle/doc_claims_diff.py)
 
 check-oracle-newlines: ## Compare PCRE2's newline conventions against pcre2
 # Six conventions, each deciding four things at once - what `.` refuses,
@@ -1510,6 +1546,22 @@ vectors-perl: ## Re-import Perl's re_tests corpus, answered by the pinned perl
 		exit 0; \
 	fi
 	$(call run-oracle,perl,python3 tools/corpus/import_re_tests.py)
+# The other three files in that directory are *generated* from perl rather
+# than imported from a corpus, and until this line existed **no target ran
+# them at all**: the pin raise of 2026-09-25 regenerated `re_tests.rxt` and
+# left `folding.rxt`, `names.rxt` and `boundaries.rxt` to be regenerated by
+# hand, which meant their provenance headers still named Perl 5.40 a day
+# later. Each resolves the pin for its own header, and takes `--out`
+# rather than a redirect because oracle_run.py's provenance line goes to
+# stdout and would otherwise land inside the corpus - the same way
+# vectors-ecmascript's three generators each record the node that
+# answered them.
+	$(call run-oracle,perl,python3 tools/corpus/make_fold_vectors.py \
+		--out tests/data/vectors/perl/folding.rxt)
+	$(call run-oracle,perl,python3 tools/corpus/make_name_vectors.py \
+		--out tests/data/vectors/perl/names.rxt)
+	$(call run-oracle,perl,python3 tools/corpus/make_boundary_vectors.py \
+		--out tests/data/vectors/perl/boundaries.rxt)
 
 # Only the one tool, not $(TOOLS): this is a gate, and a gate that first
 # builds every oracle in the tree is one people learn to skip. It is also a

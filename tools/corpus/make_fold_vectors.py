@@ -21,7 +21,7 @@ The code points are not a chosen sample: they are every `F` line of the UCD's
 CaseFolding.txt, which is the definition of "has a full fold". 104 in UCD
 17.0.0, folding to 73 distinct sequences.
 
-Usage:  tools/corpus/make_fold_vectors.py > tests/data/vectors/perl/folding.rxt
+Usage:  tools/corpus/make_fold_vectors.py [--out tests/data/vectors/perl/folding.rxt]
 """
 import os
 import subprocess
@@ -173,7 +173,8 @@ def main():
 
     distinct = len({fold for _cp, fold in pairs})
     sys.stdout.write(
-        "# Perl's full case folding, with Perl 5.40 as the oracle.\n"
+        "# Perl's full case folding, with %s as the oracle.\n"
+        % oracle_env.version("perl") +
         "# Written by tools/corpus/make_fold_vectors.py.\n"
         "#\n"
         "# Every code point with a full fold - all %d `F` lines of\n"
@@ -208,4 +209,25 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    # `--out PATH` rather than a shell redirect, because the Makefile runs
+    # every generator through oracle_run.py, which prints the provenance line
+    # it resolved to *stdout* - a redirect would put "oracle(container): perl
+    # perl v5.44.0" inside the corpus. With no argument the output is stdout,
+    # which is the spelling the usage line above documents and the one
+    # somebody reaching for this by hand will type.
+    OUT = None
+    ARGV = sys.argv[1:]
+    if len(ARGV) == 2 and ARGV[0] == "--out":
+        OUT = ARGV[1]
+    elif ARGV:
+        sys.stderr.write("usage: %s [--out PATH]\n" % sys.argv[0])
+        sys.exit(2)
+    if OUT is None:
+        sys.exit(main())
+    with open(OUT, "w", encoding="utf-8", newline="\n") as HANDLE:
+        SAVED, sys.stdout = sys.stdout, HANDLE
+        try:
+            CODE = main()
+        finally:
+            sys.stdout = SAVED
+    sys.exit(CODE)

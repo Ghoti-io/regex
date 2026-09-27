@@ -5,10 +5,13 @@
  *
  * Every test here states a rule from documentation/dialects.md section 8 and
  * names the clause of ECMA-262 it comes from, rather than recording what the
- * parser currently does. Where the rule was checked against Node 22 - which
- * is the oracle the conformance vectors come from - the test says so, because
+ * parser currently does. Where the rule was checked against the pinned node
+ * - the oracle the conformance vectors come from - the test says so, because
  * "the reference implementation agrees" is a stronger claim than "the
- * specification seems to say".
+ * specification seems to say". A comment naming "Node 22" records which
+ * release the rule was taken against; the pin is node 24 / V8 13.6 now, and
+ * tools/oracle/syntax_diff.py re-asks the whole accept/reject surface every
+ * run.
  *
  * The accept/reject behaviour as a whole is checked against Node by
  * tools/oracle/syntax_diff.py, which runs millions of patterns through both.
@@ -370,13 +373,97 @@ TEST(EcmaScript, NamedGroupsAndReferences) {
   Parsed empty("(?<>x)", "u");
   EXPECT_EQ(empty.result(), GRX_ERR_SYNTAX);
 
-  // Node 22 rejects a duplicate name even across alternatives, which ES2025
-  // allows. The oracle is what the conformance vectors come from, so this
-  // library follows it and records the difference in dialects.md.
   Parsed duplicate("(?<n>a)(?<n>b)", "u");
   EXPECT_EQ(duplicate.result(), GRX_ERR_SYNTAX);
   EXPECT_EQ(duplicate.diag(), GRX_DIAG_DUPLICATE_GROUP_NAME);
-  EXPECT_EQ(Parsed("(?<n>a)|(?<n>b)", "u").result(), GRX_ERR_SYNTAX);
+  // ...and across alternatives it is legal, which is ES2025. See
+  // DuplicateNamesAreLegalOnlyAcrossAlternatives for the rule.
+  EXPECT_TRUE(Parsed("(?<n>a)|(?<n>b)", "u").ok());
+}
+
+TEST(EcmaScript, DuplicateNamesAreLegalOnlyAcrossAlternatives) {
+  // ES2025 allows a name twice, and the proposal states the whole of the rule
+  // as reusing it only "in different `|` alternatives, so that it's
+  // impossible for a single match to actually use the same name multiple
+  // times". So the question is whether one match could fill both, and the
+  // only construct here that makes two things exclusive is an alternation.
+  const char * legal[] = {
+    "(?<n>a)|(?<n>b)",              // The rule itself.
+    "(?<n>a)|(?<n>b)|(?<n>c)",      // Three branches, three groups.
+    "(?:(?<n>a)|(?<n>b))\\k<n>",     // A reference to whichever filled.
+    "((?:(?<n>a)|(?<n>b)))",        // Nested inside plain groups.
+    "(?<n>a)*|(?<n>b)",             // A quantifier on one of them.
+    "(?=(?<n>a))|(?<n>b)",          // One inside an assertion.
+    "(?i:(?<n>a))|(?<n>b)",         // One inside a modifier group.
+  };
+  for (const char * pattern : legal) {
+    EXPECT_TRUE(Parsed(pattern, "u").ok()) << pattern;
+  }
+
+  // Every one of these could fill both in a single match, so every one is an
+  // error - and the diagnostic says which error, because
+  // GRX_DIAG_INVALID_GROUP_SYNTAX would also "fail" and would tell a caller
+  // the group was malformed.
+  const char * illegal[] = {
+    "(?<n>a)(?<n>b)",               // Sequential, the original rule.
+    "(?<n>a)(?:(?<n>b))",           // Sequential through a plain group.
+    "(?:(?<n>a)|x)(?:(?<n>b)|y)",   // Two alternations, not one.
+    "(?<n>a)?(?<n>b)",              // Optional does not make them exclusive.
+    "(?<n>a){0}(?<n>b)",            // Nor does a zero repeat.
+    "(?=(?<n>a))(?<n>b)",           // A lookahead's captures survive it.
+    "(?<n>a)(?!(?<n>b))",           // So do a failed negative one's, here.
+    "(?<=(?<n>a))(?<n>b)",          // Lookbehind too.
+    "(?<n>x(?<n>y))",               // One inside the other.
+    "(?:|(?<n>a))(?<n>b)",          // An empty first branch is still a branch.
+    "(?<n>a)|(?<n>b)(?<n>c)",       // Legal pair, illegal pair, one pattern.
+    // **And the family V8 13.6 accepts.** Over "ac" it fills both - group 1
+    // "a", group 2 "c", `groups.n` "c" - which is the thing the rule exists
+    // to prevent, so this library refuses it and dialects.md section 6
+    // carries the row. `tools/oracle/syntax_diff.py` re-asks node every run.
+    "(?<n>a)(?:b|(?<n>c))",
+    "(?<n>a)(?:x|(?<n>b))",
+    "(?<n>a)(?:b|c(?<n>d))",
+  };
+  for (const char * pattern : illegal) {
+    Parsed parsed(pattern, "u");
+    EXPECT_EQ(parsed.result(), GRX_ERR_SYNTAX) << pattern;
+    EXPECT_EQ(parsed.diag(), GRX_DIAG_DUPLICATE_GROUP_NAME) << pattern;
+  }
+
+  // GRX_OPT_DUPLICATE_NAMES turns the check off, which is what that option
+  // documents itself as doing. ECMAScript has no `(?J)` to set it with, so
+  // this is only reachable from a caller that asked for it by name.
+  GRX_Pattern * pattern = nullptr;
+  GRX_Error error;
+  grx_error_clear(&error);
+  EXPECT_EQ(grx_pattern_parse_with_allocator("(?<n>a)(?<n>b)", 14,
+                GRX_SYNTAX_ECMASCRIPT,
+                GRX_OPT_UTF | GRX_OPT_DUPLICATE_NAMES, nullptr, nullptr,
+                &error, &pattern),
+      GRX_OK);
+  grx_pattern_free(pattern);
+}
+
+TEST(EcmaScript, ModifierGroupsTakeThreeLettersAndMustBeScoped) {
+  // ES2025's RegExp Modifiers. Three letters, and the `:` is not optional -
+  // which is what makes this a different construct from the Perl family's
+  // inline flags rather than the same one with a shorter alphabet.
+  for (const char * pattern : {"(?i:a)", "(?m:a)", "(?s:a)", "(?im:a)",
+                               "(?ims:a)", "(?-i:a)", "(?-ims:a)", "(?i-s:a)",
+                               "(?im-s:a)", "(?i-:a)", "(?i:)"}) {
+    EXPECT_TRUE(Parsed(pattern, "u").ok()) << pattern;
+  }
+
+  // A letter may not be both set and cleared, nor repeated within a list;
+  // the empty modifier is only refused when it is the *only* list; and the
+  // letters are the three, not the regexp's whole alphabet.
+  for (const char * pattern : {"(?i)a", "(?i-i:a)", "(?ii:a)", "(?--i:a)",
+                               "(?-:a)", "(?x:a)", "(?d:a)", "(?u:a)",
+                               "(?v:a)", "(?g:a)", "(?y:a)", "(?i a)",
+                               "(?i", "(?-"}) {
+    Parsed parsed(pattern, "u");
+    EXPECT_EQ(parsed.result(), GRX_ERR_SYNTAX) << pattern;
+  }
 }
 
 TEST(EcmaScript, BackslashKIsALiteralOnlyWhenNoGroupIsNamed) {
@@ -399,9 +486,7 @@ TEST(EcmaScript, GroupsThePerlFamilyHasAndThisDialectDoesNot) {
     "(?(1)a)",  // Conditional.
     "(?P<n>a)", // Python's named group.
     "(?'n'a)",  // Perl's other named group.
-    "(?i)a",    // A bare inline flag.
-    "(?i:a)",   // ES2025's scoped modifier - which Node 22 also rejects.
-    "(?-i:a)",
+    "(?i)a",    // A bare inline flag: ES2025's modifier must be scoped.
   };
 
   for (const char * pattern : foreign) {

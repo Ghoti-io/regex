@@ -344,8 +344,9 @@ Two resolvers over the same alias tables:
   (`\p{Lu}`, `\p{Uppercase_Letter}`, `\p{L}`), and `name=value` for `gc`,
   `sc` and `scx`. A **lone script value is a `SyntaxError`**: `\p{Greek}`
   is rejected and `\p{Script=Greek}` accepted. An earlier draft of this page
-  said otherwise; Node 22 was asked, and it rejects `\p{Greek}` under both
-  `u` and `v`. Anything else is `GRX_ERR_SYNTAX` here.
+  said otherwise; node was asked, and node 24 / V8 13.6 rejects `\p{Greek}`
+  under both `u` and `v` - as Node 22 did when the claim was first taken.
+  Anything else is `GRX_ERR_SYNTAX` here.
 
   The set of binary property *names* the strict resolver accepts is **closed**
   and is ECMA-262's own list, not "every binary property in the UCD".

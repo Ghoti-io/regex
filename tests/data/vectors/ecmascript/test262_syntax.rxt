@@ -1,6 +1,6 @@
 # imported by tools/corpus/import_test262.py
 # corpus: tc39/test262 35d566604512cba908054eec49f85e64a59f3091, test/built-ins/RegExp
-# oracle: node v22.23.2, Unicode 17.0
+# oracle: node v24.21.0, Unicode 17.0
 #
 # Cases whose expectation test262 states in a form a program
 # can read: the `negative:` frontmatter and

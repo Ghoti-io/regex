@@ -17,7 +17,7 @@ disagreement. Those rows are left out here and the count is reported, which
 is the same treatment tools/corpus/make_boundary_vectors.py gives the three
 break rules Perl predates.
 
-Usage:  tools/corpus/make_name_vectors.py > tests/data/vectors/perl/names.rxt
+Usage:  tools/corpus/make_name_vectors.py [--out tests/data/vectors/perl/names.rxt]
 """
 import os
 import random
@@ -169,7 +169,8 @@ def main():
         return 2
 
     sys.stdout.write(
-        "# Perl's `\\N{NAME}`, with Perl 5.40 as the oracle.\n"
+        "# Perl's `\\N{NAME}`, with %s as the oracle.\n"
+        % oracle_env.version("perl") +
         "# Written by tools/corpus/make_name_vectors.py.\n"
         "#\n"
         "# Stored names, every NameAliases kind, the computed families at\n"
@@ -212,4 +213,25 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    # `--out PATH` rather than a shell redirect, because the Makefile runs
+    # every generator through oracle_run.py, which prints the provenance line
+    # it resolved to *stdout* - a redirect would put "oracle(container): perl
+    # perl v5.44.0" inside the corpus. With no argument the output is stdout,
+    # which is the spelling the usage line above documents and the one
+    # somebody reaching for this by hand will type.
+    OUT = None
+    ARGV = sys.argv[1:]
+    if len(ARGV) == 2 and ARGV[0] == "--out":
+        OUT = ARGV[1]
+    elif ARGV:
+        sys.stderr.write("usage: %s [--out PATH]\n" % sys.argv[0])
+        sys.exit(2)
+    if OUT is None:
+        sys.exit(main())
+    with open(OUT, "w", encoding="utf-8", newline="\n") as HANDLE:
+        SAVED, sys.stdout = sys.stdout, HANDLE
+        try:
+            CODE = main()
+        finally:
+            sys.stdout = SAVED
+    sys.exit(CODE)

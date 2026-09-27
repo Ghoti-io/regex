@@ -1,6 +1,6 @@
 # imported by tools/corpus/import_test262.py
 # corpus: tc39/test262 35d566604512cba908054eec49f85e64a59f3091, test/built-ins/RegExp
-# oracle: node v22.23.2, Unicode 17.0
+# oracle: node v24.21.0, Unicode 17.0
 #
 # Patterns harvested from files whose assertions are about
 # JavaScript rather than about the pattern, run against a fixed
@@ -934,1431 +934,1788 @@ expect: 0-0
 
 pattern: (?-i:(?-i:))
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?-i:(?-i:))
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?-i:(?-i:))
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?-i:(?-i:))
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?-i:(?-i:))
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?-i:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?-i:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?-i:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?-i:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?-i:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?-i:)
 flags: i
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?-i:)
 flags: i
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?-i:)
 flags: i
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?-i:)
 flags: i
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?-i:)
 flags: i
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?-i:.es)
 flags: i
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?-i:.es)
 flags: i
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?-i:.es)
 flags: i
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?-i:.es)
 flags: i
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?-i:.es)
 flags: i
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?-i:.es)
 flags: is
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?-i:.es)
 flags: is
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?-i:.es)
 flags: is
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?-i:.es)
 flags: is
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?-i:.es)
 flags: is
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?-i:Z\\B)
 flags: iu
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?-i:Z\\B)
 flags: iu
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?-i:Z\\B)
 flags: iu
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?-i:Z\\B)
 flags: iu
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?-i:Z\\B)
 flags: iu
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?-i:Z\\B)
 flags: iu
-expect: error syntax
+subject: \u00E9\u4E2D\u{1F4A9}
+expect: nomatch
 
 pattern: (?-i:[^ab])c
 flags: i
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?-i:[^ab])c
 flags: i
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?-i:[^ab])c
 flags: i
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?-i:[^ab])c
 flags: i
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?-i:[^ab])c
 flags: i
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?-i:[ab])c
 flags: i
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?-i:[ab])c
 flags: i
-expect: error syntax
+subject: abc
+expect: 1-3
 
 pattern: (?-i:[ab])c
 flags: i
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?-i:[ab])c
 flags: i
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?-i:[ab])c
 flags: i
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?-i:\\P{Lu})
 flags: iu
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?-i:\\P{Lu})
 flags: iu
-expect: error syntax
+subject: abc
+expect: 0-1
 
 pattern: (?-i:\\P{Lu})
 flags: iu
-expect: error syntax
+subject: aaa
+expect: 0-1
 
 pattern: (?-i:\\P{Lu})
 flags: iu
-expect: error syntax
+subject: a1 B2
+expect: 0-1
 
 pattern: (?-i:\\P{Lu})
 flags: iu
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-2
 
 pattern: (?-i:\\P{Lu})
 flags: iu
-expect: error syntax
+subject: \u00E9\u4E2D\u{1F4A9}
+expect: 0-2
 
 pattern: (?-i:\\W)
 flags: iu
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?-i:\\W)
 flags: iu
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?-i:\\W)
 flags: iu
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?-i:\\W)
 flags: iu
-expect: error syntax
+subject: a1 B2
+expect: 2-3
 
 pattern: (?-i:\\W)
 flags: iu
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-2
 
 pattern: (?-i:\\W)
 flags: iu
-expect: error syntax
+subject: \u00E9\u4E2D\u{1F4A9}
+expect: 0-2
 
 pattern: (?-i:\\b)
 flags: iu
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?-i:\\b)
 flags: iu
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?-i:\\b)
 flags: iu
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?-i:\\b)
 flags: iu
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?-i:\\b)
 flags: iu
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?-i:\\b)
 flags: iu
-expect: error syntax
+subject: \u00E9\u4E2D\u{1F4A9}
+expect: nomatch
 
 pattern: (?-i:\\p{Lu})
 flags: iu
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?-i:\\p{Lu})
 flags: iu
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?-i:\\p{Lu})
 flags: iu
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?-i:\\p{Lu})
 flags: iu
-expect: error syntax
+subject: a1 B2
+expect: 3-4
 
 pattern: (?-i:\\p{Lu})
 flags: iu
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?-i:\\p{Lu})
 flags: iu
-expect: error syntax
+subject: \u00E9\u4E2D\u{1F4A9}
+expect: nomatch
 
 pattern: (?-i:\\u0061)b
 flags: i
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?-i:\\u0061)b
 flags: i
-expect: error syntax
+subject: abc
+expect: 0-2
 
 pattern: (?-i:\\u0061)b
 flags: i
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?-i:\\u0061)b
 flags: i
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?-i:\\u0061)b
 flags: i
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?-i:\\u{0061})b
 flags: iu
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?-i:\\u{0061})b
 flags: iu
-expect: error syntax
+subject: abc
+expect: 0-2
 
 pattern: (?-i:\\u{0061})b
 flags: iu
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?-i:\\u{0061})b
 flags: iu
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?-i:\\u{0061})b
 flags: iu
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?-i:\\u{0061})b
 flags: iu
-expect: error syntax
+subject: \u00E9\u4E2D\u{1F4A9}
+expect: nomatch
 
 pattern: (?-i:\\w)
 flags: iu
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?-i:\\w)
 flags: iu
-expect: error syntax
+subject: abc
+expect: 0-1
 
 pattern: (?-i:\\w)
 flags: iu
-expect: error syntax
+subject: aaa
+expect: 0-1
 
 pattern: (?-i:\\w)
 flags: iu
-expect: error syntax
+subject: a1 B2
+expect: 0-1
 
 pattern: (?-i:\\w)
 flags: iu
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?-i:\\w)
 flags: iu
-expect: error syntax
+subject: \u00E9\u4E2D\u{1F4A9}
+expect: nomatch
 
 pattern: (?-i:\\x61)b
 flags: i
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?-i:\\x61)b
 flags: i
-expect: error syntax
+subject: abc
+expect: 0-2
 
 pattern: (?-i:\\x61)b
 flags: i
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?-i:\\x61)b
 flags: i
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?-i:\\x61)b
 flags: i
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?-i:a(?i:b))c
 flags: i
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?-i:a(?i:b))c
 flags: i
-expect: error syntax
+subject: abc
+expect: 0-3
 
 pattern: (?-i:a(?i:b))c
 flags: i
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?-i:a(?i:b))c
 flags: i
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?-i:a(?i:b))c
 flags: i
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?-i:aB)
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?-i:aB)
 flags: 
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?-i:aB)
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?-i:aB)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?-i:aB)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?-i:es$)
 flags: i
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?-i:es$)
 flags: i
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?-i:es$)
 flags: i
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?-i:es$)
 flags: i
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?-i:es$)
 flags: i
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?-i:es$)
 flags: im
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?-i:es$)
 flags: im
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?-i:es$)
 flags: im
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?-i:es$)
 flags: im
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?-i:es$)
 flags: im
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?-i:fo)o
 flags: i
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?-i:fo)o
 flags: i
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?-i:fo)o
 flags: i
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?-i:fo)o
 flags: i
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?-i:fo)o
 flags: i
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?-im:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?-im:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?-im:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?-im:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?-im:)
 flags: 
-expect: error syntax
-
-pattern: (?-im:)
-flags: im
-expect: error syntax
-
-pattern: (?-im:)
-flags: im
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?-im:)
 flags: im
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?-im:)
 flags: im
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?-im:)
 flags: im
-expect: error syntax
+subject: aaa
+expect: 0-0
+
+pattern: (?-im:)
+flags: im
+subject: a1 B2
+expect: 0-0
+
+pattern: (?-im:)
+flags: im
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?-ims:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?-ims:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?-ims:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?-ims:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?-ims:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?-ims:)
 flags: ims
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?-ims:)
 flags: ims
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?-ims:)
 flags: ims
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?-ims:)
 flags: ims
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?-ims:)
 flags: ims
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?-is:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?-is:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?-is:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?-is:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?-is:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?-is:)
 flags: is
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?-is:)
 flags: is
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?-is:)
 flags: is
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?-is:)
 flags: is
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?-is:)
 flags: is
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?-ism:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?-ism:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?-ism:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?-ism:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?-ism:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?-ism:)
 flags: ims
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?-ism:)
 flags: ims
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?-ism:)
 flags: ims
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?-ism:)
 flags: ims
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?-ism:)
 flags: ims
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?-m:(?-m:))
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?-m:(?-m:))
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?-m:(?-m:))
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?-m:(?-m:))
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?-m:(?-m:))
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?-m:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?-m:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?-m:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?-m:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?-m:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?-m:)
 flags: m
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?-m:)
 flags: m
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?-m:)
 flags: m
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?-m:)
 flags: m
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?-m:)
 flags: m
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?-m:^es)$
 flags: m
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?-m:^es)$
 flags: m
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?-m:^es)$
 flags: m
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?-m:^es)$
 flags: m
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?-m:^es)$
 flags: m
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?-m:es$)
 flags: im
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?-m:es$)
 flags: im
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?-m:es$)
 flags: im
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?-m:es$)
 flags: im
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?-m:es$)
 flags: im
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?-m:es$)
 flags: m
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?-m:es$)
 flags: m
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?-m:es$)
 flags: m
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?-m:es$)
 flags: m
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?-m:es$)
 flags: m
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?-m:es(?m-:$)|js$)
 flags: m
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?-m:es(?m-:$)|js$)
 flags: m
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?-m:es(?m-:$)|js$)
 flags: m
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?-m:es(?m-:$)|js$)
 flags: m
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?-m:es(?m-:$)|js$)
 flags: m
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?-m:es(?m:$)|js$)
 flags: m
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?-m:es(?m:$)|js$)
 flags: m
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?-m:es(?m:$)|js$)
 flags: m
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?-m:es(?m:$)|js$)
 flags: m
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?-m:es(?m:$)|js$)
 flags: m
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?-m:es.$)
 flags: m
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?-m:es.$)
 flags: m
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?-m:es.$)
 flags: m
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?-m:es.$)
 flags: m
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?-m:es.$)
 flags: m
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?-m:es.$)
 flags: ms
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?-m:es.$)
 flags: ms
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?-m:es.$)
 flags: ms
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?-m:es.$)
 flags: ms
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?-m:es.$)
 flags: ms
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?-mi:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?-mi:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?-mi:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?-mi:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?-mi:)
 flags: 
-expect: error syntax
-
-pattern: (?-mi:)
-flags: im
-expect: error syntax
-
-pattern: (?-mi:)
-flags: im
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?-mi:)
 flags: im
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?-mi:)
 flags: im
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?-mi:)
 flags: im
-expect: error syntax
+subject: aaa
+expect: 0-0
+
+pattern: (?-mi:)
+flags: im
+subject: a1 B2
+expect: 0-0
+
+pattern: (?-mi:)
+flags: im
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?-mis:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?-mis:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?-mis:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?-mis:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?-mis:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?-mis:)
 flags: ims
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?-mis:)
 flags: ims
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?-mis:)
 flags: ims
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?-mis:)
 flags: ims
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?-mis:)
 flags: ims
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?-ms:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?-ms:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?-ms:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?-ms:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?-ms:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?-ms:)
 flags: ms
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?-ms:)
 flags: ms
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?-ms:)
 flags: ms
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?-ms:)
 flags: ms
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?-ms:)
 flags: ms
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?-msi:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?-msi:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?-msi:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?-msi:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?-msi:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?-msi:)
 flags: ims
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?-msi:)
 flags: ims
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?-msi:)
 flags: ims
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?-msi:)
 flags: ims
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?-msi:)
 flags: ims
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?-s:(?-s:))
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?-s:(?-s:))
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?-s:(?-s:))
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?-s:(?-s:))
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?-s:(?-s:))
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?-s:(?s-:^.$))
 flags: s
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?-s:(?s-:^.$))
 flags: s
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?-s:(?s-:^.$))
 flags: s
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?-s:(?s-:^.$))
 flags: s
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?-s:(?s-:^.$))
 flags: s
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?-s:(?s:^.$))
 flags: s
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?-s:(?s:^.$))
 flags: s
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?-s:(?s:^.$))
 flags: s
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?-s:(?s:^.$))
 flags: s
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?-s:(?s:^.$))
 flags: s
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?-s:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?-s:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?-s:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?-s:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?-s:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?-s:)
 flags: s
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?-s:)
 flags: s
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?-s:)
 flags: s
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?-s:)
 flags: s
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?-s:)
 flags: s
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?-s:.es$)
 flags: ms
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?-s:.es$)
 flags: ms
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?-s:.es$)
 flags: ms
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?-s:.es$)
 flags: ms
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?-s:.es$)
 flags: ms
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?-s:.es$)
 flags: s
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?-s:.es$)
 flags: s
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?-s:.es$)
 flags: s
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?-s:.es$)
 flags: s
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?-s:.es$)
 flags: s
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?-s:.es)
 flags: is
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?-s:.es)
 flags: is
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?-s:.es)
 flags: is
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?-s:.es)
 flags: is
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?-s:.es)
 flags: is
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?-s:.es)
 flags: s
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?-s:.es)
 flags: s
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?-s:.es)
 flags: s
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?-s:.es)
 flags: s
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?-s:.es)
 flags: s
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?-s:^.$)
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?-s:^.$)
 flags: 
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?-s:^.$)
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?-s:^.$)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?-s:^.$)
 flags: 
-expect: error syntax
-
-pattern: (?-s:^.$)
-flags: s
-expect: error syntax
-
-pattern: (?-s:^.$)
-flags: s
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?-s:^.$)
 flags: s
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?-s:^.$)
 flags: s
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?-s:^.$)
 flags: s
-expect: error syntax
+subject: aaa
+expect: nomatch
+
+pattern: (?-s:^.$)
+flags: s
+subject: a1 B2
+expect: nomatch
+
+pattern: (?-s:^.$)
+flags: s
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?-si:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?-si:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?-si:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?-si:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?-si:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?-si:)
 flags: is
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?-si:)
 flags: is
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?-si:)
 flags: is
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?-si:)
 flags: is
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?-si:)
 flags: is
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?-sim:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?-sim:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?-sim:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?-sim:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?-sim:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?-sim:)
 flags: ims
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?-sim:)
 flags: ims
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?-sim:)
 flags: ims
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?-sim:)
 flags: ims
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?-sim:)
 flags: ims
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?-sm:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?-sm:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?-sm:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?-sm:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?-sm:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?-sm:)
 flags: ms
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?-sm:)
 flags: ms
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?-sm:)
 flags: ms
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?-sm:)
 flags: ms
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?-sm:)
 flags: ms
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?-smi:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?-smi:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?-smi:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?-smi:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?-smi:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?-smi:)
 flags: ims
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?-smi:)
 flags: ims
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?-smi:)
 flags: ims
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?-smi:)
 flags: ims
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?-smi:)
 flags: ims
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?:(?:(?<x>a)|(?<x>b))\\k<x>){2}
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?:(?:(?<x>a)|(?<x>b))\\k<x>){2}
 flags: 
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?:(?:(?<x>a)|(?<x>b))\\k<x>){2}
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?:(?:(?<x>a)|(?<x>b))\\k<x>){2}
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?:(?:(?<x>a)|(?<x>b))\\k<x>){2}
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?:(?:(?<x>a)|(?<x>b)|c)\\k<x>){2}
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?:(?:(?<x>a)|(?<x>b)|c)\\k<x>){2}
 flags: 
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?:(?:(?<x>a)|(?<x>b)|c)\\k<x>){2}
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?:(?:(?<x>a)|(?<x>b)|c)\\k<x>){2}
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?:(?:(?<x>a)|(?<x>b)|c)\\k<x>){2}
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?:(?<x>a)|(?<x>b))\\k<x>
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?:(?<x>a)|(?<x>b))\\k<x>
 flags: 
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?:(?<x>a)|(?<x>b))\\k<x>
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-2 0-1 -
 
 pattern: (?:(?<x>a)|(?<x>b))\\k<x>
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?:(?<x>a)|(?<x>b))\\k<x>
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?:(?<x>a)|(?<y>a)(?<x>b))(?:(?<z>c)|(?<z>d))
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?:(?<x>a)|(?<y>a)(?<x>b))(?:(?<z>c)|(?<z>d))
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-3 - 0-1 1-2 2-3 -
 
 pattern: (?:(?<x>a)|(?<y>a)(?<x>b))(?:(?<z>c)|(?<z>d))
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?:(?<x>a)|(?<y>a)(?<x>b))(?:(?<z>c)|(?<z>d))
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?:(?<x>a)|(?<y>a)(?<x>b))(?:(?<z>c)|(?<z>d))
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?:(?=(abc)))?a
 flags: 
@@ -6772,63 +7129,78 @@ expect: 0-2 0-2
 
 pattern: (?<x>a)|(?<x>b)
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?<x>a)|(?<x>b)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-1 0-1 -
 
 pattern: (?<x>a)|(?<x>b)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-1 0-1 -
 
 pattern: (?<x>a)|(?<x>b)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-1 0-1 -
 
 pattern: (?<x>a)|(?<x>b)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?<x>b)|(?<x>a)
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?<x>b)|(?<x>a)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-1 - 0-1
 
 pattern: (?<x>b)|(?<x>a)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-1 - 0-1
 
 pattern: (?<x>b)|(?<x>a)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-1 - 0-1
 
 pattern: (?<x>b)|(?<x>a)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?<y>a)(?<x>a)|(?<x>b)(?<y>b)
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?<y>a)(?<x>a)|(?<x>b)(?<y>b)
 flags: 
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?<y>a)(?<x>a)|(?<x>b)(?<y>b)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-2 0-1 1-2 - -
 
 pattern: (?<y>a)(?<x>a)|(?<x>b)(?<y>b)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?<y>a)(?<x>a)|(?<x>b)(?<y>b)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?<\u03C0>a)
 flags: 
@@ -7617,2419 +7989,3023 @@ expect: nomatch
 
 pattern: (?i-:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?i-:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?i-:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?i-:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?i-:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?i-:.es)
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?i-:.es)
 flags: 
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?i-:.es)
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?i-:.es)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?i-:.es)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?i-:.es)
 flags: s
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?i-:.es)
 flags: s
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?i-:.es)
 flags: s
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?i-:.es)
 flags: s
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?i-:.es)
 flags: s
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?i-:Z\\B)
 flags: u
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?i-:Z\\B)
 flags: u
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?i-:Z\\B)
 flags: u
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?i-:Z\\B)
 flags: u
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?i-:Z\\B)
 flags: u
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?i-:Z\\B)
 flags: u
-expect: error syntax
+subject: \u00E9\u4E2D\u{1F4A9}
+expect: nomatch
 
 pattern: (?i-:[^ab])c
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?i-:[^ab])c
 flags: 
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?i-:[^ab])c
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?i-:[^ab])c
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?i-:[^ab])c
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?i-:[ab])c
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?i-:[ab])c
 flags: 
-expect: error syntax
+subject: abc
+expect: 1-3
 
 pattern: (?i-:[ab])c
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?i-:[ab])c
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?i-:[ab])c
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?i-:\\P{Lu})
 flags: u
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?i-:\\P{Lu})
 flags: u
-expect: error syntax
+subject: abc
+expect: 0-1
 
 pattern: (?i-:\\P{Lu})
 flags: u
-expect: error syntax
+subject: aaa
+expect: 0-1
 
 pattern: (?i-:\\P{Lu})
 flags: u
-expect: error syntax
+subject: a1 B2
+expect: 0-1
 
 pattern: (?i-:\\P{Lu})
 flags: u
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-2
 
 pattern: (?i-:\\P{Lu})
 flags: u
-expect: error syntax
+subject: \u00E9\u4E2D\u{1F4A9}
+expect: 0-2
 
 pattern: (?i-:\\W)
 flags: u
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?i-:\\W)
 flags: u
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?i-:\\W)
 flags: u
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?i-:\\W)
 flags: u
-expect: error syntax
+subject: a1 B2
+expect: 2-3
 
 pattern: (?i-:\\W)
 flags: u
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-2
 
 pattern: (?i-:\\W)
 flags: u
-expect: error syntax
+subject: \u00E9\u4E2D\u{1F4A9}
+expect: 0-2
 
 pattern: (?i-:\\b)
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?i-:\\b)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?i-:\\b)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?i-:\\b)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?i-:\\b)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?i-:\\b)
 flags: u
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?i-:\\b)
 flags: u
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?i-:\\b)
 flags: u
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?i-:\\b)
 flags: u
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?i-:\\b)
 flags: u
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?i-:\\b)
 flags: u
-expect: error syntax
+subject: \u00E9\u4E2D\u{1F4A9}
+expect: nomatch
 
 pattern: (?i-:\\p{Lu})
 flags: u
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?i-:\\p{Lu})
 flags: u
-expect: error syntax
+subject: abc
+expect: 0-1
 
 pattern: (?i-:\\p{Lu})
 flags: u
-expect: error syntax
+subject: aaa
+expect: 0-1
 
 pattern: (?i-:\\p{Lu})
 flags: u
-expect: error syntax
+subject: a1 B2
+expect: 0-1
 
 pattern: (?i-:\\p{Lu})
 flags: u
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-2
 
 pattern: (?i-:\\p{Lu})
 flags: u
-expect: error syntax
+subject: \u00E9\u4E2D\u{1F4A9}
+expect: 0-2
 
 pattern: (?i-:\\u0061)b
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?i-:\\u0061)b
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-2
 
 pattern: (?i-:\\u0061)b
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?i-:\\u0061)b
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?i-:\\u0061)b
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?i-:\\u{0061})b
 flags: u
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?i-:\\u{0061})b
 flags: u
-expect: error syntax
+subject: abc
+expect: 0-2
 
 pattern: (?i-:\\u{0061})b
 flags: u
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?i-:\\u{0061})b
 flags: u
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?i-:\\u{0061})b
 flags: u
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?i-:\\u{0061})b
 flags: u
-expect: error syntax
+subject: \u00E9\u4E2D\u{1F4A9}
+expect: nomatch
 
 pattern: (?i-:\\w)
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?i-:\\w)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-1
 
 pattern: (?i-:\\w)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-1
 
 pattern: (?i-:\\w)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-1
 
 pattern: (?i-:\\w)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?i-:\\w)
 flags: u
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?i-:\\w)
 flags: u
-expect: error syntax
+subject: abc
+expect: 0-1
 
 pattern: (?i-:\\w)
 flags: u
-expect: error syntax
+subject: aaa
+expect: 0-1
 
 pattern: (?i-:\\w)
 flags: u
-expect: error syntax
+subject: a1 B2
+expect: 0-1
 
 pattern: (?i-:\\w)
 flags: u
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?i-:\\w)
 flags: u
-expect: error syntax
+subject: \u00E9\u4E2D\u{1F4A9}
+expect: nomatch
 
 pattern: (?i-:\\x61)b
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?i-:\\x61)b
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-2
 
 pattern: (?i-:\\x61)b
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?i-:\\x61)b
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?i-:\\x61)b
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?i-:es$)
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?i-:es$)
 flags: 
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?i-:es$)
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?i-:es$)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?i-:es$)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?i-:es$)
 flags: m
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?i-:es$)
 flags: m
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?i-:es$)
 flags: m
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?i-:es$)
 flags: m
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?i-:es$)
 flags: m
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?i-m:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?i-m:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?i-m:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?i-m:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?i-m:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?i-ms:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?i-ms:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?i-ms:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?i-ms:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?i-ms:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?i-s:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?i-s:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?i-s:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?i-s:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?i-s:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?i-sm:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?i-sm:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?i-sm:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?i-sm:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?i-sm:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?i:(?i:))
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?i:(?i:))
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?i:(?i:))
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?i:(?i:))
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?i:(?i:))
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?i:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?i:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?i:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?i:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?i:)
 flags: 
-expect: error syntax
-
-pattern: (?i:)
-flags: i
-expect: error syntax
-
-pattern: (?i:)
-flags: i
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?i:)
 flags: i
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?i:)
 flags: i
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?i:)
 flags: i
-expect: error syntax
+subject: aaa
+expect: 0-0
+
+pattern: (?i:)
+flags: i
+subject: a1 B2
+expect: 0-0
+
+pattern: (?i:)
+flags: i
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?i:.es)
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?i:.es)
 flags: 
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?i:.es)
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?i:.es)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?i:.es)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?i:.es)
 flags: s
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?i:.es)
 flags: s
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?i:.es)
 flags: s
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?i:.es)
 flags: s
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?i:.es)
 flags: s
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?i:Z\\B)
 flags: u
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?i:Z\\B)
 flags: u
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?i:Z\\B)
 flags: u
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?i:Z\\B)
 flags: u
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?i:Z\\B)
 flags: u
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?i:Z\\B)
 flags: u
-expect: error syntax
+subject: \u00E9\u4E2D\u{1F4A9}
+expect: nomatch
 
 pattern: (?i:[^ab])c
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?i:[^ab])c
 flags: 
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?i:[^ab])c
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?i:[^ab])c
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?i:[^ab])c
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?i:[ab])c
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?i:[ab])c
 flags: 
-expect: error syntax
+subject: abc
+expect: 1-3
 
 pattern: (?i:[ab])c
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?i:[ab])c
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?i:[ab])c
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?i:\\P{Lu})
 flags: u
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?i:\\P{Lu})
 flags: u
-expect: error syntax
+subject: abc
+expect: 0-1
 
 pattern: (?i:\\P{Lu})
 flags: u
-expect: error syntax
+subject: aaa
+expect: 0-1
 
 pattern: (?i:\\P{Lu})
 flags: u
-expect: error syntax
+subject: a1 B2
+expect: 0-1
 
 pattern: (?i:\\P{Lu})
 flags: u
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-2
 
 pattern: (?i:\\P{Lu})
 flags: u
-expect: error syntax
+subject: \u00E9\u4E2D\u{1F4A9}
+expect: 0-2
 
 pattern: (?i:\\W)
 flags: u
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?i:\\W)
 flags: u
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?i:\\W)
 flags: u
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?i:\\W)
 flags: u
-expect: error syntax
+subject: a1 B2
+expect: 2-3
 
 pattern: (?i:\\W)
 flags: u
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-2
 
 pattern: (?i:\\W)
 flags: u
-expect: error syntax
+subject: \u00E9\u4E2D\u{1F4A9}
+expect: 0-2
 
 pattern: (?i:\\b)
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?i:\\b)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?i:\\b)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?i:\\b)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?i:\\b)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?i:\\b)
 flags: u
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?i:\\b)
 flags: u
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?i:\\b)
 flags: u
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?i:\\b)
 flags: u
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?i:\\b)
 flags: u
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?i:\\b)
 flags: u
-expect: error syntax
+subject: \u00E9\u4E2D\u{1F4A9}
+expect: nomatch
 
 pattern: (?i:\\p{Lu})
 flags: u
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?i:\\p{Lu})
 flags: u
-expect: error syntax
+subject: abc
+expect: 0-1
 
 pattern: (?i:\\p{Lu})
 flags: u
-expect: error syntax
+subject: aaa
+expect: 0-1
 
 pattern: (?i:\\p{Lu})
 flags: u
-expect: error syntax
+subject: a1 B2
+expect: 0-1
 
 pattern: (?i:\\p{Lu})
 flags: u
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-2
 
 pattern: (?i:\\p{Lu})
 flags: u
-expect: error syntax
+subject: \u00E9\u4E2D\u{1F4A9}
+expect: 0-2
 
 pattern: (?i:\\u0061)b
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?i:\\u0061)b
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-2
 
 pattern: (?i:\\u0061)b
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?i:\\u0061)b
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?i:\\u0061)b
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?i:\\u{0061})b
 flags: u
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?i:\\u{0061})b
 flags: u
-expect: error syntax
+subject: abc
+expect: 0-2
 
 pattern: (?i:\\u{0061})b
 flags: u
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?i:\\u{0061})b
 flags: u
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?i:\\u{0061})b
 flags: u
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?i:\\u{0061})b
 flags: u
-expect: error syntax
+subject: \u00E9\u4E2D\u{1F4A9}
+expect: nomatch
 
 pattern: (?i:\\w)
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?i:\\w)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-1
 
 pattern: (?i:\\w)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-1
 
 pattern: (?i:\\w)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-1
 
 pattern: (?i:\\w)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?i:\\w)
 flags: u
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?i:\\w)
 flags: u
-expect: error syntax
+subject: abc
+expect: 0-1
 
 pattern: (?i:\\w)
 flags: u
-expect: error syntax
+subject: aaa
+expect: 0-1
 
 pattern: (?i:\\w)
 flags: u
-expect: error syntax
+subject: a1 B2
+expect: 0-1
 
 pattern: (?i:\\w)
 flags: u
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?i:\\w)
 flags: u
-expect: error syntax
+subject: \u00E9\u4E2D\u{1F4A9}
+expect: nomatch
 
 pattern: (?i:\\x61)b
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?i:\\x61)b
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-2
 
 pattern: (?i:\\x61)b
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?i:\\x61)b
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?i:\\x61)b
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?i:a(?-i:b))c
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?i:a(?-i:b))c
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-3
 
 pattern: (?i:a(?-i:b))c
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?i:a(?-i:b))c
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?i:a(?-i:b))c
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?i:a)b
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?i:a)b
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-2
 
 pattern: (?i:a)b
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?i:a)b
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?i:a)b
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?i:aB)
 flags: i
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?i:aB)
 flags: i
-expect: error syntax
+subject: abc
+expect: 0-2
 
 pattern: (?i:aB)
 flags: i
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?i:aB)
 flags: i
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?i:aB)
 flags: i
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?i:es$)
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?i:es$)
 flags: 
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?i:es$)
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?i:es$)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?i:es$)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?i:es$)
 flags: m
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?i:es$)
 flags: m
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?i:es$)
 flags: m
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?i:es$)
 flags: m
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?i:es$)
 flags: m
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?im-:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?im-:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?im-:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?im-:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?im-:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?im-s:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?im-s:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?im-s:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?im-s:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?im-s:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?im:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?im:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?im:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?im:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?im:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?ims-:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?ims-:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?ims-:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?ims-:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?ims-:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?ims:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?ims:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?ims:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?ims:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?ims:)
 flags: 
-expect: error syntax
-
-pattern: (?ims:)
-flags: ims
-expect: error syntax
-
-pattern: (?ims:)
-flags: ims
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?ims:)
 flags: ims
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?ims:)
 flags: ims
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?ims:)
 flags: ims
-expect: error syntax
+subject: aaa
+expect: 0-0
+
+pattern: (?ims:)
+flags: ims
+subject: a1 B2
+expect: 0-0
+
+pattern: (?ims:)
+flags: ims
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?is-:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?is-:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?is-:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?is-:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?is-:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?is-m:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?is-m:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?is-m:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?is-m:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?is-m:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?is:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?is:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?is:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?is:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?is:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?ism-:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?ism-:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?ism-:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?ism-:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?ism-:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?ism:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?ism:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?ism:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?ism:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?ism:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?m-:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?m-:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?m-:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?m-:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?m-:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?m-:es$)
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?m-:es$)
 flags: 
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?m-:es$)
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?m-:es$)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?m-:es$)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?m-:es$)
 flags: i
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?m-:es$)
 flags: i
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?m-:es$)
 flags: i
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?m-:es$)
 flags: i
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?m-:es$)
 flags: i
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?m-:es$|(?-m:js$))
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?m-:es$|(?-m:js$))
 flags: 
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?m-:es$|(?-m:js$))
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?m-:es$|(?-m:js$))
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?m-:es$|(?-m:js$))
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?m-:es.$)
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?m-:es.$)
 flags: 
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?m-:es.$)
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?m-:es.$)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?m-:es.$)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?m-:es.$)
 flags: s
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?m-:es.$)
 flags: s
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?m-:es.$)
 flags: s
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?m-:es.$)
 flags: s
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?m-:es.$)
 flags: s
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?m-i:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?m-i:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?m-i:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?m-i:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?m-i:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?m-i:^a$)
 flags: i
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?m-i:^a$)
 flags: i
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?m-i:^a$)
 flags: i
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?m-i:^a$)
 flags: i
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?m-i:^a$)
 flags: i
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?m-is:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?m-is:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?m-is:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?m-is:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?m-is:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?m-s:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?m-s:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?m-s:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?m-s:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?m-s:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?m-si:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?m-si:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?m-si:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?m-si:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?m-si:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?m:(?m:))
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?m:(?m:))
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?m:(?m:))
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?m:(?m:))
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?m:(?m:))
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?m:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?m:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?m:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?m:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?m:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?m:)
 flags: m
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?m:)
 flags: m
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?m:)
 flags: m
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?m:)
 flags: m
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?m:)
 flags: m
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?m:^(?-i:a)$)
 flags: i
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?m:^(?-i:a)$)
 flags: i
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?m:^(?-i:a)$)
 flags: i
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?m:^(?-i:a)$)
 flags: i
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?m:^(?-i:a)$)
 flags: i
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?m:es$)
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?m:es$)
 flags: 
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?m:es$)
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?m:es$)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?m:es$)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?m:es$)
 flags: i
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?m:es$)
 flags: i
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?m:es$)
 flags: i
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?m:es$)
 flags: i
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?m:es$)
 flags: i
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?m:es$)
 flags: m
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?m:es$)
 flags: m
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?m:es$)
 flags: m
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?m:es$)
 flags: m
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?m:es$)
 flags: m
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?m:es$|(?-m:js$))
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?m:es$|(?-m:js$))
 flags: 
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?m:es$|(?-m:js$))
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?m:es$|(?-m:js$))
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?m:es$|(?-m:js$))
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?m:es.$)
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?m:es.$)
 flags: 
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?m:es.$)
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?m:es.$)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?m:es.$)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?m:es.$)
 flags: s
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?m:es.$)
 flags: s
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?m:es.$)
 flags: s
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?m:es.$)
 flags: s
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?m:es.$)
 flags: s
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?mi-:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?mi-:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?mi-:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?mi-:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?mi-:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?mi-s:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?mi-s:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?mi-s:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?mi-s:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?mi-s:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?mi:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?mi:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?mi:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?mi:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?mi:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?mis-:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?mis-:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?mis-:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?mis-:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?mis-:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?mis:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?mis:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?mis:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?mis:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?mis:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?ms-:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?ms-:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?ms-:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?ms-:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?ms-:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?ms-i:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?ms-i:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?ms-i:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?ms-i:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?ms-i:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?ms:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?ms:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?ms:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?ms:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?ms:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?msi-:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?msi-:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?msi-:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?msi-:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?msi-:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?msi:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?msi:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?msi:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?msi:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?msi:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?s-:(?-s:^.$))
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?s-:(?-s:^.$))
 flags: 
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?s-:(?-s:^.$))
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?s-:(?-s:^.$))
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?s-:(?-s:^.$))
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?s-:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?s-:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?s-:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?s-:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?s-:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?s-:.es$)
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?s-:.es$)
 flags: 
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?s-:.es$)
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?s-:.es$)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?s-:.es$)
 flags: 
-expect: error syntax
-
-pattern: (?s-:.es$)
-flags: m
-expect: error syntax
-
-pattern: (?s-:.es$)
-flags: m
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?s-:.es$)
 flags: m
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?s-:.es$)
 flags: m
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?s-:.es$)
 flags: m
-expect: error syntax
+subject: aaa
+expect: nomatch
+
+pattern: (?s-:.es$)
+flags: m
+subject: a1 B2
+expect: nomatch
+
+pattern: (?s-:.es$)
+flags: m
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?s-:.es)
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?s-:.es)
 flags: 
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?s-:.es)
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?s-:.es)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?s-:.es)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?s-:.es)
 flags: i
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?s-:.es)
 flags: i
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?s-:.es)
 flags: i
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?s-:.es)
 flags: i
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?s-:.es)
 flags: i
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?s-:^.$)
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?s-:^.$)
 flags: 
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?s-:^.$)
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?s-:^.$)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?s-:^.$)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?s-i:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?s-i:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?s-i:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?s-i:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?s-i:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?s-im:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?s-im:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?s-im:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?s-im:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?s-im:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?s-m:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?s-m:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?s-m:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?s-m:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?s-m:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?s-mi:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?s-mi:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?s-mi:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?s-mi:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?s-mi:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?s:(?-s:^.$))
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?s:(?-s:^.$))
 flags: 
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?s:(?-s:^.$))
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?s:(?-s:^.$))
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?s:(?-s:^.$))
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?s:(?s:))
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?s:(?s:))
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?s:(?s:))
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?s:(?s:))
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?s:(?s:))
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?s:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?s:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?s:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?s:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?s:)
 flags: 
-expect: error syntax
-
-pattern: (?s:)
-flags: s
-expect: error syntax
-
-pattern: (?s:)
-flags: s
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?s:)
 flags: s
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?s:)
 flags: s
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?s:)
 flags: s
-expect: error syntax
+subject: aaa
+expect: 0-0
+
+pattern: (?s:)
+flags: s
+subject: a1 B2
+expect: 0-0
+
+pattern: (?s:)
+flags: s
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?s:.es$)
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?s:.es$)
 flags: 
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?s:.es$)
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?s:.es$)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?s:.es$)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?s:.es$)
 flags: m
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?s:.es$)
 flags: m
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?s:.es$)
 flags: m
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?s:.es$)
 flags: m
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?s:.es$)
 flags: m
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?s:.es)
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?s:.es)
 flags: 
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?s:.es)
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?s:.es)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?s:.es)
 flags: 
-expect: error syntax
-
-pattern: (?s:.es)
-flags: i
-expect: error syntax
-
-pattern: (?s:.es)
-flags: i
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?s:.es)
 flags: i
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?s:.es)
 flags: i
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?s:.es)
 flags: i
-expect: error syntax
+subject: aaa
+expect: nomatch
+
+pattern: (?s:.es)
+flags: i
+subject: a1 B2
+expect: nomatch
+
+pattern: (?s:.es)
+flags: i
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?s:^.$)
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?s:^.$)
 flags: 
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?s:^.$)
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?s:^.$)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?s:^.$)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?s:^.$)
 flags: s
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (?s:^.$)
 flags: s
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (?s:^.$)
 flags: s
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (?s:^.$)
 flags: s
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (?s:^.$)
 flags: s
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (?si-:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?si-:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?si-:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?si-:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?si-:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?si-m:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?si-m:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?si-m:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?si-m:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?si-m:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?si:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?si:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?si:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?si:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?si:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?sim-:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?sim-:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?sim-:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?sim-:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?sim-:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?sim:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?sim:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?sim:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?sim:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?sim:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?sm-:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?sm-:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?sm-:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?sm-:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?sm-:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?sm-i:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?sm-i:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?sm-i:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?sm-i:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?sm-i:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?sm:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?sm:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?sm:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?sm:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?sm:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?smi-:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?smi-:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?smi-:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?smi-:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?smi-:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (?smi:)
 flags: 
-expect: error syntax
+subject: 
+expect: 0-0
 
 pattern: (?smi:)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-0
 
 pattern: (?smi:)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-0
 
 pattern: (?smi:)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-0
 
 pattern: (?smi:)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: 0-0
 
 pattern: (A)?(A.*)
 flags: 
@@ -10683,43 +11659,53 @@ expect: nomatch
 
 pattern: (^a$)|(?:^b$)|(?-m:^c$)|(?:^d$)|(^e$)
 flags: m
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (^a$)|(?:^b$)|(?-m:^c$)|(?:^d$)|(^e$)
 flags: m
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (^a$)|(?:^b$)|(?-m:^c$)|(?:^d$)|(^e$)
 flags: m
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (^a$)|(?:^b$)|(?-m:^c$)|(?:^d$)|(^e$)
 flags: m
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (^a$)|(?:^b$)|(?-m:^c$)|(?:^d$)|(^e$)
 flags: m
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (^a$)|(?:^b$)|(?m:^c$)|(?:^d$)|(^e$)
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (^a$)|(?:^b$)|(?m:^c$)|(?:^d$)|(^e$)
 flags: 
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (^a$)|(?:^b$)|(?m:^c$)|(?:^d$)|(^e$)
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: (^a$)|(?:^b$)|(?m:^c$)|(?:^d$)|(^e$)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (^a$)|(?:^b$)|(?m:^c$)|(?:^d$)|(^e$)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (a(b(c)))(d(e(f)))
 flags: 
@@ -10828,63 +11814,78 @@ expect: nomatch
 
 pattern: (a)(?-i:\\1)
 flags: i
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (a)(?-i:\\1)
 flags: i
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (a)(?-i:\\1)
 flags: i
-expect: error syntax
+subject: aaa
+expect: 0-2 0-1
 
 pattern: (a)(?-i:\\1)
 flags: i
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (a)(?-i:\\1)
 flags: i
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (a)(?i-:\\1)
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (a)(?i-:\\1)
 flags: 
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (a)(?i-:\\1)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-2 0-1
 
 pattern: (a)(?i-:\\1)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (a)(?i-:\\1)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (a)(?i:\\1)
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (a)(?i:\\1)
 flags: 
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (a)(?i:\\1)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-2 0-1
 
 pattern: (a)(?i:\\1)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (a)(?i:\\1)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (a)?(a)
 flags: 
@@ -10938,43 +11939,53 @@ expect: nomatch
 
 pattern: (a)|(?:b)|(?-i:c)|(?:d)|(e)
 flags: i
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (a)|(?:b)|(?-i:c)|(?:d)|(e)
 flags: i
-expect: error syntax
+subject: abc
+expect: 0-1 0-1 -
 
 pattern: (a)|(?:b)|(?-i:c)|(?:d)|(e)
 flags: i
-expect: error syntax
+subject: aaa
+expect: 0-1 0-1 -
 
 pattern: (a)|(?:b)|(?-i:c)|(?:d)|(e)
 flags: i
-expect: error syntax
+subject: a1 B2
+expect: 0-1 0-1 -
 
 pattern: (a)|(?:b)|(?-i:c)|(?:d)|(e)
 flags: i
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (a)|(?:b)|(?i:c)|(?:d)|(e)
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (a)|(?:b)|(?i:c)|(?:d)|(e)
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-1 0-1 -
 
 pattern: (a)|(?:b)|(?i:c)|(?:d)|(e)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-1 0-1 -
 
 pattern: (a)|(?:b)|(?i:c)|(?:d)|(e)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-1 0-1 -
 
 pattern: (a)|(?:b)|(?i:c)|(?:d)|(e)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (a*)b\\1+
 flags: 
@@ -11003,43 +12014,53 @@ expect: nomatch
 
 pattern: (a.a)|(?:b.b)|(?-s:c.c)|(?:d.d)|(e.e)
 flags: s
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (a.a)|(?:b.b)|(?-s:c.c)|(?:d.d)|(e.e)
 flags: s
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (a.a)|(?:b.b)|(?-s:c.c)|(?:d.d)|(e.e)
 flags: s
-expect: error syntax
+subject: aaa
+expect: 0-3 0-3 -
 
 pattern: (a.a)|(?:b.b)|(?-s:c.c)|(?:d.d)|(e.e)
 flags: s
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (a.a)|(?:b.b)|(?-s:c.c)|(?:d.d)|(e.e)
 flags: s
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (a.a)|(?:b.b)|(?s:c.c)|(?:d.d)|(e.e)
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: (a.a)|(?:b.b)|(?s:c.c)|(?:d.d)|(e.e)
 flags: 
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: (a.a)|(?:b.b)|(?s:c.c)|(?:d.d)|(e.e)
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-3 0-3 -
 
 pattern: (a.a)|(?:b.b)|(?s:c.c)|(?:d.d)|(e.e)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: (a.a)|(?:b.b)|(?s:c.c)|(?:d.d)|(e.e)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: (a?b??)*
 flags: 
@@ -20238,83 +21259,103 @@ expect: nomatch
 
 pattern: ^(?-m:es$)
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: ^(?-m:es$)
 flags: 
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: ^(?-m:es$)
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: ^(?-m:es$)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: ^(?-m:es$)
 flags: 
-expect: error syntax
-
-pattern: ^(?-m:es$)
-flags: m
-expect: error syntax
-
-pattern: ^(?-m:es$)
-flags: m
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: ^(?-m:es$)
 flags: m
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: ^(?-m:es$)
 flags: m
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: ^(?-m:es$)
 flags: m
-expect: error syntax
+subject: aaa
+expect: nomatch
+
+pattern: ^(?-m:es$)
+flags: m
+subject: a1 B2
+expect: nomatch
+
+pattern: ^(?-m:es$)
+flags: m
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: ^(?:(?<a>x)|(?<a>y)|z)\\k<a>$
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: ^(?:(?<a>x)|(?<a>y)|z)\\k<a>$
 flags: 
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: ^(?:(?<a>x)|(?<a>y)|z)\\k<a>$
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: ^(?:(?<a>x)|(?<a>y)|z)\\k<a>$
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: ^(?:(?<a>x)|(?<a>y)|z)\\k<a>$
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: ^(?:(?<a>x)|(?<a>y)|z){2}\\k<a>$
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: ^(?:(?<a>x)|(?<a>y)|z){2}\\k<a>$
 flags: 
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: ^(?:(?<a>x)|(?<a>y)|z){2}\\k<a>$
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: ^(?:(?<a>x)|(?<a>y)|z){2}\\k<a>$
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: ^(?:(?<a>x)|(?<a>y)|z){2}\\k<a>$
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: ^(A)?(A.*)$
 flags: 
@@ -127683,103 +128724,128 @@ expect: nomatch
 
 pattern: ^a$|(?-m:^b$|(?m:^c$)|^d$|(?-m:^e$)|^f$)|^g$|(?m:^h$)|^k$
 flags: m
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: ^a$|(?-m:^b$|(?m:^c$)|^d$|(?-m:^e$)|^f$)|^g$|(?m:^h$)|^k$
 flags: m
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: ^a$|(?-m:^b$|(?m:^c$)|^d$|(?-m:^e$)|^f$)|^g$|(?m:^h$)|^k$
 flags: m
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: ^a$|(?-m:^b$|(?m:^c$)|^d$|(?-m:^e$)|^f$)|^g$|(?m:^h$)|^k$
 flags: m
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: ^a$|(?-m:^b$|(?m:^c$)|^d$|(?-m:^e$)|^f$)|^g$|(?m:^h$)|^k$
 flags: m
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: ^a$|(?m:^b$|(?-m:^c$)|^d$|(?m:^e$)|^f$)|^g$|(?-m:^h$)|^k$
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: ^a$|(?m:^b$|(?-m:^c$)|^d$|(?m:^e$)|^f$)|^g$|(?-m:^h$)|^k$
 flags: 
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: ^a$|(?m:^b$|(?-m:^c$)|^d$|(?m:^e$)|^f$)|^g$|(?-m:^h$)|^k$
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: ^a$|(?m:^b$|(?-m:^c$)|^d$|(?m:^e$)|^f$)|^g$|(?-m:^h$)|^k$
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: ^a$|(?m:^b$|(?-m:^c$)|^d$|(?m:^e$)|^f$)|^g$|(?-m:^h$)|^k$
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: ^a$|^b$|(?-m:^c$)|^d$|^e$
 flags: m
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: ^a$|^b$|(?-m:^c$)|^d$|^e$
 flags: m
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: ^a$|^b$|(?-m:^c$)|^d$|^e$
 flags: m
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: ^a$|^b$|(?-m:^c$)|^d$|^e$
 flags: m
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: ^a$|^b$|(?-m:^c$)|^d$|^e$
 flags: m
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: ^a$|^b$|(?m:^c$)|^d$|^e$
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: ^a$|^b$|(?m:^c$)|^d$|^e$
 flags: 
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: ^a$|^b$|(?m:^c$)|^d$|^e$
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: ^a$|^b$|(?m:^c$)|^d$|^e$
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: ^a$|^b$|(?m:^c$)|^d$|^e$
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: ^a\\n(?m:^b$)\\nc$
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: ^a\\n(?m:^b$)\\nc$
 flags: 
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: ^a\\n(?m:^b$)\\nc$
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: ^a\\n(?m:^b$)\\nc$
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: ^a\\n(?m:^b$)\\nc$
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: ^ab
 flags: 
@@ -128363,23 +129429,28 @@ expect: nomatch
 
 pattern: a(?i:b)c
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: a(?i:b)c
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-3
 
 pattern: a(?i:b)c
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: a(?i:b)c
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: a(?i:b)c
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: a(bc)d(ef)g
 flags: 
@@ -128488,123 +129559,153 @@ expect: error syntax
 
 pattern: a.(?-s:b.b).c
 flags: s
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: a.(?-s:b.b).c
 flags: s
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: a.(?-s:b.b).c
 flags: s
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: a.(?-s:b.b).c
 flags: s
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: a.(?-s:b.b).c
 flags: s
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: a.(?s:b.b).c
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: a.(?s:b.b).c
 flags: 
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: a.(?s:b.b).c
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: a.(?s:b.b).c
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: a.(?s:b.b).c
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: a.a|(?-s:b.b|(?s:c.c)|d.d|(?-s:e.e)|f.f)|g.g|(?s:h.h)|k.k
 flags: s
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: a.a|(?-s:b.b|(?s:c.c)|d.d|(?-s:e.e)|f.f)|g.g|(?s:h.h)|k.k
 flags: s
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: a.a|(?-s:b.b|(?s:c.c)|d.d|(?-s:e.e)|f.f)|g.g|(?s:h.h)|k.k
 flags: s
-expect: error syntax
+subject: aaa
+expect: 0-3
 
 pattern: a.a|(?-s:b.b|(?s:c.c)|d.d|(?-s:e.e)|f.f)|g.g|(?s:h.h)|k.k
 flags: s
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: a.a|(?-s:b.b|(?s:c.c)|d.d|(?-s:e.e)|f.f)|g.g|(?s:h.h)|k.k
 flags: s
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: a.a|(?s:b.b|(?-s:c.c)|d.d|(?s:e.e)|f.f)|g.g|(?-s:h.h)|k.k
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: a.a|(?s:b.b|(?-s:c.c)|d.d|(?s:e.e)|f.f)|g.g|(?-s:h.h)|k.k
 flags: 
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: a.a|(?s:b.b|(?-s:c.c)|d.d|(?s:e.e)|f.f)|g.g|(?-s:h.h)|k.k
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-3
 
 pattern: a.a|(?s:b.b|(?-s:c.c)|d.d|(?s:e.e)|f.f)|g.g|(?-s:h.h)|k.k
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: a.a|(?s:b.b|(?-s:c.c)|d.d|(?s:e.e)|f.f)|g.g|(?-s:h.h)|k.k
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: a.a|b.b|(?-s:c.c)|d.d|e.e
 flags: s
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: a.a|b.b|(?-s:c.c)|d.d|e.e
 flags: s
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: a.a|b.b|(?-s:c.c)|d.d|e.e
 flags: s
-expect: error syntax
+subject: aaa
+expect: 0-3
 
 pattern: a.a|b.b|(?-s:c.c)|d.d|e.e
 flags: s
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: a.a|b.b|(?-s:c.c)|d.d|e.e
 flags: s
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: a.a|b.b|(?s:c.c)|d.d|e.e
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: a.a|b.b|(?s:c.c)|d.d|e.e
 flags: 
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: a.a|b.b|(?s:c.c)|d.d|e.e
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-3
 
 pattern: a.a|b.b|(?s:c.c)|d.d|e.e
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: a.a|b.b|(?s:c.c)|d.d|e.e
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: a???
 flags: 
@@ -129148,43 +130249,53 @@ expect: nomatch
 
 pattern: a|(?-i:b|(?i:c)|d|(?-i:e)|f)|g|(?i:h)|k
 flags: i
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: a|(?-i:b|(?i:c)|d|(?-i:e)|f)|g|(?i:h)|k
 flags: i
-expect: error syntax
+subject: abc
+expect: 0-1
 
 pattern: a|(?-i:b|(?i:c)|d|(?-i:e)|f)|g|(?i:h)|k
 flags: i
-expect: error syntax
+subject: aaa
+expect: 0-1
 
 pattern: a|(?-i:b|(?i:c)|d|(?-i:e)|f)|g|(?i:h)|k
 flags: i
-expect: error syntax
+subject: a1 B2
+expect: 0-1
 
 pattern: a|(?-i:b|(?i:c)|d|(?-i:e)|f)|g|(?i:h)|k
 flags: i
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: a|(?i:b|(?-i:c)|d|(?i:e)|f)|g|(?-i:h)|k
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: a|(?i:b|(?-i:c)|d|(?i:e)|f)|g|(?-i:h)|k
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-1
 
 pattern: a|(?i:b|(?-i:c)|d|(?i:e)|f)|g|(?-i:h)|k
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-1
 
 pattern: a|(?i:b|(?-i:c)|d|(?i:e)|f)|g|(?-i:h)|k
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-1
 
 pattern: a|(?i:b|(?-i:c)|d|(?i:e)|f)|g|(?-i:h)|k
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: a|(b)
 flags: 
@@ -129288,43 +130399,53 @@ expect: nomatch
 
 pattern: a|b|(?-i:c)|d|e
 flags: i
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: a|b|(?-i:c)|d|e
 flags: i
-expect: error syntax
+subject: abc
+expect: 0-1
 
 pattern: a|b|(?-i:c)|d|e
 flags: i
-expect: error syntax
+subject: aaa
+expect: 0-1
 
 pattern: a|b|(?-i:c)|d|e
 flags: i
-expect: error syntax
+subject: a1 B2
+expect: 0-1
 
 pattern: a|b|(?-i:c)|d|e
 flags: i
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: a|b|(?i:c)|d|e
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: a|b|(?i:c)|d|e
 flags: 
-expect: error syntax
+subject: abc
+expect: 0-1
 
 pattern: a|b|(?i:c)|d|e
 flags: 
-expect: error syntax
+subject: aaa
+expect: 0-1
 
 pattern: a|b|(?i:c)|d|e
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: 0-1
 
 pattern: a|b|(?i:c)|d|e
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: a|b|c
 flags: 
@@ -129488,63 +130609,78 @@ expect: nomatch
 
 pattern: b(?-i:a)z
 flags: i
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: b(?-i:a)z
 flags: i
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: b(?-i:a)z
 flags: i
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: b(?-i:a)z
 flags: i
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: b(?-i:a)z
 flags: i
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: b(?-i:ar)
 flags: i
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: b(?-i:ar)
 flags: i
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: b(?-i:ar)
 flags: i
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: b(?-i:ar)
 flags: i
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: b(?-i:ar)
 flags: i
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: b(?i:a)
 flags: 
-expect: error syntax
+subject: 
+expect: nomatch
 
 pattern: b(?i:a)
 flags: 
-expect: error syntax
+subject: abc
+expect: nomatch
 
 pattern: b(?i:a)
 flags: 
-expect: error syntax
+subject: aaa
+expect: nomatch
 
 pattern: b(?i:a)
 flags: 
-expect: error syntax
+subject: a1 B2
+expect: nomatch
 
 pattern: b(?i:a)
 flags: 
-expect: error syntax
+subject: \u00E9\u4E2D
+expect: nomatch
 
 pattern: b(c)
 flags: 

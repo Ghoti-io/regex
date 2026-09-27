@@ -18,12 +18,18 @@ Two things have to be controlled or this measures something else:
     silently at the next UCD, which is how an exclusion bucket starts
     absorbing defects.
 
-  * **Unicode version.** This library is UCD 17.0.0 and perl 5.40.1 is
-    older, so it has never heard of some of these code points and reports
-    them as unassigned rather than as uncased. Every comparison is
-    restricted to what perl calls assigned. Unrestricted, 110 code points
-    differ and 106 of them are simply newer, which measures the release
-    rather than the tables.
+  * **Unicode version.** A perl older than these tables has never heard of
+    some of these code points and reports them as unassigned rather than as
+    uncased, so every comparison is restricted to what perl calls assigned.
+    Against perl 5.40.1, which carried UCD 15.0.0, that restriction removed
+    110 code points and 106 of them were simply newer - measuring the
+    release rather than the tables. **The pinned perl is 5.44.0 and carries
+    UCD 17.0.0 exactly, so the restriction now removes nothing**, and the
+    run says so: it prints the count it skipped for this reason, which is
+    zero. The restriction stays because it is keyed to what perl answers
+    rather than to a version, so it switches itself off and back on as the
+    pin moves; deleting it would have to be undone the next time the two
+    editions part.
 
 Exit 1 on any disagreement, and print the counts either way - a "0
 disagreements" with no denominator beside it says nothing.
@@ -124,11 +130,14 @@ def main(argv):
     # restrict on the whole *orbit*, not on the code point.
     #
     # Restricting the code point alone is not enough, and the difference is
-    # not academic: U+019B is assigned in perl 5.40.1 and its partner
-    # U+A7DC is not, so perl cannot know the pair exists and calls U+019B
-    # uncased. Four code points reported as disagreements that way, every
-    # one of them a UCD 17.0.0 addition. A relation is only comparable when
-    # the reference has heard of both ends of it.
+    # not academic - it was measured on the perl that had the gap. U+019B is
+    # assigned in perl 5.40.1 and its partner U+A7DC is not, so that perl
+    # cannot know the pair exists and calls U+019B uncased. Four code points
+    # were reported as disagreements that way, every one of them a UCD
+    # 17.0.0 addition. A relation is only comparable when the reference has
+    # heard of both ends of it. The pinned perl has both ends of all of
+    # them now, which is why the skip count is zero rather than why this
+    # is gone.
     def comparable(codepoint):
         if codepoint in multi:
             return False

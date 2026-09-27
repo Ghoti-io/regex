@@ -252,7 +252,7 @@ typedef enum {
   GRX_FEATURE_ATOMIC_GROUP = GRX_BIT(9),   ///< `(?>a)`.
   GRX_FEATURE_CONDITIONAL = GRX_BIT(10),   ///< `(?(1)a|b)`.
   GRX_FEATURE_RECURSION = GRX_BIT(11),     ///< `(?R)`, `(?1)`.
-  GRX_FEATURE_INLINE_FLAGS = GRX_BIT(12),  ///< `(?i)`, `(?i:a)`.
+  GRX_FEATURE_INLINE_FLAGS = GRX_BIT(12),  ///< `(?i)`, unscoped.
   GRX_FEATURE_COMMENT_GROUP = GRX_BIT(13), ///< `(?#...)`.
   GRX_FEATURE_POSIX_CLASS = GRX_BIT(14),   ///< `[[:alpha:]]`.
   GRX_FEATURE_UNICODE_PROPERTY = GRX_BIT(15), ///< `\p{L}`.
@@ -289,7 +289,23 @@ typedef enum {
    * `\F \L \l \N{name} \U \u` - and so does Python, so only Perl's row
    * carries this one.
    */
-  GRX_FEATURE_CASE_TRANSFORM = GRX_BIT(25)
+  GRX_FEATURE_CASE_TRANSFORM = GRX_BIT(25),
+  /**
+   * @brief A flag setting scoped to a subexpression: `(?i:a)`, `(?-i:a)`.
+   *
+   * Separate from GRX_FEATURE_INLINE_FLAGS because one dialect has exactly
+   * one of the two. ES2025's RegExp Modifiers are always scoped - a bare
+   * `(?i)` is "Invalid group" in V8 - where every Perl-family dialect here
+   * accepts both spellings, so a single bit would answer "can I write
+   * `(?i)`?" wrongly for ECMAScript whichever way it was set. The feature
+   * table in documentation/dialects.md has carried the distinction as one
+   * row reading "scoped only" since it was written; this is that row's
+   * second bit.
+   *
+   * The alphabets differ too and are not this bit's business:
+   * `grx_options_parse()` answers which letters a dialect takes.
+   */
+  GRX_FEATURE_SCOPED_FLAGS = GRX_BIT(26)
 } GRX_Feature;
 
 /**

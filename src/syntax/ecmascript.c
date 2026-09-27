@@ -37,10 +37,16 @@
  * then reads as one grammar or the other. Where the two agree, the code does
  * not ask.
  *
- * The behaviour of each rule was checked against Node 22, which is the oracle
- * the conformance vectors come from (testing.md section 2). Three of the
- * checks corrected what this library would otherwise have implemented, and
- * each is marked below.
+ * The behaviour of each rule was checked against the pinned node, which is
+ * the oracle the conformance vectors come from (testing.md section 2). Three
+ * of the checks corrected what this library would otherwise have implemented,
+ * and each is marked below. **A comment here naming "Node 22" is a record of
+ * which release a rule was taken against, not of which one answers now**: the
+ * pin is node 24 / V8 13.6, and `tools/oracle/syntax_diff.py` puts 960,000
+ * cases through both on every run, so a rule that had drifted would be a
+ * disagreement rather than a stale comment. Two rules *did* change with that
+ * raise and neither was a drift - duplicate named capture groups and RegExp
+ * Modifiers arrived - and both are built.
  */
 
 #include <ghoti.io/regex/macros.h>
@@ -416,21 +422,6 @@ static GRX_Result read_group_name(GRX_Parser * parser, char terminator,
 #define GRX_ES_NAME_MAX 256
 
 /** Whether a capturing group with this name has already been parsed. */
-static int name_already_used(const GRX_Parser * parser, const char * name) {
-  for (size_t i = 0; i < parser->pattern->nodes.count; i++) {
-    const GRX_Node * node = grx_pattern_node(parser->pattern, (uint32_t)i);
-    if (!node || node->kind != GRX_NODE_GROUP
-        || !(node->flags & GRX_NODE_NAMED)) {
-      continue;
-    }
-    const char * existing = grx_pattern_name(parser->pattern, node->b);
-    if (existing && strcmp(existing, name) == 0) {
-      return 1;
-    }
-  }
-
-  return 0;
-}
 
 // --------------------------------------------------------------------------
 // Escapes outside a character class
@@ -1637,6 +1628,78 @@ static GRX_Result es_char_class(GRX_Parser * parser, uint32_t * out_node) {
 // Groups
 // --------------------------------------------------------------------------
 
+/** The option bit an ES2025 modifier letter names, or 0. */
+static uint32_t es_modifier_letter(char c) {
+  switch (c) {
+    case 'i': return GRX_OPT_CASELESS;
+    case 'm': return GRX_OPT_MULTILINE;
+    case 's': return GRX_OPT_DOTALL;
+    default: return 0;
+  }
+}
+
+/**
+ * `(?flags:...)`, `(?-flags:...)` and `(?flags-flags:...)`.
+ *
+ * Called with the position on the first letter or on the `-`. Four ways this
+ * differs from the Perl reader, each measured against the pinned node rather
+ * than read off the proposal:
+ *
+ * - **A letter may not appear on both sides.** `(?i-i:a)` is "Repeated flag
+ *   in flag group" in V8, where perl accepts `(?i-i:)` and clears. It is a
+ *   repeat across the two lists and within either one, so `(?ii:a)` is
+ *   refused too.
+ * - **At least one letter, somewhere.** `(?-:a)` is "Invalid flag group".
+ *   `(?i-:a)` is accepted, so the empty list is only refused when it is the
+ *   *only* list.
+ * - **The `:` is not optional.** An unscoped modifier is not a construct
+ *   here, so the caller cannot fall through to one.
+ * - **Three letters.** See the call site.
+ */
+static GRX_Result es_modifier(
+    GRX_Parser * parser, size_t start, GRX_GroupOpen * out) {
+  uint32_t set = 0;
+  uint32_t clear = 0;
+  while (es_modifier_letter(byte_at(parser, 0))) {
+    uint32_t bit = es_modifier_letter(byte_at(parser, 0));
+    if (set & bit) {
+      return grx_parse_fail(parser, GRX_DIAG_INVALID_GROUP_SYNTAX, start,
+          parser->position + 1 - start);
+    }
+    set |= bit;
+    parser->position++;
+  }
+  if (grx_parse_eat(parser, '-')) {
+    while (es_modifier_letter(byte_at(parser, 0))) {
+      uint32_t bit = es_modifier_letter(byte_at(parser, 0));
+      // The repeat is across both lists, not within one: a letter that is
+      // being set may not also be cleared.
+      if ((set | clear) & bit) {
+        return grx_parse_fail(parser, GRX_DIAG_INVALID_GROUP_SYNTAX, start,
+            parser->position + 1 - start);
+      }
+      clear |= bit;
+      parser->position++;
+    }
+    if (!set && !clear) {
+      return grx_parse_fail(parser, GRX_DIAG_INVALID_GROUP_SYNTAX, start,
+          parser->position - start);
+    }
+  }
+  if (!grx_parse_eat(parser, ':')) {
+    return grx_parse_fail(parser, GRX_DIAG_INVALID_GROUP_SYNTAX, start,
+        parser->position - start);
+  }
+
+  out->kind = GRX_NODE_OPTIONS;
+  out->flags = GRX_NODE_SCOPED;
+  out->a = set;
+  out->b = clear;
+  out->has_body = 1;
+  parser->options = (parser->options | set) & ~clear;
+  return GRX_OK;
+}
+
 static GRX_Result es_group_open(GRX_Parser * parser, GRX_GroupOpen * out) {
   size_t start = parser->position - 1; // The `(`.
 
@@ -1685,13 +1748,17 @@ static GRX_Result es_group_open(GRX_Parser * parser, GRX_GroupOpen * out) {
     if (result != GRX_OK) {
       return result;
     }
-    // Node 22 rejects a duplicate name even across alternatives, so this
-    // library does too: ES2025 allows it and the oracle does not yet, and
-    // the oracle is what the conformance vectors come from.
-    if (name_already_used(parser, name)) {
-      return grx_parse_fail(parser, GRX_DIAG_DUPLICATE_GROUP_NAME, start,
-          parser->position - start);
-    }
+    // A duplicate name is **not** decided here. ES2025 allows one when the
+    // two groups cannot both take part in a single match, which is a fact
+    // about the alternation nesting around them and therefore about the tree
+    // rather than about the text read so far: at this point the parser has
+    // not seen the `|` that would make the pair legal. es_validate() asks it
+    // once the tree exists.
+    //
+    // Node 22 refused every duplicate, and this library did too for as long
+    // as that was what the reference said; the pin is node 24 (V8 13.6) and
+    // it implements the feature - over-implements it, in fact, which
+    // documentation/dialects.md section 6 records.
 
     uint32_t offset = GRX_INDEX_NONE;
     result = grx_pattern_add_name(parser->pattern, name, name_length, &offset);
@@ -1706,11 +1773,23 @@ static GRX_Result es_group_open(GRX_Parser * parser, GRX_GroupOpen * out) {
     return GRX_OK;
   }
 
+  // ES2025's RegExp Modifiers: `(?i:...)`, `(?-s:...)`, `(?im-s:...)`.
+  //
+  // Three letters and no others - `i`, `m`, `s` - which is the whole of what
+  // the proposal took: `d`, `g`, `u`, `v` and `y` are flags of the *regexp*
+  // rather than of a subexpression and V8 answers "Invalid group" for each.
+  // And always scoped: `(?i)` is "Invalid group" there too, where every
+  // Perl-family dialect here accepts it. So this is not the Perl construct
+  // with a shorter alphabet; it is a different construct that shares a
+  // spelling, and reading it with the Perl reader would have accepted four
+  // spellings ECMAScript has not got.
+  if (es_modifier_letter(c) || c == '-') {
+    return es_modifier(parser, start, out);
+  }
+
   // Everything else that a Perl-family dialect spells with `(?`: a comment
-  // group, an atomic group, a conditional, a named group written `(?P<n>` or
-  // `(?'n'`, and the ES2025 modifier `(?i:...)`. ECMAScript has none of
-  // them - checked against Node 22, which rejects the modifiers as well,
-  // resolving the **probe** in dialects.md section 8.5.
+  // group, an atomic group, a conditional, and a named group written
+  // `(?P<n>` or `(?'n'`. ECMAScript has none of them.
   return grx_parse_fail(
       parser, GRX_DIAG_INVALID_GROUP_SYNTAX, start, parser->position - start);
 }
@@ -1812,7 +1891,127 @@ static GRX_Result es_literal_atom(GRX_Parser * parser, uint32_t codepoint,
  * checked where the reference is read, because ECMAScript allows the group to
  * come afterwards - `/\k<a>(?<a>x)/` is valid.
  */
+/** Whether this node is a capturing group named `name`. */
+static int es_group_named(
+    const GRX_Pattern * pattern, const GRX_Node * node, const char * name) {
+  if (node->kind != GRX_NODE_GROUP || !(node->flags & GRX_NODE_NAMED)) {
+    return 0;
+  }
+  const char * existing = grx_pattern_name(pattern, node->b);
+  return existing && strcmp(existing, name) == 0;
+}
+
+/**
+ * How many groups named `name` a single match of this subtree could use.
+ *
+ * ES2025 allows a name to be used twice only when it is "impossible for a
+ * single match to actually use the same name multiple times", which the
+ * proposal states as the whole of the rule. That is a property of the
+ * alternation nesting: two alternatives of one disjunction exclude each
+ * other, and nothing else here does.
+ *
+ * So the count is a **maximum over the branches of an alternation and a sum
+ * everywhere else**, and a sum reaching two is the error. `-1` is that
+ * error, propagated up so the first one found is the one reported.
+ *
+ * Everything else is a sum because everything else can be reached together:
+ * a concatenation obviously, a repeat because `(?<n>a)?(?<n>b)` matches "b"
+ * with the first group unset and "ab" with both set, and a lookaround
+ * because its captures survive it. All four were probed against node and all
+ * four are refused there too.
+ */
+static int es_name_uses(
+    const GRX_Pattern * pattern, uint32_t index, const char * name) {
+  const GRX_Node * node = grx_pattern_node(pattern, index);
+  if (!node) {
+    return 0;
+  }
+
+  int mine = es_group_named(pattern, node, name) ? 1 : 0;
+  int children = 0;
+  for (uint32_t child = node->first_child; child != GRX_INDEX_NONE;) {
+    const GRX_Node * kid = grx_pattern_node(pattern, child);
+    int theirs = es_name_uses(pattern, child, name);
+    if (theirs < 0) {
+      return -1;
+    }
+    if (node->kind == GRX_NODE_ALTERNATE) {
+      children = theirs > children ? theirs : children;
+    }
+    else {
+      children += theirs;
+    }
+    child = kid ? kid->next_sibling : GRX_INDEX_NONE;
+  }
+
+  // A named group whose own body holds another of the same name - `(?<n>x(?<n>y))` -
+  // is the one shape the children loop cannot see, because the group has a
+  // single child and the sum never reaches two without counting the group
+  // itself.
+  return mine + children >= 2 ? -1 : mine + children;
+}
+
+/**
+ * The offset of the first group named `name`, for the error's position.
+ *
+ * The *second* occurrence is the one a reader wants pointed at, and this
+ * returns the last one whose subtree is where the count went wrong - which
+ * for every shape probed is the later of the pair.
+ */
+static const GRX_Node * es_last_group_named(
+    const GRX_Pattern * pattern, const char * name) {
+  const GRX_Node * found = NULL;
+  for (size_t i = 0; i < pattern->nodes.count; i++) {
+    const GRX_Node * node = grx_pattern_node(pattern, (uint32_t)i);
+    if (node && es_group_named(pattern, node, name)) {
+      found = node;
+    }
+  }
+  return found;
+}
+
 static GRX_Result es_validate(GRX_Parser * parser) {
+  // Duplicate names, once per distinct name: a walk per name is O(names x
+  // nodes), where a walk per *pair* would be cubic in a pattern the fuzzer
+  // can build.
+  //
+  // GRX_OPT_DUPLICATE_NAMES turns the check off, which is what that option
+  // says it does - "what it turns off is a check, so a pattern that is valid
+  // without it is valid with it". ECMAScript has no `(?J)` to set it with, so
+  // this is reachable only from a caller that asked for PCRE2's behaviour by
+  // name.
+  for (size_t i = 0; !(parser->options & GRX_OPT_DUPLICATE_NAMES)
+      && i < parser->pattern->nodes.count; i++) {
+    const GRX_Node * node = grx_pattern_node(parser->pattern, (uint32_t)i);
+    if (!node || node->kind != GRX_NODE_GROUP
+        || !(node->flags & GRX_NODE_NAMED)) {
+      continue;
+    }
+    const char * name = grx_pattern_name(parser->pattern, node->b);
+    if (!name) {
+      return grx_parse_fail(parser, GRX_DIAG_INTERNAL, node->offset,
+          node->length);
+    }
+    // Only the first group carrying this name runs the walk. Names are not
+    // interned - grx_pattern_add_name() appends - so two groups with one
+    // name have two offsets and the comparison is on the text.
+    int first = 1;
+    for (size_t j = 0; j < i && first; j++) {
+      const GRX_Node * earlier
+          = grx_pattern_node(parser->pattern, (uint32_t)j);
+      first = !(earlier && es_group_named(parser->pattern, earlier, name));
+    }
+    if (!first) {
+      continue;
+    }
+    if (es_name_uses(parser->pattern, parser->pattern->root, name) < 0) {
+      const GRX_Node * where = es_last_group_named(parser->pattern, name);
+      return grx_parse_fail(parser, GRX_DIAG_DUPLICATE_GROUP_NAME,
+          where ? where->offset : node->offset,
+          where ? where->length : node->length);
+    }
+  }
+
   for (size_t i = 0; i < parser->pattern->nodes.count; i++) {
     const GRX_Node * node = grx_pattern_node(parser->pattern, (uint32_t)i);
     if (!node || node->kind != GRX_NODE_BACKREF

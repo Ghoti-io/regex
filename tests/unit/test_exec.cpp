@@ -877,3 +877,76 @@ TEST(Exec, TheMatchTimeErrorChannelNamesWhatStopped) {
   grx_match_destroy(dot_match);
   grx_regex_free(dot);
 }
+
+// --------------------------------------------------------------------------
+// ES2025: what a modifier group and a duplicated name do at run time
+// --------------------------------------------------------------------------
+
+namespace {
+
+/** "start-end" for group `group`, "-" when it did not fill, or "nomatch". */
+std::string es_group(const char * pattern, const std::string & subject,
+    size_t group = 0) {
+  Regex regex(pattern, GRX_OPT_UTF);
+  if (!regex.ok()) {
+    return "compile failed";
+  }
+  GRX_Match * match = nullptr;
+  if (grx_match_create(regex.get(), nullptr, &match) != GRX_OK) {
+    return "no match object";
+  }
+  int matched = 0;
+  std::string answer = "nomatch";
+  if (grx_regex_search(regex.get(), subject.data(), subject.size(), 0,
+          GRX_ENGINE_AUTO, nullptr, match, &matched) == GRX_OK
+      && matched) {
+    GRX_Capture capture;
+    answer = grx_match_group(match, group, &capture) == GRX_OK
+            && capture.start != GRX_NPOS
+        ? std::to_string(capture.start) + "-" + std::to_string(capture.end)
+        : "-";
+  }
+  grx_match_destroy(match);
+  return answer;
+}
+
+} // namespace
+
+TEST(Exec, EcmaScriptModifiersChangeTheirBodyAndNothingElse) {
+  // Every answer here is node 24's, asked construct by construct. The point
+  // of each pair is the *scope*: the letter applies to the body and stops at
+  // the closing parenthesis, which is what distinguishes a modifier from the
+  // regexp's own flag.
+  EXPECT_EQ(es_group("(?i:a)b", "Ab"), "0-2");
+  EXPECT_EQ(es_group("(?i:a)b", "AB"), "nomatch");
+  EXPECT_EQ(es_group("a(?i:b)", "aB"), "0-2");
+  EXPECT_EQ(es_group("(?s:.)", "\n"), "0-1");
+  EXPECT_EQ(es_group("(?-s:.)", "\n"), "nomatch");
+  EXPECT_EQ(es_group("(?m:^b)", "a\nb"), "2-3");
+  EXPECT_EQ(es_group("(?-m:^b)", "a\nb"), "nomatch");
+
+  // A nested modifier overrides the one around it, in both directions, which
+  // is why `set` and `clear` are two fields rather than one signed one.
+  EXPECT_EQ(es_group("(?i:(?-i:a)b)", "ab"), "0-2");
+  EXPECT_EQ(es_group("(?i:(?-i:a)b)", "aB"), "0-2");
+  EXPECT_EQ(es_group("(?i:(?-i:a)b)", "Ab"), "nomatch");
+
+  // `i` is case folding and nothing else: it does not widen `\w`.
+  EXPECT_EQ(es_group("(?i:\\w)", "A"), "0-1");
+}
+
+TEST(Exec, ADuplicatedEcmaScriptNameResolvesToWhicheverBranchRan) {
+  // The name is one name and the groups are two, so which one filled is a
+  // fact about the match rather than about the pattern. Both answers are
+  // node 24's.
+  EXPECT_EQ(es_group("(?<n>a)|(?<n>b)", "a", 1), "0-1");
+  EXPECT_EQ(es_group("(?<n>a)|(?<n>b)", "a", 2), "-");
+  EXPECT_EQ(es_group("(?<n>a)|(?<n>b)", "b", 1), "-");
+  EXPECT_EQ(es_group("(?<n>a)|(?<n>b)", "b", 2), "0-1");
+
+  // And a backreference to the name follows the group that ran, which is the
+  // whole reason the feature is worth having.
+  EXPECT_EQ(es_group("(?<n>a)\\k<n>|(?<n>b)\\k<n>", "aa"), "0-2");
+  EXPECT_EQ(es_group("(?<n>a)\\k<n>|(?<n>b)\\k<n>", "bb"), "0-2");
+  EXPECT_EQ(es_group("(?<n>a)\\k<n>|(?<n>b)\\k<n>", "ab"), "nomatch");
+}
