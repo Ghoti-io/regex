@@ -812,23 +812,24 @@ hold:
 all of them, and the list is here rather than in a note because a definition
 of done with no reading beside it is a definition nobody checks.
 
-**I-Regexp is the tenth and stands apart on three of the six**, so it is
-stated first rather than folded into counts that would then need a footnote
-each. Conditions 1 and 2 hold: its profile row cites the RFC for every cell
-that has a reader and says why the rest have none, and every rule in §10 of
-[dialects.md](dialects.md) has a test. Condition 3 is **unmet and not
-attemptable today** - there is no oracle on this machine to generate vectors
-from, which is a different thing from a corpus that fails, and the README's
-table says so with a rate of `-` rather than a percentage. Condition 4 is
-unmet, as for every dialect; `GRX_FUZZ_SYNTAX=i-regexp` works and the
-harness's dialect list includes it. Condition 5 is met in the only way it
-can be: `grx_options_parse()` refuses every letter, the dialect having no
-flag alphabet at all, and there is no replacement template grammar to
-implement because RFC 9485 has none - which is recorded as a deviation rather
-than as a gap. Condition 6 is met by `examples/iregexp_jsonpath.c`, which is
-`match()` and `search()` over one compiled pattern.
+**I-Regexp is the tenth and stands apart on one of the six**, so it is stated
+first rather than folded into counts that would then need a footnote each.
+Conditions 1 and 2 hold: its profile row cites the RFC for every cell that has a
+reader and says why the rest have none, and every rule in §10 of
+[dialects.md](dialects.md) has a test. Condition 3 is **met** - 30,015 generated
+vectors at 100%, from two references rather than one - and was "unmet and not
+attemptable" until the oracle was built a day later, which is a different thing
+from a corpus that fails and was recorded as such while it lasted. Condition 4
+is unmet, as for every dialect; `GRX_FUZZ_SYNTAX=i-regexp` works and the
+harness's dialect list includes it. Condition 5 is the one it stands apart on,
+and it is met in the only way it can be: `grx_options_parse()` refuses every
+letter, the dialect having no flag alphabet at all, and there is no replacement
+template grammar to implement because RFC 9485 has none - which is recorded as a
+deviation rather than as a gap. Condition 6 is met by
+`examples/iregexp_jsonpath.c`, which is `match()` and `search()` over one
+compiled pattern.
 
-Condition 3 is met by all nine for the first time: every dialect now has a
+Condition 3 is met by all ten: every dialect now has a
 committed corpus, a published rate, and every failure named -
 [README.md](../README.md) carries the table and `make test` prints it. Python
 and Vim had no corpus at all until this date, which meant the condition could
@@ -845,7 +846,8 @@ limits. That found a real defect. The re-run after the fix was parked at
 and the eight other dialects have not been asked; `GRX_FUZZ_SYNTAX=<dialect>`
 exists so that each can be, in a private prefix, on wall clock.
 
-Condition 6 is met by all nine: `python_split` was the last one missing.
+Condition 6 is met by all ten: `python_split` was the last one missing before
+I-Regexp arrived with `iregexp_jsonpath` of its own.
 
 Conditions 1, 2, 3 and 5 hold for the nine that compile and match. There are
 no known gaps left: the five that remained were one feature - Perl's `\U`,

@@ -129,6 +129,24 @@ PROBE = {
     # Pinned because this machine's `grep` is ugrep, which answers the probe's
     # `gnu-ere` column without being GNU's grep at all. See IMAGES.
     "grep": (["grep", "--version"], "GNU grep", None),
+    # The two I-Regexp references share one image and are two pins, so each
+    # probes for its own half: a run says which of them answered. Neither is a
+    # program - both are libraries called from tools/oracle/iregexp_match.py -
+    # so the probe is the import rather than a `--version` flag.
+    "iregexp": (["python3", "-c",
+                 "import importlib.metadata as m;"
+                 " print('iregexp-check %s' % m.version('iregexp-check'))"],
+                "iregexp-check ", None),
+    # libxml2's version and not lxml's is what decides an answer, and the wheel
+    # links its own, so both are printed and both are pinned: a wheel built
+    # against a different libxml2 is a different reference under the same
+    # `lxml==6.1.3`.
+    "libxml2": (["python3", "-c",
+                 "import importlib.metadata as m, lxml.etree as e;"
+                 " print('libxml2 %s, lxml %s'"
+                 " % ('.'.join(str(n) for n in e.LIBXML_VERSION),"
+                 " m.version('lxml')))"],
+                "libxml2 2.", None),
 }
 # musl's regex is compiled from sources pinned in tools/corpus/VERSIONS
 # against *this* image's libc, and both halves decide an answer - so the probe

@@ -185,7 +185,7 @@ can run the pattern. The other seven report `GRX_ERR_UNSUPPORTED`.
 
 ### Conformance
 
-`make test` runs 45,904 checked-in conformance vectors and prints this table.
+`make test` runs 75,919 checked-in conformance vectors and prints this table.
 Every expectation in them is a reference implementation's, taken from the
 pinned oracle in `tools/oracle/containers/IMAGES`; none is this library's own
 output. The corpora are committed, so the run needs no oracle, no container
@@ -193,6 +193,7 @@ engine and no network.
 
 | Dialect | Vectors | Pass | Notes |
 | --- | ---: | ---: | --- |
+| `i-regexp` | 30,015 | 100.00% | generated from two references, RFC 9485 naming none: iregexp-check 0.1.4 for the syntax, libxml2 2.14.6 for XSD's semantics |
 | `ecmascript` | 28,559 | 100.00% | test262, plus generated from node 24.21 |
 | `perl` | 6,173 | 100.00% | perl 5.44's `re_tests`; 8 excluded |
 | `vim` | 6,317 | 100.00% | generated from vim 9.2.1129 |
@@ -202,7 +203,6 @@ engine and no network.
 | `posix-ere` | 245 | 100.00% | Spencer's cases, where glibc and musl agree |
 | `gnu-bre` | 159 | 100.00% | as `gnu-ere` |
 | `posix-bre` | 135 | 100.00% | as `posix-ere` |
-| `i-regexp` | 0 | - | no reference on this machine to generate them from; `documentation/dialects.md` §10.4 says what an oracle would be. The dialect's rules are in `tests/unit/test_iregexp.cpp` instead, against RFC 9485's ABNF |
 
 Read the denominators with the rates: they differ by two orders of magnitude,
 and 100% of 135 vectors is a smaller claim than 100% of 28,559.

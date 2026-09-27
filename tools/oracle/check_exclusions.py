@@ -28,6 +28,7 @@ import os
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
+import iregexp_diff
 import iterate_diff
 import perl_diff
 import posix_diff
@@ -676,6 +677,102 @@ block("syntax_diff.ASTRAL_STAND_IN",
     [
     ("the stand-in must outrank every surrogate, or it would turn an "
      "ascending range descending and hide the row it is testing", (), True),
+])
+
+
+# --------------------------------------------------------------------
+# i-regexp: iregexp-check accepts a quantifier of one digit only.
+# --------------------------------------------------------------------
+block("iregexp_diff.multi_digit_quantifier",
+    lambda pattern: iregexp_diff.multi_digit_quantifier(pattern),
+    [
+    ("the family the reference refuses and Figure 1 admits",
+     ("a{10}",), True),
+    ("a leading zero is two digits too", ("a{07}",), True),
+    ("the upper bound counts as well as the lower", ("a{1,10}",), True),
+    ("the RFC's own section 8 example", ("a{20,200000}",), True),
+    # The near misses. A predicate that said yes to a single digit would
+    # swallow every quantifier there is, which is the whole corpus.
+    ("one digit is what the reference accepts", ("a{9}",), False),
+    ("one digit on both sides", ("a{1,9}",), False),
+    ("an open upper bound with one digit", ("a{9,}",), False),
+    ("a brace that is not a quantifier at all", ("a{,3}",), False),
+    ("an escaped brace", (chr(92) + "{10" + chr(92) + "}",), False),
+    ("no quantifier anywhere", ("[a-z]+",), False),
+])
+
+# --------------------------------------------------------------------
+# i-regexp: a class range the wrong way round, which Figure 1 admits and
+# XSD refuses.
+# --------------------------------------------------------------------
+block("iregexp_diff.descending_range",
+    lambda pattern: iregexp_diff.descending_range(pattern),
+    [
+    ("the plain case", ("[z-a]",), True),
+    ("negated, which changes nothing about the endpoints", ("[^z-a]",), True),
+    ("an escaped endpoint still has a code point", ("[a-" + chr(92) + "-]",), True),
+    ("the escape on the low end", ("[" + chr(92) + "|-" + "!]",), True),
+    ("a member before the range", ("[qz-a]",), True),
+    # The near misses.
+    ("an ascending range", ("[a-z]",), False),
+    ("equal endpoints are not descending", ("[a-a]",), False),
+    ("a dash that is a member, not an operator", ("[-a]",), False),
+    ("a dash last", ("[a-]",), False),
+    ("an escaped ascending range", ("[" + chr(92) + "--a]",), False),
+    ("a quantifier, which this predicate must not claim", ("a{3,1}",), False),
+    ("a property endpoint, which is a different refusal",
+     (r"[\p{L}-z]",), False),
+])
+
+# --------------------------------------------------------------------
+# i-regexp: libxml2 reads a range whose low end is escaped as a union.
+# --------------------------------------------------------------------
+block("iregexp_diff.escaped_range_endpoint",
+    lambda pattern: iregexp_diff.escaped_range_endpoint(pattern),
+    [
+    ("the measured case", ("[" + chr(92) + "--a]",), True),
+    ("the minimal pair's escaped half", ("[" + chr(92) + ".-a]",), True),
+    ("after a member", ("[q" + chr(92) + "--a]",), True),
+    ("negated", ("[^" + chr(92) + "--a]",), True),
+    # The near misses. The unescaped half of the minimal pair is the row the
+    # reference gets *right*, and a predicate that swallowed it would hide
+    # every range there is.
+    ("the minimal pair's unescaped half", ("[.-a]",), False),
+    ("an ordinary range", ("[a-z]",), False),
+    ("an escape that is a member rather than an endpoint",
+     ("[" + chr(92) + "-a]",), False),
+    ("an escape on the *high* end, which the reference reads correctly",
+     ("[a-" + chr(92) + "-]",), False),
+    ("no class at all", (chr(92) + "-a",), False),
+])
+
+# --------------------------------------------------------------------
+# i-regexp: the general-category tables differ, which is *measured* - so the
+# control feeds the predicate a map rather than a reference.
+# --------------------------------------------------------------------
+IREGEXP_CATEGORIES = {
+    "a": ({"L", "Ll"}, {"L", "Ll"}),
+    chr(0x0378): (set(), {"C", "Cn"}),
+}
+
+block("iregexp_diff.table_skew",
+    lambda pattern, subject:
+        iregexp_diff.table_skew(IREGEXP_CATEGORIES, pattern, subject),
+    [
+    ("a property row about a code point the two tables disagree on",
+     (r"\p{C}", chr(0x0378)), True),
+    ("the complement is a property row too",
+     (r"\P{Cn}", chr(0x0378)), True),
+    ("a property named inside a class",
+     (r"[\p{C}a]", chr(0x0378)), True),
+    # The near misses, and both halves have to hold: a row is excluded only
+    # where a property meets a code point the tables disagree about.
+    ("a property row about a code point they agree on",
+     (r"\p{L}", "a"), False),
+    ("a pattern with no property, on the skewed subject",
+     (".", chr(0x0378)), False),
+    ("a literal that looks like one", ("p{C}", chr(0x0378)), False),
+    ("a subject the map has never heard of", (r"\p{L}", "zz"), False),
 ])
 
 

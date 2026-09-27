@@ -22,20 +22,20 @@ and built by the conformance lane ([plan.md](plan.md)).
 - **Skips are counted, never silent.** A vector skipped because its oracle
   is absent, or its Unicode version is newer than the tables, is reported
   with a count so a green run cannot hide a missing oracle.
-- **One dialect has no oracle, and the exception is stated rather than
-  quietly taken.** I-Regexp (RFC 9485) names no implementation: it is a
-  *format*, defined by an ABNF, and the reference is a document. So its rules
-  are in `tests/unit/test_iregexp.cpp`, each quoting the production it comes
-  from, and it has **no conformance vectors at all** - the README's table
-  gives it a rate of `-` rather than a percentage, because a corpus generated
-  from this library's own answers would record its bugs as requirements.
-  That is the weakest arrangement on this page and it is not where the
-  dialect should stay: [dialects.md](dialects.md) §10.4 names the two oracles
-  that would fix it, one for the syntax half and one for the semantics, and
-  the second is free - §5.2 of the RFC makes every I-Regexp an XSD regexp
-  under the identity mapping, so any XSD engine answers what a pattern
-  matches. Neither is pinned, and both would need a package added to a shared
-  container image, which is a decision of its own.
+- **One dialect's references are not implementations of it**, and the
+  difference is worth stating rather than blurring. I-Regexp (RFC 9485) is a
+  *format* defined by an ABNF, so nothing implements "I-Regexp" the way perl
+  implements Perl. Two things answer its halves instead: a second reading of
+  the same ABNF decides whether a pattern is one, and an XSD engine decides
+  what a pattern matches - §5.2 of the RFC making every I-Regexp an XSD regexp
+  under the identity mapping. Both are pinned, both run in one image built
+  here, and §7 of this page has the differential.
+
+  The half neither can answer is JSONPath's `search()`, a substring question
+  neither XSD nor RFC 9485 asks. It is stated in
+  `tests/unit/test_iregexp.cpp` and deliberately absent from the corpus: a
+  vector for it would be this library compared against this library's own
+  reading of a non-normative mapping.
 
 ## 2. Oracles
 
@@ -456,11 +456,12 @@ cases worth writing down by name - the two loop rules, the two foldings, the
 would reach only by accident. `generated.rxt` holds the random ones, which
 reach combinations nobody would think to write.
 
-Three dialects are generated this way - ECMAScript, Python and Vim - and four
-are imported from an upstream corpus. The tenth, I-Regexp, has neither: no
-corpus to import and no reference to generate from, which §1 states as the one
-exception to this page's first principle rather than leaving a dialect with an
-empty directory and no explanation. Python and Vim were the two with
+Four dialects are generated this way - ECMAScript, Python, Vim and I-Regexp -
+and four are imported from an upstream corpus. I-Regexp is generated from *two*
+references rather than one, because its two halves have two, and its records
+therefore come in two shapes: a pattern the syntax reference refuses becomes
+`expect: error syntax`, and a pattern it accepts becomes one record per subject
+carrying the semantic reference's whole-string answer. Python and Vim were the two with
 **nothing committed at all** until 2026-09-26: they have no corpus to import,
 and that was taken to settle the generated question too, so their only gate
 needed a container and a machine without one checked them with unit tests.
@@ -1171,6 +1172,67 @@ split cases passed while 1,848 generated rows did not; twelve hand-written
 template cases passed while the generator found six rules they had missed,
 including that `\u`, `\U`, `\N{...}` and `\x` are *pattern* escapes in Python
 and errors in a template. One dialect, two closed alphabets.
+
+### The I-Regexp differential
+
+`tools/oracle/iregexp_diff.py`, WP-47's gate, and the only one here whose
+references are not implementations of the dialect they answer for. RFC 9485 is a
+*format*: an ABNF and a borrowed semantics, with no program that is "an
+I-Regexp engine" the way pcre2test is a PCRE2 engine. So it has two references
+and two phases.
+
+```
+syntax:   37248 patterns, 37238 agree, 0 disagree
+            multi-digit quantifier   6
+            range order              4
+semantics: 13200 rows, 13181 agree, 0 disagree
+            category tables differ   12
+            escaped range endpoint   7
+            xsd refused the pattern  0
+```
+
+**The syntax phase is the one that matters**, because a checking implementation
+is defined by what it refuses (RFC 9485 §3.1). What can contradict this one is a
+second *reading of Figure 1*, and iregexp-check is one: a Rust parser written
+independently against the same grammar. Almost all of the corpus is patterns
+that are not I-Regexps - the exhaustive sweep over three characters of the
+dialect's punctuation, plus a token soup holding `\d`, `(?:`, `a*?`,
+`[a-z-[aeiou]]` and a Unicode escape - because a corpus of valid patterns
+measures the half of the dialect that is not in dispute.
+
+**The semantic phase asks the whole-string question**, the only one its
+reference has: an XSD pattern facet is anchored by definition, so
+`GRX_OPT_ANCHORED | GRX_OPT_ANCHORED_END` is what the library-side driver sets
+and the row is a Boolean. JSONPath's `search()` has no reference here at all and
+the differential says so rather than wrapping the pattern to invent one.
+
+**It found a defect of this library's on its first run**, which is the argument
+for building it: `a{3,1}` conforms to Figure 1 and both references accept it,
+where this library refused it because the shared parser's default refuses an
+impossible repeat and nothing had asked whether that default was right for this
+dialect. [dialects.md](dialects.md) §10.5 has that and the two reference
+defects, each with the minimal pair that proves which side is wrong.
+
+**One exclusion is measured rather than listed**, and that is the part worth
+copying. libxml2's general-category tables are older than this library's - its
+`\p{Cn}` is empty, and U+1F41F is in no category at all - so a property row
+about such a code point compares two different Unicode versions. Writing the
+affected code points down as a list would go stale the moment either side moved,
+and would go stale *silently*. Instead the differential asks both references
+which of the 36 categories each subject belongs to, prints the ones where the
+answers differ, and excludes only those rows:
+
+```
+  general-category tables differ for 2 of 27 subjects:
+    U+00378  reference=(none) here=C,Cn
+    U+1F41F  reference=(none) here=S,So
+```
+
+`xsd refused the pattern` is a tripwire rather than an exclusion. RFC 9485 §5.2
+says every I-Regexp *is* an XSD regexp, so a pattern both this library and the
+syntax reference accept should always compile as a facet - measured over 16,907
+patterns, it does, and the count is zero. A run where it is not zero has found
+the subset relation failing, which is a finding about the RFC's own claim.
 
 ### The cross-engine check
 

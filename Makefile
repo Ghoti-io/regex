@@ -1116,6 +1116,7 @@ check-oracles: check-oracle-syntax check-oracle-match check-oracle-properties \
 	check-oracle-sed \
 	check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
 	check-oracle-exclusions check-oracle-determinism \
+	check-oracle-iregexp \
 	check-engine-equivalence
 
 check-oracle-soak: ## Run the generating differentials over many seeds
@@ -1489,7 +1490,17 @@ vectors: ## Regenerate every dialect's conformance vectors
 # tests and nothing else. Six targets, seven corpora, nine dialects; the two
 # still missing are the two the POSIX importer covers.
 vectors: vectors-ecmascript vectors-pcre vectors-perl vectors-posix \
-	vectors-python vectors-vim
+	vectors-python vectors-vim vectors-iregexp
+
+vectors-iregexp: ## Regenerate the I-Regexp vectors from its two references
+# Two references write two kinds of record: a pattern iregexp-check refuses
+# becomes `expect: error syntax`, and a pattern it accepts becomes one record
+# per subject carrying libxml2's whole-string answer. Every record is anchored
+# at both ends, because a pattern facet has no unanchored form - JSONPath's
+# `search()` has no reference at all and is not in the corpus.
+vectors-iregexp:
+	@$(REQUIRE_PYTHON3)
+	$(call run-oracle,iregexp$(comma)libxml2,python3 tools/oracle/make_iregexp_vectors.py)
 
 vectors-ecmascript: ## Regenerate the ECMAScript vectors from the pinned node
 # Three generators, three provenance lines, deliberately: each writes its own
@@ -1639,6 +1650,26 @@ check-limits: $(TOOLS)
 	python3 tools/limits/measure.py \
 		--driver $(APP_DIR)/tools/grx_limits$(EXE_EXTENSION) \
 		--matcher $(APP_DIR)/tools/grx_match$(EXE_EXTENSION)
+
+check-oracle-iregexp: ## Compare the I-Regexp front end against its two references
+# The only dialect here whose references are not implementations of it. RFC 9485
+# is a *format* defined by an ABNF, so the syntax half is answered by a second
+# reading of that ABNF - iregexp-check, a Rust parser - and the matching half by
+# XSD's own semantics, which section 4 adopts and section 5.2 makes reachable
+# through any XSD engine. Both live in one image; IMAGES has why.
+#
+# It earned itself on its first run. `a{3,1}` conforms to Figure 1 - the
+# range-quantifier production puts no condition on the two numbers - and both
+# references accept it, where this library refused it because the shared
+# parser's default does and nothing had asked whether the default was right for
+# this dialect. Two reference defects came out of the same run and are excluded
+# by name: iregexp-check accepts a quantifier of one digit only, and libxml2's
+# general-category tables are older than this library's. The second is
+# *measured* rather than listed - the two references are asked which of the 36
+# categories each subject is in - so it empties itself if either moves.
+check-oracle-iregexp: $(TOOLS)
+	@$(REQUIRE_PYTHON3)
+	$(call run-oracle,iregexp$(comma)libxml2,python3 tools/oracle/iregexp_diff.py)
 
 check-engine-equivalence: ## Fail if two engines disagree about one program
 # Only the one driver, not $(TOOLS): this check consults no reference

@@ -284,3 +284,45 @@ grep	localhost/ghoti-regex-oracle-posix:deb13	grep (GNU grep) 3.11	Whether a lin
 # 17.0.0 and is a property of the differential's eighteen subject characters
 # rather than of the comparison; tools/corpus/VERSIONS measures it.
 python-next	docker.io/library/python:3.15-rc-slim@sha256:4c269ae51995d15c7115f3403bde620e5aa5387ca5b865e56a61a4a24c9ffb49	python 3.15.0rc2, UCD 17.0.0	The same questions one CPython ahead
+
+# I-Regexp, RFC 9485, and this is the first reference here that is not an
+# implementation of the dialect it answers for - because there is no such
+# thing. The dialect is a *format* defined by an ABNF, so two references
+# answer its two halves, and both live in one image built here
+# (containers/iregexp/Dockerfile).
+#
+# **iregexp-check answers the syntax half**: is this string an I-Regexp? A
+# checking implementation is defined by what it refuses (RFC 9485 section
+# 3.1), which is what this library claims to be, so the reference that can
+# contradict it is a second *reading of Figure 1* - jg-rp's Rust parser behind
+# Python bindings, written independently against the same grammar. Two
+# readings that agree are evidence; one reading is an assertion.
+#
+# **0.1.4 accepts a quantifier of one digit only**, which is a defect in it and
+# not a rule: `a{9}` is accepted, `a{10}` refused, and Figure 1 says
+# `QuantExact = 1*%x30-39`. RFC 9485's own section 8 settles it by quoting
+# `a{20,200000}` as an I-Regexp whose *cost* is a concern. libxml2 accepts
+# both, so the two references disagree and the grammar decides.
+# tools/oracle/iregexp_diff.py excludes the family by name and counts it;
+# documentation/dialects.md section 10.5 has the reproduction. If a release
+# past 0.1.4 fixes it, the exclusion is what to delete first.
+iregexp	localhost/ghoti-regex-oracle-iregexp:0.1.4-lxml6.1.3	iregexp-check 0.1.4	Whether a pattern is an I-Regexp: the syntax half of RFC 9485
+
+# **libxml2 answers the semantic half**: does this pattern match this string?
+# RFC 9485 section 5.2 is what makes that possible - every I-Regexp *is* an XSD
+# regexp and the mapping is the identity - so an XSD pattern facet runs the
+# pattern, and a facet is anchored by definition, which is the whole-string
+# Boolean section 4 borrows from XSD. `search()` has no reference here at all,
+# and iregexp_diff.py says so rather than inventing one.
+#
+# **The pin is the libxml2 inside the lxml wheel**, not lxml: the wheel links
+# its own statically, so `pip install lxml==6.1.3` pins an engine as well as a
+# binding and the version field names both. That is also why the Dockerfile
+# passes `--only-binary` - a source build would link this machine's libxml2 and
+# the reference would quietly be something else.
+#
+# One image and two pins, which is the shape the four POSIX rows have for a
+# different reason: those are four faces of one Debian userland, these are two
+# wheels reached through one interpreter. What the two pins buy is the
+# provenance line - a run says which of them answered.
+libxml2	localhost/ghoti-regex-oracle-iregexp:0.1.4-lxml6.1.3	libxml2 2.14.6, lxml 6.1.3	XSD's Boolean semantics, which RFC 9485 section 4 adopts

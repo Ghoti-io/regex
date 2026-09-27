@@ -218,6 +218,18 @@ static const GRX_SyntaxSpec spec_table[GRX_SYNTAX_COUNT] = {
   [GRX_SYNTAX_IREGEXP] = {
     .features = ALT | REP | UPRP,
     .default_options = GRX_OPT_UTF,
+    // `a{3,1}` compiles and can never match, which is Perl's answer rather
+    // than PCRE2's - and here it is not a choice between references but what
+    // the grammar says: `range-quantifier = "{" QuantExact [ "," [ QuantExact
+    // ] ] "}"` puts no condition on the two numbers, so a pattern with them
+    // the wrong way round conforms to Figure 1 and a checking implementation
+    // has nothing to refuse. Both references agree: iregexp-check accepts it,
+    // and libxml2 compiles it into a pattern that matches nothing.
+    //
+    // This library refused it until the oracle was built, which is the whole
+    // argument for building one - the refusal was inherited from the shared
+    // default and no test could see that the default was wrong here.
+    .allow_impossible_repeat = 1,
   },
   [GRX_SYNTAX_PYTHON] = {
     .features = ALT | REP | LAZY | POSS | NCAP | NAME | BREF | LAH | LBH

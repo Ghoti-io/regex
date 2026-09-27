@@ -18,7 +18,7 @@ one of them is added.
 | Dialects | Status |
 | --- | --- |
 | **ECMAScript**, **PCRE2**, **Perl**, **Python**, **Vim**, **POSIX BRE/ERE**, **GNU BRE/ERE** | Implemented. Each has an oracle on this machine. |
-| **I-Regexp** (RFC 9485) | Implemented, and the only one with no shipped reference: its authority is an ABNF rather than a program (§10). |
+| **I-Regexp** (RFC 9485) | Implemented. The only one whose references are not implementations *of it*: an ABNF is the authority, and two programs answer its two halves (§10). |
 | Java, .NET, Ruby, RE2 (Go), Rust, Tcl, Emacs | Not implemented. Selecting one is `GRX_ERR_UNSUPPORTED` with `GRX_DIAG_DIALECT_NOT_IMPLEMENTED`, never a silent fallback to another dialect. |
 
 A pattern accepted under `GRX_SYNTAX_RE2`, once that dialect exists, is one
@@ -52,7 +52,7 @@ this design was written on; a CI job installs the rest
 | Tcl | `tcl` | Tcl 8.6 | `re_syntax(n)` | `tclsh` (install) |
 | Vim | `vim` | Vim 9.2, patches 1-1129 | `:help pattern` | `vim -es` with `matchlist()` (pinned); no corpus to import, a generated one |
 | Emacs | `emacs` | GNU Emacs 29 | Elisp Reference Manual, "Regular Expressions" | `emacs --batch` (install) |
-| I-Regexp | `i-regexp` | RFC 9485 (October 2023), with its two errata | Figure 1's ABNF; §3 for what it removes from XSD; §4 for the semantics it borrows | **none on this machine.** The grammar is the reference; §10 says what an oracle would be and why one is still wanted |
+| I-Regexp | `i-regexp` | RFC 9485 (October 2023), with its two errata | Figure 1's ABNF; §3 for what it removes from XSD; §4 for the semantics it borrows | **two, neither an implementation of I-Regexp:** iregexp-check 0.1.4 (pinned) reads Figure 1 a second time; libxml2 2.14.6 through lxml 6.1.3 (pinned) runs XSD's semantics, which §5.2 makes the identity mapping. §10.4 |
 
 ### 2.1 Python's oracle is the only one that is not a subprocess
 
@@ -2509,7 +2509,7 @@ Three cases worth stating, because a caller's own test table will hit them:
   JSONPath turns an invalid regexp into `false`; a `GRX_ERR_LIMIT` decided
   nothing and must not become one.
 
-### 10.4 Cost, and what is not built
+### 10.4 Cost, the caller's options, and the two references
 
 §8 names range quantifiers as the expense - `(a{2,4}){2,4}` and
 `a{20,200000}` - and offers three mitigations: refuse nesting, refuse large
@@ -2552,20 +2552,46 @@ refuses a template with `GRX_DIAG_NOT_IN_DIALECT` - distinct from the
 `GRX_DIAG_DIALECT_NOT_IMPLEMENTED` a dialect whose template row is merely
 unwritten gets. `GRX_REPLACE_LITERAL` needs no grammar and still works.
 
-**What is not built: an oracle, and so conformance vectors.** Every other
-implemented dialect is measured against a reference this machine can run;
-this one is measured against a document, which is the weakest arrangement in
-the suite - it means the ABNF was read correctly, not that the reading was
-checked. Two oracles exist to be had, and they answer different halves:
+**The two references, and what each can answer.** No implementation of
+I-Regexp answers for it, because it is a format rather than a program's
+dialect. Two things do, and they answer different halves:
 
-- **The syntax half.** A published checking implementation - `iregexp-check`
-  on PyPI is one, a Python binding over a Rust checker - would decide
-  accept-versus-refuse over a generated corpus of near-miss patterns, which is
-  exactly where a hand-read grammar goes wrong.
-- **The semantic half.** §5.2 says any I-Regexp is also an XSD regexp and the
-  mapping is the identity, so any XSD 1.0 or 1.1 engine is a Boolean oracle
-  for what a pattern matches.
+| Half | Reference | Why it can answer |
+| --- | --- | --- |
+| Is this an I-Regexp? | **iregexp-check 0.1.4**, a Rust parser with Python bindings | A checking implementation is defined by what it refuses (§3.1), so what can contradict this one is a second *reading of Figure 1*. Two readings that agree are evidence; one is an assertion. |
+| Does this pattern match this string? | **libxml2 2.14.6**, through lxml's XSD pattern facet | §5.2: every I-Regexp *is* an XSD regexp and the mapping is the identity. A facet is anchored by definition, which is the whole-string Boolean §4 borrows from XSD. |
 
-Until one of those is pinned, `tests/unit/test_iregexp.cpp` is the whole of
-the evidence, and it is written to quote the production behind each rule so
-that a misreading is visible as a misquotation.
+`make check-oracle-iregexp` runs both over 37,248 patterns and 13,200
+pattern-and-subject rows; `make vectors-iregexp` writes the corpus the suite
+commits. **JSONPath's `search()` has no reference at all** - a substring
+question neither XSD nor RFC 9485 asks - so the unanchored path is stated in
+`tests/unit/test_iregexp.cpp` rather than measured, and the corpus says so in
+its own header.
+
+### 10.5 What the oracle found, in both directions
+
+**One defect of this library's, on the first run.** `a{3,1}` conforms to Figure
+1 - `range-quantifier` puts no condition on the two numbers - and both
+references accept it: iregexp-check parses it, libxml2 compiles it into a
+pattern that matches nothing. This library refused it, because the shared
+parser's default refuses an impossible repeat and nothing had asked whether
+that default was right for this dialect. The row now sets
+`allow_impossible_repeat`, and `[z-a]` is still refused, which is the same
+question answered the other way: Figure 1 admits it, XSD does not, and §4 makes
+XSD's semantics the dialect's - libxml2 refuses the pattern outright, so the
+stricter reading has a reference behind it.
+
+**Two defects of the references', each excluded by name and counted.**
+
+| Reference | What it gets wrong | The pair that proves it |
+| --- | --- | --- |
+| iregexp-check 0.1.4 | A quantifier of **one digit only**: `a{9}` is accepted and `a{10}` refused, where Figure 1 says `QuantExact = 1*%x30-39` | The RFC's own §8 quotes `a{20,200000}` as an I-Regexp whose *cost* is a concern - a grammar that could not spell it could not have raised the concern. libxml2 accepts both |
+| libxml2 2.14.6 | Its **general-category tables are older** than UCD 17.0: `\p{Cn}` is empty, so an unassigned code point is in no category at all while `\P{Cn}` matches it, and U+1F41F is in neither `So` nor `S` | `\p{Lu}` against U+10400 is true there, so it is not a plane limit; `\p{Cc}` against a tab is true, so it is not the construct. This library's tables are checked against V8's ICU by `check-oracle-properties` |
+| libxml2 2.14.6 | A class range whose low end is **escaped** is read as a union: `[\--a]` matches `-` and `a` and not `0` | `[.-a]`, the same range with the low end unescaped, *is* a range there and matches `0`. XSD Appendix F is explicit that a `charRange` endpoint may be a `SingleCharEsc` |
+
+The category skew is **measured rather than listed**: the differential asks both
+references which of the 36 categories each subject belongs to, and excludes only
+the rows where those answers differ. A list of code points would go stale the
+moment either side's tables moved, and would go stale silently.
+
+
