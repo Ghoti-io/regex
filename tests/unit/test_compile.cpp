@@ -15,7 +15,9 @@
  * Copyright 2026 by Corey Pennycuff
  */
 
+#include <chrono>
 #include <cstdio>
+#include <string>
 
 #include "test_helpers.h"
 
@@ -125,6 +127,47 @@ TEST(Compile, AnAlreadyParsedPatternCanBeCompiledMoreThanOnce) {
   grx_regex_free(first);
   grx_regex_free(second);
   grx_pattern_free(parsed);
+}
+
+TEST(Compile, AGroupsLengthIsMeasuredOncePerGroupNotOncePerReference) {
+  // `group_span()` in src/ir/analyze.c answers "how long can what this group
+  // captured be", and `walk()` asks it for every reference. It had a cycle
+  // guard and no memo, so a group referenced twice was measured twice - and
+  // when the body doing the referencing was itself a group being measured, the
+  // work doubled a level.
+  //
+  // The shape below is the cheapest witness: group 1 is a literal, and every
+  // group after it is two references to the one before. Measured on the build
+  // that had no memo, 24 groups took 6.68 seconds and 22 took 2.43 - a factor
+  // of 2.1 a level - so the 40 groups here would have taken about nine hours.
+  // A 1,514-byte pattern from the fuzzer took 354 seconds and was then
+  // rejected as malformed, which is notes section 14i.
+  //
+  // A wall clock in a test is usually a bad idea and here it is the only
+  // honest instrument: the defect is time, not allocation or output, and the
+  // two implementations are nine hours apart. Five seconds is therefore not a
+  // tolerance to argue about - it is thirty times what a memoised compile of
+  // this pattern needs on a slow machine and a millionth of what the
+  // unmemoised one needs.
+  std::string pattern = "(a)";
+  for (int group = 1; group < 40; group++) {
+    pattern += "(\\" + std::to_string(group) + "\\" + std::to_string(group) + ")";
+  }
+
+  GRX_Regex * regex = nullptr;
+  auto start = std::chrono::steady_clock::now();
+  GRX_Result result = grx_regex_compile(
+      pattern.c_str(), GRX_SYNTAX_ECMASCRIPT, GRX_OPT_NONE, &regex);
+  auto elapsed = std::chrono::steady_clock::now() - start;
+  EXPECT_EQ(result, GRX_OK);
+  EXPECT_NE(regex, nullptr);
+  grx_regex_free(regex);
+
+  auto seconds
+      = std::chrono::duration_cast<std::chrono::duration<double>>(elapsed)
+            .count();
+  EXPECT_LT(seconds, 5.0) << pattern.size() << "-byte pattern with 40 groups "
+                             "took " << seconds << " s to compile";
 }
 
 TEST(Compile, AllocatesNothingOnAFailedCompile) {

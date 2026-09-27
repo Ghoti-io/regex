@@ -89,6 +89,27 @@ typedef struct {
 /** How many references deep the measuring of a group's length will go. */
 #define GRX_ANALYSIS_MAX_REFERENCES 32
 
+/**
+ * How many group spans are remembered at a time.
+ *
+ * Direct-mapped by group number, because the alternative to remembering them
+ * was measuring each one once per reference to it. `group_span()` walks a
+ * group's body to answer "how long can what this captured be", and a body
+ * containing references of its own walks those too - so with groups whose
+ * bodies reference the group before them, the work doubles a level and a
+ * 170-byte pattern took 6.7 seconds to compile. A 1,514-byte one found by the
+ * fuzzer took 354 seconds and was then rejected as malformed; notes section
+ * 14i has the curve.
+ *
+ * Direct-mapped rather than exact: a collision costs a recomputation and
+ * nothing else, the table is a pure memo, and this keeps the whole thing on
+ * the stack with no allocation to fail and no cleanup path to forget. What has
+ * to be covered is the *chain* in play during one resolution, and
+ * GRX_ANALYSIS_MAX_REFERENCES caps that at 32, so 64 slots hold a chain twice
+ * over before two of its groups can collide.
+ */
+#define GRX_ANALYSIS_SPAN_CACHE 64
+
 typedef struct {
   const GRX_IR * ir;
   /**
@@ -135,6 +156,23 @@ typedef struct {
    */
   uint32_t resolving[GRX_ANALYSIS_MAX_REFERENCES];
   size_t resolving_count;
+  /**
+   * Answers that depend on where the walk came from rather than on the IR.
+   *
+   * Bumped wherever a guard gives up: a reference to a group already being
+   * resolved, a resolution deeper than GRX_ANALYSIS_MAX_REFERENCES, or a walk
+   * deeper than GRX_ANALYSIS_MAX_DEPTH. Each returns "unknown" because of the
+   * route taken to it, so a span computed with one of them underneath is not a
+   * property of the group and must not be remembered. group_span() reads this
+   * before and after walking a body and caches only when it did not move.
+   */
+  size_t context_hits;
+  /** Group numbers in the cache, 0 for an empty slot. */
+  uint32_t cache_group[GRX_ANALYSIS_SPAN_CACHE];
+  /** Whether that entry was computed while measuring a lookbehind's width. */
+  unsigned char cache_look[GRX_ANALYSIS_SPAN_CACHE];
+  /** What walk() returned for that body, before group_span's own tidying. */
+  Span cache_span[GRX_ANALYSIS_SPAN_CACHE];
 } Analysis;
 
 /** How deep the walk will go before it gives up rather than overflowing. */
@@ -310,40 +348,74 @@ static Span walk_alternate(Analysis * analysis, const GRX_IRNode * node) {
  */
 static Span group_span(Analysis * analysis, uint32_t group) {
   Span unknown = {0, GRX_NPOS, 0, 0, 1, 0};
-  if (!group || analysis->resolving_count >= GRX_ANALYSIS_MAX_REFERENCES) {
+  if (!group) {
+    return unknown;
+  }
+  if (analysis->resolving_count >= GRX_ANALYSIS_MAX_REFERENCES) {
+    analysis->context_hits++;
     return unknown;
   }
   for (size_t i = 0; i < analysis->resolving_count; i++) {
     if (analysis->resolving[i] == group) {
+      analysis->context_hits++;
       return unknown;
     }
   }
 
+  // The memo. A hit skips the search below and the walk under it, which is the
+  // whole difference between a group measured once and a group measured once
+  // per reference to it.
+  //
+  // `measuring_look_width` is part of the key rather than of the entry,
+  // because a body that contains references of its own has *their* minimums
+  // zeroed or kept by the flag as it stood when they were measured. The flag
+  // is not read by walk() itself - only here - so the two settings are two
+  // different answers for the same group and cannot share a slot.
+  unsigned char look = analysis->measuring_look_width ? 1u : 0u;
+  size_t slot = group % GRX_ANALYSIS_SPAN_CACHE;
   uint32_t body = GRX_INDEX_NONE;
-  size_t found = 0;
-  int branch_reset = 0;
-  for (size_t i = 0; i < analysis->ir->nodes.count; i++) {
-    const GRX_IRNode * node = grx_ir_node(analysis->ir, (uint32_t)i);
-    if (node && node->kind == GRX_IR_CAPTURE && node->a == group) {
-      if (!found) {
-        body = node->first_child;
+  Span span;
+  if (analysis->cache_group[slot] == group && analysis->cache_look[slot] == look) {
+    span = analysis->cache_span[slot];
+  }
+  else {
+    size_t found = 0;
+    int branch_reset = 0;
+    for (size_t i = 0; i < analysis->ir->nodes.count; i++) {
+      const GRX_IRNode * node = grx_ir_node(analysis->ir, (uint32_t)i);
+      if (node && node->kind == GRX_IR_CAPTURE && node->a == group) {
+        if (!found) {
+          body = node->first_child;
+        }
+        branch_reset = branch_reset || (node->flags & GRX_IR_BRANCH_RESET);
+        found++;
       }
-      branch_reset = branch_reset || (node->flags & GRX_IR_BRANCH_RESET);
-      found++;
+    }
+    // A group written inside `(?|...)` shares its number with the other
+    // branches', so which of them a reference means is not decided until the
+    // match runs and there is no length here to give. pcre2test refuses
+    // `(?|([ab]))...(?<=\1)z` even with one branch, and takes the same
+    // lookbehind over a group written outside one.
+    if (body == GRX_INDEX_NONE || found > 1 || branch_reset) {
+      return unknown;
+    }
+
+    size_t before = analysis->context_hits;
+    analysis->resolving[analysis->resolving_count++] = group;
+    span = walk(analysis, body);
+    analysis->resolving_count--;
+
+    // Remembered only if nothing underneath gave up because of where the walk
+    // came from. A reference to a group already on `resolving` returns
+    // "unknown" about *this* route, not about the group, and a walk that hit
+    // GRX_ANALYSIS_MAX_DEPTH says only that it stopped - caching either would
+    // answer a later query with a result that was never about it.
+    if (analysis->context_hits == before) {
+      analysis->cache_group[slot] = group;
+      analysis->cache_look[slot] = look;
+      analysis->cache_span[slot] = span;
     }
   }
-  // A group written inside `(?|...)` shares its number with the other
-  // branches', so which of them a reference means is not decided until the
-  // match runs and there is no length here to give. pcre2test refuses
-  // `(?|([ab]))...(?<=\1)z` even with one branch, and takes the same
-  // lookbehind over a group written outside one.
-  if (body == GRX_INDEX_NONE || found > 1 || branch_reset) {
-    return unknown;
-  }
-
-  analysis->resolving[analysis->resolving_count++] = group;
-  Span span = walk(analysis, body);
-  analysis->resolving_count--;
 
   if (!analysis->measuring_look_width) {
     span.min_length = 0;
@@ -366,6 +438,9 @@ static Span walk(Analysis * analysis, uint32_t node_index) {
     // and the honest answer for a subtree that was not examined is "nothing
     // is known".
     analysis->is_regular = 0;
+    // Context-dependent: this says the walk stopped, not what the subtree
+    // is, so group_span() must not remember a span computed above it.
+    analysis->context_hits++;
     return (Span) {0, GRX_NPOS, 0, 0, 0, 0};
   }
   analysis->depth++;
