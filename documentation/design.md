@@ -786,7 +786,7 @@ need:
 | --- | --- | --- |
 | `max_pattern_length` | entry | bytes of pattern |
 | `max_nesting_depth` | parser | recursion depth of groups, classes and lookarounds - this is also the C stack bound, so its default is small (a few hundred) and it is the one limit a caller should not lift casually. It bounds the *parser's* stack; the backtracker's own recursion over nested assertions has its own floor under it, `GRX_BACKTRACK_MAX_C_DEPTH`, because this field is the caller's to raise and that one must not be (section 9 invariant 6) |
-| `max_nodes` | parser | AST nodes |
+| `max_nodes` | parser | AST nodes - and, with `max_nesting_depth`, what sizes the two compile-time passes' working stacks. Neither recurses over the tree any more, so both keep one heap frame per level of nesting instead: 48 bytes a level in the analysis pass and 56 in codegen, freed when the compile ends. Raising either field raises that, and it is the whole cost - the C stack the passes use is flat in nesting (section 9 invariant 6) |
 | `max_captures` | lowering | capturing groups |
 | `max_repeat_count` | parser | any bound in `{m,n}` |
 | `max_class_ranges` | lowering | ranges in one canonical class, after expansion of properties and folding |

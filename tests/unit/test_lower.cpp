@@ -1273,6 +1273,84 @@ TEST(Compile, EverythingIsFreedThroughTheCallersAllocator) {
   EXPECT_EQ(allocator.live(), 0) << "the half-built program leaked";
 }
 
+/**
+ * A deep pattern that is a plain automaton is still reported as one.
+ *
+ * The analysis pass gives up past a depth and reports "nothing is known",
+ * which sets `is_regular` to 0 and takes the pattern off the Pike VM. That
+ * depth used to be the constant 512, chosen as how far walk() could recurse
+ * before overflowing the C stack - and once the walk kept its stack on the
+ * heap the constant was still there, bounding something it was never chosen
+ * for. It was reachable: `max_nesting_depth` is the caller's to raise
+ * (design.md section 6), lowering costs about two IR levels per level of
+ * `(?:a...)*`, and the pair below straddled it.
+ *
+ * 255 levels of nesting is 511 IR nodes deep and was regular. 256 is 513 and
+ * was not - so `GRX_ENGINE_PIKE` answered GRX_ERR_UNSUPPORTED for a pattern
+ * with no capture, no backreference and no lookaround in it, and
+ * `GRX_ENGINE_AUTO` quietly used a backtracking engine instead. One IR level,
+ * the linear-time guarantee, and nothing said.
+ *
+ * The bound is the node count now, which a tree cannot exceed, so both sides
+ * of the pair are measured exactly. What this test pins is that they agree:
+ * the deeper one must be regular too, and the Pike VM must run it.
+ */
+TEST(Lower, DepthDoesNotDecideWhetherAPatternCountsAsRegular) {
+  GRX_Limits limits;
+  grx_limits_default(&limits);
+  // The caller's to raise, and raising it is what made the old cap reachable.
+  limits.max_nesting_depth = 4096;
+  limits.max_nodes = 0;
+  limits.max_program_size = 0;
+  limits.max_pattern_length = 0;
+
+  // Either side of where the constant used to sit: 511 and 513 IR levels.
+  for (size_t nesting : {255u, 256u}) {
+    std::string pattern;
+    for (size_t i = 0; i < nesting; i++) {
+      pattern += "(?:a";
+    }
+    pattern += "b";
+    for (size_t i = 0; i < nesting; i++) {
+      pattern += ")*";
+    }
+
+    GRX_Regex * regex = nullptr;
+    ASSERT_EQ(grx_regex_compile_with_allocator(pattern.data(), pattern.size(),
+                  GRX_SYNTAX_ECMASCRIPT, GRX_OPT_NONE, &limits, nullptr,
+                  nullptr, &regex),
+        GRX_OK)
+        << "nesting " << nesting;
+    ASSERT_NE(regex, nullptr);
+
+    GRX_Facts facts;
+    ASSERT_EQ(grx_regex_facts(regex, &facts), GRX_OK);
+    EXPECT_EQ(facts.is_regular, 1)
+        << "nesting " << nesting
+        << ": no capture, no backreference and no lookaround, so this is a "
+           "plain automaton however deep it is. A 0 here means the analysis "
+           "pass gave up on depth and the Pike VM will refuse it";
+
+    // And the engine that reads that fact agrees, which is the consequence
+    // the fact exists for: a return code, not an inference from the flag.
+    GRX_Match * match = nullptr;
+    ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+    GRX_SearchOptions options;
+    grx_search_options_default(&options);
+    options.engine = GRX_ENGINE_PIKE;
+    options.limits = &limits;
+    int matched = 0;
+    EXPECT_EQ(
+        grx_regex_search_ex(regex, "aab", 3, &options, match, &matched),
+        GRX_OK)
+        << "nesting " << nesting
+        << ": the Pike VM refused a pattern it can run";
+    EXPECT_EQ(matched, 1) << "nesting " << nesting;
+    grx_match_destroy(match);
+    grx_regex_free(regex);
+  }
+}
+
 int main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

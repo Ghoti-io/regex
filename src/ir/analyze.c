@@ -161,7 +161,7 @@ typedef struct {
    *
    * Bumped wherever a guard gives up: a reference to a group already being
    * resolved, a resolution deeper than GRX_ANALYSIS_MAX_REFERENCES, or a walk
-   * deeper than GRX_ANALYSIS_MAX_DEPTH. Each returns "unknown" because of the
+   * deeper than walk_depth_limit(). Each returns "unknown" because of the
    * route taken to it, so a span computed with one of them underneath is not a
    * property of the group and must not be remembered. group_span() reads this
    * before and after walking a body and caches only when it did not move.
@@ -177,13 +177,15 @@ typedef struct {
    * The walk's own stack, one WalkFrame per node being measured.
    *
    * On the heap because a C stack runs out and this one grows. walk() used to
-   * call itself - one 240-byte frame per level of nesting at -O2 - and
-   * GRX_ANALYSIS_MAX_DEPTH stopped it at 512, which is 123 KB: half the 256 KB
-   * stack testing.md section 12 runs every harness under, spent by the pass
-   * that only measures. The cap was a frame count standing in for a byte
-   * budget, the way GRX_BACKTRACK_MAX_C_DEPTH was before somebody measured the
-   * matcher. It is unchanged in what it refuses; what changed is that reaching
-   * it now costs bytes that grow rather than frames that run out.
+   * call itself - one 240-byte frame per level of nesting at -O2 - and a cap of
+   * 512 stopped it at 123 KB: half the 256 KB stack testing.md section 12 runs
+   * every harness under, spent by the pass that only measures. The cap was a
+   * frame count standing in for a byte budget, the way
+   * GRX_BACKTRACK_MAX_C_DEPTH was before somebody measured the matcher.
+   *
+   * What bounds the memory now is the tree: one frame per level at 48 bytes,
+   * so max_nodes and max_nesting_depth are what a caller sizes it with. See
+   * walk_depth_limit().
    */
   GRX_Arena frames;
   /**
@@ -196,8 +198,34 @@ typedef struct {
   Span result;
 } Analysis;
 
-/** How deep the walk will go before it gives up rather than overflowing. */
-#define GRX_ANALYSIS_MAX_DEPTH 512
+/**
+ * How deep the walk will go before it gives up: as deep as the tree has nodes.
+ *
+ * A tree cannot be deeper than it has nodes, so this refuses nothing the IR can
+ * legitimately hold - anything the parser accepted is measured exactly - while
+ * still terminating on a structure that is not a tree, which is the only case
+ * left to guard. Lowering builds trees; a caller assembling an IR by hand can
+ * make a cycle, and that is what this catches.
+ *
+ * It was 512, and that was a stack bound wearing a frame count: walk() called
+ * itself at some 240 bytes a level, so 512 levels was 123 KB, half the stack
+ * testing.md section 12 gives a harness. Now that the walk keeps its stack on
+ * the heap the question is no longer "how much C stack is left" but "how deep a
+ * tree is worth measuring exactly", and the answer to that is all of it.
+ *
+ * The constant was also reachable, which is what made replacing it worth doing
+ * rather than merely tidy. `max_nesting_depth` is the caller's to raise
+ * (design.md section 6), lowering costs up to about three IR levels per level of
+ * it, and a raise past 171 put an ordinary pattern over 512: at 511 levels
+ * `(?:a...)*` was regular and the Pike VM ran it, at 513 it was not and the
+ * Pike VM answered GRX_ERR_UNSUPPORTED. One IR level, a linear-time guarantee,
+ * and no diagnostic. tests/unit/test_lower.cpp pins that pair.
+ */
+static size_t walk_depth_limit(const Analysis * analysis) {
+  // Plus one because `depth` counts the node being entered, so a chain of
+  // `count` nodes reaches a depth of `count`.
+  return analysis->ir->nodes.count + 1;
+}
 
 /** Add two lengths, saturating at "unbounded". */
 static size_t add_length(size_t a, size_t b) {
@@ -439,7 +467,7 @@ static Span group_span(Analysis * analysis, uint32_t group) {
     // Remembered only if nothing underneath gave up because of where the walk
     // came from. A reference to a group already on `resolving` returns
     // "unknown" about *this* route, not about the group, and a walk that hit
-    // GRX_ANALYSIS_MAX_DEPTH says only that it stopped - caching either would
+    // walk_depth_limit() says only that it stopped - caching either would
     // answer a later query with a result that was never about it.
     if (analysis->context_hits == before) {
       analysis->cache_group[slot] = group;
@@ -461,7 +489,7 @@ static Span group_span(Analysis * analysis, uint32_t group) {
  *
  * The two refusals the recursion made on the way in, in the order it made
  * them: a node index that resolves to nothing is measured as zero-width, and a
- * node deeper than GRX_ANALYSIS_MAX_DEPTH is not measured at all. Both write
+ * node deeper than walk_depth_limit() is not measured at all. Both write
  * the answer to Analysis::result and push nothing, which is what a caller
  * resuming from a descent reads either way.
  *
@@ -501,11 +529,11 @@ static int walk_push(Analysis * analysis, uint32_t node_index) {
     analysis->result = (Span) {0, 0, 0, 0, 0, 0};
     return 0;
   }
-  if (analysis->depth >= GRX_ANALYSIS_MAX_DEPTH) {
-    // Deeper than the parser's own cap allows, so this is unreachable for a
-    // pattern that came through it. A tree built by hand can still get here,
-    // and the honest answer for a subtree that was not examined is "nothing
-    // is known".
+  if (analysis->depth >= walk_depth_limit(analysis)) {
+    // Deeper than the tree has nodes, so what is being walked is not a tree.
+    // Unreachable for anything lowering built; a caller assembling an IR by
+    // hand can make a cycle, and the honest answer for a subtree that was not
+    // examined is "nothing is known".
     analysis->is_regular = 0;
     // Context-dependent: this says the walk stopped, not what the subtree
     // is, so group_span() must not remember a span computed above it.
