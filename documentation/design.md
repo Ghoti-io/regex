@@ -932,6 +932,18 @@ The things the tests exist to hold. Each is checked somewhere named in
    over it the answer is `GRX_ERR_LIMIT`. Making the engine iterative here
    would let this invariant go back to its original wording; until somebody
    does, the wording follows the code.
+
+   It says *engine*, and for a while that was a gap rather than a scope. The
+   instrument was pointed only at a match, so `grx_codegen_program()` - which
+   called itself over the IR at about four frames a level, with no bound of
+   any kind - was unmeasured, and a fuzz campaign found it at 106 levels of
+   nesting as a stack overflow inside `grx_regex_compile()` with nothing
+   returned and nothing logged. A depth cap could not answer it: this suite
+   requires a pattern nested 1920 deep to *compile*, so a constant would have
+   had to be at least 1920 to keep that and at most 105 to stop the crash.
+   Codegen keeps its stack on the heap instead, and its cost is now flat -
+   about 4.5 KB from eight levels of nesting to nineteen hundred, measured the
+   same way.
 7. The Unicode tables regenerate byte-identical from the pinned UCD.
    (`make check-unicode-tables`.)
 

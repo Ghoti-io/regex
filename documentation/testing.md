@@ -2564,7 +2564,20 @@ rather than a frame count that would need the engine's cooperation to
 collect. It sweeps the subject over four orders of magnitude, the program's
 size over two, and the program's assertion nesting to the cap - and it is
 where the claim in design.md section 9 invariant 6 was found to be half
-wrong. The measurement is skipped under AddressSanitizer, which relocates
+wrong.
+
+It measures a *compile* the same way, which is newer and was a gap of the
+same kind: the ruler pointed only at a match, so codegen's own recursion
+over the IR went unmeasured and broke the 256 KB claim above on a pattern
+this suite already required to compile - 281 KB for 1920 nested
+lookaheads, where it is now 5 KB and flat. Parse, lower and analyse run on
+the caller's thread and only `grx_codegen_program()` runs on the painted
+one, because the parser recurses over nesting too and a figure covering
+both could not say which pass moved. The same split is why one of those
+tests measures `grx_ir_can_match_empty()` separately and asserts the
+difference: codegen re-enters the analysis pass on every repeat body, so
+the two recursions share one stack, and the analysis is the larger term
+once codegen is flat. The measurement is skipped under AddressSanitizer, which relocates
 locals to a heap fake stack, and under Valgrind, which counts a deliberate
 write below the stack pointer as an invalid one; the verdicts those runs
 check - that nesting past the cap is a `GRX_ERR_LIMIT` and not a crash - are

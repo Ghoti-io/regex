@@ -165,6 +165,19 @@ typedef struct {
    * something the caller cannot change is worse than no limit.
    */
   GRX_Arena fixups;
+  /**
+   * The generator's own stack, one GenFrame per IR level being laid out.
+   *
+   * On the heap because a C stack runs out and this one grows; see GenFrame.
+   * Uncapped for the same reason the fixups above are capped by
+   * max_program_size rather than by a constant of their own - the depth here
+   * is the tree's, which max_nodes and max_nesting_depth already bound, and a
+   * second limit naming something the caller cannot change would refuse
+   * patterns those two accept.
+   */
+  GRX_Arena frames;
+  /** A subtree walk's stack, for capture_span(); uint32_t node indices. */
+  GRX_Arena walk;
 } Codegen;
 
 /** One CALL waiting to be pointed at the block for its target. */
@@ -175,7 +188,99 @@ typedef struct {
   uint32_t reverse;    ///< Non-zero when the call is inside a reverse body.
 } Fixup;
 
-static GRX_Result gen(Codegen * codegen, uint32_t node_index);
+/**
+ * One node being laid out, and how far through laying it out we are.
+ *
+ * This pass used to walk the IR by calling itself - about four C frames to a
+ * level, with no bound of any kind - and a fuzz campaign found it as a stack
+ * overflow inside grx_regex_compile() at 106 levels of nesting, with nothing
+ * returned and nothing logged. A depth cap cannot be the fix:
+ * tests/unit/test_stack.cpp requires 1920 levels to *compile*, which is
+ * design.md section 9 invariant 6 read through max_nesting_depth, so a
+ * constant would have to be at least 1920 to keep that contract and at most
+ * 105 to stop the crash. There is no such number. The walk keeps its stack on
+ * the heap instead, where depth costs bytes that grow rather than frames that
+ * run out.
+ *
+ * So every generator below is resumable: it is entered with a stage number,
+ * emits up to its next child, and says which child to lay out next. Its
+ * locals live here rather than in a C frame, and the union is one member per
+ * kind named for what that kind keeps - a row of numbered slots is how this
+ * sort of rewrite goes wrong.
+ */
+typedef struct {
+  uint32_t node;  ///< The IR node this frame lays out.
+  uint16_t stage; ///< How far it has got; each generator numbers its own.
+  /**
+   * `forward_tail` and `flip` as they were when this frame started.
+   *
+   * The recursive form read these into locals, changed them for the duration
+   * of a child, and put them back when the child returned. The driver does
+   * exactly that - it restores both before resuming a frame - and a stage
+   * that wants its child to see something else sets it again on the way out.
+   * Restoring in one place is what stops a sibling being generated under the
+   * previous child's direction, which is two dialects' lookbehind semantics.
+   */
+  int8_t saved_tail;
+  int8_t saved_flip;
+  union {
+    /** CAPTURE's closing slot, ATOMIC's begin, SCRIPT_RUN's register. */
+    struct {
+      uint32_t slot;
+    } one;
+    /** CONCAT: where in the child list, and how long it is when reversed. */
+    struct {
+      uint32_t child;
+      uint32_t next;
+      uint32_t count;
+    } list;
+    /** ALTERNATE: the shared trampoline, and the branch being emitted. */
+    struct {
+      uint32_t child;
+      uint32_t stub;
+      uint32_t split;
+    } alternate;
+    /** REPEAT, by expansion and as a loop; see gen_repeat_step(). */
+    struct {
+      uint32_t body;
+      uint32_t i;
+      uint32_t stub;
+      uint32_t reg;
+      uint32_t late_reg;
+      uint32_t pair_reg;
+      uint32_t optional;
+      uint32_t top;
+      uint32_t split;
+      uint32_t body_start;
+      uint8_t lazy;
+      uint8_t guard;
+      uint8_t late;
+      uint8_t empty_first;
+      uint8_t clears_tail;
+    } repeat;
+    /** COND and its assertion form: the jumps waiting for their targets. */
+    struct {
+      uint32_t test;
+      uint32_t held;
+      uint32_t missed;
+      uint32_t skip;
+      uint32_t yes;
+      uint32_t no;
+    } cond;
+    /** LOOK and SCAN: the instruction to patch, and a rewind register. */
+    struct {
+      uint32_t mark;
+      uint32_t reg;
+    } look;
+  } u;
+} GenFrame;
+
+/** What a stage asks the driver to do next. */
+typedef enum {
+  GEN_POP,     ///< This node is laid out.
+  GEN_DESCEND, ///< Lay out the child named, then resume this frame.
+  GEN_AGAIN    ///< Call this frame again; its stage has moved.
+} GenAction;
 
 /** Report a failure at a node's span. */
 static GRX_Result fail(
@@ -276,30 +381,55 @@ static void patch_y(Codegen * codegen, uint32_t index, uint32_t target) {
  * of the pattern. So "every capture inside this repeat" is two numbers, which
  * is what lets the reset be one instruction rather than a list.
  */
-static void capture_span(const GRX_IR * ir, uint32_t node_index,
+static GRX_Result capture_span(Codegen * codegen, uint32_t node_index,
     uint32_t * out_low, uint32_t * out_high) {
-  const GRX_IRNode * node = grx_ir_node(ir, node_index);
-  if (!node) {
-    return;
+  // Its own explicit stack, for the reason GenFrame gives: this is a second
+  // walk of the same tree, reached from inside the first one, and a frame per
+  // level here would put back a per-level cost the generator has just taken
+  // out. Children are pushed and popped in no particular order, which a
+  // minimum and a maximum do not care about.
+  size_t base = codegen->walk.count;
+  GRX_Result result = grx_arena_append(&codegen->walk, &node_index, NULL);
+
+  while (result == GRX_OK && codegen->walk.count > base) {
+    const uint32_t * top
+        = GRX_ARENA_AT(const uint32_t, &codegen->walk, codegen->walk.count - 1);
+    if (!top) {
+      result = GRX_ERR_INTERNAL;
+      break;
+    }
+    uint32_t index = *top;
+    codegen->walk.count--;
+
+    const GRX_IRNode * node = grx_ir_node(codegen->ir, index);
+    if (!node) {
+      break; // As the recursive form did: abandon the walk, report no error.
+    }
+
+    if (node->kind == GRX_IR_CAPTURE) {
+      if (node->a < *out_low) {
+        *out_low = node->a;
+      }
+      if (node->a + 1 > *out_high) {
+        *out_high = node->a + 1;
+      }
+    }
+
+    for (uint32_t child = node->first_child; child != GRX_INDEX_NONE;) {
+      const GRX_IRNode * child_node = grx_ir_node(codegen->ir, child);
+      if (!child_node) {
+        break;
+      }
+      result = grx_arena_append(&codegen->walk, &child, NULL);
+      if (result != GRX_OK) {
+        break;
+      }
+      child = child_node->next_sibling;
+    }
   }
 
-  if (node->kind == GRX_IR_CAPTURE) {
-    if (node->a < *out_low) {
-      *out_low = node->a;
-    }
-    if (node->a + 1 > *out_high) {
-      *out_high = node->a + 1;
-    }
-  }
-
-  for (uint32_t child = node->first_child; child != GRX_INDEX_NONE;) {
-    const GRX_IRNode * child_node = grx_ir_node(ir, child);
-    if (!child_node) {
-      return;
-    }
-    capture_span(ir, child, out_low, out_high);
-    child = child_node->next_sibling;
-  }
+  codegen->walk.count = base;
+  return result;
 }
 
 /**
@@ -318,7 +448,10 @@ static GRX_Result emit_capture_reset(
 
   uint32_t low = GRX_INDEX_NONE;
   uint32_t high = 0;
-  capture_span(codegen->ir, body, &low, &high);
+  GRX_Result spanned = capture_span(codegen, body, &low, &high);
+  if (spanned != GRX_OK) {
+    return fail(codegen, GRX_DIAG_OUT_OF_MEMORY, node);
+  }
   if (low == GRX_INDEX_NONE || high <= low) {
     return GRX_OK;
   }
@@ -353,7 +486,10 @@ static GRX_Result emit_capture_reset_late(
 
   uint32_t low = GRX_INDEX_NONE;
   uint32_t high = 0;
-  capture_span(codegen->ir, body, &low, &high);
+  GRX_Result spanned = capture_span(codegen, body, &low, &high);
+  if (spanned != GRX_OK) {
+    return fail(codegen, GRX_DIAG_OUT_OF_MEMORY, node);
+  }
   if (low == GRX_INDEX_NONE || high <= low) {
     return GRX_OK;
   }
@@ -369,59 +505,91 @@ static GRX_Result emit_capture_reset_late(
 }
 
 /** Generate a concatenation, in reading order or against it. */
-static GRX_Result gen_concat(Codegen * codegen, const GRX_IRNode * node) {
-  if (!reversed(codegen, node)) {
-    for (uint32_t child = node->first_child; child != GRX_INDEX_NONE;) {
+static GRX_Result gen_concat_step(Codegen * codegen, GenFrame * frame,
+    const GRX_IRNode * node, GenAction * action, uint32_t * out_child) {
+  switch (frame->stage) {
+    case 0:
+      frame->u.list.child = node->first_child;
+      frame->stage = reversed(codegen, node) ? 10 : 1;
+      *action = GEN_AGAIN;
+      return GRX_OK;
+
+    // In reading order.
+    case 1: {
+      uint32_t child = frame->u.list.child;
+      if (child == GRX_INDEX_NONE) {
+        return GRX_OK;
+      }
       const GRX_IRNode * child_node = grx_ir_node(codegen->ir, child);
       if (!child_node) {
         return fail(codegen, GRX_DIAG_INTERNAL, node);
       }
-      uint32_t next = child_node->next_sibling;
-      int outer_tail = codegen->forward_tail;
-      if (next != GRX_INDEX_NONE) {
+      frame->u.list.next = child_node->next_sibling;
+      if (frame->u.list.next != GRX_INDEX_NONE) {
         codegen->forward_tail = 0;
       }
-      GRX_Result result = gen(codegen, child);
-      codegen->forward_tail = outer_tail;
-      if (result != GRX_OK) {
-        return result;
-      }
-      child = next;
+      frame->stage = 2;
+      *action = GEN_DESCEND;
+      *out_child = child;
+      return GRX_OK;
     }
-    return GRX_OK;
-  }
 
-  // Backwards. The child list is singly linked, so the order is recovered by
-  // counting and then walking to the nth child - which is quadratic in the
-  // number of children and confined to lookbehind bodies, where the count is
-  // small and the alternative is a second link field on every node in every
-  // pattern.
-  uint32_t count = 0;
-  for (uint32_t child = node->first_child; child != GRX_INDEX_NONE;) {
-    const GRX_IRNode * child_node = grx_ir_node(codegen->ir, child);
-    if (!child_node) {
+    case 2:
+      frame->u.list.child = frame->u.list.next;
+      frame->stage = 1;
+      *action = GEN_AGAIN;
+      return GRX_OK;
+
+    // Backwards. The child list is singly linked, so the order is recovered
+    // by counting and then walking to the nth child - which is quadratic in
+    // the number of children and confined to lookbehind bodies, where the
+    // count is small and the alternative is a second link field on every node
+    // in every pattern.
+    case 10: {
+      uint32_t count = 0;
+      for (uint32_t child = node->first_child; child != GRX_INDEX_NONE;) {
+        const GRX_IRNode * child_node = grx_ir_node(codegen->ir, child);
+        if (!child_node) {
+          return fail(codegen, GRX_DIAG_INTERNAL, node);
+        }
+        count++;
+        child = child_node->next_sibling;
+      }
+      frame->u.list.count = count;
+      frame->stage = 11;
+      *action = GEN_AGAIN;
+      return GRX_OK;
+    }
+
+    // `count` counts down from here: it is the `i` of the loop this was.
+    case 11: {
+      uint32_t i = frame->u.list.count;
+      if (!i) {
+        return GRX_OK;
+      }
+      uint32_t child = node->first_child;
+      for (uint32_t step = 1; step < i; step++) {
+        const GRX_IRNode * child_node = grx_ir_node(codegen->ir, child);
+        if (!child_node) {
+          return fail(codegen, GRX_DIAG_INTERNAL, node);
+        }
+        child = child_node->next_sibling;
+      }
+      frame->stage = 12;
+      *action = GEN_DESCEND;
+      *out_child = child;
+      return GRX_OK;
+    }
+
+    case 12:
+      frame->u.list.count--;
+      frame->stage = 11;
+      *action = GEN_AGAIN;
+      return GRX_OK;
+
+    default:
       return fail(codegen, GRX_DIAG_INTERNAL, node);
-    }
-    count++;
-    child = child_node->next_sibling;
   }
-
-  for (uint32_t i = count; i > 0; i--) {
-    uint32_t child = node->first_child;
-    for (uint32_t step = 1; step < i; step++) {
-      const GRX_IRNode * child_node = grx_ir_node(codegen->ir, child);
-      if (!child_node) {
-        return fail(codegen, GRX_DIAG_INTERNAL, node);
-      }
-      child = child_node->next_sibling;
-    }
-    GRX_Result result = gen(codegen, child);
-    if (result != GRX_OK) {
-      return result;
-    }
-  }
-
-  return GRX_OK;
 }
 
 /**
@@ -493,69 +661,103 @@ static GRX_Result gen_length_guard(
       codegen, GRX_OP_ASSERT, GRX_ASSERT_LOOK_LENGTH, offset, 0, node, NULL);
 }
 
-static GRX_Result gen_alternate(Codegen * codegen, const GRX_IRNode * node) {
-  uint32_t child = node->first_child;
-  if (child == GRX_INDEX_NONE) {
-    return GRX_OK;
-  }
-  const GRX_IRNode * first = grx_ir_node(codegen->ir, child);
-  if (first && first->next_sibling == GRX_INDEX_NONE) {
-    return gen(codegen, child); // One branch is not a choice.
-  }
-
-  uint32_t stub = GRX_INDEX_NONE;
-  GRX_Result result = emit_trampoline(codegen, node, &stub);
-  if (result != GRX_OK) {
-    return result;
-  }
-
-  for (;;) {
-    const GRX_IRNode * child_node = grx_ir_node(codegen->ir, child);
-    if (!child_node) {
-      return fail(codegen, GRX_DIAG_INTERNAL, node);
-    }
-    uint32_t next = child_node->next_sibling;
-
-    if (next == GRX_INDEX_NONE) {
-      result = gen_length_guard(codegen, node, child);
-      if (result == GRX_OK) {
-        result = gen(codegen, child);
+static GRX_Result gen_alternate_step(Codegen * codegen, GenFrame * frame,
+    const GRX_IRNode * node, GenAction * action, uint32_t * out_child) {
+  switch (frame->stage) {
+    case 0: {
+      uint32_t child = node->first_child;
+      if (child == GRX_INDEX_NONE) {
+        return GRX_OK;
       }
+      const GRX_IRNode * first = grx_ir_node(codegen->ir, child);
+      if (first && first->next_sibling == GRX_INDEX_NONE) {
+        frame->stage = 5; // One branch is not a choice.
+        *action = GEN_DESCEND;
+        *out_child = child;
+        return GRX_OK;
+      }
+
+      uint32_t stub = GRX_INDEX_NONE;
+      GRX_Result result = emit_trampoline(codegen, node, &stub);
       if (result != GRX_OK) {
         return result;
       }
-      break;
+      frame->u.alternate.stub = stub;
+      frame->u.alternate.child = child;
+      frame->stage = 1;
+      *action = GEN_AGAIN;
+      return GRX_OK;
     }
 
-    uint32_t split = GRX_INDEX_NONE;
-    result = emit(codegen, GRX_OP_SPLIT, 0, 0, 0, node, &split);
-    if (result != GRX_OK) {
-      return result;
-    }
-    // Marked, so that `(*THEN)` can tell this SPLIT from a quantifier's.
-    GRX_Inst * marked = grx_program_at(codegen->program, split);
-    if (marked) {
-      marked->flags |= GRX_INST_ALTERNATION;
-    }
-    patch_x(codegen, split, here(codegen));
+    case 1: {
+      uint32_t child = frame->u.alternate.child;
+      const GRX_IRNode * child_node = grx_ir_node(codegen->ir, child);
+      if (!child_node) {
+        return fail(codegen, GRX_DIAG_INTERNAL, node);
+      }
 
-    result = gen_length_guard(codegen, node, child);
-    if (result == GRX_OK) {
-      result = gen(codegen, child);
-    }
-    if (result == GRX_OK) {
-      result = emit(codegen, GRX_OP_JMP, 0, stub, 0, node, NULL);
-    }
-    if (result != GRX_OK) {
-      return result;
+      if (child_node->next_sibling == GRX_INDEX_NONE) {
+        GRX_Result result = gen_length_guard(codegen, node, child);
+        if (result != GRX_OK) {
+          return result;
+        }
+        frame->stage = 3;
+        *action = GEN_DESCEND;
+        *out_child = child;
+        return GRX_OK;
+      }
+
+      uint32_t split = GRX_INDEX_NONE;
+      GRX_Result result = emit(codegen, GRX_OP_SPLIT, 0, 0, 0, node, &split);
+      if (result != GRX_OK) {
+        return result;
+      }
+      // Marked, so that `(*THEN)` can tell this SPLIT from a quantifier's.
+      GRX_Inst * marked = grx_program_at(codegen->program, split);
+      if (marked) {
+        marked->flags |= GRX_INST_ALTERNATION;
+      }
+      patch_x(codegen, split, here(codegen));
+
+      result = gen_length_guard(codegen, node, child);
+      if (result != GRX_OK) {
+        return result;
+      }
+      frame->u.alternate.split = split;
+      frame->stage = 2;
+      *action = GEN_DESCEND;
+      *out_child = child;
+      return GRX_OK;
     }
 
-    patch_y(codegen, split, here(codegen));
-    child = next;
+    case 2: {
+      const GRX_IRNode * child_node
+          = grx_ir_node(codegen->ir, frame->u.alternate.child);
+      if (!child_node) {
+        return fail(codegen, GRX_DIAG_INTERNAL, node);
+      }
+      GRX_Result result = emit(
+          codegen, GRX_OP_JMP, 0, frame->u.alternate.stub, 0, node, NULL);
+      if (result != GRX_OK) {
+        return result;
+      }
+      patch_y(codegen, frame->u.alternate.split, here(codegen));
+      frame->u.alternate.child = child_node->next_sibling;
+      frame->stage = 1;
+      *action = GEN_AGAIN;
+      return GRX_OK;
+    }
+
+    case 3:
+      patch_x(codegen, frame->u.alternate.stub, here(codegen));
+      return GRX_OK;
+
+    case 5:
+      return GRX_OK;
+
+    default:
+      return fail(codegen, GRX_DIAG_INTERNAL, node);
   }
-
-  patch_x(codegen, stub, here(codegen));
-  return GRX_OK;
 }
 
 /**
@@ -735,7 +937,19 @@ static GRX_Result gen_fold_run(Codegen * codegen, const GRX_IRNode * node) {
 }
 
 /**
- * Generate one unbounded repetition of a body, with its loop guard.
+ * Generate a repetition: the mandatory copies, then a loop or an expansion.
+ *
+ * A counted repetition is laid out by expansion:
+ *
+ *     <body> * min
+ *     then, for each optional copy:  split body, trampoline
+ *
+ * The optional copies chain rather than nest, with every exit landing on one
+ * trampoline, so `a{0,3}` can stop after any number of them and the number of
+ * them is bounded only by `max_program_size`.
+ *
+ * An unbounded one is a loop instead - stages 10 and 11, which is what
+ * gen_star() was:
  *
  *     top:   split body, exit        (arms swapped when lazy)
  *     body:  progress_set r
@@ -749,237 +963,304 @@ static GRX_Result gen_fold_run(Codegen * codegen, const GRX_IRNode * node) {
  * "b" loops forever in a backtracker and reports the wrong capture in a Pike
  * VM; with them, ECMAScript's "an iteration that consumed nothing fails" and
  * Perl's "it succeeds and the loop stops" are one instruction with two modes.
- */
-static GRX_Result gen_star(Codegen * codegen, const GRX_IRNode * node,
-    uint32_t body_index, uint32_t given_reg, int have_given) {
-  int lazy = node->mode == GRX_REPEAT_LAZY;
-
-  // A body that cannot match the empty string cannot stall, so it needs no
-  // guard. Emitting one anyway would be two dead instructions per loop and -
-  // the reason this is a decision rather than a tidy-up - would make the
-  // program unmemoizable: a progress register is history the bit-state
-  // engine's (pc, position) key does not capture.
-  int guard = grx_ir_can_match_empty(codegen->ir, body_index);
-  // The late capture reset wants the same number the guard wants - where
-  // this iteration began - so one register serves both, and a loop that
-  // needs only the reset still gets one.
-  int late = resets_captures_late(codegen, node);
-  // The caller hands the register down when it had to allocate the pair
-  // itself; see gen_repeat_body(), and GRX_EMPTY_LOOP_BREAK_FIRST below.
-  uint32_t reg = have_given ? given_reg
-      : (guard || late)     ? codegen->registers++
-                            : 0;
-
-  uint32_t top = here(codegen);
-  uint32_t split = GRX_INDEX_NONE;
-  GRX_Result result = emit(codegen, GRX_OP_SPLIT, 0, 0, 0, node, &split);
-  if (result != GRX_OK) {
-    return result;
-  }
-
-  uint32_t body_start = here(codegen);
-  result = GRX_OK;
-  if (guard || late) {
-    result = emit(codegen, GRX_OP_PROGRESS_SET, 0, reg, 0, node, NULL);
-  }
-  if (result == GRX_OK) {
-    result = emit_capture_reset(codegen, node, body_index);
-  }
-  if (result == GRX_OK) {
-    result = gen(codegen, body_index);
-  }
-  // Before the check, because the check is what leaves the loop: an
-  // iteration that ends by exiting has still ended.
-  if (result == GRX_OK) {
-    result = emit_capture_reset_late(codegen, node, body_index, reg);
-  }
-  uint32_t check = GRX_INDEX_NONE;
-  if (result == GRX_OK && guard) {
-    result = emit(codegen, GRX_OP_PROGRESS_CHECK, node->empty_loop, reg, 0,
-        node, &check);
-  }
-  if (result == GRX_OK) {
-    result = emit(codegen, GRX_OP_JMP, 0, top, 0, node, NULL);
-  }
-  if (result != GRX_OK) {
-    return result;
-  }
-
-  uint32_t exit_target = here(codegen);
-  if (guard) {
-    patch_y(codegen, check, exit_target);
-  }
-  if (lazy) {
-    patch_x(codegen, split, exit_target);
-    patch_y(codegen, split, body_start);
-  }
-  else {
-    patch_x(codegen, split, body_start);
-    patch_y(codegen, split, exit_target);
-  }
-
-  return GRX_OK;
-}
-
-/**
- * Generate a counted repetition by expansion.
  *
- *     <body> * min
- *     then, for each optional copy:  split body, trampoline
- *
- * The optional copies chain rather than nest, with every exit landing on one
- * trampoline, so `a{0,3}` can stop after any number of them and the number
- * of them is bounded only by `max_program_size`.
+ * The three functions this was - gen_repeat(), gen_repeat_body() and
+ * gen_star() - are one frame here because they were never three levels of
+ * anything: each called the next once, at its end, so they cost three C
+ * frames per IR level to express one decision. Which is a third of the four
+ * frames a level cost, and the reason a level now costs none.
  */
-static GRX_Result gen_repeat_body(Codegen * codegen, const GRX_IRNode * node,
-    uint32_t body, int lazy);
+static GRX_Result gen_repeat_step(Codegen * codegen, GenFrame * frame,
+    const GRX_IRNode * node, GenAction * action, uint32_t * out_child) {
+  switch (frame->stage) {
+    case 0: {
+      uint32_t body = node->first_child;
+      if (body == GRX_INDEX_NONE) {
+        return fail(codegen, GRX_DIAG_INTERNAL, node);
+      }
+      frame->u.repeat.body = body;
+      frame->u.repeat.lazy = (node->mode == GRX_REPEAT_LAZY) ? 1u : 0u;
+      // One iteration can be followed by another, so nothing inside a repeat
+      // is the tail of the body - except a repeat of exactly one, which is
+      // not a loop at all. `(?<=(a|aa){2})` is the case: the first `a|aa` has
+      // a second one after it, and a guard there would ask one iteration to
+      // span both. Re-applied before every descent below rather than set
+      // once, because the driver puts `forward_tail` back between children.
+      frame->u.repeat.clears_tail
+          = (node->min != 1 || node->max != 1) ? 1u : 0u;
+      // The mandatory copies need the register too: `((?(2)x|y)(a)){2}` is
+      // the same question as the unbounded form, asked twice.
+      frame->u.repeat.late = resets_captures_late(codegen, node) ? 1u : 0u;
+      frame->u.repeat.late_reg
+          = frame->u.repeat.late ? codegen->registers++ : 0;
 
-static GRX_Result gen_repeat(Codegen * codegen, const GRX_IRNode * node) {
-  uint32_t body = node->first_child;
-  if (body == GRX_INDEX_NONE) {
-    return fail(codegen, GRX_DIAG_INTERNAL, node);
+      /*
+       * GRX_EMPTY_LOOP_BREAK_FIRST needs a second number: the position the
+       * whole repeat began at, as against the position this iteration began
+       * at.
+       *
+       * "The whole repeat" and not "the optional tail", which is the
+       * distinction `(b+|(c)*)+` against "b" turns on. Its mandatory copy
+       * consumes the `b`, and if the tail counted as the loop then its first
+       * iteration would be the loop's first and would take the empty
+       * alternative - reporting group 1 as 1-1 where glibc and musl both say
+       * 0-1. So the register is set here, before the mandatory copies run,
+       * and the empty iteration is allowed only while the repeat as a whole
+       * has consumed nothing.
+       *
+       * The pair is allocated together and used as `reg` and `reg - 1`,
+       * because GRX_Inst has two operands and the check has spent both.
+       * Allocating them here is what makes them adjacent: a nested loop
+       * inside a mandatory copy would otherwise take a number between them.
+       */
+      frame->u.repeat.empty_first
+          = (node->empty_loop == GRX_EMPTY_LOOP_BREAK_FIRST
+                && grx_ir_can_match_empty(codegen->ir, body))
+          ? 1u
+          : 0u;
+      frame->u.repeat.pair_reg = 0;
+      frame->u.repeat.i = 0;
+      frame->stage = 1;
+      *action = GEN_AGAIN;
+      if (frame->u.repeat.empty_first) {
+        codegen->registers++;             // the entry register, at reg - 1
+        frame->u.repeat.pair_reg = codegen->registers++;
+        return emit(codegen, GRX_OP_PROGRESS_SET, 0,
+            frame->u.repeat.pair_reg - 1, 0, node, NULL);
+      }
+      return GRX_OK;
+    }
+
+    // One mandatory copy per iteration of this stage pair.
+    case 1: {
+      if (frame->u.repeat.i >= node->min) {
+        frame->stage = 3;
+        *action = GEN_AGAIN;
+        return GRX_OK;
+      }
+      GRX_Result result = GRX_OK;
+      if (frame->u.repeat.late) {
+        result = emit(codegen, GRX_OP_PROGRESS_SET, 0,
+            frame->u.repeat.late_reg, 0, node, NULL);
+      }
+      if (result == GRX_OK) {
+        result = emit_capture_reset(codegen, node, frame->u.repeat.body);
+      }
+      if (result != GRX_OK) {
+        return result;
+      }
+      if (frame->u.repeat.clears_tail) {
+        codegen->forward_tail = 0;
+      }
+      frame->stage = 2;
+      *action = GEN_DESCEND;
+      *out_child = frame->u.repeat.body;
+      return GRX_OK;
+    }
+
+    case 2: {
+      GRX_Result result = emit_capture_reset_late(
+          codegen, node, frame->u.repeat.body, frame->u.repeat.late_reg);
+      if (result != GRX_OK) {
+        return result;
+      }
+      frame->u.repeat.i++;
+      frame->stage = 1;
+      *action = GEN_AGAIN;
+      return GRX_OK;
+    }
+
+    // The mandatory copies are done. Either a loop, or the optional copies.
+    case 3: {
+      if (node->max == GRX_REPEAT_INF) {
+        frame->stage = 10;
+        *action = GEN_AGAIN;
+        return GRX_OK;
+      }
+
+      uint32_t optional = node->max - node->min;
+      if (!optional) {
+        return GRX_OK;
+      }
+
+      uint32_t stub = GRX_INDEX_NONE;
+      GRX_Result result = emit_trampoline(codegen, node, &stub);
+      if (result != GRX_OK) {
+        return result;
+      }
+      frame->u.repeat.stub = stub;
+      frame->u.repeat.optional = optional;
+
+      // One register for the whole expansion. Each copy sets it immediately
+      // before its body and checks it immediately after, and a thread meets
+      // those in that order, so the copies cannot tread on each other. A body
+      // that cannot match empty needs none of it; see stage 10.
+      frame->u.repeat.guard
+          = grx_ir_can_match_empty(codegen->ir, frame->u.repeat.body) ? 1u
+                                                                     : 0u;
+      frame->u.repeat.reg = frame->u.repeat.empty_first
+          ? frame->u.repeat.pair_reg
+          : frame->u.repeat.guard ? codegen->registers++
+                                  : frame->u.repeat.late_reg;
+      frame->u.repeat.i = 0;
+      frame->stage = 4;
+      *action = GEN_AGAIN;
+      return GRX_OK;
+    }
+
+    case 4: {
+      if (frame->u.repeat.i >= frame->u.repeat.optional) {
+        frame->stage = 6;
+        *action = GEN_AGAIN;
+        return GRX_OK;
+      }
+
+      uint32_t split = GRX_INDEX_NONE;
+      GRX_Result result = emit(codegen, GRX_OP_SPLIT, 0, 0, 0, node, &split);
+      if (result != GRX_OK) {
+        return result;
+      }
+      if (frame->u.repeat.lazy) {
+        patch_x(codegen, split, frame->u.repeat.stub);
+        patch_y(codegen, split, here(codegen));
+      }
+      else {
+        patch_x(codegen, split, here(codegen));
+        patch_y(codegen, split, frame->u.repeat.stub);
+      }
+
+      // The minimum is satisfied by the time an optional copy runs, so the
+      // dialect's empty-iteration rule applies to it exactly as it applies to
+      // an unbounded loop. ECMA-262 says so by passing min = 0 into the
+      // remaining RepeatMatcher; `(a|){1,2}` against "ab" is what tells the
+      // two apart, and the guard is why group 1 comes out as "a" rather than
+      // as the empty string the second iteration would have set it to.
+      result = GRX_OK;
+      if (frame->u.repeat.guard || frame->u.repeat.late) {
+        result = emit(codegen, GRX_OP_PROGRESS_SET, 0, frame->u.repeat.reg, 0,
+            node, NULL);
+      }
+      if (result == GRX_OK) {
+        result = emit_capture_reset(codegen, node, frame->u.repeat.body);
+      }
+      if (result != GRX_OK) {
+        return result;
+      }
+      if (frame->u.repeat.clears_tail) {
+        codegen->forward_tail = 0;
+      }
+      frame->stage = 5;
+      *action = GEN_DESCEND;
+      *out_child = frame->u.repeat.body;
+      return GRX_OK;
+    }
+
+    case 5: {
+      GRX_Result result = emit_capture_reset_late(
+          codegen, node, frame->u.repeat.body, frame->u.repeat.reg);
+      if (result == GRX_OK && frame->u.repeat.guard) {
+        result = emit(codegen, GRX_OP_PROGRESS_CHECK, node->empty_loop,
+            frame->u.repeat.reg, frame->u.repeat.stub, node, NULL);
+      }
+      if (result != GRX_OK) {
+        return result;
+      }
+      frame->u.repeat.i++;
+      frame->stage = 4;
+      *action = GEN_AGAIN;
+      return GRX_OK;
+    }
+
+    case 6:
+      patch_x(codegen, frame->u.repeat.stub, here(codegen));
+      return GRX_OK;
+
+    // The unbounded form: one copy of the body, inside a loop.
+    case 10: {
+      // A body that cannot match the empty string cannot stall, so it needs
+      // no guard. Emitting one anyway would be two dead instructions per loop
+      // and - the reason this is a decision rather than a tidy-up - would
+      // make the program unmemoizable: a progress register is history the
+      // bit-state engine's (pc, position) key does not capture.
+      frame->u.repeat.guard
+          = grx_ir_can_match_empty(codegen->ir, frame->u.repeat.body) ? 1u
+                                                                     : 0u;
+      // The late capture reset wants the same number the guard wants - where
+      // this iteration began - so one register serves both, and a loop that
+      // needs only the reset still gets one. `empty_first` hands its own
+      // pair's second register down instead, having had to allocate the pair
+      // before the mandatory copies; see stage 0.
+      frame->u.repeat.reg = frame->u.repeat.empty_first
+          ? frame->u.repeat.pair_reg
+          : (frame->u.repeat.guard || frame->u.repeat.late)
+              ? codegen->registers++
+              : 0;
+
+      frame->u.repeat.top = here(codegen);
+      uint32_t split = GRX_INDEX_NONE;
+      GRX_Result result = emit(codegen, GRX_OP_SPLIT, 0, 0, 0, node, &split);
+      if (result != GRX_OK) {
+        return result;
+      }
+      frame->u.repeat.split = split;
+      frame->u.repeat.body_start = here(codegen);
+
+      result = GRX_OK;
+      if (frame->u.repeat.guard || frame->u.repeat.late) {
+        result = emit(codegen, GRX_OP_PROGRESS_SET, 0, frame->u.repeat.reg, 0,
+            node, NULL);
+      }
+      if (result == GRX_OK) {
+        result = emit_capture_reset(codegen, node, frame->u.repeat.body);
+      }
+      if (result != GRX_OK) {
+        return result;
+      }
+      if (frame->u.repeat.clears_tail) {
+        codegen->forward_tail = 0;
+      }
+      frame->stage = 11;
+      *action = GEN_DESCEND;
+      *out_child = frame->u.repeat.body;
+      return GRX_OK;
+    }
+
+    case 11: {
+      // Before the check, because the check is what leaves the loop: an
+      // iteration that ends by exiting has still ended.
+      GRX_Result result = emit_capture_reset_late(
+          codegen, node, frame->u.repeat.body, frame->u.repeat.reg);
+      uint32_t check = GRX_INDEX_NONE;
+      if (result == GRX_OK && frame->u.repeat.guard) {
+        result = emit(codegen, GRX_OP_PROGRESS_CHECK, node->empty_loop,
+            frame->u.repeat.reg, 0, node, &check);
+      }
+      if (result == GRX_OK) {
+        result = emit(
+            codegen, GRX_OP_JMP, 0, frame->u.repeat.top, 0, node, NULL);
+      }
+      if (result != GRX_OK) {
+        return result;
+      }
+
+      uint32_t exit_target = here(codegen);
+      if (frame->u.repeat.guard) {
+        patch_y(codegen, check, exit_target);
+      }
+      if (frame->u.repeat.lazy) {
+        patch_x(codegen, frame->u.repeat.split, exit_target);
+        patch_y(codegen, frame->u.repeat.split, frame->u.repeat.body_start);
+      }
+      else {
+        patch_x(codegen, frame->u.repeat.split, frame->u.repeat.body_start);
+        patch_y(codegen, frame->u.repeat.split, exit_target);
+      }
+      return GRX_OK;
+    }
+
+    default:
+      return fail(codegen, GRX_DIAG_INTERNAL, node);
   }
-
-  int lazy = node->mode == GRX_REPEAT_LAZY;
-  // One iteration can be followed by another, so nothing inside a repeat is
-  // the tail of the body - except a repeat of exactly one, which is not a
-  // loop at all. `(?<=(a|aa){2})` is the case: the first `a|aa` has a second
-  // one after it, and a guard there would ask one iteration to span both.
-  int outer_tail = codegen->forward_tail;
-  if (node->min != 1 || node->max != 1) {
-    codegen->forward_tail = 0;
-  }
-  GRX_Result repeated = gen_repeat_body(codegen, node, body, lazy);
-  codegen->forward_tail = outer_tail;
-  return repeated;
-}
-
-static GRX_Result gen_repeat_body(Codegen * codegen, const GRX_IRNode * node,
-    uint32_t body, int lazy) {
-
-  // The mandatory copies need the register too: `((?(2)x|y)(a)){2}` is the
-  // same question as the unbounded form, asked twice.
-  int late = resets_captures_late(codegen, node);
-  uint32_t late_reg = late ? codegen->registers++ : 0;
-
-  /*
-   * GRX_EMPTY_LOOP_BREAK_FIRST needs a second number: the position the whole
-   * repeat began at, as against the position this iteration began at.
-   *
-   * "The whole repeat" and not "the optional tail", which is the distinction
-   * `(b+|(c)*)+` against "b" turns on. Its mandatory copy consumes the `b`,
-   * and if the tail counted as the loop then its first iteration would be
-   * the loop's first and would take the empty alternative - reporting group
-   * 1 as 1-1 where glibc and musl both say 0-1. So the register is set here,
-   * before the mandatory copies run, and the empty iteration is allowed only
-   * while the repeat as a whole has consumed nothing.
-   *
-   * The pair is allocated together and used as `reg` and `reg - 1`, because
-   * GRX_Inst has two operands and the check has spent both. Allocating them
-   * here is what makes them adjacent: a nested loop inside a mandatory copy
-   * would otherwise take a number between them.
-   */
-  int empty_first = node->empty_loop == GRX_EMPTY_LOOP_BREAK_FIRST
-      && grx_ir_can_match_empty(codegen->ir, body);
-  uint32_t pair_reg = 0;
-  if (empty_first) {
-    codegen->registers++;             // the entry register, at pair_reg - 1
-    pair_reg = codegen->registers++;  // the per-iteration register
-    GRX_Result entry = emit(
-        codegen, GRX_OP_PROGRESS_SET, 0, pair_reg - 1, 0, node, NULL);
-    if (entry != GRX_OK) {
-      return entry;
-    }
-  }
-
-  for (uint32_t i = 0; i < node->min; i++) {
-    GRX_Result result = GRX_OK;
-    if (late) {
-      result = emit(codegen, GRX_OP_PROGRESS_SET, 0, late_reg, 0, node, NULL);
-    }
-    if (result == GRX_OK) {
-      result = emit_capture_reset(codegen, node, body);
-    }
-    if (result == GRX_OK) {
-      result = gen(codegen, body);
-    }
-    if (result == GRX_OK) {
-      result = emit_capture_reset_late(codegen, node, body, late_reg);
-    }
-    if (result != GRX_OK) {
-      return result;
-    }
-  }
-
-  if (node->max == GRX_REPEAT_INF) {
-    return gen_star(codegen, node, body, pair_reg, empty_first);
-  }
-
-  uint32_t optional = node->max - node->min;
-  if (!optional) {
-    return GRX_OK;
-  }
-
-  uint32_t stub = GRX_INDEX_NONE;
-  GRX_Result result = emit_trampoline(codegen, node, &stub);
-  if (result != GRX_OK) {
-    return result;
-  }
-
-  // One register for the whole expansion. Each copy sets it immediately
-  // before its body and checks it immediately after, and a thread meets those
-  // in that order, so the copies cannot tread on each other. A body that
-  // cannot match empty needs none of it; see gen_star().
-  int guard = grx_ir_can_match_empty(codegen->ir, body);
-  uint32_t reg = empty_first  ? pair_reg
-      : guard                 ? codegen->registers++
-                              : late_reg;
-
-  for (uint32_t i = 0; i < optional; i++) {
-    uint32_t split = GRX_INDEX_NONE;
-    result = emit(codegen, GRX_OP_SPLIT, 0, 0, 0, node, &split);
-    if (result != GRX_OK) {
-      return result;
-    }
-    if (lazy) {
-      patch_x(codegen, split, stub);
-      patch_y(codegen, split, here(codegen));
-    }
-    else {
-      patch_x(codegen, split, here(codegen));
-      patch_y(codegen, split, stub);
-    }
-
-    // The minimum is satisfied by the time an optional copy runs, so the
-    // dialect's empty-iteration rule applies to it exactly as it applies to
-    // an unbounded loop. ECMA-262 says so by passing min = 0 into the
-    // remaining RepeatMatcher; `(a|){1,2}` against "ab" is what tells the
-    // two apart, and the guard is why group 1 comes out as "a" rather than
-    // as the empty string the second iteration would have set it to.
-    result = GRX_OK;
-    if (guard || late) {
-      result = emit(codegen, GRX_OP_PROGRESS_SET, 0, reg, 0, node, NULL);
-    }
-    if (result == GRX_OK) {
-      result = emit_capture_reset(codegen, node, body);
-    }
-    if (result == GRX_OK) {
-      result = gen(codegen, body);
-    }
-    if (result == GRX_OK) {
-      result = emit_capture_reset_late(codegen, node, body, reg);
-    }
-    if (result == GRX_OK && guard) {
-      result = emit(codegen, GRX_OP_PROGRESS_CHECK, node->empty_loop, reg,
-          stub, node, NULL);
-    }
-    if (result != GRX_OK) {
-      return result;
-    }
-  }
-
-  patch_x(codegen, stub, here(codegen));
-  return GRX_OK;
 }
 
 /** Generate a lookaround: a sub-program run without consuming input. */
@@ -1009,64 +1290,86 @@ static GRX_Result gen_repeat_body(Codegen * codegen, const GRX_IRNode * node,
  * Two instructions, against a whole second copy of the assertion's body
  * under the rewrite this replaces.
  */
-static GRX_Result gen_cond_assertion(
-    Codegen * codegen, const GRX_IRNode * node) {
-  uint32_t condition = node->first_child;
-  const GRX_IRNode * look = grx_ir_node(codegen->ir, condition);
-  if (!look || look->kind != GRX_IR_LOOK) {
-    return fail(codegen, GRX_DIAG_INTERNAL, node);
-  }
+static GRX_Result gen_cond_assertion_step(Codegen * codegen,
+    GenFrame * frame, const GRX_IRNode * node, GenAction * action,
+    uint32_t * out_child) {
+  switch (frame->stage) {
+    case 20: {
+      uint32_t condition = node->first_child;
+      const GRX_IRNode * look = grx_ir_node(codegen->ir, condition);
+      if (!look || look->kind != GRX_IR_LOOK) {
+        return fail(codegen, GRX_DIAG_INTERNAL, node);
+      }
+      frame->u.cond.yes = look->next_sibling;
 
-  // gen() on the condition emits the LOOK, its body and the body's MATCH,
-  // and patches the LOOK's `y` to here - so after it, `here()` is the
-  // first of the two jumps. Emitting it through gen() rather than by hand
-  // is what keeps a conditional's assertion the same assertion as any
-  // other: the span, the capture rules and the two lookbehind models are
-  // gen_look()'s, not a second copy of them.
-  GRX_Result result = gen(codegen, condition);
-  if (result != GRX_OK) {
-    return result;
-  }
-
-  uint32_t held = GRX_INDEX_NONE;
-  result = emit(codegen, GRX_OP_JMP, 0, 0, 0, node, &held);
-  if (result != GRX_OK) {
-    return result;
-  }
-  uint32_t missed = GRX_INDEX_NONE;
-  result = emit(codegen, GRX_OP_JMP, 0, 0, 0, node, &missed);
-  if (result != GRX_OK) {
-    return result;
-  }
-
-  uint32_t yes = look->next_sibling;
-  uint32_t no = GRX_INDEX_NONE;
-  patch_x(codegen, held, here(codegen));
-  if (yes != GRX_INDEX_NONE) {
-    const GRX_IRNode * taken = grx_ir_node(codegen->ir, yes);
-    no = taken ? taken->next_sibling : GRX_INDEX_NONE;
-    result = gen(codegen, yes);
-    if (result != GRX_OK) {
-      return result;
+      // Descending on the condition emits the LOOK, its body and the body's
+      // MATCH, and patches the LOOK's `y` to here - so on the way back,
+      // `here()` is the first of the two jumps. Going through the ordinary
+      // generator rather than by hand is what keeps a conditional's assertion
+      // the same assertion as any other: the span, the capture rules and the
+      // two lookbehind models are gen_look_step()'s, not a second copy of
+      // them.
+      frame->stage = 21;
+      *action = GEN_DESCEND;
+      *out_child = condition;
+      return GRX_OK;
     }
-  }
 
-  uint32_t skip = GRX_INDEX_NONE;
-  result = emit(codegen, GRX_OP_JMP, 0, 0, 0, node, &skip);
-  if (result != GRX_OK) {
-    return result;
-  }
+    case 21: {
+      uint32_t held = GRX_INDEX_NONE;
+      GRX_Result result = emit(codegen, GRX_OP_JMP, 0, 0, 0, node, &held);
+      if (result != GRX_OK) {
+        return result;
+      }
+      uint32_t missed = GRX_INDEX_NONE;
+      result = emit(codegen, GRX_OP_JMP, 0, 0, 0, node, &missed);
+      if (result != GRX_OK) {
+        return result;
+      }
+      frame->u.cond.held = held;
+      frame->u.cond.missed = missed;
+      frame->u.cond.no = GRX_INDEX_NONE;
 
-  patch_x(codegen, missed, here(codegen));
-  if (no != GRX_INDEX_NONE) {
-    result = gen(codegen, no);
-    if (result != GRX_OK) {
-      return result;
+      patch_x(codegen, held, here(codegen));
+      frame->stage = 22;
+      if (frame->u.cond.yes != GRX_INDEX_NONE) {
+        const GRX_IRNode * taken
+            = grx_ir_node(codegen->ir, frame->u.cond.yes);
+        frame->u.cond.no = taken ? taken->next_sibling : GRX_INDEX_NONE;
+        *action = GEN_DESCEND;
+        *out_child = frame->u.cond.yes;
+        return GRX_OK;
+      }
+      *action = GEN_AGAIN;
+      return GRX_OK;
     }
-  }
 
-  patch_x(codegen, skip, here(codegen));
-  return GRX_OK;
+    case 22: {
+      uint32_t skip = GRX_INDEX_NONE;
+      GRX_Result result = emit(codegen, GRX_OP_JMP, 0, 0, 0, node, &skip);
+      if (result != GRX_OK) {
+        return result;
+      }
+      frame->u.cond.skip = skip;
+
+      patch_x(codegen, frame->u.cond.missed, here(codegen));
+      frame->stage = 23;
+      if (frame->u.cond.no != GRX_INDEX_NONE) {
+        *action = GEN_DESCEND;
+        *out_child = frame->u.cond.no;
+        return GRX_OK;
+      }
+      *action = GEN_AGAIN;
+      return GRX_OK;
+    }
+
+    case 23:
+      patch_x(codegen, frame->u.cond.skip, here(codegen));
+      return GRX_OK;
+
+    default:
+      return fail(codegen, GRX_DIAG_INTERNAL, node);
+  }
 }
 
 /**
@@ -1088,64 +1391,85 @@ static GRX_Result gen_cond_assertion(
 static GRX_Result copy_group_list(Codegen * codegen, const GRX_IRNode * node,
     uint32_t ir_list, uint32_t * out_offset);
 
-static GRX_Result gen_cond(Codegen * codegen, const GRX_IRNode * node) {
-  if (node->mode == GRX_COND_ASSERTION) {
-    return gen_cond_assertion(codegen, node);
+static GRX_Result gen_cond_step(Codegen * codegen, GenFrame * frame,
+    const GRX_IRNode * node, GenAction * action, uint32_t * out_child) {
+  if (frame->stage == 0 && node->mode == GRX_COND_ASSERTION) {
+    frame->stage = 20;
+  }
+  if (frame->stage >= 20) {
+    return gen_cond_assertion_step(codegen, frame, node, action, out_child);
   }
 
-  // `x` is the group, unless the name it was written with belongs to
-  // several - then it is a list of them and GRX_INST_AMBIGUOUS_REF says so,
-  // exactly as a backreference carries one, because the question is the
-  // same: which of the groups with that name is set when this runs.
-  uint32_t operand = node->a;
-  if (node->flags & GRX_IR_AMBIGUOUS_REF) {
-    GRX_Result listed = copy_group_list(codegen, node, node->b, &operand);
-    if (listed != GRX_OK) {
-      return listed;
+  switch (frame->stage) {
+    case 0: {
+      // `x` is the group, unless the name it was written with belongs to
+      // several - then it is a list of them and GRX_INST_AMBIGUOUS_REF says
+      // so, exactly as a backreference carries one, because the question is
+      // the same: which of the groups with that name is set when this runs.
+      uint32_t operand = node->a;
+      if (node->flags & GRX_IR_AMBIGUOUS_REF) {
+        GRX_Result listed = copy_group_list(codegen, node, node->b, &operand);
+        if (listed != GRX_OK) {
+          return listed;
+        }
+      }
+
+      uint32_t test = GRX_INDEX_NONE;
+      GRX_Result result
+          = emit(codegen, GRX_OP_COND, node->mode, operand, 0, node, &test);
+      if (result != GRX_OK) {
+        return result;
+      }
+      if (node->flags & GRX_IR_AMBIGUOUS_REF) {
+        GRX_Inst * inst
+            = GRX_ARENA_AT(GRX_Inst, &codegen->program->insts, test);
+        if (!inst) {
+          return fail(codegen, GRX_DIAG_INTERNAL, node);
+        }
+        inst->flags |= GRX_INST_AMBIGUOUS_REF;
+      }
+      frame->u.cond.test = test;
+      frame->u.cond.no = GRX_INDEX_NONE;
+
+      frame->stage = 1;
+      uint32_t yes = node->first_child;
+      if (yes != GRX_INDEX_NONE) {
+        const GRX_IRNode * taken = grx_ir_node(codegen->ir, yes);
+        frame->u.cond.no = taken ? taken->next_sibling : GRX_INDEX_NONE;
+        *action = GEN_DESCEND;
+        *out_child = yes;
+        return GRX_OK;
+      }
+      *action = GEN_AGAIN;
+      return GRX_OK;
     }
-  }
 
-  uint32_t test = GRX_INDEX_NONE;
-  GRX_Result result
-      = emit(codegen, GRX_OP_COND, node->mode, operand, 0, node, &test);
-  if (result != GRX_OK) {
-    return result;
-  }
-  if (node->flags & GRX_IR_AMBIGUOUS_REF) {
-    GRX_Inst * inst = GRX_ARENA_AT(GRX_Inst, &codegen->program->insts, test);
-    if (!inst) {
+    case 1: {
+      uint32_t skip = GRX_INDEX_NONE;
+      GRX_Result result = emit(codegen, GRX_OP_JMP, 0, 0, 0, node, &skip);
+      if (result != GRX_OK) {
+        return result;
+      }
+      frame->u.cond.skip = skip;
+
+      patch_y(codegen, frame->u.cond.test, here(codegen));
+      frame->stage = 2;
+      if (frame->u.cond.no != GRX_INDEX_NONE) {
+        *action = GEN_DESCEND;
+        *out_child = frame->u.cond.no;
+        return GRX_OK;
+      }
+      *action = GEN_AGAIN;
+      return GRX_OK;
+    }
+
+    case 2:
+      patch_x(codegen, frame->u.cond.skip, here(codegen));
+      return GRX_OK;
+
+    default:
       return fail(codegen, GRX_DIAG_INTERNAL, node);
-    }
-    inst->flags |= GRX_INST_AMBIGUOUS_REF;
   }
-
-  uint32_t yes = node->first_child;
-  uint32_t no = GRX_INDEX_NONE;
-  if (yes != GRX_INDEX_NONE) {
-    const GRX_IRNode * taken = grx_ir_node(codegen->ir, yes);
-    no = taken ? taken->next_sibling : GRX_INDEX_NONE;
-    result = gen(codegen, yes);
-    if (result != GRX_OK) {
-      return result;
-    }
-  }
-
-  uint32_t skip = GRX_INDEX_NONE;
-  result = emit(codegen, GRX_OP_JMP, 0, 0, 0, node, &skip);
-  if (result != GRX_OK) {
-    return result;
-  }
-
-  patch_y(codegen, test, here(codegen));
-  if (no != GRX_INDEX_NONE) {
-    result = gen(codegen, no);
-    if (result != GRX_OK) {
-      return result;
-    }
-  }
-
-  patch_x(codegen, skip, here(codegen));
-  return GRX_OK;
 }
 
 /**
@@ -1173,48 +1497,6 @@ static GRX_Result gen_call(Codegen * codegen, const GRX_IRNode * node) {
         node);
   }
   return GRX_OK;
-}
-
-/**
- * Emit a non-atomic lookaround: the body inline, and the position put back.
- *
- * The whole difference from gen_look() is that there is no sub-match. The
- * body's instructions are the outer program's, so the choice points it
- * leaves stay on the backtrack stack and can be returned to - which is what
- * "non-atomic" means. A register records where the body started and a REWIND
- * puts the position back, so the construct still consumes nothing.
- *
- * A non-atomic lookbehind needs nothing else: its body carries GRX_IR_REVERSE
- * already, so its instructions walk backwards and the REWIND undoes that the
- * same way.
- */
-static GRX_Result gen_non_atomic_look(
-    Codegen * codegen, const GRX_IRNode * node) {
-  uint32_t reg = codegen->registers++;
-  GRX_Result result
-      = emit(codegen, GRX_OP_PROGRESS_SET, 0, reg, 0, node, NULL);
-  if (result != GRX_OK) {
-    return result;
-  }
-
-  // Inlined into the caller's instructions, so a length guard here would be
-  // measuring the caller's distance against this body's alternatives. It is
-  // not the same assertion; it gets no guards.
-  int outer_body = codegen->forward_tail;
-  int outer_flip = codegen->flip;
-  codegen->forward_tail = 0;
-  // A lookaround sets its body's direction absolutely, so a subroutine
-  // block being laid out the other way round turns over everything except
-  // this. See the `flip` field.
-  codegen->flip = 0;
-  result = gen(codegen, node->first_child);
-  codegen->flip = outer_flip;
-  codegen->forward_tail = outer_body;
-  if (result != GRX_OK) {
-    return result;
-  }
-
-  return emit(codegen, GRX_OP_REWIND, 0, reg, 0, node, NULL);
 }
 
 /**
@@ -1251,66 +1533,111 @@ static GRX_Result gen_look_span(
   return GRX_OK;
 }
 
-static GRX_Result gen_look(Codegen * codegen, const GRX_IRNode * node) {
-  if (node->mode == GRX_LOOK_AHEAD_NON_ATOMIC
-      || node->mode == GRX_LOOK_BEHIND_NON_ATOMIC) {
-    return gen_non_atomic_look(codegen, node);
+static GRX_Result gen_look_step(Codegen * codegen, GenFrame * frame,
+    const GRX_IRNode * node, GenAction * action, uint32_t * out_child) {
+  if (frame->stage == 0
+      && (node->mode == GRX_LOOK_AHEAD_NON_ATOMIC
+          || node->mode == GRX_LOOK_BEHIND_NON_ATOMIC)) {
+    frame->stage = 10;
   }
 
-  // `x` is the length span, not the body: the body is always the next
-  // instruction, so writing that down twice only makes a second place for it
-  // to disagree with itself. A lookahead and a reverse lookbehind have no
-  // span and say so.
-  uint32_t span = GRX_INDEX_NONE;
-  if (node->flags & GRX_IR_LOOK_FORWARD) {
-    GRX_Result measured = gen_look_span(codegen, node, &span);
-    if (measured != GRX_OK) {
-      return measured;
+  switch (frame->stage) {
+    case 0: {
+      // `x` is the length span, not the body: the body is always the next
+      // instruction, so writing that down twice only makes a second place for
+      // it to disagree with itself. A lookahead and a reverse lookbehind have
+      // no span and say so.
+      uint32_t span = GRX_INDEX_NONE;
+      if (node->flags & GRX_IR_LOOK_FORWARD) {
+        GRX_Result measured = gen_look_span(codegen, node, &span);
+        if (measured != GRX_OK) {
+          return measured;
+        }
+      }
+
+      uint32_t look = GRX_INDEX_NONE;
+      GRX_Result result
+          = emit(codegen, GRX_OP_LOOK, node->mode, span, 0, node, &look);
+      if (result != GRX_OK) {
+        return result;
+      }
+      if (node->flags & (GRX_IR_LOOK_KEEP_CAPTURES | GRX_IR_LOOK_CONDITION)) {
+        GRX_Inst * marked = grx_program_at(codegen->program, look);
+        if (marked) {
+          marked->flags |= (node->flags & GRX_IR_LOOK_KEEP_CAPTURES)
+              ? GRX_INST_KEEP_CAPTURES : 0u;
+          marked->flags |= (node->flags & GRX_IR_LOOK_CONDITION)
+              ? GRX_INST_COND_ELSE : 0u;
+        }
+      }
+      frame->u.look.mark = look;
+
+      // Set rather than raised: the distance a guard measures is *this*
+      // assertion's, and a body nested in another one has its own end or none
+      // at all. Everything that is not a forward lookbehind - a lookahead, a
+      // reverse lookbehind, a scan - clears it, and the engine clears the
+      // matching runtime field in the same places.
+      codegen->forward_tail = (node->flags & GRX_IR_LOOK_FORWARD) ? 1 : 0;
+      // A lookaround sets its body's direction absolutely, so a subroutine
+      // block being laid out the other way round turns over everything except
+      // this. See the `flip` field.
+      codegen->flip = 0;
+      frame->stage = 1;
+      *action = GEN_DESCEND;
+      *out_child = node->first_child;
+      return GRX_OK;
     }
-  }
 
-  uint32_t look = GRX_INDEX_NONE;
-  GRX_Result result
-      = emit(codegen, GRX_OP_LOOK, node->mode, span, 0, node, &look);
-  if (result != GRX_OK) {
-    return result;
-  }
-  if (node->flags & (GRX_IR_LOOK_KEEP_CAPTURES | GRX_IR_LOOK_CONDITION)) {
-    GRX_Inst * marked = grx_program_at(codegen->program, look);
-    if (marked) {
-      marked->flags |= (node->flags & GRX_IR_LOOK_KEEP_CAPTURES)
-          ? GRX_INST_KEEP_CAPTURES : 0u;
-      marked->flags |= (node->flags & GRX_IR_LOOK_CONDITION)
-          ? GRX_INST_COND_ELSE : 0u;
+    case 1: {
+      // The body ends in a MATCH so that the sub-program has a success state
+      // of its own; the LOOK's `y` is where the outer program resumes.
+      GRX_Result result = emit(codegen, GRX_OP_MATCH, 0, 0, 0, node, NULL);
+      if (result != GRX_OK) {
+        return result;
+      }
+      patch_y(codegen, frame->u.look.mark, here(codegen));
+      return GRX_OK;
     }
-  }
 
-  // Set rather than raised: the distance a guard measures is *this*
-  // assertion's, and a body nested in another one has its own end or none at
-  // all. Everything that is not a forward lookbehind - a lookahead, a
-  // reverse lookbehind, a scan - clears it, and the engine clears the
-  // matching runtime field in the same places.
-  int outer_body = codegen->forward_tail;
-  int outer_flip = codegen->flip;
-  codegen->forward_tail = (node->flags & GRX_IR_LOOK_FORWARD) ? 1 : 0;
-  codegen->flip = 0; // As in gen_non_atomic_look: the body's own direction.
-  result = gen(codegen, node->first_child);
-  codegen->flip = outer_flip;
-  codegen->forward_tail = outer_body;
-  if (result != GRX_OK) {
-    return result;
-  }
+    /*
+     * The non-atomic form, which was gen_non_atomic_look().
+     *
+     * The whole difference is that there is no sub-match. The body's
+     * instructions are the outer program's, so the choice points it leaves
+     * stay on the backtrack stack and can be returned to - which is what
+     * "non-atomic" means. A register records where the body started and a
+     * REWIND puts the position back, so the construct still consumes nothing.
+     *
+     * A non-atomic lookbehind needs nothing else: its body carries
+     * GRX_IR_REVERSE already, so its instructions walk backwards and the
+     * REWIND undoes that the same way.
+     */
+    case 10: {
+      uint32_t reg = codegen->registers++;
+      GRX_Result result
+          = emit(codegen, GRX_OP_PROGRESS_SET, 0, reg, 0, node, NULL);
+      if (result != GRX_OK) {
+        return result;
+      }
+      frame->u.look.reg = reg;
 
-  // The body ends in a MATCH so that the sub-program has a success state of
-  // its own; the LOOK's `y` is where the outer program resumes.
-  uint32_t done = GRX_INDEX_NONE;
-  result = emit(codegen, GRX_OP_MATCH, 0, 0, 0, node, &done);
-  if (result != GRX_OK) {
-    return result;
-  }
+      // Inlined into the caller's instructions, so a length guard here would
+      // be measuring the caller's distance against this body's alternatives.
+      // It is not the same assertion; it gets no guards.
+      codegen->forward_tail = 0;
+      codegen->flip = 0; // As in stage 0: the body's own direction.
+      frame->stage = 11;
+      *action = GEN_DESCEND;
+      *out_child = node->first_child;
+      return GRX_OK;
+    }
 
-  patch_y(codegen, look, here(codegen));
-  return GRX_OK;
+    case 11:
+      return emit(codegen, GRX_OP_REWIND, 0, frame->u.look.reg, 0, node, NULL);
+
+    default:
+      return fail(codegen, GRX_DIAG_INTERNAL, node);
+  }
 }
 
 /**
@@ -1434,45 +1761,57 @@ static GRX_Result gen_backref(Codegen * codegen, const GRX_IRNode * node) {
   return GRX_OK;
 }
 
-static GRX_Result gen_scan(Codegen * codegen, const GRX_IRNode * node) {
-  uint32_t offset = 0;
-  GRX_Result listed = copy_group_list(codegen, node, node->a, &offset);
-  if (listed != GRX_OK) {
-    return listed;
-  }
+static GRX_Result gen_scan_step(Codegen * codegen, GenFrame * frame,
+    const GRX_IRNode * node, GenAction * action, uint32_t * out_child) {
+  switch (frame->stage) {
+    case 0: {
+      uint32_t offset = 0;
+      GRX_Result listed = copy_group_list(codegen, node, node->a, &offset);
+      if (listed != GRX_OK) {
+        return listed;
+      }
 
-  uint32_t scan = GRX_INDEX_NONE;
-  GRX_Result result
-      = emit(codegen, GRX_OP_SCAN, 0, offset, 0, node, &scan);
-  if (result != GRX_OK) {
-    return result;
-  }
+      uint32_t scan = GRX_INDEX_NONE;
+      GRX_Result result
+          = emit(codegen, GRX_OP_SCAN, 0, offset, 0, node, &scan);
+      if (result != GRX_OK) {
+        return result;
+      }
+      frame->u.look.mark = scan;
 
-  // A scan's body is a sub-match over a captured substring, with an end of
-  // its own; a guard measuring the enclosing assertion's distance would be
-  // measuring against the wrong subject entirely.
-  int outer_body = codegen->forward_tail;
-  codegen->forward_tail = 0;
-  result = gen(codegen, node->first_child);
-  codegen->forward_tail = outer_body;
-  if (result != GRX_OK) {
-    return result;
-  }
-  result = emit(codegen, GRX_OP_MATCH, 0, 0, 0, node, NULL);
-  if (result != GRX_OK) {
-    return result;
-  }
+      // A scan's body is a sub-match over a captured substring, with an end of
+      // its own; a guard measuring the enclosing assertion's distance would be
+      // measuring against the wrong subject entirely.
+      codegen->forward_tail = 0;
+      frame->stage = 1;
+      *action = GEN_DESCEND;
+      *out_child = node->first_child;
+      return GRX_OK;
+    }
 
-  patch_y(codegen, scan, here(codegen));
-  return GRX_OK;
+    case 1: {
+      GRX_Result result = emit(codegen, GRX_OP_MATCH, 0, 0, 0, node, NULL);
+      if (result != GRX_OK) {
+        return result;
+      }
+      patch_y(codegen, frame->u.look.mark, here(codegen));
+      return GRX_OK;
+    }
+
+    default:
+      return fail(codegen, GRX_DIAG_INTERNAL, node);
+  }
 }
 
-static GRX_Result gen(Codegen * codegen, uint32_t node_index) {
-  const GRX_IRNode * node = grx_ir_node(codegen->ir, node_index);
-  if (!node) {
-    return fail(codegen, GRX_DIAG_INTERNAL, NULL);
-  }
-
+/**
+ * Take one node one step further, and say what to do next.
+ *
+ * The switch the recursive gen() was, with each arm either finishing the node
+ * or naming the child to lay out before resuming. A leaf kind finishes in its
+ * first stage and never descends, which is why most arms here are unchanged.
+ */
+static GRX_Result gen_step(Codegen * codegen, GenFrame * frame,
+    const GRX_IRNode * node, GenAction * action, uint32_t * out_child) {
   switch (node->kind) {
     case GRX_IR_EMPTY:
       return GRX_OK;
@@ -1493,30 +1832,35 @@ static GRX_Result gen(Codegen * codegen, uint32_t node_index) {
       return emit(codegen, GRX_OP_ANY, 0, node->a, 0, node, NULL);
 
     case GRX_IR_CONCAT:
-      return gen_concat(codegen, node);
+      return gen_concat_step(codegen, frame, node, action, out_child);
 
     case GRX_IR_ALTERNATE:
-      return gen_alternate(codegen, node);
+      return gen_alternate_step(codegen, frame, node, action, out_child);
 
     case GRX_IR_REPEAT:
-      return gen_repeat(codegen, node);
+      return gen_repeat_step(codegen, frame, node, action, out_child);
 
     case GRX_IR_CAPTURE: {
       // The slots are twice the group number and one more, so group 0's
       // start is slot 0 and the whole match is slots 0 and 1. A reversed
       // capture writes its end first, because that is the boundary its body
       // reaches first.
-      uint32_t first = node->a * 2 + (reversed(codegen, node) ? 1u : 0u);
-      uint32_t second = node->a * 2 + (reversed(codegen, node) ? 0u : 1u);
-      GRX_Result result
-          = emit(codegen, GRX_OP_SAVE, 0, first, 0, node, NULL);
-      if (result == GRX_OK) {
-        result = gen(codegen, node->first_child);
+      if (frame->stage == 0) {
+        uint32_t first = node->a * 2 + (reversed(codegen, node) ? 1u : 0u);
+        GRX_Result result
+            = emit(codegen, GRX_OP_SAVE, 0, first, 0, node, NULL);
+        if (result != GRX_OK) {
+          return result;
+        }
+        frame->u.one.slot
+            = node->a * 2 + (reversed(codegen, node) ? 0u : 1u);
+        frame->stage = 1;
+        *action = GEN_DESCEND;
+        *out_child = node->first_child;
+        return GRX_OK;
       }
-      if (result == GRX_OK) {
-        result = emit(codegen, GRX_OP_SAVE, 0, second, 0, node, NULL);
-      }
-      return result;
+      return emit(
+          codegen, GRX_OP_SAVE, 0, frame->u.one.slot, 0, node, NULL);
     }
 
     case GRX_IR_ASSERT:
@@ -1526,21 +1870,27 @@ static GRX_Result gen(Codegen * codegen, uint32_t node_index) {
           codegen, GRX_OP_ASSERT, node->mode, node->a, node->b, node, NULL);
 
     case GRX_IR_LOOK:
-      return gen_look(codegen, node);
+      return gen_look_step(codegen, frame, node, action, out_child);
 
     case GRX_IR_ATOMIC: {
-      uint32_t begin = GRX_INDEX_NONE;
-      GRX_Result result
-          = emit(codegen, GRX_OP_ATOMIC_BEGIN, 0, 0, 0, node, &begin);
-      if (result == GRX_OK) {
-        result = gen(codegen, node->first_child);
+      if (frame->stage == 0) {
+        uint32_t begin = GRX_INDEX_NONE;
+        GRX_Result result
+            = emit(codegen, GRX_OP_ATOMIC_BEGIN, 0, 0, 0, node, &begin);
+        if (result != GRX_OK) {
+          return result;
+        }
+        frame->u.one.slot = begin;
+        frame->stage = 1;
+        *action = GEN_DESCEND;
+        *out_child = node->first_child;
+        return GRX_OK;
       }
       uint32_t end = GRX_INDEX_NONE;
+      GRX_Result result
+          = emit(codegen, GRX_OP_ATOMIC_END, 0, 0, 0, node, &end);
       if (result == GRX_OK) {
-        result = emit(codegen, GRX_OP_ATOMIC_END, 0, 0, 0, node, &end);
-      }
-      if (result == GRX_OK) {
-        patch_x(codegen, begin, end);
+        patch_x(codegen, frame->u.one.slot, end);
       }
       return result;
     }
@@ -1559,23 +1909,28 @@ static GRX_Result gen(Codegen * codegen, uint32_t node_index) {
       return emit(codegen, GRX_OP_VERB, node->mode, node->a, 0, node, NULL);
 
     case GRX_IR_SCAN:
-      return gen_scan(codegen, node);
+      return gen_scan_step(codegen, frame, node, action, out_child);
 
     case GRX_IR_SCRIPT_RUN: {
       // A register to hold where the body began, and a check at the end
       // over what it consumed. GRX_OP_PROGRESS_SET is the write, because
       // "record the position" is exactly what it does and its undo frame
       // is what makes a backtrack out of the body put the mark back.
-      uint32_t reg = codegen->registers++;
-      GRX_Result result
-          = emit(codegen, GRX_OP_PROGRESS_SET, 0, reg, 0, node, NULL);
-      if (result == GRX_OK) {
-        result = gen(codegen, node->first_child);
+      if (frame->stage == 0) {
+        uint32_t reg = codegen->registers++;
+        GRX_Result result
+            = emit(codegen, GRX_OP_PROGRESS_SET, 0, reg, 0, node, NULL);
+        if (result != GRX_OK) {
+          return result;
+        }
+        frame->u.one.slot = reg;
+        frame->stage = 1;
+        *action = GEN_DESCEND;
+        *out_child = node->first_child;
+        return GRX_OK;
       }
-      if (result == GRX_OK) {
-        result = emit(codegen, GRX_OP_SCRIPT_RUN, 0, reg, 0, node, NULL);
-      }
-      return result;
+      return emit(
+          codegen, GRX_OP_SCRIPT_RUN, 0, frame->u.one.slot, 0, node, NULL);
     }
 
     case GRX_IR_FOLD_RUN:
@@ -1585,7 +1940,7 @@ static GRX_Result gen(Codegen * codegen, uint32_t node_index) {
       return gen_callout(codegen, node);
 
     case GRX_IR_COND:
-      return gen_cond(codegen, node);
+      return gen_cond_step(codegen, frame, node, action, out_child);
 
     case GRX_IR_RECURSE:
       return gen_call(codegen, node);
@@ -1594,6 +1949,82 @@ static GRX_Result gen(Codegen * codegen, uint32_t node_index) {
     default:
       return fail(codegen, GRX_DIAG_INTERNAL, node);
   }
+}
+
+/** Put one node's frame on the generator's stack. */
+static GRX_Result gen_push(Codegen * codegen, uint32_t node_index) {
+  GenFrame frame = {.node = node_index, .stage = 0};
+  if (grx_arena_append(&codegen->frames, &frame, NULL) != GRX_OK) {
+    return fail(codegen, GRX_DIAG_OUT_OF_MEMORY, NULL);
+  }
+  return GRX_OK;
+}
+
+/**
+ * Lay out a subtree: the driver over the frames the generators leave.
+ *
+ * Depth-first, exactly as the recursion was, with the C stack's job done by
+ * codegen->frames. The one piece of bookkeeping that is the driver's rather
+ * than a generator's is `forward_tail` and `flip`: they are saved when a frame
+ * starts and put back whenever it is resumed, which is what the recursive form
+ * did with a local at each of a dozen call sites. Doing it here means a new
+ * generator cannot forget to.
+ *
+ * Re-entrant, because gen_subroutines() calls this while nothing else is on
+ * the stack and a future caller might not be so lucky: the loop runs until the
+ * stack is back to the depth it was handed, not until it is empty.
+ */
+static GRX_Result gen(Codegen * codegen, uint32_t node_index) {
+  size_t base = codegen->frames.count;
+  GRX_Result result = gen_push(codegen, node_index);
+
+  while (result == GRX_OK && codegen->frames.count > base) {
+    GenFrame * frame
+        = GRX_ARENA_AT(GenFrame, &codegen->frames, codegen->frames.count - 1);
+    if (!frame) {
+      result = fail(codegen, GRX_DIAG_INTERNAL, NULL);
+      break;
+    }
+    const GRX_IRNode * node = grx_ir_node(codegen->ir, frame->node);
+    if (!node) {
+      result = fail(codegen, GRX_DIAG_INTERNAL, NULL);
+      break;
+    }
+
+    if (frame->stage == 0) {
+      frame->saved_tail = (int8_t)codegen->forward_tail;
+      frame->saved_flip = (int8_t)codegen->flip;
+    }
+    else {
+      codegen->forward_tail = frame->saved_tail;
+      codegen->flip = frame->saved_flip;
+    }
+
+    GenAction action = GEN_POP;
+    uint32_t child = GRX_INDEX_NONE;
+    result = gen_step(codegen, frame, node, &action, &child);
+    if (result != GRX_OK) {
+      break;
+    }
+
+    // `frame` is dead after a push: the arena may have moved. The loop
+    // re-reads the top rather than keeping a pointer across one.
+    if (action == GEN_DESCEND) {
+      result = gen_push(codegen, child);
+      continue;
+    }
+    if (action == GEN_AGAIN) {
+      continue;
+    }
+    codegen->frames.count--;
+  }
+
+  // Unwound whether it finished or failed, so that a caller which carries on
+  // after a failure - gen_subroutines() does not, but grx_codegen_program()
+  // reads codegen->registers afterwards - is not looking at a part-walked
+  // stack.
+  codegen->frames.count = base;
+  return result;
 }
 
 /**
@@ -1789,9 +2220,15 @@ GRX_Result grx_codegen_program(const GRX_IR * ir, const GRX_Limits * limits,
     .entry = {0},
     .called_count = 0,
     .fixups = {0},
+    .frames = {0},
+    .walk = {0},
   };
   grx_arena_init(&codegen.fixups, out_program->insts.allocator, sizeof(Fixup),
       limits->max_program_size, GRX_DIAG_LIMIT_PROGRAM_SIZE);
+  grx_arena_init(&codegen.frames, out_program->insts.allocator,
+      sizeof(GenFrame), 0, GRX_DIAG_NONE);
+  grx_arena_init(&codegen.walk, out_program->insts.allocator,
+      sizeof(uint32_t), 0, GRX_DIAG_NONE);
 
   GRX_Result result = copy_classes(&codegen, &ir->classes);
 
@@ -1832,6 +2269,8 @@ GRX_Result grx_codegen_program(const GRX_IR * ir, const GRX_Limits * limits,
   // The fixups are scaffolding: every one of them has been spent patching a
   // CALL by now, and the program keeps nothing that points into them.
   grx_arena_clear(&codegen.fixups);
+  grx_arena_clear(&codegen.frames);
+  grx_arena_clear(&codegen.walk);
   if (result != GRX_OK) {
     return result;
   }
