@@ -137,7 +137,12 @@ int main(int argc, char ** argv) {
     if (grx_regex_compile_with_allocator(pattern, pattern_length, syntax,
             options, NULL, NULL, &error, &regex)
         != GRX_OK) {
-      printf("compile\n");
+      /* The diagnostic and not only the word, the way grx_match.c prints it.
+       * A caller comparing refusals needs to know *which* refusal: a
+       * construct this library has not built is a gap and a malformed pattern
+       * is a disagreement, and folding the two makes the first one arrive as
+       * the second. tools/oracle/replace_diff.py still compares on the word. */
+      printf("compile %d\n", (int)error.diag);
       fflush(stdout);
       grx_regex_free(regex);
       continue;

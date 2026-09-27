@@ -371,13 +371,23 @@ def ask_vim(rows, engine=0):
 
 
 def ask_library(driver, dialect, rows):
+    """This library's answers, and the raw lines beside them.
+
+    Both, because `parse_driver` folds every refusal to "syntax" - which is
+    what the comparison wants, since the references say no more than that -
+    and one caller needs to know *which* refusal. A construct this library has
+    not built is a gap; a malformed pattern is a disagreement; and the fold
+    turns the first into the second, which is how `\C` arrived here as 96
+    disagreements on the day it was added to the shared pattern list.
+    """
     lines = "".join("%s\t%s\t%s\t%s\n" % (
         flags, pattern.encode("utf-8").hex(), subject.encode("utf-8").hex(),
         template.encode("utf-8").hex())
         for flags, pattern, subject, template in rows)
     finished = subprocess.run([driver, dialect], input=lines,
         capture_output=True, text=True, check=True)
-    return [parse_driver(line) for line in finished.stdout.splitlines()]
+    raw = finished.stdout.splitlines()
+    return [parse_driver(line) for line in raw], raw
 
 
 # "template" has no counterpart on the node side: ECMAScript has no
@@ -534,7 +544,8 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
         theirs = [(answer, 1) for answer in ask_vim(rows)]
     else:
         theirs = ask_pcre2(reference, rows)
-    mine = ask_library(driver, dialect, rows)
+    mine, raw_mine = ask_library(driver, dialect, rows)
+    not_implemented = perl_diff.construct_not_implemented()
     if len(theirs) != len(rows) or len(mine) != len(rows):
         sys.stderr.write("%s: the drivers answered %d and %d of %d requests\n"
             % (dialect, len(theirs), len(mine), len(rows)))
@@ -542,14 +553,15 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
 
     disagreements = []
     compared = 0
+    unimplemented = 0
     rejected = 0
     declined = 0
     deviation = 0
     lazy = 0
     defect = 0
 
-    for (flags, pattern, subject, template), (them, count), us in \
-            zip(rows, theirs, mine):
+    for (flags, pattern, subject, template), (them, count), us, raw in \
+            zip(rows, theirs, mine, raw_mine):
         if them == "error":
             declined += 1
             continue
@@ -572,6 +584,26 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
             if us != "syntax":
                 disagreements.append(
                     (flags, pattern, subject, template, them, us))
+            continue
+        # A construct this library has not built is a gap, not a disagreement
+        # about what a replacement means. **This column existed, held one
+        # ECMAScript rule, and was deleted on 2026-09-26 when that rule was
+        # built and nothing could increment it any more.** Deleting it was
+        # right then and wrong within the hour: `\C` went into the pattern list
+        # this gate shares with perl_diff.py, and 96 rows arrived as
+        # disagreements because the only thing that could have counted them was
+        # gone. Keyed to the diagnostic rather than to a construct, so the next
+        # one needs no change here.
+        #
+        # **Below the refusal arm above, not before it.** Placed first it also
+        # swallowed 224 vim rows where *both* sides refuse the pattern and this
+        # library's diagnostic happens to be this one - rows that belong in the
+        # `rejected` control, which exists precisely to prove the run rejected
+        # something. A gap is "the reference answered and this library would
+        # not", so the reference's acceptance has to be established first.
+        if (not_implemented is not None
+                and raw == "compile %d" % not_implemented):
+            unimplemented += 1
             continue
         if dialect == "vim" and us == "syntax" \
                 and vim_diff.is_forward_reference_artifact(
@@ -747,11 +779,12 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
     print("%-11s %d rows, %d compared, %d the pattern was rejected, "
           "%d the reference declined, %d the surrogate-pair deviation, "
           "%d the template parsed up front, %d a known reference defect, "
+          "%d this library does not implement, "
           "%d vim's two engines disagree, "
           "%d vim's two engines disagree and neither gives ours, "
           "%d disagreements"
           % (dialect + ":", len(rows), compared, rejected, declined,
-             deviation, lazy, defect, split, len(both_axes),
+             deviation, lazy, defect, unimplemented, split, len(both_axes),
              len(disagreements)))
     if not rejected:
         sys.stderr.write(
