@@ -123,12 +123,6 @@ record when one of them is wanted.
   dialect has.
 - **Partial matching** (PCRE2's `PCRE2_PARTIAL_SOFT`/`HARD`). Reserved as a
   future flag on the search request; nothing in the engines precludes it.
-- **Exact POSIX submatch rules in 1.0.** The overall leftmost-*longest*
-  match is exact from the first POSIX release. Which substrings the
-  parenthesised subexpressions report under POSIX's "each subexpression, from
-  left to right, longest possible consistent with the whole match" rule is a
-  known-hard problem (Laurikari, Okui-Suzuki); the first release documents its
-  approximation as a deviation and a later work package makes it exact.
 
 ## 3. The pipeline
 
@@ -1021,6 +1015,31 @@ blocks the first work packages.
    per library minor version. Recommendation: 17.0.0 now, because Node 22 -
    the ECMAScript oracle - reports it, and vectors generated from an oracle
    on a newer UCD than the tables would fail for reasons that are not bugs.
-6. **POSIX submatch fidelity** (§2): approximate in the first POSIX release.
-   Recommendation: yes, with the deviation written and a work package
-   scheduled, rather than holding the POSIX dialects for it.
+6. **POSIX submatch fidelity**: approximate in the first POSIX release.
+   Recommendation was yes - ship the deviation written down and schedule a
+   work package, rather than hold the POSIX dialects for it.
+
+   **Decided against, and built** (WP-26 in [plan.md](plan.md)). Which
+   substrings the subexpressions report under POSIX's "each subexpression,
+   from left to right, longest possible consistent with the whole match" rule
+   is exact, and this was a non-goal for one release only. It is no longer
+   listed in §2.
+
+   What made it worth doing sooner is that it turned out not to need
+   Laurikari's or Okui-Suzuki's machinery: the comparison is on each
+   subexpression's **end**, in subexpression order, and a subexpression only
+   one candidate entered is skipped. src/exec/exec_internal.h's
+   `grx_exec_submatch_better()` is the whole of it.
+
+   **How it is known, which is the part worth keeping.** Neither reference
+   can check this. `(a|ab)(c|bcd)(d*)` against "abcd" must give group 1 "ab",
+   because it can while the whole match still reaches 4; glibc and musl both
+   give it "a", so their agreeing says nothing. The gate is
+   tests/unit/test_submatch.cpp, which enumerates *every* way a small
+   extended RE can divide a small subject and then asks two things of our
+   answer: whether it is a division the pattern can actually produce - which
+   needs no reading of POSIX at all - and whether any achievable division
+   beats it under the rule. 46,896 comparisons across both engines, 6,468 of
+   them with more than one division to choose between, and the oracle is made
+   to refuse the references' own answer first so that an instrument corrected
+   three times towards agreement is shown still able to say no.

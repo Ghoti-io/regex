@@ -494,6 +494,20 @@ what POSIX requires and what **neither** glibc nor musl gives. Six such
 patterns are carried by name in `tools/oracle/submatch_diff.py`, with the
 answer each must produce, so the exemption cannot hide a defect.
 
+**And how exactness is known at all.** Carrying six answers by name says the
+exemption hides no defect; it does not say the rule is right everywhere else,
+and no reference can, because on exactly the cases that discriminate the
+references are the ones that are wrong. `tests/unit/test_submatch.cpp` is the
+instrument that can: for a small extended RE over a small subject it
+enumerates *every* division the pattern admits, and asks whether ours is one
+the pattern can produce - a question with no reading of POSIX in it at all -
+and then whether any achievable division beats ours under the rule. 46,896
+comparisons over both engines, 6,468 of them with a real choice to make, and
+nothing unsound or beaten. The oracle needed three corrections before it was
+right, every one of which had it accusing a correct answer, so it opens by
+being handed the division glibc and musl actually produce and required to
+refuse it.
+
 **What it costs.** `make bench` and [testing.md](testing.md) §13 carry the
 table and the method. In short, against the same patterns compiled for the
 other rule. The two optimisation columns predate the release build's move

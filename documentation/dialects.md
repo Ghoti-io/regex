@@ -464,8 +464,9 @@ run.
 This is what the ten `known-gaps.txt` rows filed under "POSIX subexpression
 disambiguation" actually were. They were read as needing WP-26's
 tagged-transition machinery - Okui-Suzuki or Laurikari - and they needed an
-empty-iteration rule instead. Every one of them passes now, and WP-26 is
-still unbuilt.
+empty-iteration rule instead. Every one of them passes now, and they passed
+before WP-26 was built - which is the content of the observation, and stays
+true now that it has been.
 
 The first two report the same spans. After the last iteration, a capture it
 did not set is gone either way, which is why one value stood for both until
