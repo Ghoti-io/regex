@@ -2963,6 +2963,25 @@ typedef struct {
   GRX_Arena runs;     ///< uint32_t: length-prefixed runs, the rest.
   GRX_Arena offsets;  ///< uint32_t: where each run starts in `runs`.
   size_t count;       ///< How many runs.
+  /**
+   * Run index + 1 by run contents, 0 for an empty slot; a power of two.
+   *
+   * class_set_add() refuses a duplicate, and asking "is this already here"
+   * meant comparing against every member. That is the second factor of n in
+   * the same place the offsets array above removed the third: adding n members
+   * stayed O(n^2), which two soak artifacts found as 1.91 s and 0.93 s spent
+   * lowering `v`-mode classes - notes/regex/TODO.md section 14u.
+   *
+   * An index rather than sorting the runs, because the order members were
+   * written in is the order they are emitted in, and a set that sorted itself
+   * would compile to a different program. This changes no order and no
+   * decision: it answers the same question faster.
+   *
+   * Empty means there is no index and class_set_holds() compares against every
+   * member, which is what it did before this existed and what it still does if
+   * the table cannot be grown.
+   */
+  GRX_Arena buckets;
 } ClassSet;
 
 static void class_set_init(ClassSet * value, const GRX_Allocator * allocator) {
@@ -2971,6 +2990,8 @@ static void class_set_init(ClassSet * value, const GRX_Allocator * allocator) {
       GRX_DIAG_OUT_OF_MEMORY);
   grx_arena_init(&value->offsets, allocator, sizeof(uint32_t), 0,
       GRX_DIAG_OUT_OF_MEMORY);
+  grx_arena_init(&value->buckets, allocator, sizeof(uint32_t), 0,
+      GRX_DIAG_OUT_OF_MEMORY);
   value->count = 0;
 }
 
@@ -2978,6 +2999,7 @@ static void class_set_clear(ClassSet * value) {
   grx_charclass_clear(&value->set);
   grx_arena_clear(&value->runs);
   grx_arena_clear(&value->offsets);
+  grx_arena_clear(&value->buckets);
   value->count = 0;
 }
 
@@ -3005,27 +3027,142 @@ static const uint32_t * class_set_run(
   return GRX_ARENA_AT(const uint32_t, &value->runs, (size_t)*at + 1);
 }
 
+/**
+ * Whether run `index` of `value` is exactly this run.
+ *
+ * One predicate for both the indexed lookup and the scan it falls back to: two
+ * spellings of "the same run" is one place for them to drift apart, and the
+ * scan is the one that decides what the set contains when the index is gone.
+ */
+static int class_set_run_is(const ClassSet * value, size_t index,
+    const uint32_t * points, size_t length) {
+  size_t candidate_length = 0;
+  const uint32_t * candidate = class_set_run(value, index, &candidate_length);
+  if (candidate_length != length) {
+    return 0;
+  }
+  if (!candidate) {
+    // `\q{}` writes a run of length zero, and such a run has no first point to
+    // address, so class_set_run() answers NULL with a length of 0. Two of them
+    // are the same member - which is why the length is compared before the
+    // pointer is looked at, and why this is not `!candidate` on its own.
+    return length == 0;
+  }
+  for (size_t at = 0; at < length; at++) {
+    if (candidate[at] != points[at]) {
+      return 0;
+    }
+  }
+  return 1;
+}
+
+/** FNV-1a over the run's length and code points. */
+static uint32_t class_set_hash(const uint32_t * points, size_t length) {
+  uint32_t hash = 2166136261u;
+  hash = (hash ^ (uint32_t)length) * 16777619u;
+  for (size_t i = 0; i < length; i++) {
+    for (int byte = 0; byte < 4; byte++) {
+      hash = (hash ^ ((points[i] >> (byte * 8)) & 0xffu)) * 16777619u;
+    }
+  }
+  return hash;
+}
+
 /** Whether `value` already holds this exact run. */
 static int class_set_holds(
     const ClassSet * value, const uint32_t * points, size_t length) {
+  if (value->buckets.count) {
+    size_t mask = value->buckets.count - 1;
+    size_t slot = (size_t)class_set_hash(points, length) & mask;
+    // Open addressing, so a run of the table ends at the first empty slot and
+    // the loop cannot outlast the table even if every slot is full.
+    for (size_t probe = 0; probe <= mask; probe++) {
+      const uint32_t * entry
+          = GRX_ARENA_AT(const uint32_t, &value->buckets, slot);
+      if (!entry || !*entry) {
+        return 0;
+      }
+      if (class_set_run_is(value, (size_t)*entry - 1, points, length)) {
+        return 1;
+      }
+      slot = (slot + 1) & mask;
+    }
+    return 0;
+  }
+
   for (size_t i = 0; i < value->count; i++) {
-    size_t candidate_length = 0;
-    const uint32_t * candidate = class_set_run(value, i, &candidate_length);
-    if (!candidate && candidate_length) {
-      continue;
-    }
-    if (candidate_length != length) {
-      continue;
-    }
-    size_t at = 0;
-    while (at < length && candidate[at] == points[at]) {
-      at++;
-    }
-    if (at == length) {
+    if (class_set_run_is(value, i, points, length)) {
       return 1;
     }
   }
   return 0;
+}
+
+/** Put run `index` in the table, which must have room. */
+static void class_set_index_put(ClassSet * value, size_t index) {
+  size_t length = 0;
+  const uint32_t * points = class_set_run(value, index, &length);
+  if (!points && length) {
+    return;
+  }
+  // A zero-length run is indexed like any other: NULL points with a length of
+  // 0 is what class_set_run() says about `\q{}`, not a failure. Leaving it out
+  // would make the table answer "no" for a member that is there, and the set
+  // would take a second copy of it.
+  size_t mask = value->buckets.count - 1;
+  size_t slot = (size_t)class_set_hash(points, length) & mask;
+  for (size_t probe = 0; probe <= mask; probe++) {
+    uint32_t * entry = GRX_ARENA_AT(uint32_t, &value->buckets, slot);
+    if (!entry) {
+      return;
+    }
+    if (!*entry) {
+      *entry = (uint32_t)index + 1u;
+      return;
+    }
+    slot = (slot + 1) & mask;
+  }
+}
+
+/**
+ * Make room for one more member, growing and refilling the table if needed.
+ *
+ * Kept at most half full, which is what keeps a probe short. A table that
+ * cannot be grown is emptied rather than left undersized: class_set_holds()
+ * then scans, which is slower and still right, where a full table would probe
+ * forever or answer "no" to a member that is there.
+ */
+static void class_set_index_reserve(ClassSet * value) {
+  if (value->buckets.count && (value->count + 1) * 2 <= value->buckets.count) {
+    return;
+  }
+
+  size_t wanted = value->buckets.count ? value->buckets.count * 2 : 16;
+  while (wanted < (value->count + 1) * 2) {
+    wanted *= 2;
+  }
+
+  GRX_Arena grown;
+  grx_arena_init(
+      &grown, value->set.allocator, sizeof(uint32_t), 0, GRX_DIAG_NONE);
+  if (grx_arena_reserve(&grown, wanted) != GRX_OK) {
+    grx_arena_clear(&grown);
+    grx_arena_clear(&value->buckets);
+    return;
+  }
+  for (size_t i = 0; i < wanted; i++) {
+    if (grx_arena_append(&grown, NULL, NULL) != GRX_OK) {
+      grx_arena_clear(&grown);
+      grx_arena_clear(&value->buckets);
+      return;
+    }
+  }
+
+  grx_arena_clear(&value->buckets);
+  value->buckets = grown;
+  for (size_t i = 0; i < value->count; i++) {
+    class_set_index_put(value, i);
+  }
 }
 
 /**
@@ -3054,7 +3191,13 @@ static GRX_Result class_set_add(ClassSet * value, const uint32_t * points,
     result = grx_arena_append(&value->runs, &points[i], NULL);
   }
   if (result == GRX_OK) {
+    // Reserved before the count moves, so the table is sized for the member
+    // about to be indexed rather than for the one before it.
+    class_set_index_reserve(value);
     value->count++;
+    if (value->buckets.count) {
+      class_set_index_put(value, value->count - 1);
+    }
   }
   return result;
 }
@@ -3112,11 +3255,16 @@ static GRX_Result class_set_combine(ClassSet * a, const ClassSet * b,
   if (result == GRX_OK) {
     grx_arena_clear(&a->runs);
     grx_arena_clear(&a->offsets);
+    grx_arena_clear(&a->buckets);
     a->runs = kept.runs;
     a->offsets = kept.offsets;
+    // The table names positions in the two arenas above, so it moves with
+    // them: keeping the old one would index runs that are no longer there.
+    a->buckets = kept.buckets;
     a->count = kept.count;
     kept.runs = (GRX_Arena) {0};
     kept.offsets = (GRX_Arena) {0};
+    kept.buckets = (GRX_Arena) {0};
     kept.count = 0;
   }
   class_set_clear(&kept);

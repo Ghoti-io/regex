@@ -18,6 +18,7 @@
  * Copyright 2026 by Corey Pennycuff
  */
 
+#include <chrono>
 #include <string>
 
 #include "test_helpers.h"
@@ -52,6 +53,15 @@ public:
   bool ok() const { return result_ == GRX_OK; }
   GRX_Result result() const { return result_; }
   GRX_Diag diag() const { return diag_; }
+
+  /** Instructions the pattern compiled to, or 0. */
+  size_t program_size() const {
+    GRX_Facts facts;
+    if (!regex_ || grx_regex_facts(regex_, &facts) != GRX_OK) {
+      return 0;
+    }
+    return facts.program_size;
+  }
 
   /** "start..end" of the first match, or "none". */
   std::string find(const std::string & subject) const {
@@ -336,6 +346,113 @@ TEST(UnicodeSets, TheNegationRuleDiffersBetweenUAndV) {
   EXPECT_EQ(finds("\\W", long_s, "iu"), "none");
   EXPECT_EQ(finds("\\W", long_s, "u"), long_s);
   EXPECT_EQ(finds("\\w", long_s, "iu"), long_s);
+}
+
+TEST(UnicodeSets, TheEmptyStringIsOneMemberHoweverManyTimesItIsWritten) {
+  // `\q{}` puts the empty string in the set, and a set holds each member once.
+  // Two of them are one member, so `[\q{}\q{}]` is `[\q{}]` - which is
+  // observable, because every member of the set is emitted as an alternative.
+  //
+  // This is here because it was nearly lost. A run of length zero is the one
+  // member with no first code point to address, so the accessor answers NULL
+  // for it with a length of 0 - not a failure, but indistinguishable from one
+  // if the pointer is tested before the length. An index over the members was
+  // added to stop the duplicate check being O(n^2) and did exactly that: the
+  // empty string was never put in the table and never found in it, so every
+  // `\q{}` after the first was taken as a new member.
+  //
+  // `make test` passed with that in place. Nothing in the suite wrote the
+  // empty string twice, and a differential that generates patterns will not
+  // either unless it is told to.
+  EXPECT_EQ(Compiled("[\\q{}]").program_size(),
+      Compiled("[\\q{}\\q{}]").program_size());
+  EXPECT_EQ(Compiled("[\\q{}]").program_size(), Compiled("[\\q{|}]").program_size());
+  EXPECT_EQ(Compiled("[\\q{}]").program_size(), Compiled("[\\q{||}]").program_size());
+  EXPECT_EQ(Compiled("[\\q{ab}\\q{}]").program_size(),
+      Compiled("[\\q{ab}\\q{}\\q{}]").program_size());
+  EXPECT_EQ(Compiled("[[\\q{}][\\q{}]]").program_size(),
+      Compiled("[\\q{}]").program_size());
+
+  // And it still means the empty string in each spelling. Where the set has a
+  // longer member too, that one wins: `v` tries string members longest first,
+  // so `[\\q{|ab}]` takes "ab" and not the empty match in front of it.
+  EXPECT_EQ(finds("[\\q{}\\q{}]", "x"), "");
+  EXPECT_EQ(finds("[\\q{|ab}\\q{}]", "ab"), "ab");
+  EXPECT_EQ(finds("[\\q{|ab}\\q{}]", "xy"), "");
+
+  // The same rule for a member that is not empty, which is the case that was
+  // never in doubt - kept as the control beside the one that was.
+  EXPECT_EQ(Compiled("[\\q{ab}]").program_size(),
+      Compiled("[\\q{ab}\\q{ab}]").program_size());
+}
+
+TEST(UnicodeSets, ASetIsBuiltInTimeProportionalToItsMembersNotTheirSquare) {
+  // A `v`-mode class may hold strings, and class_set_add() refuses a
+  // duplicate, so it asks "is this member already here". That question used to
+  // be answered by comparing against every member the set already had, which
+  // makes building a set of n members O(n^2).
+  //
+  // Half of this was found once before and half fixed: the run list had no
+  // offsets, so reaching the nth member walked the first n-1, and building
+  // `\p{RGI_Emoji}` - 3,953 members - was O(n^3) and ran for seven minutes
+  // before being killed. The offsets array removed that factor and left this
+  // one.
+  //
+  // The soak found what was left as two slow units,
+  // `pattern-ecmascript/slow-unit-baad77df` at 1.91 s and `slow-unit-175057e1`
+  // at 0.93 s - notes/regex/TODO.md section 14u. They are 0.085 s and 0.039 s
+  // now. The tell that the cost was construction and not content: both produce
+  // the same 17,100-instruction program from 10,860 and 5,804 bytes of pattern
+  // and differed 2:1 in time.
+  //
+  // The witness is the emoji set intersected with itself over and over, which
+  // is three thousand-odd string members added per operation out of a
+  // 559-byte pattern. Growth is linear in the repetitions on both builds and
+  // the constant is what differs: release 0.062 s fixed against 4.82 s broken,
+  // and under AddressSanitizer, where `make test` also runs this, 0.217 s
+  // against 13.03 s.
+  //
+  // One second rather than the half the neighbouring gates use, and 32
+  // repetitions rather than 16, because the sanitizer's fixed cost here is a
+  // floor and not a slope: building the emoji set once is ~190 ms under ASan
+  // whatever the repetition count, so halving the work moved 217 ms to 199 ms
+  // and halved the separation for nothing. Raising the bound instead puts 4.6x
+  // under it and 4.8x over it, which is the balance the other way round.
+  //
+  // An index rather than sorted runs, because the order members are written in
+  // is the order they are emitted in - a set that sorted itself would compile
+  // to a different program.
+  std::string pattern = "[\\p{RGI_Emoji}";
+  for (int i = 0; i < 32; i++) {
+    pattern += "&&[\\p{RGI_Emoji}]";
+  }
+  pattern += "]";
+
+  GRX_Limits limits;
+  grx_limits_default(&limits);
+  // The set is far wider than the default range cap and the cap is not what is
+  // being measured; the work happens either way.
+  limits.max_class_ranges = 0;
+  limits.max_program_size = 0;
+
+  GRX_Regex * regex = nullptr;
+  auto start = std::chrono::steady_clock::now();
+  GRX_Result result = grx_regex_compile_with_allocator(pattern.data(),
+      pattern.size(), GRX_SYNTAX_ECMASCRIPT,
+      GRX_OPT_UTF | GRX_OPT_UNICODE_SETS, &limits, nullptr, nullptr, &regex);
+  auto elapsed = std::chrono::steady_clock::now() - start;
+  EXPECT_EQ(result, GRX_OK);
+  EXPECT_NE(regex, nullptr);
+  grx_regex_free(regex);
+
+  auto seconds
+      = std::chrono::duration_cast<std::chrono::duration<double>>(elapsed)
+            .count();
+  EXPECT_LT(seconds, 1.0)
+      << pattern.size() << "-byte pattern, the emoji set intersected with "
+      << "itself 32 times, took " << seconds
+      << " s to compile. class_set_holds() answers from an index; a figure "
+         "this large means it is comparing against every member again";
 }
 
 int main(int argc, char ** argv) {
