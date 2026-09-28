@@ -220,6 +220,17 @@ typedef struct {
    * decides that is the memo's lifetime, not its existence.
    */
   GRX_Arena node_span;
+  /**
+   * One analysis memo for every question the two arenas above miss on.
+   *
+   * They bound how many questions are asked - once per IR node. This bounds
+   * what each one costs: `grx_ir_can_match_empty()` and `grx_ir_span()` each
+   * build a fresh analysis, and the analysis is where the group-span memo and
+   * the capture index live, so 338 questions about one pattern built and threw
+   * away 338 caches. NULL when it could not be allocated, and then the
+   * one-shot forms are called, which is what happened before this existed.
+   */
+  GRX_IRMemo * memo;
 } Codegen;
 
 /** One CALL waiting to be pointed at the block for its target. */
@@ -559,7 +570,9 @@ static int can_match_empty(Codegen * codegen, uint32_t node_index) {
   if (slot && *slot) {
     return *slot == 1;
   }
-  int answer = grx_ir_can_match_empty(codegen->ir, node_index);
+  int answer = codegen->memo
+      ? grx_ir_memo_can_match_empty(codegen->memo, node_index)
+      : grx_ir_can_match_empty(codegen->ir, node_index);
   if (slot) {
     *slot = answer ? 1u : 2u;
   }
@@ -587,7 +600,9 @@ static int span_of(Codegen * codegen, uint32_t node_index, size_t * out_min,
     return 1;
   }
 
-  int answer = grx_ir_span(codegen->ir, node_index, out_min, out_max);
+  int answer = codegen->memo
+      ? grx_ir_memo_span(codegen->memo, node_index, out_min, out_max)
+      : grx_ir_span(codegen->ir, node_index, out_min, out_max);
   if (slot) {
     slot->state = answer ? 1u : 2u;
     slot->min = answer ? *out_min : 0;
@@ -2316,6 +2331,7 @@ GRX_Result grx_codegen_program(const GRX_IR * ir, const GRX_Limits * limits,
     .walk = {0},
     .node_empty = {0},
     .node_span = {0},
+    .memo = NULL,
   };
   grx_arena_init(&codegen.fixups, out_program->insts.allocator, sizeof(Fixup),
       limits->max_program_size, GRX_DIAG_LIMIT_PROGRAM_SIZE);
@@ -2335,6 +2351,9 @@ GRX_Result grx_codegen_program(const GRX_IR * ir, const GRX_Limits * limits,
       }
     }
   }
+  // Same discipline as the two arenas above: a memo that could not be made
+  // means asking the long way, not failing.
+  codegen.memo = grx_ir_memo_create(ir);
   grx_arena_init(&codegen.node_span, out_program->insts.allocator,
       sizeof(SpanMemo), 0, GRX_DIAG_NONE);
   if (grx_arena_reserve(&codegen.node_span, ir->nodes.count) == GRX_OK) {
@@ -2388,6 +2407,7 @@ GRX_Result grx_codegen_program(const GRX_IR * ir, const GRX_Limits * limits,
   grx_arena_clear(&codegen.walk);
   grx_arena_clear(&codegen.node_empty);
   grx_arena_clear(&codegen.node_span);
+  grx_ir_memo_destroy(codegen.memo);
   if (result != GRX_OK) {
     return result;
   }

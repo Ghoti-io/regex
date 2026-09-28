@@ -665,6 +665,39 @@ static void analysis_done(Analysis * analysis) {
   grx_arena_clear(&analysis->groups);
 }
 
+/**
+ * Ready an analysis for another question, keeping what it has learned.
+ *
+ * Everything reset here belongs to one walk - where it was, how deep, which
+ * groups it was in the middle of resolving. Everything kept is a property of
+ * the IR: the group-span memo and the capture index, both of which answer the
+ * same way whoever asks.
+ *
+ * The fields below `result` are the full pass's outputs, and a memo is never
+ * the full pass - grx_analyze_ir() builds its own. They are cleared anyway, so
+ * that an object which is asked a hundred questions never holds a claim left
+ * over from one of them.
+ */
+static void analysis_restart(Analysis * analysis) {
+  analysis->failure = GRX_OK;
+  analysis->depth = 0;
+  analysis->resolving_count = 0;
+  analysis->context_floor = GRX_ANALYSIS_NO_FLOOR;
+  analysis->measuring_look_width = 0;
+  // The frames keep their capacity: it is the same walk over the same tree
+  // every time, and re-growing the arena per question was part of the cost
+  // this exists to remove.
+  analysis->frames.count = 0;
+  analysis->result = (Span) {0, GRX_NPOS, 0, 0, 0, 0};
+  analysis->is_regular = 1;
+  analysis->has_backreference = 0;
+  analysis->has_lookaround = 0;
+  analysis->has_recursion = 0;
+  analysis->has_script_run = 0;
+  analysis->max_lookbehind = 0;
+  analysis->max_variable_lookbehind = 0;
+}
+
 static int walk_push(Analysis * analysis, uint32_t node_index) {
   const GRX_IRNode * node = grx_ir_node(analysis->ir, node_index);
   if (!node) {
@@ -1310,16 +1343,54 @@ GRX_Result grx_analyze_ir(GRX_IR * ir, GRX_Facts * out_facts) {
   return GRX_OK;
 }
 
-int grx_ir_span(const GRX_IR * ir, uint32_t node_index, size_t * out_min,
-    size_t * out_max) {
-  if (!ir || !out_min || !out_max || node_index == GRX_INDEX_NONE) {
-    return 0;
-  }
-
+/**
+ * A memo the caller owns, so that a run of questions shares one.
+ *
+ * The group-span cache and the capture index live on the Analysis, and the two
+ * entry points below built one Analysis per question - so codegen asking 338
+ * questions about one pattern built and discarded 338 caches. The memos on the
+ * Codegen cut the *number* of questions to once per node; this makes each of
+ * them cheap. Measured on a 24,901-byte fuzz artifact: 4,988 body walks and
+ * 69,465,944 walk steps across those 338, where sharing one memo is a few
+ * hundred walks.
+ *
+ * This is the same lesson as the two memos it sits under, one level out, and
+ * it is the third time: a memo's *lifetime* is part of the fix. The scope that
+ * is right here is the compile, because that is what owns the IR, and the IR is
+ * what every answer in here is a property of.
+ */
+struct GRX_IRMemo {
   Analysis analysis;
-  analysis_init(&analysis, ir, NULL);
-  Span span = walk(&analysis, node_index);
-  analysis_done(&analysis);
+};
+
+GRX_IRMemo * grx_ir_memo_create(const GRX_IR * ir) {
+  if (!ir) {
+    return NULL;
+  }
+  GRX_IRMemo * memo
+      = gcu_allocator_calloc(ir->allocator, 1, sizeof(GRX_IRMemo));
+  if (!memo) {
+    return NULL;
+  }
+  // NULL for `writable`, the same as the one-shot calls: asking about one
+  // subtree must not disturb what the full pass recorded.
+  analysis_init(&memo->analysis, ir, NULL);
+  return memo;
+}
+
+void grx_ir_memo_destroy(GRX_IRMemo * memo) {
+  if (!memo) {
+    return;
+  }
+  const GRX_Allocator * allocator = memo->analysis.ir->allocator;
+  analysis_done(&memo->analysis);
+  gcu_allocator_free(allocator, memo);
+}
+
+/** grx_ir_span()'s answer, from an analysis the caller keeps. */
+static int span_of_node(Analysis * analysis, uint32_t node_index,
+    size_t * out_min, size_t * out_max) {
+  Span span = walk(analysis, node_index);
   if (span.unknown_length) {
     // A length nobody can compute is not one to prune with. Saying so is the
     // difference between a guard that skips work and a guard that skips an
@@ -1329,6 +1400,36 @@ int grx_ir_span(const GRX_IR * ir, uint32_t node_index, size_t * out_min,
   *out_min = span.min_length;
   *out_max = span.max_length;
   return 1;
+}
+
+int grx_ir_memo_span(GRX_IRMemo * memo, uint32_t node_index, size_t * out_min,
+    size_t * out_max) {
+  if (!memo || !out_min || !out_max || node_index == GRX_INDEX_NONE) {
+    return 0;
+  }
+  analysis_restart(&memo->analysis);
+  return span_of_node(&memo->analysis, node_index, out_min, out_max);
+}
+
+int grx_ir_memo_can_match_empty(GRX_IRMemo * memo, uint32_t node_index) {
+  if (!memo || node_index == GRX_INDEX_NONE) {
+    return 1;
+  }
+  analysis_restart(&memo->analysis);
+  return walk(&memo->analysis, node_index).min_length == 0;
+}
+
+int grx_ir_span(const GRX_IR * ir, uint32_t node_index, size_t * out_min,
+    size_t * out_max) {
+  if (!ir || !out_min || !out_max || node_index == GRX_INDEX_NONE) {
+    return 0;
+  }
+
+  Analysis analysis;
+  analysis_init(&analysis, ir, NULL);
+  int answer = span_of_node(&analysis, node_index, out_min, out_max);
+  analysis_done(&analysis);
+  return answer;
 }
 
 int grx_ir_can_match_empty(const GRX_IR * ir, uint32_t node_index) {
@@ -1346,3 +1447,4 @@ int grx_ir_can_match_empty(const GRX_IR * ir, uint32_t node_index) {
   analysis_done(&analysis);
   return span.min_length == 0;
 }
+

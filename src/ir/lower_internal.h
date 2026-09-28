@@ -213,6 +213,59 @@ GRX_Result grx_lower_pattern(const GRX_Pattern * pattern,
 GRX_Result grx_analyze_ir(GRX_IR * ir, GRX_Facts * out_facts);
 
 /**
+ * @brief A memo for the two questions below, owned by whoever asks them.
+ *
+ * Both calls build a fresh analysis, and the analysis is where the group-span
+ * memo and the capture index live - so a caller asking many questions about
+ * one IR built and discarded a cache per question. Codegen asks once per IR
+ * node, which for a 24,901-byte fuzz artifact was 338 questions, 338 caches,
+ * and 69,465,944 walk steps between them.
+ *
+ * Hold one of these for as long as the IR is being asked about - a compile -
+ * and pass it to the `_memo_` forms. The answers are properties of the IR, so
+ * the cache is good for the whole of its life and for every caller.
+ *
+ * Create may fail and answer NULL; the `_memo_` forms accept NULL and give the
+ * same conservative answer the one-shot forms give for a bad argument, so a
+ * caller that cannot allocate one calls grx_ir_span() and
+ * grx_ir_can_match_empty() instead and is merely slower.
+ */
+typedef struct GRX_IRMemo GRX_IRMemo;
+
+/**
+ * @brief Make a memo for asking about `ir`.
+ *
+ * @param ir The lowered pattern, which must outlive the memo.
+ * @return The memo, or NULL.
+ */
+GRX_IRMemo * grx_ir_memo_create(const GRX_IR * ir);
+
+/** @brief Release a memo. NULL is ignored. */
+void grx_ir_memo_destroy(GRX_IRMemo * memo);
+
+/**
+ * @brief grx_ir_span(), sharing `memo`'s cache.
+ *
+ * @param memo The caller's memo. NULL answers 0.
+ * @param node_index The subtree root.
+ * @param out_min Receives the shortest match.
+ * @param out_max Receives the longest, or GRX_NPOS when unbounded.
+ * @return Non-zero when the length is knowable at all.
+ */
+int grx_ir_memo_span(GRX_IRMemo * memo, uint32_t node_index, size_t * out_min,
+    size_t * out_max);
+
+/**
+ * @brief grx_ir_can_match_empty(), sharing `memo`'s cache.
+ *
+ * @param memo The caller's memo. NULL answers 1, which is the conservative
+ *   answer for the same reason the one-shot form's bad-argument case is.
+ * @param node_index The subtree root.
+ * @return Non-zero when the subtree can match the empty string.
+ */
+int grx_ir_memo_can_match_empty(GRX_IRMemo * memo, uint32_t node_index);
+
+/**
  * @brief How long a subtree's match can be, in bytes.
  *
  * The same walk grx_analyze_ir() uses, asked about one node - and asked for

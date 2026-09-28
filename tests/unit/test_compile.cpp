@@ -239,6 +239,73 @@ TEST(Compile, AGroupThatReferencesItselfIsMeasuredOnceNotOncePerReference) {
          "this large means it is refusing to remember them again";
 }
 
+TEST(Compile, OneAnalysisMemoServesTheWholeCompileNotOneQuestion) {
+  // The fourth of this family and the last of it, and the one that says what
+  // the other three were about.
+  //
+  // `grx_ir_can_match_empty()` and `grx_ir_span()` each build a fresh analysis,
+  // and the analysis is where the group-span memo and the capture index live.
+  // So the memos on the Codegen cut the *number* of questions to once per IR
+  // node - 14,300 nodes to 338 questions on the artifact below - and every one
+  // of those 338 built a cache, filled it, and threw it away. Codegen holds one
+  // analysis memo for the compile now.
+  //
+  // pattern-pcre/slow-unit-2fcdef60, 24,901 bytes: 4,988 body walks and
+  // 69,465,944 walk steps across those 338 questions, 1.84 s. It is three body
+  // walks and 0.111 s now - 321 of its 338 questions are answered from the
+  // cache, 61 of them from an entry a previous question stored.
+  //
+  // The witness is one group whose body is expensive to resolve and 6,000
+  // repeats that each ask about it: `(?:\1x)*` is a repeat, so codegen asks
+  // whether its body can match empty, and answering walks group 1. Old cost is
+  // questions times body; new cost is body plus questions - so the fixed build
+  // barely moves as the pattern grows and the broken one goes up with the
+  // product. Measured 2.50 s against 0.014 s in release, a factor of 181.
+  //
+  // Half a second clears both populations in both builds: release 0.016 s
+  // fixed against 2.65 s broken, and under AddressSanitizer 0.053 s against
+  // 10.97 s. That is 9.4x under the bound and 5.3x over it.
+  std::string body;
+  for (int i = 0; i < 5000; i++) {
+    body += "(?:a|b)";
+  }
+  std::string pattern = "(" + body + "\\1)";
+  for (int i = 0; i < 6000; i++) {
+    pattern += "(?:\\1" + std::string(1, (char)('a' + i % 26)) + ")*";
+  }
+
+  GRX_Limits limits;
+  grx_limits_default(&limits);
+  // Two caps lifted rather than the one its neighbours lift, and the second is
+  // worth a word. Growing this pattern costs the fixed build nothing and the
+  // broken one everything, so the separation is bought with size - and at
+  // 83 KB it is past the 64 KB max_pattern_length ships with. Neither cap is
+  // what is being measured: a pattern refused for its length is never analysed
+  // at all.
+  limits.max_program_size = 0;
+  limits.max_pattern_length = 0;
+
+  GRX_Regex * regex = nullptr;
+  auto start = std::chrono::steady_clock::now();
+  GRX_Result result = grx_regex_compile_with_allocator(pattern.data(),
+      pattern.size(), GRX_SYNTAX_PCRE, GRX_OPT_NONE, &limits, nullptr, nullptr,
+      &regex);
+  auto elapsed = std::chrono::steady_clock::now() - start;
+  EXPECT_EQ(result, GRX_OK);
+  EXPECT_NE(regex, nullptr);
+  grx_regex_free(regex);
+
+  auto seconds
+      = std::chrono::duration_cast<std::chrono::duration<double>>(elapsed)
+            .count();
+  EXPECT_LT(seconds, 0.5)
+      << pattern.size() << "-byte pattern, one expensive group and 6,000 "
+      << "repeats that each ask about it, took " << seconds
+      << " s to compile. codegen holds one GRX_IRMemo for the compile; a "
+         "figure this large means every question is building its own analysis "
+         "again";
+}
+
 TEST(Compile, ASubtreeIsAskedAboutTheEmptyStringOncePerNodeNotOncePerCopy) {
   // The other half of the memo above, and the half it did not fix.
   //
