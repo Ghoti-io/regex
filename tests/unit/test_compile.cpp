@@ -235,6 +235,82 @@ TEST(Compile, ASubtreeIsAskedAboutTheEmptyStringOncePerNodeNotOncePerCopy) {
          "a figure this large means it is asking once per expanded copy again";
 }
 
+TEST(Compile, AnAlternationBranchIsMeasuredOncePerNodeNotOncePerCopy) {
+  // The third of the same family, and the one that was recorded rather than
+  // fixed when the second went in.
+  //
+  // `grx_ir_span()` is the other pure function codegen calls from inside the
+  // expansion: gen_length_guard() asks how long each alternation branch is, to
+  // emit the assertion that prunes a variable lookbehind. That call site sits
+  // inside the same nested `{1,2}` repeats, so a branch was being measured once
+  // per expanded copy of the body around it.
+  //
+  // It appeared in none of the stack samples that found the empty-string memo,
+  // so it was left in notes/regex/TODO.md section 14s as "the same kind of pure
+  // function inside the same loops" rather than fixed with it. The shape was
+  // the whole argument and the measurement bore it out: 1.99 s asking per copy
+  // against 0.019 s asking per node, a factor of a hundred.
+  //
+  // A forward lookbehind is what reaches the guard at all - `forward_tail` is
+  // set entering one and cleared by any repeat that can iterate - so the
+  // lookbehind goes *inside* the nesting, and the alternation inside that.
+  //
+  // The backreference chain is 120 long rather than the 40 above, because it is
+  // the one axis that separates the two builds without costing the fixed one:
+  // it sits outside the nesting, so it makes each measurement expensive and
+  // adds nothing to the expansion. Lengthening it and dropping a level of
+  // nesting buys the same 2 s on the broken build for half the time on the
+  // fixed one.
+  //
+  // Measured against the half-second bound, which sits between the two
+  // populations in both builds: release 0.017 s fixed against 2.03 s broken,
+  // and under AddressSanitizer - where `make test` also runs this - 0.107 s
+  // fixed against 8.66 s broken. The tightest margin is therefore 4.7x, on the
+  // side that matters, which is a false failure on a loaded machine.
+  std::string pattern = "(a)";
+  for (int group = 1; group <= 120; group++) {
+    pattern += "(\\" + std::to_string(group) + "x)";
+  }
+  std::string alternation;
+  for (int branch = 0; branch < 6; branch++) {
+    if (branch) {
+      alternation += "|";
+    }
+    alternation += "\\121" + std::string((size_t)branch, 'y');
+  }
+  std::string inner = "(?<=" + alternation + ")";
+  for (int level = 0; level < 14; level++) {
+    inner = "(?:" + inner + "){1,2}";
+  }
+  pattern += inner;
+
+  GRX_Limits limits;
+  grx_limits_default(&limits);
+  // Same as above: a refused compile walks exactly as much, and the cap is not
+  // what is being measured.
+  limits.max_program_size = 0;
+
+  GRX_Regex * regex = nullptr;
+  auto start = std::chrono::steady_clock::now();
+  GRX_Result result = grx_regex_compile_with_allocator(pattern.data(),
+      pattern.size(), GRX_SYNTAX_PCRE, GRX_OPT_NONE, &limits, nullptr, nullptr,
+      &regex);
+  auto elapsed = std::chrono::steady_clock::now() - start;
+  EXPECT_EQ(result, GRX_OK);
+  EXPECT_NE(regex, nullptr);
+  grx_regex_free(regex);
+
+  auto seconds
+      = std::chrono::duration_cast<std::chrono::duration<double>>(elapsed)
+            .count();
+  EXPECT_LT(seconds, 0.5)
+      << pattern.size() << "-byte pattern, 14 levels of {1,2} over a "
+      << "six-branch lookbehind, took " << seconds
+      << " s to compile. codegen caches grx_ir_span() per IR node; a figure "
+         "this large means gen_length_guard() is measuring once per expanded "
+         "copy again";
+}
+
 TEST(Compile, AllocatesNothingOnAFailedCompile) {
   grxtest::CountingAllocator allocator;
 

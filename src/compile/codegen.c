@@ -56,10 +56,17 @@
 #include "../ir/lower_internal.h"
 #include "compile_internal.h"
 
-/** What one code-generation run carries. */
 /** How many distinct groups one program may call as subroutines. */
 #define GRX_CODEGEN_MAX_CALLED 256
 
+/** grx_ir_span()'s answer about one IR node; see Codegen::node_span. */
+typedef struct {
+  size_t min;    ///< Shortest the subtree can match.
+  size_t max;    ///< Longest it can match, or GRX_NPOS.
+  uint8_t state; ///< 0 not asked, 1 answered, 2 asked and there is no answer.
+} SpanMemo;
+
+/** What one code-generation run carries. */
 typedef struct {
   const GRX_IR * ir;         ///< What is being compiled.
   GRX_Program * program;     ///< What is being built.
@@ -196,6 +203,23 @@ typedef struct {
    * pattern, which is the one case that was ever fixed.
    */
   GRX_Arena node_empty;
+  /**
+   * grx_ir_span()'s answer per IR node.
+   *
+   * The same story as node_empty above, one call site along. A branch's length
+   * is a pure function of its subtree, and gen_length_guard() asks it of every
+   * alternation branch inside a forward lookbehind body - which sits inside the
+   * same expansion loops, so a branch under sixteen nested `{1,2}` repeats was
+   * measured once per copy. Sixteen levels over a chain of forty
+   * backreferences: 1.9 s asking per copy, 0.02 s asking per node.
+   *
+   * It was recorded rather than fixed when node_empty went in, because it
+   * appeared in none of the stack samples that found that one. The shape is
+   * identical, which is the whole reason to keep both memos in view: a pure
+   * function called from inside the expansion is answered per node, and what
+   * decides that is the memo's lifetime, not its existence.
+   */
+  GRX_Arena node_span;
 } Codegen;
 
 /** One CALL waiting to be pointed at the block for its target. */
@@ -542,6 +566,36 @@ static int can_match_empty(Codegen * codegen, uint32_t node_index) {
   return answer;
 }
 
+/**
+ * How long a subtree can be, asked at most once per node.
+ *
+ * "There is no answer" is an answer worth remembering too: a branch whose
+ * length nobody can compute is the expensive case to re-ask, because the walk
+ * that fails to compute it is the walk that covered the whole subtree.
+ */
+static int span_of(Codegen * codegen, uint32_t node_index, size_t * out_min,
+    size_t * out_max) {
+  SpanMemo * slot = node_index == GRX_INDEX_NONE
+      ? NULL
+      : GRX_ARENA_AT(SpanMemo, &codegen->node_span, node_index);
+  if (slot && slot->state) {
+    if (slot->state != 1) {
+      return 0;
+    }
+    *out_min = slot->min;
+    *out_max = slot->max;
+    return 1;
+  }
+
+  int answer = grx_ir_span(codegen->ir, node_index, out_min, out_max);
+  if (slot) {
+    slot->state = answer ? 1u : 2u;
+    slot->min = answer ? *out_min : 0;
+    slot->max = answer ? *out_max : 0;
+  }
+  return answer;
+}
+
 /** Generate a concatenation, in reading order or against it. */
 static GRX_Result gen_concat_step(Codegen * codegen, GenFrame * frame,
     const GRX_IRNode * node, GenAction * action, uint32_t * out_child) {
@@ -684,7 +738,7 @@ static GRX_Result gen_length_guard(
   size_t min = 0;
   size_t max = 0;
   if (!codegen->forward_tail
-      || !grx_ir_span(codegen->ir, branch, &min, &max)
+      || !span_of(codegen, branch, &min, &max)
       || (min == 0 && max == GRX_NPOS)) {
     return GRX_OK;
   }
@@ -2261,6 +2315,7 @@ GRX_Result grx_codegen_program(const GRX_IR * ir, const GRX_Limits * limits,
     .frames = {0},
     .walk = {0},
     .node_empty = {0},
+    .node_span = {0},
   };
   grx_arena_init(&codegen.fixups, out_program->insts.allocator, sizeof(Fixup),
       limits->max_program_size, GRX_DIAG_LIMIT_PROGRAM_SIZE);
@@ -2276,6 +2331,15 @@ GRX_Result grx_codegen_program(const GRX_IR * ir, const GRX_Limits * limits,
   if (grx_arena_reserve(&codegen.node_empty, ir->nodes.count) == GRX_OK) {
     for (size_t i = 0; i < ir->nodes.count; i++) {
       if (grx_arena_append(&codegen.node_empty, NULL, NULL) != GRX_OK) {
+        break;
+      }
+    }
+  }
+  grx_arena_init(&codegen.node_span, out_program->insts.allocator,
+      sizeof(SpanMemo), 0, GRX_DIAG_NONE);
+  if (grx_arena_reserve(&codegen.node_span, ir->nodes.count) == GRX_OK) {
+    for (size_t i = 0; i < ir->nodes.count; i++) {
+      if (grx_arena_append(&codegen.node_span, NULL, NULL) != GRX_OK) {
         break;
       }
     }
@@ -2323,6 +2387,7 @@ GRX_Result grx_codegen_program(const GRX_IR * ir, const GRX_Limits * limits,
   grx_arena_clear(&codegen.frames);
   grx_arena_clear(&codegen.walk);
   grx_arena_clear(&codegen.node_empty);
+  grx_arena_clear(&codegen.node_span);
   if (result != GRX_OK) {
     return result;
   }
