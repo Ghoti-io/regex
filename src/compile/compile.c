@@ -221,7 +221,9 @@ GRX_Result grx_compile_program(const GRX_Pattern * pattern,
     regex->program.literal_prefix_length = grx_program_literal_prefix(
         &regex->program, regex->program.literal_prefix, GRX_LITERAL_MAX);
     regex->program.required_literal_length = grx_program_required_literal(
-        &regex->program, regex->program.required_literal, GRX_LITERAL_MAX);
+        &regex->program, regex->program.required_literal, GRX_LITERAL_MAX,
+        &regex->program.required_offset_min,
+        &regex->program.required_offset_max);
     if (regex->program.literal_prefix_length) {
       regex->facts.literal_prefix = regex->program.literal_prefix;
       regex->facts.literal_prefix_length

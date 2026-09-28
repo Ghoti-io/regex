@@ -364,7 +364,12 @@ TEST(Replace, AStrayLimitIsReported) {
   options.limits = &limits;
   options.engine = GRX_ENGINE_BACKTRACK;
 
-  const std::string subject(40, 'a');
+  // The leading `b` is a decoy. `(a+)+b` requires a `b` in every match, so a
+  // subject of nothing but `a` is answered by the prefilter and the run that
+  // is supposed to exhaust max_steps never starts - and this gate then fails
+  // twice over, once on the status and once as a leak, because the call it
+  // expected to fail returns a buffer the test does not free.
+  const std::string subject = "b" + std::string(40, 'a');
   GRX_Text text {};
   EXPECT_EQ(grx_regex_replace(regex.get(), subject.data(), subject.size(),
                 "X", 1, GRX_REPLACE_GLOBAL, &options, nullptr, nullptr,

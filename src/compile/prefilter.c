@@ -554,8 +554,48 @@ static uint32_t dom_intersect(
   return left;
 }
 
-size_t grx_program_required_literal(
-    const GRX_Program * program, char * out, size_t cap) {
+/**
+ * @brief How many bytes one instruction consumes, as a [min, max] range.
+ *
+ * Only the opcodes successors_of() models can reach this; everything else has
+ * already refused the analysis. A class or a dot under UTF-8 is 1 to 4 bytes
+ * because it is a code point and this does not look inside the class to see
+ * whether it holds anything above U+007F - conservative, and conservative
+ * here means a wider window, which is the safe direction.
+ */
+static void inst_width(
+    const GRX_Inst * inst, int utf, size_t * out_min, size_t * out_max) {
+  switch (inst->op) {
+    case GRX_OP_CHAR: {
+      if (!utf) {
+        *out_min = *out_max = 1;
+        return;
+      }
+      char encoded[8];
+      size_t width = grx_unicode_utf8_encode(inst->x, encoded);
+      *out_min = *out_max = width ? width : 1;
+      return;
+    }
+    case GRX_OP_CLASS:
+    case GRX_OP_ANY:
+    case GRX_OP_ANY_NL:
+      *out_min = 1;
+      *out_max = utf ? 4 : 1;
+      return;
+    default:
+      *out_min = *out_max = 0;
+      return;
+  }
+}
+
+size_t grx_program_required_literal(const GRX_Program * program, char * out,
+    size_t cap, size_t * out_offset_min, size_t * out_offset_max) {
+  if (out_offset_min) {
+    *out_offset_min = 0;
+  }
+  if (out_offset_max) {
+    *out_offset_max = GRX_NPOS;
+  }
   if (!program || !out || !cap) {
     return 0;
   }
@@ -726,10 +766,101 @@ size_t grx_program_required_literal(
     return 0;
   }
 
+  // How far from the start of a match each instruction can be, in bytes.
+  // `lo` is the least over every path from the entry and `hi` the greatest,
+  // with `unbounded` standing for a maximum there is none of. This is what
+  // turns an occurrence of the literal into a *window* of start positions
+  // instead of only a reason to search the subject at all.
+  //
+  // Both are conservative towards a wider window, which is the direction that
+  // keeps start positions: a `lo` too small moves the window's right edge
+  // right, a `hi` too large moves its left edge left, and neither can drop a
+  // position a true window would have held.
+  size_t * lo = gcu_allocator_calloc(allocator, posted, sizeof *lo);
+  size_t * hi = gcu_allocator_calloc(allocator, posted, sizeof *hi);
+  uint8_t * unbounded = gcu_allocator_calloc(allocator, posted, 1);
+  int offsets = lo && hi && unbounded;
+  if (offsets) {
+    for (size_t i = 0; i < posted; i++) {
+      lo[i] = GRX_NPOS;
+    }
+    lo[0] = 0;
+    // A retreating edge in reverse postorder is the only way back to a node
+    // already passed, so its target is where a repeat re-enters. Everything
+    // reachable from there can be any number of iterations from the start,
+    // and the maximum is given up rather than counted: a repeat that consumes
+    // nothing would converge, but telling those apart is not worth a pass and
+    // being wrong costs only the window.
+    for (size_t i = 0; i < posted; i++) {
+      const GRX_Inst * inst
+          = GRX_ARENA_AT(const GRX_Inst, &program->insts, d.order[i]);
+      uint32_t succ[2];
+      size_t succ_count = 0;
+      if (!inst || !successors_of(program, d.order[i], inst, succ,
+              &succ_count)) {
+        continue;
+      }
+      for (size_t sx = 0; sx < succ_count; sx++) {
+        uint32_t to = d.number[succ[sx]];
+        if (to != GRX_INDEX_NONE && to <= i) {
+          unbounded[to] = 1;
+        }
+      }
+    }
+    // Relax to a fixed point rather than in one pass, because a shortest
+    // path to a node may run through an edge that retreats in this order and
+    // one pass would then report a minimum that is too large - the one
+    // direction that is not safe. Not settling means no offsets at all.
+    int settled = 0;
+    for (size_t pass = 0; !settled && pass <= posted + 1; pass++) {
+      settled = 1;
+      for (size_t i = 0; i < posted; i++) {
+        if (lo[i] == GRX_NPOS) {
+          continue;
+        }
+        const GRX_Inst * inst
+            = GRX_ARENA_AT(const GRX_Inst, &program->insts, d.order[i]);
+        uint32_t succ[2];
+        size_t succ_count = 0;
+        if (!inst || !successors_of(program, d.order[i], inst, succ,
+                &succ_count)) {
+          continue;
+        }
+        size_t wmin = 0;
+        size_t wmax = 0;
+        inst_width(inst, utf, &wmin, &wmax);
+        for (size_t sx = 0; sx < succ_count; sx++) {
+          uint32_t to = d.number[succ[sx]];
+          if (to == GRX_INDEX_NONE) {
+            continue;
+          }
+          if (lo[i] + wmin < lo[to]) {
+            lo[to] = lo[i] + wmin;
+            settled = 0;
+          }
+          if (unbounded[i] && !unbounded[to]) {
+            unbounded[to] = 1;
+            settled = 0;
+          }
+          if (!unbounded[to] && hi[i] + wmax > hi[to]) {
+            hi[to] = hi[i] + wmax;
+            settled = 0;
+          }
+        }
+      }
+    }
+    if (!settled) {
+      offsets = 0;
+    }
+  }
+
   // The longest run of CHARs that a match must consume adjacently: each is
   // the only way on from the one before, and the only way into the one after.
   // The head has to dominate every MATCH; the rest then follow from it.
   size_t best = 0;
+  int best_rank = -1;
+  size_t best_lo = 0;
+  size_t best_hi = GRX_NPOS;
   char candidate[GRX_LITERAL_MAX];
   size_t limit = cap < GRX_LITERAL_MAX ? cap : GRX_LITERAL_MAX;
   for (size_t i = 0; i < posted; i++) {
@@ -827,12 +958,53 @@ size_t grx_program_required_literal(
       }
       at = next;
     }
-    if (written > best) {
+    if (!written) {
+      continue;
+    }
+    // Length first, because a longer literal is rarer under any subject
+    // distribution with imperfect correlation between its bytes, and that
+    // needs no corpus to assume. The rank below only ever settles a tie, so
+    // no candidate can lose to a shorter one.
+    //
+    //   2  a bounded window somewhere other than the very start
+    //   1  an unbounded offset, or no offsets at all: presence only
+    //   0  always at offset 0 and no longer than the literal prefix
+    //
+    // Rank 0 is last because such a literal is exactly what the prefix skip
+    // already tests at every position it tries; reporting it leaves the
+    // engine with one fact written twice. `a.{20}q` is the case - `a` and `q`
+    // both dominate, both are one byte - and it used to answer `a`.
+    size_t here_lo = 0;
+    size_t here_hi = GRX_NPOS;
+    if (offsets && !unbounded[i] && lo[i] != GRX_NPOS) {
+      here_lo = lo[i];
+      here_hi = hi[i];
+    }
+    int rank = 1;
+    if (here_hi == 0 && program->literal_prefix_length >= written) {
+      rank = 0;
+    }
+    else if (here_hi != GRX_NPOS) {
+      rank = 2;
+    }
+    if (written > best || (written == best && rank > best_rank)) {
       best = written;
+      best_rank = rank;
+      best_lo = here_lo;
+      best_hi = here_hi;
       memcpy(out, candidate, written);
     }
   }
 
   dominators_free(allocator, &d);
+  gcu_allocator_free(allocator, lo);
+  gcu_allocator_free(allocator, hi);
+  gcu_allocator_free(allocator, unbounded);
+  if (best && out_offset_min) {
+    *out_offset_min = best_lo;
+  }
+  if (best && out_offset_max) {
+    *out_offset_max = best_hi;
+  }
   return best;
 }

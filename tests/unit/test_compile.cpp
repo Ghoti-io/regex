@@ -23,6 +23,8 @@
 
 #include "test_helpers.h"
 
+#include "../../src/compile/compile_internal.h"
+
 TEST(Compile, NullArgumentsAreInvalid) {
   GRX_Regex * regex = nullptr;
   EXPECT_EQ(
@@ -825,6 +827,12 @@ const char * const kLiteralPatterns[] = {
   // are what say so: every one of them has a match that omits a character a
   // walk following the preferred arm would have claimed.
   "ab?c", "abc?d", "a(?:b)?c", "ax*y", "ab|abc", "a(?:b|)c", "ab{0,1}c",
+  // Added 2026-09-28 for the offset window. Each separates the start of a
+  // match from the literal every match contains by a different mechanism, so
+  // that the distance is fixed, a range, or unbounded, rather than only the
+  // zero the rest of this list mostly gives.
+  "a.{3}q", "a.{1,3}q", "a{0,4}q", "a?q", "(abc)?q", "a+q", "a*q",
+  "x(ab|cd)y", "(foo|bar)baz", "abcdef.*z", "a.b.c", "(a|b)zebra(c|d)",
   "", "a", ".", "a|", "(?R)x", "(*ACCEPT)abc", "\\1abc", "abc(?R)",
 };
 
@@ -1019,6 +1027,149 @@ TEST(Compile, ARequiredLiteralIsOneEveryMatchReallyContains) {
 
   EXPECT_GT(offered, 20u) << "hardly any pattern here has a required literal";
   EXPECT_GT(checked, 200u) << "no match was ever examined";
+}
+
+TEST(Compile, TheRequiredLiteralSitsWhereTheOffsetWindowSaysItDoes) {
+  // The claim the *skip* rests on, and it is a stronger one than the sweep
+  // above makes. Knowing every match contains the literal only says the
+  // subject is worth searching; knowing it sits `[min, max]` bytes from the
+  // start of the match is what lets a position be ruled out - and a window
+  // that is too narrow drops a start that would have matched, which is the
+  // one way this optimisation can be wrong rather than merely weak.
+  //
+  // Checked against the engines: for every match the pattern has anywhere in
+  // every subject, some occurrence of the literal inside it must fall in the
+  // window. Not *every* occurrence - the match is entitled to contain others.
+  size_t offered = 0;
+  size_t bounded = 0;
+  size_t checked = 0;
+  std::vector<std::pair<const char *, uint32_t>> work;
+  for (const char * pattern : kLiteralPatterns) {
+    work.emplace_back(pattern, GRX_OPT_NONE);
+  }
+  for (const char * pattern : kLiteralUtfPatterns) {
+    work.emplace_back(pattern, GRX_OPT_UTF);
+  }
+
+  for (const auto & item : work) {
+    const bool utf = (item.second & GRX_OPT_UTF) != 0;
+    GRX_Regex * loose = nullptr;
+    GRX_Regex * pinned = nullptr;
+    if (grx_regex_compile_with_allocator(item.first, strlen(item.first),
+            GRX_SYNTAX_PCRE, item.second, nullptr, nullptr, nullptr, &loose)
+            != GRX_OK
+        || grx_regex_compile_with_allocator(item.first, strlen(item.first),
+               GRX_SYNTAX_PCRE, item.second | GRX_OPT_ANCHORED, nullptr,
+               nullptr, nullptr, &pinned) != GRX_OK) {
+      grx_regex_free(loose);
+      grx_regex_free(pinned);
+      continue;
+    }
+    const GRX_Program * program = &loose->program;
+    if (!program->required_literal_length) {
+      grx_regex_free(loose);
+      grx_regex_free(pinned);
+      continue;
+    }
+    offered++;
+    std::string needle(
+        program->required_literal, program->required_literal_length);
+    const size_t low = program->required_offset_min;
+    const size_t high = program->required_offset_max;
+    if (high != GRX_NPOS) {
+      bounded++;
+      EXPECT_LE(low, high) << item.first;
+    }
+
+    for (const std::string & subject :
+        utf ? literal_utf_subjects() : literal_subjects()) {
+      bool ok = false;
+      auto spans = every_match(pinned, subject, utf, &ok);
+      if (!ok || high == GRX_NPOS) {
+        continue;
+      }
+      for (const auto & span : spans) {
+        std::string text = subject.substr(span.first, span.second - span.first);
+        bool inside = false;
+        for (size_t at = text.find(needle); at != std::string::npos;
+            at = text.find(needle, at + 1)) {
+          if (at >= low && at <= high) {
+            inside = true;
+            break;
+          }
+        }
+        checked++;
+        EXPECT_TRUE(inside)
+            << "pattern " << item.first << " puts \"" << needle
+            << "\" at [" << low << ", " << high << "] from the start of a "
+            << "match, but \"" << text << "\" at " << span.first << " in \""
+            << subject << "\" has no occurrence there";
+      }
+    }
+    grx_regex_free(loose);
+    grx_regex_free(pinned);
+  }
+
+  EXPECT_GT(offered, 20u) << "hardly any pattern here has a required literal";
+  EXPECT_GT(bounded, 10u)
+      << "every window is unbounded, so this gate never tested one";
+  EXPECT_GT(checked, 100u) << "no match was ever examined";
+}
+
+TEST(Compile, AmongEqualLiteralsTheOneThePrefixAlreadyGivesIsTheLastChoice) {
+  // By value, because the sweeps cannot see this at all: every answer below
+  // and every answer this used to give are equally true facts about the
+  // pattern, and the difference is only which one is worth having.
+  //
+  // `a.{20}q` is the case that prompted it. `a` and `q` both dominate every
+  // match and both are one byte, the earlier used to win, and the answer was
+  // then identical to the literal prefix - one fact written twice, and a
+  // benchmark row three orders of magnitude off what the other was worth.
+  struct Expected {
+    const char * pattern;
+    const char * required;
+    size_t low;
+    size_t high;   // GRX_NPOS for unbounded.
+  };
+  const Expected table[] = {
+    // The tie-break doing its work: not the byte at offset 0.
+    {"a.{20}q", "q", 21, 21},
+    {"a.{3}q", "q", 4, 4},
+    {"a.{1,3}q", "q", 2, 4},
+    {"a?q", "q", 0, 1},
+    {"(abc)?q", "q", 0, 3},
+    {"x(ab|cd)y", "y", 3, 3},
+    {"(a|b)zebra(c|d)", "zebra", 1, 1},
+    {"(foo|bar)baz", "baz", 3, 3},
+    {"(a+)(b+)", "b", 0, GRX_NPOS},
+    // Length still decides first, so a long literal at offset 0 keeps the
+    // answer even though a shorter one sits further in.
+    {"abcdef.*z", "abcdef", 0, 0},
+    {"xyzzy", "xyzzy", 0, 0},
+    {"aaaaaaaaab", "aaaaaaaaab", 0, 0},
+    {"colou?r", "colo", 0, 0},
+    // Unbounded before the literal: the window is given up, the literal is
+    // not.
+    {".*foo", "foo", 0, GRX_NPOS},
+    {"a*q", "q", 0, GRX_NPOS},
+  };
+
+  for (const Expected & want : table) {
+    GRX_Regex * regex = nullptr;
+    ASSERT_EQ(grx_regex_compile_with_allocator(want.pattern,
+                  strlen(want.pattern), GRX_SYNTAX_PCRE, GRX_OPT_NONE,
+                  nullptr, nullptr, nullptr, &regex),
+        GRX_OK)
+        << want.pattern;
+    const GRX_Program * program = &regex->program;
+    EXPECT_EQ(std::string(program->required_literal,
+                  program->required_literal_length),
+        std::string(want.required))
+        << want.pattern;
+    EXPECT_EQ(program->required_offset_min, want.low) << want.pattern;
+    EXPECT_EQ(program->required_offset_max, want.high) << want.pattern;
+    grx_regex_free(regex);
+  }
 }
 
 TEST(Compile, WhichLiteralsTheseParticularPatternsHaveAndWhichHaveNone) {

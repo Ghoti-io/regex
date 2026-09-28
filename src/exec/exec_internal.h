@@ -240,9 +240,31 @@ static inline const char * grx_exec_find(const char * haystack,
   return NULL;
 }
 
+/**
+ * @brief The widest offset window worth filtering positions with.
+ *
+ * Inside a window the scan for the literal restarts one byte further along
+ * each time, so a window of width `w` costs about `w^2 / 2` byte comparisons
+ * to walk - cheap against `w` attempts at a hundred instructions each while
+ * `w` is small, and not worth it once it is large. `a{0,40}q` is width 40 and
+ * inside; a pattern with a thousand-wide window keeps the presence test it
+ * has today and nothing more.
+ */
+#define GRX_REQUIRED_WINDOW_MAX 64
+
 static inline size_t grx_exec_skip_to_first_byte(const GRX_Program * program,
     const char * subject, size_t length, size_t from) {
-  if (!program->first_bytes_known && !program->literal_prefix_length) {
+  // The required literal earns a place here only when its offset is bounded.
+  // Unbounded, the question "is there an occurrence at or after here" has the
+  // same answer at every position until one is passed, so asking it per
+  // position would rescan the subject for nothing; that case is already
+  // answered once, before either engine starts, in exec.c.
+  int windowed = program->required_literal_length
+      && program->required_offset_max != GRX_NPOS
+      && program->required_offset_max - program->required_offset_min
+          <= GRX_REQUIRED_WINDOW_MAX;
+  if (!program->first_bytes_known && !program->literal_prefix_length
+      && !windowed) {
     return from;
   }
   // A callout is a side effect of *trying* a position, not of matching at one:
@@ -280,26 +302,67 @@ static inline size_t grx_exec_skip_to_first_byte(const GRX_Program * program,
   // continuation byte is never one of those, so a hit cannot land inside a
   // character. Not finding it means no match exists at or after `from`, which
   // `length` is the way to say.
-  if (program->literal_prefix_length) {
-    if (from >= length) {
+  // Two filters that each only move `from` forwards, applied until neither
+  // does. They have to alternate rather than run once each: a jump the window
+  // makes can land on a byte the set rejects, and a position the set accepts
+  // can be one the window has already ruled out.
+  for (;;) {
+    size_t before = from;
+
+    if (program->literal_prefix_length) {
+      if (from >= length) {
+        return from;
+      }
+      const char * found = grx_exec_find(subject + from, length - from,
+          program->literal_prefix, program->literal_prefix_length);
+      if (!found) {
+        return length;
+      }
+      from = (size_t)(found - subject);
+    }
+    else if (program->first_bytes_known) {
+      while (from < length) {
+        unsigned char byte = (unsigned char)subject[from];
+        if (program->first_bytes[byte >> 3]
+            & (unsigned char)(1u << (byte & 7u))) {
+          break;
+        }
+        from++;
+      }
+      if (from >= length) {
+        return from;
+      }
+    }
+
+    if (!windowed) {
       return from;
     }
-    const char * found = grx_exec_find(subject + from, length - from,
-        program->literal_prefix, program->literal_prefix_length);
-    return found ? (size_t)(found - subject) : length;
-  }
 
-  if (!program->first_bytes_known) {
-    return from;
-  }
-  while (from < length) {
-    unsigned char byte = (unsigned char)subject[from];
-    if (program->first_bytes[byte >> 3] & (unsigned char)(1u << (byte & 7u))) {
-      break;
+    // A match beginning at `from` has to contain the literal somewhere in
+    // `[from + min, from + max]`. The first occurrence at or after
+    // `from + min` is at `p`, so every start before `p - max` is ruled out -
+    // and if there is no such occurrence, no start from here on has one
+    // either, since `from` only grows.
+    size_t want = from + program->required_offset_min;
+    if (want > length || want < from) {
+      return length;
     }
-    from++;
+    const char * hit = grx_exec_find(subject + want, length - want,
+        program->required_literal, program->required_literal_length);
+    if (!hit) {
+      return length;
+    }
+    size_t at = (size_t)(hit - subject);
+    size_t earliest = at > program->required_offset_max
+        ? at - program->required_offset_max
+        : 0;
+    if (earliest > from) {
+      from = earliest;
+    }
+    if (from == before) {
+      return from;
+    }
   }
-  return from;
 }
 
 /**

@@ -455,7 +455,15 @@ TEST(Backtrack, ABitmapThatWillNotFitLeavesTheRunUnmemoisedRatherThanRefused) {
   // separates the two.
   Regex regex("(a+)+b");
   ASSERT_TRUE(regex.ok());
-  const std::string subject(40, 'a');
+  // The `b` is a decoy and it is load-bearing. `(a+)+b` requires a `b` in
+  // every match, and a subject of nothing but `a` is one the prefilter
+  // settles before any engine starts - so the run this gate is about would
+  // never happen and the limit it expects would never be reached. Putting
+  // the `b` first leaves the required literal present, so the search still
+  // has to be run, while no match exists: the first-byte set steps over
+  // position 0 and the backtracker sees the same forty characters it always
+  // did.
+  const std::string subject = "b" + std::string(40, 'a');
 
   GRX_Limits limits;
   grx_limits_default(&limits);

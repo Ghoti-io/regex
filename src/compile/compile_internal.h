@@ -457,6 +457,22 @@ typedef struct GRX_Program {
   size_t literal_prefix_length;
   char required_literal[GRX_LITERAL_MAX];
   size_t required_literal_length;
+  /**
+   * @brief Where `required_literal` sits, in bytes from the start of a match.
+   *
+   * A match containing the literal at subject position `p` began somewhere in
+   * `[p - required_offset_max, p - required_offset_min]`, so an occurrence
+   * names a window of start positions rather than only proving the subject is
+   * worth searching at all. `required_offset_max == GRX_NPOS` means unbounded
+   * - anything that can repeat without limit before the literal - and leaves
+   * only the weaker claim.
+   *
+   * Both are conservative in the direction that keeps starts: a minimum too
+   * small or a maximum too large widens the window, and a wider window
+   * contains every position a true one would.
+   */
+  size_t required_offset_min;
+  size_t required_offset_max;
 } GRX_Program;
 
 /**
@@ -664,13 +680,26 @@ size_t grx_program_literal_prefix(
  * cannot help with at all - `.*foo`, `[0-9]+-[0-9]+` - and an answer it
  * cannot justify is no answer.
  *
- * @param program The compiled program.
+ * Among candidates the longest wins, as the one that is rarest under any
+ * subject distribution worth assuming. The tie-break is where this used to go
+ * wrong: `a.{20}q` has `a` and `q` both dominating and both one byte, and
+ * taking the earlier left the answer identical to the literal prefix, which
+ * tells an engine nothing it did not already have. A candidate that always
+ * sits at offset 0 is therefore the last choice among equals, and a bounded
+ * offset beats an unbounded one.
+ *
+ * @param program The compiled program. `literal_prefix` must already be
+ *   computed, since the choice among equal-length candidates reads it.
  * @param out Receives up to `cap` bytes.
  * @param cap How many bytes `out` holds.
+ * @param out_offset_min Receives the least distance in bytes from the start
+ *   of a match to the literal. Never NULL.
+ * @param out_offset_max Receives the greatest such distance, or GRX_NPOS
+ *   when it is unbounded or was not established. Never NULL.
  * @return How many bytes were written; 0 when there is no answer.
  */
-size_t grx_program_required_literal(
-    const GRX_Program * program, char * out, size_t cap);
+size_t grx_program_required_literal(const GRX_Program * program, char * out,
+    size_t cap, size_t * out_offset_min, size_t * out_offset_max);
 
 #ifdef __cplusplus
 }

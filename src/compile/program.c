@@ -173,6 +173,8 @@ void grx_program_init(GRX_Program * program, const GRX_Allocator * allocator,
   memset(program->first_bytes, 0, sizeof program->first_bytes);
   program->literal_prefix_length = 0;
   program->required_literal_length = 0;
+  program->required_offset_min = 0;
+  program->required_offset_max = GRX_NPOS;
   program->preference = GRX_PREFER_LEFTMOST_FIRST;
   program->submatch = GRX_SUBMATCH_FIRST_PATH;
   program->iteration = GRX_ITERATE_RETRY_THEN_ADVANCE;

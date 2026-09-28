@@ -700,7 +700,12 @@ TEST(Match, StepsAreReportedEvenWhenTheLimitIsHit) {
   options.limits = &limits;
   options.engine = GRX_ENGINE_BACKTRACK;
 
-  const std::string subject(40, 'a');
+  // The leading `b` is a decoy, not decoration. Every match of `(a+)+b`
+  // contains one, so a subject of nothing but `a` is settled by the
+  // prefilter before an engine runs, and a search that never runs spends no
+  // steps to report. Putting it where no match can use it leaves the run
+  // intact: the first-byte set steps over position 0.
+  const std::string subject = "b" + std::string(40, 'a');
   int matched = 0;
   EXPECT_EQ(grx_regex_search_ex(regex.get(), subject.data(), subject.size(),
                 &options, match.get(), &matched),
