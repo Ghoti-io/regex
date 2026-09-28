@@ -248,6 +248,14 @@
 #define grx_exec_accepts GHOTIIO_REGEX(grx_exec_accepts)
 #define grx_exec_backtrack GHOTIIO_REGEX(grx_exec_backtrack)
 #define grx_exec_pike GHOTIIO_REGEX(grx_exec_pike)
+#define grx_dfa_create GHOTIIO_REGEX(grx_dfa_create)
+#define grx_dfa_eligible GHOTIIO_REGEX(grx_dfa_eligible)
+#define grx_dfa_exists GHOTIIO_REGEX(grx_dfa_exists)
+#define grx_dfa_flushes GHOTIIO_REGEX(grx_dfa_flushes)
+#define grx_dfa_free GHOTIIO_REGEX(grx_dfa_free)
+#define grx_dfa_search GHOTIIO_REGEX(grx_dfa_search)
+#define grx_dfa_search_skipping GHOTIIO_REGEX(grx_dfa_search_skipping)
+#define grx_dfa_states GHOTIIO_REGEX(grx_dfa_states)
 
 // Substitution and splitting.
 #define GRX_Template GHOTIIO_REGEX(GRX_Template)

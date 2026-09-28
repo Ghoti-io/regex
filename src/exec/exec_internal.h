@@ -49,6 +49,15 @@ extern "C" {
  * Declared here because both engines write it; the public headers see only an
  * opaque GRX_Match.
  */
+/**
+ * @brief A lazy DFA over a compiled program. Opaque; see exec_dfa.c.
+ *
+ * Mutable, because the whole point is that its states are built as a subject
+ * asks for them - so it lives in a @ref GRX_Match and never in a
+ * @ref GRX_Regex, which is shared between threads.
+ */
+typedef struct GRX_Dfa GRX_Dfa;
+
 struct GRX_Match {
   const GRX_Allocator * allocator; ///< The allocator it came from.
   const GRX_Regex * regex;         ///< The regex it was created for.
@@ -89,6 +98,21 @@ struct GRX_Match {
    * that never ends.
    */
   size_t searched_from;
+
+  /**
+   * The lazy DFA for this match's regex, built on first use.
+   *
+   * Here and not on the @ref GRX_Regex because it is mutable by design - its
+   * states are built as a subject asks for them - and a regex is shared
+   * between threads. One per match object means the cache survives a loop
+   * over many subjects, which is where it pays for itself.
+   *
+   * NULL when one has not been needed, or when the program cannot have one.
+   * `dfa_refused` is what keeps a program that cannot have one from being
+   * asked again on every search.
+   */
+  GRX_Dfa * dfa;
+  int dfa_refused;
 };
 
 /**
@@ -522,6 +546,97 @@ size_t grx_exec_bitmap_bytes(const GRX_Regex * regex, size_t length);
  * @param out_matched Receives non-zero when a match was found. Never NULL.
  * @return GRX_OK or a failure code.
  */
+/**
+ * @brief Whether a DFA can be built over `program` at all.
+ *
+ * Narrow on purpose, and the two conditions that matter are the lift being
+ * byte-level - so a program in UTF mode is refused - and every opcode being
+ * zero-width or consuming exactly one byte, which rules out backreferences,
+ * lookaround, recursion, script runs and callouts.
+ *
+ * @param program The compiled program.
+ * @return Non-zero when grx_dfa_create() can build one.
+ */
+int grx_dfa_eligible(const GRX_Program * program);
+
+/**
+ * @brief Build one. NULL when the program is ineligible or memory ran out.
+ *
+ * @param allocator Allocator for it. NULL uses the default.
+ * @param program The program. Borrowed, and must outlive the DFA.
+ * @param max_states How many states the cache may hold before it is flushed
+ *   and rebuilt. Zero takes a default.
+ * @return The DFA, or NULL.
+ */
+GRX_Dfa * grx_dfa_create(const GRX_Allocator * allocator,
+    const GRX_Program * program, size_t max_states);
+
+/** @brief Release one. NULL is ignored. */
+void grx_dfa_free(GRX_Dfa * dfa);
+
+/**
+ * @brief The leftmost-longest match in `subject[from, length)`, using the
+ * program's own prefilter to choose which start positions to try.
+ *
+ * The anchored scan is exact and quadratic in the worst case, so
+ * `budget_per_byte` bounds the bytes it may read as a multiple of the
+ * subject's length. Running out is not a failure: one unanchored pass is
+ * tried first, because that automaton carries every start at once and can
+ * say "no match anywhere" in linear time, and only then does this give up.
+ *
+ * @param dfa The DFA.
+ * @param subject The subject.
+ * @param length Its length.
+ * @param from Where to begin.
+ * @param budget Bytes the anchored scans may read before giving up.
+ * @param out_steps Receives how many bytes were read, so that a caller can
+ *   charge them the way it charges an engine's instructions. Optional.
+ * @param out_begin Receives the start of the match.
+ * @param out_end Receives its end.
+ * @return 1 with the span, 0 for no match, or -1 when the caller must run an
+ *   engine instead.
+ */
+int grx_dfa_search_skipping(GRX_Dfa * dfa, const char * subject, size_t length,
+    size_t from, size_t budget, size_t * out_steps, size_t * out_begin,
+    size_t * out_end);
+
+/**
+ * @brief The same without the prefilter, trying every start position.
+ *
+ * Exists so that a test can separate a wrong answer from a wrong prefilter.
+ *
+ * @param dfa The DFA.
+ * @param subject The subject.
+ * @param length Its length.
+ * @param from Where to begin.
+ * @param out_begin Receives the start of the match.
+ * @param out_end Receives its end.
+ * @return 1, 0, or -1 as above.
+ */
+int grx_dfa_search(GRX_Dfa * dfa, const char * subject, size_t length,
+    size_t from, size_t * out_begin, size_t * out_end);
+
+/**
+ * @brief Whether any match exists in `subject[from, length)`.
+ *
+ * One pass, linear in the subject however the pattern is written, because the
+ * unanchored automaton carries every start position at once.
+ *
+ * @param dfa The DFA.
+ * @param subject The subject.
+ * @param length Its length.
+ * @param from Where to begin.
+ * @return 1, 0, or -1 when the state cache could not hold the automaton.
+ */
+int grx_dfa_exists(
+    GRX_Dfa * dfa, const char * subject, size_t length, size_t from);
+
+/** @brief States the cache holds. For tests and for measurement. */
+size_t grx_dfa_states(const GRX_Dfa * dfa);
+
+/** @brief Times the cache filled up and was rebuilt. */
+size_t grx_dfa_flushes(const GRX_Dfa * dfa);
+
 GRX_Result grx_exec_pike(const GRX_ExecRequest * request, int * out_matched);
 
 /**

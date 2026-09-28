@@ -76,7 +76,12 @@ OTHER_DIALECTS = ("vim", "perl", "pcre", "python")
 # Every engine that can be asked for by name. GRX_ENGINE_AUTO is deliberately
 # not among them: the invariant is about engines agreeing, and AUTO is
 # whichever of these the selector picked.
-ENGINES = ("pike", "backtrack", "bitstate")
+# The DFA is here for the reason the other three are: it shares nothing with
+# them below the instruction set - it runs a different automaton that accepts
+# the same language - so a disagreement is a defect and not a shared mistake.
+# It reports the extent and the Pike VM fills the groups behind it, so the
+# lines it prints have the same shape as everyone else's.
+ENGINES = ("pike", "backtrack", "bitstate", "dfa")
 
 
 def rows_for(syntax, rng, patterns, subjects):

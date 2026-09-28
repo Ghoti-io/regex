@@ -75,6 +75,12 @@ GRX_Result grx_match_create(const GRX_Regex * regex,
   if (!match) {
     return GRX_ERR_OOM;
   }
+  // Wholesale before field by field, because the list below is a list and a
+  // field added to the structure is not added to it. That is not a
+  // hypothetical: `dfa` and `dfa_refused` were added here and left out of
+  // it, and an uninitialised cache pointer read as a live DFA on the first
+  // search and crashed.
+  memset(match, 0, sizeof *match);
 
   match->captures = gcu_allocator_calloc(allocator, count,
       sizeof(GRX_Capture));
@@ -90,6 +96,8 @@ GRX_Result grx_match_create(const GRX_Regex * regex,
   match->matched = 0;
   match->steps = 0;
   match->mark = GRX_INDEX_NONE;
+  match->dfa = NULL;
+  match->dfa_refused = 0;
   grx_error_clear(&match->error);
   for (size_t i = 0; i < count; i++) {
     match->captures[i] = (GRX_Capture) {GRX_NPOS, GRX_NPOS};
@@ -342,7 +350,23 @@ static GRX_Result exec(const GRX_Regex * regex, const char * subject,
     needs_backtracking = 1;
     memoizable = 0;
   }
-  if (engine == GRX_ENGINE_AUTO) {
+  // What the caller asked for, before this resolves it. The DFA is offered
+  // to AUTO and given to a caller who names it, and to nobody else: naming
+  // GRX_ENGINE_PIKE is a request for the Pike VM, and answering it with a
+  // different automaton - even one that agrees - would make
+  // grx_match_engine() report something the caller did not ask for and
+  // would quietly remove an engine from every differential that names one.
+  const GRX_Engine asked = engine;
+  if (engine == GRX_ENGINE_DFA) {
+    // The extent is all it reports, so the Pike VM is what fills the groups
+    // and what runs when the DFA hands the search back.
+    engine = GRX_ENGINE_PIKE;
+    if (needs_backtracking || !grx_dfa_eligible(&regex->program)
+        || regex->program.preference != GRX_PREFER_LEFTMOST_LONGEST) {
+      return GRX_ERR_UNSUPPORTED;
+    }
+  }
+  else if (engine == GRX_ENGINE_AUTO) {
     engine = !needs_backtracking ? GRX_ENGINE_PIKE
         : memoizable             ? GRX_ENGINE_BITSTATE
                                  : GRX_ENGINE_BACKTRACK;
@@ -443,6 +467,96 @@ static GRX_Result exec(const GRX_Regex * regex, const char * subject,
       *out_matched = 0;
     }
     return GRX_OK;
+  }
+
+  // The lazy DFA, where it applies. It is offered only in place of the Pike
+  // VM - the two answer the same question, and the conditions that send a
+  // search to the backtracker are all things the lift cannot express anyway
+  // - and only for a leftmost-longest program, because the extent of a
+  // leftmost-first match depends on the order the arms were written in and a
+  // state set has merged that away.
+  //
+  // An anchored search is excluded because it tries one position: there is
+  // nothing to find and the DFA would only be a second way to run it. The
+  // empty-match rules other than GRX_EMPTY_OK are excluded because the DFA
+  // accepts wherever the automaton does and cannot refuse a match for what
+  // the *request* wants. And a match object is required, because that is
+  // where the state cache lives - one search's worth of states thrown away
+  // at the end would cost more than it saved.
+  if ((asked == GRX_ENGINE_AUTO || asked == GRX_ENGINE_DFA)
+      && engine == GRX_ENGINE_PIKE && !request.anchored
+      && empty_rule == GRX_EMPTY_OK
+      && regex->program.preference == GRX_PREFER_LEFTMOST_LONGEST
+      && match && !match->dfa_refused
+      && !(options->callout && (regex->program.flags & GRX_PROGRAM_HAS_CALLOUT))) {
+    if (!match->dfa) {
+      match->dfa = grx_dfa_create(regex->allocator, &regex->program, 0);
+      if (!match->dfa) {
+        // Ineligible, or out of memory; either way asking again on every
+        // search over the same match object is pure loss.
+        match->dfa_refused = 1;
+      }
+    }
+    if (match->dfa) {
+      // Two bytes read per subject byte before it gives up, which §14aj
+      // measured against seven budgets rather than picked: past it the
+      // budget spent before giving up costs more than the anchored scan can
+      // win. Never more than max_steps, so that a caller who capped the work
+      // still gets GRX_ERR_LIMIT from an engine rather than an answer this
+      // spent the cap to find.
+      size_t budget = (end - request.start) * 2 + 64;
+      if (limits->max_steps && budget > limits->max_steps) {
+        budget = limits->max_steps;
+      }
+      size_t begin = 0;
+      size_t finish = 0;
+      size_t read = 0;
+      int got = grx_dfa_search_skipping(match->dfa, subject, end,
+          request.start, budget, &read, &begin, &finish);
+      if (got >= 0) {
+        steps = read;
+      }
+      if (got == 0) {
+        gcu_allocator_free(regex->allocator, columns);
+        match->engine = GRX_ENGINE_DFA;
+        match->steps = steps;
+        match->matched = 0;
+        if (out_matched) {
+          *out_matched = 0;
+        }
+        return GRX_OK;
+      }
+      if (got > 0 && regex->capture_count == 0) {
+        gcu_allocator_free(regex->allocator, columns);
+        match->engine = GRX_ENGINE_DFA;
+        match->steps = steps;
+        match->matched = 1;
+        if (match->count) {
+          match->captures[0] = (GRX_Capture) {begin, finish};
+        }
+        if (out_matched) {
+          *out_matched = 1;
+        }
+        return GRX_OK;
+      }
+      if (got > 0) {
+        // The span is known and the groups are not. Pinning the attempt to
+        // where the match begins is the whole saving: the Pike VM then runs
+        // over the match and not over the subject in front of it.
+        //
+        // Reported as the DFA even though the Pike VM also ran, because the
+        // DFA is what decided where the match is: the Pike VM was handed the
+        // span and asked only which group is which. A caller reading
+        // grx_match_engine() wants to know which path the search took, and
+        // "pike" would describe the same search whether the DFA found it in
+        // one pass or the Pike VM scanned the whole subject.
+        match->engine = GRX_ENGINE_DFA;
+        request.start = begin;
+        request.search_start = begin;
+        request.anchored = 1;
+        steps = 0;
+      }
+    }
   }
 
   GRX_Result result = engine == GRX_ENGINE_PIKE
@@ -836,6 +950,7 @@ void grx_match_destroy(GRX_Match * match) {
   if (!allocator) {
     allocator = grx_allocator_default();
   }
+  grx_dfa_free(match->dfa);
   gcu_allocator_free(allocator, match->captures);
   gcu_allocator_free(allocator, match);
 }

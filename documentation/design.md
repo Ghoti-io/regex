@@ -295,17 +295,29 @@ and a mode byte; it stays fixed-size so the program is one array.
 
 ### 3.5 The engines
 
-There are three, and the third is not a new algorithm:
+There are four, and only one of them is a new algorithm:
 
 | Engine | Runs | Cost | Guarantees |
 | --- | --- | --- | --- |
+| **Lazy DFA** | the regular subset, byte-level, leftmost-longest only | O(subject) time once the states it needs exist, O(states × 256) memory | linear in the subject and independent of the program's size; reports the *extent* and never the groups |
 | **Pike VM** | the regular subset | O(subject × program × masks) time, O(program × masks) memory | linear in the subject; `GRX_ERR_LIMIT` for time when `max_steps` is set below what the closure walks |
 | **Bit-state backtracker** | anything without a backreference, lookaround or recursion, when `program × subject` fits a memory budget | O(subject × program) time, O(subject × program / 8) memory | linear; leftmost-first captures exactly as the backtracker would report them |
 | **Backtracker** | everything | exponential worst case, capped by `max_steps` and `max_backtrack` | terminates; `GRX_ERR_LIMIT` when the cap is hit |
 
 `GRX_ENGINE_AUTO` picks the first row that applies. A caller who names
 `GRX_ENGINE_PIKE` gets `GRX_ERR_UNSUPPORTED` for a program the Pike VM cannot
-run, never a quiet substitution.
+run, never a quiet substitution - and naming it does not get the DFA either,
+for the same reason: an engine asked for by name is the engine that runs.
+
+The first row is the odd one, and the way it is odd is the point. The other
+three *simulate the program*; the DFA runs a different automaton that accepts
+the same language, built by subset construction, so a state there is a set of
+program counters. It can therefore say where a match is and cannot say which
+path found it - which is why it reports the extent and a search needing
+groups runs the Pike VM over the span it found rather than over the subject.
+It is offered only for a leftmost-longest program, because the extent of a
+leftmost-first match is decided by the order the arms were written in and a
+state set has merged that away. Section 3.5.5 has the rest.
 
 `masks` in the first row is the number of distinct stall masks a program
 counter can carry, and it is there because the row used to read `O(subject ×
@@ -614,10 +626,41 @@ Boyer-Moore search this paragraph used to promise for the literals themselves.
 different instructions and neither is on every path. Finding it needs the tree
 rather than the program, and an answer this cannot justify is no answer.
 
-**Still to come.** A lazy DFA (RE2's strategy: DFA for "is there a match and
-where does it end", then the Pike VM or bit-state on the bounded span for
-captures) would be a fourth row in the engine table with the same equivalence
-obligation.
+#### The lazy DFA
+
+Built, and it is the fourth row of §3.5's table. `src/exec/exec_dfa.c` lifts
+the program into a byte-labelled NFA once - nodes are instructions, edges are
+zero-width or one byte from a set, `MATCH` accepts - and builds the subset
+construction over that a state at a time, into a cache that is thrown away
+and rebuilt when it fills. That is the "lazy": a program whose state set is
+larger than the cache still answers, and answers the same thing.
+
+**What it can run is narrow on purpose.** The lift is byte-level, so a
+program in UTF mode is refused - a character there is one to four bytes and a
+class matches a code point. Every opcode has to be zero-width or consume
+exactly one byte, which rules out backreferences, lookaround, recursion,
+script runs, callouts and assertions. `GRX_OP_PROGRESS_CHECK` is lifted as
+zero-width *both ways*, because the empty-iteration rule decides which
+division an iteration may produce and not which strings match: an iteration
+it refuses consumed nothing, so every byte-path through it exists without it.
+
+**How a search uses it.** The prefilter still chooses the start positions;
+the DFA replaces the attempt at each one, which is exact and quadratic in the
+worst case, so it runs on a budget of two bytes read per subject byte. When
+that runs out the *unanchored* automaton gets one pass - it carries every
+start position at once, so "is there a match anywhere" is linear by
+construction - and only then does the search fall back to the Pike VM. The
+budget was swept over seven values rather than chosen; past it, the work
+spent before giving up costs more than the anchored scan can win.
+
+**The obligation §3.5.4 names is discharged.** The DFA is the fourth engine
+in `tools/oracle/engine_diff.py`, which is the right place for it precisely
+because it shares nothing with the other three below the instruction set:
+zero disagreements over every dialect, alongside a generated population in
+`tests/unit/test_dfa.cpp`. Measured over eighteen patterns and five subjects
+at 4 KB, the two builds interleaved: **-48.1% over ninety cells with no
+answer changed**, the largest wins near a hundredfold, and seven cells up to
+1.24x slower where the budget is spent and handed back.
 
 ### 3.6 Search semantics
 

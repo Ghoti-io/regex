@@ -196,6 +196,8 @@ static const char * engine_name(GRX_Engine engine) {
       return "backtrack";
     case GRX_ENGINE_BITSTATE:
       return "bitstate";
+    case GRX_ENGINE_DFA:
+      return "dfa";
     default:
       return "?";
   }
@@ -234,6 +236,9 @@ int main(int argc, char ** argv) {
     }
     else if (strcmp(argv[2], "backtrack") == 0) {
       engine = GRX_ENGINE_BACKTRACK;
+    }
+    else if (strcmp(argv[2], "dfa") == 0) {
+      engine = GRX_ENGINE_DFA;
     }
     else if (strcmp(argv[2], "bitstate") == 0) {
       engine = GRX_ENGINE_BITSTATE;

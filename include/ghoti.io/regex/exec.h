@@ -88,6 +88,27 @@ typedef enum {
    * a disassembly as `registers=0`.
    */
   GRX_ENGINE_BITSTATE,
+  /**
+   * @brief A lazy DFA: one table lookup per byte, and no groups.
+   *
+   * A different automaton accepting the same language, rather than a
+   * simulation of the program, so a state is a *set* of program counters. It
+   * can say where a match is and it cannot say which path found it - so it
+   * reports the extent only, and a search that needs groups runs the Pike VM
+   * over the span it found rather than over the subject.
+   *
+   * Never chosen for a program whose preference is leftmost-first: the
+   * extent there depends on the order the arms were written in, which a
+   * state set has merged away. It is also refused for anything the lift
+   * cannot express - UTF mode, backreferences, lookaround, recursion, script
+   * runs, callouts - and for an anchored search, which tries one position
+   * and needs no help finding it.
+   *
+   * GRX_ENGINE_AUTO reaches for it before the Pike VM wherever it applies.
+   * Naming it for a program it cannot run is GRX_ERR_UNSUPPORTED, like every
+   * other engine mismatch.
+   */
+  GRX_ENGINE_DFA,
   GRX_ENGINE_COUNT     ///< Closes the enum; not an engine.
 } GRX_Engine;
 
