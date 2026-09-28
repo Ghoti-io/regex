@@ -138,6 +138,12 @@ GRX_API GRX_Result grx_regex_compile_pattern(const GRX_Pattern * pattern,
  * of one every match contains is still one - so a consumer may use either to
  * rule a subject or a position out, and neither to rule one in.
  *
+ * Where `required_literal` falls is known to the engines but is not reported
+ * here: a match containing it at position `p` began within a bounded window
+ * ending at `p`, which is what lets a start position be ruled out rather than
+ * only a subject. It is left internal because adding it would change the size
+ * of this structure.
+ *
  * Neither is offered for a pattern containing `\K` or vim's `\ze`, which
  * move the reported start or end away from what the attempt consumed: these
  * two are about the match, not about the attempt, and `ab\Kcd` reports a

@@ -572,6 +572,30 @@ replaces the byte set in the skip - it can only skip further, since it begins
 with a byte the set contains - and the required literal is checked once over
 the whole window before either engine starts, which is the only one of the
 three that helps a pattern whose match begins with something unconstrained.
+
+**And the required literal names *where* it has to be, not only that it is
+there.** `grx_program_required_literal()` reports the least and greatest
+distance in bytes from the start of a match to the literal, computed as a
+forward dataflow over the same program CFG the dominance uses. A match
+containing the literal at subject position `p` therefore began somewhere in
+`[p - max, p - min]`, so an occurrence names a *window* of start positions
+rather than only proving the subject worth searching: the skip finds the first
+occurrence at or after `from + min` and jumps to `p - max`, and ends the
+search outright when there is none. Both bounds are conservative towards a
+wider window, because a wider one holds every position a true one would, and
+anything that can repeat before the literal gives the maximum up rather than
+counting it. The window is applied only when it is bounded and no wider than
+64 bytes; inside a window the scan restarts a byte further along each time, so
+a wide one costs more than the attempts it saves.
+
+Which literal is chosen matters as much as the window. Among candidates the
+longest wins - a longer literal is rarer under any subject distribution worth
+assuming, and that needs no corpus - but `a.{20}q` has `a` and `q` both
+dominating every match and both one byte, and taking the earlier made the
+answer identical to the literal prefix, which is one fact written twice. A
+candidate that always sits at offset 0 and is no longer than the prefix is
+therefore the last choice among equals. On 4 KB of `a`, `a.{20}q` went from
+174.75 ns per subject byte to 0.02 and `(a+)(b+)` from 80.12 to 0.02.
 Measured on the same 4 KB subject as the byte set above, `aaaaaaaaab` goes from
 5.19 ns per subject byte to 0.010, and `.*foo`, which the byte set cannot
 answer for at all, from a closure per position to 0.011.
