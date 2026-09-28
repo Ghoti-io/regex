@@ -102,11 +102,6 @@ struct GRX_Dfa {
   const GRX_Program * program;
   Node * nodes;
   size_t node_count;
-  /* Reverse edges, as a flat list per node: who consumes into me. */
-  uint32_t * rev_at;    /* node_count + 1 offsets */
-  uint32_t * rev;       /* the consuming predecessors */
-  uint32_t * repsilon_at;
-  uint32_t * repsilon;
   /* Two tables, because they are two different automata. The anchored one
    * starts at the entry and never returns to it; the unanchored one adds the
    * entry back at every position. A transition cached by one is wrong for
@@ -281,64 +276,6 @@ static int lift(GRX_Dfa * dfa) {
   return 1;
 }
 
-/* Reverse edges: for each node, who steps onto it. Kept as two lists so the
- * reverse walk can follow zero-width edges without reading a byte and
- * consuming edges only when it does. */
-static int reverse_edges(GRX_Dfa * dfa) {
-  size_t n = dfa->node_count;
-  dfa->rev_at = gcu_allocator_calloc(dfa->allocator, n + 1, sizeof *dfa->rev_at);
-  dfa->repsilon_at
-      = gcu_allocator_calloc(dfa->allocator, n + 1, sizeof *dfa->repsilon_at);
-  if (!dfa->rev_at || !dfa->repsilon_at) {
-    return 0;
-  }
-  for (size_t pass = 0; pass < 2; pass++) {
-    if (pass == 1) {
-      for (size_t i = 0; i < n; i++) {
-        dfa->rev_at[i + 1] += dfa->rev_at[i];
-        dfa->repsilon_at[i + 1] += dfa->repsilon_at[i];
-      }
-      dfa->rev = gcu_allocator_calloc(
-          dfa->allocator, dfa->rev_at[n] ? dfa->rev_at[n] : 1, sizeof *dfa->rev);
-      dfa->repsilon = gcu_allocator_calloc(dfa->allocator,
-          dfa->repsilon_at[n] ? dfa->repsilon_at[n] : 1, sizeof *dfa->repsilon);
-      if (!dfa->rev || !dfa->repsilon) {
-        return 0;
-      }
-    }
-    uint32_t * fill_rev = gcu_allocator_calloc(dfa->allocator, n, sizeof *fill_rev);
-    uint32_t * fill_eps = gcu_allocator_calloc(dfa->allocator, n, sizeof *fill_eps);
-    if (!fill_rev || !fill_eps) {
-      gcu_allocator_free(dfa->allocator, fill_rev);
-      gcu_allocator_free(dfa->allocator, fill_eps);
-      return 0;
-    }
-    for (size_t i = 0; i < n; i++) {
-      const Node * node = &dfa->nodes[i];
-      for (uint8_t s = 0; s < node->nsucc; s++) {
-        uint32_t to = node->succ[s];
-        if (pass == 0) {
-          if (node->kind == KIND_CONSUME) {
-            dfa->rev_at[to + 1]++;
-          }
-          else {
-            dfa->repsilon_at[to + 1]++;
-          }
-        }
-        else if (node->kind == KIND_CONSUME) {
-          dfa->rev[dfa->rev_at[to] + fill_rev[to]++] = (uint32_t)i;
-        }
-        else {
-          dfa->repsilon[dfa->repsilon_at[to] + fill_eps[to]++] = (uint32_t)i;
-        }
-      }
-    }
-    gcu_allocator_free(dfa->allocator, fill_rev);
-    gcu_allocator_free(dfa->allocator, fill_eps);
-  }
-  return 1;
-}
-
 /* ------------------------------------------------------------------ */
 /* Closures.                                                            */
 /*                                                                      */
@@ -382,39 +319,6 @@ static void close_forward(GRX_Dfa * dfa, const uint32_t * from, size_t count) {
     }
     for (uint8_t s = 0; s < node->nsucc; s++) {
       uint32_t to = node->succ[s];
-      if (!dfa->seen[to]) {
-        dfa->seen[to] = 1;
-        dfa->work[depth++] = to;
-      }
-    }
-  }
-}
-
-static void close_reverse(GRX_Dfa * dfa, const uint32_t * from, size_t count) {
-  size_t depth = 0;
-  for (size_t i = 0; i < count; i++) {
-    if (!dfa->seen[from[i]]) {
-      dfa->seen[from[i]] = 1;
-      dfa->work[depth++] = from[i];
-    }
-  }
-  while (depth) {
-    uint32_t pc = dfa->work[--depth];
-    if (pc == 0) {
-      /* The entry. Reaching it backwards is what "a match starts here"
-       * means, and it is the reverse run's whole answer. */
-      dfa->build_flag = 1;
-    }
-    const Node * node = &dfa->nodes[pc];
-    if (node->kind == KIND_CONSUME) {
-      /* A byte step, not a zero-width one: kept as frontier, not walked
-       * through. */
-      dfa->build[dfa->build_count++] = pc;
-      continue;
-    }
-    for (uint32_t e = dfa->repsilon_at[pc]; e < dfa->repsilon_at[pc + 1];
-        e++) {
-      uint32_t to = dfa->repsilon[e];
       if (!dfa->seen[to]) {
         dfa->seen[to] = 1;
         dfa->work[depth++] = to;
@@ -554,14 +458,9 @@ static uint32_t intern(GRX_Dfa * dfa, Cache * cache) {
 /* ------------------------------------------------------------------ */
 
 static uint32_t state_for(GRX_Dfa * dfa, Cache * cache, const uint32_t * from,
-    size_t count, int reverse) {
+    size_t count) {
   build_reset(dfa);
-  if (reverse) {
-    close_reverse(dfa, from, count);
-  }
-  else {
-    close_forward(dfa, from, count);
-  }
+  close_forward(dfa, from, count);
   return intern(dfa, cache);
 }
 
@@ -594,7 +493,7 @@ static uint32_t fill(GRX_Dfa * dfa, Cache * cache, uint32_t index,
   if (inject_entry) {
     dfa->work[depth++] = 0;
   }
-  uint32_t next = state_for(dfa, cache, dfa->work, depth, 0);
+  uint32_t next = state_for(dfa, cache, dfa->work, depth);
   if (next != STATE_NONE) {
     cache->trans[(size_t)index * 256 + byte]
         = next | (cache->flag[next] ? STATE_ACCEPT : 0u);
@@ -608,7 +507,7 @@ int grx_dfa_exists(GRX_Dfa * dfa, const char * subject, size_t length,
   Cache * cache = &dfa->unanchored;
   for (int attempt = 0; attempt < 2; attempt++) {
     uint32_t entry = 0;
-    uint32_t index = state_for(dfa, cache, &entry, 1, 0);
+    uint32_t index = state_for(dfa, cache, &entry, 1);
     if (index == STATE_NONE) {
       break;
     }
@@ -669,7 +568,7 @@ static size_t longest_from(GRX_Dfa * dfa, const char * subject, size_t length,
    * most of what a short run cost. */
   if (dfa->anchored_start == STATE_NONE) {
     uint32_t entry = 0;
-    dfa->anchored_start = state_for(dfa, cache, &entry, 1, 0);
+    dfa->anchored_start = state_for(dfa, cache, &entry, 1);
   }
   uint32_t index = dfa->anchored_start;
   if (index == STATE_NONE) {
@@ -845,7 +744,7 @@ GRX_Dfa * grx_dfa_create(const GRX_Allocator * allocator,
   dfa->program = program;
   dfa->max_states = max_states ? max_states : 1024;
   dfa->anchored_start = STATE_NONE;
-  if (!lift(dfa) || !reverse_edges(dfa)) {
+  if (!lift(dfa)) {
     grx_dfa_free(dfa);
     return NULL;
   }
@@ -870,10 +769,6 @@ void grx_dfa_free(GRX_Dfa * dfa) {
   }
   const GRX_Allocator * allocator = dfa->allocator;
   gcu_allocator_free(allocator, dfa->nodes);
-  gcu_allocator_free(allocator, dfa->rev_at);
-  gcu_allocator_free(allocator, dfa->rev);
-  gcu_allocator_free(allocator, dfa->repsilon_at);
-  gcu_allocator_free(allocator, dfa->repsilon);
   gcu_allocator_free(allocator, dfa->work);
   gcu_allocator_free(allocator, dfa->build);
   gcu_allocator_free(allocator, dfa->seen);
