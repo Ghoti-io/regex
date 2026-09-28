@@ -256,6 +256,11 @@
 #define grx_dfa_search GHOTIIO_REGEX(grx_dfa_search)
 #define grx_dfa_search_skipping GHOTIIO_REGEX(grx_dfa_search_skipping)
 #define grx_dfa_states GHOTIIO_REGEX(grx_dfa_states)
+#define grx_onepass_create GHOTIIO_REGEX(grx_onepass_create)
+#define grx_onepass_eligible GHOTIIO_REGEX(grx_onepass_eligible)
+#define grx_onepass_free GHOTIIO_REGEX(grx_onepass_free)
+#define grx_onepass_run GHOTIIO_REGEX(grx_onepass_run)
+#define grx_onepass_states GHOTIIO_REGEX(grx_onepass_states)
 
 // Substitution and splitting.
 #define GRX_Template GHOTIIO_REGEX(GRX_Template)

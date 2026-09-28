@@ -539,10 +539,47 @@ static GRX_Result exec(const GRX_Regex * regex, const char * subject,
         }
         return GRX_OK;
       }
+      if (got > 0 && !match->onepass_refused) {
+        // The span is known and the groups are not, and for a one-pass
+        // program the division of it is not a choice: the subject forces
+        // every branch, so the groups can be read off the span in one walk
+        // rather than simulated over it. That is the difference between
+        // thirteen thread-steps a byte and one table lookup, and on a long
+        // match it is the whole of what is left to pay.
+        if (!match->onepass) {
+          match->onepass
+              = grx_onepass_create(regex->allocator, &regex->program);
+          if (!match->onepass) {
+            // Not one-pass, or out of memory. Either way the table is not
+            // going to appear on the next search over the same match object,
+            // and rebuilding it to find that out again is pure loss.
+            match->onepass_refused = 1;
+          }
+        }
+        if (match->onepass
+            && grx_onepass_run(match->onepass, subject, begin, finish,
+                   match->captures, match->count)
+                > 0) {
+          gcu_allocator_free(regex->allocator, columns);
+          match->engine = GRX_ENGINE_DFA;
+          match->steps = steps;
+          match->matched = 1;
+          if (out_matched) {
+            *out_matched = 1;
+          }
+          return GRX_OK;
+        }
+        // The table and the automaton disagreed about the span, which for a
+        // correct table cannot happen - so the engine answers instead of
+        // this handing back a half-filled set of groups.
+        for (size_t i = 0; i < match->count; i++) {
+          match->captures[i] = (GRX_Capture) {GRX_NPOS, GRX_NPOS};
+        }
+      }
       if (got > 0) {
-        // The span is known and the groups are not. Pinning the attempt to
-        // where the match begins is the whole saving: the Pike VM then runs
-        // over the match and not over the subject in front of it.
+        // Not one-pass. Pinning the attempt to where the match begins is
+        // still a saving: the Pike VM then runs over the match and not over
+        // the subject in front of it.
         //
         // Reported as the DFA even though the Pike VM also ran, because the
         // DFA is what decided where the match is: the Pike VM was handed the
@@ -951,6 +988,7 @@ void grx_match_destroy(GRX_Match * match) {
     allocator = grx_allocator_default();
   }
   grx_dfa_free(match->dfa);
+  grx_onepass_free(match->onepass);
   gcu_allocator_free(allocator, match->captures);
   gcu_allocator_free(allocator, match);
 }

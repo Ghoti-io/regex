@@ -57,6 +57,7 @@ extern "C" {
  * @ref GRX_Regex, which is shared between threads.
  */
 typedef struct GRX_Dfa GRX_Dfa;
+typedef struct GRX_OnePass GRX_OnePass;
 
 struct GRX_Match {
   const GRX_Allocator * allocator; ///< The allocator it came from.
@@ -113,6 +114,18 @@ struct GRX_Match {
    */
   GRX_Dfa * dfa;
   int dfa_refused;
+
+  /**
+   * The one-pass table for this match's regex, built on first use.
+   *
+   * Beside the DFA rather than inside it because the two are answering
+   * different halves of one search - the DFA says where the match is, this
+   * says how the groups divide it - and either can be available without the
+   * other. Immutable once built, unlike the DFA's cache, so it sits here
+   * only to share the DFA's lifetime and the refusal flag's job.
+   */
+  GRX_OnePass * onepass;
+  int onepass_refused;
 };
 
 /**
@@ -636,6 +649,62 @@ size_t grx_dfa_states(const GRX_Dfa * dfa);
 
 /** @brief Times the cache filled up and was rebuilt. */
 size_t grx_dfa_flushes(const GRX_Dfa * dfa);
+
+/**
+ * @brief Whether a one-pass table can be built over `program` at all.
+ *
+ * A cheap syntactic filter and not the real question: it says the opcodes
+ * are ones a table can hold - no assertion, no progress guard, no atomic
+ * group, no backreference, nothing in UTF mode - and grx_onepass_create() is
+ * what decides whether the program is actually one-pass.
+ *
+ * @param program The compiled program.
+ * @return Non-zero when grx_onepass_create() is worth trying.
+ */
+int grx_onepass_eligible(const GRX_Program * program);
+
+/**
+ * @brief Build the table, or NULL when the program is not one-pass.
+ *
+ * NULL is the ordinary answer for most programs and costs one walk of the
+ * zero-width graph per state reached before the ambiguity turned up.
+ *
+ * @param allocator Allocator for it. NULL uses the default.
+ * @param program The program. Borrowed, and must outlive the table.
+ * @return The table, or NULL.
+ */
+GRX_OnePass * grx_onepass_create(
+    const GRX_Allocator * allocator, const GRX_Program * program);
+
+/** @brief Release one. NULL is ignored. */
+void grx_onepass_free(GRX_OnePass * op);
+
+/** @brief Rows the table holds. For tests and for measurement. */
+size_t grx_onepass_states(const GRX_OnePass * op);
+
+/**
+ * @brief Fill in the groups of the match that spans `[begin, finish)`.
+ *
+ * The span is an input, not something this finds: it comes from the lazy
+ * DFA, which settled the extent in one pass. This walks the span once,
+ * writing capture slots as the forced path crosses them, so the whole of it
+ * costs one table lookup and at most a handful of stores per byte.
+ *
+ * `captures` is not cleared first - the caller has already set every entry
+ * to (GRX_NPOS, GRX_NPOS), and a group no path enters keeps that.
+ *
+ * @param op The table.
+ * @param subject The subject.
+ * @param begin Where the match starts.
+ * @param finish Where it ends.
+ * @param captures The caller's spans, `count` of them, group 0 first.
+ * @param count How many there are.
+ * @return 1 with the groups filled, or -1 when the caller must run an engine
+ *   instead - which for a span the DFA found means the table and the
+ *   automaton disagree, and the engine's answer is the one to trust.
+ */
+int grx_onepass_run(const GRX_OnePass * op, const char * subject, size_t begin,
+    size_t finish, GRX_Capture * captures, size_t count);
 
 GRX_Result grx_exec_pike(const GRX_ExecRequest * request, int * out_matched);
 

@@ -300,6 +300,19 @@ branch generates rather than what it can match, so `(a{0}|a)` counts and
 rows, where it reproduced glibc exactly and never contradicted a case musl
 agreed with.
 
+**A third machine runs here, and the reason it may is that it never
+chooses.** The one-pass capture table ([design.md](design.md) section 3.5.5)
+fills in groups over a span the lazy DFA has already settled, for programs
+where each byte leads to at most one instruction that can accept it. Such a
+program has exactly one path for a given start and extent, so the division of
+the match is forced rather than selected - and where there is one candidate,
+`POSIX` and `FIRST_PATH` are asking which of one is better. That is not an
+exception to the paragraph above but the only way past it: the bit-state
+engine is refused because its answer *is* a priority order, and this one is
+allowed because it has no order to be. A program where the two rules could
+differ is a program with two paths, which is exactly what the table refuses
+to build for.
+
 **Both engines implement `POSIX`**, which is what keeps them
 interchangeable: the Pike VM compares two arrivals at one program counter
 and keeps the better, walking on from it again so the improvement reaches

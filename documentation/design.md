@@ -314,7 +314,9 @@ three *simulate the program*; the DFA runs a different automaton that accepts
 the same language, built by subset construction, so a state there is a set of
 program counters. It can therefore say where a match is and cannot say which
 path found it - which is why it reports the extent and a search needing
-groups runs the Pike VM over the span it found rather than over the subject.
+groups fills them in over the span it found rather than over the subject.
+Which machine does that filling is section 3.5.5's one-pass table where the
+program allows one, and the Pike VM otherwise.
 It is offered only for a leftmost-longest program, because the extent of a
 leftmost-first match is decided by the order the arms were written in and a
 state set has merged that away. Section 3.5.5 has the rest.
@@ -661,6 +663,63 @@ zero disagreements over every dialect, alongside a generated population in
 at 4 KB, the two builds interleaved: **-48.1% over ninety cells with no
 answer changed**, the largest wins near a hundredfold, and seven cells up to
 1.24x slower where the budget is spent and handed back.
+
+#### The one-pass capture table
+
+Built, and it is what the DFA leaves undone. `src/exec/exec_onepass.c`
+answers the second half of a search - not where the match is but how the
+groups divide it - for the programs where that division is not a choice.
+
+**The property.** A program is *one-pass* when, from every set of
+instructions the machine can be in, each input byte leads to at most one
+instruction that accepts it. The subject alone then determines the whole
+path: every branch taken, every `GRX_OP_SAVE` crossed. `(a+)(b+)` is
+one-pass, because after an `a` the next byte says whether the first group
+continues or the second begins; `(a+)(a+)` is not, because after an `a` both
+do, and which one gets the byte is exactly the question the Pike VM exists to
+answer.
+
+**Why that lets it sit under a leftmost-longest dialect.**
+[dialects.md](dialects.md) section 5.1 splits the four of them by how the
+groups divide one match - POSIX BRE/ERE compare candidate divisions, GNU
+BRE/ERE take the first path - and refuses the bit-state engine on that same
+axis. Here there is no split to fall on: one path exists, so the first path
+and the best path are the same path, and the two rules cannot disagree about
+which. `tests/unit/test_onepass.cpp` runs the identical pattern under both
+dialects and requires identical spans, which is that argument written as a
+gate rather than left in a comment.
+
+**The machine is a table.** One state is one program counter - the entry to a
+closure, which is a sufficient key precisely *because* the closure is
+deterministic - carrying for each of 256 bytes the state to go to and the
+list of capture slots to write on the way there, plus one more list for the
+route to `MATCH`. Building it walks the zero-width graph once per state and
+refuses the moment two instructions want the same byte, or two routes to one
+instruction disagree about what to save. Running it is one indexed read and a
+handful of stores per byte, over the span and not over the subject.
+
+**What it refuses**, and it is narrower than the DFA: no assertion, because a
+row cannot ask where it stands; no empty-width loop, because the zero-width
+walk would not leave it; no conditional save, because a transition's action
+list cannot express "only if still unset"; and nothing the DFA refuses
+either. It also refuses an alternation both of whose arms can be empty -
+`(a*)|(b*)` is the smallest - because two zero-width routes reach `MATCH`
+saving different groups and the extent cannot separate them. Priority order
+would answer that one; refusing is what this engine does with a question it
+would have to answer *by* priority, which is the whole basis for it running
+here at all. A refusal costs one table build, is remembered on the match
+object, and the search proceeds as it did before.
+
+**Measured**, the two builds interleaved over thirty-two patterns and six
+subjects at 4 KB, with glibc and musl as drift controls that moved less than
+1.5% between rounds: **-53.4% over the eighty-one cells the clock can
+separate, 55 of them faster by more than 5% and none slower by more than
+5.4%, with no answer changed.** `(a+)(b+)` over a four-kilobyte match - the
+row the DFA's own measurement lost worst - goes from 50.66 to 3.16 ns per
+subject byte. The cells that did not move are the ones where the program is
+not one-pass (`(a+)(a+)`, `(.*)(foo)`), which is the fallback working, and
+the ones where the DFA spent its budget and handed the search back, which is
+a different piece of work.
 
 ### 3.6 Search semantics
 
