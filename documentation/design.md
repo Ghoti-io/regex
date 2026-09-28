@@ -270,7 +270,8 @@ caller (§7):
 | `min_length`, `max_length` (or unbounded) | rejecting a subject that is too short without running; sizing lookbehind |
 | `anchored_start`, `anchored_end` | skipping the unanchored-search loop |
 | `can_match_empty` | the iteration rule in `grx_regex_search_next()` |
-| literal prefix, required literal, first-byte set | prefilters (§3.5.5), which are a later phase but whose slot exists from the first commit so that adding them changes no interface |
+| first-byte set | the prefilter (§3.5.5): both engines skip a start position whose byte is not in it |
+| literal prefix, required literal | the rest of the prefilter (§3.5.5), still a later phase, whose slot exists from the first commit so that adding them changes no interface |
 | capture count, names, name-to-index map, duplicate-name groups | the match API |
 | program size, lookbehind maximum, recursion present | limits and engine selection |
 
@@ -526,15 +527,46 @@ library has, because the two implementations share nothing below the program,
 and it is why the Pike VM carries progress registers rather than relying on
 a rewrite: the captures have to come out the same.
 
-#### 3.5.5 Later: prefilters and a lazy DFA
+#### 3.5.5 Prefilters, and later a lazy DFA
 
-Both are speed, not correctness, and are phased after every implemented
-dialect is conformant ([plan.md](plan.md)). Their interfaces are fixed now: the
-facts in §3.3 carry the literal prefix, the required literal and the
-first-byte set, and engine selection consults them. A lazy DFA (RE2's
-strategy: DFA for "is there a match and where does it end", then the Pike VM
-or bit-state on the bounded span for captures) would be a fourth row in the
-engine table with the same equivalence obligation.
+Speed, not correctness, and phased after every implemented dialect is
+conformant ([plan.md](plan.md)). The facts in §3.3 carry the literal prefix,
+the required literal and the first-byte set; the first of those three is built.
+
+**The first-byte set.** `src/compile/prefilter.c` walks the compiled program
+from its entry point, following everything that consumes nothing, and unions
+what the consuming instructions it reaches can begin with. Both engines then
+step over a start position whose byte is absent - the Pike VM when its thread
+list is empty and nothing has matched, the backtracker between attempts - which
+turns an unanchored search for a literal that is not there from a closure per
+byte into a byte test per byte. Measured against a 4 KB subject: 30.6 ns per
+subject byte before, 0.51 after.
+
+The walk is over the *program* rather than the tree because that is the one
+form all three engines share, so one answer serves them and cannot drift from
+what they run. Its single claim is that the set is a **superset**: it may name
+a byte no match begins with, and it may never omit one. Every instruction the
+walk does not model therefore abandons the whole set rather than contributing
+nothing to it, and an assertion is walked *past* rather than interpreted, since
+ignoring a condition can only add starts. It is unknown for 6,671 of the 53,062
+compilable conformance vectors, and those searches behave exactly as they did.
+
+Three things do not skip, and each is a rule about the search rather than about
+the pattern: a program carrying a callout, because a callout is a side effect
+of *trying* a position and suppressing it would make a tracing facility lie; a
+program under `(*CRLF)` that cannot itself begin with CR or LF, because the
+skip and that rule both decide where an attempt may begin; and an anchored
+search, which tries one position anyway. A non-atomic lookbehind is refused by
+the walk instead, since it is inlined and consumes *backwards* - its bytes are
+not at the start position.
+
+**Still to come.** A literal prefix and a required literal want a substring
+search (`memmem`, or Boyer-Moore for a long needle) rather than a byte set, and
+they are what a pattern like `aaaaaaaaab` needs: every position passes a
+first-byte test there, so the set buys nothing. A lazy DFA (RE2's strategy: DFA
+for "is there a match and where does it end", then the Pike VM or bit-state on
+the bounded span for captures) would be a fourth row in the engine table with
+the same equivalence obligation.
 
 ### 3.6 Search semantics
 

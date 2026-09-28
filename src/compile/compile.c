@@ -204,6 +204,15 @@ GRX_Result grx_compile_program(const GRX_Pattern * pattern,
     // rather than of the tree it came from.
     regex->facts.program_size = regex->program.insts.count;
     regex->facts.capture_count = regex->capture_count;
+    // The prefilter is one of those, and the only fact an engine reads back:
+    // it is kept on the program because that is what a search is handed.
+    regex->program.first_bytes_known
+        = grx_program_first_bytes(&regex->program, regex->program.first_bytes);
+    regex->facts.first_bytes_known = regex->program.first_bytes_known;
+    if (regex->program.first_bytes_known) {
+      memcpy(regex->facts.first_bytes, regex->program.first_bytes,
+          GRX_FIRST_BYTES_SIZE);
+    }
   }
 
   grx_ir_free(ir);

@@ -2540,6 +2540,20 @@ GRX_Result grx_exec_backtrack(
   GRX_Result result = GRX_OK;
   size_t start = request->start;
   for (;;) {
+    // Step over every position whose byte cannot begin a match, this one
+    // included. Each would have failed on its first consumed byte, and
+    // failing takes a descent through the program where this takes a byte
+    // test.
+    //
+    // At the top rather than beside the advance below, so that the *first*
+    // attempt is covered too. That is not only speed: a first attempt nothing
+    // can skip is a first attempt that hides a wrong set from any test whose
+    // subject matches at offset zero, which is how the first version of this
+    // let a mutation of prefilter.c's give-up arm pass.
+    if (!request->anchored) {
+      start = grx_exec_skip_to_first_byte(
+          program, request->subject, request->length, start);
+    }
     for (size_t i = 0; i < bt.slot_count; i++) {
       bt.slots[i] = GRX_NPOS;
     }

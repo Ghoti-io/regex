@@ -162,6 +162,65 @@ typedef struct GRX_ExecRequest {
 } GRX_ExecRequest;
 
 /**
+ * @brief The first position at or after `from` whose byte could begin a match.
+ *
+ * `length` when there is none. The caller must have nothing in flight: this
+ * says only that a fresh attempt at a skipped position would have died before
+ * consuming anything, which is a statement about starting and not about
+ * threads already running.
+ *
+ * Safe because the set is a superset when it is known at all (prefilter.c), so
+ * a position this steps over is one where no attempt could have consumed its
+ * first byte. In UTF mode the set holds leading bytes only, so a position it
+ * stops at is a character boundary; a subject that is not valid UTF-8 never
+ * reaches an engine, exec.c having validated it.
+ *
+ * @param program The compiled program.
+ * @param subject The bytes being searched.
+ * @param length Their length.
+ * @param from Where to look from.
+ * @return The position to try next, which is `from` when nothing is known.
+ */
+static inline size_t grx_exec_skip_to_first_byte(const GRX_Program * program,
+    const char * subject, size_t length, size_t from) {
+  if (!program->first_bytes_known) {
+    return from;
+  }
+  // A callout is a side effect of *trying* a position, not of matching at one:
+  // `(?C1)abc` is documented to fire at every starting position the search
+  // tries, and Callout.FiresAtEveryStartingPositionTheSearchTries is that
+  // sentence as a test. Skipping a position would quietly stop reporting it,
+  // which is the one thing a tracing facility must not do - so a program with
+  // a callout anywhere in it does not skip. Its author is watching the search,
+  // not timing it.
+  //
+  // This is a property of the *search*, not of the pattern, which is why it is
+  // here and not in prefilter.c: the set is still a true fact about where a
+  // match can begin, and GRX_Facts still reports it.
+  if (program->flags & GRX_PROGRAM_HAS_CALLOUT) {
+    return from;
+  }
+  // `(*CRLF)` keeps both engines from *beginning* an attempt between a CR and
+  // its LF, and this would step straight onto one. The rule is off whenever
+  // the pattern names CR or LF itself, and that is the only case where the
+  // skip and the rule could contend - so the skip simply does not apply when
+  // the rule is live. A pattern under `(*CRLF)` that cannot start with either
+  // character is the whole of what this gives up.
+  if ((program->flags & GRX_PROGRAM_NEWLINE_CRLF)
+      && !(program->flags & GRX_PROGRAM_HAS_CR_OR_LF)) {
+    return from;
+  }
+  while (from < length) {
+    unsigned char byte = (unsigned char)subject[from];
+    if (program->first_bytes[byte >> 3] & (unsigned char)(1u << (byte & 7u))) {
+      break;
+    }
+    from++;
+  }
+  return from;
+}
+
+/**
  * @brief Whether a match spanning [begin, end) is one this request accepts.
  *
  * Shared by the two engines so that the rule is written once. An engine calls

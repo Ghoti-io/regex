@@ -1294,6 +1294,18 @@ GRX_Result grx_exec_pike(const GRX_ExecRequest * request, int * out_matched) {
 
   size_t position = request->start;
   for (;;) {
+    // Nothing in flight, nothing matched, and no position between here and
+    // the next byte that could begin one is worth seeding at - so step over
+    // all of them at once. This is where the prefilter pays: a literal that
+    // is not in the subject used to cost a closure at every byte, and now
+    // costs a byte test at every byte. It is guarded on an empty list because
+    // a thread already running has to be stepped, and on `!matched` because
+    // after a match the loop is draining and not searching.
+    if (!pike.matched && !pike.current.count && !request->anchored) {
+      position = grx_exec_skip_to_first_byte(
+          program, request->subject, request->length, position);
+    }
+
     // A fresh thread at the start of the program for every position, until
     // something matches. Not a restart: the sparse set means an occupied
     // program counter is not occupied twice, so the whole search stays

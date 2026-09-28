@@ -18,6 +18,8 @@
 #include <chrono>
 #include <cstdio>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "test_helpers.h"
 
@@ -445,6 +447,330 @@ TEST(Compile, AnAlternationBranchIsMeasuredOncePerNodeNotOncePerCopy) {
       << " s to compile. codegen caches grx_ir_span() per IR node; a figure "
          "this large means gen_length_guard() is measuring once per expanded "
          "copy again";
+}
+
+namespace {
+
+/** Whether `byte` is in a facts bitmap. */
+bool first_byte_set(const GRX_Facts & facts, unsigned char byte) {
+  return (facts.first_bytes[byte >> 3] & (1u << (byte & 7u))) != 0;
+}
+
+/** Every pattern the prefilter tests below agree to answer about. */
+const char * const kPrefilterPatterns[] = {
+  "xyzzy", "[b-z]+q", "aaaaaaaaab", "a.{2}q", "(a+)(b+)", "abc|def",
+  "^foo", "a*b", "a?b", "(?i)abc", "[[:digit:]]x", "\\bword", "(?=a)b",
+  "(?!a)b", "(?<=a)b", "\\Kabc", "(a)\\1", "(?:abc){2,}", "a{0,3}b",
+  "(?>abc)d", "[^a]x", "\\d+", "(a|bb|ccc)d", "x|yy|zzz", "\\s+z",
+  // `.` beside something that does constrain the first byte. Alone it makes
+  // the set empty and the empty set is reported as unknown, so a bug that let
+  // `.` contribute nothing instead of giving up would hide behind that - it
+  // needs a branch that still contributes for the set to come back wrong.
+  "a|.b", "ab|.q", "a|.", "(?s)x|.y", "[abc]|.",
+  // The same shape for the opcodes the walk does not model at all: a branch
+  // that gives up beside a branch that contributes. A backreference, a verb,
+  // a subroutine call and a script run each have to take the whole set down
+  // with them rather than quietly leaving their own starts out of it.
+  "(*ACCEPT)|a", "(a)b|\\1c", "a|(?R)b", "(*sr:qz)|a", "(a)(?:\\1|b)c",
+  // A conditional whose condition is an assertion: the LOOK that carries it
+  // is laid out as two jumps rather than one continuation, and which of them
+  // continues the match is the thing the walk would have to know. It refuses
+  // the form instead, and these are what hold it to that.
+  "(?(?=a)b|c)", "(?(?<=x)y|z)", "q(?(?=a)b|c)", "(?(?!a)b|c)",
+  // A non-atomic lookbehind, which is inlined and so consumes backwards on
+  // the main path. Its bytes are not at the start position and the set has to
+  // refuse rather than name them.
+  "(?<*ab)c", "(?<*a)b|q", "x(?<*y)z",
+  // And a conditional on whether a group took part, which is the ordinary
+  // COND: both arms can begin the match, so both have to be walked.
+  "(a)?(?(1)b|z)", "(?(1)a|q)(x)", "(a)?(?(1)b|)",
+  "(?:(?:a|b)c)+", "[\\x00-\\x08]q", "\\n+x", "[a-c]|[x-z]", "q$",
+  "(?m)^ab", "a(?#comment)b", "\\Qa+b\\E", "[[:^alpha:]]z", "(?s).x",
+  "", "a|", "(a*)", "x*", "(?:)", ".", "[^q]",
+};
+
+/**
+ * The same, in UTF mode and over characters that are not one byte.
+ *
+ * A separate list because the byte set is built from code points there: a
+ * range becomes a run of *leading* bytes, and the arithmetic that turns one
+ * into the other is only reached with GRX_OPT_UTF. Without these the plain
+ * list above leaves it untested - which is not a guess, it is what a mutation
+ * that kept only the low end of every range survived.
+ */
+const char * const kPrefilterUtfPatterns[] = {
+  "é", "[é-ü]", "[\\x{100}-\\x{200}]x", "\\p{Lu}", "(?i)k", "(?i)é",
+  "[\\x{1F600}-\\x{1F64F}]", "\\x{4E00}+", "[a\\x{80}\\x{7FF}\\x{800}]",
+  "[\\x{7F}-\\x{81}]", "[\\x{FFFF}-\\x{10000}]", "é|ü|漢",
+  "[^\\x{100}]q", "\\w+\\x{E9}", "[\\x{10FFFF}]", "(?:漢字)+",
+};
+
+/**
+ * How far the anchored sweep below advances from `at`.
+ *
+ * One character in UTF mode and one byte otherwise. A sweep that stepped bytes
+ * would start a search inside a character, which is not a position a search
+ * can begin at and which the library refuses rather than answers - so the
+ * sweep would be comparing an error against a match and calling it a
+ * disagreement about the prefilter.
+ */
+size_t utf_step(const std::string & subject, size_t at, bool utf) {
+  if (!utf || at >= subject.size()) {
+    return 1;
+  }
+  unsigned char lead = (unsigned char)subject[at];
+  if (lead < 0x80u) { return 1; }
+  if ((lead & 0xE0u) == 0xC0u) { return 2; }
+  if ((lead & 0xF0u) == 0xE0u) { return 3; }
+  if ((lead & 0xF8u) == 0xF0u) { return 4; }
+  return 1;
+}
+
+/** Subjects for the list above: every length class and the edges between. */
+std::vector<std::string> utf_subjects() {
+  return {
+    "", "a", "é", "ü", "漢", "字", "🙂", "aé", "éa", "éü", "漢字",
+    "a\xC2\x80", "\xC2\x80", "\xDF\xBF", "\xE0\xA0\x80", "\xEF\xBF\xBF",
+    "\xF0\x90\x80\x80", "\xF4\x8F\xBF\xBF", "K", "\xE2\x84\xAA",
+    "aébü", "xé漢🙂z", "漢aé", "AÉÎ", "kK\xE2\x84\xAA",
+  };
+}
+
+} // namespace
+
+TEST(Compile, SkippingPositionsFindsTheSameMatchesAsTryingThemAll) {
+  // prefilter.c's set lets both engines step over positions without running
+  // anything there, so the whole of its correctness is that it never steps
+  // over a position where a match begins. This checks that against the engines
+  // rather than against itself, and without trusting the reported span.
+  //
+  // The reference is the same library with GRX_OPT_ANCHORED, tried at every
+  // offset in turn: an anchored search never skips, so it is the brute force
+  // the skipping search has to agree with. Leftmost says the unanchored answer
+  // must be the anchored one at the first offset that has any, and the spans
+  // must be the same span.
+  //
+  // Not the reported match start, which is what the first version of this
+  // tested and got wrong: `\K` moves the *reported* start past where the
+  // attempt began - `ab\K` reports an empty span two bytes along - so the byte
+  // the set constrains is not the byte the caller is shown. Vim's `\zs` is the
+  // same construct. The set is about where an attempt can begin, which is only
+  // observable by comparing whole searches.
+  std::vector<std::string> subjects;
+  const std::string alphabet = "abqz";
+  subjects.push_back("");
+  for (size_t length = 1; length <= 4; length++) {
+    size_t total = 1;
+    for (size_t i = 0; i < length; i++) { total *= alphabet.size(); }
+    for (size_t n = 0; n < total; n++) {
+      std::string s;
+      size_t at = n;
+      for (size_t i = 0; i < length; i++) {
+        s += alphabet[at % alphabet.size()];
+        at /= alphabet.size();
+      }
+      subjects.push_back(s);
+    }
+  }
+  subjects.push_back("ab\ncd");
+  subjects.push_back("x\t y7");
+  subjects.push_back(std::string("\x01\x05q", 3));
+  subjects.push_back("ccc d");
+  subjects.push_back("Foo FOO foo");
+  subjects.push_back("a+b");
+
+  size_t known = 0;
+  size_t compared = 0;
+  std::vector<std::pair<const char *, uint32_t>> work;
+  for (const char * pattern : kPrefilterPatterns) {
+    work.emplace_back(pattern, GRX_OPT_NONE);
+  }
+  for (const char * pattern : kPrefilterUtfPatterns) {
+    work.emplace_back(pattern, GRX_OPT_UTF);
+    work.emplace_back(pattern, GRX_OPT_UTF | GRX_OPT_CASELESS);
+  }
+  const std::vector<std::string> wide = utf_subjects();
+  for (const auto & item : work) {
+    const char * pattern = item.first;
+    const uint32_t options = item.second;
+    GRX_Regex * loose = nullptr;
+    GRX_Regex * pinned = nullptr;
+    if (grx_regex_compile_with_allocator(pattern, strlen(pattern),
+            GRX_SYNTAX_PCRE, options, nullptr, nullptr, nullptr, &loose)
+            != GRX_OK
+        || grx_regex_compile_with_allocator(pattern, strlen(pattern),
+               GRX_SYNTAX_PCRE, options | GRX_OPT_ANCHORED, nullptr, nullptr,
+               nullptr, &pinned)
+            != GRX_OK) {
+      grx_regex_free(loose);
+      grx_regex_free(pinned);
+      continue;
+    }
+    GRX_Facts facts;
+    ASSERT_EQ(grx_regex_facts(loose, &facts), GRX_OK);
+    if (facts.first_bytes_known) {
+      known++;
+    }
+
+    for (const std::string & subject :
+        (options & GRX_OPT_UTF) ? wide : subjects) {
+      // Where the brute force says the leftmost match is.
+      size_t want_begin = GRX_NPOS;
+      size_t want_end = GRX_NPOS;
+      GRX_Result want_rc = GRX_OK;
+      for (size_t at = 0; at <= subject.size();
+          at += utf_step(subject, at, (options & GRX_OPT_UTF) != 0)) {
+        GRX_Match * match = nullptr;
+        ASSERT_EQ(grx_match_create(pinned, nullptr, &match), GRX_OK);
+        int matched = 0;
+        GRX_Result rc = grx_regex_search(pinned, subject.data(),
+            subject.size(), at, GRX_ENGINE_AUTO, nullptr, match, &matched);
+        if (rc == GRX_OK && matched) {
+          GRX_Capture span {};
+          grx_match_span(match, &span);
+          want_begin = span.start;
+          want_end = span.end;
+        }
+        grx_match_destroy(match);
+        if (rc != GRX_OK) {
+          want_rc = rc;
+          break;
+        }
+        if (want_begin != GRX_NPOS) {
+          break;
+        }
+      }
+
+      GRX_Match * match = nullptr;
+      ASSERT_EQ(grx_match_create(loose, nullptr, &match), GRX_OK);
+      int matched = 0;
+      GRX_Result rc = grx_regex_search(loose, subject.data(), subject.size(),
+          0, GRX_ENGINE_AUTO, nullptr, match, &matched);
+      size_t got_begin = GRX_NPOS;
+      size_t got_end = GRX_NPOS;
+      if (rc == GRX_OK && matched) {
+        GRX_Capture span {};
+        grx_match_span(match, &span);
+        got_begin = span.start;
+        got_end = span.end;
+      }
+      grx_match_destroy(match);
+
+      // A pattern can spend max_steps rather than answer - `a|(?R)b` does,
+      // recursion against an unanchored search being exactly that - and a
+      // run that stopped at a limit has no leftmost match to compare. What
+      // still has to hold is that the two searches agree on *whether* they
+      // answered: a skip that turned a limit into a quiet non-match would be
+      // this test passing for the wrong reason.
+      EXPECT_EQ(rc != GRX_OK, want_rc != GRX_OK)
+          << pattern << " on \"" << subject
+          << "\": one of the two searches stopped at a limit and the other "
+             "did not";
+      if (rc != GRX_OK || want_rc != GRX_OK) {
+        continue;
+      }
+
+      compared++;
+      EXPECT_EQ(got_begin, want_begin)
+          << pattern << " on \"" << subject
+          << "\": the skipping search and the anchored sweep disagree about "
+             "where the leftmost match begins";
+      if (got_begin == want_begin) {
+        EXPECT_EQ(got_end, want_end)
+            << pattern << " on \"" << subject << "\" at " << got_begin
+            << ": same start, different extent";
+      }
+    }
+    grx_regex_free(loose);
+    grx_regex_free(pinned);
+  }
+
+  // Denominators, because a sweep that reaches nothing passes. `known` is the
+  // one that matters: every comparison above is vacuous for a pattern with no
+  // set, since nothing is skipped for it.
+  EXPECT_GE(known, 25u) << "only " << known << " patterns produced a set";
+  EXPECT_GE(compared, 5000u) << "only " << compared << " searches compared";
+}
+
+TEST(Compile, AnEmptyMatchLeavesNoFirstByteSetUnlessKeepMovedTheStart) {
+  // Two passes answer "can this match nothing" independently - the tree walk
+  // that fills GRX_Facts::can_match_empty, and the program walk that gives up
+  // the moment it can reach MATCH without consuming. They have to agree, and
+  // where they do not is worth naming rather than smoothing over.
+  //
+  // They disagree on exactly one construct. `can_match_empty` is about the
+  // span the caller is *shown*, and `\K` can empty that span while the attempt
+  // still consumed input: `ab\K` matches only where "ab" is and reports the
+  // empty span after it. The prefilter is about what the attempt consumes, so
+  // it rightly keeps its set of {a}. Vim's `\zs` is the same construct.
+  struct Row { const char * pattern; int empty; int known; };
+  const Row rows[] = {
+    {"abc", 0, 1},      // neither
+    {"a*", 1, 0},       // empty without consuming: no set
+    {"(?:)", 1, 0},     // and the plainest form of it
+    {"a|", 1, 0},       // one branch of an alternation is enough
+    {"\\Kabc", 1, 1},   // `\K` at the front changes nothing it can see
+    {"ab\\K", 1, 1},    // and at the back empties the span, not the attempt
+  };
+  for (const Row & row : rows) {
+    GRX_Regex * regex = nullptr;
+    ASSERT_EQ(grx_regex_compile(row.pattern, GRX_SYNTAX_PCRE, GRX_OPT_NONE,
+                  &regex),
+        GRX_OK)
+        << row.pattern;
+    GRX_Facts facts;
+    ASSERT_EQ(grx_regex_facts(regex, &facts), GRX_OK);
+    EXPECT_EQ(facts.can_match_empty != 0, row.empty != 0) << row.pattern;
+    EXPECT_EQ(facts.first_bytes_known != 0, row.known != 0) << row.pattern;
+    if (row.known) {
+      EXPECT_TRUE(first_byte_set(facts, 'a')) << row.pattern;
+      EXPECT_FALSE(first_byte_set(facts, 'z')) << row.pattern;
+    }
+    grx_regex_free(regex);
+  }
+}
+
+TEST(Compile, TheEngineSkipsWhatThePrefilterRulesOut) {
+  // That the set exists is one thing and that a search uses it is another.
+  // Without the skip, a literal that is not in the subject costs a closure at
+  // every byte: measured over a megabyte, 27 ns per byte before and 0.9 after,
+  // which is thirty-one times and is also the difference between this library
+  // and everything it is compared against in notes/regex/TODO.md section 14x.
+  //
+  // A megabyte at the unskipped rate is 28 ms per search and 2.8 s for the
+  // hundred here; skipped it is under 0.1 s. The bound is one second, which
+  // clears both populations in both builds - under AddressSanitizer the
+  // skipped figure is 0.35 s and the unskipped some twelve.
+  std::string subject(1024 * 1024, 'a');
+  GRX_Regex * regex = nullptr;
+  ASSERT_EQ(grx_regex_compile("xyzzy", GRX_SYNTAX_PCRE, GRX_OPT_NONE, &regex),
+      GRX_OK);
+  GRX_Facts facts;
+  ASSERT_EQ(grx_regex_facts(regex, &facts), GRX_OK);
+  ASSERT_TRUE(facts.first_bytes_known);
+
+  GRX_Match * match = nullptr;
+  ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+  auto start = std::chrono::steady_clock::now();
+  for (int i = 0; i < 100; i++) {
+    int matched = 1;
+    ASSERT_EQ(grx_regex_search(regex, subject.data(), subject.size(), 0,
+                  GRX_ENGINE_AUTO, nullptr, match, &matched),
+        GRX_OK);
+    ASSERT_FALSE(matched);
+  }
+  auto elapsed = std::chrono::steady_clock::now() - start;
+  grx_match_destroy(match);
+  grx_regex_free(regex);
+
+  auto seconds
+      = std::chrono::duration_cast<std::chrono::duration<double>>(elapsed)
+            .count();
+  EXPECT_LT(seconds, 1.0)
+      << "100 failing searches of a 1 MB subject for a five-byte literal took "
+      << seconds
+      << " s. Both engines skip positions whose byte is not in the program's "
+         "first-byte set; a figure this large means the skip is not happening";
 }
 
 TEST(Compile, AllocatesNothingOnAFailedCompile) {

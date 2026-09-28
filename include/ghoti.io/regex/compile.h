@@ -120,11 +120,17 @@ GRX_API GRX_Result grx_regex_compile_pattern(const GRX_Pattern * pattern,
  * an untrusted schema can refuse what it cannot run in linear time, rather
  * than discovering the cost at match time.
  *
- * The prefilter fields are populated by a later phase
- * (documentation/design.md section 3.5.5). Until then `literal_prefix` and
- * `required_literal` are NULL and `first_bytes_known` is 0, which is what a
- * consumer must check rather than assuming an empty prefix means "no prefix
- * exists".
+ * Of the prefilter fields (documentation/design.md section 3.5.5) the
+ * first-byte set is computed: `first_bytes_known` says whether `first_bytes`
+ * holds one, and when it does, every byte a match can begin with is in it. It
+ * is a *superset* - a byte may be in the set at a position where nothing
+ * matches - so it may be used to rule a position out and never to rule one in.
+ * It is not known for a pattern that can match the empty string, nor for one
+ * whose first consuming instruction this cannot reason about.
+ *
+ * `literal_prefix` and `required_literal` are still a later phase and are
+ * NULL, which is what a consumer must check rather than assuming an empty
+ * prefix means "no prefix exists".
  *
  * Pointers in this structure are owned by the @ref GRX_Regex it was read
  * from and are valid until that regex is freed.

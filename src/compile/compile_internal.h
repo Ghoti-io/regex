@@ -60,6 +60,9 @@ struct GRX_IR;
 extern "C" {
 #endif
 
+/** Bytes of a 256-bit byte set; GRX_Facts::first_bytes is the same shape. */
+#define GRX_FIRST_BYTES_SIZE 32
+
 /**
  * @brief One instruction of the compiled program.
  *
@@ -409,6 +412,21 @@ typedef struct GRX_Program {
   GRX_SubmatchRule submatch; ///< Which division of it the groups get.
   GRX_IterationRule iteration;    ///< Search-all after an empty match.
   GRX_SearchStartRule search_start; ///< What `\G` asserts while iterating.
+  /**
+   * Which bytes a match can begin with, as a 256-bit set; see prefilter.c.
+   *
+   * Here rather than only in GRX_Facts because the engines are what read it,
+   * and they are handed the program. A search that has nothing in flight and
+   * has not matched can skip every position whose byte is absent, which is the
+   * difference between touching the subject once and running the thread set at
+   * every byte of it.
+   *
+   * Meaningless unless `first_bytes_known`. Unknown is the safe state: it
+   * means "check every position", which is what every search did before this
+   * existed.
+   */
+  unsigned char first_bytes[GRX_FIRST_BYTES_SIZE];
+  int first_bytes_known;
 } GRX_Program;
 
 /**
@@ -561,6 +579,22 @@ GRX_Result grx_codegen_program(const struct GRX_IR * ir,
 GRX_Result grx_compile_program(const GRX_Pattern * pattern,
     const GRX_Limits * limits, const GRX_Allocator * allocator,
     GRX_Error * out_error, GRX_Regex ** out_regex);
+
+/**
+ * @brief Which bytes a match of `program` can begin with.
+ *
+ * A walk from the entry point over every path that reaches a consuming
+ * instruction; see the file comment in prefilter.c for what it promises. The
+ * answer is a *superset* when it is known at all, so a caller may use it to
+ * skip a position and may never use it to accept one.
+ *
+ * @param program The compiled program.
+ * @param out_set Receives GRX_FIRST_BYTES_SIZE bytes of bitmap, zeroed when
+ *   the answer is not known.
+ * @return Non-zero when the set is known.
+ */
+int grx_program_first_bytes(
+    const GRX_Program * program, unsigned char * out_set);
 
 #ifdef __cplusplus
 }
