@@ -420,6 +420,31 @@ static GRX_Result exec(const GRX_Regex * regex, const char * subject,
     request.columns = columns;
   }
 
+  // Every match contains these bytes, so a window that does not hold them
+  // anywhere has no match in it and no engine needs to be started. The byte
+  // set and the literal prefix both say where an attempt may *begin*; this
+  // one is the only prefilter that can answer for a pattern whose match
+  // begins with something unconstrained, which `.*foo` is.
+  //
+  // Unanchored only. An anchored search tries one position, so it is already
+  // O(1) in the subject on a program like `^abc`, and a scan of the whole
+  // window to save it would be the first time this library made a search
+  // slower to make it faster. A callout is excluded for the reason the byte
+  // skip excludes it: its author is watching the attempts, and this would
+  // remove all of them.
+  if (regex->program.required_literal_length && !request.anchored
+      && !(regex->program.flags & GRX_PROGRAM_HAS_CALLOUT)
+      && options->begin <= end
+      && !grx_exec_find(subject + options->begin, end - options->begin,
+             regex->program.required_literal,
+             regex->program.required_literal_length)) {
+    gcu_allocator_free(regex->allocator, columns);
+    if (out_matched) {
+      *out_matched = 0;
+    }
+    return GRX_OK;
+  }
+
   GRX_Result result = engine == GRX_ENGINE_PIKE
       ? grx_exec_pike(&request, out_matched)
       : grx_exec_backtrack(&request, out_matched);

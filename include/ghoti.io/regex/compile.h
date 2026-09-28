@@ -128,9 +128,20 @@ GRX_API GRX_Result grx_regex_compile_pattern(const GRX_Pattern * pattern,
  * It is not known for a pattern that can match the empty string, nor for one
  * whose first consuming instruction this cannot reason about.
  *
- * `literal_prefix` and `required_literal` are still a later phase and are
- * NULL, which is what a consumer must check rather than assuming an empty
- * prefix means "no prefix exists".
+ * `literal_prefix` and `required_literal` are computed too, and each is NULL
+ * when there is no answer - which is what a consumer must check, rather than
+ * assuming an empty prefix means "no prefix exists". When one is not NULL:
+ * every match of the pattern begins with `literal_prefix`, and every match
+ * contains `required_literal` somewhere in it. Both may be shorter than the
+ * longest true answer, which is sound in the direction that matters - a
+ * prefix of a string every match starts with is still one, and a substring
+ * of one every match contains is still one - so a consumer may use either to
+ * rule a subject or a position out, and neither to rule one in.
+ *
+ * Neither is offered for a pattern containing `\K` or vim's `\ze`, which
+ * move the reported start or end away from what the attempt consumed: these
+ * two are about the match, not about the attempt, and `ab\Kcd` reports a
+ * span that begins at `c`.
  *
  * Pointers in this structure are owned by the @ref GRX_Regex it was read
  * from and are valid until that regex is freed.

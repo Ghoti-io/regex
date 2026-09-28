@@ -58,6 +58,7 @@
 
 #include "../charclass/charclass_internal.h"
 #include "../core/core_internal.h"
+#include "../unicode/unicode_internal.h"
 #include "compile_internal.h"
 
 /** Set one byte in a 256-bit set. */
@@ -311,4 +312,527 @@ int grx_program_first_bytes(
     }
   }
   return 0;
+}
+
+/**
+ * Whether anything in the program moves the reported start or end away from
+ * where the attempt began and ended.
+ *
+ * `\K` and vim's `\ze` both do, and both invalidate the two literal facts
+ * rather than shifting them: what the attempt consumes first is no longer
+ * what the *match* begins with. `ab\Kcd` reports a span starting at `c`, so
+ * "ab" is not a prefix of any match of it even though every attempt consumes
+ * it. The byte set does not have this problem because it is explicitly about
+ * where an attempt may begin, and these two are about the match.
+ *
+ * A whole-program scan rather than a check on the walked path, because the
+ * instruction that moves the start can sit after the literal that the walk
+ * would otherwise have believed.
+ */
+static int start_or_end_moves(const GRX_Program * program) {
+  size_t count = program->insts.count;
+  for (size_t i = 0; i < count; i++) {
+    const GRX_Inst * inst = GRX_ARENA_AT(const GRX_Inst, &program->insts, i);
+    if (!inst) {
+      return 1;
+    }
+    if (inst->op == GRX_OP_KEEP || inst->op == GRX_OP_KEEP_END) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+/**
+ * Append one code point's bytes, or report that it does not fit.
+ *
+ * @return Non-zero when the whole code point was written.
+ */
+static int literal_append(
+    char * out, size_t cap, size_t * written, uint32_t codepoint, int utf) {
+  char encoded[8];
+  size_t width;
+  if (utf) {
+    width = grx_unicode_utf8_encode(codepoint, encoded);
+    if (!width) {
+      return 0;
+    }
+  }
+  else {
+    if (codepoint > 0xFFu) {
+      return 0;
+    }
+    encoded[0] = (char)(unsigned char)codepoint;
+    width = 1;
+  }
+  if (*written + width > cap) {
+    return 0;
+  }
+  memcpy(out + *written, encoded, width);
+  *written += width;
+  return 1;
+}
+
+size_t grx_program_literal_prefix(
+    const GRX_Program * program, char * out, size_t cap) {
+  if (!program || !out || !cap) {
+    return 0;
+  }
+  size_t count = program->insts.count;
+  if (!count || start_or_end_moves(program)) {
+    return 0;
+  }
+  int utf = (program->flags & GRX_PROGRAM_UTF) != 0;
+
+  size_t written = 0;
+  uint32_t pc = 0;
+  // The step cap is the program's length: a path that visits more
+  // instructions than the program holds has gone round a loop, and a loop
+  // means a second way onwards, which this walk stops at anyway.
+  for (size_t step = 0; step < count; step++) {
+    const GRX_Inst * inst = GRX_ARENA_AT(const GRX_Inst, &program->insts, pc);
+    if (!inst || (inst->flags & GRX_INST_REVERSE)) {
+      break;
+    }
+
+    if (inst->op == GRX_OP_CHAR) {
+      if (!literal_append(out, cap, &written, inst->x, utf)) {
+        break;
+      }
+      pc++;
+      continue;
+    }
+
+    switch (inst->op) {
+      // Zero-width and one way onwards. An assertion is stepped over rather
+      // than interpreted: it can refuse a match but cannot change what one
+      // consumes, so what follows is still what a match begins with.
+      case GRX_OP_SAVE:
+      case GRX_OP_ASSERT:
+      case GRX_OP_PROGRESS_SET:
+      case GRX_OP_RESET:
+      case GRX_OP_RESET_STALE:
+      case GRX_OP_ATOMIC_BEGIN:
+      case GRX_OP_ATOMIC_END:
+      case GRX_OP_CALLOUT:
+        pc++;
+        continue;
+
+      case GRX_OP_JMP:
+        pc = inst->x;
+        continue;
+
+      // A lookaround consumes nothing of the match, so the walk resumes after
+      // the body. The two-jump form is not read, for the reason the byte set
+      // does not read it: which of the two continues the match is the thing
+      // this would have to know.
+      case GRX_OP_LOOK:
+        if (!(inst->flags & GRX_INST_COND_ELSE)) {
+          pc = inst->y;
+          continue;
+        }
+        break;
+
+      // Everything else either branches, consumes a choice of code points, or
+      // is not modelled here. Each of them ends the prefix, and ending it is
+      // always safe: what has been written is still a prefix of every match.
+      default:
+        break;
+    }
+    // Anything that reached here neither consumed a known code point nor
+    // found one way onwards, so the prefix ends.
+    break;
+  }
+
+  return written;
+}
+
+/**
+ * The instructions one instruction can continue to.
+ *
+ * Modelled conservatively in one direction only: an edge this does not know
+ * about would make a node look like a dominator when a match can reach the
+ * end without it, and that is the direction that loses matches. So an opcode
+ * whose control flow is not spelled out here refuses the whole analysis
+ * rather than being given no edges.
+ *
+ * `LOOK` is refused rather than modelled, and the reason is worth stating
+ * because it looks over-cautious: a lookaround's body **ends in a MATCH of
+ * its own**. Treating that as the program's end would let a node inside an
+ * assertion's body dominate "every MATCH" while consuming text no match
+ * contains.
+ *
+ * @return Non-zero when the opcode is modelled; the count is written to
+ *   `out_count` and the targets to `out`.
+ */
+static int successors_of(const GRX_Program * program, uint32_t pc,
+    const GRX_Inst * inst, uint32_t * out, size_t * out_count) {
+  size_t next = program->insts.count;
+  *out_count = 0;
+  switch (inst->op) {
+    case GRX_OP_MATCH:
+      return 1;
+
+    case GRX_OP_CHAR:
+    case GRX_OP_CLASS:
+    case GRX_OP_ANY:
+    case GRX_OP_ANY_NL:
+    case GRX_OP_SAVE:
+    case GRX_OP_ASSERT:
+    case GRX_OP_PROGRESS_SET:
+    case GRX_OP_RESET:
+    case GRX_OP_RESET_STALE:
+    case GRX_OP_ATOMIC_BEGIN:
+    case GRX_OP_ATOMIC_END:
+    case GRX_OP_CALLOUT:
+      if ((size_t)pc + 1 >= next) {
+        return 0;
+      }
+      out[(*out_count)++] = pc + 1;
+      return 1;
+
+    case GRX_OP_JMP:
+      out[(*out_count)++] = inst->x;
+      return 1;
+
+    case GRX_OP_SPLIT:
+      out[(*out_count)++] = inst->x;
+      out[(*out_count)++] = inst->y;
+      return 1;
+
+    case GRX_OP_PROGRESS_CHECK:
+      if ((size_t)pc + 1 >= next) {
+        return 0;
+      }
+      out[(*out_count)++] = pc + 1;
+      out[(*out_count)++] = inst->y;
+      return 1;
+
+    default:
+      return 0;
+  }
+}
+
+/** Working storage for the dominator pass, so one failure path frees it all. */
+typedef struct {
+  uint32_t * post;      ///< Postorder -> pc.
+  uint32_t * number;    ///< pc -> reverse-postorder index, or GRX_INDEX_NONE.
+  uint32_t * order;     ///< Reverse-postorder index -> pc.
+  uint32_t * idom;      ///< RPO index -> RPO index of its immediate dominator.
+  uint32_t * pred_at;   ///< CSR offsets, one per RPO index plus a terminator.
+  uint32_t * pred;      ///< CSR predecessors, as RPO indices.
+  uint32_t * stack;     ///< DFS stack.
+  uint8_t * state;      ///< DFS colour, then reused as a marker.
+  uint32_t * succ_seen; ///< How many successors of a node the DFS has taken.
+  size_t nodes;         ///< Reachable instructions.
+} Dominators;
+
+static void dominators_free(const GRX_Allocator * allocator, Dominators * d) {
+  gcu_allocator_free(allocator, d->post);
+  gcu_allocator_free(allocator, d->number);
+  gcu_allocator_free(allocator, d->order);
+  gcu_allocator_free(allocator, d->idom);
+  gcu_allocator_free(allocator, d->pred_at);
+  gcu_allocator_free(allocator, d->pred);
+  gcu_allocator_free(allocator, d->stack);
+  gcu_allocator_free(allocator, d->state);
+  gcu_allocator_free(allocator, d->succ_seen);
+  memset(d, 0, sizeof *d);
+}
+
+/** Cooper, Harvey and Kennedy's intersection, over reverse-postorder indices. */
+static uint32_t dom_intersect(
+    const uint32_t * idom, uint32_t left, uint32_t right) {
+  while (left != right) {
+    while (left > right) {
+      left = idom[left];
+    }
+    while (right > left) {
+      right = idom[right];
+    }
+  }
+  return left;
+}
+
+size_t grx_program_required_literal(
+    const GRX_Program * program, char * out, size_t cap) {
+  if (!program || !out || !cap) {
+    return 0;
+  }
+  size_t count = program->insts.count;
+  if (!count || start_or_end_moves(program)) {
+    return 0;
+  }
+  int utf = (program->flags & GRX_PROGRAM_UTF) != 0;
+  const GRX_Allocator * allocator = program->insts.allocator;
+
+  Dominators d;
+  memset(&d, 0, sizeof d);
+  d.post = gcu_allocator_calloc(allocator, count, sizeof *d.post);
+  d.number = gcu_allocator_calloc(allocator, count, sizeof *d.number);
+  d.order = gcu_allocator_calloc(allocator, count, sizeof *d.order);
+  d.idom = gcu_allocator_calloc(allocator, count, sizeof *d.idom);
+  d.pred_at = gcu_allocator_calloc(allocator, count + 1, sizeof *d.pred_at);
+  d.pred = gcu_allocator_calloc(allocator, 2 * count, sizeof *d.pred);
+  d.stack = gcu_allocator_calloc(allocator, count, sizeof *d.stack);
+  d.state = gcu_allocator_calloc(allocator, count, 1);
+  d.succ_seen = gcu_allocator_calloc(allocator, count, sizeof *d.succ_seen);
+  if (!d.post || !d.number || !d.order || !d.idom || !d.pred_at || !d.pred
+      || !d.stack || !d.state || !d.succ_seen) {
+    dominators_free(allocator, &d);
+    return 0;
+  }
+  for (size_t i = 0; i < count; i++) {
+    d.number[i] = GRX_INDEX_NONE;
+  }
+
+  // Depth-first from the entry, iteratively, recording a postorder. `state`
+  // is 0 for untouched, 1 for on the stack and 2 for finished.
+  int modelled = 1;
+  size_t posted = 0;
+  size_t depth = 0;
+  d.stack[depth++] = 0;
+  d.state[0] = 1;
+  while (depth) {
+    uint32_t pc = d.stack[depth - 1];
+    const GRX_Inst * inst = GRX_ARENA_AT(const GRX_Inst, &program->insts, pc);
+    uint32_t succ[2];
+    size_t succ_count = 0;
+    if (!inst || !successors_of(program, pc, inst, succ, &succ_count)) {
+      modelled = 0;
+      break;
+    }
+    if (d.succ_seen[pc] < succ_count) {
+      uint32_t next = succ[d.succ_seen[pc]++];
+      if (next >= count) {
+        modelled = 0;
+        break;
+      }
+      if (!d.state[next]) {
+        d.state[next] = 1;
+        d.stack[depth++] = next;
+      }
+      continue;
+    }
+    d.state[pc] = 2;
+    d.post[posted++] = pc;
+    depth--;
+  }
+  if (!modelled) {
+    dominators_free(allocator, &d);
+    return 0;
+  }
+
+  // Reverse postorder: the entry is 0, and a node's index is always larger
+  // than its dominator's, which is what dom_intersect() walks by.
+  d.nodes = posted;
+  for (size_t i = 0; i < posted; i++) {
+    uint32_t pc = d.post[posted - 1 - i];
+    d.order[i] = pc;
+    d.number[pc] = (uint32_t)i;
+  }
+
+  // Predecessors, as two passes over the same edges: count, then fill. One
+  // predicate written twice is how a count-then-fill pair drifts, so the edge
+  // is produced by successors_of() in both.
+  for (size_t i = 0; i < posted; i++) {
+    uint32_t pc = d.order[i];
+    const GRX_Inst * inst = GRX_ARENA_AT(const GRX_Inst, &program->insts, pc);
+    uint32_t succ[2];
+    size_t succ_count = 0;
+    successors_of(program, pc, inst, succ, &succ_count);
+    for (size_t s = 0; s < succ_count; s++) {
+      uint32_t to = d.number[succ[s]];
+      if (to != GRX_INDEX_NONE) {
+        d.pred_at[to + 1]++;
+      }
+    }
+  }
+  for (size_t i = 0; i < posted; i++) {
+    d.pred_at[i + 1] += d.pred_at[i];
+  }
+  uint32_t * fill = d.succ_seen;   // Finished with; reused as a cursor.
+  for (size_t i = 0; i < posted; i++) {
+    fill[i] = d.pred_at[i];
+  }
+  for (size_t i = 0; i < posted; i++) {
+    uint32_t pc = d.order[i];
+    const GRX_Inst * inst = GRX_ARENA_AT(const GRX_Inst, &program->insts, pc);
+    uint32_t succ[2];
+    size_t succ_count = 0;
+    successors_of(program, pc, inst, succ, &succ_count);
+    for (size_t s = 0; s < succ_count; s++) {
+      uint32_t to = d.number[succ[s]];
+      if (to != GRX_INDEX_NONE) {
+        d.pred[fill[to]++] = (uint32_t)i;
+      }
+    }
+  }
+
+  // Cooper, Harvey and Kennedy: iterate to a fixed point in reverse
+  // postorder. GRX_INDEX_NONE stands for "no immediate dominator yet".
+  for (size_t i = 0; i < posted; i++) {
+    d.idom[i] = GRX_INDEX_NONE;
+  }
+  d.idom[0] = 0;
+  int changed = 1;
+  while (changed) {
+    changed = 0;
+    for (size_t i = 1; i < posted; i++) {
+      uint32_t candidate = GRX_INDEX_NONE;
+      for (uint32_t e = d.pred_at[i]; e < d.pred_at[i + 1]; e++) {
+        uint32_t p = d.pred[e];
+        if (d.idom[p] == GRX_INDEX_NONE) {
+          continue;
+        }
+        candidate = candidate == GRX_INDEX_NONE
+            ? p : dom_intersect(d.idom, p, candidate);
+      }
+      if (candidate != GRX_INDEX_NONE && d.idom[i] != candidate) {
+        d.idom[i] = candidate;
+        changed = 1;
+      }
+    }
+  }
+
+  // The instructions on every path from the entry to every MATCH. Built as
+  // the intersection of the dominator chains, which for this shape is
+  // cheaper and simpler than a bitset per node.
+  uint8_t * common = d.state;    // Finished with; reused as the marker.
+  memset(common, 0, count);
+  int seen_match = 0;
+  for (size_t i = 0; i < posted; i++) {
+    const GRX_Inst * inst
+        = GRX_ARENA_AT(const GRX_Inst, &program->insts, d.order[i]);
+    if (!inst || inst->op != GRX_OP_MATCH) {
+      continue;
+    }
+    // Mark this MATCH's chain, then keep only what every chain so far marked.
+    for (uint32_t at = (uint32_t)i;; at = d.idom[at]) {
+      common[at] = seen_match ? (uint8_t)(common[at] | 2u) : (uint8_t)1u;
+      if (at == 0) {
+        break;
+      }
+    }
+    if (seen_match) {
+      for (size_t n = 0; n < posted; n++) {
+        common[n] = (uint8_t)((common[n] & 2u) ? 1u : 0u);
+      }
+    }
+    seen_match = 1;
+  }
+  if (!seen_match) {
+    dominators_free(allocator, &d);
+    return 0;
+  }
+
+  // The longest run of CHARs that a match must consume adjacently: each is
+  // the only way on from the one before, and the only way into the one after.
+  // The head has to dominate every MATCH; the rest then follow from it.
+  size_t best = 0;
+  char candidate[GRX_LITERAL_MAX];
+  size_t limit = cap < GRX_LITERAL_MAX ? cap : GRX_LITERAL_MAX;
+  for (size_t i = 0; i < posted; i++) {
+    if (!common[i]) {
+      continue;
+    }
+    const GRX_Inst * head
+        = GRX_ARENA_AT(const GRX_Inst, &program->insts, d.order[i]);
+    if (!head || head->op != GRX_OP_CHAR
+        || (head->flags & GRX_INST_REVERSE)) {
+      continue;
+    }
+
+    size_t written = 0;
+    size_t at = i;
+    for (size_t step = 0; step <= posted; step++) {
+      const GRX_Inst * inst
+          = GRX_ARENA_AT(const GRX_Inst, &program->insts, d.order[at]);
+      if (!inst || inst->op != GRX_OP_CHAR
+          || (inst->flags & GRX_INST_REVERSE)
+          || !literal_append(candidate, limit, &written, inst->x, utf)) {
+        break;
+      }
+      // On to the next instruction that consumes, stepping over the ones
+      // that do not. A SAVE between two characters does not put anything
+      // between them in the subject, and `ab(cd)ef` is three SAVEs' worth of
+      // exactly that - without this the answer would stop at "ab".
+      //
+      // One way *out* is the whole of what each step needs, and the head
+      // dominating every MATCH carries the rest: if an instruction is on
+      // every path to MATCH and has exactly one successor, then every such
+      // path continues through that successor, so it is on every path too.
+      // Induction does the remaining steps.
+      //
+      // A second way *in* was also required here at first, on the reasoning
+      // that another edge is another way to reach the next instruction
+      // without consuming this one's character. That is true and it does not
+      // matter: the claim is that every match *contains* these bytes, and it
+      // is settled by the edge every match does take. The condition was
+      // measured before it was removed - it is reached 470,686 times over the
+      // corpus's 31,648 patterns and changes the answer for none of the
+      // 13,631 that have one - so it was cost and lost length, not safety.
+      size_t next = at;
+      int chained = 1;
+      for (size_t hop = 0; hop <= posted; hop++) {
+        const GRX_Inst * here
+            = GRX_ARENA_AT(const GRX_Inst, &program->insts, d.order[next]);
+        uint32_t succ[2];
+        size_t succ_count = 0;
+        // `succ_count != 1` cannot currently fail on its own: every opcode
+        // the whitelist below allows a step onto continues at `pc + 1` and
+        // nowhere else, so a branch is refused there before it is reached
+        // here. It is kept as the condition the argument actually rests on,
+        // so that adding an opcode to that whitelist cannot quietly extend a
+        // literal across a branch. No input separates the two today, and a
+        // mutation of this line alone survives the gates for that reason.
+        if (!here || !successors_of(program, d.order[next], here, succ,
+                &succ_count) || succ_count != 1) {
+          chained = 0;
+          break;
+        }
+        // Reverse postorder rises along a chain of dominators, so requiring
+        // it to rise is a cycle guard that costs nothing a real chain wants.
+        uint32_t to = d.number[succ[0]];
+        if (to == GRX_INDEX_NONE || to <= next) {
+          chained = 0;
+          break;
+        }
+        next = to;
+        const GRX_Inst * landed
+            = GRX_ARENA_AT(const GRX_Inst, &program->insts, d.order[next]);
+        if (!landed) {
+          chained = 0;
+          break;
+        }
+        if (landed->op == GRX_OP_CHAR) {
+          break;
+        }
+        // Only a zero-width instruction may be stepped over. Anything that
+        // consumes puts text between the two characters, and anything not
+        // listed here is not known to do neither.
+        if (landed->op != GRX_OP_SAVE && landed->op != GRX_OP_ASSERT
+            && landed->op != GRX_OP_PROGRESS_SET
+            && landed->op != GRX_OP_RESET
+            && landed->op != GRX_OP_RESET_STALE
+            && landed->op != GRX_OP_ATOMIC_BEGIN
+            && landed->op != GRX_OP_ATOMIC_END
+            && landed->op != GRX_OP_CALLOUT) {
+          chained = 0;
+          break;
+        }
+      }
+      if (!chained || next == at) {
+        break;
+      }
+      at = next;
+    }
+    if (written > best) {
+      best = written;
+      memcpy(out, candidate, written);
+    }
+  }
+
+  dominators_free(allocator, &d);
+  return best;
 }

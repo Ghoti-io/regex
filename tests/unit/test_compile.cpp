@@ -795,6 +795,328 @@ TEST(Regex, AccessorsTolerateNull) {
   EXPECT_EQ(grx_regex_capture_index(nullptr, "name", &index), GRX_ERR_INVALID);
 }
 
+namespace {
+
+/**
+ * Patterns for the two literal facts.
+ *
+ * kPrefilterPatterns is about the *first* byte and is full of shapes that
+ * refuse to have one; these are shapes with a literal run somewhere in them,
+ * which is the axis the byte set cannot reach at all. `aaaaaaaaab` is the
+ * case documentation/design.md names: every position passes a first-byte test
+ * there and only one passes a string test.
+ */
+const char * const kLiteralPatterns[] = {
+  "abc", "abc*", "a*bc", ".*foo", "foo.*", "[0-9]+-[0-9]+", "cat|car",
+  "(abc)+", "^hello world", "a{3}b", "xyzzy", "aaaaaaaaab", "colou?r",
+  "(a|b)zebra(c|d)", "[abc]def", "ab(cd)ef", "(a)(b)(c)", "q(?:abc)+z",
+  "\\d+apple", "x*apple", "(?:ab)+cd", "ab\\Kcd", "ab\\Kcd|q",
+  "(?=x)abc", "(?i)abc", "\\bword\\b", "a(?:bc)d", "foo(?!bar)",
+  "(?<=x)abc", "(?>abc)d", "a(?#x)bc", "\\Qa+b\\E", "z(a)\\1z",
+  "(?:a|a)bc", "a+b+c", "[^q]xyz", "\\A\\Qliteral\\E\\z", "(a*)bcd(e*)",
+  "abc$", "(?m)abc$", "a\\nb", "a\\x00b", "(?:x|y)hello(?:x|y)",
+  // One instruction that *consumes* in the middle of a literal run. The
+  // required literal steps over the instructions between two characters, and
+  // without one of these in the population it could step over a consuming one
+  // and claim "ab" of a pattern every match of which is three characters.
+  "a[0-9]b", "ab.cd", "q[a-z]z", "xy\\wz", "ab[^q]cd", "a.b.c",
+  // A branch in the middle of what looks like a literal run. The prefix walk
+  // stops at a branch and the required literal will not cross one, and these
+  // are what say so: every one of them has a match that omits a character a
+  // walk following the preferred arm would have claimed.
+  "ab?c", "abc?d", "a(?:b)?c", "ax*y", "ab|abc", "a(?:b|)c", "ab{0,1}c",
+  "", "a", ".", "a|", "(?R)x", "(*ACCEPT)abc", "\\1abc", "abc(?R)",
+};
+
+/** The same, for UTF mode, where a character is more than one byte. */
+const char * const kLiteralUtfPatterns[] = {
+  "é", "café", ".*café", "漢字", "x*漢字", "(?:漢)+字", "🙂ok",
+  "(?i)é", "[a-z]+é", "é|ü", "a\\x{1F600}b",
+};
+
+/** Subjects that actually contain the literals above, and ones that do not. */
+std::vector<std::string> literal_subjects() {
+  return {
+    "", "a", "abc", "abcabc", "xabc", "abcx", "aaaaaaaaab", "aaaaaaaaa",
+    "aaaaaaaaabaaaaaaaaab", "foo", "xfoo", "fooy", "barfoobaz", "cat", "car",
+    "hello world", "say hello world now", "aaab", "xyzzy", "colour", "color",
+    "azebrac", "bzebrad", "zebra", "adef", "abcdef", "12-34", "1-2",
+    "q abc abc z", "qabcabcz", "5apple", "apple", "xxapple", "word",
+    "a word here", "abcd", "cd", "abKcd", "literal", "a\nb",
+    std::string("a\x00" "b", 3), "xhelloy", "xhellox", "AbC", "ABC",
+    "a+b", "zaaz", "abcq",
+  };
+}
+
+std::vector<std::string> literal_utf_subjects() {
+  return {
+    "", "é", "café", "un café noir", "xxcafé", "漢字", "x漢字",
+    "xx漢字yy", "漢漢字", "🙂ok", "z🙂okz", "ü", "aé", "É", "a😀b",
+  };
+}
+
+/** Every match of `pattern` in `subject`, found by anchoring at each offset. */
+std::vector<std::pair<size_t, size_t>> every_match(
+    GRX_Regex * pinned, const std::string & subject, bool utf, bool * ok) {
+  std::vector<std::pair<size_t, size_t>> out;
+  *ok = true;
+  for (size_t at = 0; at <= subject.size(); at += utf_step(subject, at, utf)) {
+    GRX_Match * match = nullptr;
+    if (grx_match_create(pinned, nullptr, &match) != GRX_OK) {
+      *ok = false;
+      return out;
+    }
+    int matched = 0;
+    GRX_Result rc = grx_regex_search(pinned, subject.data(), subject.size(),
+        at, GRX_ENGINE_AUTO, nullptr, match, &matched);
+    if (rc == GRX_OK && matched) {
+      GRX_Capture span {};
+      grx_match_span(match, &span);
+      out.emplace_back(span.start, span.end);
+    }
+    grx_match_destroy(match);
+    if (rc != GRX_OK) {
+      *ok = false;
+      return out;
+    }
+  }
+  return out;
+}
+
+} // namespace
+
+TEST(Compile, ALiteralPrefixIsOneEveryMatchReallyBeginsWith) {
+  // The one claim the fact makes. Checked against the engines rather than
+  // against the walk that produced it: every match the pattern has anywhere
+  // in any subject, found by anchoring at each offset in turn, has to begin
+  // with those bytes.
+  //
+  // `\K` is why the claim is about the *reported* span and not about where
+  // the attempt began. `ab\Kcd` consumes "ab" first and reports a span
+  // starting at `c`, so a prefix taken from the attempt would be a prefix of
+  // no match at all - which is why prefilter.c refuses the fact outright for
+  // a program containing one, and why `ab\Kcd` is in the list above.
+  size_t offered = 0;
+  size_t checked = 0;
+  std::vector<std::pair<const char *, uint32_t>> work;
+  for (const char * pattern : kLiteralPatterns) {
+    work.emplace_back(pattern, GRX_OPT_NONE);
+  }
+  for (const char * pattern : kLiteralUtfPatterns) {
+    work.emplace_back(pattern, GRX_OPT_UTF);
+  }
+
+  for (const auto & item : work) {
+    const bool utf = (item.second & GRX_OPT_UTF) != 0;
+    GRX_Regex * loose = nullptr;
+    GRX_Regex * pinned = nullptr;
+    if (grx_regex_compile_with_allocator(item.first, strlen(item.first),
+            GRX_SYNTAX_PCRE, item.second, nullptr, nullptr, nullptr, &loose)
+            != GRX_OK
+        || grx_regex_compile_with_allocator(item.first, strlen(item.first),
+               GRX_SYNTAX_PCRE, item.second | GRX_OPT_ANCHORED, nullptr,
+               nullptr, nullptr, &pinned) != GRX_OK) {
+      grx_regex_free(loose);
+      grx_regex_free(pinned);
+      continue;
+    }
+    GRX_Facts facts;
+    ASSERT_EQ(grx_regex_facts(loose, &facts), GRX_OK);
+    if (!facts.literal_prefix) {
+      EXPECT_EQ(facts.literal_prefix_length, 0u) << item.first;
+      grx_regex_free(loose);
+      grx_regex_free(pinned);
+      continue;
+    }
+    offered++;
+    EXPECT_GT(facts.literal_prefix_length, 0u) << item.first;
+    std::string prefix(facts.literal_prefix, facts.literal_prefix_length);
+
+    for (const std::string & subject :
+        utf ? literal_utf_subjects() : literal_subjects()) {
+      bool ok = false;
+      auto spans = every_match(pinned, subject, utf, &ok);
+      if (!ok) {
+        continue;
+      }
+      for (const auto & span : spans) {
+        checked++;
+        ASSERT_LE(span.second, subject.size());
+        std::string text = subject.substr(span.first, span.second - span.first);
+        EXPECT_EQ(text.compare(0, prefix.size(), prefix), 0)
+            << "pattern " << item.first << " claims every match starts with \""
+            << prefix << "\", but \"" << text << "\" at " << span.first
+            << " in \"" << subject << "\" does not";
+      }
+    }
+    grx_regex_free(loose);
+    grx_regex_free(pinned);
+  }
+
+  // A sweep that offered nothing would pass without having asked anything.
+  EXPECT_GT(offered, 20u) << "hardly any pattern here has a literal prefix, "
+                             "so this gate is checking almost nothing";
+  EXPECT_GT(checked, 200u) << "the subjects do not match these patterns, so "
+                              "no match was ever examined";
+}
+
+TEST(Compile, ARequiredLiteralIsOneEveryMatchReallyContains) {
+  size_t offered = 0;
+  size_t checked = 0;
+  std::vector<std::pair<const char *, uint32_t>> work;
+  for (const char * pattern : kLiteralPatterns) {
+    work.emplace_back(pattern, GRX_OPT_NONE);
+  }
+  for (const char * pattern : kLiteralUtfPatterns) {
+    work.emplace_back(pattern, GRX_OPT_UTF);
+  }
+
+  for (const auto & item : work) {
+    const bool utf = (item.second & GRX_OPT_UTF) != 0;
+    GRX_Regex * loose = nullptr;
+    GRX_Regex * pinned = nullptr;
+    if (grx_regex_compile_with_allocator(item.first, strlen(item.first),
+            GRX_SYNTAX_PCRE, item.second, nullptr, nullptr, nullptr, &loose)
+            != GRX_OK
+        || grx_regex_compile_with_allocator(item.first, strlen(item.first),
+               GRX_SYNTAX_PCRE, item.second | GRX_OPT_ANCHORED, nullptr,
+               nullptr, nullptr, &pinned) != GRX_OK) {
+      grx_regex_free(loose);
+      grx_regex_free(pinned);
+      continue;
+    }
+    GRX_Facts facts;
+    ASSERT_EQ(grx_regex_facts(loose, &facts), GRX_OK);
+    if (!facts.required_literal) {
+      EXPECT_EQ(facts.required_literal_length, 0u) << item.first;
+      grx_regex_free(loose);
+      grx_regex_free(pinned);
+      continue;
+    }
+    offered++;
+    std::string needle(facts.required_literal, facts.required_literal_length);
+    EXPECT_GT(needle.size(), 0u) << item.first;
+
+    for (const std::string & subject :
+        utf ? literal_utf_subjects() : literal_subjects()) {
+      bool ok = false;
+      auto spans = every_match(pinned, subject, utf, &ok);
+      if (!ok) {
+        continue;
+      }
+      for (const auto & span : spans) {
+        checked++;
+        std::string text = subject.substr(span.first, span.second - span.first);
+        EXPECT_NE(text.find(needle), std::string::npos)
+            << "pattern " << item.first << " claims every match contains \""
+            << needle << "\", but \"" << text << "\" at " << span.first
+            << " in \"" << subject << "\" does not";
+      }
+    }
+    grx_regex_free(loose);
+    grx_regex_free(pinned);
+  }
+
+  EXPECT_GT(offered, 20u) << "hardly any pattern here has a required literal";
+  EXPECT_GT(checked, 200u) << "no match was ever examined";
+}
+
+TEST(Compile, WhichLiteralsTheseParticularPatternsHaveAndWhichHaveNone) {
+  // By value, because the sweeps above can only catch a literal that is
+  // *wrong*; one that is merely absent passes them silently, and absent is
+  // what a broken walk returns. Each row says which of the two facts the
+  // pattern has, so a change that quietly stops answering is a failure and
+  // not an improvement in the skip rate.
+  struct Row {
+    const char * pattern;
+    const char * prefix;    // nullptr for "there must be none"
+    const char * required;
+  };
+  const Row rows[] = {
+    {"abc", "abc", "abc"},
+    {"aaaaaaaaab", "aaaaaaaaab", "aaaaaaaaab"},
+    {".*foo", nullptr, "foo"},
+    {"foo.*", "foo", "foo"},
+    {"a*bc", nullptr, "bc"},
+    {"ab(cd)ef", "abcdef", "abcdef"},
+    {"\\d+apple", nullptr, "apple"},
+    {"^hello world", "hello world", "hello world"},
+    {"colou?r", "colo", "colo"},
+    {"(abc)+", "abc", "abc"},
+    // Both arms spell the same text and neither instruction is on every
+    // path, so dominance cannot see it. Recorded as a known weakness rather
+    // than left to look like an accident.
+    {"cat|car", nullptr, nullptr},
+    // `\K` moves the reported start, so nothing consumed before it is part of
+    // any match and both facts are refused.
+    {"ab\\Kcd", nullptr, nullptr},
+    // A class is a choice of code points, so it ends a literal run.
+    {"(?i)abc", nullptr, nullptr},
+    {"[abc]def", nullptr, "def"},
+    // A lookaround consumes nothing of the match, so the prefix walks past it
+    // and the required literal refuses the program outright.
+    {"(?=x)abc", "abc", nullptr},
+    {"", nullptr, nullptr},
+    {".", nullptr, nullptr},
+  };
+  for (const Row & row : rows) {
+    GRX_Regex * regex = nullptr;
+    ASSERT_EQ(grx_regex_compile_with_allocator(row.pattern,
+                  strlen(row.pattern), GRX_SYNTAX_PCRE, GRX_OPT_NONE, nullptr,
+                  nullptr, nullptr, &regex),
+        GRX_OK)
+        << row.pattern;
+    GRX_Facts facts;
+    ASSERT_EQ(grx_regex_facts(regex, &facts), GRX_OK);
+
+    if (row.prefix) {
+      ASSERT_NE(facts.literal_prefix, nullptr) << row.pattern;
+      EXPECT_EQ(
+          std::string(facts.literal_prefix, facts.literal_prefix_length),
+          std::string(row.prefix))
+          << row.pattern;
+    }
+    else {
+      EXPECT_EQ(facts.literal_prefix, nullptr)
+          << row.pattern << " offered a prefix where none was expected";
+    }
+    if (row.required) {
+      ASSERT_NE(facts.required_literal, nullptr) << row.pattern;
+      EXPECT_EQ(
+          std::string(facts.required_literal, facts.required_literal_length),
+          std::string(row.required))
+          << row.pattern;
+    }
+    else {
+      EXPECT_EQ(facts.required_literal, nullptr)
+          << row.pattern << " offered a required literal where none was "
+                            "expected";
+    }
+    grx_regex_free(regex);
+  }
+}
+
+TEST(Compile, ALiteralIsTruncatedRatherThanRefusedWhenItRunsLong) {
+  // Truncation is sound for both facts - a prefix of a string every match
+  // begins with is still one, and a substring of one every match contains is
+  // still one - so a pattern longer than the cap answers with as much as
+  // fits rather than with nothing.
+  std::string pattern(200, 'q');
+  GRX_Regex * regex = nullptr;
+  ASSERT_EQ(grx_regex_compile_with_allocator(pattern.data(), pattern.size(),
+                GRX_SYNTAX_PCRE, GRX_OPT_NONE, nullptr, nullptr, nullptr,
+                &regex),
+      GRX_OK);
+  GRX_Facts facts;
+  ASSERT_EQ(grx_regex_facts(regex, &facts), GRX_OK);
+  ASSERT_NE(facts.literal_prefix, nullptr);
+  EXPECT_GT(facts.literal_prefix_length, 8u);
+  EXPECT_LE(facts.literal_prefix_length, 64u);
+  EXPECT_EQ(std::string(facts.literal_prefix, facts.literal_prefix_length),
+      std::string(facts.literal_prefix_length, 'q'));
+  grx_regex_free(regex);
+}
+
 int main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

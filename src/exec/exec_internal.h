@@ -35,6 +35,7 @@
 #include <ghoti.io/regex/exec.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "../compile/compile_internal.h"
 
@@ -181,9 +182,67 @@ typedef struct GRX_ExecRequest {
  * @param from Where to look from.
  * @return The position to try next, which is `from` when nothing is known.
  */
+/**
+ * @brief The first occurrence of `needle` in `haystack`, or NULL.
+ *
+ * memchr for a candidate and a comparison to confirm it, rather than
+ * `memmem`, which is a GNU extension where this library builds on three
+ * platforms. The scan is the work and it is memchr's, which every libc
+ * vectorises.
+ *
+ * **The candidate is the needle's last byte, not its first**, and the reason
+ * is the case documentation/design.md section 3.5.5 names as what the
+ * literals are for. `aaaaaaaaab` over a subject of `a` has a candidate at
+ * every position if the first byte is what is scanned for - the search
+ * degrades to a memchr call and a memcmp per byte, measured at 5.2 ns per
+ * subject byte, which is barely better than the byte set it replaced. Its
+ * last byte occurs nowhere, so scanning for that answers in one pass.
+ *
+ * The first byte is then checked inline before memcmp, which costs one
+ * comparison and bounds the mirror image of that case: a needle whose last
+ * byte is common and whose first is rare rejects each candidate without a
+ * call.
+ *
+ * Neither is a guarantee. A needle whose first *and* last bytes are both
+ * common is still quadratic in the worst case, and the fix for that is the
+ * two-way or Boyer-Moore search design.md already names as the next piece.
+ *
+ * @param haystack Where to look. May be NULL only when `haystack_length` is 0.
+ * @param haystack_length Its length.
+ * @param needle What to look for. Never NULL.
+ * @param needle_length Its length; zero finds `haystack` itself.
+ * @return The first occurrence, or NULL.
+ */
+static inline const char * grx_exec_find(const char * haystack,
+    size_t haystack_length, const char * needle, size_t needle_length) {
+  if (!needle_length) {
+    return haystack;
+  }
+  if (!haystack || needle_length > haystack_length) {
+    return NULL;
+  }
+  const size_t last = needle_length - 1;
+  const char * at = haystack + last;
+  size_t left = haystack_length - last;
+  while (left) {
+    const char * hit
+        = (const char *)memchr(at, (unsigned char)needle[last], left);
+    if (!hit) {
+      return NULL;
+    }
+    const char * begin = hit - last;
+    if (begin[0] == needle[0] && memcmp(begin, needle, last) == 0) {
+      return begin;
+    }
+    left -= (size_t)(hit - at) + 1;
+    at = hit + 1;
+  }
+  return NULL;
+}
+
 static inline size_t grx_exec_skip_to_first_byte(const GRX_Program * program,
     const char * subject, size_t length, size_t from) {
-  if (!program->first_bytes_known) {
+  if (!program->first_bytes_known && !program->literal_prefix_length) {
     return from;
   }
   // A callout is a side effect of *trying* a position, not of matching at one:
@@ -208,6 +267,29 @@ static inline size_t grx_exec_skip_to_first_byte(const GRX_Program * program,
   // character is the whole of what this gives up.
   if ((program->flags & GRX_PROGRAM_NEWLINE_CRLF)
       && !(program->flags & GRX_PROGRAM_HAS_CR_OR_LF)) {
+    return from;
+  }
+  // A whole string beats a byte wherever there is one. `aaaaaaaaab` is the
+  // case the byte set cannot help with at all - every position in a subject
+  // of `a` passes the byte test and exactly one passes this - and it is the
+  // case documentation/design.md section 3.5.5 names as what the literals are
+  // for. Nothing is lost where both are known: the prefix begins with a byte
+  // the set contains, so this skips at least as far.
+  //
+  // A prefix begins with the first byte of an encoded code point, and a UTF-8
+  // continuation byte is never one of those, so a hit cannot land inside a
+  // character. Not finding it means no match exists at or after `from`, which
+  // `length` is the way to say.
+  if (program->literal_prefix_length) {
+    if (from >= length) {
+      return from;
+    }
+    const char * found = grx_exec_find(subject + from, length - from,
+        program->literal_prefix, program->literal_prefix_length);
+    return found ? (size_t)(found - subject) : length;
+  }
+
+  if (!program->first_bytes_known) {
     return from;
   }
   while (from < length) {

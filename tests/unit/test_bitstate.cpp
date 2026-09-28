@@ -325,8 +325,15 @@ TEST(BitState, PaysLessThanTheBacktrackerForTheSameAnswer) {
     const char * expected;
   };
   const Row rows[] = {
-    {"(a+)+b", std::string(40, 'a'), "none"},
-    {"(a|aa)+b", std::string(40, 'a'), "none"},
+    // The leading `b` is a decoy and has to be there. Every match of these
+    // two contains one, so src/compile/prefilter.c's required literal lets
+    // the search answer before either engine is entered - which is correct,
+    // and which would leave this measurement comparing nothing at all: both
+    // engines cost one step and neither allocates a bitmap. A `b` the match
+    // cannot use puts the engines back in the picture without changing the
+    // answer, because nothing precedes it for `(a+)+` to consume.
+    {"(a+)+b", "b" + std::string(40, 'a'), "none"},
+    {"(a|aa)+b", "b" + std::string(40, 'a'), "none"},
     // These two can still match: the outer star takes zero iterations and
     // `$` holds at the end, so the answer is an empty match there rather
     // than no match. Answering at all is the point.
@@ -440,7 +447,10 @@ TEST(BitState, RefusesABitmapThatWillNotFit) {
   Regex regex("(a|aa)+b");
   ASSERT_TRUE(regex.ok());
 
-  const std::string subject(4096, 'a');
+  // Leading `b` for the reason the rows above carry one: without it the
+  // required literal is absent and the search answers before the engine asks
+  // for a bitmap, so a test about the bitmap's budget would never reach it.
+  const std::string subject = "b" + std::string(4096, 'a');
 
   GRX_Limits limits;
   grx_limits_default(&limits);

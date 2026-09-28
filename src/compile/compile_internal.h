@@ -64,6 +64,20 @@ extern "C" {
 #define GRX_FIRST_BYTES_SIZE 32
 
 /**
+ * @brief Longest literal run either prefilter literal will carry.
+ *
+ * A cap rather than an allocation, because truncating is *sound* for both
+ * facts and nothing is gained past it. A prefix of a string every match
+ * starts with is still a string every match starts with, and a substring of
+ * one every match contains is still one every match contains - so a truncated
+ * answer is a weaker true claim, not a wrong one. Sixty-four bytes is already
+ * more than any substring search profits from: the scan cost is set by the
+ * needle's rarest byte and its length, and both have stopped mattering long
+ * before this.
+ */
+#define GRX_LITERAL_MAX 64
+
+/**
  * @brief One instruction of the compiled program.
  *
  * The first group is what a lockstep NFA simulation can run; a program made
@@ -427,6 +441,22 @@ typedef struct GRX_Program {
    */
   unsigned char first_bytes[GRX_FIRST_BYTES_SIZE];
   int first_bytes_known;
+  /**
+   * Bytes every match begins with, and bytes every match contains.
+   *
+   * Here for the same reason the byte set is: the engines read them. The byte
+   * set turns a closure per position into a byte test per position, and these
+   * two turn it into a substring search - which is the difference the set
+   * cannot make for a pattern like `aaaaaaaaab`, where every position passes
+   * the byte test and only the tenth passes the string test.
+   *
+   * Zero length means "not known", which is the same answer as an empty
+   * literal would be and is the safe one: check every position.
+   */
+  char literal_prefix[GRX_LITERAL_MAX];
+  size_t literal_prefix_length;
+  char required_literal[GRX_LITERAL_MAX];
+  size_t required_literal_length;
 } GRX_Program;
 
 /**
@@ -595,6 +625,52 @@ GRX_Result grx_compile_program(const GRX_Pattern * pattern,
  */
 int grx_program_first_bytes(
     const GRX_Program * program, unsigned char * out_set);
+
+/**
+ * @brief The bytes every match of `program` begins with.
+ *
+ * The forced path out of the entry point: while there is exactly one way
+ * onwards and it consumes one known code point, that code point's bytes are
+ * bytes every match starts with. The walk stops at the first branch, at
+ * anything that consumes a choice of code points, and at anything it does not
+ * model - so the answer is a *prefix* of the true one, never longer than it.
+ *
+ * Nothing is reported for a program containing `\K` or `\ze`, which move the
+ * reported start and end away from where the attempt began: what the attempt
+ * consumes first is then not what the match begins with, and this fact is
+ * about the match.
+ *
+ * @param program The compiled program.
+ * @param out Receives up to `cap` bytes.
+ * @param cap How many bytes `out` holds.
+ * @return How many bytes were written; 0 when there is no answer.
+ */
+size_t grx_program_literal_prefix(
+    const GRX_Program * program, char * out, size_t cap);
+
+/**
+ * @brief Bytes every match of `program` contains, wherever they fall in it.
+ *
+ * Dominance, not a walk: an instruction on every path from the entry point to
+ * every `MATCH` is executed by every match, so a run of such instructions that
+ * consume one known code point each, chained so that each is the only way on
+ * from the one before and the only way into the one after, is a string every
+ * match contains.
+ *
+ * Weaker than it could be, on purpose. `cat|car` has the required literal
+ * `ca` and this does not find it, because the two `c` instructions are
+ * different instructions and neither is on every path; finding it needs the
+ * tree rather than the program. What this does find is the case the byte set
+ * cannot help with at all - `.*foo`, `[0-9]+-[0-9]+` - and an answer it
+ * cannot justify is no answer.
+ *
+ * @param program The compiled program.
+ * @param out Receives up to `cap` bytes.
+ * @param cap How many bytes `out` holds.
+ * @return How many bytes were written; 0 when there is no answer.
+ */
+size_t grx_program_required_literal(
+    const GRX_Program * program, char * out, size_t cap);
 
 #ifdef __cplusplus
 }

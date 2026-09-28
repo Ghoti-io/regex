@@ -525,7 +525,7 @@ a rewrite: the captures have to come out the same.
 
 Speed, not correctness, and phased after every implemented dialect is
 conformant ([plan.md](plan.md)). The facts in §3.3 carry the literal prefix,
-the required literal and the first-byte set; the first of those three is built.
+the required literal and the first-byte set, and all three are built.
 
 **The first-byte set.** `src/compile/prefilter.c` walks the compiled program
 from its entry point, following everything that consumes nothing, and unions
@@ -554,13 +554,46 @@ search, which tries one position anyway. A non-atomic lookbehind is refused by
 the walk instead, since it is inlined and consumes *backwards* - its bytes are
 not at the start position.
 
-**Still to come.** A literal prefix and a required literal want a substring
-search (`memmem`, or Boyer-Moore for a long needle) rather than a byte set, and
-they are what a pattern like `aaaaaaaaab` needs: every position passes a
-first-byte test there, so the set buys nothing. A lazy DFA (RE2's strategy: DFA
-for "is there a match and where does it end", then the Pike VM or bit-state on
-the bounded span for captures) would be a fourth row in the engine table with
-the same equivalence obligation.
+**The two literals.** `grx_program_literal_prefix()` walks the forced path out
+of the entry point - while there is exactly one way onwards and it consumes one
+known code point, those bytes are bytes every match starts with - and
+`grx_program_required_literal()` asks a different question that a walk cannot:
+an instruction on every path from the entry to every `MATCH` is executed by
+every match, so a run of such instructions, chained so that each is the only
+way on from the one before, is a string every match *contains* wherever it
+falls. That is dominance, computed with Cooper, Harvey and Kennedy's
+algorithm over the program's control flow. An opcode whose control flow is not
+modelled refuses the whole analysis rather than being given no edges, since a
+missing edge is what would make an instruction look like a dominator when a
+match can reach the end without it.
+
+The engines use them as a substring search rather than a byte test. The prefix
+replaces the byte set in the skip - it can only skip further, since it begins
+with a byte the set contains - and the required literal is checked once over
+the whole window before either engine starts, which is the only one of the
+three that helps a pattern whose match begins with something unconstrained.
+Measured on the same 4 KB subject as the byte set above, `aaaaaaaaab` goes from
+5.19 ns per subject byte to 0.010, and `.*foo`, which the byte set cannot
+answer for at all, from a closure per position to 0.011.
+
+Two things the scan gets right by construction and one it does not. The search
+looks for the needle's **last** byte and not its first, because
+`aaaaaaaaab` has a candidate at every position of a subject of `a` otherwise -
+that is the 5.19 above. A hit cannot land inside a UTF-8 character, because a
+literal begins with the first byte of an encoded code point and a continuation
+byte is never one. And a needle whose first *and* last bytes are both common
+is still quadratic in the worst case; the fix for that is the two-way or
+Boyer-Moore search this paragraph used to promise for the literals themselves.
+
+`required_literal` is deliberately weaker than it could be: `cat|car` requires
+`ca` and dominance cannot see it, because the two `c` instructions are
+different instructions and neither is on every path. Finding it needs the tree
+rather than the program, and an answer this cannot justify is no answer.
+
+**Still to come.** A lazy DFA (RE2's strategy: DFA for "is there a match and
+where does it end", then the Pike VM or bit-state on the bounded span for
+captures) would be a fourth row in the engine table with the same equivalence
+obligation.
 
 ### 3.6 Search semantics
 

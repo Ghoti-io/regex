@@ -632,9 +632,16 @@ TEST(Limits, APatternsOwnLimitIsAppliedAndNotMerelyParsed) {
   // where max_match_memory counts bytes. A subject long enough that the
   // thread lists cost more than one kibibyte is what makes the scale
   // visible: with the directive read as bytes this row would pass anyway.
+  //
+  // `[cq]` rather than `c`, and the reason is the prefilter rather than the
+  // heap: a bare `c` is a literal every match contains, so a subject of `a`
+  // with no `c` in it is answered by src/compile/prefilter.c's required
+  // literal before any thread list is allocated, and a row about the size of
+  // that allocation would never reach it. A class is a choice of code points
+  // and leaves nothing to require.
   std::string big(4000, 'a');
-  EXPECT_EQ(ask("(a|b)*c", big).result, GRX_OK);
-  Asked heap = ask("(*LIMIT_HEAP=1)(a|b)*c", big);
+  EXPECT_EQ(ask("(a|b)*[cq]", big).result, GRX_OK);
+  Asked heap = ask("(*LIMIT_HEAP=1)(a|b)*[cq]", big);
   EXPECT_EQ(heap.result, GRX_ERR_LIMIT);
   EXPECT_EQ(heap.diag, GRX_DIAG_LIMIT_MATCH_MEMORY);
 }

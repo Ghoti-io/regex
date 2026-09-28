@@ -213,6 +213,25 @@ GRX_Result grx_compile_program(const GRX_Pattern * pattern,
       memcpy(regex->facts.first_bytes, regex->program.first_bytes,
           GRX_FIRST_BYTES_SIZE);
     }
+
+    // The two literals are the same arrangement: computed once here, held on
+    // the program because the engines read them, and published through the
+    // facts as pointers into it. They are valid for as long as the regex is,
+    // which is what the public header promises about every pointer in there.
+    regex->program.literal_prefix_length = grx_program_literal_prefix(
+        &regex->program, regex->program.literal_prefix, GRX_LITERAL_MAX);
+    regex->program.required_literal_length = grx_program_required_literal(
+        &regex->program, regex->program.required_literal, GRX_LITERAL_MAX);
+    if (regex->program.literal_prefix_length) {
+      regex->facts.literal_prefix = regex->program.literal_prefix;
+      regex->facts.literal_prefix_length
+          = regex->program.literal_prefix_length;
+    }
+    if (regex->program.required_literal_length) {
+      regex->facts.required_literal = regex->program.required_literal;
+      regex->facts.required_literal_length
+          = regex->program.required_literal_length;
+    }
   }
 
   grx_ir_free(ir);

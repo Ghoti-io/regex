@@ -249,7 +249,13 @@ TEST(Exec, StepsAreCappedEvenThoughTheBoundIsStructural) {
   grx_limits_default(&limits);
   limits.max_steps = 10;
 
-  const std::string subject(1000, 'a');
+  // The trailing `b` is what keeps this a test about max_steps. Every match
+  // of `a*b` contains one, so src/compile/prefilter.c's required literal
+  // answers a subject without one before the engine is entered - correctly,
+  // and in no steps at all, which is not what this row is asking about. With
+  // the `b` there the walk still has to cross a thousand positions to reach
+  // it, and ten steps still do not buy that.
+  const std::string subject = std::string(1000, 'a') + "b";
   int matched = 1;
   EXPECT_EQ(grx_regex_search(regex.get(), subject.data(), subject.size(), 0,
                 GRX_ENGINE_AUTO, &limits, nullptr, &matched),
@@ -567,7 +573,16 @@ TEST(Backtrack, ExponentialPatternsTheMemoCannotHelpHitTheLimitRatherThanHanging
   // a hang into GRX_ERR_LIMIT, and GRX_ERR_LIMIT is not "no match", because
   // "no match" is a fact about the subject and a limit is a fact about the
   // budget.
-  const char * patterns[] = {"(a*)*b", "(a+)+b\\1", "((?=a)a+)+b"};
+  // A two-member class rather than a bare `b`, and the difference is the
+  // prefilter rather than the backtracking. These subjects are runs of `a`
+  // with no `b` anywhere, which is exactly what makes the search exponential
+  // - and exactly what src/compile/prefilter.c's required literal now answers
+  // in one pass without entering an engine. A `b` cannot simply be added to
+  // the subject either: any `b` at all gives every one of these an immediate
+  // match, and the row would stop being about a limit. `[bq]` is a choice of
+  // code points, so there is no literal to require, and the pattern explodes
+  // exactly as it did.
+  const char * patterns[] = {"(a*)*[bq]", "(a+)+[bq]\\1", "((?=a)a+)+[bq]"};
 
   GRX_Limits limits;
   grx_limits_default(&limits);
@@ -591,7 +606,10 @@ TEST(Backtrack, TheStackDepthIsCappedSeparatelyFromTheStepCount) {
   // Two different resources, and a caller may want to bound either. The
   // stack is on the heap, so this is a policy cap and not a guard against
   // overflowing the C stack - there is nothing recursive here to overflow it.
-  Regex regex("(a|b)*c");
+  // `[cq]` for the reason the rows above use one: a bare `c` is a literal
+  // every match contains, and a subject of `a` with no `c` in it is answered
+  // by the prefilter before the backtracker allocates a stack to cap.
+  Regex regex("(a|b)*[cq]");
   ASSERT_TRUE(regex.ok());
 
   GRX_Limits limits;

@@ -171,6 +171,8 @@ TEST(ReDoS, EveryPairIsAnsweredOrRefusedQuicklyAndNeverOnlyByOneEngine) {
   size_t answered = 0;
   size_t refused = 0;
   size_t ran = 0;
+  size_t compared = 0;
+  size_t prefiltered = 0;
   long slowest_refusal = 0;
   long slowest_answer = 0;
 
@@ -241,9 +243,27 @@ TEST(ReDoS, EveryPairIsAnsweredOrRefusedQuicklyAndNeverOnlyByOneEngine) {
       if (!under_valgrind()) {
         EXPECT_LT(safe.milliseconds, kBudgetMilliseconds) << record.pattern;
       }
-      EXPECT_LT(safe.steps, backtrack.steps)
-          << "/" << record.pattern
-          << "/ cost the safe engine as much as the backtracker";
+      // A row both engines answered in no steps at all was not answered by
+      // an engine: src/compile/prefilter.c's required literal is absent from
+      // the subject, so the search returned before either was entered. That
+      // is the prefilter doing exactly what it is for - `(a|b|ab)*bc` over a
+      // kilobyte of "a" has no `bc` in it anywhere - and it is a better
+      // outcome than the one this pair was written to check, not a worse one.
+      //
+      // Counted rather than asserted away. The comparison below is about what
+      // the two *engines* cost, and it cannot be made of a row where neither
+      // ran; the count is printed in the summary so that a prefilter change
+      // which quietly swallowed the whole corpus would be visible instead of
+      // reading as a clean run.
+      if (!backtrack.steps && !safe.steps) {
+        prefiltered++;
+      }
+      else {
+        compared++;
+        EXPECT_LT(safe.steps, backtrack.steps)
+            << "/" << record.pattern
+            << "/ cost the safe engine as much as the backtracker";
+      }
       if (expected != "limit") {
         EXPECT_EQ(safe.spans, backtrack.spans)
             << "/" << record.pattern << "/: the engines disagree";
@@ -259,9 +279,17 @@ TEST(ReDoS, EveryPairIsAnsweredOrRefusedQuicklyAndNeverOnlyByOneEngine) {
   // corpus is where that would have to be recorded rather than discovered.
   EXPECT_EQ(answered, rows) << "some pair has no engine that can answer it";
 
-  printf("\nredos: %zu of %zu pairs, %zu still refused by the backtracker; "
+  // And the comparison has to have been made of something. If the prefilter
+  // ever settled every row, this test would pass while measuring nothing.
+  EXPECT_GT(compared, 0u)
+      << "every pair was settled before an engine ran, so nothing here "
+         "compared the two engines' cost at all";
+
+  printf("\nredos: %zu of %zu pairs, %zu still refused by the backtracker, "
+         "%zu settled by the prefilter before an engine ran, %zu compared; "
          "slowest refusal %ld ms, slowest answer %ld ms\n",
-      rows, file.records.size(), refused, slowest_refusal, slowest_answer);
+      rows, file.records.size(), refused, prefiltered, compared,
+      slowest_refusal, slowest_answer);
 }
 
 TEST(ReDoS, TheStepLimitReachesTheClosureWalkAndNotOnlyTheDispatchLoop) {

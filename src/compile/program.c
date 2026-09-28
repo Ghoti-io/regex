@@ -30,6 +30,7 @@
 #include <ghoti.io/regex/core.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 #include <stdio.h>
 
 #include "compile_internal.h"
@@ -165,6 +166,13 @@ void grx_program_init(GRX_Program * program, const GRX_Allocator * allocator,
       &program->callout_strings, allocator, sizeof(char), 0, GRX_DIAG_NONE);
   program->flags = 0;
   program->register_count = 0;
+  // The prefilter fields are not filled until after codegen, and "not known"
+  // has to be what they say until then: every one of them is read by the
+  // engines, and a stale value here would skip a position a match begins at.
+  program->first_bytes_known = 0;
+  memset(program->first_bytes, 0, sizeof program->first_bytes);
+  program->literal_prefix_length = 0;
+  program->required_literal_length = 0;
   program->preference = GRX_PREFER_LEFTMOST_FIRST;
   program->submatch = GRX_SUBMATCH_FIRST_PATH;
   program->iteration = GRX_ITERATE_RETRY_THEN_ADVANCE;
