@@ -170,6 +170,75 @@ TEST(Compile, AGroupsLengthIsMeasuredOncePerGroupNotOncePerReference) {
                              "took " << seconds << " s to compile";
 }
 
+TEST(Compile, AGroupThatReferencesItselfIsMeasuredOnceNotOncePerReference) {
+  // The memo above is guarded, and the guard was wide enough to switch it off.
+  //
+  // group_span() must not remember a span that came out "unknown" because of
+  // the route to it: a reference to a group already being resolved says
+  // nothing about that group. The old rule for that was a counter - if
+  // anything underneath gave up, do not store - and it cannot tell two unlike
+  // cases apart. A group whose own body references *itself* gives up on every
+  // route, because group_span() pushes the group before walking its body, so
+  // that answer is a property of the group and is the same wherever it is
+  // asked from. A group that gives up because an enclosing resolution put some
+  // other group on the stack is the case the guard is for.
+  //
+  // With a self-reference in the body the counter moves every time, so nothing
+  // was ever stored and every reference re-walked the whole body. The fix
+  // compares against the resolving-stack index the group was pushed at.
+  //
+  // Found by replaying the soak's slow units: `pattern-pcre/slow-unit-2fcdef60`
+  // is 24,901 bytes, took 20,384 body walks and **zero** cache hits -
+  // 265,488,928 walk steps and 7.89 s. It is 1.95 s now, and the two artifacts
+  // either side of it in notes/regex/TODO.md section 14u went 6.03 s to 1.09 s
+  // and 0.32 s to 0.006 s.
+  //
+  // The witness here is one group whose body is expensive to walk and contains
+  // a reference to itself, plus many references to it from outside. Old cost
+  // is references times body; new cost is body plus references.
+  //
+  // Half a second sits between the two populations in both builds: release
+  // 0.011 s fixed against 1.14 s broken, and under AddressSanitizer - where
+  // `make test` also runs this - 0.024 s against 4.90 s. The margin under the
+  // bound is 21x, which is the side a loaded machine can move.
+  std::string body;
+  for (int i = 0; i < 4000; i++) {
+    body += "(?:a|b)";
+  }
+  std::string pattern = "(" + body + "\\1)";
+  for (int i = 0; i < 4000; i++) {
+    pattern += "\\1";
+  }
+
+  GRX_Limits limits;
+  grx_limits_default(&limits);
+  // The only cap lifted, for the same reason as the two tests below: the
+  // program this expands to is large and the program-size cap is not the
+  // subject. Everything else is the default, and the 36 KB pattern is inside
+  // max_pattern_length and max_nodes as they ship.
+  limits.max_program_size = 0;
+
+  GRX_Regex * regex = nullptr;
+  auto start = std::chrono::steady_clock::now();
+  GRX_Result result = grx_regex_compile_with_allocator(pattern.data(),
+      pattern.size(), GRX_SYNTAX_PCRE, GRX_OPT_NONE, &limits, nullptr, nullptr,
+      &regex);
+  auto elapsed = std::chrono::steady_clock::now() - start;
+  EXPECT_EQ(result, GRX_OK);
+  EXPECT_NE(regex, nullptr);
+  grx_regex_free(regex);
+
+  auto seconds
+      = std::chrono::duration_cast<std::chrono::duration<double>>(elapsed)
+            .count();
+  EXPECT_LT(seconds, 0.5)
+      << pattern.size() << "-byte pattern, one self-referencing group and "
+      << "4,000 references to it, took " << seconds
+      << " s to compile. group_span() remembers a span whose give-ups were all "
+         "at or above the group's own place on the resolving stack; a figure "
+         "this large means it is refusing to remember them again";
+}
+
 TEST(Compile, ASubtreeIsAskedAboutTheEmptyStringOncePerNodeNotOncePerCopy) {
   // The other half of the memo above, and the half it did not fix.
   //

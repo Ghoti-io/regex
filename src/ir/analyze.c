@@ -110,6 +110,26 @@ typedef struct {
  */
 #define GRX_ANALYSIS_SPAN_CACHE 64
 
+/** `context_floor` when nothing has given up; larger than any stack index. */
+#define GRX_ANALYSIS_NO_FLOOR ((size_t)-1)
+
+/**
+ * Where one capture number is written, so that finding it is not a search.
+ *
+ * group_span() needs three things about a group and all three are properties
+ * of the IR: the body to walk, whether more than one node claims the number,
+ * and whether any of them is inside `(?|...)`. It was reading them by walking
+ * every node in the tree, once per cache miss - which is O(nodes) inside a
+ * function whose whole purpose is to avoid repeating work. Section 14l said so
+ * when the memo went in and left it; a 24,901-byte fuzz artifact then spent
+ * 291,654,272 node visits on 20,384 misses over a 14,300-node tree.
+ */
+typedef struct {
+  uint32_t body;       ///< first_child of the first node claiming the number.
+  uint16_t found;      ///< How many do, saturating at 2 - only `> 1` is read.
+  unsigned char reset; ///< Any of them carries GRX_IR_BRANCH_RESET.
+} GroupSite;
+
 typedef struct {
   const GRX_IR * ir;
   /**
@@ -157,22 +177,49 @@ typedef struct {
   uint32_t resolving[GRX_ANALYSIS_MAX_REFERENCES];
   size_t resolving_count;
   /**
-   * Answers that depend on where the walk came from rather than on the IR.
+   * How far down `resolving` the give-ups underneath the current walk reached.
    *
-   * Bumped wherever a guard gives up: a reference to a group already being
-   * resolved, a resolution deeper than GRX_ANALYSIS_MAX_REFERENCES, or a walk
-   * deeper than walk_depth_limit(). Each returns "unknown" because of the
-   * route taken to it, so a span computed with one of them underneath is not a
-   * property of the group and must not be remembered. group_span() reads this
-   * before and after walking a body and caches only when it did not move.
+   * Every guard that returns "unknown" because of the route rather than
+   * because of the IR records the resolving-stack index it depended on, and
+   * this keeps the smallest. GRX_ANALYSIS_NO_FLOOR means none has fired.
+   *
+   * A low-water mark rather than the counter it replaces, because the counter
+   * could not tell two unlike cases apart. A group whose own body references
+   * *itself* gives up on every route: group_span() pushes the group before
+   * walking, so the cycle guard fires wherever the question is asked from, and
+   * the answer is a property of the group. A group that gives up because an
+   * *enclosing* resolution put some other group on the stack has an answer
+   * that belongs to the route and to nothing else.
+   *
+   * The counter said "something gave up" and blocked the memo for both, which
+   * on a pattern whose groups reference themselves blocked it always: a
+   * 24,901-byte fuzz artifact took 20,384 body walks and **zero** cache hits -
+   * 265,488,928 walk steps, 7.9 seconds. Comparing against the index the group
+   * was pushed at separates them: the first is remembered, the second is not.
    */
-  size_t context_hits;
+  size_t context_floor;
   /** Group numbers in the cache, 0 for an empty slot. */
   uint32_t cache_group[GRX_ANALYSIS_SPAN_CACHE];
   /** Whether that entry was computed while measuring a lookbehind's width. */
   unsigned char cache_look[GRX_ANALYSIS_SPAN_CACHE];
   /** What walk() returned for that body, before group_span's own tidying. */
   Span cache_span[GRX_ANALYSIS_SPAN_CACHE];
+  /**
+   * Capture number to GroupSite, built at most once and only if asked.
+   *
+   * Lazy because most analyses never call group_span() at all - a pattern with
+   * no backreference never asks - and an index built for every
+   * grx_ir_can_match_empty() would put an O(nodes) pass in front of a question
+   * that is usually about one node. Built on the first miss instead, which is
+   * the first time the search it replaces would have run.
+   *
+   * `groups_state` is 0 before the attempt, 1 once the index stands, 2 if it
+   * could not be built - and 2 means group_span() searches the way it always
+   * did. A cache that cannot be allocated is not an error here, it is the old
+   * cost.
+   */
+  GRX_Arena groups;
+  unsigned char groups_state;
   /**
    * The walk's own stack, one WalkFrame per node being measured.
    *
@@ -405,18 +452,89 @@ typedef enum {
  * group that did not participate matches the empty string in ECMAScript and
  * fails in the Perl family, and neither is "at least what the group was".
  */
+/**
+ * Build the capture-number index, or decide it cannot be built.
+ *
+ * One pass over the nodes instead of one pass per query. Returns whether the
+ * index now stands; a false answer is not a failure, it is group_span()
+ * searching the way it did before this existed.
+ */
+static int group_index_ready(Analysis * analysis) {
+  if (analysis->groups_state) {
+    return analysis->groups_state == 1;
+  }
+  // Pessimistic until it works, so an early return anywhere below leaves the
+  // fallback armed rather than an index half filled.
+  analysis->groups_state = 2;
+
+  uint32_t highest = 0;
+  for (size_t i = 0; i < analysis->ir->nodes.count; i++) {
+    const GRX_IRNode * node = grx_ir_node(analysis->ir, (uint32_t)i);
+    if (node && node->kind == GRX_IR_CAPTURE && node->a > highest) {
+      highest = node->a;
+    }
+  }
+  if (highest == GRX_INDEX_NONE) {
+    return 0;
+  }
+
+  // Slot 0 is never read - group 0 is refused at the top of group_span() - but
+  // it is allocated so that a group number indexes the arena directly.
+  size_t wanted = (size_t)highest + 1;
+  if (grx_arena_reserve(&analysis->groups, wanted) != GRX_OK) {
+    return 0;
+  }
+  for (size_t i = 0; i < wanted; i++) {
+    GroupSite blank = {GRX_INDEX_NONE, 0, 0};
+    if (grx_arena_append(&analysis->groups, &blank, NULL) != GRX_OK) {
+      return 0;
+    }
+  }
+
+  for (size_t i = 0; i < analysis->ir->nodes.count; i++) {
+    const GRX_IRNode * node = grx_ir_node(analysis->ir, (uint32_t)i);
+    if (!node || node->kind != GRX_IR_CAPTURE || node->a > highest) {
+      continue;
+    }
+    GroupSite * site = GRX_ARENA_AT(GroupSite, &analysis->groups, node->a);
+    if (!site) {
+      return 0;
+    }
+    if (!site->found) {
+      site->body = node->first_child;
+    }
+    if (node->flags & GRX_IR_BRANCH_RESET) {
+      site->reset = 1u;
+    }
+    // Only `found > 1` is ever read, so two is as high as this has to count
+    // and a uint16_t cannot be made to wrap back to one.
+    if (site->found < 2u) {
+      site->found++;
+    }
+  }
+
+  analysis->groups_state = 1;
+  return 1;
+}
+
 static Span group_span(Analysis * analysis, uint32_t group) {
   Span unknown = {0, GRX_NPOS, 0, 0, 1, 0};
   if (!group) {
     return unknown;
   }
   if (analysis->resolving_count >= GRX_ANALYSIS_MAX_REFERENCES) {
-    analysis->context_hits++;
+    // Reached only because of how deep the caller already was, so this is
+    // about the route all the way down: floor 0 blocks every memo above it.
+    analysis->context_floor = 0;
     return unknown;
   }
   for (size_t i = 0; i < analysis->resolving_count; i++) {
     if (analysis->resolving[i] == group) {
-      analysis->context_hits++;
+      // Whose resolution this depends on: the entry at `i`. A walk started at
+      // or below `i` would hit this again; one started above it would not.
+      if (i < analysis->context_floor) {
+        analysis->context_floor = i;
+      }
       return unknown;
     }
   }
@@ -440,14 +558,26 @@ static Span group_span(Analysis * analysis, uint32_t group) {
   else {
     size_t found = 0;
     int branch_reset = 0;
-    for (size_t i = 0; i < analysis->ir->nodes.count; i++) {
-      const GRX_IRNode * node = grx_ir_node(analysis->ir, (uint32_t)i);
-      if (node && node->kind == GRX_IR_CAPTURE && node->a == group) {
-        if (!found) {
-          body = node->first_child;
+    const GroupSite * site = group_index_ready(analysis)
+        ? GRX_ARENA_AT(const GroupSite, &analysis->groups, group)
+        : NULL;
+    if (site) {
+      body = site->body;
+      found = site->found;
+      branch_reset = site->reset;
+    }
+    else {
+      // No index: either it could not be built, or this number is past the
+      // highest one written, which the search below reports as "not found".
+      for (size_t i = 0; i < analysis->ir->nodes.count; i++) {
+        const GRX_IRNode * node = grx_ir_node(analysis->ir, (uint32_t)i);
+        if (node && node->kind == GRX_IR_CAPTURE && node->a == group) {
+          if (!found) {
+            body = node->first_child;
+          }
+          branch_reset = branch_reset || (node->flags & GRX_IR_BRANCH_RESET);
+          found++;
         }
-        branch_reset = branch_reset || (node->flags & GRX_IR_BRANCH_RESET);
-        found++;
       }
     }
     // A group written inside `(?|...)` shares its number with the other
@@ -459,17 +589,25 @@ static Span group_span(Analysis * analysis, uint32_t group) {
       return unknown;
     }
 
-    size_t before = analysis->context_hits;
+    size_t outer_floor = analysis->context_floor;
+    size_t mine = analysis->resolving_count;
+    analysis->context_floor = GRX_ANALYSIS_NO_FLOOR;
     analysis->resolving[analysis->resolving_count++] = group;
     span = walk(analysis, body);
     analysis->resolving_count--;
+    size_t reached = analysis->context_floor;
+    // What the caller needs is the deepest anyone reached, this walk included:
+    // a give-up at or above `mine` was about this group and stops here, one
+    // below it belongs to the caller's route as well.
+    analysis->context_floor = reached < outer_floor ? reached : outer_floor;
 
-    // Remembered only if nothing underneath gave up because of where the walk
-    // came from. A reference to a group already on `resolving` returns
-    // "unknown" about *this* route, not about the group, and a walk that hit
-    // walk_depth_limit() says only that it stopped - caching either would
-    // answer a later query with a result that was never about it.
-    if (analysis->context_hits == before) {
+    // Remembered only if nothing underneath reached below this group's own
+    // place on the stack. A give-up at `mine` or above happened because of
+    // this group, or of something this walk itself started resolving, and will
+    // happen the same way wherever the question is asked from; one below it
+    // was caused by a resolution already in progress when this call was made,
+    // so that span is about the route and not about the group.
+    if (reached >= mine) {
       analysis->cache_group[slot] = group;
       analysis->cache_look[slot] = look;
       analysis->cache_span[slot] = span;
@@ -514,13 +652,17 @@ static void analysis_init(
   analysis->writable = writable;
   analysis->failure = GRX_OK;
   analysis->is_regular = 1;
+  analysis->context_floor = GRX_ANALYSIS_NO_FLOOR;
   grx_arena_init(
       &analysis->frames, ir->allocator, sizeof(WalkFrame), 0, GRX_DIAG_NONE);
+  grx_arena_init(
+      &analysis->groups, ir->allocator, sizeof(GroupSite), 0, GRX_DIAG_NONE);
 }
 
 /** Release what analysis_init() took. */
 static void analysis_done(Analysis * analysis) {
   grx_arena_clear(&analysis->frames);
+  grx_arena_clear(&analysis->groups);
 }
 
 static int walk_push(Analysis * analysis, uint32_t node_index) {
@@ -535,9 +677,10 @@ static int walk_push(Analysis * analysis, uint32_t node_index) {
     // hand can make a cycle, and the honest answer for a subtree that was not
     // examined is "nothing is known".
     analysis->is_regular = 0;
-    // Context-dependent: this says the walk stopped, not what the subtree
-    // is, so group_span() must not remember a span computed above it.
-    analysis->context_hits++;
+    // Context-dependent: this says the walk stopped, not what the subtree is,
+    // and how deep it already was is the caller's doing - so nothing above
+    // this may be remembered.
+    analysis->context_floor = 0;
     analysis->result = (Span) {0, GRX_NPOS, 0, 0, 0, 0};
     return 0;
   }
@@ -550,7 +693,7 @@ static int walk_push(Analysis * analysis, uint32_t node_index) {
       analysis->failure = GRX_ERR_OOM;
     }
     analysis->is_regular = 0;
-    analysis->context_hits++;
+    analysis->context_floor = 0;
     analysis->result = (Span) {0, GRX_NPOS, 0, 0, 0, 0};
     return 0;
   }
