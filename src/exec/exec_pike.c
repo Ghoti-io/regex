@@ -157,6 +157,52 @@ typedef struct {
    */
   uint8_t * contested;
   size_t steps;          ///< Instructions executed, against max_steps.
+  /**
+   * The program's instructions and their count, and the step cap, copied out
+   * of the structures that own them.
+   *
+   * The closure walk reaches each of these once per program counter it
+   * visits, and that walk is where this engine's time is. Reading them
+   * through `pike->program->insts` and `pike->request->limits` is two and
+   * three pointer hops respectively, on values that cannot change while a
+   * search runs - the program is immutable and the limits belong to the
+   * caller's request. Copying them here was worth 12% of the walk.
+   *
+   * `insts` is the arena's block directly. The arena is contiguous by
+   * construction (src/core/arena.c), and every read of it in this file is
+   * already guarded by an explicit `pc < inst_count` test, so going through
+   * grx_arena_at() was an out-of-line call that repeated a bounds check its
+   * caller had just made.
+   */
+  const GRX_Inst * insts;
+  size_t inst_count;
+  size_t max_steps;      ///< 0 for no cap; request->limits->max_steps.
+  /**
+   * Whether any progress register exists, so the stall mask can be skipped.
+   *
+   * Most programs have none - a register is emitted only for a
+   * potentially-empty loop - and for those the mask is always zero. Asking
+   * `slots > captures` at every visit is two loads and a branch to reach a
+   * constant, which is worth removing from a walk this hot.
+   */
+  int has_registers;
+  /**
+   * Released state blocks, kept for the next thread rather than freed.
+   *
+   * Every block in a run is the same size - `slots` is fixed for the whole
+   * search - so one freed here fits the next request exactly. A search over
+   * a subject of n bytes creates and destroys one per position at least, and
+   * malloc and free together were 3% of this engine's instructions for a
+   * block that is thirty-two bytes and immediately wanted again.
+   *
+   * `memory` is *not* charged for a pooled block, which keeps
+   * max_match_memory counting exactly what it counted before: bytes handed
+   * out to a thread. A block sitting here has been handed back.
+   *
+   * Linked through `slots[0]`, which exists because `captures` is at least
+   * two - group 0 - and holds nothing while the block is free.
+   */
+  PikeState * free_states;
   size_t memory;         ///< Bytes handed out, against max_match_memory.
   int utf;               ///< Whether a step is a code point or a byte.
   GRX_Result failure;    ///< Set when a limit stopped the run.
@@ -168,6 +214,45 @@ typedef struct {
 // Thread state
 // --------------------------------------------------------------------------
 
+/**
+ * The pool's link, kept in a slot rather than in a field of its own.
+ *
+ * A field would change sizeof(PikeState), and that is charged to
+ * max_match_memory - so it would move where a caller's limit fires, which is
+ * observable and has nothing to do with pooling. memcpy rather than a cast
+ * because a size_t and a pointer are different types and -fstrict-aliasing is
+ * on; the compiler turns this into the single move it looks like.
+ */
+_Static_assert(sizeof(PikeState *) <= sizeof(size_t),
+    "the state pool links through a slot, which must hold a pointer");
+
+static PikeState * pool_take(Pike * pike) {
+  PikeState * state = pike->free_states;
+  if (state) {
+    PikeState * next;
+    memcpy(&next, &state->slots[0], sizeof next);
+    pike->free_states = next;
+  }
+  return state;
+}
+
+static void pool_give(Pike * pike, PikeState * state) {
+  PikeState * next = pike->free_states;
+  memcpy(&state->slots[0], &next, sizeof next);
+  pike->free_states = state;
+}
+
+static void pool_drain(Pike * pike) {
+  PikeState * state = pike->free_states;
+  while (state) {
+    PikeState * next;
+    memcpy(&next, &state->slots[0], sizeof next);
+    gcu_allocator_free(pike->allocator, state);
+    state = next;
+  }
+  pike->free_states = NULL;
+}
+
 static PikeState * state_create(Pike * pike) {
   size_t bytes = sizeof(PikeState) + (pike->slots) * sizeof(size_t);
   if (pike->request->limits->max_match_memory
@@ -177,10 +262,13 @@ static PikeState * state_create(Pike * pike) {
     return NULL;
   }
 
-  PikeState * state = gcu_allocator_malloc(pike->allocator, bytes);
+  PikeState * state = pool_take(pike);
   if (!state) {
-    pike->failure = GRX_ERR_OOM;
-    return NULL;
+    state = gcu_allocator_malloc(pike->allocator, bytes);
+    if (!state) {
+      pike->failure = GRX_ERR_OOM;
+      return NULL;
+    }
   }
 
   pike->memory += bytes;
@@ -205,7 +293,7 @@ static void state_release(Pike * pike, PikeState * state) {
   }
 
   pike->memory -= sizeof(PikeState) + state->capacity * sizeof(size_t);
-  gcu_allocator_free(pike->allocator, state);
+  pool_give(pike, state);
 }
 
 /**
@@ -293,9 +381,42 @@ static int list_reserve(Pike * pike, PikeList * list) {
 }
 
 static void list_clear(Pike * pike, PikeList * list) {
-  for (size_t i = 0; i < list->count; i++) {
-    state_release(pike, list->threads[i].state);
-    state_release(pike, list->threads[i].best);
+  // `best` exists for GRX_SUBMATCH_POSIX and is never written under any other
+  // rule, so under those it is not read here either - which keeps a release
+  // call per thread per position off every dialect that does not use it. The
+  // two loops rather than one branch inside one, because the branch is
+  // invariant across the whole walk.
+  if (pike->posix) {
+    for (size_t i = 0; i < list->count; i++) {
+      state_release(pike, list->threads[i].state);
+      state_release(pike, list->threads[i].best);
+    }
+  }
+  else {
+    // The null test inline rather than inside state_release(): after a full
+    // dispatch pass every state here has already been taken and the field set
+    // to NULL, so this loop's ordinary job is to confirm that - and paying a
+    // call to be told so, once per thread per position, was 5% of the engine.
+    for (size_t i = 0; i < list->count; i++) {
+      if (list->threads[i].state) {
+        state_release(pike, list->threads[i].state);
+      }
+    }
+  }
+  list->count = 0;
+}
+
+/**
+ * Empty a list whose states the caller has already taken.
+ *
+ * `best` is still this function's to release, because nothing outside
+ * GRX_SUBMATCH_POSIX writes it and nothing at all takes it.
+ */
+static void list_drop_taken(Pike * pike, PikeList * list) {
+  if (pike->posix) {
+    for (size_t i = 0; i < list->count; i++) {
+      state_release(pike, list->threads[i].best);
+    }
   }
   list->count = 0;
 }
@@ -321,16 +442,25 @@ static void list_free(Pike * pike, PikeList * list) {
  * of that difference is here.
  */
 static uint32_t list_find(const PikeList * list, uint32_t pc, uint64_t stalls,
-    size_t * out_walked) {
+    size_t * out_walked, uint32_t * out_head) {
   uint32_t index = list->sparse[pc];
   size_t walked = 0;
-  while (index < list->count && list->threads[index].pc == pc) {
-    walked++;
-    if (list->threads[index].stalls == stalls) {
-      *out_walked = walked;
-      return index;
-    }
-    index = list->threads[index].next;
+  // Whether `sparse` names a live chain for this pc is the same question the
+  // insert in add_thread() would otherwise ask again with the same two reads,
+  // so it is answered once here and handed back. `sparse` is never cleared
+  // between positions - that is the sparse set's whole trick - so an entry
+  // may name a thread belonging to some earlier pc, and it has to be tested.
+  *out_head = PIKE_NO_THREAD;
+  if (index < list->count && list->threads[index].pc == pc) {
+    *out_head = index;
+    do {
+      walked++;
+      if (list->threads[index].stalls == stalls) {
+        *out_walked = walked;
+        return index;
+      }
+      index = list->threads[index].next;
+    } while (index < list->count && list->threads[index].pc == pc);
   }
   *out_walked = walked;
   return PIKE_NO_THREAD;
@@ -852,8 +982,7 @@ static int closure_better(
  */
 static int charge_steps(Pike * pike, size_t amount) {
   pike->steps += amount;
-  if (pike->request->limits->max_steps
-      && pike->steps > pike->request->limits->max_steps) {
+  if (pike->max_steps && pike->steps > pike->max_steps) {
     pike->failure = GRX_ERR_LIMIT;
     pike->failure_diag = GRX_DIAG_LIMIT_STEPS;
     return 1;
@@ -864,15 +993,19 @@ static int charge_steps(Pike * pike, size_t amount) {
 static void add_thread(
     Pike * pike, PikeList * list, uint32_t pc, PikeState * state,
     size_t position) {
+  // The stack's block and capacity in locals: the walk touches both at every
+  // program counter it visits, and only stack_reserve() below can move them.
+  PikeThread * stack = pike->stack;
+  size_t capacity = pike->stack_capacity;
   size_t depth = 0;
-  pike->stack[depth].pc = pc;
-  pike->stack[depth].state = state;
+  stack[depth].pc = pc;
+  stack[depth].state = state;
   depth++;
 
   while (depth) {
     depth--;
-    uint32_t current_pc = pike->stack[depth].pc;
-    PikeState * current = pike->stack[depth].state;
+    uint32_t current_pc = stack[depth].pc;
+    PikeState * current = stack[depth].state;
 
     // Every program counter the closure visits is a step, charged here
     // because this walk is where the work of this engine actually is.
@@ -903,25 +1036,27 @@ static void add_thread(
       state_release(pike, current);
       while (depth) {
         depth--;
-        state_release(pike, pike->stack[depth].state);
+        state_release(pike, stack[depth].state);
       }
       return;
     }
 
-    uint64_t stalls = stall_mask(pike, current, position);
-    if (current_pc >= pike->program->insts.count) {
+    uint64_t stalls
+        = pike->has_registers ? stall_mask(pike, current, position) : 0;
+    if (current_pc >= pike->inst_count) {
       state_release(pike, current);
       continue;
     }
 
     size_t slot;
     size_t walked = 0;
-    uint32_t occupant = list_find(list, current_pc, stalls, &walked);
+    uint32_t head = PIKE_NO_THREAD;
+    uint32_t occupant = list_find(list, current_pc, stalls, &walked, &head);
     if (walked > 1 && charge_steps(pike, walked - 1)) {
       state_release(pike, current);
       while (depth) {
         depth--;
-        state_release(pike, pike->stack[depth].state);
+        state_release(pike, stack[depth].state);
       }
       return;
     }
@@ -967,30 +1102,24 @@ static void add_thread(
       }
 
       // Occupied now, before the walk goes on. A second arrival with a
-      // different mask is a different thread and is chained behind this one.
-      uint32_t previous = list->sparse[current_pc];
-      list->threads[list->count].next
-          = (previous < list->count
-                && list->threads[previous].pc == current_pc)
-          ? previous
-          : PIKE_NO_THREAD;
+      // different mask is a different thread and is chained behind this one;
+      // `head` is what list_find() already established about that chain.
+      list->threads[list->count].next = head;
       list->sparse[current_pc] = (uint32_t)list->count;
       list->threads[list->count].pc = current_pc;
       list->threads[list->count].state = NULL;
       list->threads[list->count].stalls = stalls;
-      list->threads[list->count].best
-          = pike->posix && pike->contested[current_pc]
-          ? state_retain(current) : NULL;
+      // Only POSIX reads this, and only POSIX's list_clear() releases it.
+      if (pike->posix) {
+        list->threads[list->count].best = pike->contested[current_pc]
+            ? state_retain(current) : NULL;
+      }
       list->count++;
       slot = list->count - 1;
     }
 
-    const GRX_Inst * inst
-        = GRX_ARENA_AT(const GRX_Inst, &pike->program->insts, current_pc);
-    if (!inst) {
-      state_release(pike, current);
-      continue;
-    }
+    // In range, tested above; `insts` is the arena's own block.
+    const GRX_Inst * inst = &pike->insts[current_pc];
 
     // Room for two more tasks. The stack was sized for the program on the
     // reasoning that a program counter is pushed only when it has not been
@@ -998,24 +1127,28 @@ static void add_thread(
     // one program counter able to hold several threads, so it grows now
     // rather than reporting an internal error for a pattern that is merely
     // bigger than the old assumption.
-    if (depth + 2 > pike->stack_capacity && !stack_reserve(pike, depth + 2)) {
-      state_release(pike, current);
-      continue;
+    if (depth + 2 > capacity) {
+      if (!stack_reserve(pike, depth + 2)) {
+        state_release(pike, current);
+        continue;
+      }
+      stack = pike->stack;
+      capacity = pike->stack_capacity;
     }
 
     switch ((GRX_Opcode)inst->op) {
       case GRX_OP_JMP:
-        pike->stack[depth].pc = inst->x;
-        pike->stack[depth].state = current;
+        stack[depth].pc = inst->x;
+        stack[depth].state = current;
         depth++;
         break;
 
       case GRX_OP_SPLIT:
-        pike->stack[depth].pc = inst->y;
-        pike->stack[depth].state = state_retain(current);
+        stack[depth].pc = inst->y;
+        stack[depth].state = state_retain(current);
         depth++;
-        pike->stack[depth].pc = inst->x;
-        pike->stack[depth].state = current;
+        stack[depth].pc = inst->x;
+        stack[depth].state = current;
         depth++;
         break;
 
@@ -1027,16 +1160,16 @@ static void add_thread(
         if (inst->x < pike->captures) {
           writable->slots[inst->x] = position;
         }
-        pike->stack[depth].pc = current_pc + 1;
-        pike->stack[depth].state = writable;
+        stack[depth].pc = current_pc + 1;
+        stack[depth].state = writable;
         depth++;
         break;
       }
 
       case GRX_OP_ASSERT:
         if (assertion_holds(pike, inst, position)) {
-          pike->stack[depth].pc = current_pc + 1;
-          pike->stack[depth].state = current;
+          stack[depth].pc = current_pc + 1;
+          stack[depth].state = current;
           depth++;
         }
         else {
@@ -1053,8 +1186,8 @@ static void add_thread(
         if (index < pike->slots) {
           writable->slots[index] = position;
         }
-        pike->stack[depth].pc = current_pc + 1;
-        pike->stack[depth].state = writable;
+        stack[depth].pc = current_pc + 1;
+        stack[depth].state = writable;
         depth++;
         break;
       }
@@ -1068,8 +1201,8 @@ static void add_thread(
             slot++) {
           writable->slots[slot] = GRX_NPOS;
         }
-        pike->stack[depth].pc = current_pc + 1;
-        pike->stack[depth].state = writable;
+        stack[depth].pc = current_pc + 1;
+        stack[depth].state = writable;
         depth++;
         break;
       }
@@ -1093,8 +1226,8 @@ static void add_thread(
           writable->slots[first] = GRX_NPOS;
           writable->slots[first + 1] = GRX_NPOS;
         }
-        pike->stack[depth].pc = current_pc + 1;
-        pike->stack[depth].state = writable;
+        stack[depth].pc = current_pc + 1;
+        stack[depth].state = writable;
         depth++;
         break;
       }
@@ -1104,8 +1237,8 @@ static void add_thread(
         int stalled = index < pike->slots
             && current->slots[index] == position;
         if (!stalled) {
-          pike->stack[depth].pc = current_pc + 1;
-          pike->stack[depth].state = current;
+          stack[depth].pc = current_pc + 1;
+          stack[depth].state = current;
           depth++;
           break;
         }
@@ -1117,8 +1250,8 @@ static void add_thread(
             state_release(pike, current);
             break;
           case GRX_EMPTY_LOOP_BREAK:
-            pike->stack[depth].pc = inst->y;
-            pike->stack[depth].state = current;
+            stack[depth].pc = inst->y;
+            stack[depth].state = current;
             depth++;
             break;
           case GRX_EMPTY_LOOP_BREAK_FIRST: {
@@ -1129,8 +1262,8 @@ static void add_thread(
             int unmoved = entry < pike->slots
                 && current->slots[entry] == position;
             if (unmoved) {
-              pike->stack[depth].pc = inst->y;
-              pike->stack[depth].state = current;
+              stack[depth].pc = inst->y;
+              stack[depth].state = current;
               depth++;
             }
             else {
@@ -1141,8 +1274,8 @@ static void add_thread(
           case GRX_EMPTY_LOOP_ALLOW:
           case GRX_EMPTY_LOOP_COUNT:
           default:
-            pike->stack[depth].pc = current_pc + 1;
-            pike->stack[depth].state = current;
+            stack[depth].pc = current_pc + 1;
+            stack[depth].state = current;
             depth++;
             break;
         }
@@ -1156,8 +1289,8 @@ static void add_thread(
         // in is backtracking order, and a thread set has no such order to
         // report. So step over it. Resting the thread here, which the
         // default arm would do, would stall it forever.
-        pike->stack[depth].pc = current_pc + 1;
-        pike->stack[depth].state = current;
+        stack[depth].pc = current_pc + 1;
+        stack[depth].state = current;
         depth++;
         break;
 
@@ -1271,6 +1404,13 @@ GRX_Result grx_exec_pike(const GRX_ExecRequest * request, int * out_matched) {
   if (!pike.allocator) {
     pike.allocator = grx_allocator_default();
   }
+  // Hoisted once, for the reason the fields carry: the closure walk reads
+  // each of these at every program counter it visits, and neither the
+  // program nor the limits can change while this runs.
+  pike.insts = (const GRX_Inst *)program->insts.data;
+  pike.inst_count = program->insts.count;
+  pike.max_steps = request->limits->max_steps;
+  pike.has_registers = pike.slots > pike.captures;
 
   size_t size = program->insts.count;
   GRX_Result result = GRX_OK;
@@ -1285,6 +1425,7 @@ GRX_Result grx_exec_pike(const GRX_ExecRequest * request, int * out_matched) {
   pike.stack = NULL;
   pike.stack_capacity = 0;
   pike.contested = NULL;
+  pike.free_states = NULL;
   if (!stack_reserve(&pike, 32) || !list_init(&pike, &pike.current, size)
       || !list_init(&pike, &pike.next, size)
       || (pike.posix && !contested_init(&pike))) {
@@ -1363,29 +1504,32 @@ GRX_Result grx_exec_pike(const GRX_ExecRequest * request, int * out_matched) {
       goto done;
     }
 
-    for (size_t i = 0; i < pike.current.count; i++) {
-      uint32_t pc = pike.current.threads[i].pc;
-      PikeState * state = pike.current.threads[i].state;
-      pike.current.threads[i].state = NULL;
+    // `current` is not written during this loop - add_thread() builds `next`
+    // - so its block and count are read once rather than at every thread.
+    PikeThread * const live = pike.current.threads;
+    const size_t live_count = pike.current.count;
+    for (size_t i = 0; i < live_count; i++) {
+      uint32_t pc = live[i].pc;
+      PikeState * state = live[i].state;
+      live[i].state = NULL;
       if (!state) {
         continue;
       }
 
       pike.steps++;
-      if (request->limits->max_steps
-          && pike.steps > request->limits->max_steps) {
+      if (pike.max_steps && pike.steps > pike.max_steps) {
         state_release(&pike, state);
-        for (size_t j = i + 1; j < pike.current.count; j++) {
-          state_release(&pike, pike.current.threads[j].state);
-          pike.current.threads[j].state = NULL;
+        for (size_t j = i + 1; j < live_count; j++) {
+          state_release(&pike, live[j].state);
+          live[j].state = NULL;
         }
         result = GRX_ERR_LIMIT;
         pike.failure_diag = GRX_DIAG_LIMIT_STEPS;
         goto done;
       }
 
-      const GRX_Inst * inst
-          = GRX_ARENA_AT(const GRX_Inst, &program->insts, pc);
+      // Every pc in a list was bounds-tested before it was put there.
+      const GRX_Inst * inst = &pike.insts[pc];
       int advance = 0;
       switch ((GRX_Opcode)inst->op) {
         case GRX_OP_CHAR:
@@ -1485,7 +1629,13 @@ GRX_Result grx_exec_pike(const GRX_ExecRequest * request, int * out_matched) {
       }
     }
 
-    list_clear(&pike, &pike.current);
+    // Not list_clear(): the loop above took every state in `current` and left
+    // the field NULL behind it, including on the path where a match ends the
+    // pass early - which releases the rest explicitly rather than abandoning
+    // them. So the sweep this would do is a confirmation, and at one load and
+    // branch per thread per position it was 5% of the engine. Anything this
+    // is wrong about is a leak, which test-asan's leak check is a gate for.
+    list_drop_taken(&pike, &pike.current);
     PikeList swap = pike.current;
     pike.current = pike.next;
     pike.next = swap;
@@ -1513,6 +1663,8 @@ done:
   list_free(&pike, &pike.next);
   gcu_allocator_free(pike.allocator, pike.stack);
   gcu_allocator_free(pike.allocator, pike.contested);
+  // After the lists, which release into the pool as they are freed.
+  pool_drain(&pike);
   return result;
 }
 
