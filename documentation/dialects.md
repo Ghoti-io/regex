@@ -1007,14 +1007,24 @@ this cell went unwritten for as long as it did.
 | --- | --- | --- | --- |
 | `\p{blk=X}`, `\p{Block=X}` | the block | yes | no |
 | `\p{InX}` | the block, and nothing else is tried | yes | no |
-| `\p{IsX}` | the ordinary chain first, then a block | no | yes |
-| bare `\p{X}` | binary, category, script, then a block | no | yes |
+| `\p{IsX}` | the ordinary chain first, then a block | yes | yes |
+| bare `\p{X}` | binary, category, **script extensions**, then a block | yes | yes |
 
 So `\p{InGreek}` is the block and `\p{IsGreek}` is not: `Is` re-runs the
 unprefixed reading, and only a name no other kind claims -
 `\p{IsGreekAndCoptic}` - reaches a block through it. A bare block name does
 resolve (`\p{GreekExtended}` matches U+1F00) but last, so a name that is
 both a script and a block is the script.
+
+**A lone script name is `Script_Extensions`, not `Script`**, in Perl and in
+PCRE2 both - since perl 5.26 and PCRE2 10.43. `\p{Greek}` matches U+0374
+and `\p{Script=Greek}` does not; `\p{Katakana}` matches U+30FC, whose
+Script is Common and whose extensions are Hiragana and Katakana, and
+`\p{Script=Katakana}` does not. This library read it as `Script` until the
+pair above was put to both references, and 75,919 conformance vectors
+passed throughout, because none of them put a code point where the two sets
+differ against a lone script name. ECMAScript is unaffected: a lone script
+name is a syntax error there, and `sc=` and `scx=` must be written out.
 
 **The short block aliases are where the value is, and they are the half
 `Blocks.txt` does not carry.** That file spells the long name with spaces -

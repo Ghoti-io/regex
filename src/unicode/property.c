@@ -493,11 +493,35 @@ GRX_Result grx_unicode_property_lookup(const char * name, size_t name_length,
     return GRX_OK;
   }
 
-  // A lone *script* name, which the loose dialects also accept: `\p{Latin}`
-  // is `\p{Script=Latin}` in Perl and PCRE2 and a syntax error in
-  // ECMAScript, which is exactly the difference the two resolvers exist to
-  // keep apart. Tried last, so that a name which is both a binary property
-  // and a script still resolves the way it does in the strict form.
+  // A lone script name, which the loose dialects also accept where
+  // ECMAScript makes it a syntax error - exactly the difference the two
+  // resolvers exist to keep apart. Tried after the binary properties and
+  // the categories, so that a name which is both still resolves the way it
+  // does in the strict form.
+  //
+  // **Script_Extensions, not Script**, and this row said Script until it
+  // was asked. Both references agree and the comment here asserted the
+  // opposite of both: perl 5.44.0 and pcre2test 10.46 each match U+0374
+  // with `\p{Greek}` and refuse it with `\p{Script=Greek}`, and each
+  // match U+30FC with `\p{Katakana}` and refuse it with
+  // `\p{Script=Katakana}`. A bare script name is the *extensions* set in
+  // both, and has been since perl 5.26 and PCRE2 10.43.
+  //
+  // What this cost is a silent wrong answer on the commonest spelling
+  // there is: `\p{Greek}` is what people write, `\p{scx=Greek}` is not.
+  // 75,919 conformance vectors passed throughout, because none of them put
+  // a code point where the two sets differ against a lone script name -
+  // U+0374 and U+30FC are in the corpus now.
+  //
+  // Script stays reachable behind it rather than being replaced. Every
+  // script value is also an scx value, so the fallback is for a name the
+  // extensions table does not carry - `Unknown` being the one this
+  // library adds to Script itself, Scripts.txt not listing it.
+  if (match != GRX_PROPERTY_STRICT
+      && find_name(names, name_count, name, name_length, GRX_UPROP_SCX,
+          out_property)) {
+    return GRX_OK;
+  }
   if (match != GRX_PROPERTY_STRICT
       && find_name(names, name_count, name, name_length, GRX_UPROP_SCRIPT,
           out_property)) {
@@ -545,7 +569,7 @@ GRX_Result grx_unicode_property_lookup(const char * name, size_t name_length,
     }
     if (name[0] == 'i' && name[1] == 's') {
       static const int is_kinds[] = {GRX_UPROP_BINARY, GRX_UPROP_GC,
-          GRX_UPROP_SCRIPT, GRX_UPROP_SCX, GRX_UPROP_BLOCK};
+          GRX_UPROP_SCX, GRX_UPROP_SCRIPT, GRX_UPROP_BLOCK};
       for (size_t i = 0; i < sizeof is_kinds / sizeof *is_kinds; i++) {
         if (find_name(names, name_count, rest, rest_length, is_kinds[i],
                 out_property)) {

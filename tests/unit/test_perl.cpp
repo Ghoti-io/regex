@@ -3561,6 +3561,35 @@ int main(int argc, char ** argv) {
 static const char * kU0374 = "\xCD\xB4";
 static const char * kU1F00 = "\xE1\xBC\x80";
 
+/**
+ * Search with UTF on, by option rather than by flag letter.
+ *
+ * PCRE2 has no `u` modifier - UTF is a compile option there and not an
+ * inline letter - so `search(..., "u")` fails at grx_options_parse() for
+ * that dialect while working for perl, whose `u` is one of the four
+ * charset modifiers. A test that has to ask both dialects the same
+ * question cannot go through the flag string.
+ */
+static bool search_utf(const std::string & pattern,
+    const std::string & subject, GRX_Syntax syntax) {
+  GRX_Regex * regex = nullptr;
+  GRX_Error error;
+  grx_error_clear(&error);
+  if (grx_regex_compile_with_allocator(pattern.data(), pattern.size(), syntax,
+          GRX_OPT_UTF, nullptr, nullptr, &error, &regex)
+      != GRX_OK) {
+    return false;
+  }
+  GRX_Match * match = nullptr;
+  grx_match_create(regex, nullptr, &match);
+  int matched = 0;
+  grx_regex_search(regex, subject.data(), subject.size(), 0, GRX_ENGINE_AUTO,
+      nullptr, match, &matched);
+  grx_match_destroy(match);
+  grx_regex_free(regex);
+  return matched != 0;
+}
+
 TEST(Perl, BlockPropertiesAreSpelledFourWaysAndAreOnlyPerls) {
   // Measured against perl 5.44.0: all four spellings take U+0374 and refuse
   // U+1F00, which is the block and not either script reading.
@@ -3592,11 +3621,12 @@ TEST(Perl, ABareBlockNameResolvesOnlyWhenNothingElseClaimsIt) {
                    .matched);
 
   // `Greek` is a script *and* a block, and the script wins: a bare
-  // `\p{Greek}` refuses U+0374, where `\p{InGreek}` takes it. This is the
+  // `\p{Greek}` takes U+1F00, which is Script=Greek and is *not* in the
+  // Greek and Coptic block, where `\p{InGreek}` refuses it. This is the
   // ordering assertion - resolve blocks any earlier in the chain and this
   // is the test that fails.
-  EXPECT_FALSE(search("\\p{Greek}", kU0374, GRX_SYNTAX_PERL, "u").matched);
-  EXPECT_TRUE(search("\\p{InGreek}", kU0374, GRX_SYNTAX_PERL, "u").matched);
+  EXPECT_TRUE(search("\\p{Greek}", kU1F00, GRX_SYNTAX_PERL, "u").matched);
+  EXPECT_FALSE(search("\\p{InGreek}", kU1F00, GRX_SYNTAX_PERL, "u").matched);
 
   // Still Perl's alone. PCRE2 takes `\p{Greek}` as a script and refuses the
   // block name outright.
@@ -3614,10 +3644,11 @@ TEST(Perl, TheInPrefixIsABlockAndTheIsPrefixIsNot) {
   EXPECT_TRUE(search("\\p{InGreek}", kU0374, GRX_SYNTAX_PERL, "u").matched);
 
   // `Is` re-runs the ordinary chain first, so `\p{IsGreek}` is the script
-  // reading - it refuses U+0374 exactly as a bare `\p{Greek}` does - and
-  // only reaches a block when no other kind claims the name, which is what
-  // `\p{IsGreekAndCoptic}` does.
-  EXPECT_FALSE(search("\\p{IsGreek}", kU0374, GRX_SYNTAX_PERL, "u").matched);
+  // reading - it takes U+1F00 exactly as a bare `\p{Greek}` does, where
+  // the block refuses it - and only reaches a block when no other kind
+  // claims the name, which is what `\p{IsGreekAndCoptic}` does.
+  EXPECT_TRUE(search("\\p{IsGreek}", kU1F00, GRX_SYNTAX_PERL, "u").matched);
+  EXPECT_FALSE(search("\\p{InGreek}", kU1F00, GRX_SYNTAX_PERL, "u").matched);
   EXPECT_TRUE(
       search("\\p{IsGreekAndCoptic}", kU0374, GRX_SYNTAX_PERL, "u").matched);
   EXPECT_FALSE(
@@ -3649,4 +3680,45 @@ TEST(Perl, AShortBlockAliasResolvesAndIsWhereTheValueIs) {
   EXPECT_TRUE(
       search("\\p{Block=Greek and Coptic}", kU0374, GRX_SYNTAX_PERL, "u")
           .matched);
+}
+
+TEST(Perl, ALoneScriptNameIsScriptExtensions) {
+  // Both references agree and this library did not. perl 5.44.0 and
+  // pcre2test 10.46 each match U+0374 with `\p{Greek}` and refuse it with
+  // `\p{Script=Greek}`; a lone script name has been the *extensions* set in
+  // perl since 5.26 and in PCRE2 since 10.43.
+  //
+  // U+0374 GREEK NUMERAL SIGN is Script=Common with Script_Extensions
+  // {Greek}, which is what makes it the separating input. A test written
+  // with U+03B1 would pass under either reading.
+  for (GRX_Syntax syntax : {GRX_SYNTAX_PERL, GRX_SYNTAX_PCRE}) {
+    EXPECT_TRUE(search_utf("\\p{Greek}", kU0374, syntax))
+        << grx_syntax_name(syntax);
+    EXPECT_FALSE(search_utf("\\p{Script=Greek}", kU0374, syntax))
+        << grx_syntax_name(syntax);
+    EXPECT_TRUE(search_utf("\\p{scx=Greek}", kU0374, syntax))
+        << grx_syntax_name(syntax);
+  }
+
+  // A second script, because one could be a quirk of how Greek is spelled.
+  // U+30FC KATAKANA-HIRAGANA PROLONGED SOUND MARK is Script=Common with
+  // Script_Extensions {Hiragana, Katakana}, so it answers to both of those
+  // lone names and to neither `sc=`.
+  const char * prolonged = "\xE3\x83\xBC";
+  EXPECT_TRUE(search("\\p{Katakana}", prolonged, GRX_SYNTAX_PERL, "u").matched);
+  EXPECT_TRUE(search("\\p{Hiragana}", prolonged, GRX_SYNTAX_PERL, "u").matched);
+  EXPECT_FALSE(
+      search("\\p{Script=Katakana}", prolonged, GRX_SYNTAX_PERL, "u").matched);
+
+  // ECMAScript is untouched: its resolver is strict and a lone script name
+  // is a syntax error there whichever set it would have named.
+  EXPECT_EQ(compile_result("\\p{Greek}", GRX_SYNTAX_ECMASCRIPT, "u"),
+      GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("\\p{Script=Greek}", GRX_SYNTAX_ECMASCRIPT, "u"),
+      GRX_OK);
+
+  // `Unknown` is the name Script carries and Script_Extensions does not -
+  // Scripts.txt does not list it and this library adds it - so it is what
+  // says the Script fallback behind scx is still reachable.
+  EXPECT_EQ(compile_result("\\p{Unknown}", GRX_SYNTAX_PERL, "u"), GRX_OK);
 }
