@@ -756,8 +756,8 @@ reads bytes until `PCRE2_UTF` says otherwise.
 | Dialect | `\w` | `\d` | `\s` | Property names |
 | --- | --- | --- | --- | --- |
 | POSIX, GNU | GNU: `[[:alnum:]_]`, ASCII here | none (GNU: none; `[[:digit:]]`) | GNU: `[[:space:]]` | none |
-| Perl | Unicode: `\p{Word}` = `L`, `M`, `N`, `Pc`, join controls | `\p{Nd}` | `\p{White_Space}` | loose (UAX #44), `Is`/`In` prefixes, many synonyms |
-| PCRE2 | ASCII; Unicode under `UCP` | ASCII; `Nd` under `UCP` | ASCII `[ \t\n\v\f\r]`; `White_Space` under `UCP` | loose; plus `Xan Xps Xsp Xwd Xuc` |
+| Perl | Unicode: `\p{Word}` = `L`, `M`, `N`, `Pc`, join controls | `\p{Nd}` | `\p{White_Space}` | loose (UAX #44), many synonyms, and **the only dialect here with the Block property**: `\p{blk=Greek_And_Coptic}`, `\p{Block=Greek}`, a bare `\p{GreekExtended}`, and the `In`/`Is` prefixes - which differ from each other, see below |
+| PCRE2 | ASCII; Unicode under `UCP` | ASCII; `Nd` under `UCP` | ASCII `[ \t\n\v\f\r]`; `White_Space` under `UCP` | loose; plus `Xan Xps Xsp Xwd Xuc`; **no Block property and no `In`/`Is` prefix** - pcre2test 10.46 answers error 147 to every spelling of both |
 | ECMAScript | `[A-Za-z0-9_]`; plus U+017F, U+212A under `iu` (22.2.2.9.3 WordCharacters) | `[0-9]` | WhiteSpace ∪ LineTerminator: `\t \v \f \r \n`, U+0020, U+00A0, U+1680, U+2000-200A, U+2028, U+2029, U+202F, U+205F, U+3000, U+FEFF (`\p{Zs}` plus the named ones) | strict, case-sensitive, canonical names and aliases only; `gc`, `sc`, `scx` and the listed binaries |
 | Python | Unicode (`str` patterns): alphanumeric per `str.isalnum()` plus `_`; ASCII under `re.ASCII` | Unicode `Nd`; ASCII under `re.ASCII` | Unicode whitespace per `str.isspace()`; ASCII `[ \t\n\r\f\v]` under `re.ASCII` | none |
 | Java | ASCII; Unicode under `UNICODE_CHARACTER_CLASS` | ASCII; `Nd` under the flag | `[ \t\n\x0B\f\r]`; `White_Space` under the flag | loose-ish: `\p{IsAlphabetic}`, `\p{Lu}`, `\p{IsGreek}`, `\p{InGreek}` blocks, `\p{javaLowerCase}` (**probe** exact rules) |
@@ -996,7 +996,37 @@ The row was in the code and not on this page until 2026-09-24, which is how
 the axis beside it - whether a subroutine call is atomic (§5.21) - came to
 be wrong for two pinned versions without anything saying so.
 
-### 5.10 Iteration after an empty match
+#**The Block property, and why `In` and `Is` are not a pair.** Perl's alone
+here, measured against perl 5.44.0 and pcre2test 10.46 with a minimal pair:
+U+0374 GREEK NUMERAL SIGN is in the Greek and Coptic *block* and its Script
+is Common, and U+1F00 is Script=Greek in the Greek Extended block. No single
+code point separates the readings - U+03B1 is all of them - which is why
+this cell went unwritten for as long as it did.
+
+| Spelling | Resolves to | U+0374 | U+1F00 |
+| --- | --- | --- | --- |
+| `\p{blk=X}`, `\p{Block=X}` | the block | yes | no |
+| `\p{InX}` | the block, and nothing else is tried | yes | no |
+| `\p{IsX}` | the ordinary chain first, then a block | no | yes |
+| bare `\p{X}` | binary, category, script, then a block | no | yes |
+
+So `\p{InGreek}` is the block and `\p{IsGreek}` is not: `Is` re-runs the
+unprefixed reading, and only a name no other kind claims -
+`\p{IsGreekAndCoptic}` - reaches a block through it. A bare block name does
+resolve (`\p{GreekExtended}` matches U+1F00) but last, so a name that is
+both a script and a block is the script.
+
+**The short block aliases are where the value is, and they are the half
+`Blocks.txt` does not carry.** That file spells the long name with spaces -
+`0370..03FF; Greek and Coptic` - and `PropertyValueAliases.txt` spells it
+with underscores beside the short one, `blk; Greek ; Greek_And_Coptic`. 143
+of the 347 blocks have a short alias that differs, `ASCII` for `Basic_Latin`
+among them. This library reads the alias file and joins the two loosely;
+ghoti.io-unicode joins them exactly and so resolves none of the 143, which
+is `notes/unicode/BLOCK-VALUE-ALIASES.md` in the workspace and not a defect
+here.
+
+## 5.10 Iteration after an empty match
 
 | Value | Rule | Dialects |
 | --- | --- | --- |

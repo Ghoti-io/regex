@@ -49,6 +49,16 @@ typedef enum {
   GRX_UPROP_SCRIPT,     ///< A Script value: `\p{sc=Greek}`.
   GRX_UPROP_SCX,        ///< A Script_Extensions value: `\p{scx=Greek}`.
   GRX_UPROP_NV,         ///< A Numeric_Value: `\p{nv=1/2}`.
+  /**
+   * A Block value: `\p{blk=Greek_And_Coptic}`, `\p{InGreek}`.
+   *
+   * Perl's alone. pcre2test 10.46 answers error 147 "unknown property" to
+   * every block spelling there is - `\p{InGreek}`, `\p{IsGreek}`,
+   * `\p{Block=Greek}`, `\p{blk=...}` and a bare `\p{BasicLatin}` -
+   * and ECMA-262's list is closed, so the strict tables carry no block at
+   * all and property.c gates the loose ones to GRX_PROPERTY_LOOSE_PERL.
+   */
+  GRX_UPROP_BLOCK,
   GRX_UPROP_KIND_COUNT  ///< Closes the enum; not a kind.
 } GRX_UPropKind;
 

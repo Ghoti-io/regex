@@ -38,6 +38,7 @@ KIND_GC = 1
 KIND_SCRIPT = 2
 KIND_SCX = 3
 KIND_NV = 4
+KIND_BLOCK = 5
 
 KIND_NAMES = {
     KIND_BINARY: "GRX_UPROP_BINARY",
@@ -45,6 +46,7 @@ KIND_NAMES = {
     KIND_SCRIPT: "GRX_UPROP_SCRIPT",
     KIND_SCX: "GRX_UPROP_SCX",
     KIND_NV: "GRX_UPROP_NV",
+    KIND_BLOCK: "GRX_UPROP_BLOCK",
 }
 
 # The binary properties ECMA-262 table 69 names, plus the three that its
@@ -895,6 +897,7 @@ def build_tables(ucd, version):
 
     gc_values = value_aliases.get("gc", {})
     script_values = value_aliases.get("sc", {})
+    block_values = value_aliases.get("blk", {})
     script_short_to_long = {
         spelling: entry[0] for spelling, entry in script_values.items()
     }
@@ -913,6 +916,28 @@ def build_tables(ucd, version):
 
     scx = read_script_extensions(
         os.path.join(ucd, "ScriptExtensions.txt"), script_short_to_long)
+
+    # Blocks. Perl's alone among the dialects here: pcre2test 10.46 answers
+    # error 147 "unknown property" to every block spelling there is,
+    # `\p{InGreek}`, `\p{Block=Greek}`, `\p{blk=...}` and a bare
+    # `\p{BasicLatin}` alike, and ECMAScript's list is closed. So these
+    # records go in the loose tables and not the strict one, and property.c
+    # gates them further to GRX_PROPERTY_LOOSE_PERL - the same treatment
+    # `nv` gets, and for the same reason.
+    #
+    # **The two UCD files spell a block's long name differently** and the
+    # join has to be loose. Blocks.txt says `0370..03FF; Greek and Coptic`
+    # with spaces; PropertyValueAliases.txt says
+    # `blk; Greek ; Greek_And_Coptic` with underscores. An exact lookup
+    # between them finds nothing, which is not hypothetical - it is the
+    # defect this work found in ghoti.io-unicode, where every one of the
+    # 143 blocks with a distinct short alias is unreachable because of it
+    # (notes/unicode/BLOCK-VALUE-ALIASES.md in the workspace). Here the
+    # short name is where the value is: `ASCII` is Basic_Latin's.
+    blocks = read_property_file(os.path.join(ucd, "Blocks.txt"))
+    block_by_loose = {}
+    for spelling, entry in block_values.items():
+        block_by_loose[normalise_loose(spelling)] = entry
     # A code point with no ScriptExtensions record has scx equal to its sc.
     scx_explicit = union(*scx.values()) if scx else []
     scx_unlisted = complement(scx_explicit)
@@ -986,6 +1011,24 @@ def build_tables(ucd, version):
         add(KIND_SCX, name, scx[name], script_values)
     for name in sorted(binaries):
         add(KIND_BINARY, name, binaries[name], prop_aliases)
+
+    # Blocks, joined loosely for the reason given where `blocks` is read.
+    # `add()` cannot be used: it looks its key up exactly, and the key here
+    # is Blocks.txt's spacing, which no alias table carries. The canonical
+    # name is PropertyValueAliases' underscored long form, which is what
+    # every other record on this page uses and what perl reports - and
+    # ghoti.io-unicode accepts it, since its lookup loosens at the call.
+    # Blocks.txt's own spelling joins the accepted list so that a caller
+    # copying a name out of that file still finds it.
+    for name in sorted(blocks):
+        entry = block_by_loose.get(normalise_loose(name))
+        long_name, spellings = entry if entry else (name, [name])
+        properties.append({
+            "kind": KIND_BLOCK,
+            "name": long_name,
+            "ranges": normalize(blocks[name]),
+            "spellings": sorted(set(list(spellings) + [long_name, name])),
+        })
 
     # Numeric_Value. Not routed through `add`, because these records have no
     # spellings: a numeric value is found by arithmetic, not by name, and a
@@ -1113,6 +1156,16 @@ typedef enum {
   GRX_UPROP_SCRIPT,     ///< A Script value: `\\p{sc=Greek}`.
   GRX_UPROP_SCX,        ///< A Script_Extensions value: `\\p{scx=Greek}`.
   GRX_UPROP_NV,         ///< A Numeric_Value: `\\p{nv=1/2}`.
+  /**
+   * A Block value: `\\p{blk=Greek_And_Coptic}`, `\\p{InGreek}`.
+   *
+   * Perl's alone. pcre2test 10.46 answers error 147 "unknown property" to
+   * every block spelling there is - `\\p{InGreek}`, `\\p{IsGreek}`,
+   * `\\p{Block=Greek}`, `\\p{blk=...}` and a bare `\\p{BasicLatin}` -
+   * and ECMA-262's list is closed, so the strict tables carry no block at
+   * all and property.c gates the loose ones to GRX_PROPERTY_LOOSE_PERL.
+   */
+  GRX_UPROP_BLOCK,
   GRX_UPROP_KIND_COUNT  ///< Closes the enum; not a kind.
 } GRX_UPropKind;
 
@@ -1358,12 +1411,32 @@ def write_properties(out_dir, tables):
         # oversight for a later reader to "fix".
         if prop["kind"] == KIND_NV:
             continue
+        # Blocks are not in ECMA-262's list at all, and the strict resolver
+        # is the one that has to say so: `\p{BasicLatin}` is a SyntaxError
+        # in V8 and must stay one here.
+        if prop["kind"] == KIND_BLOCK:
+            continue
         for spelling in prop["spellings"]:
             strict.append((spelling, prop["kind"], index))
     strict = sorted(set(strict))
 
+    # The loose table is the strict one plus what only a loose dialect may
+    # reach. Derived from `strict` alone it would inherit that table's
+    # exclusions, and blocks are excluded there deliberately - so a block
+    # would be unreachable from every dialect, which is the bug this whole
+    # change is fixing. The binary properties ECMA-262 leaves out stay out
+    # of both: they are excluded because the *strict* list is closed, and no
+    # reference accepts them anywhere.
+    loose_pairs = list(strict)
+    for index, prop in enumerate(properties):
+        if prop["kind"] != KIND_BLOCK:
+            continue
+        for spelling in prop["spellings"]:
+            loose_pairs.append((spelling, prop["kind"], index))
+
     loose = sorted(set(
-        (normalise_loose(name), kind, index) for name, kind, index in strict))
+        (normalise_loose(name), kind, index)
+        for name, kind, index in loose_pairs))
 
     prop_names = []
     for spelling, kind in (
@@ -1383,7 +1456,9 @@ def write_properties(out_dir, tables):
         [(normalise_loose(name), kind, index)
          for name, kind, index in prop_names]
         + [(normalise_loose(name), KIND_NV, 0)
-           for name in ("Numeric_Value", "nv")]))
+           for name in ("Numeric_Value", "nv")]
+        + [(normalise_loose(name), KIND_BLOCK, 0)
+           for name in ("Block", "blk")]))
 
     with open(path, "w", encoding="utf-8", newline="\n") as out:
         out.write(HEADER_NOTICE % tables["version"])

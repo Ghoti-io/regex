@@ -3553,3 +3553,100 @@ int main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
+
+// U+0374 GREEK NUMERAL SIGN is in the Greek and Coptic **block** and its
+// Script is Common; U+1F00 is Script=Greek and in the Greek Extended block.
+// That pair separates the three readings of "Greek" from each other, which
+// no single code point can do - U+03B1 is all three at once.
+static const char * kU0374 = "\xCD\xB4";
+static const char * kU1F00 = "\xE1\xBC\x80";
+
+TEST(Perl, BlockPropertiesAreSpelledFourWaysAndAreOnlyPerls) {
+  // Measured against perl 5.44.0: all four spellings take U+0374 and refuse
+  // U+1F00, which is the block and not either script reading.
+  for (const char * pattern : {"\\p{InGreek}", "\\p{Block=Greek}",
+           "\\p{Block=Greek_And_Coptic}", "\\p{blk=Greek_And_Coptic}"}) {
+    EXPECT_TRUE(search(pattern, kU0374, GRX_SYNTAX_PERL, "u").matched)
+        << pattern << " missed U+0374, which is in the block";
+    EXPECT_FALSE(search(pattern, kU1F00, GRX_SYNTAX_PERL, "u").matched)
+        << pattern << " took U+1F00, which is in Greek Extended";
+
+    // pcre2test 10.46 answers error 147 "unknown property" to every one of
+    // these, and ECMA-262 has no block property at all. Both share this
+    // resolver with perl, so the refusal is the thing to pin: a change that
+    // let blocks leak into either dialect would pass every test above.
+    EXPECT_EQ(compile_result(pattern, GRX_SYNTAX_PCRE), GRX_ERR_SYNTAX)
+        << pattern;
+    EXPECT_EQ(compile_result(pattern, GRX_SYNTAX_ECMASCRIPT, "u"),
+        GRX_ERR_SYNTAX)
+        << pattern;
+  }
+}
+
+TEST(Perl, ABareBlockNameResolvesOnlyWhenNothingElseClaimsIt) {
+  // `Greek_Extended` is a block name and nothing else, so a bare
+  // `\p{GreekExtended}` is the block - perl matches U+1F00 with it.
+  EXPECT_TRUE(search("\\p{GreekExtended}", kU1F00, GRX_SYNTAX_PERL, "u")
+                  .matched);
+  EXPECT_FALSE(search("\\p{GreekExtended}", kU0374, GRX_SYNTAX_PERL, "u")
+                   .matched);
+
+  // `Greek` is a script *and* a block, and the script wins: a bare
+  // `\p{Greek}` refuses U+0374, where `\p{InGreek}` takes it. This is the
+  // ordering assertion - resolve blocks any earlier in the chain and this
+  // is the test that fails.
+  EXPECT_FALSE(search("\\p{Greek}", kU0374, GRX_SYNTAX_PERL, "u").matched);
+  EXPECT_TRUE(search("\\p{InGreek}", kU0374, GRX_SYNTAX_PERL, "u").matched);
+
+  // Still Perl's alone. PCRE2 takes `\p{Greek}` as a script and refuses the
+  // block name outright.
+  EXPECT_EQ(compile_result("\\p{GreekExtended}", GRX_SYNTAX_PCRE),
+      GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("\\p{Greek}", GRX_SYNTAX_PCRE), GRX_OK);
+}
+
+TEST(Perl, TheInPrefixIsABlockAndTheIsPrefixIsNot) {
+  // The two prefixes are not the same question, which is the thing most
+  // easily got wrong by treating them as a pair.
+  //
+  // `In` is the block prefix and has no other reading: perl's
+  // `\p{InGreek}` is the block.
+  EXPECT_TRUE(search("\\p{InGreek}", kU0374, GRX_SYNTAX_PERL, "u").matched);
+
+  // `Is` re-runs the ordinary chain first, so `\p{IsGreek}` is the script
+  // reading - it refuses U+0374 exactly as a bare `\p{Greek}` does - and
+  // only reaches a block when no other kind claims the name, which is what
+  // `\p{IsGreekAndCoptic}` does.
+  EXPECT_FALSE(search("\\p{IsGreek}", kU0374, GRX_SYNTAX_PERL, "u").matched);
+  EXPECT_TRUE(
+      search("\\p{IsGreekAndCoptic}", kU0374, GRX_SYNTAX_PERL, "u").matched);
+  EXPECT_FALSE(
+      search("\\p{IsGreekAndCoptic}", kU1F00, GRX_SYNTAX_PERL, "u").matched);
+
+  // Neither prefix exists in PCRE2: error 147 for both, measured.
+  EXPECT_EQ(compile_result("\\p{InGreek}", GRX_SYNTAX_PCRE), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_result("\\p{IsGreek}", GRX_SYNTAX_PCRE), GRX_ERR_SYNTAX);
+}
+
+TEST(Perl, AShortBlockAliasResolvesAndIsWhereTheValueIs) {
+  // The short names are the half `PropertyValueAliases.txt` carries and
+  // `Blocks.txt` does not, and they are the reason this library reads the
+  // alias file for blocks rather than taking Blocks.txt's spelling alone.
+  // 143 of the 347 blocks have one that differs from the long name.
+  //
+  // ghoti.io-unicode cannot resolve any of them today - the two UCD files
+  // spell the long name differently and its generator joins them exactly -
+  // so this is also the assertion that this library is not simply passing
+  // the name through. See notes/unicode/BLOCK-VALUE-ALIASES.md.
+  EXPECT_TRUE(search("\\p{blk=Greek}", kU0374, GRX_SYNTAX_PERL, "u").matched);
+  EXPECT_TRUE(search("\\p{blk=Greek_Ext}", kU1F00, GRX_SYNTAX_PERL, "u")
+                  .matched);
+  EXPECT_FALSE(search("\\p{blk=Greek_Ext}", kU0374, GRX_SYNTAX_PERL, "u")
+                   .matched);
+
+  // `Blocks.txt` spells it with spaces, and a caller copying the name out
+  // of that file finds it too.
+  EXPECT_TRUE(
+      search("\\p{Block=Greek and Coptic}", kU0374, GRX_SYNTAX_PERL, "u")
+          .matched);
+}

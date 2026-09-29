@@ -459,6 +459,13 @@ GRX_Result grx_unicode_property_lookup(const char * name, size_t name_length,
                                                              : GRX_ERR_SYNTAX;
     }
 
+    // `\p{blk=...}` and `\p{Block=...}`, which only perl has. pcre2test
+    // 10.46 answers error 147 to both, so PCRE2 must keep refusing them
+    // even though it shares this resolver and the loose tables with perl.
+    if (kind == GRX_UPROP_BLOCK && match != GRX_PROPERTY_LOOSE_PERL) {
+      return GRX_ERR_SYNTAX;
+    }
+
     if (match != GRX_PROPERTY_STRICT) {
       value_length = loosen(value, value_length, value_buffer);
       if (!value_length) {
@@ -495,6 +502,57 @@ GRX_Result grx_unicode_property_lookup(const char * name, size_t name_length,
       && find_name(names, name_count, name, name_length, GRX_UPROP_SCRIPT,
           out_property)) {
     return GRX_OK;
+  }
+
+  // Blocks, and everything below here is perl's alone - measured against
+  // perl 5.44.0 and pcre2test 10.46, which answers error 147 to every one
+  // of these spellings.
+  //
+  // **A bare block name resolves, and it resolves last.** `\p{BasicLatin}`
+  // and `\p{GreekExtended}` both match in perl; `\p{Greek}` is *not* the
+  // block, because the script claims the name first - probed with a
+  // minimal pair, U+0374 being in the Greek and Coptic block with
+  // Script=Common, and U+1F00 being Script=Greek in the Greek Extended
+  // block. `\p{Greek}` takes U+0374 and U+1F00 both, which is neither the
+  // block nor plain Script but Script_Extensions, and `\p{InGreek}` takes
+  // U+0374 and not U+1F00, which is the block. So the order below is the
+  // measurement: binary, category, script, script extensions, then block.
+  if (match == GRX_PROPERTY_LOOSE_PERL
+      && find_name(names, name_count, name, name_length, GRX_UPROP_BLOCK,
+          out_property)) {
+    return GRX_OK;
+  }
+
+  // The `In` and `Is` prefixes, which differ from each other and are not
+  // the same question:
+  //
+  // - `In` is the block prefix and nothing else. `\p{InGreek}` is the
+  //   block; there is no non-block reading to try first.
+  // - `Is` is *not* a block prefix. It re-runs the ordinary chain -
+  //   `\p{IsGreek}` matches U+1F00, so it is the script-extensions reading
+  //   and not the block - and only falls through to a block when nothing
+  //   else claims the name, which is how `\p{IsGreekAndCoptic}` works.
+  //
+  // Both are tried only after every unprefixed reading has failed, so a
+  // property whose own name begins with "In" or "Is" is unaffected.
+  if (match == GRX_PROPERTY_LOOSE_PERL && name_length > 2) {
+    const char * rest = name + 2;
+    size_t rest_length = name_length - 2;
+    if (name[0] == 'i' && name[1] == 'n'
+        && find_name(names, name_count, rest, rest_length, GRX_UPROP_BLOCK,
+            out_property)) {
+      return GRX_OK;
+    }
+    if (name[0] == 'i' && name[1] == 's') {
+      static const int is_kinds[] = {GRX_UPROP_BINARY, GRX_UPROP_GC,
+          GRX_UPROP_SCRIPT, GRX_UPROP_SCX, GRX_UPROP_BLOCK};
+      for (size_t i = 0; i < sizeof is_kinds / sizeof *is_kinds; i++) {
+        if (find_name(names, name_count, rest, rest_length, is_kinds[i],
+                out_property)) {
+          return GRX_OK;
+        }
+      }
+    }
   }
 
   return GRX_ERR_SYNTAX;
@@ -631,6 +689,7 @@ static GRX_Result resolve(uint32_t property, Resolved * out) {
     case GRX_UPROP_GC:     name = "General_Category";  value = record->name; break;
     case GRX_UPROP_SCRIPT: name = "Script";            value = record->name; break;
     case GRX_UPROP_SCX:    name = "Script_Extensions"; value = record->name; break;
+    case GRX_UPROP_BLOCK:  name = "Block";            value = record->name; break;
     default: break;
   }
 
