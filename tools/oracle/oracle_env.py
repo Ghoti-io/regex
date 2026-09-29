@@ -141,6 +141,30 @@ PROBE = {
     # links its own, so both are printed and both are pinned: a wheel built
     # against a different libxml2 is a different reference under the same
     # `lxml==6.1.3`.
+    # Go, for the `re2` dialect. Two versions in one line and both decide
+    # answers: the compiler, and the Unicode tables the compiler vendors -
+    # which are `unicode.Version`, a constant `go doc` prints without
+    # compiling anything. The second is the one with teeth here, being two
+    # releases behind this library's; see the pin's comment in IMAGES.
+    "go": (["sh", "-c",
+            "printf '%s, Unicode %s\\n' \"$(go env GOVERSION)\""
+            " \"$(go doc unicode.Version"
+            " | sed -n 's/^const Version = \"\\(.*\\)\"$/\\1/p')\""],
+           "go1.", None),
+    # The Rust `regex` crate. The crate version comes out of the committed
+    # lock file rather than out of the Dockerfile's ARG, so that what is
+    # reported is what was *resolved*; the UCD version comes out of the
+    # generated table's own header comment, because the crate vendors its
+    # tables and states the version in them.
+    "rust": (["sh", "-c",
+              "printf 'regex %s, UCD %s, %s\\n'"
+              " \"$(sed -n '/^name = \"regex\"$/,/^version/"
+              "s/^version = \"\\(.*\\)\"/\\1/p' /build/Cargo.lock)\""
+              " \"$(sed -n 's|^// Unicode version: \\(.*\\)\\.$|\\1|p'"
+              " /usr/local/cargo/registry/src/*/regex-syntax-*"
+              "/src/unicode_tables/general_category.rs)\""
+              " \"$(rustc --version | cut -d' ' -f1,2)\""],
+             "regex 1.", None),
     "libxml2": (["python3", "-c",
                  "import importlib.metadata as m, lxml.etree as e;"
                  " print('libxml2 %s, lxml %s'"

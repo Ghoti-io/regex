@@ -326,3 +326,52 @@ iregexp	localhost/ghoti-regex-oracle-iregexp:0.1.4-lxml6.1.3	iregexp-check 0.1.4
 # wheels reached through one interpreter. What the two pins buy is the
 # provenance line - a run says which of them answered.
 libxml2	localhost/ghoti-regex-oracle-iregexp:0.1.4-lxml6.1.3	libxml2 2.14.6, lxml 6.1.3	XSD's Boolean semantics, which RFC 9485 section 4 adopts
+
+# Go's `regexp`, for the `re2` dialect. A stock image, so the digest is the
+# whole guarantee - and unlike every other reference here there is nothing
+# else to pin: `regexp` is in the standard library, so the compiler the
+# digest names carries the implementation that answers.
+#
+# **This is RE2's lineage and is not RE2.** Go's own documentation says
+# `regexp/syntax` is RE2's syntax, which is why one dialect row can be read
+# off it; the C++ RE2 is a separate implementation with constructs Go's does
+# not have (`\C`) and an options struct Go exposes as two constructors. The
+# dialect is named `re2` because that is what the family is called and what
+# documentation/dialects.md has called it since the table was written, and
+# the pin names the implementation that actually answers. A second reference
+# would be the way to tell the two apart, and there is not one here.
+#
+# **The Unicode skew is the largest of any pin in this file, and it is
+# structural rather than a raise waiting to happen.** Go 1.25.14 carries
+# Unicode 15.0.0 where tools/unicode/UCD_VERSION is 17.0.0 - two releases,
+# against CPython's one and node's none. Go raises the version it vendors on
+# its own schedule and a newer Go is the only way to move it, so a
+# differential that asks about `\p{...}` or about case folding is asking a
+# question with two answers in it. What follows from that is a rule rather
+# than a caveat: a property comparison against this reference must exclude
+# the code points that moved between 15.0.0 and 17.0.0 **by name**, the way
+# tools/corpus/VERSIONS records python's eighteen-subject exposure, or it is
+# measuring the Consortium and reporting it as a defect here.
+go	docker.io/library/golang@sha256:2c4c60ef415fbfa5e90300722293bef36c5e63fae17570ce18f580af933dbd73	go1.25.14, Unicode 15.0.0	The RE2 dialect: `regexp`, its split and its replacement template
+
+# The Rust `regex` crate, for the `rust` dialect. **Built here, and it is the
+# third kind of thing this file pins**: not a stock image and not a source
+# tarball fetched into a Debian, but a package manager's resolution.
+#
+# Two pins decide it and neither is enough alone, which is musl's shape for a
+# different reason. `containers/rust/Dockerfile` names `regex = "=1.13.1"`,
+# and the `=` is load-bearing - Cargo reads a bare `"1.13.1"` as a caret
+# requirement, so without it the image drifts to the newest 1.x on every
+# rebuild. But `=` fixes one crate of five: `aho-corasick`, `memchr`,
+# `regex-automata` and `regex-syntax` are caret requirements *of* `regex`,
+# and `regex-automata` is where the matching actually happens. So
+# `containers/rust/Cargo.lock` is committed beside the Dockerfile with all
+# five and their checksums, and `--locked` refuses to resolve anything else.
+#
+# **The version field names the crate and its UCD, not the compiler.** What
+# decides an answer here is `regex-syntax`'s vendored tables - the crate
+# carries its own Unicode data rather than reading the host's - and those say
+# 16.0.0, one release behind tools/unicode/UCD_VERSION at 17.0.0. rustc's
+# version is in the field too because it is in the image and a reader will
+# want it, but it is not what would make an answer change.
+rust	localhost/ghoti-regex-oracle-rust:1.13.1	regex 1.13.1, UCD 16.0.0, rustc 1.98.1	The Rust dialect: the `regex` crate, its split and its replacement template
