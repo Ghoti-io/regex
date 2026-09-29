@@ -593,9 +593,60 @@ currently reaches it.
 
 ### Phase 6: RE2 and Rust
 
-**WP-34 RE2 and Go**, **WP-35 Rust**: profile rows and hooks; the value
+**WP-34 RE2 and Go**, **WP-35 Rust**: **both built 2026-09-29.** The value
 is the guarantee that a pattern accepted under these dialects is regular,
-and a test that says so.
+and `Linear.EveryPatternTheseDialectsAcceptRunsOnTheLinearEngine` is the
+test that says so - it asks for `GRX_ENGINE_PIKE` *by name*, which reports
+`GRX_ERR_UNSUPPORTED` for a program it cannot run, rather than letting
+`GRX_ENGINE_AUTO` pick the backtracker and report a match either way.
+
+**The front end is deny-by-default and is its own file**, which is the one
+design decision here worth recording. These two are Perl-family *by
+subtraction*, so the obvious route was two more flavours in `src/syntax/
+perl.c` - and that file is accept-by-default: it reads a construct and then
+asks `flavour()` whether this dialect keeps it, so a construct nobody
+remembered to ask about is accepted. For a dialect whose whole character is
+an absence that is the wrong default, and it fails silently in the direction
+that matters. `src/syntax/re2.c` is shaped like `src/syntax/iregexp.c`
+instead: what is not named is `GRX_DIAG_NOT_IN_DIALECT`.
+
+**What the differential found, none of it reachable by reading either
+project's documentation.** `tools/oracle/linear_diff.py` ran 28,000 rows
+per dialect and went from 330 disagreements to 0 through these:
+
+- **`\S` built a class matching nothing.** The negation is the item's
+  `GRX_CLASS_ITEM_NEGATED` flag and not the enum's `NOT_` members, which
+  lowering does not read.
+- **`U` was silently ignored by `tools/oracle/grx_match.c`**, whose own
+  comment warns that a letter its table does not know is dropped. 35 rows
+  asked the reference for ungreedy matching and this library for greedy.
+- **The empty-loop cell is `BREAK_FIRST`** - POSIX's rule, arrived at from
+  the other side: these are automata, and an automaton has no "iteration"
+  to fail. Two measurements were needed and either alone chooses wrongly.
+- **A counted repeat is not a loop at all.** Both engines expand `x{n,m}`,
+  so `(a|){1,2}` over "a" reports group 1 as 1-1 where the loop rule would
+  give 0-1. New profile field `bounded_repeat_allows_empty`.
+- **Go widens `\w` under caseless and leaves `\b`'s word set alone**, which
+  is a corner of the 2x2 that `caseless_widens_shorthands` documented with
+  three references in it and no fourth. New field
+  `caseless_leaves_boundary_narrow`.
+- **Both fold a POSIX class under caseless, before negating it.** The
+  comment in `src/ir/lower.c` said no dialect here reached past the class's
+  name; now two do, and `(?i)[[:^alpha:]]` over U+017F is what fixes the
+  order. New field `posix_classes_fold`.
+- **The crate's shorthands are Unicode and its POSIX classes are not**,
+  which `posix_class_is_wide()` had tied together. New field
+  `posix_classes_stay_ascii`.
+- **`(?-u)` refuses every atom that could match half a character** -
+  `\D`, `\W`, `\S`, `[^a]`, `.`, `\p{L}` - because `regex::Regex` matches
+  `&str`. It is not a fact about the grammar: `regex::bytes::Regex` takes
+  all of them.
+
+And two the **vectors** found that the differential's seed had not spelled,
+which is the argument for keeping both: a negated set *expression* needs a
+complement operation rather than the node flag (`[^a--b]`), and a nested
+class in the middle of a member run has to become its own operand, because
+a class node names a contiguous span of the item table.
 
 ### Phase 7: Tcl, Vim and Emacs
 

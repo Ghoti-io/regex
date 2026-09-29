@@ -564,6 +564,24 @@ typedef struct GRX_Profile {
   GRX_MatchPreference preference;   ///< Which match a search reports.
   GRX_SubmatchRule submatch;        ///< Which division of it the groups get.
   GRX_EmptyLoopMode empty_loop;     ///< An iteration that consumed nothing.
+  /**
+   * ...and a repeat with a finite maximum takes every iteration anyway.
+   *
+   * The two linear dialects, and neither of the two obvious readings of
+   * their `empty_loop` cell. Both expand `x{n,m}` into m copies of the
+   * program rather than into a loop with a counter, so there is no loop for
+   * an empty-iteration rule to guard - and the answers say so:
+   *
+   *   `(a|){1,2}` over "a"    group 1 is 1-1 in both. The second iteration
+   *                           matched empty and wrote its capture.
+   *   `(a|){1,}`  over "aaaa" group 1 is 3-4 in both, which is the
+   *                           empty_loop cell doing its work.
+   *
+   * `{n}` gives the same answer either way - every iteration is required -
+   * so it is `{1,2}` and `{1,3}` that separate the two, and a differential
+   * found it rather than a reading of either project's documentation.
+   */
+  int bounded_repeat_allows_empty;
   GRX_CaptureResetMode capture_reset; ///< Captures between iterations.
   GRX_BackrefUnsetMode backref_unset; ///< A reference to an unset group.
   GRX_LookbehindLimit lookbehind;   ///< How long a lookbehind may be.
@@ -730,6 +748,66 @@ typedef struct GRX_Profile {
    * fields rather than beside the fold ones.
    */
   int caseless_widens_shorthands;
+  /**
+   * ...but `\b`'s word set stays narrow, which RE2 alone does.
+   *
+   * The field above documents a 2x2 whose four references filled three
+   * corners; Go's `regexp` fills the fourth, and it took a differential to
+   * notice because the two halves are lowered in different functions. The
+   * same two measurements, extended:
+   *
+   * | | `\w` on U+017F | `x\b` on "x" U+212A |
+   * | --- | --- | --- |
+   * | node, `iu` | match | no match - the boundary is gone |
+   * | the Rust crate, `(?i)` | match | no match |
+   * | Go's `regexp`, `(?i)` | **match** | **0-1 - the boundary is there** |
+   * | pcre2test, perl, CPython | no match | 0-1 |
+   *
+   * So the two rules are independent and had been one field. Go widens the
+   * shorthand and leaves the boundary alone; the crate widens both, which
+   * is ECMAScript's rule; the Perl family widens neither.
+   *
+   * Spelled as the exception rather than as a second positive field,
+   * because every other row here either widens both or widens neither and
+   * a positive spelling would have to be set on rows nobody measured for
+   * it.
+   */
+  int caseless_leaves_boundary_narrow;
+  /**
+   * A caseless mode folds `[[:alpha:]]` and its fellows as well.
+   *
+   * The comment in src/ir/lower.c said there was no dialect here where a
+   * caseless mode reached past a POSIX class's name, and it was right about
+   * the dialects that existed when it was written: `(?i)[[:alpha:]]` over
+   * U+017F is no match in pcre2test and in perl under `/ai`. Both of the
+   * linear dialects answer *match* - and so do `[[:lower:]]`, `[[:upper:]]`
+   * and `[[:word:]]`, each probed - because each folds the class's set the
+   * way it folds a literal or a range.
+   *
+   * Separate from caseless_widens_shorthands because the two are different
+   * sets reached by different paths, and because the Perl family is on the
+   * opposite side of this one while being on the same side of that one.
+   */
+  int posix_classes_fold;
+  /**
+   * `[[:alpha:]]` stays ASCII even where `\w` is Unicode.
+   *
+   * The Rust crate, and nothing else here: its `\w`, `\d` and `\s` are
+   * Unicode by default - `\w` matches "é" and `\d` matches U+0663 - and
+   * its POSIX classes are the ASCII ones regardless, so `[[:word:]]` does
+   * not match "é" and `[[:alpha:]]` does not either. Both probed.
+   *
+   * Everywhere else the two travel together, which is why
+   * posix_class_is_wide() read the shorthand cell for this and why a row
+   * that split them needed a field. RE2 does not need it: its shorthands
+   * are ASCII too, so the answer is the same by either route.
+   *
+   * The *negation* follows: `[[:^alpha:]]` is the complement of the ASCII
+   * set over the whole code space, so it matches "é" in the crate. That is
+   * what a narrow class negated gives already, and is the second half of
+   * the same probe.
+   */
+  int posix_classes_stay_ascii;
   GRX_FoldKind fold;                ///< Caseless folding without UTF.
   GRX_FoldKind fold_utf;            ///< Caseless folding with UTF.
   GRX_PropertyMatch property_match; ///< How `\p{...}` names are spelled.

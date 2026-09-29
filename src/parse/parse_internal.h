@@ -607,6 +607,27 @@ typedef struct GRX_Parser {
    */
   size_t quote_end;
   /**
+   * Non-zero when skip_ignorable() last consumed something.
+   *
+   * Read by exactly one caller - the second-quantifier check - and set by
+   * the wrapper that calls the hook, so that the question "was anything
+   * between these two quantifiers" is answered where the skipping happens
+   * rather than by comparing positions at the far end. See
+   * GRX_SyntaxSpec::ignorable_separates_quantifiers.
+   */
+  int ignorable_skipped;
+  /**
+   * What `ignorable_skipped` held when the last quantifier's operator was
+   * read.
+   *
+   * Two fields because the answer has to survive the reader that clears
+   * it: parse_quantifier() skips, then consumes an operator, then clears -
+   * so by the time parse_term() judges a *second* quantifier the live flag
+   * is zero and what it needs is the value from just before. This is that
+   * value. See GRX_SyntaxSpec::ignorable_separates_quantifiers.
+   */
+  int ignorable_before_quantifier;
+  /**
    * Non-zero once `(*BSR_ANYCRLF)` has narrowed what `\R` matches.
    *
    * PCRE2's, and the one newline directive whose whole effect is on a
@@ -1007,6 +1028,12 @@ extern const GRX_Frontend grx_frontend_gnu_ere;
 
 /** @brief I-Regexp, RFC 9485: a checking implementation of Figure 1. */
 extern const GRX_Frontend grx_frontend_iregexp;
+
+/** RE2's syntax, as Go's `regexp` spells it. src/syntax/re2.c. */
+extern const GRX_Frontend grx_frontend_re2;
+
+/** The Rust `regex` crate. src/syntax/re2.c, beside RE2. */
+extern const GRX_Frontend grx_frontend_rust;
 
 // --------------------------------------------------------------------------
 // The services a hook uses. Declared here so that a front end is a table of

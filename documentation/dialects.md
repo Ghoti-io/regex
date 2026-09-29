@@ -13,13 +13,14 @@ provisional until §3 below replaces them.
 ## 1. What is implemented
 
 Eighteen dialects are named in `GRX_Syntax`, so the enum does not move when
-one of them is added.
+one of them is added. Twelve are built.
 
 | Dialects | Status |
 | --- | --- |
 | **ECMAScript**, **PCRE2**, **Perl**, **Python**, **Vim**, **POSIX BRE/ERE**, **GNU BRE/ERE** | Implemented. Each has an oracle on this machine. |
+| **RE2**, **Rust** | Implemented, WP-34 and WP-35. Each has a pinned oracle: Go 1.25.14's `regexp` and the `regex` crate 1.13.1. They are the two dialects where a *refusal* is the guarantee - no backreference, no lookaround, so a pattern accepted here is one `GRX_ENGINE_PIKE` will run. |
 | **I-Regexp** (RFC 9485) | Implemented. The only one whose references are not implementations *of it*: an ABNF is the authority, and two programs answer its two halves (§10). |
-| Java, .NET, Ruby, RE2 (Go), Rust, Tcl, Emacs, RE/flex | Not implemented. Selecting one is `GRX_ERR_UNSUPPORTED` with `GRX_DIAG_DIALECT_NOT_IMPLEMENTED`, never a silent fallback to another dialect. |
+| Java, .NET, Ruby, Tcl, Emacs, RE/flex | Not implemented. Selecting one is `GRX_ERR_UNSUPPORTED` with `GRX_DIAG_DIALECT_NOT_IMPLEMENTED`, never a silent fallback to another dialect. |
 
 A pattern accepted under `GRX_SYNTAX_RE2`, once that dialect exists, is one
 the linear engine is guaranteed to run. RE2 and Rust are deliberate subsets
@@ -49,8 +50,8 @@ this design was written on; a CI job installs the rest
 | Java | `java` | JDK 21 | `java.util.regex.Pattern` javadoc, 21 | OpenJDK (install) |
 | .NET | `dotnet` | .NET 8 | "Regular Expression Language - Quick Reference"; "Regular expression options" | .NET SDK (install) |
 | Ruby | `ruby` | Ruby 3.3 / Onigmo 6.2 | Onigmo `doc/RE`; Ruby `Regexp` documentation | `ruby` (install) |
-| RE2 | `re2` | Go 1.22 `regexp` | RE2 "Syntax" wiki; Go `regexp/syntax` documentation | `go` (install) |
-| Rust | `rust` | `regex` 1.10 | `regex-syntax` documentation | `cargo` (install) |
+| RE2 | `re2` | Go 1.25.14 `regexp` | Go `regexp/syntax` documentation, which states that it is RE2's syntax; the RE2 "Syntax" wiki | `go` (pinned, stock image by digest). **The pin names Go and not RE2**: what answers here is Go's implementation of RE2's syntax, not the C++ library, and the two are not identical - `\C` is RE2's and Go has not got it. A second reference would be the way to tell them apart and there is not one here. Carries Unicode 15.0.0, two releases behind this library's; see `containers/IMAGES` |
+| Rust | `rust` | `regex` 1.13.1 | the crate's own syntax documentation | the crate (pinned, **built here**: it is not in any image, and `=1.13.1` fixes one crate of five, so `containers/rust/Cargo.lock` is committed and `--locked` refuses to resolve anything else). Carries UCD 16.0.0 |
 | Tcl | `tcl` | Tcl 8.6 | `re_syntax(n)` | `tclsh` (install) |
 | Vim | `vim` | Vim 9.2, patches 1-1129 | `:help pattern` | `vim -es` with `matchlist()` (pinned); no corpus to import, a generated one |
 | Emacs | `emacs` | GNU Emacs 29 | Elisp Reference Manual, "Regular Expressions" | `emacs --batch` (install) |

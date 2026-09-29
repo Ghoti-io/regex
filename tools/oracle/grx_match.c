@@ -317,6 +317,15 @@ int main(int argc, char ** argv) {
         // UCP and the case folding widens on UTF.
         case 'P': options |= GRX_OPT_UCP; break;
         case 'v': options |= GRX_OPT_UNICODE_SETS | GRX_OPT_UTF; break;
+        // PCRE2's `U`, and the letter RE2 and the Rust crate both spell
+        // the same way - `(?U)` there, a builder method in the crate. It
+        // was missing and the comment above says what that costs: a letter
+        // this table does not know is silently ignored, so every `U` row
+        // linear_diff.py generated asked the reference for ungreedy
+        // matching and asked this library for greedy, and the answers were
+        // scored against each other anyway. 35 disagreements, every one of
+        // them the driver's.
+        case 'U': options |= GRX_OPT_UNGREEDY; break;
         // `n` is REG_NEWLINE, spelled the way posix_match.c and
         // musl_match.c spell it, so that a differential can hand the same
         // flag string to all three. It is *both* of this library's bits,

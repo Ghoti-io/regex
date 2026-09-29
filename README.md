@@ -10,17 +10,23 @@ bound restored.
 
 This is what the library implements.
 
-Ten dialects compile and match: ECMAScript (legacy, `u` and `v`), PCRE2,
-Perl, POSIX BRE and ERE, GNU BRE and ERE, Python, Vim, and I-Regexp
-(RFC 9485, the interoperable subset JSONPath is specified over).
+Twelve dialects compile and match: ECMAScript (legacy, `u` and `v`), PCRE2,
+Perl, POSIX BRE and ERE, GNU BRE and ERE, Python, Vim, I-Regexp (RFC 9485,
+the interoperable subset JSONPath is specified over), RE2 and Rust.
 
-Java, .NET, Ruby, RE2, Rust, Tcl, Emacs and RE/flex are named and report
+Java, .NET, Ruby, Tcl, Emacs and RE/flex are named and report
 `GRX_ERR_UNSUPPORTED`.
 
 | Dialect | What it means here |
 | --- | --- |
-| ECMAScript, PCRE2, Perl, POSIX BRE, POSIX ERE, GNU BRE, GNU ERE, Python, Vim, I-Regexp | Compiles and matches, on whichever engine can run the pattern. |
-| Java, .NET, Ruby, RE2, Rust, Tcl, Emacs, RE/flex | Named. A pattern reports `GRX_ERR_UNSUPPORTED`. |
+| ECMAScript, PCRE2, Perl, POSIX BRE, POSIX ERE, GNU BRE, GNU ERE, Python, Vim, I-Regexp, RE2, Rust | Compiles and matches, on whichever engine can run the pattern. |
+| Java, .NET, Ruby, Tcl, Emacs, RE/flex | Named. A pattern reports `GRX_ERR_UNSUPPORTED`. |
+
+RE2 and Rust are the two where a *refusal* is the point. Neither has
+backreferences or lookaround, because neither can be run in linear time, so
+a pattern this library accepts under `re2` or `rust` is one
+`GRX_ENGINE_PIKE` is guaranteed to run - and asking for that engine by name
+is how the tests check it rather than assert it.
 
 ## Before you call it
 
@@ -180,12 +186,12 @@ JSON Schema `pattern` and `patternProperties`.
 
 ## Status
 
-The ten dialects above compile and match on whichever of the three engines
-can run the pattern. The other eight report `GRX_ERR_UNSUPPORTED`.
+The twelve dialects above compile and match on whichever of the three
+engines can run the pattern. The other six report `GRX_ERR_UNSUPPORTED`.
 
 ### Conformance
 
-`make test` runs 75,919 checked-in conformance vectors and prints this table.
+`make test` runs 87,191 checked-in conformance vectors and prints this table.
 Every expectation in them is a reference implementation's, taken from the
 pinned oracle in `tools/oracle/containers/IMAGES`; none is this library's own
 output. The corpora are committed, so the run needs no oracle, no container
@@ -197,6 +203,8 @@ engine and no network.
 | `ecmascript` | 28,559 | 100.00% | test262, plus generated from node 24.21 |
 | `perl` | 11,705 | 100.00% | perl 5.44's `re_tests`, plus generated: full folds, `\N{}` names, boundaries, and property names with more than one reading; 8 excluded |
 | `vim` | 6,317 | 100.00% | generated from vim 9.2.1129 |
+| `re2` | 2,933 | 100.00% | generated from Go 1.25.14's `regexp`, which carries Unicode 15.0.0 |
+| `rust` | 2,807 | 99.96% | generated from the `regex` crate 1.13.1, which carries UCD 16.0.0; 1 known gap |
 | `python` | 2,177 | 100.00% | generated from CPython 3.14.7 |
 | `pcre` | 1,869 | 100.00% | PCRE2 10.46's `testinput` |
 | `gnu-ere` | 270 | 100.00% | Spencer's cases, answered by glibc 2.41 |
@@ -207,7 +215,16 @@ engine and no network.
 Read the denominators with the rates: they differ by two orders of magnitude,
 and 100% of 135 vectors is a smaller claim than 100% of 28,559.
 
-There are no known gaps. Where there were five, there is now `\U`, `\L`,
+There is one known gap, and it arrived with the `rust` dialect: `(a*)+b`
+under `U` reports group 1 as 1-2 where the crate reports 0-2, the overall
+match agreeing at 0-3. A lazy loop over a lazy body, and the interaction is
+the whole of it - `(a+)+b` under the same flag agrees, and `(a*)+b` without
+it agrees. It is the only disagreement in 105,000 differential rows, and the
+row is in the committed corpus on purpose so that the gap has to be named
+rather than quietly not spelled.
+
+Before it there were none; before that there were five, and where those were
+there is now `\U`, `\L`,
 `\F`, `\u` and `\l` - Perl's case transforms over the pattern source, the
 operators its own `re_tests` calls "\l works in []". The eight excluded rows
 are ones where the reference's own answer is demonstrably wrong; each carries

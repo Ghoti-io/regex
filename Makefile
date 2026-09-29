@@ -869,7 +869,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 
 # General commands
 .PHONY: check-oracle-soak
-.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-unicode-agreement check-dump-names check-readme-example check-tables check-status-line check-corpus-seeds check-makefile-hash check-generated-header-deps check-oracle-env check-oracle-syntax check-oracle-match check-oracle-soak check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-perl-syntax check-oracle-script-runs check-doc-claims check-wide-classes check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
+.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-unicode-agreement check-dump-names check-readme-example check-tables check-status-line check-corpus-seeds check-makefile-hash check-generated-header-deps check-oracle-env check-oracle-syntax check-oracle-match check-oracle-soak check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-linear check-oracle-perl-syntax check-oracle-script-runs check-doc-claims check-wide-classes check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
 	check-oracle-properties check-oracle-numeric-properties \
 	check-oracle-folds \
 	check-vim-widths check-vim-classes check-vim-sets \
@@ -877,7 +877,8 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 	check-oracle-exclusions check-oracle-determinism \
 	check-oracles oracle-version oracle-images oracle-clean \
 	check-limits check-json-schema-suite vectors vectors-ecmascript \
-	vectors-pcre vectors-perl vectors-posix vectors-python vectors-vim
+	vectors-pcre vectors-perl vectors-posix vectors-python vectors-vim \
+	vectors-linear
 # Release build commands
 .PHONY: all install test test-quiet test-asan test-valgrind test-valgrind-quiet test-watch uninstall watch
 # Debug build commands
@@ -1111,7 +1112,7 @@ check-oracles: check-oracle-syntax check-oracle-match check-oracle-properties \
 	check-vim-widths check-vim-classes check-vim-sets \
 	check-oracle-posix check-oracle-submatch \
 	check-oracle-perl check-oracle-perl-syntax check-oracle-python \
-	check-oracle-vim \
+	check-oracle-vim check-oracle-linear \
 	check-oracle-script-runs check-doc-claims check-wide-classes \
 	check-oracle-newlines check-oracle-callouts \
 	check-oracle-sed \
@@ -1331,6 +1332,29 @@ check-oracle-python: $(TOOLS)
 	@$(REQUIRE_PYTHON3)
 	$(call run-oracle,python,python3 tools/oracle/python_diff.py --strict)
 
+check-oracle-linear: ## Compare the RE2 and Rust front ends against Go and the crate
+# One target for two dialects because they are one front end: src/syntax/re2.c
+# reads both, deny-by-default, with a two-valued flavour(). A gate that asked
+# only one of them would leave every flavour() branch with a side nobody
+# checks - and twelve constructs belong to exactly one of the two.
+#
+# **Most of what it generates is what the dialects do NOT have**, which is the
+# opposite balance from every other differential here and is what the subject
+# demands. These two are defined by subtraction, so a corpus made of what they
+# accept would leave the larger half of the front end with no gate on it.
+#
+# What it found while WP-34 and WP-35 were being built, none of it reachable
+# by reading either project's documentation: `\S` building a class that
+# matched nothing, `U` silently ignored by this directory's own grx_match,
+# the empty-loop cell being POSIX's rather than Perl's or ECMAScript's, a
+# counted repeat not being a loop at all, Go widening `\w` under caseless
+# while leaving `\b` alone, and both dialects folding a POSIX class before
+# negating it - which the comment in src/ir/lower.c said no dialect here did.
+check-oracle-linear: $(TOOLS)
+	@$(REQUIRE_PYTHON3)
+	$(call run-oracle,go,python3 tools/oracle/linear_diff.py --dialect re2 --strict)
+	$(call run-oracle,rust,python3 tools/oracle/linear_diff.py --dialect rust --strict)
+
 check-oracle-vim: ## Compare the Vim front end against vim itself
 # One vim process for the whole run, not one per case: vim reads a file of
 # cases and writes a file of answers, which is what makes a differential
@@ -1541,6 +1565,15 @@ vectors-python: ## Regenerate the Python vectors from the pinned CPython
 vectors-python:
 	@$(REQUIRE_PYTHON3)
 	$(call run-oracle,python,python3 tools/oracle/make_python_vectors.py)
+
+vectors-linear: ## Regenerate the RE2 and Rust vectors from their engines
+# Neither dialect has an upstream corpus to import. Go's `regexp` tests are
+# Go source rather than data, and the crate's are TOML fixtures naming the
+# crate's own API; both would be a port rather than an import, and a ported
+# corpus measures the port.
+vectors-linear:
+	@$(REQUIRE_PYTHON3)
+	$(call run-oracle,go,python3 tools/oracle/make_linear_vectors.py)
 
 vectors-vim: ## Regenerate the Vim vectors from the pinned vim
 # Two vim processes per file, not one: the second asks `set re=1`, because a

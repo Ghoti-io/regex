@@ -268,16 +268,59 @@ static const GRX_SyntaxSpec spec_table[GRX_SYNTAX_COUNT] = {
         | ATOM | COND | RECU | FLAG | CMNT | PCLS | UPRP | CSET | WORD | ANCH
         | HEX | OCT | CTRL | SUBR,
   },
+  // **Both rows below are probed**, against the two references pinned in
+  // tools/oracle/containers/IMAGES: go1.25.14's `regexp` and the `regex`
+  // crate 1.13.1. What they had before was read off the two projects'
+  // documentation, and three cells of the five that changed were wrong in
+  // the direction that matters - a construct claimed for a dialect that
+  // refuses it.
   [GRX_SYNTAX_RE2] = {
     // The point of RE2: no backreference and no lookaround, because neither
     // can be run in linear time. A dialect table is how that becomes a parse
     // error instead of a silent fallback to the backtracking engine.
-    .features = ALT | REP | LAZY | NCAP | NAME | FLAG | PCLS | UPRP | WORD
-        | ANCH | QUOT | HEX | OCT,
+    //
+    // SFLG was missing and is not an oversight of the same kind as the
+    // others: the block comment above says no row below it carries the bit
+    // because none had been asked for both spellings. This one has been.
+    // `(?i)a` and `(?i:a)` both compile in `regexp`, so it takes FLAG and
+    // SFLG alike.
+    .features = ALT | REP | LAZY | NCAP | NAME | FLAG | SFLG | PCLS | UPRP
+        | WORD | ANCH | QUOT | HEX | OCT,
+    // The subject is UTF-8 text: `.` takes a whole character, `\x{1F600}`
+    // is one code point, and `(?i)k` matches U+212A.
+    //
+    // DUPLICATE_NAMES because `regexp` has no switch for it either:
+    // `(?P<n>a)(?P<n>b)` compiles there with no flag, where the crate
+    // answers "duplicate capture group name". Perl's row has the option on
+    // for the same reason and by the same mechanism.
+    .default_options = GRX_OPT_UTF | GRX_OPT_DUPLICATE_NAMES,
+    // `a**` is refused and `a\Q\E*` is not: the empty quoted run makes the
+    // two quantifiers non-adjacent, and `regexp`'s check is an adjacency
+    // check. The crate needs no such field - it allows a second quantifier
+    // outright - and it has no `\Q` either.
+    .ignorable_separates_quantifiers = 1,
   },
   [GRX_SYNTAX_RUST] = {
-    .features = ALT | REP | LAZY | NCAP | NAME | FLAG | PCLS | UPRP | CSET
-        | WORD | ANCH | QUOT | HEX | OCT,
+    // Three bits came off this row and one went on, all four probed.
+    //
+    // **QUOT and OCT came off.** `\Qa+b\E` is "unrecognized escape
+    // sequence" in the crate and so are `\0` and `\101` - it has no octal
+    // at all, and reads a digit after a backslash as a backreference it
+    // does not support. RE2 has both, which is why the two rows are not one.
+    //
+    // **SFLG went on**, the same probe RE2's row records.
+    //
+    // CSET stays: `&&`, `--`, `~~` and `||` are the crate's own, and it is
+    // the only dialect here that spells all four.
+    .features = ALT | REP | LAZY | NCAP | NAME | FLAG | SFLG | PCLS | UPRP
+        | CSET | WORD | ANCH | HEX,
+    .default_options = GRX_OPT_UTF,
+    // `a**` and `a{2}{3}` compile in the crate and are "invalid repeat
+    // operand" in `regexp`. The crate reads the second quantifier as
+    // applying to the repeat, so `a**` is `(a*)*` - which is GNU's answer
+    // and Ruby's, and is why this flag existed before either of these
+    // dialects did.
+    .allow_double_quantifier = 1,
   },
   [GRX_SYNTAX_TCL] = {
     .features = ALT | REP | LAZY | NCAP | BREF | LAH | LBH | FLAG | PCLS
@@ -893,26 +936,90 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
 
   // RE2 and Rust: no backreference and no lookaround at all, which is the
   // point of them - a pattern they accept is regular by construction.
+  // Probed against the two pinned references rather than read off their
+  // documentation, which is what the surrounding rows still are. Four cells
+  // moved and one of them was a silent wrong answer rather than a gap:
+  // **RE2's iteration rule was absent**, so the row took the default -
+  // Perl's retry-then-advance - where `regexp` skips an empty match abutting
+  // the one before it. `a*` over "baac" is three matches there and four
+  // under the default, and the rule the enum needed was already spelled
+  // GRX_ITERATE_ADVANCE_SKIP_ABUTTING and already commented "Go".
   [GRX_SYNTAX_RE2] = {
-    .empty_loop = GRX_EMPTY_LOOP_BREAK,
+    // BREAK_FIRST, which was BREAK and is the second cell the probe moved -
+    // and the more interesting of the two, because it is POSIX's rule
+    // arrived at from somewhere else entirely. Both halves measured, and
+    // one alone would not have chosen it:
+    //
+    //   `(a*)*` over "b"     group 1 is 0-0, so an empty iteration does run
+    //                        when nothing else has. FAIL would leave it unset.
+    //   `(a|)*` over "aaaa"  group 1 is 3-4, so once an iteration has
+    //                        consumed, a trailing empty one does not run.
+    //                        BREAK would give 4-4.
+    //
+    // These are automata rather than backtrackers, and this is the answer an
+    // automaton falls into: there is no "iteration" to fail, only a state
+    // that stops moving. glibc and musl land on the same rule from the
+    // standard's side.
+    .empty_loop = GRX_EMPTY_LOOP_BREAK_FIRST,
+    .bounded_repeat_allows_empty = 1,
     .lookbehind = GRX_LOOKBEHIND_NONE,
+    .iteration = GRX_ITERATE_ADVANCE_SKIP_ABUTTING,
     .dollar = GRX_DOLLAR_END_ONLY,
+    // ASCII, and the fold below is not: `\w` does not match "é" in
+    // `regexp` and `(?i)k` does match U+212A. The two axes are independent
+    // and this dialect is the clearest case of it in the table.
     .shorthands = GRX_SHORTHANDS_ASCII,
     .shorthands_wide = GRX_SHORTHANDS_ASCII,
     .fold = GRX_FOLD_SIMPLE,
     .fold_utf = GRX_FOLD_SIMPLE,
-    .property_match = GRX_PROPERTY_STRICT,
+    // LOOSE and not STRICT. `\p{any}` and `\p{Letter}` both compile in
+    // `regexp`, so the names are matched the way UAX #44 section 5.9.2
+    // matches them; `\p{InGreek}` does not, which is what keeps it off
+    // GRX_PROPERTY_LOOSE_PERL.
+    .property_match = GRX_PROPERTY_LOOSE,
+    // `(?i)\w` matches U+017F and `(?i)[[:alpha:]]` matches it too, where
+    // the whole Perl family answers no match to both. `x\b` over "x"
+    // U+212A still reports a boundary, which is what separates this row
+    // from the crate's and is why there are two fields rather than one.
+    .caseless_widens_shorthands = 1,
+    .caseless_leaves_boundary_narrow = 1,
+    .posix_classes_fold = 1,
+    // `^` under `m` matches at the end of a subject that ends in a newline:
+    // `\p{Any}^` over "a\n" is 1-2 in both references, where perl and PCRE2
+    // answer no match. Measured on both.
+    .caret_after_final_newline = 1,
+    .subject_is_text = 1,
   },
   [GRX_SYNTAX_RUST] = {
-    .empty_loop = GRX_EMPTY_LOOP_BREAK,
+    // The same two measurements as RE2's row above, with the same answers.
+    .empty_loop = GRX_EMPTY_LOOP_BREAK_FIRST,
+    .bounded_repeat_allows_empty = 1,
     .lookbehind = GRX_LOOKBEHIND_NONE,
     .iteration = GRX_ITERATE_ADVANCE_SKIP_ABUTTING,
     .dollar = GRX_DOLLAR_END_ONLY,
+    // Unicode, where RE2's are ASCII - the one profile cell where the two
+    // dialects part company over every subject above U+007F. `\w` matches
+    // "é" in the crate and `(?-u)\w` does not.
     .shorthands = GRX_SHORTHANDS_UNICODE,
     .shorthands_wide = GRX_SHORTHANDS_UNICODE,
     .fold = GRX_FOLD_SIMPLE,
     .fold_utf = GRX_FOLD_SIMPLE,
     .property_match = GRX_PROPERTY_LOOSE,
+    // Both halves, which is ECMAScript's rule: `x\b` over "x" U+212A is no
+    // match here, the fold having made U+212A a word character on both
+    // sides of the boundary.
+    .caseless_widens_shorthands = 1,
+    .posix_classes_fold = 1,
+    // The crate is the only row here whose shorthands are Unicode and whose
+    // POSIX classes are not: `\w` matches "é" and `[[:word:]]` does not.
+    .posix_classes_stay_ascii = 1,
+    .caret_after_final_newline = 1,
+    // `(?-u)` takes the Unicode folding with it: `(?i-u)k` does not match
+    // U+212A, where `(?i)k` does. CPython's `(?a)` is the only other flag
+    // here that does both at once - Perl's `/a` leaves the folding alone
+    // and needs a second `a` to cut the orbit.
+    .ascii_classes_fold_ascii = 1,
+    .subject_is_text = 1,
   },
 
   [GRX_SYNTAX_TCL] = {
@@ -1241,6 +1348,36 @@ static const FlagRow python_flags[] = {
   {0, FLAG_OPTION, 0, 0, 0},
 };
 
+// Go's `regexp` has no flags argument at all: the flags are `(?ims)` groups
+// inside the pattern, which is the dialect's own syntax. So this alphabet is
+// not a second spelling of anything the reference takes - it is the set of
+// letters `(?...)` accepts there, offered to a caller who would otherwise
+// have to prepend a group. `x` is absent because `regexp` has no extended
+// mode, which is the one letter a caller coming from any other dialect will
+// reach for.
+static const FlagRow re2_flags[] = {
+  {'i', FLAG_OPTION, GRX_OPT_CASELESS, 0, 0},
+  {'m', FLAG_OPTION, GRX_OPT_MULTILINE, 0, 0},
+  {'s', FLAG_OPTION, GRX_OPT_DOTALL, 0, 0},
+  {'U', FLAG_OPTION, GRX_OPT_UNGREEDY, 0, 0},
+  {0, FLAG_OPTION, 0, 0, 0},
+};
+
+// The crate's `RegexBuilder`, which does have a flags argument, plus the two
+// letters that are only `(?...)`. `u` is the odd one: Unicode is the
+// default, so setting it changes nothing and `(?-u)` is the spelling that
+// does - which is why it is FLAG_NO_EFFECT here and an inversion in the
+// front end, where the sign of the letter is known.
+static const FlagRow rust_flags[] = {
+  {'i', FLAG_OPTION, GRX_OPT_CASELESS, 0, 0},
+  {'m', FLAG_OPTION, GRX_OPT_MULTILINE, 0, 0},
+  {'s', FLAG_OPTION, GRX_OPT_DOTALL, 0, 0},
+  {'U', FLAG_OPTION, GRX_OPT_UNGREEDY, 0, 0},
+  {'x', FLAG_OPTION, GRX_OPT_EXTENDED, 0, 0},
+  {'u', FLAG_NO_EFFECT, 0, 0, 0},
+  {0, FLAG_OPTION, 0, 0, 0},
+};
+
 /** The alphabet of a dialect, or NULL when it has none. */
 static const FlagRow * flag_alphabet(GRX_Syntax syntax) {
   switch (syntax) {
@@ -1248,6 +1385,10 @@ static const FlagRow * flag_alphabet(GRX_Syntax syntax) {
       return ecmascript_flags;
     case GRX_SYNTAX_PCRE:
       return pcre_flags;
+    case GRX_SYNTAX_RE2:
+      return re2_flags;
+    case GRX_SYNTAX_RUST:
+      return rust_flags;
     case GRX_SYNTAX_PERL:
       return perl_flags;
     case GRX_SYNTAX_PYTHON:

@@ -224,11 +224,25 @@ static int in_quote(GRX_Parser * parser) {
 
 /** Let the dialect consume what stands between atoms and means nothing. */
 static GRX_Result skip_ignorable(GRX_Parser * parser) {
+  // Accumulated rather than assigned: one parse_quantifier() call skips
+  // more than once - before the operator and before its suffix - and the
+  // question the flag answers is whether *anything* stood between the two
+  // quantifiers, so the last skip must not clear what an earlier one found.
+  // The reader resets it, which is the one place that knows where the span
+  // begins.
   if (!parser->frontend->skip_ignorable || in_quote(parser)) {
     return GRX_OK;
   }
 
-  return parser->frontend->skip_ignorable(parser);
+  size_t before = parser->position;
+  GRX_Result result = parser->frontend->skip_ignorable(parser);
+  // The quote_end test as well as the position, because opening a run
+  // consumes the `\Q` and then *returns* with the position inside it: that
+  // is a skip too, and the one RE2 cares about.
+  if (parser->position != before || parser->quote_end != GRX_NPOS) {
+    parser->ignorable_skipped = 1;
+  }
+  return result;
 }
 
 // --------------------------------------------------------------------------
@@ -713,6 +727,16 @@ static GRX_Result parse_quantifier(
     return GRX_OK;
   }
 
+  // The operator is behind us, so what a skip found *before* it is no
+  // longer between this quantifier and the next. `a\Q\E**` is the case:
+  // the run stands before the first `*` and the two asterisks are
+  // adjacent, which `regexp` refuses - where `a+\Q\E*` and `a??\Q\E*`
+  // have the run between them and are accepted. The value is kept because
+  // parse_term() needs exactly this one. See
+  // GRX_SyntaxSpec::ignorable_separates_quantifiers.
+  parser->ignorable_before_quantifier = parser->ignorable_skipped;
+  parser->ignorable_skipped = 0;
+
   // Whether this atom may be repeated at all is the dialect's call, not
   // this file's: `(?=a)*` is legal ECMAScript without `u` and a syntax error
   // with it, and no shared rule can say both.
@@ -1017,7 +1041,11 @@ static GRX_Result parse_term(GRX_Parser * parser, uint32_t * out_node) {
   if (!again) {
     return GRX_OK;
   }
-  if (!parser->spec.allow_double_quantifier) {
+  // Something ignorable between the two makes them two repeats rather than
+  // one double quantifier, where the dialect says so. See the spec field.
+  if (!parser->spec.allow_double_quantifier
+      && !(parser->spec.ignorable_separates_quantifiers
+          && parser->ignorable_before_quantifier)) {
     return grx_parse_fail(parser, GRX_DIAG_DOUBLE_QUANTIFIER, second,
         parser->position - second);
   }

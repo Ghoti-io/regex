@@ -379,6 +379,23 @@ typedef struct GRX_SyntaxSpec {
    */
   int allow_double_quantifier;
   /**
+   * Non-zero when something ignorable between two quantifiers separates
+   * them, so that the second is not a second quantifier at all.
+   *
+   * RE2, and it is the mirror of quantifier_suffix_is_adjacent: that field
+   * says a lazy suffix must touch its quantifier, this one says a *repeat*
+   * must. Go's `regexp` refuses `a**` and accepts `a\Q\E*` - the empty
+   * quoted run makes the two non-adjacent and the check does not fire -
+   * and `\Q\E*` on its own is still "missing argument to repetition
+   * operator", so the run is not an atom either. Both probed.
+   *
+   * It costs nothing in the dialects that have no ignorable run between a
+   * quantifier and the next character, which is every other one here: the
+   * Perl family has comments and extended mode, but both of those are
+   * *inside* the suffix rule above rather than beside it.
+   */
+  int ignorable_separates_quantifiers;
+  /**
    * Non-zero when `{3,1}` is a quantifier that can never be satisfied.
    *
    * Perl compiles `((def){37,17})?ABC` and matches "ABC": the inner repeat

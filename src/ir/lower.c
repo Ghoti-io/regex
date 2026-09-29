@@ -248,7 +248,10 @@ static int posix_class_is_wide(Lowering * low, const char * name) {
   if (strcmp(name, "digit") == 0 || strcmp(name, "xdigit") == 0) {
     narrow |= GRX_OPT_ASCII_POSIX_DIGIT;
   }
+  // A dialect may put the POSIX classes on the other side of the line from
+  // its shorthands, which the Rust crate does and nothing else here does.
   int wide = !(low->ascii & narrow)
+      && !low->profile.posix_classes_stay_ascii
       && ((low->options & GRX_OPT_UCP)
           || low->profile.shorthands == GRX_SHORTHANDS_UNICODE);
 
@@ -574,12 +577,21 @@ static GRX_Result posix_class_set(Lowering * low, const GRX_ClassItem * item,
     return result;
   }
   if (strcmp(name, "lower") == 0) {
-    return posix_class_named_set(low, "upper", node, out);
+    result = posix_class_named_set(low, "upper", node, out);
   }
-  if (strcmp(name, "upper") == 0) {
-    return posix_class_named_set(low, "lower", node, out);
+  else if (strcmp(name, "upper") == 0) {
+    result = posix_class_named_set(low, "lower", node, out);
   }
-  return GRX_OK;
+  // A dialect that folds its POSIX classes folds them *here*, before the
+  // item's own negation, the way a shorthand's widening is part of its
+  // definition. `(?i)[[:^alpha:]]` over U+017F is the case that decides the
+  // order: both linear references answer no match, which is the complement
+  // of a folded set. Folding after the complement would add nothing that
+  // removes U+017F and would make it a match.
+  if (result == GRX_OK && low->profile.posix_classes_fold) {
+    result = grx_charclass_fold_closure(out, low->fold, low->limits);
+  }
+  return result;
 }
 
 /** Fill `out` with the set one class item denotes, negation not yet applied. */
@@ -929,7 +941,10 @@ static GRX_Result word_class(Lowering * low, uint32_t * out_index) {
       shorthands_for(low, GRX_SHORTHAND_WORD), low->profile.word_set,
       low->profile.mongolian_separator_is_space, GRX_SHORTHAND_WORD,
       low->limits);
-  if (result == GRX_OK && low->profile.caseless_widens_shorthands) {
+  // The shorthand's rule, unless the dialect splits the two - which RE2
+  // does and is the only row here that does. See the profile field.
+  if (result == GRX_OK && low->profile.caseless_widens_shorthands
+      && !low->profile.caseless_leaves_boundary_narrow) {
     result = grx_charclass_fold_closure(&cls, low->fold, low->limits);
   }
   if (result == GRX_OK) {
@@ -2610,7 +2625,15 @@ static GRX_Result lower_repeat(
   // says `a*+` is "equivalent to (?>a*)" in those words.
   int possessive = node->a == (uint32_t)GRX_REPEAT_POSSESSIVE;
   repeat->mode = possessive ? (uint8_t)GRX_REPEAT_GREEDY : (uint8_t)node->a;
-  repeat->empty_loop = (uint8_t)low->profile.empty_loop;
+  // A finite maximum takes every iteration in the two linear dialects,
+  // whose engines expand a counted repeat rather than looping. Only the
+  // pattern's own repeat asks this: the three synthesised loops above are
+  // all GRX_REPEAT_INF and none of them is a dialect construct.
+  repeat->empty_loop
+      = (uint8_t)((low->profile.bounded_repeat_allows_empty
+                      && node->max != GRX_REPEAT_INF)
+              ? GRX_EMPTY_LOOP_ALLOW
+              : low->profile.empty_loop);
   repeat->capture_reset = (uint8_t)low->profile.capture_reset;
   result = attach(low, *out_node, body);
   if (result != GRX_OK || !possessive) {
