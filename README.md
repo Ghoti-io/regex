@@ -195,7 +195,7 @@ engine and no network.
 | --- | ---: | ---: | --- |
 | `i-regexp` | 30,015 | 100.00% | generated from two references, RFC 9485 naming none: iregexp-check 0.1.4 for the syntax, libxml2 2.14.6 for XSD's semantics |
 | `ecmascript` | 28,559 | 100.00% | test262, plus generated from node 24.21 |
-| `perl` | 6,173 | 100.00% | perl 5.44's `re_tests`; 8 excluded |
+| `perl` | 11,705 | 100.00% | perl 5.44's `re_tests`, plus generated: full folds, `\N{}` names, boundaries, and property names with more than one reading; 8 excluded |
 | `vim` | 6,317 | 100.00% | generated from vim 9.2.1129 |
 | `python` | 2,177 | 100.00% | generated from CPython 3.14.7 |
 | `pcre` | 1,869 | 100.00% | PCRE2 10.46's `testinput` |
