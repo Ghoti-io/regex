@@ -234,6 +234,100 @@ TEST(OnePass, ItDividesAMatchTheWayThePikeVmDoesOnAGeneratedPopulation) {
          "a correct table";
 }
 
+TEST(OnePass, ARunIsSkippedOnlyWhenTheBytesInItWriteNothing) {
+  // The run loop reads a self-looping byte off without consulting the table
+  // again, because the walk's cost is that the state addresses the next load
+  // and inside a self-loop there is no such dependency to pay. That is exact
+  // for a transition that returns to the same row carrying the EMPTY action
+  // and wrong for any other, and the two are indistinguishable from outside:
+  // `(a+)` loops on `a` writing nothing, `(a)*` loops on `a` writing group
+  // one every iteration, and both are one-pass. So both shapes are here.
+  //
+  // The lengths matter as much as the patterns. A subject of two bytes
+  // exercises the fast path as an edge; the long ones are what make it the
+  // thing under test, and the short ones are what catch an off-by-one at the
+  // boundary between the skip and the step that follows it.
+  static const char * const kPatterns[] = {
+      "(a+)(b+)",     // self-loop writing nothing: the path being optimised
+      "(a*)(b*)",     // ...reachable with an empty run on either side
+      "(a)*",         // self-loop writing group one every iteration
+      "(ab)*",        // ...over two bytes, so the loop is two rows
+      "([ab])*",      // ...over a class rather than one byte
+      "(a)*b",        // a writing loop with something after it
+      "([^b]*)(b)",   // a negated class run, then one byte
+      "([ab]*)(c)",   // a class run, then one byte
+      "(a{4,})(b)",   // a counted run
+  };
+  static const size_t kLengths[] = {0, 1, 2, 3, 4, 5, 17, 64, 300, 2000};
+  size_t compared = 0;
+  size_t through_fast_path = 0;
+  for (const char * pattern : kPatterns) {
+    GRX_Regex * regex = nullptr;
+    ASSERT_EQ(grx_regex_compile(
+                  pattern, GRX_SYNTAX_POSIX_ERE, GRX_OPT_NONE, &regex),
+        GRX_OK)
+        << pattern;
+    GRX_OnePass * onepass = grx_onepass_create(nullptr, &regex->program);
+    ASSERT_NE(onepass, nullptr)
+        << "/" << pattern << "/ stopped being one-pass, so this test no "
+        << "longer covers the run loop it was written for";
+    GRX_Dfa * dfa = grx_dfa_create(nullptr, &regex->program, 0);
+    ASSERT_NE(dfa, nullptr) << pattern;
+    for (size_t n : kLengths) {
+      // Three shapes per length: a bare run, a run then one other byte, and
+      // an alternating run. The second is what a loop that writes has to get
+      // right at its last iteration.
+      std::vector<std::string> subjects;
+      subjects.push_back(std::string(n, 'a'));
+      subjects.push_back(std::string(n, 'a') + "b");
+      std::string alt;
+      for (size_t i = 0; i < n; i++) { alt += (i & 1) ? 'b' : 'a'; }
+      subjects.push_back(alt);
+      subjects.push_back(alt + "c");
+      for (const std::string & subject : subjects) {
+        GRX_Match * pike = nullptr;
+        ASSERT_EQ(grx_match_create(regex, nullptr, &pike), GRX_OK);
+        int matched = 0;
+        GRX_Result rc = grx_regex_search(regex, subject.data(),
+            subject.size(), 0, GRX_ENGINE_PIKE, nullptr, pike, &matched);
+        if (rc == GRX_OK && matched) {
+          size_t begin = 0;
+          size_t end = 0;
+          if (grx_dfa_search(
+                  dfa, subject.data(), subject.size(), 0, &begin, &end)
+              == 1) {
+            EXPECT_EQ(begin, pike->captures[0].start) << "/" << pattern << "/";
+            EXPECT_EQ(end, pike->captures[0].end) << "/" << pattern << "/";
+            std::vector<GRX_Capture> got(
+                pike->count, GRX_Capture {GRX_NPOS, GRX_NPOS});
+            ASSERT_EQ(grx_onepass_run(onepass, subject.data(), begin, end,
+                          got.data(), got.size()),
+                1)
+                << "/" << pattern << "/ declined a span the DFA found, on a "
+                << subject.size() << "-byte subject";
+            compared++;
+            if (end - begin > 8) { through_fast_path++; }
+            EXPECT_TRUE(same(got, spans(pike)))
+                << "/" << pattern << "/ on a " << subject.size()
+                << "-byte subject: pike" << show(spans(pike)) << ", onepass"
+                << show(got);
+          }
+        }
+        grx_match_destroy(pike);
+      }
+    }
+    grx_dfa_free(dfa);
+    grx_onepass_free(onepass);
+    grx_regex_free(regex);
+  }
+  // A skip that never runs over a long enough span proves nothing about the
+  // skip, so the population has to be shown to have reached it.
+  EXPECT_GT(compared, 100u) << "almost nothing reached the table";
+  EXPECT_GT(through_fast_path, 20u)
+      << "every span here was short enough to be walked a byte at a time, so "
+         "the run this test exists for was never taken";
+}
+
 TEST(OnePass, TheTwoSubmatchRulesCannotDisagreeAboutAForcedPath) {
   // documentation/dialects.md section 5.1 splits the four leftmost-longest
   // dialects by how the groups divide a match: POSIX BRE/ERE compare
