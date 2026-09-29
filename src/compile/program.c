@@ -171,6 +171,7 @@ void grx_program_init(GRX_Program * program, const GRX_Allocator * allocator,
   // engines, and a stale value here would skip a position a match begins at.
   program->first_bytes_known = 0;
   memset(program->first_bytes, 0, sizeof program->first_bytes);
+  memset(&program->first_byte_ranges, 0, sizeof program->first_byte_ranges);
   program->literal_prefix_length = 0;
   program->required_literal_length = 0;
   program->required_offset_min = 0;

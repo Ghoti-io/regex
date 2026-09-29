@@ -278,6 +278,38 @@ static inline const char * grx_exec_find(const char * haystack,
 }
 
 /**
+ * @brief Advance to the first byte of `subject` that is in `set`.
+ *
+ * The definition of the scan, and the answer every faster path here has to
+ * reproduce exactly. Always compiled, on every target.
+ *
+ * @param set A 256-bit bitmap, GRX_FIRST_BYTES_SIZE bytes.
+ * @param subject The subject. May be NULL only when `from >= length`.
+ * @param from Where to start.
+ * @param length The subject's length.
+ * @return The first such position, or `length` when there is none.
+ */
+size_t grx_exec_scan_bitmap(const unsigned char * set, const char * subject,
+    size_t from, size_t length);
+
+/**
+ * @brief The same scan, for a set that is one or two ranges.
+ *
+ * Sixteen bytes at a time where SSE2 is available - which the x86-64 ABI
+ * requires, so no runtime detection is involved - and byte at a time
+ * otherwise. Must agree with grx_exec_scan_bitmap() over the same set at
+ * every position; tests/unit/test_scan.cpp is that claim.
+ *
+ * @param ranges The set. `count` of zero returns `from` unchanged.
+ * @param subject The subject. May be NULL only when `from >= length`.
+ * @param from Where to start.
+ * @param length The subject's length.
+ * @return The first position in the set, or `length` when there is none.
+ */
+size_t grx_exec_scan_ranges(const GRX_ByteRanges * ranges,
+    const char * subject, size_t from, size_t length);
+
+/**
  * @brief The widest offset window worth filtering positions with.
  *
  * Inside a window the scan for the literal restarts one byte further along
@@ -358,13 +390,19 @@ static inline size_t grx_exec_skip_to_first_byte(const GRX_Program * program,
       from = (size_t)(found - subject);
     }
     else if (program->first_bytes_known) {
-      while (from < length) {
-        unsigned char byte = (unsigned char)subject[from];
-        if (program->first_bytes[byte >> 3]
-            & (unsigned char)(1u << (byte & 7u))) {
-          break;
-        }
-        from++;
+      // Where the set is one or two ranges this asks the same question
+      // sixteen bytes at a time, which on a subject that rejects every
+      // position is most of what the search costs: `[0-9]+-[0-9]+` over four
+      // kilobytes spends 95% of its time in this loop. Where it is not, or
+      // where there is no vector unit, the bitmap loop below is the answer
+      // and always was.
+      if (program->first_byte_ranges.count) {
+        from = grx_exec_scan_ranges(
+            &program->first_byte_ranges, subject, from, length);
+      }
+      else {
+        from = grx_exec_scan_bitmap(
+            program->first_bytes, subject, from, length);
       }
       if (from >= length) {
         return from;

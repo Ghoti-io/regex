@@ -464,7 +464,7 @@ ALL_TEST_GATES := check-symbols check-layering check-aliasing \
 	check-diagnostics check-engine-equivalence check-json-schema-suite \
 	check-tables check-status-line check-corpus-seeds check-makefile-hash \
 	check-generated-header-deps \
-	check-oracle-env check-unicode-agreement test-asan
+	check-oracle-env check-unicode-agreement check-scan-portable test-asan
 TEST_GATES ?= $(ALL_TEST_GATES)
 
 # What a gate that IS a python3 script does when there is no python3.
@@ -1751,6 +1751,43 @@ BELOW_THE_IR := src/exec/*.c src/exec/*.h src/compile/codegen.c \
 check-diagnostics: ## Fail if a diagnostic exists that no code path produces
 	@$(REQUIRE_PYTHON3); \
 	python3 tools/check_diagnostics.py
+
+check-scan-portable: ## Build and run the byte scan with no vector path
+# src/exec/exec_scan.c has an SSE2 path and a scalar one, chosen by an `#if`.
+# The arms of an `#if` that is never taken are never compiled, so a library
+# that ships a fallback and only ever builds the fast path does not know
+# whether the fallback still works - it rots silently and is discovered by
+# whoever ports first. This rebuilds that one translation unit with
+# GRX_SCAN_PORTABLE, swaps it into a copy of the archive, and runs the same
+# assertions against the scalar code.
+#
+# The object is checked for vector instructions BEFORE the tests run, because
+# a switch that quietly did nothing would leave this gate passing while
+# testing the SSE2 path twice - which is the failure it exists to prevent.
+	@set -e; \
+	work=$(BUILD_DIR)/scan-portable; \
+	mkdir -p $$work; \
+	$(CC) $(CFLAGS) $(INCLUDE) -DGRX_SCAN_PORTABLE -fPIC \
+		-c src/exec/exec_scan.c -o $$work/exec_scan.o; \
+	if command -v objdump >/dev/null 2>&1; then \
+		n=$$(objdump -d $$work/exec_scan.o | grep -cE 'pcmpgt|pmovmskb|movdqu' || true); \
+		if [ "$$n" != "0" ]; then \
+			printf "\033[0;31m\n### GRX_SCAN_PORTABLE did not remove the vector path ###\033[0m\n" >&2; \
+			printf "%s vector instructions remain in the portable object, so this\n" "$$n" >&2; \
+			printf "gate would be running the SSE2 path twice and testing the\n" >&2; \
+			printf "fallback not at all. See src/exec/exec_scan.c.\n" >&2; \
+			exit 1; \
+		fi; \
+	fi; \
+	cp $(APP_DIR)/$(STATIC_TARGET) $$work/lib.a; \
+	ar d $$work/lib.a exec_scan.o; \
+	ar r $$work/lib.a $$work/exec_scan.o; \
+	$(CXX) $(CXXFLAGS) -o $$work/testScanPortable \
+		$(OBJ_DIR)/tests/test_scan.o $(TEST_HELPER_OBJ) $(LDFLAGS) \
+		-Wl,--whole-archive $$work/lib.a -Wl,--no-whole-archive \
+		$(CUTIL_LIBS) $(UNICODE_LIBS) $(CUTIL_LIBS) $(TESTFLAGS); \
+	LD_LIBRARY_PATH="$(TEST_LD_PATH)" $$work/testScanPortable --gtest_brief=1
+	@printf "\033[0;32mThe byte scan's fallback builds and agrees.\033[0m\n"
 
 check-layering: ## Fail if an engine knows which dialect it is running
 	@leaked=$$(grep -lnE 'GRX_SYNTAX_|GRX_Syntax|grx_syntax_|->syntax|regex/syntax\.h|syntax_internal\.h' \

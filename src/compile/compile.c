@@ -212,6 +212,13 @@ GRX_Result grx_compile_program(const GRX_Pattern * pattern,
     if (regex->program.first_bytes_known) {
       memcpy(regex->facts.first_bytes, regex->program.first_bytes,
           GRX_FIRST_BYTES_SIZE);
+      // Whether the set is one or two contiguous ranges is a property of the
+      // set, so it is answered once here and not at every candidate position
+      // the scan is asked about. Failing to decompose is not a failure: the
+      // bitmap loop answers every set and this only ever chooses a faster
+      // spelling of the same question.
+      grx_byte_ranges_from_set(
+          regex->program.first_bytes, &regex->program.first_byte_ranges);
     }
 
     // The two literals are the same arrangement: computed once here, held on

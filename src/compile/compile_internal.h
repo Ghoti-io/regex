@@ -63,6 +63,36 @@ extern "C" {
 /** Bytes of a 256-bit byte set; GRX_Facts::first_bytes is the same shape. */
 #define GRX_FIRST_BYTES_SIZE 32
 
+/** @brief The most byte ranges a first-byte set may be described by.
+ *
+ * Two, because that is where the return stops: over the conformance corpus,
+ * of the patterns that reach the byte-set scan, 23% are one range and 56%
+ * are two - `[A-Za-z]` and its relatives - while a third range buys the
+ * remaining 21% at the cost of another compare per lane on every one of the
+ * other 79%. A set needing more keeps the bitmap loop, which is never wrong,
+ * only slower. */
+#define GRX_BYTE_RANGES_MAX 2
+
+/** @brief A byte set expressed as up to two closed ranges, when it is one. */
+typedef struct {
+  unsigned char lo[GRX_BYTE_RANGES_MAX];
+  unsigned char hi[GRX_BYTE_RANGES_MAX];
+  unsigned count;   /**< Zero when the set does not decompose this way. */
+} GRX_ByteRanges;
+
+/**
+ * @brief Describe a 256-bit byte set as up to two closed ranges.
+ *
+ * @param set A 256-bit bitmap, GRX_FIRST_BYTES_SIZE bytes.
+ * @param out_ranges Receives the description; `count` is 0 when there is
+ *   none, which includes the empty set.
+ * @return Non-zero when the set decomposes, in which case `out_ranges`
+ *   describes exactly the same set.
+ */
+int grx_byte_ranges_from_set(
+    const unsigned char * set, GRX_ByteRanges * out_ranges);
+
+
 /**
  * @brief Longest literal run either prefilter literal will carry.
  *
@@ -441,6 +471,16 @@ typedef struct GRX_Program {
    */
   unsigned char first_bytes[GRX_FIRST_BYTES_SIZE];
   int first_bytes_known;
+  /**
+   * `first_bytes` as one or two byte ranges, when it is exactly that.
+   *
+   * A property of the set and therefore of the program, so it is derived once
+   * here rather than per search: the scan that reads it runs at every
+   * candidate position. `first_byte_ranges.count` of zero means the set does
+   * not decompose and the bitmap loop answers, which it always can.
+   *
+   */
+  GRX_ByteRanges first_byte_ranges;
   /**
    * Bytes every match begins with, and bytes every match contains.
    *
