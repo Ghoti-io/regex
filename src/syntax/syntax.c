@@ -308,6 +308,35 @@ static const GRX_SyntaxSpec spec_table[GRX_SYNTAX_COUNT] = {
     .features = ALT | REP | LAZY | NCAP | BREF | PCLS | WORD | ANCH,
     .escaped_specials = 1,
   },
+  // RE/flex. The row is the constructs `ugrep --help regex` lists *without*
+  // its `(-P)` marker, that marker being exactly "this one needs PCRE2
+  // instead" - so the unmarked half is a list of what RE/flex's own matcher
+  // does, written by the people who wrote the matcher.
+  //
+  // LAZY without POSS, BREF, LAH or LBH is the whole character of the
+  // dialect and the reason it is not read as POSIX ERE: a DFA that kept
+  // lazy quantifiers and gave up the three constructs that need a
+  // backtracker. `a*?` and `a{3,7}?` are listed unmarked; `a++`, `(a)\1`,
+  // `(?=...)` and `(?<=...)` are marked or absent, and a probe against
+  // ugrep 7.8.4 answered "error at position N" for the first two.
+  //
+  // CMNT is here and NCAP is not, which looks inconsistent and is what the
+  // reference says: `(?#...)` is listed unmarked, `(?:...)` is listed
+  // `(-P)`, and `(...)` is listed *twice* - "non-capturing group" unmarked
+  // and "capturing group (-P)". So a group in this dialect groups and
+  // captures nothing. A probe did accept `(?:ab)` without `-P`, which the
+  // reference says should need it; the disagreement is recorded in
+  // dialects.md section 3 and left unresolved rather than settled by
+  // whichever of the two was asked last.
+  //
+  // No FLAG or SFLG, for the reason the block comment above gives: the
+  // overview says it "excludes some advanced patterns" and does not list
+  // either spelling, and a probe that answered is not the same thing as a
+  // reference that says so. WP-48 is where both get asked properly.
+  [GRX_SYNTAX_REFLEX] = {
+    .features = ALT | REP | LAZY | CMNT | PCLS | UPRP | WORD | ANCH | QUOT
+        | HEX | OCT | CTRL,
+  },
 };
 
 // The name a caller writes to select a dialect. Indexed by GRX_Syntax.
@@ -334,6 +363,14 @@ static const char * const spec_names[GRX_SYNTAX_COUNT] = {
   // more official to borrow. Lower case with a hyphen is this table's house
   // style, and grx_syntax_from_name() ignores case, so "I-Regexp" finds it.
   [GRX_SYNTAX_IREGEXP] = "i-regexp",
+  // The library's own spelling, which is "RE/flex" with a solidus in it.
+  // The solidus is not available: this table's names are what a caller
+  // writes to `grx_syntax_from_name()` and what a command line passes, so
+  // the punctuation goes and the house style's lower case stays. "RE/flex"
+  // would also collide with nothing and mean nothing to `from_name()`,
+  // which compares whole names; "reflex" is what the project's own
+  // repository, header directory and generator binary are all called.
+  [GRX_SYNTAX_REFLEX] = "reflex",
 };
 
 /**
@@ -989,6 +1026,22 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     .shorthands_wide = GRX_SHORTHANDS_UNICODE,
     .fold = GRX_FOLD_ASCII,
     .fold_utf = GRX_FOLD_ASCII,
+  },
+  // Two fields, and the shorter row is the point rather than an omission.
+  // Every other cell here is WP-48's to probe, and a cell nobody has asked
+  // is better left at the documented default than filled from a plausible
+  // reading of a DFA.
+  //
+  // These two are not that. LEFTMOST_LONGEST is written down - "The RE/flex
+  // matcher only supports POSIX mode matching and does not support Perl
+  // mode matching" - and it is the field whose zero is *false* here:
+  // GRX_PREFER_LEFTMOST_FIRST is Perl's and is what a row left out would
+  // have claimed. LOOKBEHIND_NONE follows from the feature bits, where a
+  // dialect with no lookbehind at all would otherwise carry PCRE2's
+  // bounded-length constraint as though the construct existed to constrain.
+  [GRX_SYNTAX_REFLEX] = {
+    .preference = GRX_PREFER_LEFTMOST_LONGEST,
+    .lookbehind = GRX_LOOKBEHIND_NONE,
   },
 };
 

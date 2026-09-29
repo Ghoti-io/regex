@@ -47,6 +47,7 @@ Phase 7  Tcl, Vim, Emacs          WP-36 .. WP-38, WP-44, WP-45
 Phase 8  Performance, translation WP-40 .. WP-43
 
 Out of band: WP-47 I-Regexp, asked for by `text` rather than by a phase
+Out of band: WP-48 RE/flex, asked for after a question about grep
 ```
 
 Phases 1 and 3 each contain a front-end package and an engine package that
@@ -641,6 +642,54 @@ first as a block of one-atom patterns, for the reason WP-44 gives.
 
 **WP-37 Tcl** (the `TCL_ARE` match preference is an engine mode, *engines,
 M*), **WP-38 Emacs**.
+
+**WP-48 RE/flex.** *front ends, M.* Named on 2026-09-29, out of phase order
+for the same reason WP-47 was: it was asked for. Built so far: the enum
+constant, the name, a provisional spec row, and the one profile cell whose
+default was false rather than merely unprobed.
+
+**The first task is an oracle, and it is most of the package.** Every other
+dialect here is pinned to something this project installs. RE/flex is not
+installed, and the `ugrep` that answered the probes behind its row is the
+copy inside the Claude Code CLI - [dialects.md](dialects.md) §2 says why
+that is evidence and not an oracle. So: RE/flex 6.5.0 in
+`tools/oracle/containers/`, driven through a small program against
+`reflex::Matcher`, **not** through ugrep. The pin names the library and
+ugrep is not it: ugrep gates capturing groups and lookaround behind `-P`,
+and whether RE/flex's own matcher draws that line in the same place is the
+first thing the container is for.
+
+**Then the cells**, in this order, each being a place the provisional row is
+knowingly thin:
+
+- `NON_CAPTURING`, `INLINE_FLAGS` and `SCOPED_FLAGS`, where the reference
+  and a probe disagree or the reference is silent. §3 records both readings
+  rather than picking one.
+- Whether the matcher has capturing groups **at all**. The RE/flex manual
+  says "POSIX matchers do not generally support group capturing"; if that
+  holds for `reflex::Matcher`, this is the only dialect here whose engine
+  answers a span and nothing else, and `GRX_Profile::submatch` has no value
+  for it. The package may have to add one rather than pick the less wrong
+  of the two that exist.
+- `\A` and `\Z`, which the help spells as beginning and end *of file*.
+  §5.3's question is what they and `$` do around a final newline, and a
+  line-oriented tool is the wrong thing to ask it of. Note there is no
+  `\z`.
+- `\i`, `\j`, `\k` - indent, nodent, dedent. No other dialect here has
+  them and they have no meaning for a subject that is a string rather than
+  a stream of lines with columns. The honest outcome may be that this
+  library refuses them, the way it refuses `(?{})`.
+- The four spellings that collide with the Perl family and mean something
+  else: `\X`, `\v`, `\s`, and `[^...]` excluding the newline. A front end
+  that inherited any of them from a neighbouring dialect would be wrong in
+  a way no conformance percentage would show, because every one of them
+  still compiles.
+
+**What it must not do** is read RE/flex as POSIX ERE with extras. The
+dialect exists because its matcher kept the lazy quantifier and never had
+the backreference - the opposite pair from every other POSIX row here - and
+a front end that got that backwards would accept `(a)\1` for an engine
+that answers "error at position 8".
 
 **WP-46 PCRE2's `a` charset modifiers**: **built 2026-09-24**. `(?aD)`,
 `(?aS)`, `(?aW)`, `(?aP)` and `(?aT)` each narrow *one* thing to ASCII,

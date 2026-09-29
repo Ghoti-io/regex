@@ -1,6 +1,6 @@
 # Ghoti.io Regex
 
-Regular expressions in C, across seventeen dialects and one parser. Three
+Regular expressions in C, across eighteen dialects and one parser. Three
 engines run the result: a Pike VM that is linear in the subject length, a
 backtracking engine for the constructs no lockstep simulation can express,
 and a bit-state engine that is the backtracker with a memo and the linear
@@ -14,13 +14,13 @@ Ten dialects compile and match: ECMAScript (legacy, `u` and `v`), PCRE2,
 Perl, POSIX BRE and ERE, GNU BRE and ERE, Python, Vim, and I-Regexp
 (RFC 9485, the interoperable subset JSONPath is specified over).
 
-Java, .NET, Ruby, RE2, Rust, Tcl and Emacs are named and report
+Java, .NET, Ruby, RE2, Rust, Tcl, Emacs and RE/flex are named and report
 `GRX_ERR_UNSUPPORTED`.
 
 | Dialect | What it means here |
 | --- | --- |
 | ECMAScript, PCRE2, Perl, POSIX BRE, POSIX ERE, GNU BRE, GNU ERE, Python, Vim, I-Regexp | Compiles and matches, on whichever engine can run the pattern. |
-| Java, .NET, Ruby, RE2, Rust, Tcl, Emacs | Named. A pattern reports `GRX_ERR_UNSUPPORTED`. |
+| Java, .NET, Ruby, RE2, Rust, Tcl, Emacs, RE/flex | Named. A pattern reports `GRX_ERR_UNSUPPORTED`. |
 
 ## Before you call it
 
@@ -181,7 +181,7 @@ JSON Schema `pattern` and `patternProperties`.
 ## Status
 
 The ten dialects above compile and match on whichever of the three engines
-can run the pattern. The other seven report `GRX_ERR_UNSUPPORTED`.
+can run the pattern. The other eight report `GRX_ERR_UNSUPPORTED`.
 
 ### Conformance
 

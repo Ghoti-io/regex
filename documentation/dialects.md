@@ -12,18 +12,20 @@ provisional until §3 below replaces them.
 
 ## 1. What is implemented
 
-Seventeen dialects are named in `GRX_Syntax`, so the enum does not move when
+Eighteen dialects are named in `GRX_Syntax`, so the enum does not move when
 one of them is added.
 
 | Dialects | Status |
 | --- | --- |
 | **ECMAScript**, **PCRE2**, **Perl**, **Python**, **Vim**, **POSIX BRE/ERE**, **GNU BRE/ERE** | Implemented. Each has an oracle on this machine. |
 | **I-Regexp** (RFC 9485) | Implemented. The only one whose references are not implementations *of it*: an ABNF is the authority, and two programs answer its two halves (§10). |
-| Java, .NET, Ruby, RE2 (Go), Rust, Tcl, Emacs | Not implemented. Selecting one is `GRX_ERR_UNSUPPORTED` with `GRX_DIAG_DIALECT_NOT_IMPLEMENTED`, never a silent fallback to another dialect. |
+| Java, .NET, Ruby, RE2 (Go), Rust, Tcl, Emacs, RE/flex | Not implemented. Selecting one is `GRX_ERR_UNSUPPORTED` with `GRX_DIAG_DIALECT_NOT_IMPLEMENTED`, never a silent fallback to another dialect. |
 
 A pattern accepted under `GRX_SYNTAX_RE2`, once that dialect exists, is one
 the linear engine is guaranteed to run. RE2 and Rust are deliberate subsets
-of the dialects above. Java, .NET and Ruby are the Perl family with their
+of the dialects above; **RE/flex** is the same guarantee arrived at from the
+other side, a lexer generator's DFA that never had a backtracker to give up
+(§3, and the row's own comment in `src/syntax/syntax.c`). Java, .NET and Ruby are the Perl family with their
 own profiles. Tcl and Emacs are lexically furthest from the others.
 
 ## 2. References and oracles
@@ -53,6 +55,31 @@ this design was written on; a CI job installs the rest
 | Vim | `vim` | Vim 9.2, patches 1-1129 | `:help pattern` | `vim -es` with `matchlist()` (pinned); no corpus to import, a generated one |
 | Emacs | `emacs` | GNU Emacs 29 | Elisp Reference Manual, "Regular Expressions" | `emacs --batch` (install) |
 | I-Regexp | `i-regexp` | RFC 9485 (October 2023), with its two errata | Figure 1's ABNF; §3 for what it removes from XSD; §4 for the semantics it borrows | **two, neither an implementation of I-Regexp:** iregexp-check 0.1.4 (pinned) reads Figure 1 a second time; libxml2 2.14.6 through lxml 6.1.3 (pinned) runs XSD's semantics, which §5.2 makes the identity mapping. §10.4 |
+| RE/flex | `reflex` | RE/flex 6.5.0 | the RE/flex manual's pattern sections; `ugrep --help regex`, whose `(-P)` marker is the line between RE/flex's own matcher and PCRE2 | **none yet, and this row is the one to read before trusting the others.** See below |
+
+**RE/flex has no oracle here, and what looks like one is not.** `ugrep` is
+RE/flex's main consumer and would be the obvious thing to ask, but the only
+`ugrep` on this machine is the copy built into the Claude Code CLI, reached
+through a shell function that rewrites `grep`. It answers `--version` with
+"ugrep 7.8.4" and `--help regex` with what reads as ugrep's own help, and
+the probes recorded in §3 and in `src/syntax/syntax.c` were taken from it.
+That is worth exactly what it is: evidence from a binary this project does
+not install, does not pin, cannot version against upstream, and whose
+presence is an accident of how one session happened to be run. It is not
+one of the pinned oracles in the table above and must not be promoted into
+one by being cited often enough.
+
+Three consequences, all of them WP-48's to fix:
+
+- **The row is provisional in the same way Java's and Ruby's are**, read off
+  a reference document, with the probes as corroboration rather than as the
+  source.
+- **A real oracle means installing RE/flex itself**, not ugrep - the pin
+  names the library, and the two are not the same dialect. ugrep gates
+  capturing groups and lookaround behind `-P` (PCRE2); the RE/flex library's
+  own matcher makes its own choices, and a row built from ugrep's help would
+  be a row about ugrep. `tools/oracle/containers/` is where that belongs.
+- **One disagreement is already visible** between the two: see §3.
 
 ### 2.1 Python's oracle is the only one that is not a subprocess
 
@@ -186,6 +213,36 @@ references and worth recording now so nobody builds on the wrong row:
 - **RE2** and **Go** accept `(?P<n>)` and, since Go 1.22, `(?<n>)`.
 - **Rust** has `&&`, `--`, `~~` and nested classes; it has no lookaround
   and no backreferences, like RE2.
+- **RE/flex** is a DFA and has no backreference and no lookaround: `ugrep
+  --help regex` marks `\1`, `\g{10}`, `\g{X}`, `(?=...)`, `(?!...)`,
+  `(?<=...)` and `(?<!...)` all `(-P)`, meaning PCRE2 answers them and its
+  own matcher does not, and a probe answered "error at position 8" for
+  `(a)\1`. What it kept from the Perl side is the lazy quantifier - `a*?`,
+  `a+?`, `a??`, `a{3}?`, `a{3,}?`, `a{3,7}?`, all listed unmarked - and
+  `(?#...)` comments. It has no possessive quantifier; `a++` is an error.
+  Its escapes are `\xhh`, `\x{hhhh}`, `\u{hhhh}`, `\0ddd`, `\cZ` and
+  `\Q...\E`; its boundaries are `\b`, `\B`, `\<`, `\>`; its anchors are
+  `\A` and `\Z` with **no `\z`**, and they are documented as beginning and
+  end *of file* rather than of subject, which is a §5.3 question this row
+  does not answer. Four spellings collide with the Perl family and mean
+  something else: `\X` is "any character and `\n`" and not a grapheme
+  cluster, `\v` is a vertical tab and not the vertical-space class, `\s`
+  is "a whitespace except `\n`", and a negated class `[^abc]` excludes the
+  newline too. It has `\i`, `\j` and `\k` indent, nodent and dedent
+  anchors, which no other dialect here has and which have no meaning
+  outside a lexer's line-oriented input.
+- **RE/flex: the reference and a probe disagree about `(?:...)`**, and it is
+  recorded rather than resolved. `ugrep --help regex` lists `(...)` twice -
+  "non-capturing group" plain and "capturing group (-P)" - and lists
+  `(?:...)` as `(-P)`, from which a group in the bare dialect groups and
+  captures nothing and the explicit non-capturing spelling is PCRE2's. But
+  `ugrep -E -o '(?:ab)'` against "aaab" answered "ab" with no `-P`. One of
+  the two is wrong and this project has no standing to say which: the row in
+  `src/syntax/syntax.c` leaves `NON_CAPTURING` clear, which is the
+  reference's answer, and WP-48 asks a RE/flex that can be pinned. The same
+  caution applies to `(?i)` and `(?i:...)`, which both answered in the probe
+  and appear in neither the overview - it says it "excludes some advanced
+  patterns" - nor in a part of the manual that could be quoted here.
 - **Vim** has lookaround as `\@=`, `\@!`, `\@<=`, `\@<!`, atomic as `\@>`,
   and non-greedy as `\{-}`; none is spelled the Perl way, and all five of
   the first group are *postfix* - `\(foo\)\@=` asserts over the group

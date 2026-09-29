@@ -18,6 +18,8 @@
 
 #include "test_helpers.h"
 
+#include "../../src/syntax/syntax_internal.h"
+
 TEST(Syntax, EveryDialectHasAUniqueName) {
   std::set<std::string> names;
   for (int i = 0; i < GRX_SYNTAX_COUNT; i++) {
@@ -110,10 +112,17 @@ TEST(Syntax, PosixBasicHasNoAlternation) {
 }
 
 TEST(Syntax, LinearTimeDialectsHaveNeitherBackreferencesNorLookaround) {
-  // RE2 and the Rust crate guarantee linear time, and neither construct can
-  // be run in linear time. A table that granted them either would let a
-  // pattern compile that the Pike VM then could not execute.
-  for (GRX_Syntax syntax : {GRX_SYNTAX_RE2, GRX_SYNTAX_RUST}) {
+  // RE2, the Rust crate and RE/flex guarantee linear time, and neither
+  // construct can be run in linear time. A table that granted them either
+  // would let a pattern compile that the Pike VM then could not execute.
+  //
+  // RE/flex reaches the same place from the other direction: RE2 and Rust
+  // are subsets of the Perl family that left the two constructs out, and
+  // RE/flex is a lexer's DFA that never had them. `ugrep --help regex`
+  // marks `(?=...)`, `(?<=...)`, `\1` and `\g{X}` as needing option `-P`,
+  // which is the line where its own matcher stops and PCRE2 starts.
+  for (GRX_Syntax syntax : {GRX_SYNTAX_RE2, GRX_SYNTAX_RUST,
+           GRX_SYNTAX_REFLEX}) {
     EXPECT_FALSE(
         grx_syntax_has_feature(syntax, GRX_FEATURE_BACKREFERENCE))
         << grx_syntax_name(syntax);
@@ -122,6 +131,43 @@ TEST(Syntax, LinearTimeDialectsHaveNeitherBackreferencesNorLookaround) {
     EXPECT_FALSE(grx_syntax_has_feature(syntax, GRX_FEATURE_LOOKBEHIND))
         << grx_syntax_name(syntax);
   }
+}
+
+TEST(Syntax, ReflexPrefersTheLongestMatchRatherThanTheFirst) {
+  // The one profile cell RE/flex's row states, and it is stated because its
+  // default is *wrong* here rather than merely unprobed:
+  // GRX_PREFER_LEFTMOST_FIRST is zero and is Perl's rule, so a row left out
+  // would have claimed the opposite of what the reference says. RE/flex's
+  // documentation: "The RE/flex matcher only supports POSIX mode matching
+  // and does not support Perl mode matching."
+  //
+  // Asserted against the constant and not merely against non-zero, because
+  // "not Perl's" is what a wrong non-zero value would also satisfy.
+  GRX_Profile profile;
+  std::memset(&profile, 0, sizeof(profile));
+  ASSERT_EQ(grx_syntax_profile(GRX_SYNTAX_REFLEX, &profile), GRX_OK);
+  EXPECT_EQ(profile.preference, GRX_PREFER_LEFTMOST_LONGEST);
+  EXPECT_NE(profile.preference, GRX_PREFER_LEFTMOST_FIRST);
+}
+
+TEST(Syntax, ReflexIsADfaThatKeptTheLazyQuantifier) {
+  // This is why RE/flex is a dialect rather than POSIX ERE with a different
+  // name. Its matcher is a DFA, so the row above takes its backreferences
+  // and its lookaround away - but `a*?`, `a+?`, `a??` and `a{3,7}?` are all
+  // listed by `ugrep --help regex` *without* the `(-P)` marker every
+  // PCRE2-only construct carries, and a probe against ugrep 7.8.4 answered
+  // "aaab" for `a*?b` with no `-P`. POSIX ERE has no lazy quantifier at all,
+  // which is the pair that makes the two rows different.
+  EXPECT_TRUE(
+      grx_syntax_has_feature(GRX_SYNTAX_REFLEX, GRX_FEATURE_NON_GREEDY));
+  EXPECT_FALSE(
+      grx_syntax_has_feature(GRX_SYNTAX_POSIX_ERE, GRX_FEATURE_NON_GREEDY));
+
+  // Lazy and not possessive: `a++` is "error at position 6" in the same
+  // probe. A DFA can run the first in linear time and has no use for the
+  // second, which only means anything to a backtracker.
+  EXPECT_FALSE(
+      grx_syntax_has_feature(GRX_SYNTAX_REFLEX, GRX_FEATURE_POSSESSIVE));
 }
 
 TEST(Syntax, EveryDialectHasBoundedRepetition) {

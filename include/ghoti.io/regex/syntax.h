@@ -83,6 +83,21 @@ typedef enum {
    * read as ECMAScript.
    */
   GRX_SYNTAX_IREGEXP,
+  /**
+   * RE/flex, the regex library ugrep and the RE/flex lexer generator use.
+   *
+   * Appended for the same ABI reason I-Regexp is: a caller compiled against
+   * an earlier header holds the old numbers, so a constant is added at the
+   * end and never inserted beside the family it belongs to.
+   *
+   * It earns a constant rather than being read as POSIX ERE because its own
+   * matcher is a DFA that took the *Perl* side of two arguments POSIX does
+   * not have: `a*?` is lazy there, with no backtracking and no `-P`, and
+   * `(?#...)` is a comment. It took neither of the two that cost linear
+   * time - no backreference, no lookaround - which is the same shape as
+   * RE2's row and, like RE2's, is the reason the dialect exists.
+   */
+  GRX_SYNTAX_REFLEX,
   GRX_SYNTAX_COUNT          ///< Closes the enum; not a dialect.
 } GRX_Syntax;
 
