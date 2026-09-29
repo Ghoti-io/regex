@@ -581,6 +581,7 @@ static size_t longest_from(GRX_Dfa * dfa, const char * subject, size_t length,
     const uint32_t * trans = cache->trans;
     const State * states = cache->states;
     while (pos < length && *budget) {
+      uint32_t from = index;
       uint32_t next
           = trans[(size_t)index * 256 + (unsigned char)subject[pos]];
       if (next >= STATE_UNKNOWN) {
@@ -591,11 +592,42 @@ static size_t longest_from(GRX_Dfa * dfa, const char * subject, size_t length,
       if (next & STATE_ACCEPT) {
         index = next & STATE_INDEX;
         best = pos;
-        continue;
       }
-      index = next;
-      if (!states[index].count) {
-        return best;   /* Nothing alive: no longer match can start here. */
+      else {
+        index = next;
+        if (!states[index].count) {
+          return best;   /* Nothing alive: no longer match can start here. */
+        }
+      }
+      if (index == from) {
+        /* That byte led back to the state it came from, so a repeat of it
+         * leads back again - the transition is the one already in hand and
+         * the table has nothing left to say about this run.
+         *
+         * Which is worth far more than the load it saves. The cost of this
+         * loop is not its work but its shape: `index` addresses the next
+         * read, so every byte waits a full load latency for the byte before
+         * it, and the same 4 KB that costs 2.21 ns a byte that way costs
+         * 0.22 as a byte compare. A run of one repeated byte is the case
+         * that matters - `a+` over a long stretch of `a` is most of what the
+         * anchored scan spends its budget on - and it is the one case that
+         * needs no state, no bitmap and nothing kept in step with the lazy
+         * fill, since the byte just read IS the whole condition.
+         *
+         * Exact, not approximate: the transition is deterministic and the
+         * state does not change, so the only observable a skipped byte could
+         * carry is the accepting position, and that is the last of them. */
+        unsigned char repeat = (unsigned char)subject[pos - 1];
+        size_t limit = *budget < length - pos ? pos + *budget : length;
+        size_t run = pos;
+        while (run < limit && (unsigned char)subject[run] == repeat) {
+          run++;
+        }
+        *budget -= run - pos;
+        pos = run;
+        if (next & STATE_ACCEPT) {
+          best = pos;
+        }
       }
     }
     if (pos >= length) {

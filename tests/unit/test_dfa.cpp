@@ -189,6 +189,137 @@ TEST(Dfa, ItAnswersWhatThePikeVmAnswersOnAGeneratedPopulation) {
   EXPECT_LT(gave_up, compared / 4) << "the state cache gave up too often";
 }
 
+TEST(Dfa, ARunOfOneRepeatedByteKeepsWhereItLastAccepted) {
+  // The anchored scan reads a run of one repeated byte off without consulting
+  // the transition table again, because a byte that led back to the state it
+  // came from will do so every time. What that must not lose is the accepting
+  // position: a state that both loops AND accepts is a match ending at every
+  // byte of the run, and the answer is the last of them - so skipping the run
+  // has to leave `best` at its end, not at its start. `a*` and `a+` are that
+  // shape and `a*b` is not, which is why both are here.
+  //
+  // The generated population above uses subjects of at most forty bytes over
+  // four letters, where a run is two or three bytes and the skip is an edge
+  // of the loop rather than the thing under test. These are long on purpose,
+  // and the lengths around 63/64/65 are there because a skip that works on a
+  // whole number of anything is the shape that hides an off-by-one.
+  static const char * const kPatterns[] = {
+      "a*",           // accepting self-loop, the whole pattern
+      "a+",           // ...reached after one byte
+      "a{3,}",        // ...reached after three
+      "[ab]*",        // an accepting loop over a class
+      "[^b]*",        // ...over a negated class
+      ".*",           // ...over everything
+      "a*b",          // a loop that does NOT accept, then a byte
+      "a+b",          // the same, entered after one byte
+      "(a+)(b+)",     // the benchmark's own case
+      "a*q",          // a loop then a byte that is absent from the run
+      "[ab]+c",       // a class loop then a byte
+  };
+  static const size_t kLengths[] = {0, 1, 2, 3, 8, 63, 64, 65, 1000, 5000};
+  size_t compared = 0;
+  size_t long_runs = 0;
+  for (const char * pattern : kPatterns) {
+    GRX_Regex * regex = nullptr;
+    ASSERT_EQ(grx_regex_compile(
+                  pattern, GRX_SYNTAX_POSIX_ERE, GRX_OPT_NONE, &regex),
+        GRX_OK)
+        << pattern;
+    ASSERT_TRUE(grx_dfa_eligible(&regex->program)) << pattern;
+    GRX_Dfa * dfa = grx_dfa_create(nullptr, &regex->program, 0);
+    ASSERT_NE(dfa, nullptr) << pattern;
+    for (size_t n : kLengths) {
+      std::vector<std::string> subjects;
+      subjects.push_back(std::string(n, 'a'));
+      subjects.push_back(std::string(n, 'a') + "b");
+      subjects.push_back(std::string(n, 'a') + "q");
+      subjects.push_back(std::string(n, 'a') + std::string(n, 'b'));
+      subjects.push_back("b" + std::string(n, 'a'));
+      for (const std::string & subject : subjects) {
+        GRX_Match * match = nullptr;
+        ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+        int matched = 0;
+        GRX_Result rc = grx_regex_search(regex, subject.data(),
+            subject.size(), 0, GRX_ENGINE_PIKE, nullptr, match, &matched);
+        GRX_Capture span {GRX_NPOS, GRX_NPOS};
+        if (rc == GRX_OK && matched) { grx_match_span(match, &span); }
+        grx_match_destroy(match);
+        if (rc != GRX_OK) { continue; }
+        for (int which = 0; which < 2; which++) {
+          size_t begin = 0;
+          size_t end = 0;
+          size_t steps = 0;
+          int got = which
+              ? grx_dfa_search_skipping(dfa, subject.data(), subject.size(),
+                    0, subject.size() * 64 + 64, &steps, &begin, &end)
+              : grx_dfa_search(
+                    dfa, subject.data(), subject.size(), 0, &begin, &end);
+          if (got < 0) { continue; }
+          compared++;
+          EXPECT_EQ(got, matched)
+              << "/" << pattern << "/ on a " << subject.size()
+              << "-byte subject (" << (which ? "skipping" : "every") << ")";
+          if (got && matched) {
+            EXPECT_EQ(begin, span.start)
+                << "/" << pattern << "/ on a " << subject.size()
+                << "-byte subject (" << (which ? "skipping" : "every") << ")";
+            EXPECT_EQ(end, span.end)
+                << "/" << pattern << "/ on a " << subject.size()
+                << "-byte subject (" << (which ? "skipping" : "every") << ")";
+            if (end - begin > 8) { long_runs++; }
+          }
+        }
+      }
+    }
+    grx_dfa_free(dfa);
+    grx_regex_free(regex);
+  }
+  EXPECT_GT(compared, 500u) << "almost nothing reached the DFA";
+  EXPECT_GT(long_runs, 100u)
+      << "every match here was short enough to be walked a byte at a time, "
+         "so the skip this test exists for was never taken";
+}
+
+TEST(Dfa, SkippingARunStillSpendsTheBudgetTheRunCosts) {
+  // The budget is what stops the anchored scan being quadratic, so it has to
+  // be charged for every byte the scan consumes - including the ones the
+  // repeated-byte skip consumes without reading the table. Skipped bytes are
+  // cheaper than walked ones; they are not free, and n candidate positions
+  // over an n-byte run is still n squared of them.
+  //
+  // Nothing about the ANSWER can see this: with the budget uncharged the
+  // scan returns the same spans, only after doing unbounded work. So the
+  // observable has to be the handing back itself - a budget far smaller than
+  // the run must produce a refusal and not an answer.
+  GRX_Regex * regex = nullptr;
+  ASSERT_EQ(grx_regex_compile("a*", GRX_SYNTAX_POSIX_ERE, GRX_OPT_NONE,
+                &regex),
+      GRX_OK);
+  GRX_Dfa * dfa = grx_dfa_create(nullptr, &regex->program, 0);
+  ASSERT_NE(dfa, nullptr);
+  const std::string subject(20000, 'a');
+  size_t begin = 0;
+  size_t end = 0;
+  size_t steps = 0;
+  EXPECT_EQ(grx_dfa_search_skipping(dfa, subject.data(), subject.size(), 0,
+                100, &steps, &begin, &end),
+      -1)
+      << "a 100-step budget answered over a 20,000-byte run, so the skip is "
+         "not being charged for what it consumes";
+  // And the same search with room to finish does answer, so the refusal
+  // above is the budget and not an engine that cannot run this at all.
+  steps = 0;
+  ASSERT_EQ(grx_dfa_search_skipping(dfa, subject.data(), subject.size(), 0,
+                subject.size() * 2 + 64, &steps, &begin, &end),
+      1);
+  EXPECT_EQ(begin, 0u);
+  EXPECT_EQ(end, subject.size());
+  EXPECT_GE(steps, subject.size())
+      << "the run was answered in fewer steps than it has bytes";
+  grx_dfa_free(dfa);
+  grx_regex_free(regex);
+}
+
 TEST(Dfa, WhichProgramsItWillRunAndWhichItRefuses) {
   // By value, because the sweep above can only exercise what it is given and
   // every line here is a rule about what the lift can express.
