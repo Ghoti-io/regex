@@ -620,12 +620,14 @@ per dialect and went from 330 disagreements to 0 through these:
 - **`U` was silently ignored by `tools/oracle/grx_match.c`**, whose own
   comment warns that a letter its table does not know is dropped. 35 rows
   asked the reference for ungreedy matching and this library for greedy.
-- **The empty-loop cell is `BREAK_FIRST`** - POSIX's rule, arrived at from
-  the other side: these are automata, and an automaton has no "iteration"
-  to fail. Two measurements were needed and either alone chooses wrongly.
+- **The empty-loop cell is not an empty-loop cell.** It read `BREAK`, then
+  `BREAK_FIRST` once `(a*)*` over "b" and `(a|)*` over "aaaa" were
+  measured - both measurements correct, and both answers wrong, because the
+  question was. See below.
 - **A counted repeat is not a loop at all.** Both engines expand `x{n,m}`,
   so `(a|){1,2}` over "a" reports group 1 as 1-1 where the loop rule would
-  give 0-1. New profile field `bounded_repeat_allows_empty`.
+  give 0-1. This had a profile field of its own until the mode below
+  subsumed it.
 - **Go widens `\w` under caseless and leaves `\b`'s word set alone**, which
   is a corner of the 2x2 that `caseless_widens_shorthands` documented with
   three references in it and no fourth. New field
@@ -647,6 +649,51 @@ which is the argument for keeping both: a negated set *expression* needs a
 complement operation rather than the node flag (`[^a--b]`), and a nested
 class in the middle of a member run has to become its own operand, because
 a class node names a contiguous span of the item table.
+
+**And one that neither found, which is the more useful story.** The run
+above finished with a single disagreement, filed as a known gap: `(a*)+b`
+under `U` reported group 1 as 1-2 where the crate said 0-2. One row in
+105,000, and it read like a thread-priority oddity worth a line in
+`known-gaps.txt` and no more.
+
+It was a whole cell. Enumerating the shape rather than sampling it - twelve
+bodies that can match empty, seven quantifiers, three tails, ten subjects -
+finds 62 disagreements in 5,040 rows across 22 patterns, and `regexp` and
+the crate agree with each other on every one of the 5,040. Some of them move
+the overall match and not only the groups.
+
+The rule behind them is that **neither reference backtracks**, so a loop
+over a body that can match empty ends where the simulation has already
+been. A fresh iteration that begins where a continuing one already stands is
+not failed, broken or allowed: it arrives at a state the walk has reached
+and is dropped there. `GRX_EMPTY_LOOP_SIMULATE` is that, and it is the only
+mode in the enum that is a claim about the *program* rather than about an
+instruction - a loop whose body can match empty is emitted as `(e+)?`, one
+copy of the body with the split at its foot, and carries no progress
+register. Both halves are load-bearing and a model of the two reproduces
+99,000 random rows from `regexp` and 24,000 from the crate exactly.
+
+It reaches the engines once: the path the simulation drops is a path a
+backtracker completes, so such a program carries
+`GRX_PROGRAM_SIMULATED_LOOP` and runs with the visited bitmap armed from the
+first step rather than as an optimisation. Without that the backtracker
+answered 347 of the 5,040 differently from the Pike VM.
+
+Three things are worth taking from it and none of them is about regular
+expressions:
+
+- **A gate reported clean over a population it could not see.** The random
+  pass reaches this shape only when it happens to put a nested empty loop
+  next to something that forces the loop to give ground. It did that once.
+- **A single surviving disagreement is a sample, not an outlier.** It was
+  filed as one row because it was found as one row, and the filing said so
+  honestly, and the honest description was still wrong by a factor of 62.
+- **Two correct measurements chose a wrong cell twice.** `BREAK` and
+  `BREAK_FIRST` each answered everything anyone had asked. The way out was
+  not a better measurement of the same question.
+
+`tools/oracle/linear_diff.py` now runs the cross-product alongside its
+random pass, so the cell is covered by construction.
 
 ### Phase 7: Tcl, Vim and Emacs
 

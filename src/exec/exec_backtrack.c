@@ -376,6 +376,13 @@ typedef struct {
  * the whole run return, so a bit that is set is a state that failed, and a
  * state that failed once fails always.
  *
+ * With one exception, and it is deliberate: a program carrying
+ * GRX_PROGRAM_SIMULATED_LOOP has an epsilon cycle with no guard in it, so a
+ * set bit there can also be a state still on the stack. Skipping *that* one
+ * is not an optimisation and does change the answer - it is the answer, and
+ * it is the same one the Pike VM's thread list gives. See
+ * GRX_EMPTY_LOOP_SIMULATE.
+ *
  * The bitmap is not cleared between starting positions, which is what makes
  * the whole *search* linear rather than each attempt. That is sound for the
  * same reason - but it takes one more step to see it for the one thing in
@@ -1760,6 +1767,11 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
             break;
           }
           case GRX_EMPTY_LOOP_ALLOW:
+          // Never emitted: a loop under GRX_EMPTY_LOOP_SIMULATE carries no
+          // progress register, so there is no check to reach. Named here
+          // rather than left to the default so that the enum's arms are
+          // the enum's members.
+          case GRX_EMPTY_LOOP_SIMULATE:
           case GRX_EMPTY_LOOP_COUNT:
           default:
             pc++;

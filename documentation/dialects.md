@@ -498,8 +498,9 @@ The two rules that make `(a*)*` against `b` report different things:
 | Axis | Value | Dialects |
 | --- | --- | --- |
 | Empty iteration | `FAIL_IF_EMPTY_AFTER_MIN`: an iteration that consumes nothing, once `min` is satisfied, fails (22.2.2.3.1 RepeatMatcher step 2.b) | ECMAScript |
-| | `BREAK_ON_EMPTY`: the iteration succeeds and the loop stops | Perl, PCRE2, Python, Java (**probe**), .NET (**probe**), Ruby (**probe**), RE2, Rust |
+| | `BREAK_ON_EMPTY`: the iteration succeeds and the loop stops | Perl, PCRE2, Python, Java (**probe**), .NET (**probe**), Ruby (**probe**) |
 | | `BREAK_IF_UNMOVED`: the iteration succeeds and the loop stops, but only while the *repeat* has consumed nothing; once it has, the empty iteration does not run at all | POSIX, GNU, Vim |
+| | `ALREADY_THERE`: there is no iteration rule, because the loop is not a loop the engine can enter twice at one position; it ends where the simulation has already been | RE2, Rust |
 | | `LONGEST`: irrelevant; the match is the longest, and an empty iteration adds nothing | Tcl |
 | Capture reset | `RESET_EACH_ITERATION`: captures inside the group are cleared at the **start** of every iteration (RepeatMatcher step 4) | ECMAScript |
 | | `RESET_AFTER_EACH_ITERATION`: an iteration clears, on the way **out**, the ones it did not itself set | **Perl** (probed) |
@@ -524,6 +525,43 @@ against "ab" is 1-2 in both of vim's engines and would be 0-2 under
 sticks. The trailing case is where vim's two engines part - `\%(a\|\zs\)*`
 against "aa" is 2-2 under `re=2` and 0-2 under `re=1` - and the old engine's
 answer is this row's.
+
+**RE2 and the crate are the fourth row, and getting there cost three wrong
+answers to the same question.** The cell read `BREAK_ON_EMPTY` from their
+documentation, then `BREAK_IF_UNMOVED` once `(a*)*` over `"b"` and `(a|)*`
+over `"aaaa"` were measured - and both of those measurements are still
+correct. What they are not is the question. `(a*)+b` under `U` - that is
+`(a*?)+?b` - reports group 1 as 0-2 over `"aab"` in `regexp` and in the
+crate, where every backtracking engine including this library's own says
+1-2. No rule about what an empty iteration *does* produces 0-2, because
+under it the fresh iteration never runs: it begins where the continuing one
+already stands, arrives at a state the walk has already reached, and is
+dropped there.
+
+So for these two the rule is the shape of the program rather than a mode on
+an instruction. A loop whose body can match empty is emitted as `(e+)?` -
+one copy of the body with the split at its foot - and carries no progress
+register at all, which is both halves of it: where the split sits decides
+whether an empty iteration's captures survive (`(a*)*` over `"b"` is 0-0
+with the split at the foot and unset with it at the top), and the absent
+register is what lets two threads at one program counter be the same thread.
+
+Enumerating that shape rather than sampling it is the difference between
+seeing this and not. A 105,000-row differential reached one row of it; the
+cross-product of twelve bodies, seven quantifiers, three tails and ten
+subjects reached 62 of 5,040, and both references agree on every one.
+`tools/oracle/linear_diff.py` now runs that cross-product alongside its
+random pass, for the reason that it is 22 patterns wide and a gate that
+samples a region that small reports a fraction of a defect.
+
+One consequence reaches the engines. The rule is "a state the walk has
+already reached is not reached again", which a Pike VM gets from its thread
+list and a backtracker gets only from a visited bitmap - the path the
+simulation drops is a path a backtracker *completes*. So a program with such
+a loop carries `GRX_PROGRAM_SIMULATED_LOOP` and runs with the bitmap armed
+from the first step on either backtracking engine, rather than after a
+threshold as an optimisation. Without that, `GRX_ENGINE_BACKTRACK` answered
+347 of the 5,040 differently from the other two.
 
 "The repeat", not "its optional tail", is the whole of the distinction.
 `(b+|(c)*)+` against `"b"` has one mandatory copy, which consumes the `b`; if

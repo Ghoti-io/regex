@@ -1272,6 +1272,11 @@ static void add_thread(
             break;
           }
           case GRX_EMPTY_LOOP_ALLOW:
+          // Never emitted: a loop under GRX_EMPTY_LOOP_SIMULATE carries no
+          // progress register, so there is no check to reach. Named here
+          // rather than left to the default so that the enum's arms are
+          // the enum's members.
+          case GRX_EMPTY_LOOP_SIMULATE:
           case GRX_EMPTY_LOOP_COUNT:
           default:
             stack[depth].pc = current_pc + 1;

@@ -118,6 +118,38 @@ REFUSED_ONLY = {
              "[\\d-x]", "{", "(?P<n>a)(?P<n>b)", "(?P<1a>a)"],
 }
 
+# The shape battery: a cross-product rather than a sample, and it is here
+# because the random pass above could not see the cell it covers. Both
+# references end a loop over a body that can match empty by meeting a state
+# the walk has already reached, which is not any of the three empty-iteration
+# rules a backtracking dialect can hold - and 62 of these 5,040 rows moved
+# when this library learned that. The random pass reached exactly one of the
+# 62 in 105,000 rows, because the shape needs a nested potentially-empty
+# loop *and* something after it that forces the loop to give ground, and
+# concatenating four atoms from a vocabulary reaches that pairing by luck.
+#
+# So it is enumerated. Sampling a region this small is the same mistake as
+# not testing it: the cell is 22 patterns wide, and a gate that meets a fifth
+# of it reports a fifth of a defect.
+SHAPE_BODIES = ["(a*)", "(a*?)", "(a|)", "(|a)", "(a?)", "((a)*)", "(a*b*)",
+                "(a|b*)", "(a*)(b*)", "(?:a*)", "(a{0,2})", "(a*|b)"]
+SHAPE_QUANTIFIERS = ["*", "+", "*?", "+?", "{0,3}", "{1,3}", "{2,4}"]
+SHAPE_TAILS = ["", "b", "c"]
+SHAPE_SUBJECTS = ["", "b", "a", "aa", "aab", "ab", "aaab", "abab", "bb",
+                  "aabb"]
+SHAPE_FLAGSETS = ["", "U"]
+
+
+def shape_cases():
+    """Every combination, because the cell is small enough to enumerate."""
+    for body in SHAPE_BODIES:
+        for quantifier in SHAPE_QUANTIFIERS:
+            for tail in SHAPE_TAILS:
+                for subject in SHAPE_SUBJECTS:
+                    for flags in SHAPE_FLAGSETS:
+                        yield (flags, body + quantifier + tail, subject)
+
+
 SUBJECTS = [
     "", "a", "b", "ab", "ba", "aa", "aab", "abab", "abc", "c",
     "a\n", "\na", "a\nb", "\n", "aaa", "aaaa", "a\r\nb",
@@ -241,6 +273,9 @@ def main():
     parser.add_argument("--examples", type=int, default=12)
     parser.add_argument("--strict", action="store_true",
                         help="exit 1 if the two disagree anywhere")
+    parser.add_argument("--no-shapes", dest="shapes", action="store_false",
+                        help="skip the enumerated nested-loop battery")
+    parser.set_defaults(shapes=True)
     args = parser.parse_args()
 
     driver = find("grx_match")
@@ -258,6 +293,8 @@ def main():
                                     min(args.subjects, len(SUBJECTS))))
         for subject in subjects:
             cases.append((flags, pattern, subject))
+    if args.shapes:
+        cases.extend(shape_cases())
 
     theirs = ask_reference(args.dialect, cases)
     if not theirs:

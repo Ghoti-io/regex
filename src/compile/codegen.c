@@ -74,6 +74,7 @@ typedef struct {
   GRX_Error * error;         ///< Where a failure is reported.
   uint32_t registers;        ///< Progress registers handed out so far.
   int no_memo;               ///< An opcode the bit-state memo cannot survive.
+  int simulated;             ///< A loop the walk ends rather than a guard.
   int has_keep_end;          ///< A `\ze` claimed the end; see the epilogue.
   /**
    * What is being emitted is the tail of a forward lookbehind body.
@@ -305,11 +306,13 @@ typedef struct {
       uint32_t top;
       uint32_t split;
       uint32_t body_start;
+      uint32_t enter;
       uint8_t lazy;
       uint8_t guard;
       uint8_t late;
       uint8_t empty_first;
       uint8_t clears_tail;
+      uint8_t simulate;
     } repeat;
     /** COND and its assertion form: the jumps waiting for their targets. */
     struct {
@@ -577,6 +580,23 @@ static int can_match_empty(Codegen * codegen, uint32_t node_index) {
     *slot = answer ? 1u : 2u;
   }
   return answer;
+}
+
+/**
+ * Whether this repeat is one the simulation shapes rather than guards.
+ *
+ * GRX_EMPTY_LOOP_SIMULATE is a claim about the program, so it is asked here
+ * and only here, and it is asked about the *unbounded* form: a counted
+ * repeat is copies with no back edge, so it has no state to arrive at twice
+ * and needs neither the guard nor the shape. The body still has to be able
+ * to match empty, because a body that cannot is already emitted as the
+ * reference emits it and changing it would be churn with a differential
+ * attached.
+ */
+static int simulated_loop(Codegen * codegen, const GRX_IRNode * node,
+    uint32_t body) {
+  return node->empty_loop == GRX_EMPTY_LOOP_SIMULATE
+      && node->max == GRX_REPEAT_INF && can_match_empty(codegen, body);
 }
 
 /**
@@ -1100,6 +1120,16 @@ static GRX_Result gen_repeat_step(Codegen * codegen, GenFrame * frame,
       frame->u.repeat.late = resets_captures_late(codegen, node) ? 1u : 0u;
       frame->u.repeat.late_reg
           = frame->u.repeat.late ? codegen->registers++ : 0;
+      // The simulation's shape puts the loop's one copy of the body at the
+      // foot of the mandatory run rather than after it, so stage 1 emits one
+      // copy fewer and stage 12 emits the one it held back. `(a*)+` is a
+      // body and a split either way; what moves is where the split is.
+      frame->u.repeat.simulate
+          = simulated_loop(codegen, node, body) ? 1u : 0u;
+      if (frame->u.repeat.simulate) {
+        codegen->simulated = 1;
+      }
+      frame->u.repeat.enter = GRX_INDEX_NONE;
 
       /*
        * GRX_EMPTY_LOOP_BREAK_FIRST needs a second number: the position the
@@ -1140,7 +1170,10 @@ static GRX_Result gen_repeat_step(Codegen * codegen, GenFrame * frame,
 
     // One mandatory copy per iteration of this stage pair.
     case 1: {
-      if (frame->u.repeat.i >= node->min) {
+      uint32_t mandatory = frame->u.repeat.simulate && node->min
+          ? node->min - 1u
+          : node->min;
+      if (frame->u.repeat.i >= mandatory) {
         frame->stage = 3;
         *action = GEN_AGAIN;
         return GRX_OK;
@@ -1180,7 +1213,7 @@ static GRX_Result gen_repeat_step(Codegen * codegen, GenFrame * frame,
     // The mandatory copies are done. Either a loop, or the optional copies.
     case 3: {
       if (node->max == GRX_REPEAT_INF) {
-        frame->stage = 10;
+        frame->stage = frame->u.repeat.simulate ? 12 : 10;
         *action = GEN_AGAIN;
         return GRX_OK;
       }
@@ -1202,9 +1235,17 @@ static GRX_Result gen_repeat_step(Codegen * codegen, GenFrame * frame,
       // before its body and checks it immediately after, and a thread meets
       // those in that order, so the copies cannot tread on each other. A body
       // that cannot match empty needs none of it; see stage 10.
+      //
+      // A counted repeat is copies with no back edge, so GRX_EMPTY_LOOP_
+      // SIMULATE needs nothing here: there is no state to reach twice, and
+      // the register it would cost is what would make the program
+      // unmemoizable. The mode's two references agree with this across every
+      // `{n,m}` in tools/oracle/linear_diff.py's shape battery.
       frame->u.repeat.guard
-          = can_match_empty(codegen, frame->u.repeat.body) ? 1u
-                                                                     : 0u;
+          = (node->empty_loop != GRX_EMPTY_LOOP_SIMULATE
+                && can_match_empty(codegen, frame->u.repeat.body))
+          ? 1u
+          : 0u;
       frame->u.repeat.reg = frame->u.repeat.empty_first
           ? frame->u.repeat.pair_reg
           : frame->u.repeat.guard ? codegen->registers++
@@ -1289,6 +1330,9 @@ static GRX_Result gen_repeat_step(Codegen * codegen, GenFrame * frame,
       // and - the reason this is a decision rather than a tidy-up - would
       // make the program unmemoizable: a progress register is history the
       // bit-state engine's (pc, position) key does not capture.
+      //
+      // A body that *can* and whose mode is GRX_EMPTY_LOOP_SIMULATE never
+      // arrives here at all; stage 3 sent it to stage 12.
       frame->u.repeat.guard
           = can_match_empty(codegen, frame->u.repeat.body) ? 1u
                                                                      : 0u;
@@ -1361,6 +1405,96 @@ static GRX_Result gen_repeat_step(Codegen * codegen, GenFrame * frame,
       else {
         patch_x(codegen, frame->u.repeat.split, frame->u.repeat.body_start);
         patch_y(codegen, frame->u.repeat.split, exit_target);
+      }
+      return GRX_OK;
+    }
+
+    /*
+     * The simulation's form: `(e+)?`, one copy of the body with the split at
+     * its foot.
+     *
+     *     enter: split body, exit          (only when min is 0)
+     *     body:  <body>
+     *            split body, exit          (arms swapped when lazy)
+     *     exit:
+     *
+     * Against stage 10's `split; body; jmp split`, which is the same language
+     * and a different program. The difference is what a walk that has already
+     * been to the split does with an iteration that consumed nothing: there
+     * it arrives at the split a second time, finds it occupied and dies, so
+     * the captures that iteration wrote go with it; here it leaves by the
+     * split's other arm and they stand. `(a*)*` against "b" is the shortest
+     * case - group 1 is 0-0 in both references and unset under the other
+     * shape - and `(a*?)+b` against "aab" is the one that pays for the copy
+     * stage 1 held back: with two copies of the body the fresh iteration and
+     * the continuing one sit at different program counters, both survive, and
+     * the wrong one is preferred.
+     *
+     * No progress register, which is the other half of the mode and is why
+     * this is not stage 10 with a flag: a register would make those two
+     * threads distinct again, and it is also the one thing that stops the
+     * bit-state engine from running the program at all.
+     */
+    case 12: {
+      GRX_Result result = GRX_OK;
+      if (node->min == 0) {
+        result = emit(codegen, GRX_OP_SPLIT, 0, 0, 0, node, &frame->u.repeat.enter);
+        if (result != GRX_OK) {
+          return result;
+        }
+      }
+      frame->u.repeat.body_start = here(codegen);
+      if (frame->u.repeat.late) {
+        result = emit(codegen, GRX_OP_PROGRESS_SET, 0,
+            frame->u.repeat.late_reg, 0, node, NULL);
+      }
+      if (result == GRX_OK) {
+        result = emit_capture_reset(codegen, node, frame->u.repeat.body);
+      }
+      if (result != GRX_OK) {
+        return result;
+      }
+      if (frame->u.repeat.clears_tail) {
+        codegen->forward_tail = 0;
+      }
+      frame->stage = 13;
+      *action = GEN_DESCEND;
+      *out_child = frame->u.repeat.body;
+      return GRX_OK;
+    }
+
+    case 13: {
+      GRX_Result result = emit_capture_reset_late(
+          codegen, node, frame->u.repeat.body, frame->u.repeat.late_reg);
+      uint32_t split = GRX_INDEX_NONE;
+      if (result == GRX_OK) {
+        result = emit(codegen, GRX_OP_SPLIT, 0, 0, 0, node, &split);
+      }
+      if (result != GRX_OK) {
+        return result;
+      }
+
+      uint32_t exit_target = here(codegen);
+      // Both splits prefer the same arm, because both are this repeat's
+      // greediness asked twice: the `?` about whether to run the body at all
+      // and the `+` about whether to run it again.
+      if (frame->u.repeat.lazy) {
+        patch_x(codegen, split, exit_target);
+        patch_y(codegen, split, frame->u.repeat.body_start);
+      }
+      else {
+        patch_x(codegen, split, frame->u.repeat.body_start);
+        patch_y(codegen, split, exit_target);
+      }
+      if (frame->u.repeat.enter != GRX_INDEX_NONE) {
+        if (frame->u.repeat.lazy) {
+          patch_x(codegen, frame->u.repeat.enter, exit_target);
+          patch_y(codegen, frame->u.repeat.enter, frame->u.repeat.body_start);
+        }
+        else {
+          patch_x(codegen, frame->u.repeat.enter, frame->u.repeat.body_start);
+          patch_y(codegen, frame->u.repeat.enter, exit_target);
+        }
       }
       return GRX_OK;
     }
@@ -2321,6 +2455,7 @@ GRX_Result grx_codegen_program(const GRX_IR * ir, const GRX_Limits * limits,
     .error = out_error,
     .registers = 0,
     .no_memo = 0,
+    .simulated = 0,
     .has_keep_end = 0,
     .called = {0},
     .called_definition = {0},
@@ -2420,6 +2555,11 @@ GRX_Result grx_codegen_program(const GRX_IR * ir, const GRX_Limits * limits,
   }
   if (codegen.no_memo) {
     out_program->flags |= GRX_PROGRAM_NO_MEMO;
+  }
+  if (codegen.simulated) {
+    // Not an optimisation any more: exec.c arms the bitmap for this program
+    // whichever backtracking engine runs it. See GRX_PROGRAM_SIMULATED_LOOP.
+    out_program->flags |= GRX_PROGRAM_SIMULATED_LOOP;
   }
   out_program->preference = ir->preference;
   out_program->submatch = ir->submatch;

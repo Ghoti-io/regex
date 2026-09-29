@@ -418,7 +418,13 @@ static GRX_Result exec(const GRX_Regex * regex, const char * subject,
     .match = match,
     .out_steps = &steps,
     .out_diag = &diag,
-    .memoize = engine == GRX_ENGINE_BITSTATE,
+    // GRX_PROGRAM_SIMULATED_LOOP is the second reason, and it is not the
+    // same reason: there the bitmap is what the dialect's empty-loop rule
+    // *is*, so the backtracker gets it too rather than being handed a
+    // program it would answer differently. The Pike VM reaches the same
+    // answer from its thread list and asks for nothing.
+    .memoize = engine == GRX_ENGINE_BITSTATE
+        || (regex->program.flags & GRX_PROGRAM_SIMULATED_LOOP) != 0,
     // Passed even when the program has no callout in it: the engine tests
     // for the function where it meets the instruction, and one place that
     // decides whether callouts are live is one place to get it wrong.

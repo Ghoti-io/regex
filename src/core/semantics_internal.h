@@ -159,6 +159,29 @@ extern "C" {
 #define GRX_PROGRAM_HAS_SCREEN_COLUMN GRX_BIT(6)
 
 /**
+ * @brief The memo is this program's semantics and not an optimisation.
+ *
+ * Set by codegen.c for a loop it shaped rather than guarded; see
+ * @ref GRX_EMPTY_LOOP_SIMULATE. The mode's rule is "a state the walk has
+ * already reached is not reached again", which the Pike VM gets for free
+ * from its thread list and a backtracker gets only from the visited bitmap -
+ * so for these programs the bitmap is armed from the first step rather than
+ * after `memo_after`, and a run that cannot afford one is GRX_ERR_LIMIT
+ * rather than a run that quietly answers something else.
+ *
+ * The difference is not small and not exotic: `(a*)*` against "aa" reports
+ * group 1 as 0-2 with the bitmap and 2-2 without it, and 347 of 5,040 rows
+ * of tools/oracle/linear_diff.py's shape battery move. Every one of them
+ * moves *onto* both references.
+ *
+ * It is the one place in this library where the two backtracking engines
+ * are not the same engine with and without a memo, and the reason is that
+ * the memo here is answering a different question: not "has this state
+ * already failed" but "is this state already live".
+ */
+#define GRX_PROGRAM_SIMULATED_LOOP GRX_BIT(7)
+
+/**
  * @brief A zero-width assertion.
  *
  * The line and boundary kinds are parameterised by a character class - the
@@ -434,6 +457,42 @@ typedef enum {
    * stands there.
    */
   GRX_EMPTY_LOOP_BREAK_FIRST,
+  /**
+   * There is no rule, because there is no iteration to have one.
+   *
+   * RE2's and the Rust crate's, and the only mode that is a statement about
+   * the *shape of the program* rather than about what an instruction does
+   * when it is reached. Both references are simulations whose thread
+   * identity is the program counter alone, so a loop over a body that can
+   * match empty ends by meeting a state the walk has already been to, and
+   * nothing has to notice that an iteration consumed nothing.
+   *
+   * Two things follow, and codegen.c owes both:
+   *
+   * - **No progress register.** A register is history, and history is what
+   *   makes two threads at one program counter distinct; keeping one here
+   *   would keep alive a thread the reference has already dropped. It is
+   *   also what would make the program unmemoizable, and the memo is not
+   *   optional for this mode (below).
+   * - **The loop is shaped `(e+)?` rather than `split; e; jmp`.** Where the
+   *   split sits decides whether an empty iteration's captures survive it:
+   *   with the split at the top, the pass through the body reaches the split
+   *   again, finds it visited, and dies, so `(a*)*` against "b" leaves group
+   *   1 unset; with the body first and the split at its foot, the pass
+   *   leaves by the split's other arm and group 1 is 0-0, which is what both
+   *   references report.
+   *
+   * The two together are the whole mode: a model of them reproduces every
+   * one of 99,000 random rows from `regexp` and 24,000 from the crate
+   * (tools/oracle/linear_diff.py --dialect re2 --shapes).
+   *
+   * This mode is not computable by a backtracker that explores paths, only
+   * by one that memoises states - the difference is precisely a path the
+   * simulation drops as already-seen and a backtracker would complete - so
+   * exec.c runs such a program with the visited bitmap armed from the start
+   * rather than as an optimisation, and says so.
+   */
+  GRX_EMPTY_LOOP_SIMULATE,
   GRX_EMPTY_LOOP_COUNT     ///< Closes the enum; not a mode.
 } GRX_EmptyLoopMode;
 

@@ -76,9 +76,15 @@ GRX_Diag why(const std::string & pattern, GRX_Syntax syntax) {
   return diag;
 }
 
-/** The match, as `start-end` per group, or "nomatch" / "refused". */
-std::string search(const std::string & pattern, const std::string & subject,
-    GRX_Syntax syntax, uint32_t options = 0) {
+/**
+ * The match, as `start-end` per group, or "nomatch" / "refused".
+ *
+ * The engine is a parameter because one of the cells below is a claim about
+ * all three of them rather than about the answer: see
+ * GRX_PROGRAM_SIMULATED_LOOP.
+ */
+std::string search_on(const std::string & pattern, const std::string & subject,
+    GRX_Syntax syntax, uint32_t options, GRX_Engine engine) {
   GRX_Regex * regex = nullptr;
   if (compile_with(pattern, syntax, options, nullptr, &regex) != GRX_OK) {
     grx_regex_free(regex);
@@ -89,7 +95,7 @@ std::string search(const std::string & pattern, const std::string & subject,
   int matched = 0;
   std::string answer = "error";
   if (grx_regex_search(regex, subject.data(), subject.size(), 0,
-          GRX_ENGINE_AUTO, nullptr, match, &matched)
+          engine, nullptr, match, &matched)
       == GRX_OK) {
     if (!matched) {
       answer = "nomatch";
@@ -116,6 +122,11 @@ std::string search(const std::string & pattern, const std::string & subject,
   grx_match_destroy(match);
   grx_regex_free(regex);
   return answer;
+}
+
+std::string search(const std::string & pattern, const std::string & subject,
+    GRX_Syntax syntax, uint32_t options = 0) {
+  return search_on(pattern, subject, syntax, options, GRX_ENGINE_AUTO);
 }
 
 /**
@@ -307,21 +318,89 @@ TEST(Linear, AnUnknownEscapeLetterIsRefusedAndPunctuationIsNot) {
 }
 
 TEST(Linear, AnEmptyIterationRunsOnceAndACountedRepeatRunsAlways) {
-  // GRX_EMPTY_LOOP_BREAK_FIRST plus bounded_repeat_allows_empty, and it
-  // takes all three of these to pin them: no two of the three distinguish
-  // the cell from BREAK or from FAIL.
+  // The three measurements that look like an empty-iteration rule, and are
+  // the ones a reader coming from the Perl family will reach for:
   //
   //   `(a*)*` over "b"      group 1 is 0-0, so an empty iteration runs when
   //                         nothing else has. FAIL would leave it unset.
   //   `(a|)*` over "aaaa"   group 1 is 3-4, so a trailing empty one does
   //                         not. BREAK would give 4-4.
-  //   `(a|){1,2}` over "a"  group 1 is 1-1: a counted repeat is expanded
-  //                         rather than looped, so the rule does not apply.
+  //   `(a|){1,2}` over "a"  group 1 is 1-1: a counted repeat is copies
+  //                         rather than a loop, so no rule applies to it.
+  //
+  // All three still hold under GRX_EMPTY_LOOP_SIMULATE, which is why they
+  // did not catch the cell the next test covers - they were satisfied by
+  // BREAK_FIRST, and so was every row of two 105,000-row differentials bar
+  // one.
   for (GRX_Syntax syntax : {GRX_SYNTAX_RE2, GRX_SYNTAX_RUST}) {
     EXPECT_EQ(search("(a*)*", "b", syntax), "0-0 0-0");
     EXPECT_EQ(search("(a|)*", "aaaa", syntax), "0-4 3-4");
     EXPECT_EQ(search("(a|){1,2}", "a", syntax), "0-1 1-1");
     EXPECT_EQ(search("(a|){1,3}", "aa", syntax), "0-2 2-2");
+  }
+}
+
+TEST(Linear, ALoopOverAnEmptyBodyEndsWhereTheWalkHasAlreadyBeen) {
+  // GRX_EMPTY_LOOP_SIMULATE, and the point of the mode is that none of the
+  // three rules above gives these. A fresh iteration that begins where a
+  // continuing one already stands is not allowed, broken or failed - it
+  // arrives at a state the simulation has already reached and is dropped
+  // there, so the continuing iteration is the one that finishes.
+  //
+  // `(a*)+b` under `U` is `(a*?)+?b`, and over "aab" group 1 is 0-2 in both
+  // references: one iteration spanning the whole run. Under BREAK_FIRST
+  // this library said 1-2, the last of two iterations, which is what perl,
+  // CPython and this library's own backtracker all say. Both references
+  // are automata and neither of them backtracks, so this is not a bug in
+  // either - it is the semantics, and it is the one cell in this dialect
+  // pair that a backtracking reading gets wrong.
+  for (GRX_Syntax syntax : {GRX_SYNTAX_RE2, GRX_SYNTAX_RUST}) {
+    EXPECT_EQ(search("(a*)+b", "aab", syntax, GRX_OPT_UNGREEDY), "0-3 0-2");
+    EXPECT_EQ(search("(a*)*b", "aaab", syntax, GRX_OPT_UNGREEDY), "0-4 0-3");
+    EXPECT_EQ(search("(a*?)+b", "aab", syntax), "0-3 0-2");
+    EXPECT_EQ(search("((a)*)+b", "aab", syntax, GRX_OPT_UNGREEDY),
+        "0-3 0-2 1-2");
+
+    // The minimal pair, and each half agrees under either reading: take the
+    // empty body away and the fresh iteration cannot begin where the
+    // continuing one stands; take the laziness away and the continuing one
+    // is preferred anyway. Neither alone would have found the cell, which
+    // is why both are here.
+    EXPECT_EQ(search("(a+)+b", "aab", syntax, GRX_OPT_UNGREEDY), "0-3 1-2");
+    EXPECT_EQ(search("(a*)+b", "aab", syntax), "0-3 0-2");
+
+    // And the overall extent moves too, so this is not only about which
+    // division of a settled match the groups get: the dropped path is the
+    // one that would have consumed further.
+    EXPECT_EQ(search("(a*b*)+?b", "abab", syntax, GRX_OPT_UNGREEDY),
+        "0-2 0-1");
+    EXPECT_EQ(search("(a|b*)+?", "aabb", syntax, GRX_OPT_UNGREEDY),
+        "0-3 2-3");
+  }
+}
+
+TEST(Linear, TheThreeEnginesAgreeOnALoopTheSimulationEnds) {
+  // The mode is computable by a Pike VM and by a backtracker with a memo,
+  // and not by a backtracker without one: the path the simulation drops as
+  // already-seen is a path a backtracker completes. So the program carries
+  // GRX_PROGRAM_SIMULATED_LOOP and exec.c arms the visited bitmap for it
+  // whichever backtracking engine runs it, rather than leaving it as the
+  // optimisation it is everywhere else.
+  //
+  // Asking all three by name is the whole test. Without the flag,
+  // GRX_ENGINE_BACKTRACK answered 347 of the shape battery's 5,040 rows
+  // differently from the other two.
+  const GRX_Engine engines[] = {
+    GRX_ENGINE_PIKE, GRX_ENGINE_BITSTATE, GRX_ENGINE_BACKTRACK,
+  };
+  for (GRX_Syntax syntax : {GRX_SYNTAX_RE2, GRX_SYNTAX_RUST}) {
+    for (GRX_Engine engine : engines) {
+      EXPECT_EQ(search_on("(a*)*", "aa", syntax, 0, engine), "0-2 0-2")
+          << "engine " << (int)engine;
+      EXPECT_EQ(search_on("(a*)+b", "aab", syntax, GRX_OPT_UNGREEDY, engine),
+          "0-3 0-2")
+          << "engine " << (int)engine;
+    }
   }
 }
 

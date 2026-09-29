@@ -50,15 +50,39 @@ import oracle_env
 # would assert a refusal rather than the rule it was written for.
 NAMED_CASES = {
     "re2": [
-        # The two loop cells. `(a*)*` over "b" and `(a|)*` over "aaaa" are
-        # what choose BREAK_FIRST over FAIL and over BREAK, one each;
-        # `(a|){1,2}` is what says a counted repeat is not a loop at all.
+        # The loop cells. The first three were what chose BREAK_FIRST over
+        # FAIL and over BREAK, one each, and they are kept because they are
+        # still true and are what a reader reaches for first:
+        #
+        #   `(a*)*` over "b"      group 1 is 0-0: an empty iteration runs
+        #                         when nothing else has.
+        #   `(a|)*` over "aaaa"   group 1 is 3-4: a trailing empty one does
+        #                         not.
+        #   `(a|){1,2}` over "a"  group 1 is 1-1: a counted repeat is copies
+        #                         rather than a loop, so no rule applies.
+        #
+        # And the fourth is what says none of the three was the question.
+        # `(a*?)+b` over "aab" reports group 1 as 0-2, which no empty-
+        # iteration rule gives: the reference is a simulation, the fresh
+        # iteration arrives at a state the walk has already reached, and it
+        # is dropped there rather than allowed, broken or failed. The rows
+        # below it are the minimal pair - `(a+?)+b` has no empty body and
+        # `(a*)+b` unflagged has no lazy loop - and each agrees under every
+        # rule, which is why neither alone would have found this.
         ("", "(a*)*", ["b", "aab", ""]),
         ("", "(a*)+", ["a", "b", "aab"]),
         ("", "(a|)*", ["aaaa", ""]),
         ("", "(a|){1,2}", ["a", "ab", "b"]),
         ("", "(a|){1,3}", ["aa"]),
         ("", "(a|){3}", ["a"]),
+        ("U", "(a*)+b", ["aab", "ab", "aaab", "b"]),
+        ("U", "(a*)*b", ["aab", "aabb"]),
+        ("U", "(a+)+b", ["aab"]),
+        ("", "(a*?)+b", ["aab", "aaab"]),
+        ("", "(a*?)*?b", ["aab"]),
+        ("U", "((a)*)+b", ["aab"]),
+        ("U", "(a*b*)+?b", ["abab", "aabb"]),
+        ("U", "(a|b*)+?", ["aabb"]),
         # Leftmost-first, which an automaton could plausibly not be.
         ("", "(a|ab)", ["ab"]),
         ("", "(a|ab)(c|bcd)", ["abcd"]),
@@ -120,22 +144,29 @@ NAMED_CASES = {
         ("", "(?x) a b", ["ab"]),
     ],
     "rust": [
-        # The same loop cells; the crate answers as RE2 does on every one,
-        # which is worth recording rather than assuming.
+        # The same loop cells, including the one that was a known gap until
+        # the shape battery showed it was 62 rows rather than one. The crate
+        # answers as RE2 does on every one of them - all 5,040 shapes, not
+        # only these - which is why the two dialects share a mode and is
+        # worth recording rather than assuming.
         ("", "(a*)*", ["b", "aab", ""]),
         ("", "(a|)*", ["aaaa"]),
         ("", "(a|){1,2}", ["a"]),
         ("", "(a|ab)(c|bcd)", ["abcd"]),
-        # The one row the differential still disagrees on, put here on
-        # purpose so that the corpus carries it and known-gaps.txt has to
-        # name it. A lazy loop over a lazy body: the crate ends with one
-        # iteration spanning 0-2 and this library with two, the last
-        # spanning 1-2. Both report the same overall match. `(a+)+b` under
-        # the same flag agrees, and so does `(a*)+b` without it, which is
-        # what makes it the interaction rather than either half.
-        ("U", "(a*)+b", ["aab", "ab"]),
+        ("U", "(a*)+b", ["aab", "ab", "aaab", "b"]),
+        ("U", "(a*)*b", ["aab", "aabb"]),
         ("U", "(a+)+b", ["aab"]),
-        ("", "(a*)+b", ["aab"]),
+        ("", "(a*?)+b", ["aab", "aaab"]),
+        ("", "(a*?)*?b", ["aab"]),
+        ("U", "((a)*)+b", ["aab"]),
+        ("U", "(a*b*)+?b", ["abab", "aabb"]),
+        ("U", "(a|b*)+?", ["aabb"]),
+        # A defect of the crate, carried on purpose so that a regeneration
+        # cannot quietly adopt its answer. The crate reports 0-0 here and
+        # `regexp`, perl and CPython all report 0-3; the first alternative
+        # matches at the same start, so leftmost-first requires it. See the
+        # reference-defect row in known-gaps.txt.
+        ("", "a??b*c|a??c*", ["abc"]),
         # Unicode shorthands, ASCII POSIX classes: the one profile cell
         # where the crate and RE2 part company over every subject above
         # U+007F.

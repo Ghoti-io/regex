@@ -945,23 +945,25 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
   // under the default, and the rule the enum needed was already spelled
   // GRX_ITERATE_ADVANCE_SKIP_ABUTTING and already commented "Go".
   [GRX_SYNTAX_RE2] = {
-    // BREAK_FIRST, which was BREAK and is the second cell the probe moved -
-    // and the more interesting of the two, because it is POSIX's rule
-    // arrived at from somewhere else entirely. Both halves measured, and
-    // one alone would not have chosen it:
+    // SIMULATE, which was BREAK_FIRST, which was BREAK. Two of those were
+    // right about everything they were measured against and wrong about the
+    // thing nobody had asked:
     //
     //   `(a*)*` over "b"     group 1 is 0-0, so an empty iteration does run
     //                        when nothing else has. FAIL would leave it unset.
     //   `(a|)*` over "aaaa"  group 1 is 3-4, so once an iteration has
     //                        consumed, a trailing empty one does not run.
     //                        BREAK would give 4-4.
+    //   `(a*?)+b` over "aab" group 1 is 0-2. BREAK_FIRST gives 1-2, having
+    //                        kept a thread that starts a fresh iteration
+    //                        where the reference had already been.
     //
-    // These are automata rather than backtrackers, and this is the answer an
-    // automaton falls into: there is no "iteration" to fail, only a state
-    // that stops moving. glibc and musl land on the same rule from the
-    // standard's side.
-    .empty_loop = GRX_EMPTY_LOOP_BREAK_FIRST,
-    .bounded_repeat_allows_empty = 1,
+    // The third is not a third answer to the same question; it is the
+    // evidence that the question is the wrong one. These are automata, and
+    // an automaton has no iteration to fail, break or allow - only a state
+    // it has already reached. Lowering stops asking, and codegen.c emits the
+    // shape that makes the walk itself the rule; see the mode.
+    .empty_loop = GRX_EMPTY_LOOP_SIMULATE,
     .lookbehind = GRX_LOOKBEHIND_NONE,
     .iteration = GRX_ITERATE_ADVANCE_SKIP_ABUTTING,
     .dollar = GRX_DOLLAR_END_ONLY,
@@ -991,9 +993,10 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     .subject_is_text = 1,
   },
   [GRX_SYNTAX_RUST] = {
-    // The same two measurements as RE2's row above, with the same answers.
-    .empty_loop = GRX_EMPTY_LOOP_BREAK_FIRST,
-    .bounded_repeat_allows_empty = 1,
+    // The same three measurements as RE2's row above, with the same answers.
+    // Between them the two references answer 5,040 shapes of nested empty
+    // loop identically, which is why one mode serves both.
+    .empty_loop = GRX_EMPTY_LOOP_SIMULATE,
     .lookbehind = GRX_LOOKBEHIND_NONE,
     .iteration = GRX_ITERATE_ADVANCE_SKIP_ABUTTING,
     .dollar = GRX_DOLLAR_END_ONLY,

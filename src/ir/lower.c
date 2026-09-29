@@ -2625,15 +2625,7 @@ static GRX_Result lower_repeat(
   // says `a*+` is "equivalent to (?>a*)" in those words.
   int possessive = node->a == (uint32_t)GRX_REPEAT_POSSESSIVE;
   repeat->mode = possessive ? (uint8_t)GRX_REPEAT_GREEDY : (uint8_t)node->a;
-  // A finite maximum takes every iteration in the two linear dialects,
-  // whose engines expand a counted repeat rather than looping. Only the
-  // pattern's own repeat asks this: the three synthesised loops above are
-  // all GRX_REPEAT_INF and none of them is a dialect construct.
-  repeat->empty_loop
-      = (uint8_t)((low->profile.bounded_repeat_allows_empty
-                      && node->max != GRX_REPEAT_INF)
-              ? GRX_EMPTY_LOOP_ALLOW
-              : low->profile.empty_loop);
+  repeat->empty_loop = (uint8_t)low->profile.empty_loop;
   repeat->capture_reset = (uint8_t)low->profile.capture_reset;
   result = attach(low, *out_node, body);
   if (result != GRX_OK || !possessive) {

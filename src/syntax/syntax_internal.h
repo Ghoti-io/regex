@@ -564,24 +564,6 @@ typedef struct GRX_Profile {
   GRX_MatchPreference preference;   ///< Which match a search reports.
   GRX_SubmatchRule submatch;        ///< Which division of it the groups get.
   GRX_EmptyLoopMode empty_loop;     ///< An iteration that consumed nothing.
-  /**
-   * ...and a repeat with a finite maximum takes every iteration anyway.
-   *
-   * The two linear dialects, and neither of the two obvious readings of
-   * their `empty_loop` cell. Both expand `x{n,m}` into m copies of the
-   * program rather than into a loop with a counter, so there is no loop for
-   * an empty-iteration rule to guard - and the answers say so:
-   *
-   *   `(a|){1,2}` over "a"    group 1 is 1-1 in both. The second iteration
-   *                           matched empty and wrote its capture.
-   *   `(a|){1,}`  over "aaaa" group 1 is 3-4 in both, which is the
-   *                           empty_loop cell doing its work.
-   *
-   * `{n}` gives the same answer either way - every iteration is required -
-   * so it is `{1,2}` and `{1,3}` that separate the two, and a differential
-   * found it rather than a reading of either project's documentation.
-   */
-  int bounded_repeat_allows_empty;
   GRX_CaptureResetMode capture_reset; ///< Captures between iterations.
   GRX_BackrefUnsetMode backref_unset; ///< A reference to an unset group.
   GRX_LookbehindLimit lookbehind;   ///< How long a lookbehind may be.

@@ -191,7 +191,7 @@ engines can run the pattern. The other six report `GRX_ERR_UNSUPPORTED`.
 
 ### Conformance
 
-`make test` runs 87,191 checked-in conformance vectors and prints this table.
+`make test` runs 87,215 checked-in conformance vectors and prints this table.
 Every expectation in them is a reference implementation's, taken from the
 pinned oracle in `tools/oracle/containers/IMAGES`; none is this library's own
 output. The corpora are committed, so the run needs no oracle, no container
@@ -203,8 +203,8 @@ engine and no network.
 | `ecmascript` | 28,559 | 100.00% | test262, plus generated from node 24.21 |
 | `perl` | 11,705 | 100.00% | perl 5.44's `re_tests`, plus generated: full folds, `\N{}` names, boundaries, and property names with more than one reading; 8 excluded |
 | `vim` | 6,317 | 100.00% | generated from vim 9.2.1129 |
-| `re2` | 2,933 | 100.00% | generated from Go 1.25.14's `regexp`, which carries Unicode 15.0.0 |
-| `rust` | 2,807 | 99.96% | generated from the `regex` crate 1.13.1, which carries UCD 16.0.0; 1 known gap |
+| `re2` | 2,947 | 100.00% | generated from Go 1.25.14's `regexp`, which carries Unicode 15.0.0 |
+| `rust` | 2,817 | 100.00% | generated from the `regex` crate 1.13.1, which carries UCD 16.0.0; 1 excluded |
 | `python` | 2,177 | 100.00% | generated from CPython 3.14.7 |
 | `pcre` | 1,869 | 100.00% | PCRE2 10.46's `testinput` |
 | `gnu-ere` | 270 | 100.00% | Spencer's cases, answered by glibc 2.41 |
@@ -215,18 +215,19 @@ engine and no network.
 Read the denominators with the rates: they differ by two orders of magnitude,
 and 100% of 135 vectors is a smaller claim than 100% of 28,559.
 
-There is one known gap, and it arrived with the `rust` dialect: `(a*)+b`
-under `U` reports group 1 as 1-2 where the crate reports 0-2, the overall
-match agreeing at 0-3. A lazy loop over a lazy body, and the interaction is
-the whole of it - `(a+)+b` under the same flag agrees, and `(a*)+b` without
-it agrees. It is the only disagreement in 105,000 differential rows, and the
-row is in the committed corpus on purpose so that the gap has to be named
-rather than quietly not spelled.
+There are no known gaps. The one there was arrived with the `rust` dialect
+and turned out not to be one row: `(a*)+b` under `U` reported group 1 as 1-2
+where both references report 0-2, and enumerating the shape rather than
+sampling it found 62 such rows in 5,040 - a whole cell rather than an
+oddity. Neither reference backtracks, so a loop over a body that can match
+empty ends for them where the simulation has already been, which is not any
+of the three empty-iteration rules a backtracking dialect can hold. The
+library now has a fourth, and all three engines compute it.
 
-Before it there were none; before that there were five, and where those were
+Before that there were five, and where those were
 there is now `\U`, `\L`,
 `\F`, `\u` and `\l` - Perl's case transforms over the pattern source, the
-operators its own `re_tests` calls "\l works in []". The eight excluded rows
+operators its own `re_tests` calls "\l works in []". The nine excluded rows
 are ones where the reference's own answer is demonstrably wrong; each carries
 the reproduction in `tests/data/vectors/known-gaps.txt`, and the count is
 printed beside the rate wherever the rate appears, because a rate that rose

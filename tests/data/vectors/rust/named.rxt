@@ -43,14 +43,66 @@ flags: U
 subject: ab
 expect: 0-2 0-1
 
+pattern: (a*)+b
+flags: U
+subject: aaab
+expect: 0-4 0-3
+
+pattern: (a*)+b
+flags: U
+subject: b
+expect: 0-1 0-0
+
+pattern: (a*)*b
+flags: U
+subject: aab
+expect: 0-3 0-2
+
+pattern: (a*)*b
+flags: U
+subject: aabb
+expect: 0-3 0-2
+
 pattern: (a+)+b
 flags: U
 subject: aab
 expect: 0-3 1-2
 
-pattern: (a*)+b
+pattern: (a*?)+b
 subject: aab
 expect: 0-3 0-2
+
+pattern: (a*?)+b
+subject: aaab
+expect: 0-4 0-3
+
+pattern: (a*?)*?b
+subject: aab
+expect: 0-3 0-2
+
+pattern: ((a)*)+b
+flags: U
+subject: aab
+expect: 0-3 0-2 1-2
+
+pattern: (a*b*)+?b
+flags: U
+subject: abab
+expect: 0-2 0-1
+
+pattern: (a*b*)+?b
+flags: U
+subject: aabb
+expect: 0-3 0-2
+
+pattern: (a|b*)+?
+flags: U
+subject: aabb
+expect: 0-3 2-3
+
+pattern: a??b*c|a??c*
+subject: abc
+expect: 0-0
 
 pattern: \\w
 subject: \u00E9
