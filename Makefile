@@ -464,7 +464,8 @@ ALL_TEST_GATES := check-symbols check-layering check-aliasing \
 	check-diagnostics check-engine-equivalence check-json-schema-suite \
 	check-tables check-status-line check-corpus-seeds check-makefile-hash \
 	check-generated-header-deps \
-	check-oracle-env check-unicode-agreement check-scan-portable test-asan
+	check-oracle-env check-unicode-agreement check-scan-portable test-asan \
+	check-programs
 TEST_GATES ?= $(ALL_TEST_GATES)
 
 # What a gate that IS a python3 script does when there is no python3.
@@ -647,7 +648,16 @@ PCRE2_SRC := third_party/pcre2/$(PCRE2_REF)
 # reach this one. posix_match.c was the one that fell through to the generic
 # rule below and so linked $(REGEXLIBRARY) - 29 grx_* symbols and 2.7 MB,
 # against 16 KB and none when built the way its two siblings already were.
+#
+# tools/bench is excluded too, and was not: regex_bench.c matches neither of
+# the two patsubst rules below, so it stayed in $(TOOLS) as its own source
+# path - a prerequisite that every oracle gate carried and that was satisfied
+# by the source file already being there, so `make tools` built no benchmark
+# and said nothing. It has three rules of its own under `bench`, one per
+# library it is timed against, and two of those link somebody else's regex.
+# Found by check-programs, whose denominator is this list.
 TOOL_SOURCES := $(shell find tools -type f -name '*.c' -not -path 'tools/jsonschema/*' \
+	-not -path 'tools/bench/*' \
 	-not -name 'musl_match.c' -not -name 'pcre2_match.c' \
 	-not -name 'pcre2_classes.c' \
 	-not -name 'posix_match.c' 2>/dev/null)
@@ -870,6 +880,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 # General commands
 .PHONY: check-oracle-soak
 .PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-unicode-agreement check-dump-names check-readme-example check-tables check-status-line check-corpus-seeds check-makefile-hash check-generated-header-deps check-oracle-env check-oracle-syntax check-oracle-match check-oracle-soak check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-linear check-oracle-perl-syntax check-oracle-script-runs check-doc-claims check-wide-classes check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
+	check-programs \
 	check-oracle-properties check-oracle-numeric-properties \
 	check-oracle-folds \
 	check-vim-widths check-vim-classes check-vim-sets \
@@ -2543,6 +2554,105 @@ test-asan: $(ASAN_TEST_EXECUTABLES)
 	@printf "\033[0;32m\nASan+UBSan suite clean.\033[0m\n"
 
 ####################################################################
+# examples/ and tools/ under the sanitizers
+####################################################################
+
+# Everything above builds src/ and tests/ twice - release and sanitized - and
+# builds examples/ and tools/ exactly once, with the release compiler, and
+# never runs them. So a memory defect in an example or an oracle driver
+# passed the whole suite, which is not hypothetical: the first draft of
+# split_by() in examples/linear_guarantee.c freed the GRX_Split and not the
+# GRX_Regex, and it was caught by reading the function because nothing here
+# could say so.
+#
+# These are compiled with $(CFLAGS) plus the sanitizer flags and nothing
+# else, so a program here differs from the release build of the same source
+# only by the sanitizers. In particular GRX_BUILD and GRX_TEST_BUILD are
+# *not* defined, unlike $(ASAN_CFLAGS): an example is a consumer of the
+# installed headers, and a gate that compiles it as though it were part of
+# the library is measuring a translation unit no reader will ever have.
+#
+# `-MMD` on each, and $(ASAN_CONSUMER_CFLAGS) inside $(ASAN_FLAGS_STAMP)'s
+# content at the end of this file, for the two reasons that are written down
+# a page above: a build with no depfile does not notice a header change, and a
+# stamp that does not record what the recipe expands does not notice a flag
+# change. Both leave a *gate* reporting on code that is not in the tree.
+ASAN_CONSUMER_CFLAGS := $(CFLAGS) $(ASAN_UBSAN_FLAGS)
+
+$(ASAN_APP_DIR)/examples/%$(EXE_EXTENSION): examples/%.c \
+		$(ASAN_APP_DIR)/$(ASAN_TARGET) $(ASAN_FLAGS_STAMP)
+	@printf "\n### Compiling Example (ASan+UBSan): $* ###\n"
+	@mkdir -p $(@D)
+	$(CC) $(ASAN_CONSUMER_CFLAGS) $(INCLUDE) -MMD -MP -MF $@.d -o $@ $< \
+		$(ASAN_LDFLAGS) $(ASAN_REGEXLIBRARY) $(CUTIL_LIBS) $(UNICODE_LIBS)
+
+$(ASAN_APP_DIR)/tools/%$(EXE_EXTENSION): tools/oracle/%.c \
+		$(ASAN_APP_DIR)/$(ASAN_TARGET) $(ASAN_FLAGS_STAMP)
+	@printf "\n### Compiling Tool (ASan+UBSan): $* ###\n"
+	@mkdir -p $(@D)
+	$(CC) $(ASAN_CONSUMER_CFLAGS) $(INCLUDE) -MMD -MP -MF $@.d -o $@ $< \
+		$(ASAN_LDFLAGS) $(ASAN_REGEXLIBRARY) $(CUTIL_LIBS) $(UNICODE_LIBS)
+
+$(ASAN_APP_DIR)/tools/%$(EXE_EXTENSION): tools/limits/%.c \
+		$(ASAN_APP_DIR)/$(ASAN_TARGET) $(ASAN_FLAGS_STAMP)
+	@printf "\n### Compiling Tool (ASan+UBSan): $* ###\n"
+	@mkdir -p $(@D)
+	$(CC) $(ASAN_CONSUMER_CFLAGS) $(INCLUDE) -MMD -MP -MF $@.d -o $@ $< \
+		$(ASAN_LDFLAGS) $(ASAN_REGEXLIBRARY) $(CUTIL_LIBS) $(UNICODE_LIBS)
+
+# The two that link `text`, as specific rules for the same reason the release
+# pair are: a specific rule beats a pattern rule and can add its flags.
+$(ASAN_APP_DIR)/examples/json_schema_provider$(EXE_EXTENSION): \
+		examples/json_schema_provider.c $(ASAN_APP_DIR)/$(ASAN_TARGET) \
+		$(ASAN_FLAGS_STAMP)
+	@printf "\n### Compiling Example (ASan+UBSan): json_schema_provider ###\n"
+	@mkdir -p $(@D)
+	$(CC) $(ASAN_CONSUMER_CFLAGS) $(INCLUDE) $(TEXT_CFLAGS) -MMD -MP -MF $@.d \
+		-o $@ $< $(ASAN_LDFLAGS) $(ASAN_REGEXLIBRARY) $(CUTIL_LIBS) \
+		$(UNICODE_LIBS) $(TEXT_LIBS)
+
+$(ASAN_APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
+		$(ASAN_APP_DIR)/$(ASAN_TARGET) $(ASAN_FLAGS_STAMP)
+	@printf "\n### Compiling Tool (ASan+UBSan): $* ###\n"
+	@mkdir -p $(@D)
+	$(CC) $(ASAN_CONSUMER_CFLAGS) $(INCLUDE) $(TEXT_CFLAGS) -MMD -MP -MF $@.d \
+		-o $@ $< $(ASAN_LDFLAGS) $(ASAN_REGEXLIBRARY) $(CUTIL_LIBS) \
+		$(UNICODE_LIBS) $(TEXT_LIBS)
+
+# The same source lists the release build uses, so what the gate is asked to
+# cover cannot drift from what the build produces. The four oracle drivers
+# held out of TOOL_SOURCES stay out: each is compiled inside the image that
+# pins its reference and links nothing of ours, so there is nothing in one to
+# sanitize.
+ASAN_PROGRAM_SOURCES := $(EXAMPLE_SOURCES) $(TOOL_SOURCES)
+ASAN_EXAMPLES := $(patsubst examples/%.c,\
+	$(ASAN_APP_DIR)/examples/%$(EXE_EXTENSION),$(EXAMPLE_SOURCES))
+ASAN_TOOLS := $(patsubst tools/oracle/%.c,\
+	$(ASAN_APP_DIR)/tools/%$(EXE_EXTENSION),$(TOOL_SOURCES))
+ASAN_TOOLS := $(patsubst tools/limits/%.c,\
+	$(ASAN_APP_DIR)/tools/%$(EXE_EXTENSION),$(ASAN_TOOLS))
+# json_schema_provider and grx_json_schema are in the denominator whether or
+# not `text` is here: a configuration that cannot build one has a case that
+# says "skipped", which is a different report from having no case.
+ASAN_PROGRAM_SOURCES += $(TEXT_EXAMPLE_SOURCES) $(JSONSCHEMA_TOOL_SOURCES)
+ifdef HAVE_TEXT
+ASAN_EXAMPLES += $(patsubst examples/%.c,\
+	$(ASAN_APP_DIR)/examples/%$(EXE_EXTENSION),$(TEXT_EXAMPLE_SOURCES))
+ASAN_TOOLS += $(patsubst tools/jsonschema/%.c,\
+	$(ASAN_APP_DIR)/tools/%$(EXE_EXTENSION),$(JSONSCHEMA_TOOL_SOURCES))
+endif
+
+check-programs: ## Fail if an example or tool is unclean under the sanitizers
+check-programs: $(ASAN_EXAMPLES) $(ASAN_TOOLS)
+	@$(REQUIRE_ASAN_RUNTIME)
+	@sh tools/check_programs.sh \
+		--bindir $(ASAN_APP_DIR) \
+		--asan-runtime "$(ASAN_RUNTIME)" \
+		--ld-path "$(ASAN_APP_DIR):$(LIB_INSTALL_PATH)/$(SUITE)" \
+		--sources "$(ASAN_PROGRAM_SOURCES)" \
+		--built "$(notdir $(ASAN_EXAMPLES) $(ASAN_TOOLS))"
+
+####################################################################
 # Fuzzing (libFuzzer)
 ####################################################################
 #
@@ -2838,7 +2948,14 @@ help: ## Display this help
 # it is written.
 ####################################################################
 
-ASAN_DEPFILES := $(ASAN_LIBOBJECTS:.o=.d) \
+# The five consumer rules compile and link in one step, so each depfile sits
+# beside the executable rather than beside an object. Without them a header
+# change leaves the gate running the previous build's example - the same
+# defect the ASan object rules carried until it was found, and worse here,
+# because a stale program inside a gate reports on code that is not in the
+# tree.
+ASAN_PROGRAM_DEPFILES := $(addsuffix .d,$(ASAN_EXAMPLES) $(ASAN_TOOLS))
+ASAN_DEPFILES := $(ASAN_PROGRAM_DEPFILES) $(ASAN_LIBOBJECTS:.o=.d) \
 	$(foreach pair,$(TEST_PAIRS),$(ASAN_OBJ_DIR)/tests/$(basename $(notdir $(word 1,$(subst |, ,$(pair))))).d)
 FUZZ_DEPFILES := $(FUZZ_OBJECTS:.o=.d)
 -include $(ASAN_DEPFILES) $(FUZZ_DEPFILES)
@@ -2871,7 +2988,7 @@ $(FLAGS_STAMP): force-flags
 
 $(ASAN_FLAGS_STAMP): force-flags
 	@mkdir -p $(@D)
-	@printf '%s\n' '$(ASAN_CFLAGS) $(ASAN_CXXFLAGS) $(ASAN_LDFLAGS) $(INCLUDE)' > $@.new
+	@printf '%s\n' '$(ASAN_CFLAGS) $(ASAN_CXXFLAGS) $(ASAN_LDFLAGS) $(ASAN_CONSUMER_CFLAGS) $(INCLUDE)' > $@.new
 	@cmp -s $@.new $@ 2>/dev/null && rm -f $@.new || mv -f $@.new $@
 
 $(FUZZ_FLAGS_STAMP): force-flags

@@ -2235,6 +2235,55 @@ Run by `make test` alongside `check-symbols`:
   **To check the gate itself:** change a digit in one of the table's counts or
   rates; both halves are compared, and a table with no rows at all fails on
   the row count.
+- **Every program built from `examples/` and `tools/` runs clean under the
+  sanitizers.** Everything else here builds `src/` and `tests/` twice - once
+  for release and once instrumented - and builds these two directories
+  exactly once, with the release compiler, and never runs them. So a memory
+  defect in an example or an oracle driver passed the whole suite. Not
+  hypothetical: the first draft of `split_by()` in
+  `examples/linear_guarantee.c` freed the `GRX_Split` and not the
+  `GRX_Regex`, and it was caught by reading the function, because nothing in
+  the suite could say so.
+  **Built:** `make check-programs`, in `TEST_GATES`. 65 cases over 23
+  programs, 33 seconds, of which 8 are `grx_vim_sets` alone - it compiles a
+  pattern per code point and is the one case worth knowing the cost of.
+  The programs are compiled with `$(CFLAGS)` plus the sanitizer flags and
+  nothing else, so each differs from the release build of the same source
+  only by the sanitizers; `GRX_BUILD` and `GRX_TEST_BUILD` are deliberately
+  *not* defined, unlike `$(ASAN_CFLAGS)`, because an example is a consumer of
+  the installed headers and a gate that compiles one as though it were part
+  of the library is measuring a translation unit no reader will ever have.
+
+  **The denominator is the Makefile's own source lists**, passed in as
+  `--sources`, not a list inside the script: a source with no case is a
+  failure, so a new example cannot arrive unrun. That is the half a
+  hand-written list loses the first time somebody forgets, and it found
+  something on its first run - `tools/bench/regex_bench.c` matched neither
+  `patsubst` under `TOOL_SOURCES`, so it sat in `$(TOOLS)` as its own source
+  path, a prerequisite every oracle gate carried and that was satisfied by
+  the file simply existing. `make tools` built no benchmark and said nothing.
+  It is excluded now, with the reason, and has three rules of its own under
+  `bench`.
+
+  **The four oracle drivers that must not link this library are in neither
+  list** - `musl_match`, `pcre2_match`, `pcre2_classes`, `posix_match` - for
+  the same reason the Makefile already holds them out of `TOOL_SOURCES`: each
+  is compiled inside the image that pins its reference, so there is nothing
+  of ours in one to sanitize. A configuration that cannot build a program it
+  does have a case for - `text` absent, a third-party suite unfetched -
+  prints `skip` and says which, which is a different report from having no
+  case.
+  **The two arms that guard the gate's own degenerate case** are the ones
+  worth naming, because they are what a sweep that cannot see looks like from
+  inside: an empty `--built` is a usage error rather than a configuration in
+  which every case skips, and a run that ends with nothing failed *and
+  nothing run* exits non-zero. A wrong `--bindir` would otherwise report a
+  clean sanitizer sweep over no program at all.
+  **To check the gate itself:** seven arms - a sanitizer report, an exit
+  status that is not what was wanted, a source with no case, a case with no
+  source, a program the Makefile claims to have built that is not there, an
+  empty `--built`, and a run in which every case skipped. All seven exercised,
+  with eight injected faults (section 9).
 - **No STUB-marked test survives the stub it marks:** a test whose comment
   says `STUB` for a function whose implementation no longer returns
   `GRX_ERR_UNSUPPORTED` fails. **Not built, and no longer needed for the
@@ -2627,6 +2676,14 @@ when the gate changes:
 | `check-aliasing` | `EXTRA_CFLAGS=-Wstrict-aliasing=3`, a later explicit level | non-zero, naming the effective level |
 | `check-aliasing` | `CC=clang`, which implements no such diagnostic | non-zero, naming the compiler rather than the flags |
 | `check-oracle-vim` | widen one of vim's eleven named classes by a single code point - `\s` to include the line break | non-zero; the run reports the rows where the two now differ |
+| `check-programs` | delete the `grx_regex_free()` from `split_by()` in `examples/linear_guarantee.c` - the original defect | non-zero; LeakSanitizer on three of that program's cases |
+| `check-programs` | a read past a `static char[4]` in `examples/regex_info.c` | non-zero; ASan global-buffer-overflow on all four of its cases |
+| `check-programs` | a `run_case` for a program no source builds | non-zero, naming the case |
+| `check-programs` | a source with no `run_case` at all - which happened for real, `tools/bench/regex_bench.c` on the gate's first run | non-zero, naming the source and the program |
+| `check-programs` | a `want` status that is not what the program returns | non-zero, reporting both |
+| `check-programs` | `--bindir` pointing at an empty tree, so every program the Makefile claims to have built is absent | non-zero on all 65 cases, rather than 65 passes over nothing |
+| `check-programs` | `--built ""` | non-zero, the usage message; not 65 skips and a pass |
+| `check-programs` | a `--built` naming nothing that exists, so every case skips | non-zero, "no case ran: 65 skipped, nothing to report" |
 
 **The first binary, not the last**, is the point of the first two rows: the
 defect they guard against is invisible if the fault is injected at the end.
