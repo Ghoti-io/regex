@@ -1401,8 +1401,17 @@ check-oracle-replace: $(TOOLS)
 	@$(REQUIRE_PYTHON3)
 	$(call run-oracle,node$(comma)pcre2$(comma)perl$(comma)python$(comma)vim,\
 		python3 tools/oracle/replace_diff.py --seed $(ORACLE_SEED))
+	@# The two linear dialects, whose sigil is PCRE2's and whose grammar is
+	@# not: `$$&`, `$$`` `, `$$'` and `$$_` are all literal text in both, a
+	@# bare name is read as one greedy run rather than a number and then a
+	@# name, and the four spellings where Go and the crate disagree with each
+	@# other are in DIALECT_FORMS on purpose.
+	$(call run-oracle,go,python3 tools/oracle/replace_diff.py \
+		--dialect re2 --seed $(ORACLE_SEED))
+	$(call run-oracle,rust,python3 tools/oracle/replace_diff.py \
+		--dialect rust --seed $(ORACLE_SEED))
 
-check-oracle-split: ## Compare grx_regex_split() against ECMAScript's and perl's
+check-oracle-split: ## Compare grx_regex_split() against all five split rules
 # The last documented surface of the substitution API with no generator
 # behind it. Its six hand-written tests each assert a rule the author had
 # already decided was right; deleting any one of ECMA-262 22.2.6.14's four
@@ -1434,6 +1443,16 @@ check-oracle-split: $(TOOLS)
 	@# agreed with `re` while 1,848 generated rows did not.
 	$(call run-oracle,python,python3 tools/oracle/split_diff.py \
 		--dialect python --seed $(ORACLE_SEED))
+	@# And a fourth and fifth rule, which are each other's closest neighbour
+	@# and still differ: `Regexp.Split` drops an empty match at either end of
+	@# the subject and `Regex::split` keeps both, so `a*` over "baac" is two
+	@# pieces there and four here. Both drop what the groups captured, which
+	@# no other row does. Two arms because one shared "linear" rule would be
+	@# wrong for six of fifteen probes.
+	$(call run-oracle,go,python3 tools/oracle/split_diff.py \
+		--dialect re2 --seed $(ORACLE_SEED))
+	$(call run-oracle,rust,python3 tools/oracle/split_diff.py \
+		--dialect rust --seed $(ORACLE_SEED))
 
 check-oracle-window: ## Compare the search window and its flags against pcre2
 # The six fields of GRX_SearchOptions that decide an answer - begin, end and
@@ -1484,7 +1503,7 @@ check-oracle-exclusions:
 	@$(REQUIRE_PYTHON3); \
 	python3 tools/oracle/check_exclusions.py
 
-check-oracle-iterate: ## Compare the search-all loop against node and perl
+check-oracle-iterate: ## Compare the search-all loop against node, perl, Go and the crate
 # grx_regex_search_next() is the one entry point whose answer is a sequence,
 # and nothing generated asked it anything: match_diff.py stops at the first
 # match, and replacement and splitting report text and pieces, so a different
@@ -1493,8 +1512,8 @@ check-oracle-iterate: ## Compare the search-all loop against node and perl
 # whose loop its caller writes.
 check-oracle-iterate: $(TOOLS)
 	@$(REQUIRE_PYTHON3)
-	$(call run-oracle,node$(comma)perl,python3 tools/oracle/iterate_diff.py \
-		--seed $(ORACLE_SEED))
+	$(call run-oracle,node$(comma)perl$(comma)go$(comma)rust,\
+		python3 tools/oracle/iterate_diff.py --seed $(ORACLE_SEED))
 
 check-oracle-sed: ## Compare the POSIX and GNU replacement templates against sed
 check-oracle-sed: $(TOOLS)

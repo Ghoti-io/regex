@@ -156,6 +156,21 @@ func doSplit(c *compiler, fields []string) string {
 	if !ok {
 		return "compile"
 	}
+	// The one question this transport cannot put to `Split`.
+	//
+	// `Regexp.Split` answers an empty subject from `len(re.expr) > 0`, and
+	// this driver spells the caller's flags by *prepending* `(?ims)` to the
+	// pattern - so an empty pattern with a flag arrives here four characters
+	// long and takes the branch an empty one would not. The caller's question
+	// was about the empty pattern and the answer would be about `(?i)`, which
+	// is a wrong answer rather than a missing one, so it is refused by name.
+	//
+	// Only `Split` reads the expression's length, so only `Split` has this.
+	// Found by split_diff.py, which reported three disagreements that were
+	// all this row.
+	if pattern == "" && fields[0] != "" {
+		return "error flags-lengthen-expr"
+	}
 	limit := -1
 	if len(fields) > 3 && fields[3] != "-" {
 		if _, err := fmt.Sscanf(fields[3], "%d", &limit); err != nil {

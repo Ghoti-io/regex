@@ -49,9 +49,12 @@ ROOT = os.path.dirname(os.path.dirname(HERE))
 
 sys.path.insert(0, HERE)
 
+import go_runner
+import linear_diff
 import match_diff
 import perl_diff
 import node_runner
+import rust_runner
 
 # The constructs that tell the iteration rules apart. Every one of them can
 # match empty *and* match something longer at the same position, which is
@@ -77,8 +80,30 @@ SEARCH_START_ATOMS = [
 ]
 
 
+# The linear dialects have no `\G` and no lookaround, so their empty-matching
+# vocabulary is EMPTY_ATOMS less the four constructs both references refuse.
+# Kept as a list of its own rather than filtered at run time, because a
+# refusal on every row of a gate is the shape that makes one read clean.
+LINEAR_EMPTY_ATOMS = [
+    atom for atom in EMPTY_ATOMS
+    if atom not in ("(?=a)", "(?!x)")
+]
+
+LINEAR = {"re2": go_runner, "rust": rust_runner}
+
+
 def make_pattern(rng, dialect, unicode_sets=False):
     """An empty-matching atom, a `\\G` one, or one inside a longer pattern."""
+    if dialect in LINEAR:
+        # No `\G` arm: neither reference has one, so the second axis this file
+        # measures does not exist for these two and a row spelling it would
+        # be a refusal rather than a question.
+        if rng.random() < 0.5:
+            return rng.choice(LINEAR_EMPTY_ATOMS)
+        return "".join(
+            rng.choice(LINEAR_EMPTY_ATOMS) if rng.random() < 0.5
+            else rng.choice(linear_diff.SHARED)
+            for _ in range(rng.randint(1, 3)))
     if dialect != "ecmascript" and rng.random() < 0.3:
         return rng.choice(SEARCH_START_ATOMS)
     if rng.random() < 0.4:
@@ -131,6 +156,29 @@ def ask_node(rows):
                 for span in spans))
         out.append(("all %d " % len(fields) + " ".join(fields)).rstrip())
     return out
+
+
+def ask_linear(rows, dialect):
+    """`FindAllSubmatchIndex` or `captures_iter`, in grx_match's `all` shape.
+
+    The loop is what is being asked about, and it is the one rule no single
+    search can reach: which match follows an empty one. Both references skip
+    an empty match abutting the one before it, which is the same cell
+    GRX_ITERATE_ADVANCE_SKIP_ABUTTING holds for Go - and until this arm
+    existed the crate's half of it was a value copied from Go's row with
+    nothing measuring it.
+    """
+    lines = "".join("%s\t%s\t%s\n" % (
+        flags, pattern.encode("utf-8").hex(), subject.encode("utf-8").hex())
+        for flags, pattern, subject in rows)
+    finished = subprocess.run(LINEAR[dialect].command("all"), input=lines,
+        capture_output=True, text=True, check=True)
+    # `rstrip` because both drivers print "all <n> " and join the fields after
+    # it, so a row with no matches carries a trailing space where grx_match
+    # prints none. ask_node() strips it for the same reason; without this the
+    # first run read 998 of 4,200 rows as disagreements, every one of them
+    # "all 0" against "all 0 ".
+    return [line.rstrip() for line in finished.stdout.splitlines()]
 
 
 def ask_perl(rows):
@@ -271,6 +319,7 @@ def search_start_before_pos(dialect, pattern, ours, theirs):
 
 def compare(dialect, rng, patterns, subjects, examples):
     flag_sets = (match_diff.FLAG_SETS if dialect == "ecmascript"
+                 else linear_diff.FLAGSETS if dialect in LINEAR
                  else perl_diff.FLAG_SETS)
     rows = []
     for _ in range(patterns):
@@ -280,6 +329,9 @@ def compare(dialect, rng, patterns, subjects, examples):
             for _ in range(subjects):
                 rows.append((flags, pattern,
                     match_diff.make_subject(rng, "u" in flags or "v" in flags)))
+        elif dialect in LINEAR:
+            for subject in linear_diff.SUBJECTS:
+                rows.append((flags, pattern, subject))
         else:
             for subject in perl_diff.SUBJECTS:
                 rows.append((flags, pattern, subject))
@@ -288,7 +340,9 @@ def compare(dialect, rng, patterns, subjects, examples):
     if mine is None:
         sys.stderr.write("the grx_match tool was not found; run `make tools`\n")
         return None
-    theirs = ask_node(rows) if dialect == "ecmascript" else ask_perl(rows)
+    theirs = (ask_node(rows) if dialect == "ecmascript"
+              else ask_linear(rows, dialect) if dialect in LINEAR
+              else ask_perl(rows))
     if theirs is None:
         print("%s: skipped (tools/corpus/perl_match.pl is missing)" % dialect)
         return 0
@@ -387,8 +441,8 @@ def main(argv):
     parser.add_argument("--dialect", default="all")
     args = parser.parse_args(argv[1:])
 
-    dialects = (("ecmascript", "perl") if args.dialect == "all"
-                else (args.dialect,))
+    dialects = (("ecmascript", "perl", "re2", "rust")
+                if args.dialect == "all" else (args.dialect,))
     total = 0
     for dialect in dialects:
         rng = random.Random(args.seed)

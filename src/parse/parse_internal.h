@@ -349,6 +349,16 @@ struct GRX_Pattern {
   GRX_Arena names;                 ///< char; NUL-terminated, by offset.
   GRX_Arena strings;               ///< uint32_t; length-prefixed runs.
   size_t capture_count;            ///< Capturing groups, excluding group 0.
+  /**
+   * Bytes of pattern text this was parsed from.
+   *
+   * One dialect's split rule reads it and nothing else does: Go's
+   * `Regexp.Split` answers an empty subject from `len(re.expr) > 0`, so
+   * `(?:)` and the empty pattern differ there while lowering to the same
+   * program. Carried from here into GRX_Regex::pattern_length, which is
+   * where the rule is applied.
+   */
+  size_t text_length;
   GRX_PatternLimits limits;        ///< What `(*LIMIT_MATCH=d)` and kin asked.
   /**
    * The newline convention `(*CR)` and kin chose, or GRX_NEWLINES_COUNT.

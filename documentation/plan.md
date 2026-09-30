@@ -695,6 +695,59 @@ expressions:
 `tools/oracle/linear_diff.py` now runs the cross-product alongside its
 random pass, so the cell is covered by construction.
 
+**Replacement, splitting and the search-all loop, added 2026-09-29.** The two
+dialects compiled and matched before this and their template grammar was not
+built, so `grx_regex_replace()` answered `GRX_ERR_UNSUPPORTED` and
+`grx_regex_split()` took the library's default - condition 5 of §4 unmet for
+both. All three axes are now measured against both references and gated:
+`check-oracle-replace`, `check-oracle-split` and `check-oracle-iterate` each
+grew two arms, at 1,080, 1,008 and 4,200 compared rows per dialect and zero
+disagreements.
+
+What the probing found, and none of it was in either project's
+documentation:
+
+- **The template's bare reference is one word run, classified after it is
+  read.** `$1x` is the name `1x` and substitutes nothing, where PCRE2 - whose
+  sigil and forms these otherwise share - reads group 1 and a literal "x".
+  New bit `GRX_TMPL_BARE_RUN_ONLY`. The dialects page said "the name is
+  parsed greedily, so `$1x` is the group named `1x`", which is the right
+  observation with the wrong consequence attached.
+- **`$0` and `${0}` are the whole match**, where the page said these two had
+  no whole-match form at all; and `$&`, `` $` ``, `$'` and `$_` are *literal
+  text*, where the Perl family reads all four.
+- **The two dialects' templates differ in four spellings**, so they carry a
+  row each: `$01` and `${00}` are a group and the whole match in the crate
+  and missing names in Go, and `${&}` and `${}` are text in one and a missing
+  name in the other. Two new bits for Go's half
+  (`GRX_TMPL_NUMBER_NO_LEADING_ZERO`, `GRX_TMPL_BRACED_WORD_ONLY`) and one
+  for the crate's (`GRX_TMPL_BRACED_EMPTY_NAME`).
+- **Splitting is two more rules, not one shared one.** Both drop what the
+  groups captured - which no other dialect here does - and both read `limit`
+  as pieces with the last the unsplit remainder. They part over an empty
+  match at either end of the subject: `a*` over "baac" is two pieces in Go
+  and four in the crate. Six of fifteen probes move, so `GRX_SPLIT_GO` and
+  `GRX_SPLIT_RUST`.
+- **Go's empty-subject rule reads the length of the pattern's own source
+  text.** `(?:)` over "" is one piece and the empty pattern over "" is none,
+  and the two compile to the same program. `GRX_Regex::pattern_length` exists
+  for that one cell, is documented as having exactly one reader, and says a
+  second reader would be a sign the question was wrong.
+- **The crate's iteration cell had never been measured.** It held
+  `ADVANCE_ONE_SKIP_ABUTTING`, copied from Go's row, whose own citation was a
+  sentence in `regexp`'s documentation. Both are now measured and both are
+  right - which is the good case, and was not knowable beforehand.
+
+And one thing that was not a library defect and would have read as three:
+`tools/oracle/go_match.go` spells a caller's flags by prepending `(?ims)` to
+the pattern, and Go's split rule reads the pattern's *length* - so an empty
+pattern with a flag arrives four characters long and takes the branch an
+empty one would not. The driver now refuses that row by name rather than
+answering a different question from the one asked. A transport that changes
+the thing the reference measures is the shape worth remembering here; the
+same driver's silent flag-dropping is §19's open item, and this is the second
+time its flag handling has produced rows that mean nothing.
+
 ### Phase 7: Tcl, Vim and Emacs
 
 **WP-36 Vim**: built 2026-09-23. The magic-level hook was indeed the work,
@@ -1015,6 +1068,19 @@ carried had expired: notes/regex/TODO.md §14 has it.
 
 Condition 6 is met by all ten: `python_split` was the last one missing before
 I-Regexp arrived with `iregexp_jsonpath` of its own.
+
+**The two linear dialects arrived after this reading and stand at five of the
+six**, measured 2026-09-29. Condition 1 holds: no `probe` cell remains in
+either row, the last four having been closed by the replacement, splitting,
+iteration and capture-reset probing above - and one of them, `capture_reset`,
+turned out to hold the right value by default, which is not the same as having
+been measured and is recorded as the difference. Conditions 2, 3 and 5 hold:
+every rule in §5 has a test that states it, 2,947 and 2,817 vectors pass at
+100%, and both template grammars and split rules are built and gated.
+Condition 4 is unmet as it is for every dialect. Condition 6 is the one
+outstanding: `examples/` has nothing in either dialect, and the natural
+program is the one that shows a refusal being the guarantee - a pattern
+accepted under `re2` running on `GRX_ENGINE_PIKE` by name.
 
 Conditions 1, 2, 3 and 5 hold for the nine that compile and match. There are
 no known gaps left: the five that remained were one feature - Perl's `\U`,

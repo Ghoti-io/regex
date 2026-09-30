@@ -44,8 +44,11 @@ import subprocess
 import sys
 import tempfile
 
+import go_runner
+import linear_diff
 import pcre2_runner
 import python_match
+import rust_runner
 import vim_runner
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -114,6 +117,18 @@ PYTHON_MALFORMED = [
 # things. Kept apart so a run can say which side it is asking about.
 DIALECT_FORMS = {
     "ecmascript": ["$`", "$'", "$<n>", "$<m>", "$3", "$9"],
+    # Go's and the crate's, which share the sigil with PCRE2's and almost
+    # nothing else. `$&`, `` $` ``, `$'` and `$_` are all in WELL_FORMED or
+    # MALFORMED and all four are literal text here, which is the half of this
+    # grammar a shared list gets wrong. What is here is what the two
+    # *recognise*, plus the four spellings where they disagree with each
+    # other: `$01` and `${00}` are group 1 and the whole match in the crate
+    # and missing names in Go, `${&}` is text in Go and a missing name in the
+    # crate, and `${}` is the reverse of that.
+    "re2": ["$n", "${n}", "${1}", "$0", "${0}", "$01", "$00", "${00}",
+            "${&}", "${}", "$1a", "$12_", "${01}", "$m", "${m}"],
+    "rust": ["$n", "${n}", "${1}", "$0", "${0}", "$01", "$00", "${00}",
+             "${&}", "${}", "$1a", "$12_", "${01}", "$m", "${m}"],
     "pcre": ["$`", "$'", "$_", "$<n>", "${n}", "$n", "${1}", "$0", "${0}"],
     # Python's sigil is a backslash and its alphabet is closed, so its forms
     # share nothing with the other two: `$1` is two literal characters here
@@ -203,7 +218,21 @@ FLAG_SETS = {
     # Vim has no flag string at all: `\c`, `\v` and the rest are pattern
     # syntax, so the alphabet is empty and the only valid value is "".
     "vim": ("",),
+    "re2": ("", "i", "m", "s", "im", "U"),
+    "rust": ("", "i", "m", "s", "im", "U"),
 }
+
+# The runner each linear dialect's reference is reached through.
+LINEAR = {"re2": go_runner, "rust": rust_runner}
+
+# Their named groups, which are `(?P<n>...)` in both and `(?<n>...)` in the
+# crate as well. The shared list uses the second spelling, which RE2 refuses,
+# so the numbered forms would be the only ones with anything to refer to.
+LINEAR_NAMED_PATTERNS = [
+    "(?P<n>a)", "(?P<n>a)(?P<m>b)", "(?P<n>a)(b)", "(a)(?P<n>b)",
+    "(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)(k)(l)",
+    "(a)", "(a)(b)", "(a)(b)(c)",
+]
 
 
 # The same list in Python's spelling: `(?<n>...)` is "unknown extension"
@@ -285,6 +314,12 @@ def make_pattern(dialect, rng):
     run exists to ask. perl_diff's per-dialect atoms are the right
     vocabulary, and they are already written.
     """
+    if dialect in LINEAR:
+        # linear_diff's own vocabulary, refusals and all, for the reason the
+        # pcre arm gives below: an ECMAScript pattern is not an RE2 one, and
+        # feeding one in would bury the template question under front-end
+        # disagreements that linear_diff.py already reports properly.
+        return linear_diff.make_pattern(rng, dialect)
     if dialect == "ecmascript":
         return match_diff.make_pattern(rng)
     if dialect == "vim":
@@ -305,6 +340,22 @@ def make_pattern(dialect, rng):
     # not" and buries the template question the run exists to ask.
     atoms = perl_diff.ATOMS[dialect if dialect in perl_diff.ATOMS else "pcre"]
     return "".join(rng.choice(atoms) for _ in range(rng.randint(1, 3)))
+
+
+def ask_linear(dialect, rows):
+    """`ReplaceAllString` or `replace_all`, paired with a count of one.
+
+    Neither reference has an ill-formed template - every spelling either is a
+    reference or is text - so there is no lazy parse for a count to
+    distinguish, and the pair's second field is a constant the way node's is.
+    """
+    lines = "".join("%s\t%s\t%s\t%s\n" % (
+        flags, pattern.encode("utf-8").hex(), subject.encode("utf-8").hex(),
+        template.encode("utf-8").hex())
+        for flags, pattern, subject, template in rows)
+    finished = subprocess.run(LINEAR[dialect].command("replace"), input=lines,
+        capture_output=True, text=True, check=True)
+    return [(parse_driver(line), 1) for line in finished.stdout.splitlines()]
 
 
 def ask_pcre2(driver, rows):
@@ -762,6 +813,8 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
             pattern = rng.choice(PYTHON_NAMED_PATTERNS)
         elif dialect == "vim":
             pattern = rng.choice(VIM_NAMED_PATTERNS)
+        elif dialect in LINEAR:
+            pattern = rng.choice(LINEAR_NAMED_PATTERNS)
         else:
             pattern = rng.choice(NAMED_PATTERNS)
         flags = rng.choice(FLAG_SETS[dialect])
@@ -782,6 +835,8 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
         theirs = [(answer, 1) for answer in ask_vim(rows)]
     elif dialect == "perl":
         theirs = ask_perl(rows)
+    elif dialect in LINEAR:
+        theirs = ask_linear(dialect, rows)
     else:
         theirs = ask_pcre2(reference, rows)
     mine, raw_mine = ask_library(driver, dialect, rows)
@@ -1152,7 +1207,7 @@ def main(argv):
     parser.add_argument("--subjects", type=int, default=4)
     parser.add_argument("--examples", type=int, default=10)
     parser.add_argument("--dialect", default="all",
-        help="ecmascript, pcre, or all")
+        help="ecmascript, pcre, perl, python, vim, re2, rust, or all")
     args = parser.parse_args(argv[1:])
 
     driver = find("grx_replace")
@@ -1160,7 +1215,7 @@ def main(argv):
         sys.stderr.write("run `make tools` first\n")
         return 2
 
-    dialects = ("ecmascript", "pcre", "perl", "python", "vim") \
+    dialects = ("ecmascript", "pcre", "perl", "python", "vim", "re2", "rust") \
         if args.dialect == "all" else (args.dialect,)
     total = 0
     for dialect in dialects:

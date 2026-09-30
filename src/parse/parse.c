@@ -1388,6 +1388,8 @@ GRX_Result grx_parse_pattern(const char * pattern, size_t length,
   if (result != GRX_OK) {
     return grx_error_set(out_error, result, GRX_DIAG_OUT_OF_MEMORY, GRX_NPOS, 0);
   }
+  // The length of the text, not of anything it parsed to. See the field.
+  parser.pattern->text_length = length;
 
   prescan(&parser);
   if (limits->max_captures && parser.group_count > limits->max_captures) {

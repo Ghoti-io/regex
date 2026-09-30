@@ -129,6 +129,89 @@ std::string search(const std::string & pattern, const std::string & subject,
   return search_on(pattern, subject, syntax, options, GRX_ENGINE_AUTO);
 }
 
+/** `grx_regex_replace()`'s answer, or "refused" / "template". */
+std::string replaced(const std::string & pattern, const std::string & subject,
+    const std::string & template_text, GRX_Syntax syntax,
+    uint32_t options = 0) {
+  GRX_Regex * regex = nullptr;
+  if (compile_with(pattern, syntax, options, nullptr, &regex) != GRX_OK) {
+    grx_regex_free(regex);
+    return "refused";
+  }
+  GRX_Text text = {nullptr, 0, nullptr};
+  GRX_Result result = grx_regex_replace(regex, subject.data(), subject.size(),
+      template_text.data(), template_text.size(), GRX_REPLACE_GLOBAL, nullptr,
+      nullptr, nullptr, &text);
+  std::string answer = result == GRX_OK
+      ? std::string(text.data ? text.data : "", text.length)
+      : (result == GRX_ERR_UNSUPPORTED ? "unsupported" : "template");
+  grx_text_free(&text);
+  grx_regex_free(regex);
+  return answer;
+}
+
+/** `grx_regex_split()`'s pieces as `a|b|c`, with `-` for an unset one. */
+std::string split_into(const std::string & pattern,
+    const std::string & subject, size_t limit, GRX_Syntax syntax,
+    uint32_t options = 0) {
+  GRX_Regex * regex = nullptr;
+  if (compile_with(pattern, syntax, options, nullptr, &regex) != GRX_OK) {
+    grx_regex_free(regex);
+    return "refused";
+  }
+  GRX_Split split = {nullptr, 0, nullptr};
+  std::string answer = "error";
+  if (grx_regex_split(regex, subject.data(), subject.size(), limit, nullptr,
+          nullptr, nullptr, &split)
+      == GRX_OK) {
+    // The count leads, because "no pieces" and "one empty piece" are the two
+    // answers a limit rule exists to tell apart and they print the same.
+    answer = std::to_string(split.count);
+    for (size_t i = 0; i < split.count; i++) {
+      answer += i ? "|" : " ";
+      answer += split.pieces[i].start == GRX_NPOS
+          ? "-"
+          : subject.substr(split.pieces[i].start,
+                split.pieces[i].end - split.pieces[i].start);
+    }
+  }
+  grx_split_free(&split);
+  grx_regex_free(regex);
+  return answer;
+}
+
+/** Every match of a search-all loop as `start-end`, space separated. */
+std::string all_matches(const std::string & pattern,
+    const std::string & subject, GRX_Syntax syntax, uint32_t options = 0) {
+  GRX_Regex * regex = nullptr;
+  if (compile_with(pattern, syntax, options, nullptr, &regex) != GRX_OK) {
+    grx_regex_free(regex);
+    return "refused";
+  }
+  GRX_Match * match = nullptr;
+  grx_match_create(regex, nullptr, &match);
+  std::string answer;
+  int matched = 0;
+  GRX_Result result = grx_regex_search(regex, subject.data(), subject.size(),
+      0, GRX_ENGINE_AUTO, nullptr, match, &matched);
+  while (result == GRX_OK && matched) {
+    GRX_Capture whole;
+    if (grx_match_span(match, &whole) != GRX_OK) {
+      answer = "error";
+      break;
+    }
+    if (!answer.empty()) {
+      answer += " ";
+    }
+    answer += std::to_string(whole.start) + "-" + std::to_string(whole.end);
+    result = grx_regex_search_next(regex, subject.data(), subject.size(),
+        nullptr, match, &matched);
+  }
+  grx_match_destroy(match);
+  grx_regex_free(regex);
+  return answer.empty() ? "none" : answer;
+}
+
 /**
  * Whether the linear engine will run this pattern, asked by name.
  *
@@ -401,6 +484,134 @@ TEST(Linear, TheThreeEnginesAgreeOnALoopTheSimulationEnds) {
           "0-3 0-2")
           << "engine " << (int)engine;
     }
+  }
+}
+
+TEST(Linear, TheTemplateGrammarIsAWordRunAndNotANumberThenAName) {
+  // GRX_TMPL_BARE_RUN_ONLY, which is the cell that separates this grammar
+  // from PCRE2's. Both have `$` and both read a bare name; PCRE2 tries a
+  // number first and falls back, so `$1a` is group 1 and an "a" there. Here
+  // the run is read whole and asked what it is afterwards, so `$1a` is the
+  // name "1a", which no pattern has.
+  for (GRX_Syntax syntax : {GRX_SYNTAX_RE2, GRX_SYNTAX_RUST}) {
+    EXPECT_EQ(replaced("(a)(b)", "zabz", "$1", syntax), "zaz");
+    EXPECT_EQ(replaced("(a)(b)", "zabz", "${1}", syntax), "zaz");
+    EXPECT_EQ(replaced("(a)(b)", "zabz", "$2", syntax), "zbz");
+    EXPECT_EQ(replaced("(a)(b)", "zabz", "$0", syntax), "zabz");
+    EXPECT_EQ(replaced("(a)(b)", "zabz", "${0}", syntax), "zabz");
+    EXPECT_EQ(replaced("(a)(b)", "zabz", "$$", syntax), "z$z");
+    EXPECT_EQ(replaced("(?P<n>a)(b)", "zabz", "$n", syntax), "zaz");
+    EXPECT_EQ(replaced("(?P<n>a)(b)", "zabz", "${n}", syntax), "zaz");
+
+    // The run, and the whole of it: `$1a` and `$12_` are names.
+    EXPECT_EQ(replaced("(a)(b)", "zabz", "$1a", syntax), "zz");
+    EXPECT_EQ(replaced("(a)(b)", "zabz", "$12_", syntax), "zz");
+    // A number the pattern has not got, and a name it has not got, both
+    // substitute nothing: GRX_TMPL_MISSING_EMPTY, not LITERAL and not ERROR.
+    EXPECT_EQ(replaced("(a)(b)", "zabz", "$9", syntax), "zz");
+    EXPECT_EQ(replaced("(a)(b)", "zabz", "$12", syntax), "zz");
+    EXPECT_EQ(replaced("(a)(b)", "zabz", "$x", syntax), "zz");
+
+    // Four spellings that look like references in the Perl family and are
+    // ordinary text here, because each is the sigil followed by something
+    // that cannot continue a name. `$_` is the exception that proves it: an
+    // underscore *can*, so it is a name and substitutes nothing.
+    EXPECT_EQ(replaced("(a)(b)", "zabz", "$&", syntax), "z$&z");
+    EXPECT_EQ(replaced("(a)(b)", "zabz", "$`", syntax), "z$`z");
+    EXPECT_EQ(replaced("(a)(b)", "zabz", "$'", syntax), "z$'z");
+    EXPECT_EQ(replaced("(a)(b)", "zabz", "$_", syntax), "zz");
+    // And a sigil that begins nothing at all stands as written, where PCRE2
+    // reports an error for every one of them.
+    EXPECT_EQ(replaced("(a)(b)", "zabz", "$", syntax), "z$z");
+    EXPECT_EQ(replaced("(a)(b)", "zabz", "${1", syntax), "z${1z");
+    EXPECT_EQ(replaced("(a)(b)", "zabz", "$-", syntax), "z$-z");
+    // The sigil is `$` and the backslash is nothing: no escapes, no `\1`.
+    EXPECT_EQ(replaced("(a)(b)", "zabz", "\\1", syntax), "z\\1z");
+    EXPECT_EQ(replaced("(a)(b)", "zabz", "\\n", syntax), "z\\nz");
+  }
+}
+
+TEST(Linear, FourTemplateSpellingsMeanDifferentThingsInTheTwoDialects) {
+  // The two dialects agree on all 5,040 rows of the matching battery and
+  // part company on four template spellings, which is why the rows carry a
+  // template_spec each rather than sharing one.
+  //
+  // Go computes a digit run's value and then throws it away when the run has
+  // a leading zero and more than one digit, so `$01` is the name "01"; the
+  // crate strips the zero. And Go's `${...}` has to close on a name, where
+  // the crate reads whatever is there - including nothing at all.
+  EXPECT_EQ(replaced("(a)(b)", "zabz", "$01", GRX_SYNTAX_RE2), "zz");
+  EXPECT_EQ(replaced("(a)(b)", "zabz", "$01", GRX_SYNTAX_RUST), "zaz");
+  EXPECT_EQ(replaced("(a)(b)", "zabz", "$00", GRX_SYNTAX_RE2), "zz");
+  EXPECT_EQ(replaced("(a)(b)", "zabz", "$00", GRX_SYNTAX_RUST), "zabz");
+  EXPECT_EQ(replaced("(a)(b)", "zabz", "${&}", GRX_SYNTAX_RE2), "z${&}z");
+  EXPECT_EQ(replaced("(a)(b)", "zabz", "${&}", GRX_SYNTAX_RUST), "zz");
+  EXPECT_EQ(replaced("(a)(b)", "zabz", "${}", GRX_SYNTAX_RE2), "z${}z");
+  EXPECT_EQ(replaced("(a)(b)", "zabz", "${}", GRX_SYNTAX_RUST), "zz");
+}
+
+TEST(Linear, SplittingDropsCapturesAndTheTwoDialectsDisagreeOnEmptyMatches) {
+  // Captures first, because it is the one clause both share and no other
+  // dialect here has: `(,)` over "a,b" is two pieces, where ECMAScript, perl
+  // and Python all interleave the separator and give three.
+  for (GRX_Syntax syntax : {GRX_SYNTAX_RE2, GRX_SYNTAX_RUST}) {
+    EXPECT_EQ(split_into("(,)", "a,b", GRX_NPOS, syntax), "2 a|b");
+    EXPECT_EQ(split_into(",", "a,b,c", GRX_NPOS, syntax), "3 a|b|c");
+    // Trailing empties are kept, which is ECMAScript's half and not perl's.
+    EXPECT_EQ(split_into(",", "a,b,,", GRX_NPOS, syntax), "4 a|b||");
+    // `limit` counts pieces and the last is the unsplit remainder, and zero
+    // means no pieces - a fourth reading again, ECMAScript's spelling with
+    // perl's remainder.
+    EXPECT_EQ(split_into(",", "a,b,c", 1, syntax), "1 a,b,c");
+    EXPECT_EQ(split_into(",", "a,b,c", 2, syntax), "2 a|b,c");
+    EXPECT_EQ(split_into(",", "a,b,c", 0, syntax), "0");
+  }
+
+  // And then the clause where they part. Go drops an empty match at either
+  // end of the subject and the crate keeps both, so every one of these
+  // differs by exactly the pieces at the ends.
+  EXPECT_EQ(split_into("a*", "baac", GRX_NPOS, GRX_SYNTAX_RE2), "2 b|c");
+  EXPECT_EQ(split_into("a*", "baac", GRX_NPOS, GRX_SYNTAX_RUST), "4 |b|c|");
+  EXPECT_EQ(split_into("", "abc", GRX_NPOS, GRX_SYNTAX_RE2), "3 a|b|c");
+  EXPECT_EQ(split_into("", "abc", GRX_NPOS, GRX_SYNTAX_RUST), "5 |a|b|c|");
+  EXPECT_EQ(split_into("x*", "a", GRX_NPOS, GRX_SYNTAX_RE2), "1 a");
+  EXPECT_EQ(split_into("x*", "a", GRX_NPOS, GRX_SYNTAX_RUST), "3 |a|");
+  // With a limit the two differ in both fields, because Go's caps the
+  // *matches* as well as the pieces and the crate's caps only the pieces.
+  EXPECT_EQ(split_into("a*", "baac", 2, GRX_SYNTAX_RE2), "2 b|c");
+  EXPECT_EQ(split_into("a*", "baac", 2, GRX_SYNTAX_RUST), "2 |baac");
+
+  // Go's empty-subject rule reads the length of the pattern's own *text*,
+  // which is the only cell in this library that does. `(?:)` and the empty
+  // pattern compile to the same program and answer differently, and no
+  // property of that program can tell them apart.
+  EXPECT_EQ(split_into("(?:)", "", GRX_NPOS, GRX_SYNTAX_RE2), "1 ");
+  EXPECT_EQ(split_into("", "", GRX_NPOS, GRX_SYNTAX_RE2), "0");
+  EXPECT_EQ(split_into("a*", "", GRX_NPOS, GRX_SYNTAX_RE2), "1 ");
+  EXPECT_EQ(split_into("z", "", GRX_NPOS, GRX_SYNTAX_RE2), "1 ");
+  // The crate has no such rule: the walk answers it, and every one of those
+  // is two empty pieces around the one empty match.
+  EXPECT_EQ(split_into("(?:)", "", GRX_NPOS, GRX_SYNTAX_RUST), "2 |");
+  EXPECT_EQ(split_into("", "", GRX_NPOS, GRX_SYNTAX_RUST), "2 |");
+  EXPECT_EQ(split_into("a*", "", GRX_NPOS, GRX_SYNTAX_RUST), "2 |");
+  EXPECT_EQ(split_into("z", "", GRX_NPOS, GRX_SYNTAX_RUST), "1 ");
+}
+
+TEST(Linear, TheSearchAllLoopSkipsAnEmptyMatchAbuttingTheOneBefore) {
+  // GRX_ITERATE_ADVANCE_SKIP_ABUTTING, and the crate's half of the cell had
+  // never been measured: the value was Go's, taken from a sentence in
+  // `regexp`'s documentation, and the crate's row copied it. Both references
+  // now answer through tools/oracle/iterate_diff.py, 4,200 rows each.
+  //
+  // `a*` over "baac" is the shortest case: three matches, not four. The
+  // empty match at 1 abuts nothing and is reported as 1-3 having consumed;
+  // the one at 3 abuts it and is skipped; 4-4 is reported.
+  for (GRX_Syntax syntax : {GRX_SYNTAX_RE2, GRX_SYNTAX_RUST}) {
+    EXPECT_EQ(all_matches("a*", "baac", syntax), "0-0 1-3 4-4");
+    EXPECT_EQ(all_matches("b*", "ab", syntax), "0-0 1-2");
+    EXPECT_EQ(all_matches("a|", "aab", syntax), "0-1 1-2 3-3");
+    EXPECT_EQ(all_matches("", "abc", syntax), "0-0 1-1 2-2 3-3");
+    EXPECT_EQ(all_matches("x*", "", syntax), "0-0");
   }
 }
 

@@ -354,8 +354,32 @@ static size_t python_escape(const char * text, size_t length, size_t after,
  * the same way. A reader that stopped at the first character which cannot
  * continue a *number* would resolve `$1x` as group 1 followed by "x".
  */
-static size_t bare_name_reference(const GRX_Regex * regex, const char * text,
-    size_t length, size_t at, GRX_TemplateOpKind * out_kind,
+/**
+ * Whether a run of digits names a group under this dialect's number rule.
+ *
+ * The leading-zero clause is Go's and is read in two places - the bare run
+ * and the braced form - so it is one function rather than two copies of a
+ * comparison. A single `0` is always a number; `00` and `01` are numbers
+ * everywhere except under GRX_TMPL_NUMBER_NO_LEADING_ZERO, where they are
+ * names instead and so can only ever be missing.
+ */
+static int digit_run_is_a_number(const GRX_TemplateSpec * spec,
+    const char * text, size_t at, size_t run) {
+  if (!run) {
+    return 0;
+  }
+  for (size_t i = 0; i < run; i++) {
+    if (text[at + i] < '0' || text[at + i] > '9') {
+      return 0;
+    }
+  }
+  return !(run > 1 && text[at] == '0'
+      && (spec->features & GRX_TMPL_NUMBER_NO_LEADING_ZERO));
+}
+
+static size_t bare_name_reference(const GRX_TemplateSpec * spec,
+    const GRX_Regex * regex, const char * text, size_t length, size_t at,
+    size_t captures, GRX_TemplateOpKind * out_kind,
     uint32_t * out_group, size_t * out_name_at, size_t * out_name_length) {
   size_t end = at;
   while (end < length) {
@@ -390,6 +414,28 @@ static size_t bare_name_reference(const GRX_Regex * regex, const char * text,
     return name_length;
   }
 
+  if (spec->features & GRX_TMPL_BARE_RUN_ONLY) {
+    // The run is the whole reference, so there is nothing for the caller to
+    // try instead: it is a number if it reads as one and a missing name
+    // otherwise, and either way the digits or letters go with it. Returning
+    // zero here is what would make `$1a` group 1 followed by an "a", which
+    // is PCRE2's answer and not these two references'.
+    if (digit_run_is_a_number(spec, text, at, name_length)) {
+      uint32_t value = 0;
+      for (size_t i = 0; i < name_length && value <= captures + 1; i++) {
+        value = value * 10 + (uint32_t)(text[at + i] - '0');
+      }
+      *out_kind = (!value && (spec->features & GRX_TMPL_WHOLE_ZERO))
+          ? GRX_TPL_WHOLE
+          : (value && value <= captures) ? GRX_TPL_GROUP : GRX_TPL_NOTHING;
+      *out_group = value;
+    }
+    else {
+      *out_kind = GRX_TPL_NOTHING;
+    }
+    return name_length;
+  }
+
   // Not a name this pattern has. It may still be a *number*, which the
   // caller reads instead: `${1}` and `$1` are the same reference.
   return 0;
@@ -414,18 +460,32 @@ static size_t braced_reference(const GRX_TemplateSpec * spec,
     return 0;
   }
   size_t inner = (size_t)(close - (text + at)) - 1;
-  if (!inner) {
+  if (!inner && !(spec->features & GRX_TMPL_BRACED_EMPTY_NAME)) {
+    // `${}` as literal text. The crate reads it as a reference to the empty
+    // name, which no pattern can have, so it substitutes nothing; Go leaves
+    // the four characters alone.
     return 0;
   }
 
-  int all_digits = 1;
-  for (size_t i = 0; i < inner; i++) {
-    char c = text[at + 1 + i];
-    if (c < '0' || c > '9') {
-      all_digits = 0;
-      break;
+  if (spec->features & GRX_TMPL_BRACED_WORD_ONLY) {
+    // Go: the brace has to close on a name, and `${&}` and `${1 }` are not
+    // names, so the whole spelling stands as text rather than becoming a
+    // reference that is merely missing.
+    if (!inner) {
+      return 0;
+    }
+    for (size_t i = 0; i < inner; i++) {
+      char c = text[at + 1 + i];
+      int word = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
+          || (c >= '0' && c <= '9') || c == '_';
+      if (!word) {
+        return 0;
+      }
     }
   }
+
+  int all_digits = inner
+      && digit_run_is_a_number(spec, text, at + 1, inner);
 
   if (all_digits) {
     if (!(spec->features & GRX_TMPL_NUMBER_BRACED)) {
@@ -746,6 +806,20 @@ GRX_Result grx_template_parse(const GRX_TemplateSpec * spec,
           consumed += 1;
         }
       }
+      else if (spec->features & GRX_TMPL_BARE_RUN_ONLY) {
+        // Before every numeric branch below, because the run is read whole
+        // and asked what it is afterwards. Behind this bit `$0` would be
+        // taken by GRX_TMPL_WHOLE_ZERO's branch a character at a time, and
+        // `$01` would become the whole match followed by a "1".
+        consumed = bare_name_reference(spec, regex, text, length, after,
+            captures, &kind, &group, &name_at, &name_length);
+        if (consumed && kind == GRX_TPL_NOTHING
+            && spec->missing == GRX_TMPL_MISSING_ERROR) {
+          grx_template_clear(out_template);
+          return fail(out_error, GRX_DIAG_TEMPLATE_UNKNOWN_GROUP, start,
+              1 + consumed);
+        }
+      }
       else if (c >= '0' && c <= '9'
           && (spec->features & GRX_TMPL_NUMBER_GREEDY)) {
         // Before the WHOLE_ZERO branch, because a leading zero belongs to
@@ -832,8 +906,8 @@ GRX_Result grx_template_parse(const GRX_TemplateSpec * spec,
       }
       else if (spec->features & GRX_TMPL_NAME_BARE) {
         consumed
-            = bare_name_reference(regex, text, length, after, &kind, &group,
-                &name_at, &name_length);
+            = bare_name_reference(spec, regex, text, length, after, captures,
+                &kind, &group, &name_at, &name_length);
         if (!consumed && spec->missing == GRX_TMPL_MISSING_ERROR) {
           grx_template_clear(out_template);
           return fail(out_error, GRX_DIAG_TEMPLATE_UNKNOWN_GROUP, start, 2);
@@ -1572,6 +1646,19 @@ GRX_Result grx_regex_split(const GRX_Regex * regex, const char * subject,
   // where ECMAScript's `"".split(/x*/)` is `[]` and perl's is `()` - three
   // references, three answers, for the shortest question the function has.
   const int python_rule = profile.split == GRX_SPLIT_PYTHON;
+  const int go_rule = profile.split == GRX_SPLIT_GO;
+  const int rust_rule = profile.split == GRX_SPLIT_RUST;
+  // The plain walk: every match separates, an empty one included, with no
+  // rule about a piece boundary and none about either end of the subject.
+  // Python reached it first and the two linear dialects walk it too; what
+  // they add - dropped captures, dropped end pieces, a fourth reading of
+  // `limit` - is below rather than here.
+  const int plain_walk = python_rule || go_rule || rust_rule;
+  // Go's `Split` and the crate's `split` both hand back the text between the
+  // matches and nothing else, where ECMAScript, perl and Python interleave
+  // what the groups captured. `(,)` over "a,b" is two pieces there and three
+  // everywhere else.
+  const int drop_captures = go_rule || rust_rule;
 
   // perlfunc: a split pattern of `/^/` "is treated as if the /m modifier
   // were supplied". Which patterns count is not what that sentence suggests,
@@ -1666,6 +1753,13 @@ GRX_Result grx_regex_split(const GRX_Regex * regex, const char * subject,
     size_t piece_start = resolved.begin;
     int matched = 0;
     size_t fields = 0;
+    // Go's own `end`, which its trailing test reads: the start of the last
+    // match the loop *processed*, dropped or not, and the subject's start
+    // before there has been one.
+    size_t go_last_start = resolved.begin;
+    // Go's `FindAllStringIndex(s, n)` cap, which is separate from its
+    // piece cap and is why a limit changes which empty matches exist at all.
+    size_t go_seen = 0;
 
     // The empty subject is its own rule, and the two dialects disagree
     // flatly: ECMAScript yields one empty piece unless the pattern matches
@@ -1674,16 +1768,30 @@ GRX_Result grx_regex_split(const GRX_Regex * regex, const char * subject,
     // it. An empty subject with a pattern that does not match yields the one
     // empty piece the final-field step emits, and one that matches empty
     // yields two - the piece before the separator and the piece after it.
-    if (resolved.begin == end && !python_rule) {
-      if (!perl_rule) {
-        GRX_SearchOptions probe = resolved;
-        result = grx_regex_search_ex(regex, subject, length, &probe, match,
-            &matched);
-        if (result == GRX_OK && !matched) {
+    if (resolved.begin == end && !python_rule && !rust_rule) {
+      if (go_rule) {
+        // Go's is a test on the length of the pattern *text*: `len(re.expr) >
+        // 0 && len(s) == 0` returns one empty piece, and the empty pattern
+        // falls through to the walk, which drops both of its end pieces and
+        // yields none. `(?:)` over "" is one piece and `` over "" is zero,
+        // and the two compile to the same program - which is the whole reason
+        // GRX_Regex carries its source length.
+        if (regex->pattern_length) {
           result = add_piece(&pieces, resolved.begin, end);
+          goto done;
         }
       }
-      goto done;
+      else {
+        GRX_SearchOptions probe = resolved;
+        if (!perl_rule) {
+          result = grx_regex_search_ex(regex, subject, length, &probe, match,
+              &matched);
+          if (result == GRX_OK && !matched) {
+            result = add_piece(&pieces, resolved.begin, end);
+          }
+        }
+        goto done;
+      }
     }
 
     result = grx_regex_search_ex(regex, subject, length, &resolved, match,
@@ -1704,10 +1812,10 @@ GRX_Result grx_regex_split(const GRX_Regex * regex, const char * subject,
       // trailing-empty drop removes the field again - which is why the
       // twenty-four hand-written probe cases missed it and the generator
       // found it.
-      if (whole.start >= end && !perl_rule && !python_rule) {
+      if (whole.start >= end && !perl_rule && !plain_walk) {
         break;
       }
-      if (whole.end == piece_start && !python_rule) {
+      if (whole.end == piece_start && !plain_walk) {
         // An empty match where this piece begins. Not a separator; step on.
         //
         // ECMA-262 22.2.6.14's rule, and perl's. Python has no such rule
@@ -1738,6 +1846,31 @@ GRX_Result grx_regex_split(const GRX_Regex * regex, const char * subject,
       if (python_rule && field_limit != GRX_NPOS && fields >= field_limit) {
         break;
       }
+      // The fourth reading of `limit`: pieces, with the last the unsplit
+      // remainder. Go caps the *matches* at `limit` as well, asking
+      // FindAllStringIndex for no more than that, which the crate's `splitn`
+      // does not - so `a*` over "baac" with a limit of two is ("b", "c")
+      // there and ("", "baac") here, the same limit reaching a different
+      // answer in both fields.
+      if (drop_captures && limit != GRX_NPOS && limit
+          && (pieces.count + 1 >= limit || (go_rule && go_seen >= limit))) {
+        break;
+      }
+      go_seen++;
+
+      if (go_rule) {
+        // `end = match[0]` is assigned before Go decides whether the match
+        // contributes, so a dropped one still moves it.
+        go_last_start = whole.start;
+        if (whole.end == resolved.begin) {
+          // `match[1] != 0`: an empty match at the subject's start yields no
+          // piece, though `beg = match[1]` still runs.
+          piece_start = whole.end;
+          result = grx_regex_search_next(regex, subject, length, &resolved,
+              match, &matched);
+          continue;
+        }
+      }
 
       result = add_piece(&pieces, piece_start, whole.start);
       // The `pieces.count >= limit` stop is ECMAScript's alone: its `limit`
@@ -1746,17 +1879,18 @@ GRX_Result grx_regex_split(const GRX_Regex * regex, const char * subject,
       // `limit` zero meaning "no limit" there this test would have stopped
       // the walk after the very first piece - which is what it did.
       if (result != GRX_OK
-          || (!perl_rule && !python_rule && pieces.count >= limit)) {
+          || (!perl_rule && !plain_walk && pieces.count >= limit)) {
         goto done;
       }
       fields++;
 
-      for (size_t group = 1; group < grx_match_count(match); group++) {
+      for (size_t group = 1;
+          !drop_captures && group < grx_match_count(match); group++) {
         GRX_Capture capture = {GRX_NPOS, GRX_NPOS};
         grx_match_group(match, group, &capture);
         result = grx_arena_append(&pieces, &capture, NULL);
         if (result != GRX_OK
-            || (!perl_rule && !python_rule && pieces.count >= limit)) {
+            || (!perl_rule && !plain_walk && pieces.count >= limit)) {
           goto done;
         }
       }
@@ -1766,7 +1900,12 @@ GRX_Result grx_regex_split(const GRX_Regex * regex, const char * subject,
           &matched);
     }
 
-    if (result == GRX_OK) {
+    if (result == GRX_OK && (!go_rule || go_last_start != end)) {
+      // Go's `if end != len(s)`: the final piece goes when the last match it
+      // processed *began* at the subject's end, which only an empty match
+      // there can do. Its `end` starts at the subject's start, so a subject
+      // with no processed match and nothing in it drops the piece too - the
+      // path the empty pattern over "" takes.
       result = add_piece(&pieces, piece_start, end);
       fields++;
     }

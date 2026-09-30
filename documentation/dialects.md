@@ -504,7 +504,7 @@ The two rules that make `(a*)*` against `b` report different things:
 | | `LONGEST`: irrelevant; the match is the longest, and an empty iteration adds nothing | Tcl |
 | Capture reset | `RESET_EACH_ITERATION`: captures inside the group are cleared at the **start** of every iteration (RepeatMatcher step 4) | ECMAScript |
 | | `RESET_AFTER_EACH_ITERATION`: an iteration clears, on the way **out**, the ones it did not itself set | **Perl** (probed) |
-| | `KEEP_LAST_SET`: a capture set in an earlier iteration survives if a later one does not set it | PCRE2, Python, Java (**probe**), .NET, Ruby (**probe**), RE2 (**probe**), Rust (**probe**) |
+| | `KEEP_LAST_SET`: a capture set in an earlier iteration survives if a later one does not set it | PCRE2, Python, Java (**probe**), .NET, Ruby (**probe**), RE2, Rust |
 
 `BREAK_IF_UNMOVED` is neither of the two above it, and it took both
 references to see that. `(a*)*` against `"b"` reports group 1 as 0-0 in glibc
@@ -525,6 +525,13 @@ against "ab" is 1-2 in both of vim's engines and would be 0-2 under
 sticks. The trailing case is where vim's two engines part - `\%(a\|\zs\)*`
 against "aa" is 2-2 under `re=2` and 0-2 under `re=1` - and the old engine's
 answer is this row's.
+
+The RE2 and Rust capture-reset cells were `probe` until they were asked, and
+the answer is the zero they already held: `((a)|b)+` over "ab" reports group 2
+as 0-1 in both references and in this library, so an iteration that does not
+write a group does not clear it either. Recorded because a cell that is right
+by default and a cell that has been measured are not the same cell, and only
+one of them stays right when something nearby moves.
 
 **RE2 and the crate are the fourth row, and getting there cost three wrong
 answers to the same question.** The cell read `BREAK_ON_EMPTY` from their
@@ -1081,7 +1088,7 @@ here.
 | --- | --- | --- |
 | `RETRY_NONEMPTY_THEN_ADVANCE` | at the same position, retry refusing an empty match; if that fails, advance one character | Perl, PCRE2 (its documented `NOTEMPTY_ATSTART` loop), Python 3.7+ |
 | `ADVANCE_ONE` | advance one code point (one code unit without `u`) and search again; an empty match immediately after a non-empty one is reported | ECMAScript (`RegExpBuiltinExec` / `AdvanceStringIndex`), Java (**probe**), .NET (**probe**), Ruby (**probe**) |
-| `ADVANCE_ONE_SKIP_ABUTTING` | as above, but an empty match abutting the previous match is not reported | Go (`regexp` documentation: "empty matches abutting a preceding match are ignored"); Rust (**probe**) |
+| `ADVANCE_ONE_SKIP_ABUTTING` | as above, but an empty match abutting the previous match is not reported | Go (`regexp` documentation: "empty matches abutting a preceding match are ignored", and now measured: `tools/oracle/iterate_diff.py --dialect re2`); Rust (measured, 4,200 rows - the cell held Go's value copied across with nothing asking the crate) |
 | `ADVANCE_ONE_STOP_AT_END` | a match reaching the end of the subject ends the loop, and the search goes on from the previous match's end - where that finds the span just reported, it advances one character rather than reporting it twice | Vim |
 
 **Vim's row is its own and both halves are measured.** `substitute("ab",
@@ -1188,12 +1195,40 @@ at all.
 | Java (`appendReplacement`) | `$n` (longest valid prefix) | `${name}` | none | `\` quotes the next character | error | empty (**probe**) | none |
 | .NET | `$n`, `${n}` | `${name}` | `$&`, `` $` ``, `$'`, `$+`, `$_` | `$$` | literal | empty | none |
 | Ruby (`sub`) | `\n` | `\k<name>` | `\0`, `\&`, `` \` ``, `\'` | `\\` | empty | empty | none |
-| Go, Rust | `$n`, `${n}` | `$name`, `${name}` - the name is parsed greedily, so `$1x` is the group named `1x` | none | `$$` | empty | empty | none |
+| Go (RE2) | `$n`, `${n}` - **one word run, classified after it is read**, so `$1x` is the name `1x` and substitutes nothing rather than being group 1 and an "x"; a run with a leading zero is a name, so `$01` is missing | `$name`, `${name}`; `${...}` must close on a word run or the spelling is text | `$0`, `${0}`; **not** `$&`, `` $` ``, `$'` or `$_`, each of which is literal | `$$` | empty | empty | none |
+| Rust | as Go, less the leading-zero rule: `$01` is group 1 and `${00}` is the whole match. `${}` is a reference to the empty name and substitutes nothing, where Go leaves it as text | as Go, and `${...}` takes whatever precedes the `}` | `$0`, `${0}`; the same four are literal | `$$` | empty | empty | none |
 | POSIX BRE/ERE | `\1`-`\9`, one digit | none | `&` | `\&`, `\\`, and `\c` for any other `c` | error | empty | none |
 | GNU BRE/ERE | as POSIX, plus `\0` for the whole match | none | `&`, `\0` | as POSIX | error | empty | none - see below |
 | Vim (`substitute()`) | `\1`-`\9`, one digit | none | `&`, `\0` | `\&`, `\~`, `\\`, and `\c` for any other `c`; `\n`, `\r`, `\t` and `\b` decode | empty | empty | `\u \U \l \L \e \E` - built; the only case-changing row here that is not Perl's |
 | Tcl (`regsub`) | `\n` | none | `&`, `\0` | `\\`, `\&` | empty | empty | none |
 | Emacs (`replace-match`) | `\n` | none | `\&` | `\\` | error | empty | none |
+
+**The Go and Rust rows were one row and wrong in three cells until
+`tools/oracle/replace_diff.py` was pointed at them.** It said the two had no
+whole-match form, and `$0` and `${0}` are one in both. It said the name was
+"parsed greedily, so `$1x` is the group named `1x`", which is the right
+observation and the wrong consequence: nothing is named `1x`, and what these
+two do then is substitute *nothing* rather than falling back to group 1 and a
+literal "x" the way PCRE2 does. That is `GRX_TMPL_BARE_RUN_ONLY`, and it is
+the cell that separates this grammar from PCRE2's, whose sigil and reference
+forms it otherwise shares.
+
+And the two are not one row. Four spellings mean different things:
+
+| | Go | Rust |
+| --- | --- | --- |
+| `$01` | nothing - the name "01" | group 1 |
+| `$00`, `${00}` | nothing | the whole match |
+| `${&}` | the four characters `${&}` | nothing - the name "&" |
+| `${}` | the four characters `${}` | nothing - the empty name |
+
+The first two are one rule seen twice: Go's reader computes a digit run's
+value and then discards it when the run has a leading zero and more than one
+digit. The last two are the other: Go's `${...}` has to close on a word run
+and leaves the spelling as text when it does not, where the crate reads
+whatever is there, including nothing at all. Both dialects agree on all 5,040
+rows of the *matching* battery (§5.5) and part company here, which is why
+they carry a template row each.
 
 **Perl's case operators in a replacement are built, and four of their rules
 are not Vim's** - which share the spelling, the ops and the applier. Each was
@@ -1282,7 +1317,7 @@ never reaches it. Here the backslash is dropped.
 
 | Rule | POSIX/GNU | Perl/PCRE2 | ECMAScript | Python | Java | Ruby | RE2/Rust |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `{,n}` | BRE: literal; ERE: undefined (glibc: literal) | `{0,n}` (Perl 5.34+, PCRE2 10.43+) | legacy: literal; `u`: error | `{0,n}` | error | `{0,n}` | RE2: literal; Rust: **probe** |
+| `{,n}` | BRE: literal; ERE: undefined (glibc: literal) | `{0,n}` (Perl 5.34+, PCRE2 10.43+) | legacy: literal; `u`: error | `{0,n}` | error | `{0,n}` | RE2: literal (`a{,3}` matches the five characters); Rust: **error** (measured - the crate refuses the pattern, so the two part here) |
 | `{` not starting a valid quantifier | literal | literal | legacy: literal; `u`: error | literal | error | literal | literal (RE2); error (Rust) |
 | `a**`, `a+*` | GNU: allowed | error | error | error | **probe** | allowed with warning | error |
 | Quantifier on an assertion | ERE: error, for every anchor; BRE: a `*` after one is a literal asterisk (§5.18) | error (`(?=a)*`) | legacy: lookahead is quantifiable; `u`: error | error | **probe** | error | n/a |
@@ -1436,7 +1471,24 @@ ECMA-262 does; Python the way `re.split` does. PCRE2, POSIX and GNU define no
 split at all, so they take ECMAScript's, which is the library's default
 rather than a claim about them.
 
-**Three values, not two.** Python's is a genuine third rule and not a blend
+**Five values, not two.** Python's was the third and Go's and the crate's are
+the fourth and fifth - and those two are each other's closest neighbour and
+still differ, which is the finding worth stating first. Both drop what the
+groups captured, which no other row here does; both read `limit` as a count of
+*pieces* with the last being the unsplit remainder and zero meaning none,
+which is ECMAScript's spelling with perl's remainder and is a fourth reading
+again. Where they part is an empty match at either end of the subject: Go
+drops the piece and the crate keeps it, so `a*` over "baac" is `["b", "c"]`
+there and `["", "b", "c", ""]` here. Six of fifteen probes move.
+
+Go's empty-subject cell is the strangest thing on this page. `Regexp.Split`
+answers it from `len(re.expr) > 0` - the length of the pattern's own *source
+text* - so `(?:)` over "" is one empty piece and the empty pattern over "" is
+none, though the two compile to the same program and no property of that
+program can tell them apart. `GRX_Regex::pattern_length` exists for this cell
+and for nothing else.
+
+Python's is a genuine third rule and not a blend
 either of the others can be bent into: its empty-subject and trailing-field
 behaviour is ECMAScript's, its `maxsplit` is perl's - counting splits, not
 pieces, and leaving the unsplit remainder as the last field, with zero
@@ -1458,14 +1510,15 @@ function* rather than about a grammar, which is why the languages below
 disagree so widely: nothing in a regular expression says what a split should
 do with a trailing empty field.
 
-| Rule | ECMAScript | Perl | Python | Java | Go, Rust |
-| --- | --- | --- | --- | --- | --- |
-| Capturing groups appear in the output | yes | yes | yes (`re.split` since 3.7) | no | no |
-| An empty match where a piece begins | not a separator | not a separator | a separator | **probe** | **probe** |
-| A zero-width match at the end of the subject | not a separator | **a separator** | **probe** | **probe** | **probe** |
-| An empty subject | one empty piece, or none if the pattern matches empty | none, whatever the pattern | one empty piece, or two if the pattern matches empty | **probe** | **probe** |
-| Trailing empties | kept | dropped unless a limit was given, and *elements* rather than fields - an unset capture goes too | kept | dropped unless a negative limit | kept |
-| `limit` counts | pieces, captures included; 0 yields none | fields, captures not counted; the last is the unsplit remainder; 0 means no limit | splits, not fields; 0 means no limit | fields | splits, not fields |
+| Rule | ECMAScript | Perl | Python | Java | Go | Rust |
+| --- | --- | --- | --- | --- | --- | --- |
+| Capturing groups appear in the output | yes | yes | yes (`re.split` since 3.7) | no | no | no |
+| An empty match where a piece begins | not a separator | not a separator | a separator | **probe** | a separator | a separator |
+| A zero-width match at the **start** of the subject | not a separator | not a separator | a separator | **probe** | **not a separator** | a separator |
+| A zero-width match at the end of the subject | not a separator | **a separator** | a separator | **probe** | **not a separator** | a separator |
+| An empty subject | one empty piece, or none if the pattern matches empty | none, whatever the pattern | one empty piece, or two if the pattern matches empty | **probe** | one empty piece, or **none if the pattern's text is empty** | one empty piece, or two if the pattern matches empty |
+| Trailing empties | kept | dropped unless a limit was given, and *elements* rather than fields - an unset capture goes too | kept | dropped unless a negative limit | kept | kept |
+| `limit` counts | pieces, captures included; 0 yields none | fields, captures not counted; the last is the unsplit remainder; 0 means no limit | splits, not fields; 0 means no limit | fields | pieces, the last the unsplit remainder, and the *matches* as well; 0 yields none | pieces, the last the unsplit remainder; 0 yields none |
 
 Two of Perl's cells came from `tools/oracle/split_diff.py` and not from
 perlfunc, after the twenty-four probe cases below had agreed with perl

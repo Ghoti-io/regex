@@ -150,6 +150,7 @@ GRX_Result grx_compile_program(const GRX_Pattern * pattern,
   regex->syntax = pattern->syntax;
   regex->options = pattern->options;
   regex->capture_count = pattern->capture_count;
+  regex->pattern_length = pattern->text_length;
   regex->capture_names = NULL;
   regex->mark_count = 0;
   regex->mark_names = NULL;

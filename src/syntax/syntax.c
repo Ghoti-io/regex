@@ -964,6 +964,33 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     // it has already reached. Lowering stops asking, and codegen.c emits the
     // shape that makes the walk itself the rule; see the mode.
     .empty_loop = GRX_EMPTY_LOOP_SIMULATE,
+    // `Regexp.Split` and `Regex::split` are not the same function. Six of
+    // fifteen probes part, every one of them over an empty match, and
+    // GRX_SplitRule's two rows carry the clauses.
+    .split = GRX_SPLIT_GO,
+    // `$name` and `${name}`, where a name that reads as a number is that
+    // group. No `$&`, no `` $` ``, no `$'` and no `$_`: each of those is the
+    // sigil followed by something that cannot continue a name, and both
+    // references leave all four as text. `$$` is a literal dollar, `$0` is
+    // the whole match, and a reference to a group the pattern has not got
+    // substitutes nothing rather than standing as text or failing.
+    //
+    // GRX_TMPL_BARE_RUN_ONLY is the cell that separates this row from
+    // PCRE2's, which has NAME_BARE and NUMBER_GREEDY and tries them in turn:
+    // `$1a` is group 1 and an "a" there, and the name "1a" here.
+    .template_spec = {
+      .sigil = '$',
+      .features = GRX_TMPL_BARE_RUN_ONLY | GRX_TMPL_NUMBER_BRACED
+          | GRX_TMPL_NAME_BRACED | GRX_TMPL_NAME_BARE
+          | GRX_TMPL_DOUBLE_SIGIL | GRX_TMPL_WHOLE_ZERO
+          // Go's two: a digit run with a leading zero is a name and not a
+          // number, so `$01` and `${00}` substitute nothing where the crate
+          // gives group 1 and the whole match; and `${...}` must close on a
+          // name, so `${&}` is four characters of output rather than a
+          // reference that is merely missing.
+          | GRX_TMPL_NUMBER_NO_LEADING_ZERO | GRX_TMPL_BRACED_WORD_ONLY,
+      .missing = GRX_TMPL_MISSING_EMPTY,
+    },
     .lookbehind = GRX_LOOKBEHIND_NONE,
     .iteration = GRX_ITERATE_ADVANCE_SKIP_ABUTTING,
     .dollar = GRX_DOLLAR_END_ONLY,
@@ -997,6 +1024,31 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     // Between them the two references answer 5,040 shapes of nested empty
     // loop identically, which is why one mode serves both.
     .empty_loop = GRX_EMPTY_LOOP_SIMULATE,
+    // `Regexp.Split` and `Regex::split` are not the same function. Six of
+    // fifteen probes part, every one of them over an empty match, and
+    // GRX_SplitRule's two rows carry the clauses.
+    .split = GRX_SPLIT_RUST,
+    // `$name` and `${name}`, where a name that reads as a number is that
+    // group. No `$&`, no `` $` ``, no `$'` and no `$_`: each of those is the
+    // sigil followed by something that cannot continue a name, and both
+    // references leave all four as text. `$$` is a literal dollar, `$0` is
+    // the whole match, and a reference to a group the pattern has not got
+    // substitutes nothing rather than standing as text or failing.
+    //
+    // GRX_TMPL_BARE_RUN_ONLY is the cell that separates this row from
+    // PCRE2's, which has NAME_BARE and NUMBER_GREEDY and tries them in turn:
+    // `$1a` is group 1 and an "a" there, and the name "1a" here.
+    .template_spec = {
+      .sigil = '$',
+      .features = GRX_TMPL_BARE_RUN_ONLY | GRX_TMPL_NUMBER_BRACED
+          | GRX_TMPL_NAME_BRACED | GRX_TMPL_NAME_BARE
+          | GRX_TMPL_DOUBLE_SIGIL | GRX_TMPL_WHOLE_ZERO
+          // The crate's one: `${}` is a reference to the empty name, which
+          // no pattern can have, so it substitutes nothing where Go leaves
+          // the four characters alone.
+          | GRX_TMPL_BRACED_EMPTY_NAME,
+      .missing = GRX_TMPL_MISSING_EMPTY,
+    },
     .lookbehind = GRX_LOOKBEHIND_NONE,
     .iteration = GRX_ITERATE_ADVANCE_SKIP_ABUTTING,
     .dollar = GRX_DOLLAR_END_ONLY,

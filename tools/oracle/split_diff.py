@@ -65,8 +65,10 @@ import random
 import subprocess
 import sys
 
+import go_runner
 import oracle_env
 import python_match
+import rust_runner
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
@@ -110,11 +112,30 @@ FLAG_SETS = {
     "ecmascript": match_diff.FLAG_SETS,
     "perl": ("", "i", "m", "s", "im", "ims"),
     "python": ("", "i", "m", "s", "im", "ims"),
+    # `U` is in these two because it changes which *matches* there are, and a
+    # split is a walk over matches. `x` is absent for the reason
+    # linear_diff.py gives: a generated pattern is not written with verbose
+    # mode's whitespace rules in mind.
+    "re2": ("", "i", "m", "s", "im", "ims", "U"),
+    "rust": ("", "i", "m", "s", "im", "ims", "U"),
 }
+
+# The runner and the mode each linear dialect's reference is reached through.
+LINEAR = {"re2": go_runner, "rust": rust_runner}
 
 
 def make_pattern(rng, unicode_sets, dialect):
     """Half from the split vocabulary, half from the matching one."""
+    if dialect in LINEAR:
+        # The split vocabulary, and the one shape neither of these dialects
+        # has: a *capture* in the separator. Both drop what the groups
+        # captured where every other dialect here interleaves it, so a
+        # generator that never wrote one would leave the cell that separates
+        # GRX_SPLIT_GO from GRX_SPLIT_ECMASCRIPT unasked. SPLIT_ATOMS already
+        # holds capturing forms; this only keeps the linear dialects off
+        # match_diff's ECMAScript grammar, which they refuse in places.
+        return "".join(rng.choice(SPLIT_ATOMS)
+                       for _ in range(rng.randint(1, 2)))
     if dialect in ("perl", "python"):
         # The split vocabulary only. What this file measures is the *walk* -
         # where a piece ends, what a limit counts, which empties survive - and
@@ -169,6 +190,17 @@ def ask_python(rows):
     return [parse_ours(line) for line in finished.stdout.splitlines()]
 
 
+def ask_linear(rows, dialect):
+    """`regexp.Split` or `Regex::split`, in grx_split's own output shape.
+
+    Both drivers print the vocabulary `parse_ours` reads, so there is no
+    second parser here - which is the point of having written them that way.
+    """
+    finished = subprocess.run(LINEAR[dialect].command("split"),
+        input=wire(rows), capture_output=True, text=True, check=True)
+    return [parse_ours(line) for line in finished.stdout.splitlines()]
+
+
 def ask_perl(rows):
     """perl's own `split`, in grx_split's output shape."""
     # errors="replace" because perl's warnings quote the offending pattern,
@@ -208,7 +240,7 @@ def main(argv):
     parser.add_argument("--examples", type=int, default=8)
     parser.add_argument("--driver", default=None)
     parser.add_argument("--dialect", default="ecmascript",
-        choices=("ecmascript", "perl", "python"))
+        choices=("ecmascript", "perl", "python", "re2", "rust"))
     args = parser.parse_args(argv[1:])
 
     driver = args.driver
@@ -240,10 +272,11 @@ def main(argv):
     if len(ours) != len(rows):
         sys.stderr.write("the driver did not answer every row\n")
         return 2
-    oracle = {"ecmascript": "node", "perl": "perl",
-              "python": "python3"}[args.dialect]
+    oracle = {"ecmascript": "node", "perl": "perl", "python": "python3",
+              "re2": "go", "rust": "crate"}[args.dialect]
     reference = (ask_node(rows) if args.dialect == "ecmascript"
                  else ask_python(rows) if args.dialect == "python"
+                 else ask_linear(rows, args.dialect) if args.dialect in LINEAR
                  else ask_perl(rows))
     if len(reference) != len(rows):
         sys.stderr.write("the oracle did not answer every row\n")

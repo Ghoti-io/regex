@@ -529,6 +529,16 @@ struct GRX_Regex {
   uint32_t options;                ///< GRX_Option bits it was compiled with.
   GRX_Program program;             ///< What the engines run.
   GRX_Facts facts;                 ///< What analysis discovered.
+  /**
+   * How many bytes of pattern text it was compiled from.
+   *
+   * Not kept for diagnostics - those carry their own offsets - but because
+   * one dialect's split rule reads it. Go's `Regexp.Split` answers an empty
+   * subject from `len(re.expr) > 0`, so `(?:)` and `` differ there while
+   * compiling to the same program; see GRX_SPLIT_GO. Nothing else may use
+   * it, and a second reader is a sign the question was the wrong one.
+   */
+  size_t pattern_length;
   size_t capture_count;            ///< Capturing groups, excluding group 0.
   char ** capture_names;           ///< One per group, NULL where unnamed.
   size_t mark_count;               ///< Distinct `(*MARK:NAME)` names.

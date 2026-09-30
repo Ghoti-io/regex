@@ -174,6 +174,49 @@ typedef enum {
    * trailing empties ECMAScript keeps.
    */
   GRX_SPLIT_PYTHON,
+  /**
+   * Go's `Regexp.Split`, and the first row here whose output holds no
+   * captures at all: `split /(,)/, "a,b"` interleaves the separator in every
+   * other dialect and `regexp` drops it, so a caller gets two pieces rather
+   * than three.
+   *
+   * Three further clauses, each measured and none of them derivable from the
+   * others:
+   *
+   * - **An empty match at either end of the subject contributes no piece.**
+   *   `a*` over "baac" is ("b", "c") where the plain walk gives ("", "b",
+   *   "c", "").
+   * - **An empty subject yields one empty piece unless the pattern's own
+   *   text is empty**, in which case it yields none. That is a test on the
+   *   length of the pattern *source* and not on what it compiled to -
+   *   `(?:)` over "" is one piece and `` over "" is none, and the two
+   *   programs are the same program. It is the only cell in this library
+   *   that reads GRX_Regex::pattern_length, and it is why that field exists.
+   * - **`limit` caps the matches and the pieces both**, the last piece being
+   *   the unsplit remainder: `Split(s, n)` asks for at most `n` matches and
+   *   then stops at `n - 1` pieces. Zero means no pieces, ECMAScript's
+   *   spelling rather than perl's.
+   */
+  GRX_SPLIT_GO,
+  /**
+   * The Rust crate's `Regex::split`, which is the plain walk and is here
+   * because Go's is not.
+   *
+   * Every match separates, an empty one included, with no special case for
+   * either end of the subject and none for an empty subject: `a*` over
+   * "baac" is ("", "b", "c", "") and `a*` over "" is ("", ""). Captures are
+   * dropped as in Go's.
+   *
+   * `limit` is `splitn`: at most that many pieces, the last the unsplit
+   * remainder, zero meaning none. So `a*` over "baac" with a limit of two is
+   * ("", "baac") where Go's is ("b", "c") - the same limit, the same
+   * pattern, the same subject, and a different answer in both fields.
+   *
+   * Two dialects whose *matching* agrees on all 5,040 rows of the shape
+   * battery and whose splitting disagrees on six of fifteen probes, which is
+   * the argument for two rows rather than one shared "linear" rule.
+   */
+  GRX_SPLIT_RUST,
   GRX_SPLIT_COUNT              ///< Closes the enum; not a rule.
 } GRX_SplitRule;
 
@@ -524,6 +567,62 @@ typedef enum {
  * nesting and perl's mapping would need them apart, and none does.
  */
 #define GRX_TMPL_CASE_ESCAPES GRX_BIT(23)
+
+/**
+ * @brief The bare reference is one run of word characters, classified after.
+ *
+ * Go's and the crate's, and the reason it is a bit rather than an ordering
+ * of GRX_TMPL_NAME_BARE and GRX_TMPL_NUMBER_GREEDY: those two read a number
+ * *or* a name and try them in turn, so `$1a` is group 1 followed by an "a"
+ * wherever no group is named `1a`. Here the run is read first and asked what
+ * it is afterwards - `$1a` is the name "1a", which no pattern has, so it
+ * substitutes nothing and takes both characters with it. Measured on both
+ * references; `$12_` is the same case with the underscore proving the
+ * alphabet.
+ *
+ * All digits makes it a group number, subject to
+ * @ref GRX_TMPL_NUMBER_NO_LEADING_ZERO; anything else makes it a name.
+ */
+#define GRX_TMPL_BARE_RUN_ONLY GRX_BIT(24)
+
+/**
+ * @brief A digit run with a leading zero is not a number.
+ *
+ * Go's, in as many words: `regexp`'s own template reader computes the index
+ * and then throws it away for a name whose first character is `0` and whose
+ * length is more than one. So `$01` is the *name* "01", which no pattern can
+ * have, and substitutes nothing - where the crate strips the zero and gives
+ * group 1, and `${00}` is the whole match there and nothing here.
+ *
+ * `$0` is still the whole match under both, the rule needing two characters
+ * before it bites. The opposite of GRX_TMPL_NUMBER_GREEDY's clause, which
+ * says leading zeros belong to the number, and the pair of them is why the
+ * two linear dialects have separate template rows at all.
+ */
+#define GRX_TMPL_NUMBER_NO_LEADING_ZERO GRX_BIT(25)
+
+/**
+ * @brief `${...}` must hold a non-empty run of word characters, or stand as text.
+ *
+ * Go's. `${&}` and `${1 }` come back as themselves, four and five characters
+ * of output, because the brace has to close on a name and neither of those
+ * is one. The crate reads everything up to the `}` as the reference instead,
+ * so both substitute nothing there - an unknown name rather than a run of
+ * literal text.
+ */
+#define GRX_TMPL_BRACED_WORD_ONLY GRX_BIT(26)
+
+/**
+ * @brief `${}` is a reference to the empty name rather than literal text.
+ *
+ * The crate's, and the other half of GRX_TMPL_BRACED_WORD_ONLY's
+ * measurement: `${}` substitutes nothing there and is four literal
+ * characters in Go. No pattern can have a group named "", so the reference
+ * can only ever be missing - which makes this a rule about whether the
+ * spelling is a reference at all, and that is the thing the two references
+ * answer differently.
+ */
+#define GRX_TMPL_BRACED_EMPTY_NAME GRX_BIT(27)
 
 
 
