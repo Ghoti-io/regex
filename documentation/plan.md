@@ -1012,15 +1012,20 @@ hold:
 4. The pattern fuzzer has run eight hours clean with the dialect selected.
 5. `grx_options_parse()` accepts its alphabet and its replacement template
    grammar is implemented.
-6. `examples/` has one example in the dialect. Seven of them:
+6. `examples/` has one example in the dialect. Nine of them:
    `regex_info` and the two JSON Schema programs are ECMAScript's,
    `posix_stream` is a grep and a sed across the four POSIX and GNU rows,
    `perl_extract` is PCRE2's and Perl's - the same pattern under both,
    because the place they part is the template rather than the pattern -
    `vim_substitute` is a `:s` over a string, where the grammar is
-   chosen inside the pattern and the replacement changes case, and
+   chosen inside the pattern and the replacement changes case,
    `python_split` is `re.split` and `re.sub`, because Python's splitting rule
-   is a third one rather than a variant of the other two.
+   is a third one rather than a variant of the other two, `iregexp_jsonpath`
+   is `match()` and `search()` over one compiled pattern, and
+   `linear_guarantee` is `re2` and `rust` together - the same pattern under
+   both for the same reason `perl_extract` pairs its two, since these part on
+   the template and the split rule and agree on every row of the matching
+   battery.
 
 **Where the ten stand against those six, measured 2026-09-26.** None meets
 all of them, and the list is here rather than in a note because a definition
@@ -1061,26 +1066,41 @@ at, and it has been run twice: the first finished its eight hours with
 says is a failure, since a pattern must not make the matcher run past its
 limits. That found a real defect. The re-run after the fix was parked at
 5h06m of its 8. So the condition has been attempted once and met zero times,
-and the nine other dialects have not been asked; `GRX_FUZZ_SYNTAX=<dialect>`
+and the eleven other dialects have not been asked; `GRX_FUZZ_SYNTAX=<dialect>`
 exists so that each can be, in a private prefix, on wall clock. How many can be
 asked at once is a measurement rather than a guess, and the one the campaign
 carried had expired: notes/regex/TODO.md §14 has it.
 
-Condition 6 is met by all ten: `python_split` was the last one missing before
-I-Regexp arrived with `iregexp_jsonpath` of its own.
+Condition 6 is met by all twelve: `python_split` was the last one missing
+before I-Regexp arrived with `iregexp_jsonpath` of its own, and
+`linear_guarantee` closed the two linear rows.
 
 **The two linear dialects arrived after this reading and stand at five of the
-six**, measured 2026-09-29. Condition 1 holds: no `probe` cell remains in
-either row, the last four having been closed by the replacement, splitting,
+six**, measured 2026-09-29 - the five being 1, 2, 3, 5 and 6, so the one they
+are short is the soak every dialect is short. Condition 1 holds: no `probe`
+cell remains in either row, the last four having been closed by the
+replacement, splitting,
 iteration and capture-reset probing above - and one of them, `capture_reset`,
 turned out to hold the right value by default, which is not the same as having
 been measured and is recorded as the difference. Conditions 2, 3 and 5 hold:
 every rule in §5 has a test that states it, 2,947 and 2,817 vectors pass at
 100%, and both template grammars and split rules are built and gated.
-Condition 4 is unmet as it is for every dialect. Condition 6 is the one
-outstanding: `examples/` has nothing in either dialect, and the natural
-program is the one that shows a refusal being the guarantee - a pattern
-accepted under `re2` running on `GRX_ENGINE_PIKE` by name.
+Condition 6 is met by `examples/linear_guarantee.c`, which is the program
+that shows a refusal being the guarantee: `(a|aa)+\1b` compiled under
+`ecmascript` spends the whole step budget against forty bytes of "a" and
+returns `GRX_ERR_LIMIT`, and returns `GRX_ERR_UNSUPPORTED` when
+`GRX_ENGINE_PIKE` is asked for by name, where under these two it never
+compiles at all. The invariant the program is for is that `is_regular` is 1
+for every pattern they accept, so a caller who must not hang names the
+linear-time engine unconditionally instead of reading a fact per pattern and
+deciding what to do when it is 0. The same program carries the two places the
+dialects part, the template and the split rule, since a reader comparing them
+is the reason to have one program rather than two.
+
+**So Condition 4 is the only one outstanding for these two**, as it is for
+every dialect. The soak is deferred until the remaining dialects are done, to
+be run for all of them in parallel on a second machine - which is what
+`GRX_FUZZ_SYNTAX=<dialect>` and a private prefix each exist for.
 
 Conditions 1, 2, 3 and 5 hold for the nine that compile and match. There are
 no known gaps left: the five that remained were one feature - Perl's `\U`,
