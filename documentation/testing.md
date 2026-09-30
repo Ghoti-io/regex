@@ -1298,8 +1298,9 @@ pair, and nothing compared the two halves: the Vim differential asks
 Vim's, Perl's, PCRE2's and Python's vocabularies as well now - nine dialects
 - and the Vim rows alone put 3,214 programs through two engines or more.
 I-Regexp is the one built dialect with no vocabulary here, which is a gap
-rather than a decision: every I-Regexp is regular, so all three engines run
-every one of them and there is more to compare than for any other dialect,
+rather than a decision: every I-Regexp is regular, so the Pike VM, the
+backtracker and the bit-state engine all run every one of them and there is
+more to compare than for any other dialect,
 not less.
 
 Seen to fail, on the code the new rows exist for: making the Pike VM's
@@ -2220,6 +2221,29 @@ Run by `make test` alongside `check-symbols`:
   against. Prose is deliberately not checked: a page that has to be
   word-for-word correct is a page nobody edits.
   **To check the gate itself:** change a digit in one of the dump examples.
+- **What README claims is built is what is built.**
+  `tools/check_status_line.py`, the `check-status-line` gate, compares two
+  claims on that page against the code. The Status section's two numbers -
+  how many dialects compile and match, how many report
+  `GRX_ERR_UNSUPPORTED` - are checked against the arms of
+  `grx_frontend_for()` and `GRX_SYNTAX_COUNT`. The engine table is checked
+  against the `GRX_Engine` enumerators by **set equality in both
+  directions**, and the opening sentence's count against the same enum
+  without `GRX_ENGINE_AUTO`, which is a selector rather than an engine.
+  **Built.**
+
+  The engine half was added after the dialect half failed to cover it, which
+  is the same lesson twice. `GRX_ENGINE_DFA` landed in WP-41 as a public
+  enumerator a caller can ask for by name, and the README went on saying
+  "three engines" in four places over a table with three rows out of four,
+  for as long as it took somebody to go looking for something else. A count
+  of rows would not have caught it either, since three rows and a count of
+  three agree with each other perfectly; only comparing the *names* against
+  the enum does. So the check is set equality, and a row for an engine that
+  does not exist fails as loudly as an engine with no row.
+  **To check the gate itself:** delete the `GRX_ENGINE_DFA` row, or change
+  the number word in front of "engines run the result".
+
 - **The pass rate README publishes is the one the runner finds.**
   `Conformance.TheRateReadmePublishesIsTheRateTheRunnerFinds` reads README's
   table and compares every dialect's vector count and percentage against the
@@ -2676,6 +2700,11 @@ when the gate changes:
 | `check-aliasing` | `EXTRA_CFLAGS=-Wstrict-aliasing=3`, a later explicit level | non-zero, naming the effective level |
 | `check-aliasing` | `CC=clang`, which implements no such diagnostic | non-zero, naming the compiler rather than the flags |
 | `check-oracle-vim` | widen one of vim's eleven named classes by a single code point - `\s` to include the line break | non-zero; the run reports the rows where the two now differ |
+| `check-status-line` | the Status section saying eleven dialects compile where twelve do | non-zero, both numbers named |
+| `check-status-line` | the `GRX_ENGINE_DFA` row deleted from the engine table - the state the page was actually in | non-zero, naming the enumerator with no row |
+| `check-status-line` | a row for a `GRX_ENGINE_BOGUS` that is in no enum | non-zero, naming the row rather than passing on a count that now matches |
+| `check-status-line` | "Four engines run the result" changed to "Three" | non-zero, naming both the claim and what `exec.h` enumerates |
+| `check-status-line` | the sentence reworded so the count is unfindable | non-zero, "could not find"; not a pass over a claim it could not read |
 | `check-programs` | delete the `grx_regex_free()` from `split_by()` in `examples/linear_guarantee.c` - the original defect | non-zero; LeakSanitizer on three of that program's cases |
 | `check-programs` | a read past a `static char[4]` in `examples/regex_info.c` | non-zero; ASan global-buffer-overflow on all four of its cases |
 | `check-programs` | a `run_case` for a program no source builds | non-zero, naming the case |

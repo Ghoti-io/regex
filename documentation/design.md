@@ -551,7 +551,7 @@ byte into a byte test per byte. Measured against a 4 KB subject: 30.6 ns per
 subject byte before, 0.51 after.
 
 The walk is over the *program* rather than the tree because that is the one
-form all three engines share, so one answer serves them and cannot drift from
+form every engine shares, so one answer serves them and cannot drift from
 what they run. Its single claim is that the set is a **superset**: it may name
 a byte no match begins with, and it may never omit one. Every instruction the
 walk does not model therefore abandons the whole set rather than contributing

@@ -988,12 +988,65 @@ pinned `tests/unit/test_iregexp.cpp` is the whole of the evidence.
 
 ### Phase 8: performance and translation
 
-**WP-40 Prefilters**: literal prefix, required literal via `memmem`,
-first-byte set, min-length rejection; benchmarks in `tools/bench`. **WP-41
-Lazy DFA** for match/no-match and boundaries, then captures on the bounded
-span. **WP-42 Translation**: `grx_pattern_translate(pattern, to_syntax)`
-from the AST, with `GRX_ERR_UNSUPPORTED` naming the construct the target
-lacks. **WP-43 UTF-16 offset helper** if a consumer asks.
+**WP-40 Prefilters.** **Built.** `src/compile/prefilter.c` computes the
+literal prefix, the required literal and the first-byte set, and all three
+reach the search rather than only the facts: the Pike VM and the backtracker
+both step over a start position the byte set does not name, and an unanchored
+search whose subject contains no occurrence of the required literal is
+answered without running an engine at all - the one prefilter that can answer
+for a pattern whose match begins with something unconstrained, which `.*foo`
+is. The substring search is memchr over the needle's **last** byte rather
+than `memmem`, which is a GNU extension where this library builds on three
+platforms; §3.5.5 of [design.md](design.md) has the measurement that decided
+the last byte over the first. `tools/bench/regex_bench.c` is the benchmark,
+which `make bench` builds three times - against this library, against glibc
+and against musl - and times on one workload.
+
+**Three of the four listed prefilters, not four.** `min_length` is computed
+and published in `GRX_Facts`, and `can_match_empty` is read off it, but no
+execution path rejects a subject shorter than it. A caller holding the facts
+can do that itself; the library does not do it for them. The claim here is
+therefore three prefilters, and the fourth is an hour's work whenever a
+measurement wants it.
+
+**WP-41 Lazy DFA.** **Built.** `src/exec/exec_dfa.c` is the fourth engine and
+`GRX_ENGINE_DFA` is public. `GRX_ENGINE_AUTO` reaches for it ahead of the
+Pike VM wherever it applies, and where it does not apply is exact rather than
+approximate: the regular subset, leftmost-longest, no UTF mode, an unanchored
+search, `GRX_EMPTY_OK`, no callout, and a match object to hold the state
+cache - the conditions are enumerated on `GRX_ENGINE_DFA` in `exec.h`, and
+naming the engine for a program it cannot run is `GRX_ERR_UNSUPPORTED` like
+every other engine mismatch. A state is a *set* of program counters, so it
+reports the extent and never which path found it, which is what makes the
+second half of the package necessary: `src/exec/exec_onepass.c` reads the
+groups off the bounded span in one table walk where the program is one-pass,
+and where it is not the Pike VM runs over that span rather than over the
+subject in front of it. Both are reported as `GRX_ENGINE_DFA`, because the
+DFA is what decided where the match is. `tests/unit/test_dfa.cpp` and
+`tests/unit/test_onepass.cpp` are the engines' own tests, and §3.5.4's
+equivalence invariant reaches the DFA through `check-engine-equivalence`,
+where `tools/oracle/engine_diff.py` lists it as the fourth engine and reports
+zero disagreements over every dialect. §3.5.5 of [design.md](design.md) is
+the long account, including what the one-pass table refuses and what the
+measurement was.
+
+**Two populations the DFA is not in**, and both say in their own words that
+they are: `tests/conformance/test_vectors.cpp` builds its engine list as
+"every engine that can run this program" and names three, so none of the
+87,215 checked-in vectors is ever answered by the DFA; and
+`tests/fuzz/fuzz_crossengine.cpp` says "every engine that can run this
+program" over a `GRX_Engine engines[3]`, whose own comment records the
+bit-state engine joining that set in WP-13 and which WP-41 did not extend.
+Neither is a hole in the invariant - `check-engine-equivalence` runs in
+`make test` and needs no reference implementation - but both are a
+denominator that stopped where it was written, and the vector corpus is the
+one population that is real patterns rather than generated ones.
+
+**WP-42 Translation**: `grx_pattern_translate(pattern, to_syntax)` from the
+AST, with `GRX_ERR_UNSUPPORTED` naming the construct the target lacks. **Not
+built**, and nothing has asked for it. **WP-43 UTF-16 offset helper** if a
+consumer asks. **Not built**; no consumer has asked, which is the condition
+the package was written with.
 
 ## 4. What "done" means for a dialect
 

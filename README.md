@@ -1,10 +1,11 @@
 # Ghoti.io Regex
 
-Regular expressions in C, across eighteen dialects and one parser. Three
+Regular expressions in C, across eighteen dialects and one parser. Four
 engines run the result: a Pike VM that is linear in the subject length, a
-backtracking engine for the constructs no lockstep simulation can express,
-and a bit-state engine that is the backtracker with a memo and the linear
-bound restored.
+backtracking engine for the constructs no lockstep simulation can express, a
+bit-state engine that is the backtracker with a memo and the linear bound
+restored, and a lazy DFA that says where a match is without saying which path
+found it.
 
 ## Dialects
 
@@ -41,7 +42,8 @@ is how the tests check it rather than assert it.
 | `GRX_ENGINE_PIKE` | Linear in the subject length. Asking for it by name returns `GRX_ERR_UNSUPPORTED` when the program is not regular. |
 | `GRX_ENGINE_BITSTATE` | The backtracker with a memo, for a program that memo can cover. |
 | `GRX_ENGINE_BACKTRACK` | Everything else those two refuse, bounded by the limits. |
-| `GRX_ENGINE_AUTO` | The Pike VM when the program is regular. A backreference, a lookaround, an atomic group, a possessive quantifier, a script run, a recursion, a conditional or a backtracking control verb is not. Of those, a memoizable program runs on the bit-state engine; the rest run on the backtracker. |
+| `GRX_ENGINE_DFA` | Linear in the subject and independent of the program's size, over the regular subset, leftmost-longest, without UTF mode, on an unanchored search. A state is a *set* of program counters, so it reports the extent and never which path found it: a search that needs groups reads them off the span it found rather than off the subject. |
+| `GRX_ENGINE_AUTO` | The lazy DFA wherever it applies, then the Pike VM when the program is regular. A backreference, a lookaround, an atomic group, a possessive quantifier, a script run, a recursion, a conditional or a backtracking control verb is not. Of those, a memoizable program runs on the bit-state engine; the rest run on the backtracker. |
 
 ## Examples
 
@@ -180,7 +182,7 @@ JSON Schema `pattern` and `patternProperties`.
 
 | Page | What it settles |
 | --- | --- |
-| [documentation/design.md](documentation/design.md) | The pipeline, the three engines, memory, limits, errors |
+| [documentation/design.md](documentation/design.md) | The pipeline, the four engines, memory, limits, errors |
 | [documentation/dialects.md](documentation/dialects.md) | Which constructs each syntax has, and where implementations disagree |
 | [documentation/unicode.md](documentation/unicode.md) | Which Unicode data this library still owns, and which it reads from `unicode` |
 | [documentation/testing.md](documentation/testing.md) | Oracles, the vector format, fuzzing |
@@ -189,7 +191,7 @@ JSON Schema `pattern` and `patternProperties`.
 
 ## Status
 
-The twelve dialects above compile and match on whichever of the three
+The twelve dialects above compile and match on whichever of the four
 engines can run the pattern. The other six report `GRX_ERR_UNSUPPORTED`.
 
 ### Conformance
@@ -225,7 +227,8 @@ sampling it found 62 such rows in 5,040 - a whole cell rather than an
 oddity. Neither reference backtracks, so a loop over a body that can match
 empty ends for them where the simulation has already been, which is not any
 of the three empty-iteration rules a backtracking dialect can hold. The
-library now has a fourth, and all three engines compute it.
+library now has a fourth, and the Pike VM, the backtracker and the
+bit-state engine all compute it.
 
 Before that there were five, and where those were
 there is now `\U`, `\L`,
