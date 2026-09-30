@@ -732,6 +732,105 @@ TEST(Compile, AnEmptyMatchLeavesNoFirstByteSetUnlessKeepMovedTheStart) {
   }
 }
 
+TEST(Compile, AConditionalWithNoElseIsAnAlternativeOfLengthZero) {
+  // An `else` that is not written is still a path the match can take: the
+  // condition can be false, and then the conditional matches nothing. So a
+  // one-branch conditional is an alternation of two, the second empty, and
+  // `min_length` is the shorter of them.
+  //
+  // It was the longer. The analyser handed a non-assertion conditional to the
+  // *alternation* stages, which have no absent arm to add - correctly, since
+  // `a|b` has none - while the conditional stages a few lines away do add it.
+  // One rule, two copies, and only one of them right. Nothing caught it for as
+  // long as nothing read the number: `min_length` was published in GRX_Facts
+  // and no search consulted it, and the day one did, two perl vectors said so.
+  //
+  // `can_match_empty` is derived from the same number, so it was wrong wherever
+  // the minimum was - which is the more visible half, and is asserted here for
+  // that reason.
+  // Perl and not PCRE2, which the other tables here use: `a(?(1)b)` names a
+  // group that does not exist, and pcre2 refuses that where perl takes it as a
+  // condition that is simply false. The vectors that caught this are perl's.
+  struct Row {
+    const char * pattern;
+    size_t min_length;
+    int empty;
+    const char * why;
+  };
+  const Row rows[] = {
+    // The two vectors that failed, and the shape behind them.
+    {"^(\\(+)?blah(?(1)(\\)))$", 4, 0,
+        "the parenthesis is required only if one opened"},
+    {"a(?(1)b)", 1, 0, "there is no group 1, so the branch is never taken"},
+    {"(a)?(?(1)bb)", 0, 1, "group 1 optional, so the two b's are too"},
+    // A conditional that *does* write both arms takes the shorter, and this is
+    // the control: it was already right, so a fix that moved it would be wrong.
+    {"(a)?(?(1)bb|c)", 1, 0, "the else-part is one byte"},
+    {"(a)?(?(1)bb|)", 0, 1, "an else-part written empty"},
+    // The assertion form reached the conditional stages all along.
+    {"a(?(?=x)b)", 1, 0, "lookahead condition, one-branch"},
+  };
+  for (const Row & row : rows) {
+    GRX_Regex * regex = nullptr;
+    ASSERT_EQ(grx_regex_compile(row.pattern, GRX_SYNTAX_PERL, GRX_OPT_NONE,
+                  &regex),
+        GRX_OK)
+        << row.pattern;
+    GRX_Facts facts;
+    ASSERT_EQ(grx_regex_facts(regex, &facts), GRX_OK);
+    EXPECT_EQ(facts.min_length, row.min_length) << row.pattern << ": "
+                                                << row.why;
+    EXPECT_EQ(facts.can_match_empty != 0, row.empty != 0)
+        << row.pattern << ": " << row.why;
+    grx_regex_free(regex);
+  }
+}
+
+TEST(Compile, TheShortestMatchIsNeverLongerThanAMatch) {
+  // The invariant behind the prefilter, asserted over the whole corpus rather
+  // than over a list somebody thought of: a subject that matches is at least
+  // `min_length` bytes long. A minimum that overstates makes the length
+  // prefilter refuse a real match, which is exactly the defect the conditional
+  // rows above are a fix for - and the defect would have been invisible in a
+  // test that only ever checked patterns it expected to be right.
+  struct Row { const char * pattern; const char * subject; };
+  const Row rows[] = {
+    {"^(\\(+)?blah(?(1)(\\)))$", "blah"},
+    {"^(\\(+)?blah(?(1)(\\)))$", "(blah)"},
+    {"a(?(1)b)", "a"},
+    {"(a)?(?(1)bb)", ""},
+    {"(a)?(?(1)bb)", "abb"},
+    {"(a)?(?(1)bb|c)", "c"},
+    {"a(?(?=x)b)", "a"},
+    {"(?:)", ""},
+    {"a*", ""},
+    {"abc", "abc"},
+  };
+  for (const Row & row : rows) {
+    GRX_Regex * regex = nullptr;
+    ASSERT_EQ(grx_regex_compile(row.pattern, GRX_SYNTAX_PERL, GRX_OPT_NONE,
+                  &regex),
+        GRX_OK)
+        << row.pattern;
+    GRX_Facts facts;
+    ASSERT_EQ(grx_regex_facts(regex, &facts), GRX_OK);
+
+    GRX_Match * match = nullptr;
+    ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+    int matched = 0;
+    ASSERT_EQ(grx_regex_search(regex, row.subject, strlen(row.subject), 0,
+                  GRX_ENGINE_AUTO, nullptr, match, &matched),
+        GRX_OK)
+        << row.pattern << " on \"" << row.subject << "\"";
+    EXPECT_TRUE(matched) << row.pattern << " on \"" << row.subject << "\"";
+    EXPECT_LE(facts.min_length, strlen(row.subject))
+        << row.pattern << ": min_length " << facts.min_length
+        << " over a subject of " << strlen(row.subject) << " that matches";
+    grx_match_destroy(match);
+    grx_regex_free(regex);
+  }
+}
+
 TEST(Compile, TheEngineSkipsWhatThePrefilterRulesOut) {
   // That the set exists is one thing and that a search uses it is another.
   // Without the skip, a literal that is not in the subject costs a closure at

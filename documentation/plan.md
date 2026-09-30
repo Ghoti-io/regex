@@ -988,9 +988,10 @@ pinned `tests/unit/test_iregexp.cpp` is the whole of the evidence.
 
 ### Phase 8: performance and translation
 
-**WP-40 Prefilters.** **Built.** `src/compile/prefilter.c` computes the
-literal prefix, the required literal and the first-byte set, and all three
-reach the search rather than only the facts: the Pike VM and the backtracker
+**WP-40 Prefilters.** **Built**, all four. `src/compile/prefilter.c` computes
+the literal prefix, the required literal and the first-byte set, `min_length`
+comes from the IR walk in `src/ir/analyze.c`, and every one of them reaches
+the search rather than only the facts: the Pike VM and the backtracker
 both step over a start position the byte set does not name, and an unanchored
 search whose subject contains no occurrence of the required literal is
 answered without running an engine at all - the one prefilter that can answer
@@ -1002,12 +1003,30 @@ the last byte over the first. `tools/bench/regex_bench.c` is the benchmark,
 which `make bench` builds three times - against this library, against glibc
 and against musl - and times on one workload.
 
-**Three of the four listed prefilters, not four.** `min_length` is computed
-and published in `GRX_Facts`, and `can_match_empty` is read off it, but no
-execution path rejects a subject shorter than it. A caller holding the facts
-can do that itself; the library does not do it for them. The claim here is
-therefore three prefilters, and the fourth is an hour's work whenever a
-measurement wants it.
+**The fourth was the cheap one and it was the one left out.** A window
+shorter than `min_length` has no match in it, which is one comparison against
+a number computed at compile time and no scan of the subject at all. Until
+2026-09-29 `min_length` reached `GRX_Facts`, where a caller could act on it,
+and no search here ever did.
+
+**Wiring it found that the number was wrong.** Two perl vectors failed the
+moment the comparison went in - `^(\(+)?blah(?(1)(\)))$` against "blah" -
+because a conditional with no `else` was measured as its one branch and not as
+an alternation with an empty second arm. `min_length` came back 5 for a
+pattern that matches four bytes. The analyser has stages for exactly this and
+uses them for the assertion form of a conditional; the group-number form was
+handed to the *alternation* stages, which have no absent arm to add, and the
+two copies of one rule disagreed. `can_match_empty` is derived from the same
+number, so it was wrong wherever the minimum was: `(a)?(?(1)bb)` claimed it
+could not match empty. Both are fixed in `src/ir/analyze.c`, and
+`Compile.AConditionalWithNoElseIsAnAlternativeOfLengthZero` and
+`Compile.TheShortestMatchIsNeverLongerThanAMatch` state the rule and the
+invariant behind it.
+
+The lesson is about the published fact and not about the conditional: a
+number nothing reads is a number nothing checks. It had been in `GRX_Facts`
+and in the documented list of what the facts are *for* since WP-40, and the
+first consumer found it wrong on the first run.
 
 **WP-41 Lazy DFA.** **Built.** `src/exec/exec_dfa.c` is the fourth engine and
 `GRX_ENGINE_DFA` is public. `GRX_ENGINE_AUTO` reaches for it ahead of the

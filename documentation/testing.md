@@ -275,8 +275,8 @@ discovers every `.rxt` under the data directory and, per record:
 4. Checks the spans against `expect`, and checks every engine's spans
    against every other's.
 5. Reports, at the end, the counts: passed, failed, skipped by reason,
-   known gaps, per dialect and per source file. The per-dialect pass rate is
-   what `README.md` publishes, and it has the known gaps in its denominator.
+   known gaps, per dialect and per source file. The per-dialect pass rate is what `README.md` publishes, and
+   it has the known gaps in its denominator.
 
 A dialect with **no front end at all** is a skip rather than a failure, and
 the runner tells the two apart by compiling the pattern `a` in that dialect
@@ -1259,6 +1259,8 @@ A limit reached by one engine and not another is not a disagreement. It is
 the exponential engine running out of budget, which is what the budget is
 for - or the bit-state engine refusing a bitmap that will not fit in
 `max_match_memory`, which is what that budget is for.
+
+
 
 **What the check could not see until Phase 4 was audited.** The paragraphs
 above describe what the *vectors* compare. `tools/oracle/engine_diff.py`,
@@ -2700,6 +2702,8 @@ when the gate changes:
 | `check-aliasing` | `EXTRA_CFLAGS=-Wstrict-aliasing=3`, a later explicit level | non-zero, naming the effective level |
 | `check-aliasing` | `CC=clang`, which implements no such diagnostic | non-zero, naming the compiler rather than the flags |
 | `check-oracle-vim` | widen one of vim's eleven named classes by a single code point - `\s` to include the line break | non-zero; the run reports the rows where the two now differ |
+| `Compile.AConditionalWithNoElseIsAnAlternativeOfLengthZero` | the non-assertion conditional routed back to the alternation stages, which is the defect as it stood | non-zero, `min_length` 5 against 4 and `can_match_empty` false against true; the two-branch control rows keep passing |
+| `Match.AWindowShorterThanTheShortestMatchCostsNoEngineAtAll` | the length prefilter's condition forced false | non-zero, `GRX_ERR_LIMIT` where `GRX_OK` is expected and 2 steps where 0 is |
 | `check-status-line` | the Status section saying eleven dialects compile where twelve do | non-zero, both numbers named |
 | `check-status-line` | the `GRX_ENGINE_DFA` row deleted from the engine table - the state the page was actually in | non-zero, naming the enumerator with no row |
 | `check-status-line` | a row for a `GRX_ENGINE_BOGUS` that is in no enum | non-zero, naming the row rather than passing on a count that now matches |

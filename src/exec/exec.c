@@ -450,6 +450,40 @@ static GRX_Result exec(const GRX_Regex * regex, const char * subject,
     request.columns = columns;
   }
 
+  // A window shorter than the shortest possible match has no match in it, and
+  // this is the cheapest of the prefilters by a wide margin: one comparison
+  // against a number computed at compile time, no scan of the subject at all.
+  // WP-40 named it alongside the other three and it was the one never wired -
+  // `min_length` reached GRX_Facts, where a caller could act on it, and no
+  // search here ever did.
+  //
+  // `min_length` is documented as a lower bound that may be too small, which
+  // is the direction that makes this sound: a bound that understates can only
+  // make the test fire less often than it could, never wrongly. The window is
+  // measured from `options->begin` rather than from `search_start` for the
+  // same reason - it is the larger of the two, so a search resumed part way
+  // through a subject is judged by more room than it has. The subtraction
+  // cannot underflow: `options->begin > end` is refused as GRX_ERR_INVALID
+  // where `end` is resolved.
+  //
+  // The `min_length &&` is a short circuit and not a guard - an unsigned
+  // window is never less than zero - and it is there because a pattern that
+  // can match empty is the common case and should not pay for this.
+  //
+  // A callout is excluded for the reason the required literal excludes it: an
+  // author who registered a function is watching the attempts, and answering
+  // without starting one removes every callout the search would have made.
+  if (regex->facts.min_length
+      && end - options->begin < regex->facts.min_length
+      && !(options->callout
+          && (regex->program.flags & GRX_PROGRAM_HAS_CALLOUT))) {
+    gcu_allocator_free(regex->allocator, columns);
+    if (out_matched) {
+      *out_matched = 0;
+    }
+    return GRX_OK;
+  }
+
   // Every match contains these bytes, so a window that does not hold them
   // anywhere has no match in it and no engine needs to be started. The byte
   // set and the literal prefix both say where an attempt may *begin*; this

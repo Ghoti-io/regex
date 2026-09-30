@@ -713,6 +713,107 @@ TEST(Match, StepsAreReportedEvenWhenTheLimitIsHit) {
   EXPECT_GT(grx_match_steps(match.get()), 0u);
 }
 
+TEST(Match, AWindowShorterThanTheShortestMatchCostsNoEngineAtAll) {
+  // `[ab]{4}` is the pattern that isolates this prefilter from the other
+  // three. Its min_length is 4 and it has neither a literal prefix nor a
+  // required literal, so neither of those can answer; the subject is three
+  // bytes and every one of them is in the first-byte set, so the byte skip
+  // cannot answer either. Whatever settles this search, it is the length.
+  Regex regex("[ab]{4}");
+  ASSERT_TRUE(regex.ok());
+  Match match(regex);
+
+  GRX_Facts facts;
+  ASSERT_EQ(grx_regex_facts(regex.get(), &facts), GRX_OK);
+  ASSERT_EQ(facts.min_length, 4u);
+  ASSERT_EQ(facts.literal_prefix, nullptr);
+  ASSERT_EQ(facts.required_literal, nullptr);
+  ASSERT_EQ(facts.first_bytes_known, 1);
+
+  // A budget of one step is what makes this an assertion rather than a
+  // restatement: "no match" and "ran out of budget" are two states a status
+  // alone cannot separate, and an engine that starts an attempt cannot finish
+  // inside one step. So GRX_OK here says no engine ran.
+  GRX_Limits limits;
+  grx_limits_default(&limits);
+  limits.max_steps = 1;
+
+  GRX_SearchOptions options;
+  grx_search_options_default(&options);
+  options.limits = &limits;
+
+  int matched = 1;
+  EXPECT_EQ(grx_regex_search_ex(regex.get(), "aaa", 3, &options, match.get(),
+                &matched),
+      GRX_OK);
+  EXPECT_FALSE(matched);
+  EXPECT_EQ(grx_match_steps(match.get()), 0u);
+
+  // The control is the same pattern and the same budget one byte later: a
+  // window a match fits in has to be searched, and then it is the budget that
+  // stops it and not the length. Without this the test above passes for a
+  // prefilter that refuses everything.
+  EXPECT_EQ(grx_regex_search_ex(regex.get(), "aaab", 4, &options, match.get(),
+                &matched),
+      GRX_ERR_LIMIT);
+
+  // And with room to work in it matches, which is the other direction of the
+  // same control.
+  ASSERT_EQ(grx_regex_search_ex(regex.get(), "aaab", 4, nullptr, match.get(),
+                &matched),
+      GRX_OK);
+  EXPECT_TRUE(matched);
+  EXPECT_GT(grx_match_steps(match.get()), 0u);
+}
+
+TEST(Match, TheWindowIsTheSearchWindowAndNotTheSubject) {
+  // A caller who hands over a buffer and a window is asking about the window,
+  // so that is what has to be measured. The subject is long enough and the
+  // window is not, and the answer must come from the window - the mirror image
+  // is the bug where a prefilter measures the whole buffer and lets a search
+  // run that had no room from the start.
+  Regex regex("[ab]{4}");
+  ASSERT_TRUE(regex.ok());
+  Match match(regex);
+
+  GRX_Limits limits;
+  grx_limits_default(&limits);
+  limits.max_steps = 1;
+
+  GRX_SearchOptions options;
+  grx_search_options_default(&options);
+  options.limits = &limits;
+  options.begin = 2;
+  options.end = 4;
+
+  int matched = 1;
+  EXPECT_EQ(grx_regex_search_ex(regex.get(), "aaaaaa", 6, &options,
+                match.get(), &matched),
+      GRX_OK);
+  EXPECT_FALSE(matched);
+  EXPECT_EQ(grx_match_steps(match.get()), 0u);
+}
+
+TEST(Match, APatternThatCanMatchEmptyIsNotRefusedForRoom) {
+  // min_length of zero, and a zero-length window is a window that match fits
+  // in. The comparison is unsigned, so this is not the arm that would break
+  // first - but a pattern that can match empty is most patterns, and a
+  // prefilter that got this wrong would be wrong about nearly everything.
+  Regex regex("a*");
+  ASSERT_TRUE(regex.ok());
+  Match match(regex);
+
+  GRX_Facts facts;
+  ASSERT_EQ(grx_regex_facts(regex.get(), &facts), GRX_OK);
+  ASSERT_EQ(facts.min_length, 0u);
+
+  int matched = 0;
+  ASSERT_EQ(grx_regex_search_ex(regex.get(), "", 0, nullptr, match.get(),
+                &matched),
+      GRX_OK);
+  EXPECT_TRUE(matched);
+}
+
 TEST(Match, SpanIsGroupZero) {
   Regex regex("a(b)c");
   ASSERT_TRUE(regex.ok());

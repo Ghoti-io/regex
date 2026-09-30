@@ -1149,9 +1149,27 @@ static WalkAction walk_step(
     case GRX_IR_COND: {
       analysis->is_regular = 0;
       if (node->mode != GRX_COND_ASSERTION) {
+        // The branches, with no condition child in front of them: a group
+        // number or a name is the test and it is not a node.
+        //
+        // WALK_COND_HEAD and not WALK_ALT_HEAD, and the two differ by exactly
+        // the thing this node needs. An `else` that is not written is still a
+        // path the match can take - `(?(1)x)` matches the empty string
+        // whenever group 1 did not participate - so a conditional with one
+        // branch is an alternation of *two*, the second of length zero. The
+        // alternation stages cannot know that, because for `a|b` there is no
+        // third arm; the conditional stages add it when they have seen fewer
+        // than two.
+        //
+        // WALK_ALT_HEAD was what this used, so `min_length` overstated for
+        // every one-branch conditional: `(?(1)x)` came back with a minimum of
+        // one, `(a)?(?(1)bb)` with two, and `can_match_empty` is derived from
+        // that minimum and was wrong with it. Nothing noticed for as long as
+        // no search consulted the number.
         frame->span = (Span) {GRX_NPOS, 0, 1, 1, 0, 0};
+        frame->seen = 0;
         frame->child = node->first_child;
-        frame->stage = WALK_ALT_HEAD;
+        frame->stage = WALK_COND_HEAD;
         return WALK_AGAIN;
       }
       // Under GRX_COND_ASSERTION the first child is the *condition*, not a

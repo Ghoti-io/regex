@@ -261,7 +261,7 @@ caller (§7):
 | Fact | Used for |
 | --- | --- |
 | `is_regular` | no backreference, lookaround, atomic group, possessive quantifier, conditional, recursion, verb or `\K`: the Pike VM can run it, and the caller can be promised linear time |
-| `min_length`, `max_length` (or unbounded) | rejecting a subject that is too short without running; sizing lookbehind |
+| `min_length`, `max_length` (or unbounded) | rejecting a subject that is too short without running, which §3.5.5 does and a caller may too; sizing lookbehind |
 | `anchored_start`, `anchored_end` | skipping the unanchored-search loop |
 | `can_match_empty` | the iteration rule in `grx_regex_search_next()` |
 | first-byte set | the prefilter (§3.5.5): both engines skip a start position whose byte is not in it |
@@ -539,7 +539,20 @@ a rewrite: the captures have to come out the same.
 
 Speed, not correctness, and phased after every implemented dialect is
 conformant ([plan.md](plan.md)). The facts in §3.3 carry the literal prefix,
-the required literal and the first-byte set, and all three are built.
+the required literal, the first-byte set and `min_length`, and all four are
+built and all four reach a search.
+
+**The shortest possible match.** The cheapest of them: `end - begin <
+min_length` is one comparison and no scan, and a window that cannot hold the
+shortest match has no match in it. `src/exec/exec.c` answers such a search
+without starting an engine, which is observable as `grx_match_steps()` of zero
+and as a search that does not reach `GRX_ERR_LIMIT` under a budget of one
+step. A callout is excluded for the reason the required literal excludes it.
+The soundness direction is that `min_length` is a *lower* bound, so a bound
+that understates makes the test fire less often and never wrongly - and the
+day this was wired, two conformance vectors proved the number could overstate
+for a conditional with no `else`, which is fixed in `src/ir/analyze.c` and
+recorded in [plan.md](plan.md)'s Phase 8.
 
 **The first-byte set.** `src/compile/prefilter.c` walks the compiled program
 from its entry point, following everything that consumes nothing, and unions
