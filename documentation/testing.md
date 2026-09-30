@@ -270,12 +270,16 @@ discovers every `.rxt` under the data directory and, per record:
    is checked here, with the result code and, where the oracle supplies
    one, the diagnostic.
 2. Determines the eligible engines from `grx_regex_facts()` and the
-   record's `engines:`.
+   record's `engines:` - four of them, the Pike VM, the bit-state engine, the
+   backtracker and the lazy DFA, each refused with `GRX_ERR_UNSUPPORTED` for a
+   program it cannot run and that refusal counted as an answer rather than a
+   failure.
 3. Runs `grx_regex_search()` on each, with the record's limits.
 4. Checks the spans against `expect`, and checks every engine's spans
    against every other's.
 5. Reports, at the end, the counts: passed, failed, skipped by reason,
-   known gaps, per dialect and per source file. The per-dialect pass rate is what `README.md` publishes, and
+   known gaps, per dialect and per source file, and how many records the lazy
+   DFA answered. The per-dialect pass rate is what `README.md` publishes, and
    it has the known gaps in its denominator.
 
 A dialect with **no front end at all** is a skip rather than a failure, and
@@ -1260,7 +1264,29 @@ the exponential engine running out of budget, which is what the budget is
 for - or the bit-state engine refusing a bitmap that will not fit in
 `max_match_memory`, which is what that budget is for.
 
+**The lazy DFA was the engine none of this reached, for as long as it
+existed.** Both of the populations above described themselves as "every engine
+that can run this program" and enumerated three: the runner built a
+`std::vector` of them and the fuzz harness a `GRX_Engine engines[3]`, whose own
+comment records the bit-state engine joining that array in WP-13 - so the
+array had grown once, the precedent was written at the site, and WP-41 still
+did not extend it. Only `engine_diff.py` had it, which is why nothing was
+unchecked; but the generated rows are a generator's idea of a pattern and the
+`.rxt` corpus is what a reference implementation was actually asked about, and
+the DFA had never been shown one.
 
+Both hold it as of 2026-09-29. **466 of the 87,215 vectors are answered by the
+DFA** - 177 `gnu-ere`, 168 `posix-ere`, 63 `gnu-bre` and 58 `posix-bre` - and
+that is every leftmost-longest record in the corpus, the DFA merging paths into
+a state set and so being refused wherever the extent depends on the order the
+arms were written in. The number is printed on the conformance line beside the
+excluded count, and `EXPECT_GT(total.dfa_rows, 0u)` fails the suite when it
+reaches zero: 87,215 passes with an engine that answered none of them is the
+one green result this runner must not give. The count is of rows the DFA
+*answered* and not of rows it was asked about, because `GRX_ENGINE_DFA`
+resolves to the Pike VM for a request it cannot serve, and "we asked for four"
+is not the claim worth printing. The fuzzer's array is `GRX_ENGINE_COUNT`
+long now.
 
 **What the check could not see until Phase 4 was audited.** The paragraphs
 above describe what the *vectors* compare. `tools/oracle/engine_diff.py`,
@@ -2702,6 +2728,7 @@ when the gate changes:
 | `check-aliasing` | `EXTRA_CFLAGS=-Wstrict-aliasing=3`, a later explicit level | non-zero, naming the effective level |
 | `check-aliasing` | `CC=clang`, which implements no such diagnostic | non-zero, naming the compiler rather than the flags |
 | `check-oracle-vim` | widen one of vim's eleven named classes by a single code point - `\s` to include the line break | non-zero; the run reports the rows where the two now differ |
+| `Conformance.EveryVectorAgreesWithItsOracle` | the lazy DFA dropped from the engine list | non-zero, "no vector was answered by the lazy DFA" - and all 87,215 still pass, which is the point |
 | `Compile.AConditionalWithNoElseIsAnAlternativeOfLengthZero` | the non-assertion conditional routed back to the alternation stages, which is the defect as it stood | non-zero, `min_length` 5 against 4 and `can_match_empty` false against true; the two-branch control rows keep passing |
 | `Match.AWindowShorterThanTheShortestMatchCostsNoEngineAtAll` | the length prefilter's condition forced false | non-zero, `GRX_ERR_LIMIT` where `GRX_OK` is expected and 2 steps where 0 is |
 | `check-status-line` | the Status section saying eleven dialects compile where twelve do | non-zero, both numbers named |

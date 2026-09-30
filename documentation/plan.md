@@ -1049,17 +1049,29 @@ zero disagreements over every dialect. §3.5.5 of [design.md](design.md) is
 the long account, including what the one-pass table refuses and what the
 measurement was.
 
-**Two populations the DFA is not in**, and both say in their own words that
-they are: `tests/conformance/test_vectors.cpp` builds its engine list as
-"every engine that can run this program" and names three, so none of the
-87,215 checked-in vectors is ever answered by the DFA; and
-`tests/fuzz/fuzz_crossengine.cpp` says "every engine that can run this
-program" over a `GRX_Engine engines[3]`, whose own comment records the
-bit-state engine joining that set in WP-13 and which WP-41 did not extend.
-Neither is a hole in the invariant - `check-engine-equivalence` runs in
-`make test` and needs no reference implementation - but both are a
-denominator that stopped where it was written, and the vector corpus is the
-one population that is real patterns rather than generated ones.
+**Two populations said they held every engine and held three.**
+`tests/conformance/test_vectors.cpp` built its engine list as "every engine
+that can run this program" and named three, so no checked-in vector was ever
+answered by the DFA; `tests/fuzz/fuzz_crossengine.cpp` said the same words
+over a `GRX_Engine engines[3]`, and its own comment records the bit-state
+engine joining that array in WP-13 - the precedent was written at the site and
+WP-41 did not follow it. Neither was a hole in the invariant, since
+`check-engine-equivalence` runs `engine_diff.py` with all four engines in
+`make test` and needs no reference implementation. But the vector corpus is
+the one population made of patterns a reference implementation was actually
+asked about rather than ones a generator invented, and the DFA had never seen
+one.
+
+Both now hold it, as of 2026-09-29. **466 of the 87,215 vectors are answered
+by the lazy DFA** - 177 `gnu-ere`, 168 `posix-ere`, 63 `gnu-bre`, 58
+`posix-bre` - and that is the whole of the leftmost-longest corpus, every
+other dialect preferring leftmost-first and coming back
+`GRX_ERR_UNSUPPORTED`. The count is printed on the conformance line beside the
+excluded count and for the same reason, and `EXPECT_GT(total.dfa_rows, 0u)`
+fails the suite if it ever reaches zero: 87,215 passes and an engine that
+answered none of them is a result this file must not report as clean. The
+fuzzer's array is sized by `GRX_ENGINE_COUNT` now rather than by however many
+engines there were on the day it was written.
 
 **WP-42 Translation**: `grx_pattern_translate(pattern, to_syntax)` from the
 AST, with `GRX_ERR_UNSUPPORTED` naming the construct the target lacks. **Not

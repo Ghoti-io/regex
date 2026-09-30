@@ -126,7 +126,13 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t * data, size_t size) {
   // the bit-state engine joined the set in WP-13 and its whole claim - that
   // skipping an (instruction, position) already tried changes no answer -
   // is checked here and nowhere else at this scale.
-  GRX_Engine engines[3];
+  //
+  // Sized by GRX_ENGINE_COUNT and not by however many there are today. This
+  // array said `[3]` while that sentence about the bit-state engine joining
+  // sat directly above it, and the lazy DFA of WP-41 did not join: a literal
+  // bound next to a note about the last time it moved is not a warning, it is
+  // decoration. The sentinel is in the header for this.
+  GRX_Engine engines[GRX_ENGINE_COUNT];
   size_t engine_count = 0;
   if (facts.is_regular) {
     engines[engine_count++] = GRX_ENGINE_PIKE;
@@ -136,6 +142,15 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t * data, size_t size) {
     engines[engine_count++] = GRX_ENGINE_BITSTATE;
   }
   engines[engine_count++] = GRX_ENGINE_BACKTRACK;
+  // The DFA, which runs the regular subset under leftmost-longest and refuses
+  // the rest with GRX_ERR_UNSUPPORTED - handled below, where every non-OK
+  // result is already read as "this engine did not answer" rather than as a
+  // disagreement. Asked for the same programs as the Pike VM, because the
+  // conditions past `is_regular` belong to the library and a copy of them
+  // here would be a copy that drifts.
+  if (facts.is_regular) {
+    engines[engine_count++] = GRX_ENGINE_DFA;
+  }
   if (engine_count < 2) {
     // Only one engine can run it, so the invariant says nothing.
     grx_regex_free(regex);

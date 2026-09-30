@@ -40,6 +40,16 @@ struct Outcome {
   bool passed = false;
   bool skipped = false;
   std::string reason;   ///< Why it failed, or why it was skipped.
+  /**
+   * Whether the lazy DFA is what answered, and not merely what was asked.
+   *
+   * Asking an engine and counting the ask is how a population comes to hold
+   * an engine that answers nothing: GRX_ENGINE_DFA resolves to the Pike VM
+   * for a request it cannot serve, so "we asked for four engines" and "four
+   * engines answered" are different claims and only the second is worth
+   * printing.
+   */
+  bool dfa_answered = false;
 };
 
 /** Spans as text, for a failure message. */
@@ -347,6 +357,19 @@ Outcome run_record(const grxtest::Record & record) {
       engines.push_back(GRX_ENGINE_BITSTATE);
     }
     engines.push_back(GRX_ENGINE_BACKTRACK);
+    // The lazy DFA, which WP-41 added to the library and to
+    // `tools/oracle/engine_diff.py` and not to this file - so until now no
+    // checked-in vector was ever answered by it, and this is the only
+    // population made of patterns a reference implementation was actually
+    // asked about rather than ones a generator invented.
+    //
+    // Asked for every regular program and refused with GRX_ERR_UNSUPPORTED
+    // for the rest, which is how the bit-state engine is asked two lines up:
+    // the conditions are the program's, the library owns them, and a list
+    // here that tried to restate them would be a second copy to drift.
+    if (facts.is_regular) {
+      engines.push_back(GRX_ENGINE_DFA);
+    }
   }
 
   std::string first_spans;
@@ -367,6 +390,7 @@ Outcome run_record(const grxtest::Record & record) {
 
     std::string engine_name = engine == GRX_ENGINE_PIKE ? "pike"
         : engine == GRX_ENGINE_BITSTATE                   ? "bitstate"
+        : engine == GRX_ENGINE_DFA                        ? "dfa"
                                                           : "backtrack";
 
     // A program whose behaviour depends on more than (instruction,
@@ -376,6 +400,18 @@ Outcome run_record(const grxtest::Record & record) {
     if (engine == GRX_ENGINE_BITSTATE && result == GRX_ERR_UNSUPPORTED) {
       grx_match_destroy(match);
       continue;
+    }
+
+    // Same rule for the DFA, and it refuses far more: it runs the regular
+    // subset under leftmost-longest only, so every leftmost-first dialect -
+    // which is most of them - comes back GRX_ERR_UNSUPPORTED here. That is
+    // why the count of rows it *did* answer is reported rather than assumed.
+    if (engine == GRX_ENGINE_DFA && result == GRX_ERR_UNSUPPORTED) {
+      grx_match_destroy(match);
+      continue;
+    }
+    if (engine == GRX_ENGINE_DFA && grx_match_engine(match) == GRX_ENGINE_DFA) {
+      outcome.dfa_answered = true;
     }
 
     if (record.expectation == grxtest::Expectation::Limit) {
@@ -447,6 +483,16 @@ struct Tally {
   size_t skipped = 0;
   size_t gaps = 0;
   size_t reference_defects = 0;
+  /**
+   * Records the lazy DFA answered, which is not a score and is a denominator.
+   *
+   * It is printed for the reason the excluded count is printed: a population
+   * that holds an engine answering nothing reports zero disagreements, and
+   * so does one that holds an engine answering everything correctly. The
+   * number is the only thing that tells them apart, and a reader who sees
+   * 100.00% should be able to see what the DFA contributed to it.
+   */
+  size_t dfa_rows = 0;
 };
 
 /**
@@ -608,6 +654,13 @@ Tally run_directory(const std::string & directory,
       const char * dialect = grx_syntax_name(record.syntax);
       Tally & tally = (*out_by_dialect)[dialect];
 
+      // Counted before the pass/fail branching, because this is about which
+      // engines the corpus reached and not about whether they were right.
+      if (outcome.dfa_answered) {
+        total.dfa_rows++;
+        tally.dfa_rows++;
+      }
+
       if (outcome.skipped) {
         total.skipped++;
         tally.skipped++;
@@ -702,9 +755,9 @@ TEST(Conformance, EveryVectorAgreesWithItsOracle) {
   }
 
   printf("\nconformance: %zu passed, %zu failed, %zu skipped, %zu known gaps, "
-         "%zu excluded (reference defects)\n",
+         "%zu excluded (reference defects), %zu answered by the lazy DFA\n",
       total.passed, total.failed, total.skipped, total.gaps,
-      total.reference_defects);
+      total.reference_defects, total.dfa_rows);
   for (const auto & entry : by_dialect) {
     // The known gaps are in the denominator. A rate that left them out would
     // be a rate over the vectors this library already answers, which is a
@@ -731,6 +784,9 @@ TEST(Conformance, EveryVectorAgreesWithItsOracle) {
       printf("  %zu excluded (reference defects)",
           entry.second.reference_defects);
     }
+    if (entry.second.dfa_rows) {
+      printf("  %zu on the dfa", entry.second.dfa_rows);
+    }
     printf("\n");
   }
 
@@ -738,6 +794,15 @@ TEST(Conformance, EveryVectorAgreesWithItsOracle) {
   // avoid: a runner that discovered nothing would report success forever.
   EXPECT_GT(total.passed + total.failed, 0u)
       << "no vectors were found under " << grxtest::data("vectors");
+
+  // And the same argument one engine down. The DFA was in this list for no
+  // time at all before it was discovered to be missing from it, and the way
+  // that happens again is a condition drifting until GRX_ERR_UNSUPPORTED is
+  // the answer for every row - which reads as a clean sweep over an engine
+  // that never ran. There is no right number here, only a wrong one.
+  EXPECT_GT(total.dfa_rows, 0u)
+      << "no vector was answered by the lazy DFA; it is in the engine list "
+         "and something is refusing all of them";
 }
 
 TEST(Conformance, TheRateReadmePublishesIsTheRateTheRunnerFinds) {

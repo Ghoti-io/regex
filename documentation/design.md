@@ -530,7 +530,11 @@ Any pattern and subject that two engines can both run must yield the same
 `matched`, the same group 0, and the same spans for every group, from both.
 This is checked in the unit tests on every conformance vector
 ([testing.md](testing.md) §4) and by a fuzz harness that runs all eligible
-engines and aborts on disagreement. It is the cheapest strong test the
+engines and aborts on disagreement. "All eligible" is four as of 2026-09-29
+and was three for as long as the lazy DFA existed: both populations named
+every engine in a comment and enumerated three in the code, and the count of
+vectors the DFA answers is now printed so that a population which quietly
+stops holding it cannot read as agreement. It is the cheapest strong test the
 library has, because the two implementations share nothing below the program,
 and it is why the Pike VM carries progress registers rather than relying on
 a rewrite: the captures have to come out the same.
