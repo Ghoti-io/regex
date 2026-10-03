@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 r"""Compare the two guaranteed-linear front ends against their references.
 
-documentation/plan.md WP-34 and WP-35. One tool for both dialects because
-they are one front end - src/syntax/re2.c reads both, deny-by-default, with
-a two-valued `flavour()` - and a gate that asked only one of them would leave
-every `flavour()` branch with a side nobody checks.
+documentation/work-packages.md WP-34 and WP-35. One tool for both dialects
+because they are one front end - src/syntax/re2.c reads both, deny-by-default,
+with a two-valued `flavour()` - and a gate that asked only one of them would
+leave every `flavour()` branch with a side nobody checks.
 
     tools/oracle/linear_diff.py --dialect re2   [--seed N] [--strict]
     tools/oracle/linear_diff.py --dialect rust  [--seed N] [--strict]

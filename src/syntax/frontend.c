@@ -72,7 +72,7 @@ const GRX_Frontend * grx_frontend_for(GRX_Syntax syntax) {
       return &grx_frontend_rust;
     default:
       // Everything in tiers 2 and beyond. Their packages are
-      // documentation/plan.md WP-30 and later.
+      // documentation/work-packages.md WP-30 and later.
       return NULL;
   }
 }

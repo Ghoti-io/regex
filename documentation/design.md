@@ -11,7 +11,7 @@ Companion pages, each owned by this one:
 | [dialects.md](dialects.md) | What each syntax accepts and what it means; the semantic profile per dialect; deviations |
 | [unicode.md](unicode.md) | The Unicode data: which version, which tables, how they are generated and checked |
 | [testing.md](testing.md) | How correctness is established: oracles, conformance vectors, cross-engine checks, fuzzing |
-| [plan.md](plan.md) | The order the work was planned in. What compiles is in [dialects.md](dialects.md) |
+| [work-packages.md](work-packages.md) | What each package produced, and what "done" means. What compiles is in [dialects.md](dialects.md) |
 
 ## 1. What the library is for
 
@@ -55,9 +55,9 @@ characters, classes, the simple and range quantifiers and their lazy forms,
 formal sense and so the subset the linear-time engine runs. That is not a
 coincidence and it is the reason the engine split in §3.5 is worth having.
 
-The integration is [plan.md](plan.md)'s WP-11, and it went the way the
-constraint here required: `text` does not link this library. It accepts a
-regular-expression *provider* - `GTEXT_JSON_Regex_Provider` in
+The integration is [work-packages.md](work-packages.md)'s WP-11, and it went the
+way the constraint here required: `text` does not link this library. It accepts
+a regular-expression *provider* - `GTEXT_JSON_Regex_Provider` in
 `GTEXT_JSON_Schema_Options`, with `compile_fn`, `search_fn`, `free_fn` and a
 `ctx` - and the application supplies one backed by `ghoti.io-regex`.
 `examples/json_schema_provider.c` is that adapter. This library stays
@@ -119,8 +119,8 @@ record when one of them is wanted.
   for single characters. Every dialect's "current locale" is Unicode.
 - **Perl code blocks** `(?{ ... })` and `(??{ ... })`. They run Perl.
 - **.NET balancing groups** `(?<open-close>...)` are deferred to the .NET
-  dialect ([plan.md](plan.md)); they are a capture-stack semantics no other
-  dialect has.
+  dialect ([work-packages.md](work-packages.md)); they are a capture-stack no
+  semantics other dialect has.
 - **Partial matching** (PCRE2's `PCRE2_PARTIAL_SOFT`/`HARD`). Reserved as a
   future flag on the search request; nothing in the engines precludes it.
 
@@ -542,9 +542,9 @@ a rewrite: the captures have to come out the same.
 #### 3.5.5 Prefilters, and later a lazy DFA
 
 Speed, not correctness, and phased after every implemented dialect is
-conformant ([plan.md](plan.md)). The facts in §3.3 carry the literal prefix,
-the required literal, the first-byte set and `min_length`, and all four are
-built and all four reach a search.
+conformant ([work-packages.md](work-packages.md)). The facts in §3.3 carry the
+literal prefix, the required literal, the first-byte set and `min_length`, and
+all four are built and all four reach a search.
 
 **The shortest possible match.** The cheapest of them: `end - begin <
 min_length` is one comparison and no scan, and a window that cannot hold the
@@ -556,7 +556,7 @@ The soundness direction is that `min_length` is a *lower* bound, so a bound
 that understates makes the test fire less often and never wrongly - and the
 day this was wired, two conformance vectors proved the number could overstate
 for a conditional with no `else`, which is fixed in `src/ir/analyze.c` and
-recorded in [plan.md](plan.md)'s Phase 8.
+recorded in [work-packages.md](work-packages.md)'s Phase 8.
 
 **The first-byte set.** `src/compile/prefilter.c` walks the compiled program
 from its entry point, following everything that consumes nothing, and unions
@@ -807,7 +807,7 @@ the first two of them:
    rule, the replacement-template grammar. The complete list with every
    dialect's value is [dialects.md](dialects.md) §5, and filling that table
    from the real implementations is a work package in its own right
-   ([plan.md](plan.md) WP-03).
+   ([work-packages.md](work-packages.md) WP-03).
 3. **Hooks** - code, for the syntax that is not expressible as data. A
    `GRX_Frontend` vtable with a default implementation (the Perl family) and
    overrides where a family's *lexical* rules differ: the POSIX/GNU family
@@ -1007,10 +1007,10 @@ checks both halves of that per field rather than leaving it a sentence.
 
 Defaults are non-zero for every field except the two noted above, because a
 regular expression is the one input whose cost is not bounded by its size. The
-default values are measured, not guessed: [plan.md](plan.md) WP-14 sets them
-from the conformance corpus so that no pattern in any oracle's own test suite
-hits a default limit, and from the ReDoS corpus so that every known
-pathological pair does.
+default values are measured, not guessed: [work-packages.md](work-packages.md)
+WP-14 sets them from the conformance corpus so that no pattern in any oracle's
+own test suite hits a default limit, and from the ReDoS corpus so that every
+known pathological pair does.
 
 ### 6.3 Threads
 
@@ -1066,7 +1066,8 @@ wrappers over the `_ex` forms with default options.
 
 ## 8. Code layout
 
-The target tree, with the lane in [plan.md](plan.md) that owns each part.
+The target tree. Each part was owned by one lane, and the lanes are not
+published: a reader of the code needs the tree, not who was assigned it.
 The scaffold's tree is a subset of this; directories appear when their first
 file does.
 
@@ -1195,7 +1196,8 @@ blocks the first work packages.
    Recommendation was yes - ship the deviation written down and schedule a
    work package, rather than hold the POSIX dialects for it.
 
-   **Decided against, and built** (WP-26 in [plan.md](plan.md)). Which
+   **Decided against, and built** (WP-26 in Which
+   *[work-packages.md](work-packages.md)).
    substrings the subexpressions report under POSIX's "each subexpression,
    from left to right, longest possible consistent with the whole match" rule
    is exact, and this was a non-goal for one release only. It is no longer

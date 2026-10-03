@@ -422,7 +422,7 @@ static const char * const spec_names[GRX_SYNTAX_COUNT] = {
  * Status: ECMAScript's row is filled from ECMA-262 and checked against Node
  * 22; every other row holds the value documentation/dialects.md section 5
  * states, and the cells that page marks **probe** are resolved by
- * documentation/plan.md WP-03 before code depends on them.
+ * documentation/work-packages.md WP-03 before code depends on them.
  *
  * A zeroed field is the first value of its enum, and it is worth knowing
  * exactly which value that is before leaving one out. It is *not* the Perl
@@ -456,8 +456,8 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     .submatch = GRX_SUBMATCH_POSIX,
     // BREAK rather than ALLOW. ALLOW means "nothing special; the longest
     // match decides", which presumes a leftmost-longest engine; until
-    // plan.md's WP-24 builds one, a backtracker given ALLOW repeats an empty
-    // iteration until it runs out of budget, and `(a*)*` against "bc"
+    // work-packages.md's WP-24 builds one, a backtracker given ALLOW repeats an
+    // empty iteration until it runs out of budget, and `(a*)*` against "bc"
     // answered with a limit rather than with a match. BREAK is what
     // reproduces glibc for both that and `a(b|c?)+d` against "ad".
     .empty_loop = GRX_EMPTY_LOOP_BREAK_FIRST,
@@ -496,8 +496,8 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     .submatch = GRX_SUBMATCH_POSIX,
     // BREAK rather than ALLOW. ALLOW means "nothing special; the longest
     // match decides", which presumes a leftmost-longest engine; until
-    // plan.md's WP-24 builds one, a backtracker given ALLOW repeats an empty
-    // iteration until it runs out of budget, and `(a*)*` against "bc"
+    // work-packages.md's WP-24 builds one, a backtracker given ALLOW repeats an
+    // empty iteration until it runs out of budget, and `(a*)*` against "bc"
     // answered with a limit rather than with a match. BREAK is what
     // reproduces glibc for both that and `a(b|c?)+d` against "ad".
     .empty_loop = GRX_EMPTY_LOOP_BREAK_FIRST,
@@ -535,8 +535,8 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     .preference = GRX_PREFER_LEFTMOST_LONGEST,
     // BREAK rather than ALLOW. ALLOW means "nothing special; the longest
     // match decides", which presumes a leftmost-longest engine; until
-    // plan.md's WP-24 builds one, a backtracker given ALLOW repeats an empty
-    // iteration until it runs out of budget, and `(a*)*` against "bc"
+    // work-packages.md's WP-24 builds one, a backtracker given ALLOW repeats an
+    // empty iteration until it runs out of budget, and `(a*)*` against "bc"
     // answered with a limit rather than with a match. BREAK is what
     // reproduces glibc for both that and `a(b|c?)+d` against "ad".
     .empty_loop = GRX_EMPTY_LOOP_BREAK_FIRST,
@@ -575,8 +575,8 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     .preference = GRX_PREFER_LEFTMOST_LONGEST,
     // BREAK rather than ALLOW. ALLOW means "nothing special; the longest
     // match decides", which presumes a leftmost-longest engine; until
-    // plan.md's WP-24 builds one, a backtracker given ALLOW repeats an empty
-    // iteration until it runs out of budget, and `(a*)*` against "bc"
+    // work-packages.md's WP-24 builds one, a backtracker given ALLOW repeats an
+    // empty iteration until it runs out of budget, and `(a*)*` against "bc"
     // answered with a limit rather than with a match. BREAK is what
     // reproduces glibc for both that and `a(b|c?)+d` against "ad".
     .empty_loop = GRX_EMPTY_LOOP_BREAK_FIRST,

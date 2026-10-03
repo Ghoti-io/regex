@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Ask every installed reference implementation what a construct means.
 
-documentation/plan.md WP-03. The cells marked **probe** in
+documentation/work-packages.md WP-03. The cells marked **probe** in
 documentation/dialects.md section 5 are places where a dialect's behaviour is
 not stated clearly enough in its documentation to write down from reading. The
 answer is to run the case and see.

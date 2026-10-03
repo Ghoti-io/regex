@@ -155,9 +155,9 @@ pcre2 pcre2-10.46
 perl v5.44.0
 
 # bminor/glibc (the git mirror of sourceware's glibc). posix/rxspencer/tests,
-# Henry Spencer's regular expression test set, which is what plan.md's WP-25
-# names. The ref matches the glibc on this machine - Debian 13 ships 2.41 -
-# because glibc is also the *oracle* for these vectors, and a corpus imported
+# Henry Spencer's regular expression test set, which is what work-packages.md's
+# WP-25 names. The ref matches the glibc on this machine - Debian 13 ships 2.41
+# - because glibc is also the *oracle* for these vectors, and a corpus imported
 # from one version and answered by another measures the difference between
 # them rather than the library.
 #
@@ -184,7 +184,7 @@ glibc glibc-2.41
 # and have never been compared against anything. musl's regex is descended
 # from Ville Laurikari's TRE, a different implementation lineage entirely,
 # which is what makes it a second *opinion* rather than a second spelling of
-# the first - and TRE is also the tagged-transition algorithm plan.md's
+# the first - and TRE is also the tagged-transition algorithm work-packages.md's
 # WP-26 names, so the same fetch is a working reference for that package.
 #
 # What this oracle is *not*. It is musl's regex hosted on glibc, not musl.

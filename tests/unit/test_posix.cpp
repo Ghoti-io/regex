@@ -237,8 +237,8 @@ TEST(Posix, AnOptionalAnchorIsRefusedRatherThanMadeUnmatchable) {
 }
 
 TEST(Posix, TheLongestMatchAtTheLeftmostStart) {
-  // plan.md's WP-24. POSIX takes the longest match at the leftmost start
-  // where every other dialect here takes the one the alternation reaches
+  // work-packages.md's WP-24. POSIX takes the longest match at the leftmost
+  // start where every other dialect here takes the one the alternation reaches
   // first, and the profile has said GRX_PREFER_LEFTMOST_LONGEST for these
   // four rows since the table was written. glibc and musl agree on every
   // case below, which is what makes it a rule rather than glibc's habit.
@@ -339,8 +339,8 @@ TEST(Posix, AnEmptyAlternativeYieldsToTheBranchBesideIt) {
 }
 
 TEST(Posix, PosixSaysWhichSubexpressionGetsWhichText) {
-  // plan.md's WP-26. POSIX.1 section 9.4.8 asks each subpattern, left to
-  // right, for the longest string it can take while the whole match stays
+  // work-packages.md's WP-26. POSIX.1 section 9.4.8 asks each subpattern, left
+  // to right, for the longest string it can take while the whole match stays
   // the longest one at the leftmost start. The extent is section 5.1's job;
   // this is the rest of it, and it is a profile axis
   // because the four leftmost-longest dialects do not agree on it - the

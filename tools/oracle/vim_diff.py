@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Compare the Vim front end against vim itself, on patterns nobody wrote.
 
-documentation/plan.md WP-36. The dialect's definition is "what vim does", so
-one oracle decides every row - the arrangement `python_diff.py` and
+documentation/work-packages.md WP-36. The dialect's definition is "what vim so
+does", one oracle decides every row - the arrangement `python_diff.py` and
 `perl_diff.py` use, and not the glibc-and-musl agreement the POSIX rows are
 held to.
 

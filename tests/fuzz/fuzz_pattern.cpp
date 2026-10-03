@@ -52,7 +52,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t * data, size_t size) {
     // they share those seven-eighths, so each gets about an eighth of the
     // campaign rather than a thirty-second of it.
     //
-    // GRX_FUZZ_SYNTAX pins one by name, which is what plan.md section 4's
+    // GRX_FUZZ_SYNTAX pins one by name, which is what work-packages.md §2's
     // fourth condition - "the pattern fuzzer has run eight hours clean with
     // the dialect selected" - needs in order to be a thing anyone can do.
     if (fuzz_syntax_is_pinned()) {

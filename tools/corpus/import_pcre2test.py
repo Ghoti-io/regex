@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Import pcre2test's `testinput1` and `testinput2` as syntax vectors.
 
-plan.md's WP-18 is measured on one thing: "pcre2test's `testinput1` and
+work-packages.md's WP-18 is measured on one thing: "pcre2test's `testinput1` and
 `testinput2` syntax verdicts match". This produces the corpus that
 measurement reads.
 
@@ -286,7 +286,8 @@ def main(argv):
         out.write("# oracle: %s\n" % version())
         out.write("#\n"
             "# Syntax verdicts only: whether each pattern compiles, which is\n"
-            "# what plan.md's WP-18 is measured on. The reference answers that\n"
+            "# what work-packages.md's WP-18 is measured on. The reference "
+            "answers that\n"
             "# question directly; its match answers need an oracle driver that\n"
             "# WP-20 will write.\n"
             "#\n"

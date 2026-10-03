@@ -513,8 +513,8 @@ TEST(Limits, TheDefaultDoesNotBoundAnEcmascriptLookbehind) {
 TEST(Limits, RecursionDepthIsEnforcedNowThatADialectHasRecursion) {
   // This test used to assert the opposite: that no dialect compiled any of
   // these into recursion, so that `max_recursion_depth` was a documented
-  // field nothing read. PCRE2's front end (plan.md WP-18) is what it was
-  // waiting for, and the assertion is now the one it was standing in for -
+  // field nothing read. PCRE2's front end (work-packages.md WP-18) is what it
+  // was waiting for, and the assertion is now the one it was standing in for -
   // that the limit refuses a recursion deeper than it allows, rather than
   // being spent on a pattern that never recurses.
   const char * recursive[] = {"(a(?R)?b)", "(a(?1)?b)"};

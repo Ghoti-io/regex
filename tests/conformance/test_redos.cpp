@@ -42,9 +42,9 @@ namespace {
 /**
  * How long one pathological pair may take to be refused.
  *
- * plan.md WP-08 says one second, and that is the number for a release build:
- * the slowest row costs 414 ms there, so the bound has two and a half times
- * the margin and a regression has to be large rather than a busy machine.
+ * work-packages.md WP-08 says one second, and that is the number for a release
+ * build: the slowest row costs 414 ms there, so the bound has two and a half
+ * times the margin and a regression has to be large rather than a busy machine.
  *
  * A sanitized build is about four times slower - measured, not assumed: this
  * test failed at 1.7 seconds a row the first time it ran under

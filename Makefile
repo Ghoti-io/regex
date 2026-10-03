@@ -465,7 +465,7 @@ ALL_TEST_GATES := check-symbols check-layering check-aliasing \
 	check-tables check-status-line check-corpus-seeds check-makefile-hash \
 	check-generated-header-deps \
 	check-oracle-env check-unicode-agreement check-scan-portable test-asan \
-	check-programs check-layout-page
+	check-programs check-layout-page check-work-packages
 TEST_GATES ?= $(ALL_TEST_GATES)
 
 # What a gate that IS a python3 script does when there is no python3.
@@ -879,7 +879,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 
 # General commands
 .PHONY: check-oracle-soak
-.PHONY: clean cloc docs docs-pdf examples tools coverage check-layout-page check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-unicode-agreement check-dump-names check-readme-example check-tables check-status-line check-corpus-seeds check-makefile-hash check-generated-header-deps check-oracle-env check-oracle-syntax check-oracle-match check-oracle-soak check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-linear check-oracle-perl-syntax check-oracle-script-runs check-doc-claims check-wide-classes check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
+.PHONY: clean cloc docs docs-pdf examples tools coverage check-layout-page check-work-packages check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-unicode-agreement check-dump-names check-readme-example check-tables check-status-line check-corpus-seeds check-makefile-hash check-generated-header-deps check-oracle-env check-oracle-syntax check-oracle-match check-oracle-soak check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-linear check-oracle-perl-syntax check-oracle-script-runs check-doc-claims check-wide-classes check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
 	check-programs \
 	check-oracle-properties check-oracle-numeric-properties \
 	check-oracle-folds \
@@ -1908,6 +1908,29 @@ check-layout-page: ## Fail if development.md's layout block disagrees with the t
 check-layout-page:
 	@$(REQUIRE_PYTHON3); \
 	python3 tools/check_layout_page.py
+
+check-work-packages: ## Fail if a WP-NN citation names a package the page lacks
+# Thirty-three work packages are cited by number from source comments, test
+# comments, importer docstrings and two checked-in corpus headers, each one a
+# promise that a reader can look the number up. Nothing checked that, and the
+# page they name was `documentation/plan.md` until the planning half of it
+# moved to the workspace: seventy-one references had to be retargeted by hand,
+# and one of them was missed by the retargeting because the section number had
+# wrapped onto the next line.
+#
+# Two arms. Every cited number is defined on the page, and a page named
+# directly before a package number is *that* page - so a surviving
+# citation of the old page name is caught rather than left pointing at a file
+# that is gone - a `plan.md WP-18`, say. [not-a-citation]
+#
+# That example needs the marker on its own line, and only its own line, which
+# is the whole of what makes an exemption auditable: a line *about* a citation
+# is not one, and `make check-work-packages` prints how many lines claim it.
+# The second arm is why this is not a grep for the number: the number was
+# never the part that broke.
+check-work-packages:
+	@$(REQUIRE_PYTHON3); \
+	python3 tools/check_work_packages.py
 
 check-status-line: ## Fail if README's status paragraph disagrees with the code
 # README.md opens by saying how many dialects are built and how many are

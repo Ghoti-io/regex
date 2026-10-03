@@ -2,7 +2,7 @@
 """Compare every Unicode property table against a reference implementation.
 
 The most thorough check the Unicode tables can be given, and the one
-documentation/plan.md WP-09 calls "the real check on WP-02". For each
+documentation/work-packages.md WP-09 calls "the real check on WP-02". For each
 property this library accepts, it asks both implementations which code points
 match `\\p{...}` - all 1,114,112 of them - and reports the first differences.
 

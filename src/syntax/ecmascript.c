@@ -29,8 +29,8 @@
  * (design.md section 1.1). **Legacy mode** is the same grammar as modified
  * by Annex B.1.2, which is what every browser and Node actually run for a
  * pattern without `u` - so it is the default here, not a compatibility
- * switch. UnicodeSets mode (`v`) is plan.md WP-12 and is refused with its
- * own diagnostic rather than silently read as `u`.
+ * switch. UnicodeSets mode (`v`) is work-packages.md WP-12 and is refused with
+ * its own diagnostic rather than silently read as `u`.
  *
  * Almost every rule below is a rule Annex B relaxes and Unicode mode does
  * not, which is why nearly every function here asks `unicode_mode()` once and

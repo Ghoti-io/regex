@@ -311,7 +311,7 @@ typedef struct GRX_ClassItem {
  * `\R` is a STRING_SET: it matches one of a fixed set of sequences, which is
  * what that kind is for. `\X` has no representation here yet - it is an
  * unbounded pattern rather than a set, and the tier that specifies it
- * (documentation/plan.md WP-18) adds its node kind then.
+ * (documentation/work-packages.md WP-18) adds its node kind then.
  */
 typedef struct GRX_Node {
   GRX_NodeKind kind;     ///< What this node is.

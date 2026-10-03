@@ -214,8 +214,8 @@ std::string describe_groups(
  * Whether this dialect has a front end at all.
  *
  * Asked by compiling the simplest pattern there is. A dialect that refuses
- * `a` is one plan.md has not built yet, which is a different thing from a
- * dialect that refuses a particular construct - and the difference decides
+ * `a` is one work-packages.md has not built yet, which is a different thing a
+ * from dialect that refuses a particular construct - and the difference decides
  * whether a record is a failure or a skip. Cached, because the answer cannot
  * change during a run.
  */
@@ -806,10 +806,10 @@ TEST(Conformance, EveryVectorAgreesWithItsOracle) {
 }
 
 TEST(Conformance, TheRateReadmePublishesIsTheRateTheRunnerFinds) {
-  // design.md invariant 5 and plan.md section 4's third condition both say
+  // design.md invariant 5 and work-packages.md §2's third condition both say
   // the pass rate is *published*. For a long time it was published only in
-  // plan.md, in the past tense of a work package - `gnu-ere` at 98.15% and
-  // three more like it - and every one of them had stopped being true, the
+  // work-packages.md, in the past tense of a work package - `gnu-ere` at 98.15%
+  // and three more like it - and every one of them had stopped being true, the
   // twelve known-gap entries behind them having been closed one at a time
   // with nothing to notice that the number three directories away had moved.
   //

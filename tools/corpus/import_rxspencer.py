@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Import Henry Spencer's regex test set as `.rxt` conformance vectors.
 
-plan.md's WP-25 names "Spencer's test suite converted; glibc, grep and sed as
-oracles". This produces the vectors; glibc is the oracle, reached through
+work-packages.md's WP-25 names "Spencer's test suite converted; glibc, grep and
+sed as oracles". This produces the vectors; glibc is the oracle, reached through
 tools/oracle/posix_match.c.
 
 The corpus is the copy glibc carries and runs as `tst-rxspencer`, so the test

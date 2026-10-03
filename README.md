@@ -187,6 +187,7 @@ JSON Schema `pattern` and `patternProperties`.
 | [documentation/dialects.md](documentation/dialects.md) | Which constructs each syntax has, and where implementations disagree |
 | [documentation/unicode.md](documentation/unicode.md) | Which Unicode data this library still owns, and which it reads from `unicode` |
 | [documentation/testing.md](documentation/testing.md) | Oracles, the vector format, fuzzing |
+| [documentation/work-packages.md](documentation/work-packages.md) | What each work package produced, and what "done" means for a dialect and for a release |
 
 `make docs` builds the manual.
 
@@ -243,8 +244,9 @@ removed from that file in the commit that closes it, and the runner fails on
 an entry whose record has started passing, so the file cannot drift into a
 list of what once was.
 
-A rate is not the whole of "done" for a dialect: [documentation/plan.md](documentation/plan.md)
-§4 lists six conditions and this is one of them.
+A rate is not the whole of "done" for a dialect:
+[documentation/work-packages.md](documentation/work-packages.md) §2 lists six
+conditions and this is one of them.
 
 ## License
 

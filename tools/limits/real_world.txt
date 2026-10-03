@@ -1,6 +1,7 @@
 # Patterns of the kind that appear in JSON Schemas, configuration files and
-# validation code. Collected for documentation/plan.md WP-14, which sets
-# grx_limits_default() from what real patterns cost rather than from a guess.
+# validation code. Collected for documentation/work-packages.md WP-14, which
+# sets grx_limits_default() from what real patterns cost rather than from a
+# guess.
 #
 # One per line: the flags, a tab, then the pattern. A line beginning with `#`
 # is a comment and a blank line is ignored.

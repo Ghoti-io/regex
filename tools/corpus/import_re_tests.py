@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Import Perl's `t/re/re_tests` as `.rxt` conformance vectors.
 
-plan.md's WP-21 is measured on "`re_tests` vectors pass". This produces them.
+work-packages.md's WP-21 is measured on "`re_tests` vectors pass". This produces
+them.
 
 The format is tab-separated - `pattern`, `subject`, `y/n/etc`, an expression,
 its expected value, a skip reason, a comment - and this importer reads the

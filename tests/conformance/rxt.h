@@ -40,7 +40,7 @@ enum class Expectation {
    * A corpus can say more about syntax than about matching. pcre2test's
    * `testinput1` and `testinput2` are thousands of patterns whose accept or
    * reject verdict the reference gives directly and unambiguously, which is
-   * exactly what plan.md's WP-18 is measured on - while their *match*
+   * exactly what work-packages.md's WP-18 is measured on - while their *match*
    * answers need an oracle driver that does not exist yet. Without this
    * expectation a corpus like that could only contribute its rejections,
    * and "the patterns we are known to refuse" is the half of a syntax

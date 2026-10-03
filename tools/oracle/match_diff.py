@@ -11,7 +11,7 @@ string; what distinguishes ECMAScript from Perl is whether group 1 is unset or
 empty, and only the span says which.
 
 A pattern whose program no implemented engine can run is skipped and counted,
-not failed: a backreference has nowhere to run until plan.md WP-08, and
+not failed: a backreference has nowhere to run until work-packages.md WP-08, and
 counting that as a disagreement would bury the real ones.
 
 Usage:

@@ -62,7 +62,7 @@ HEADER = """\
 # case this library still has, and the reason the corpus is still here.
 #
 # This corpus is what sets max_steps and max_backtrack
-# (documentation/plan.md WP-14), and it is a regression suite for the
+# (documentation/work-packages.md WP-14), and it is a regression suite for the
 # prefilters of Phase 8, which must not make a pathological pair pathological
 # again by routing around the engine that handled it.
 dialect: ecmascript

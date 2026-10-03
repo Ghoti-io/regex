@@ -28,8 +28,8 @@ disagreements are not merely skipped: they are counted and named, because
 they are the open question. Where the two references answer differently it
 is glibc that is not following POSIX, musl's answer is the one POSIX's rule
 gives, and this library answers as glibc does. That set is WP-26 in
-documentation/plan.md, and this tool exists partly to keep measuring it:
-`--strict` fails if it ever empties, because a claim about an open question
+documentation/work-packages.md, and this tool exists partly to keep measuring
+it: `--strict` fails if it ever empties, because a claim about an open question
 should not outlive the question.
 
 `posix-bre` is the thin row and says so here rather than in a comment

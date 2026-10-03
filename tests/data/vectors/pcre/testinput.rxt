@@ -3,7 +3,7 @@
 # oracle: PCRE2 version 10.46 2025-08-27
 #
 # Syntax verdicts only: whether each pattern compiles, which is
-# what plan.md's WP-18 is measured on. The reference answers that
+# what work-packages.md's WP-18 is measured on. The reference answers that
 # question directly; its match answers need an oracle driver that
 # WP-20 will write.
 #

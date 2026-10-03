@@ -2,9 +2,9 @@
 r"""Compare the Python front end against CPython's `re`, on patterns nobody
 wrote.
 
-documentation/plan.md WP-30. The dialect's definition is "what CPython's `re`
-does", so one oracle decides every row and there is no agreement to take -
-the same arrangement `perl_diff.py` uses for `perl` and `pcre`, and not the
+documentation/work-packages.md WP-30. The dialect's definition is "what `re`
+CPython's does", so one oracle decides every row and there is no agreement to -
+take the same arrangement `perl_diff.py` uses for `perl` and `pcre`, and not the
 glibc-and-musl agreement the POSIX rows are held to.
 
 **This oracle runs in-process.** Every other differential here spawns a

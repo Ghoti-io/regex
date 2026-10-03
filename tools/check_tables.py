@@ -30,7 +30,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # below skipped a path that is not there in silence, so a page renamed or
 # removed left the population smaller with nothing said. Both are errors now.
 DOCUMENTS = ("README.md", "CONTRIBUTING.md", "documentation/dialects.md",
-    "documentation/plan.md", "documentation/design.md",
+    "documentation/work-packages.md", "documentation/design.md",
     "documentation/unicode.md", "documentation/testing.md",
     "documentation/development.md")
 

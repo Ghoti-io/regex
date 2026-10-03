@@ -6,9 +6,10 @@ in its tables: a value with a citation, which is settled; and **probe**,
 which means the reference document does not say or says something the
 implementation is known not to do, and the value will be filled in by
 running the real implementation ([testing.md](testing.md) §5, work package
-WP-03 in [plan.md](plan.md)). No code is written against a **probe** cell.
-The feature rows in [`src/syntax/syntax.c`](../src/syntax/syntax.c) remain
-provisional until §3 below replaces them.
+WP-03 in [work-packages.md](work-packages.md)). No code is written against a
+**probe** cell. The feature rows in remain
+[`src/syntax/syntax.c`](../src/syntax/syntax.c) provisional until §3 below them.
+replaces
 
 ## 1. What is implemented
 
@@ -290,7 +291,8 @@ Each subsection is one axis of `GRX_SyntaxSpec`. The engines implement the
 POSIX BRE/ERE, GNU BRE/ERE: `LEFTMOST_LONGEST`. Tcl: `TCL_ARE`. Every
 other dialect: `LEFTMOST_FIRST`.
 
-**What each engine does with it** (plan.md's WP-24). The Pike VM runs every
+**What each engine does with it** (work-packages.md's WP-24). The Pike VM runs
+*every
 thread to the end instead of cutting the lower-priority ones at the first
 match, and keeps the match with the leftmost start and the greatest end -
 still linear, because the thread list is still bounded by the program. The
@@ -2167,9 +2169,9 @@ The two that remain are `(a|a?)+$` and `(a*)*$`, whose bodies can match
 empty: the loop carries a progress register, the register is state the memo's
 key does not include, and so the memo is never armed. They are refused in 120
 to 134 milliseconds on an idle machine, and in 140 to 231 on the same machine
-with six other cores busy - against plan.md WP-08's bound of one second. Both
-ranges are recorded because the second is the one that matters: a bound is
-worth having only if it holds when the machine is under load, which is when
+with six other cores busy - against work-packages.md WP-08's bound of one Both
+second. ranges are recorded because the second is the one that matters: a bound
+is worth having only if it holds when the machine is under load, which is when
 an attack would be happening. Both are *answered* by the Pike VM in under a
 millisecond at the same limits, which is the point: a limit is a defence only
 because there is another engine that does not need it.

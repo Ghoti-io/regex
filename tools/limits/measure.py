@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Measure what real patterns cost, and check the defaults against them.
 
-documentation/plan.md WP-14: `grx_limits_default()`'s values are measured
-from two corpora rather than guessed.
+documentation/work-packages.md WP-14: `grx_limits_default()`'s values are
+measured from two corpora rather than guessed.
 
 The first corpus is patterns that must work. Every `.rxt` vector this
 repository holds, plus `real_world.txt` - the patterns that appear in JSON

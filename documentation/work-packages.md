@@ -1,67 +1,49 @@
-# Plan
+# Work packages
 
-This is the order the work was planned in. What compiles today is in
-[dialects.md](dialects.md), which wins where a phase heading below is behind
-the code. The design is in [design.md](design.md); when this page and that
-one disagree, the design wins.
+This page is two things a reader of the code needs: the **work packages**,
+which source comments cite by number to say why a value is what it is and
+what will change it, and the two definitions of **"done"**, which
+`README.md`'s status table and the test suite are measured against.
 
-## 1. How the work is organised
+It is not a schedule. What was on this page and is not published: who
+owned which lane, the phase-to-milestone index, the argument about which
+phases could overlap, the risk register, and the dated per-dialect reading
+against §2. Those were addressed to whoever was doing the work rather than
+to anyone who cloned the library - and the reading had gone stale in three
+of its counts, which is what a count with no consumer does. What a reader
+of the code does need from that material is the key below, naming the part
+of the tree each package worked in.
 
-**Lanes.** Five, matching the layout in [design.md](design.md) §8. A lane
-is a team or a person who owns a set of directories and the tests for them.
+A phase heading in §1 that is behind the code loses to
+[dialects.md](dialects.md), which is what compiles today. The design is in
+[design.md](design.md); when this page and that one disagree, the design
+wins.
 
-| Lane | Owns | Needs to know |
-| --- | --- | --- |
-| **core** | `src/core`, `src/charclass`, `src/parse` (the parser skeleton), `src/ir`, `src/compile` | the AST and IR shapes; the instruction set |
-| **engines** | `src/exec` | the instruction set; nothing about dialects |
-| **front ends** | `src/syntax` and the dialect-specific parts of `src/parse` | [dialects.md](dialects.md); the AST; nothing about engines |
-| **unicode** | `src/unicode`, `tools/unicode` | the UCD; the range-set representation |
-| **conformance** | `tests/conformance`, `tests/data`, `tests/fuzz`, `tools/oracle` | the oracles; the vector format; every other lane's output |
-
-The **surface** work - substitution, iteration, the search options, the
-lint - is small and moves between core and front ends by phase. The `text`
-integration is a sixth lane owned by the `text` team.
-
-**The contract between lanes is the IR and the instruction set**, and
-WP-01 exists to write them down before anyone builds on them. After WP-01,
-engines and front ends do not need to talk: a front end produces IR, an
-engine consumes a program, and the conformance lane checks that the pair
-gives the oracle's answer.
-
-**Sizes** are for one engineer already familiar with the suite's
-conventions: **S** is up to a week, **M** two to four weeks, **L** four to
-eight. They are estimates of effort, not calendar, and the plan's
-parallelism is what makes the calendar shorter than their sum.
-
-## 2. Phases and milestones
-
-```
-Phase 0  Foundations              WP-01 .. WP-05      all lanes, all parallel
-Phase 1  ECMAScript + engines     WP-06 .. WP-11      → M1: JSON Schema ready
-Phase 2  Full ECMAScript, safety  WP-12 .. WP-17      → M2: ECMAScript complete
-Phase 3  PCRE2 and Perl           WP-18 .. WP-22      → M3
-Phase 4  POSIX and GNU            WP-23 .. WP-26      → M4: the implemented dialects
-Phase 5  Python, Java, .NET, Ruby WP-30 .. WP-33
-Phase 6  RE2 and Rust             WP-34 .. WP-35
-Phase 7  Tcl, Vim, Emacs          WP-36 .. WP-38, WP-44, WP-45
-Phase 8  Performance, translation WP-40 .. WP-43
-
-Out of band: WP-47 I-Regexp, asked for by `text` rather than by a phase
-Out of band: WP-48 RE/flex, asked for after a question about grep
-```
-
-Phases 1 and 3 each contain a front-end package and an engine package that
-run in parallel against the WP-01 contract. Phase 2 can overlap phase 3:
-the `v`-mode work touches the ECMAScript front end and the class algebra,
-the PCRE2 work touches the Perl-family front end and the backtracker.
-
-## 3. Work packages
+## 1. Work packages
 
 Each package states what it produces, what it needs, and what "done" means.
 "Done" always includes: tests that state the requirement (not the
 observation), Valgrind and ASan+UBSan clean, `make check-symbols` green,
 the design page updated if a decision changed, and the STUB-marked tests
 the package makes obsolete deleted.
+
+**How to read a heading.** `*core, M.*` is the part of the tree the package
+worked in and roughly how much of it there was - **S** up to a week, **M**
+two to four, **L** four to eight, as effort rather than calendar. The five
+names are the parts the work was divided along, which are the same divisions
+[design.md](design.md) §8 lays the tree out in:
+
+| Name | The code it covers |
+| --- | --- |
+| **core** | `src/core`, `src/charclass`, `src/parse` (the parser skeleton), `src/ir`, `src/compile` |
+| **engines** | `src/exec` |
+| **front ends** | `src/syntax` and the dialect-specific parts of `src/parse` |
+| **unicode** | `src/unicode`, `tools/unicode` |
+| **conformance** | `tests/conformance`, `tests/data`, `tests/fuzz`, `tools/oracle` |
+
+The surface work - substitution, iteration, the search options, the lint -
+is small and moves between core and front ends by phase. `*text team, M.*`
+is the one package `text` carried rather than this library.
 
 ### Phase 0: foundations
 
@@ -367,7 +349,7 @@ library invented. *Depends on:* WP-16.
 PCRE2 and Perl parse, compile, match and substitute; the engine feature set
 is complete.
 
-**The POSIX and GNU templates are here too**, which no package named and §4's
+**The POSIX and GNU templates are here too**, which no package named and §2's
 fifth condition wanted: `grx_regex_replace()` answered `GRX_ERR_UNSUPPORTED`
 for four shipped dialects. POSIX defines no replacement syntax at all, so the
 grammar is sed's `s` command - `&` for the whole match, `\&` for the literal
@@ -745,8 +727,9 @@ pattern with a flag arrives four characters long and takes the branch an
 empty one would not. The driver now refuses that row by name rather than
 answering a different question from the one asked. A transport that changes
 the thing the reference measures is the shape worth remembering here; the
-same driver's silent flag-dropping is §19's open item, and this is the second
-time its flag handling has produced rows that mean nothing.
+same driver drops an unknown flag letter in silence rather than refusing it,
+which is still open, and this is the second time its flag handling has
+produced rows that mean nothing.
 
 ### Phase 7: Tcl, Vim and Emacs
 
@@ -1079,7 +1062,7 @@ built**, and nothing has asked for it. **WP-43 UTF-16 offset helper** if a
 consumer asks. **Not built**; no consumer has asked, which is the condition
 the package was written with.
 
-## 4. What "done" means for a dialect
+## 2. What "done" means for a dialect
 
 A dialect is claimed in `README.md`'s status table only when all of these
 hold:
@@ -1111,99 +1094,9 @@ hold:
    the template and the split rule and agree on every row of the matching
    battery.
 
-**Where the ten stand against those six, measured 2026-09-26.** None meets
-all of them, and the list is here rather than in a note because a definition
-of done with no reading beside it is a definition nobody checks.
+## 3. What "done" means for the first stable release
 
-**I-Regexp is the tenth and stands apart on one of the six**, so it is stated
-first rather than folded into counts that would then need a footnote each.
-Conditions 1 and 2 hold: its profile row cites the RFC for every cell that has a
-reader and says why the rest have none, and every rule in §10 of
-[dialects.md](dialects.md) has a test. Condition 3 is **met** - 30,015 generated
-vectors at 100%, from two references rather than one - and was "unmet and not
-attemptable" until the oracle was built a day later, which is a different thing
-from a corpus that fails and was recorded as such while it lasted. Condition 4
-is unmet, as for every dialect; `GRX_FUZZ_SYNTAX=i-regexp` works and the
-harness's dialect list includes it - which was true of the harness and not of
-the campaign, whose driver carried a second copy of that list and had nine
-entries in it. The driver now reads the list from the harness and
-`Parse.TheFuzzCampaignAsksAboutEveryBuiltDialect` holds the harness's own copy
-to `grx_frontend_for()`, in both directions. Condition 5 is the one it stands apart on,
-and it is met in the only way it can be: `grx_options_parse()` refuses every
-letter, the dialect having no flag alphabet at all, and there is no replacement
-template grammar to implement because RFC 9485 has none - which is recorded as a
-deviation rather than as a gap. Condition 6 is met by
-`examples/iregexp_jsonpath.c`, which is `match()` and `search()` over one
-compiled pattern.
-
-Condition 3 is met by all ten: every dialect now has a
-committed corpus, a published rate, and every failure named -
-[README.md](../README.md) carries the table and `make test` prints it. Python
-and Vim had no corpus at all until this date, which meant the condition could
-not be evaluated for them rather than that they failed it; their only gate
-needed a container.
-
-Condition 4 is met by none. Vim's is the only dialect a soak has been pointed
-at, and it has been run twice: the first finished its eight hours with
-2,978,555 runs, no crash and no leak, and left two slow units in
-`artifacts/` - one of them 138 seconds, which the harness's own docstring
-says is a failure, since a pattern must not make the matcher run past its
-limits. That found a real defect. The re-run after the fix was parked at
-5h06m of its 8. So the condition has been attempted once and met zero times,
-and the eleven other dialects have not been asked; `GRX_FUZZ_SYNTAX=<dialect>`
-exists so that each can be, in a private prefix, on wall clock. How many can be
-asked at once is a measurement rather than a guess, and the one the campaign
-carried had expired: notes/regex/TODO.md §14 has it.
-
-Condition 6 is met by all twelve: `python_split` was the last one missing
-before I-Regexp arrived with `iregexp_jsonpath` of its own, and
-`linear_guarantee` closed the two linear rows.
-
-**The two linear dialects arrived after this reading and stand at five of the
-six**, measured 2026-09-29 - the five being 1, 2, 3, 5 and 6, so the one they
-are short is the soak every dialect is short. Condition 1 holds: no `probe`
-cell remains in either row, the last four having been closed by the
-replacement, splitting,
-iteration and capture-reset probing above - and one of them, `capture_reset`,
-turned out to hold the right value by default, which is not the same as having
-been measured and is recorded as the difference. Conditions 2, 3 and 5 hold:
-every rule in §5 has a test that states it, 2,947 and 2,817 vectors pass at
-100%, and both template grammars and split rules are built and gated.
-Condition 6 is met by `examples/linear_guarantee.c`, which is the program
-that shows a refusal being the guarantee: `(a|aa)+\1b` compiled under
-`ecmascript` spends the whole step budget against forty bytes of "a" and
-returns `GRX_ERR_LIMIT`, and returns `GRX_ERR_UNSUPPORTED` when
-`GRX_ENGINE_PIKE` is asked for by name, where under these two it never
-compiles at all. The invariant the program is for is that `is_regular` is 1
-for every pattern they accept, so a caller who must not hang names the
-linear-time engine unconditionally instead of reading a fact per pattern and
-deciding what to do when it is 0. The same program carries the two places the
-dialects part, the template and the split rule, since a reader comparing them
-is the reason to have one program rather than two.
-
-**So Condition 4 is the only one outstanding for these two**, as it is for
-every dialect. The soak is deferred until the remaining dialects are done, to
-be run for all of them in parallel on a second machine - which is what
-`GRX_FUZZ_SYNTAX=<dialect>` and a private prefix each exist for.
-
-Conditions 1, 2, 3 and 5 hold for the nine that compile and match. There are
-no known gaps left: the five that remained were one feature - Perl's `\U`,
-`\L`, `\F`, `\u` and `\l` as operators over the pattern source - and it is
-built, so every dialect reads 100.00%. What is *not* built is the template
-half, which WP-22 records as absent and which no vector asks for; the two
-halves turned out to be separate code in `src/subst/subst.c` rather than one
-construct, and closing the pattern half closed the gaps on its own.
-
-Closing the last gap left `tests/data/vectors/known-gaps.txt` holding nothing
-but reference defects, which would have made the `gap` category, the
-already-passes check and the stale-entry check code no test reaches. So
-`tests/data/vectors_selftest/` now carries a `known-gaps.txt` of its own with
-a fixture for each - the file whose whole job is arming the runner's own
-failure paths.
-
-## 5. What "done" means for the first stable release
-
-- M4: every implemented dialect done by §4.
+- M4: every implemented dialect done by §2.
 - Every invariant in [design.md](design.md) §9 has a named test or check.
 - Limits measured (WP-14) and their measurements published.
 - The three fuzzers soaked 24 hours before the tag.
@@ -1216,17 +1109,6 @@ failure paths.
 The version *number* is deliberately not named here. The ghoti.io libraries
 are versioned together rather than one at a time, so this library being ready
 is a necessary condition for a release and not a sufficient one, and a number
-written into this plan would be a commitment made by the wrong document.
+written into this page would be a commitment made by the wrong document.
 When the number changes, Corey says so.
 
-## 6. Risks, and where the plan absorbs them
-
-| Risk | Where it lands | Mitigation |
-| --- | --- | --- |
-| Lowering loses a dialect distinction the engines then cannot recover | WP-07 | the equivalence check and the probe cases are in the suite before lowering is written; a distinction that has no IR representation fails a vector, not a code review |
-| The IR contract changes after front ends and engines have built on it | WP-01 | WP-01 is small, first, and reviewed by every lane before Phase 1 starts; changes after that go through the design page |
-| An oracle is not deterministic or not what the reference says | WP-03, WP-09 | vectors record the oracle version; a disagreement between oracle and reference is recorded as such and the oracle wins for the vector, the reference for the profile, with both cited |
-| test262 and pcre2test formats are large and quirky to import | WP-09, WP-20 | the importers run the case through the oracle rather than trusting the file's own expectation, so a misread test produces a wrong vector that the oracle then corrects |
-| Unicode version drift between oracles and tables | WP-02, WP-09 | the skip-with-count rule in [unicode.md](unicode.md) §1 |
-| The backtracker's verbs and recursion are subtle and underspecified | WP-19 | pcre2test's `testinput2` is the specification in practice; every verb case there is a vector |
-| Performance is unacceptable before Phase 8 | WP-07 | the O(n·m) test in WP-07 and a small benchmark from day one, so that a regression is visible even if absolute speed is not yet a goal |

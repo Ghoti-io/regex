@@ -13,8 +13,8 @@
  * match still reaching 4 - so "ab" is what POSIX requires. glibc and musl
  * both give group 1 the single "a". They agree with each other and they are
  * both wrong, which makes their agreement worth nothing here. WP-26 in
- * documentation/plan.md is where that was decided; this file is what keeps
- * it decided.
+ * documentation/work-packages.md is where that was decided; this file is what
+ * keeps it decided.
  *
  * **What the oracle is.** For a small extended RE and a small subject it
  * enumerates *every* way the pattern can match, which makes two different

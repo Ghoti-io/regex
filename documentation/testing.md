@@ -2,7 +2,7 @@
 
 **Status:** design. The unit-test harness, the pattern fuzzer and the
 `CountingAllocator` exist; everything else on this page is specified here
-and built by the conformance lane ([plan.md](plan.md)).
+and built by the conformance lane ([work-packages.md](work-packages.md) §1).
 
 ## 1. Principles
 
@@ -201,9 +201,9 @@ expect: 0-$
 
   `compiles` exists because a corpus can say more about syntax than about
   matching. pcre2test answers "does this compile" directly and
-  unambiguously - which is exactly what [plan.md](plan.md)'s WP-18 is
-  measured on - while its match answers need an oracle driver nothing has
-  written yet. Without it such a corpus could contribute only its
+  unambiguously - which is exactly what [work-packages.md](work-packages.md)'s
+  WP-18 is measured on - while its match answers need an oracle driver nothing
+  has written yet. Without it such a corpus could contribute only its
   *rejections*, and a syntax corpus of rejections alone cannot catch a
   parser that refuses too much, which is the likelier failure for a front
   end being written from a specification.
@@ -508,7 +508,7 @@ both numbers so that stays true.
 points match each `\p{...}` - all 1,114,112 of them, for all 457 properties -
 and compares the range arrays.
 
-This is what plan.md WP-09 calls "the real check on WP-02", and it is
+This is what work-packages.md WP-09 calls "the real check on WP-02", and it is
 stronger than importing test262's generated `property-escapes/` files. Those
 files are themselves generated from the UCD, so they check that a table
 agrees with the UCD; this checks that it agrees with the UCD *as a shipping
@@ -2276,6 +2276,39 @@ Run by `make test` alongside `check-symbols`:
   rename the `## Layout` heading, point an entry at a directory that is not
   there, or empty the block - the last because nothing parsed must fail
   rather than agree.
+- **A `WP-NN` citation resolves to a package that exists.**
+  `tools/check_work_packages.py`, the `check-work-packages` gate, reads the
+  `**WP-NN` headings of [work-packages.md](work-packages.md) and requires
+  every `WP-NN` mentioned anywhere git tracks to be one of them. **Built.**
+  44 packages defined, 263 citations across 55 files.
+
+  Thirty-three distinct packages are cited from source comments, test
+  comments, importer docstrings and two checked-in corpus headers, and each
+  citation is a promise that the number can be looked up:
+  `src/syntax/syntax.c` says a POSIX row holds BREAK "until WP-24 builds
+  one", `src/parse/parse_internal.h` says `\X` gets its node kind when
+  WP-18 arrives. Nothing checked them, and the page they name moved -
+  seventy-one references retargeted by hand, one of which the retargeting
+  missed because the section number had wrapped onto the next line.
+
+  **The second arm is the page name, not the number**: a page named directly
+  before a package number must be that page, so a surviving `plan.md WP-18` <!-- not-a-citation -->
+  fails rather than pointing at a file that is gone. The number was never
+  the part that broke. That arm started far too wide - it accepted a section
+  number as well, and so flagged every `design.md section 3` and
+  `CONVENTIONS.md section 4` in the tree, about four hundred lines - which
+  took longer to notice than a silent arm would have, because it did fire.
+
+  **The page is in the gate's own population whether or not it is tracked.**
+  It cites its own packages, and the first arm was tested by putting a
+  WP-99 on it and came back clean <!-- not-a-citation -->: `git ls-files` does not list
+  a file that
+  is not committed yet, so the gate could not see its own subject.
+  **To check the gate itself:** cite a package the page does not define,
+  write `plan.md WP-18` in a comment <!-- not-a-citation -->, move the page away, or
+  change the
+  `**WP-NN` heading style - the last two because a gate that cannot read its
+  page must fail rather than pass every citation vacuously.
 - **Every page the library publishes is in `check-tables`' population.**
   `documentation/testing.md` and `documentation/development.md` were not,
   which is 190K of tables it never read, and a `DOCUMENTS` entry that is not
@@ -2307,10 +2340,10 @@ Run by `make test` alongside `check-symbols`:
 - **The pass rate README publishes is the one the runner finds.**
   `Conformance.TheRateReadmePublishesIsTheRateTheRunnerFinds` reads README's
   table and compares every dialect's vector count and percentage against the
-  tally it just computed. **Built.** design.md invariant 5 and plan.md §4's
-  third condition both require the rate to be *published*, and for a long
-  time the only place it was published was plan.md, in the past tense of a
-  work package: `gnu-ere` at 98.15% and three more like it, every one of them
+  tally it just computed. **Built.** design.md invariant 5 and work-packages.md
+  §2's third condition both require the rate to be *published*, and for a long
+  time the only place it was published was work-packages.md, in the past tense a
+  of work package: `gnu-ere` at 98.15% and three more like it, every one of them
   no longer true, the twelve known-gap entries behind them having been closed
   one at a time with nothing to notice that a figure three directories away
   had moved. This is `check-status-line`'s argument applied to a second claim
@@ -2425,11 +2458,11 @@ absent.
 - **pcre2test** (`tools/corpus/import_pcre2test.py`): `testinput1` and
   `testinput2`, as **syntax verdicts only**. pcre2test answers "does this
   compile" directly - it echoes the pattern and follows a rejection with
-  `Failed: error N at offset M` - which is exactly what [plan.md](plan.md)'s
-  WP-18 is measured on. Its *match* answers are another matter: it prints
-  matched text rather than offsets, and turning text back into spans is
-  guesswork in the cases worth having, so those wait for an oracle driver
-  linked against libpcre2, which is WP-20's business.
+  `Failed: error N at offset M` - which is exactly what
+  [work-packages.md](work-packages.md)'s WP-18 is measured on. Its *match* are
+  answers another matter: it prints matched text rather than offsets, and text
+  turning back into spans is guesswork in the cases worth having, so those wait
+  for an oracle driver linked against libpcre2, which is WP-20's business.
 
   The patterns are put to pcre2test **with their original modifiers**, not
   with the flags this library maps them to: `x` decides whether `#` starts a
@@ -2628,8 +2661,8 @@ comparing them should not have to open three files.
   ECMAScript was the only one, and went on saying it through WP-18 and
   WP-23, so each of the six built dialects was getting a thirty-second of
   the campaign instead of an eighth. `GRX_FUZZ_SYNTAX=<dialect>` pins one,
-  which is what plan.md §4's fourth condition - eight hours clean *with the
-  dialect selected* - needs in order to be something anyone can run; a name
+  which is what work-packages.md §2's fourth condition - eight hours clean
+  *with the dialect selected* - needs to be something anyone can run; a name
   it does not know aborts before the corpus is loaded rather than falling
   back to the sweep and being reported as that dialect's result.
   `GRX_FUZZ_SYNTAX=?` prints the list instead of fuzzing, so a campaign
@@ -2768,6 +2801,11 @@ when the gate changes:
 | `check-layout-page` | an entry pointing at a directory that is not in the tree | non-zero, both that the path is absent and that the real directory is now unreached |
 | `check-layout-page` | the `## Layout` heading renamed | non-zero, "no fenced block under `## Layout`" |
 | `check-layout-page` | the block emptied | non-zero, "nothing was compared"; not a pass over a page it could not read |
+| `check-work-packages` | a citation of `WP-99`, which the page does not define | non-zero, naming the file, the line and the number <!-- not-a-citation --> |
+| `check-work-packages` | `documentation/plan.md WP-30` in a source comment, the page's old name | non-zero, naming the page cited and the page it should be <!-- not-a-citation --> |
+| `check-work-packages` | the page moved out of the tree | non-zero, and before any citation is read |
+| `check-work-packages` | the `**WP-NN` heading style changed | non-zero, "too few to be the page"; not a vacuous pass over an empty definition set |
+| `check-work-packages` | the `not-a-citation` marker on the line *after* a bad citation | non-zero; the marker exempts its own line and no other, which is what makes the exemption auditable |
 | `check-tables` | a `DOCUMENTS` entry naming a page that is not in the tree | non-zero, naming it; previously skipped in silence |
 | `check-status-line` | the Status section saying eleven dialects compile where twelve do | non-zero, both numbers named |
 | `check-status-line` | the `GRX_ENGINE_DFA` row deleted from the engine table - the state the page was actually in | non-zero, naming the enumerator with no row |
