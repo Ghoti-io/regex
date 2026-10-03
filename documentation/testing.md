@@ -2249,6 +2249,38 @@ Run by `make test` alongside `check-symbols`:
   against. Prose is deliberately not checked: a page that has to be
   word-for-word correct is a page nobody edits.
   **To check the gate itself:** change a digit in one of the dump examples.
+- **The layout page says where the code actually is.**
+  `tools/check_layout_page.py`, the `check-layout-page` gate, compares the
+  fenced block under `## Layout` in [development.md](development.md) against
+  what git tracks, in both directions: every directory holding tracked files
+  must be reached by an entry, and every path an entry names must exist.
+  **Built.**
+
+  That page's only job is to say where things are, and it is the page a
+  growing tree cannot disturb - a new directory does not stop the block
+  rendering, and every path already in it still resolves, so it goes stale in
+  the one way that reads as correct. It had: `examples/`, `pkgconfig/`,
+  `tests/test_helpers.h`, `tests/data/redos/`, `tests/data/vectors_selftest/`,
+  four directories under `tools/` and the twelve gate scripts were all
+  missing, and `src/exec/` was described as three engines where it holds the
+  lazy DFA and the one-pass table as well.
+
+  **A file entry does not cover its directory**, and that distinction is the
+  whole of what makes the gate work. The block names `src/regex.c`, and the
+  first version let that grant `src/` prefix coverage - so a new directory
+  under `src/` passed without a word, which is the exact failure the gate
+  exists to catch. A directory is covered when an entry names it or an
+  ancestor; otherwise every tracked file sitting directly in it has to be
+  named one by one.
+  **To check the gate itself:** add a file in a new directory under `src/`,
+  rename the `## Layout` heading, point an entry at a directory that is not
+  there, or empty the block - the last because nothing parsed must fail
+  rather than agree.
+- **Every page the library publishes is in `check-tables`' population.**
+  `documentation/testing.md` and `documentation/development.md` were not,
+  which is 190K of tables it never read, and a `DOCUMENTS` entry that is not
+  in the tree was skipped in silence - so a page renamed left the population
+  smaller with nothing said. Both are failures now. 88 tables, 616 rows.
 - **What README claims is built is what is built.**
   `tools/check_status_line.py`, the `check-status-line` gate, compares two
   claims on that page against the code. The Status section's two numbers -
@@ -2731,6 +2763,12 @@ when the gate changes:
 | `Conformance.EveryVectorAgreesWithItsOracle` | the lazy DFA dropped from the engine list | non-zero, "no vector was answered by the lazy DFA" - and all 87,215 still pass, which is the point |
 | `Compile.AConditionalWithNoElseIsAnAlternativeOfLengthZero` | the non-assertion conditional routed back to the alternation stages, which is the defect as it stood | non-zero, `min_length` 5 against 4 and `can_match_empty` false against true; the two-branch control rows keep passing |
 | `Match.AWindowShorterThanTheShortestMatchCostsNoEngineAtAll` | the length prefilter's condition forced false | non-zero, `GRX_ERR_LIMIT` where `GRX_OK` is expected and 2 steps where 0 is |
+| `check-layout-page` | a tracked file in a new directory under `src/`, whose only mention in the block is the file `src/regex.c` | non-zero, naming the directory and the file; the first version of the gate passed this |
+| `check-layout-page` | a new file directly in `tests/`, a directory the block covers by naming its files one by one | non-zero, naming the file |
+| `check-layout-page` | an entry pointing at a directory that is not in the tree | non-zero, both that the path is absent and that the real directory is now unreached |
+| `check-layout-page` | the `## Layout` heading renamed | non-zero, "no fenced block under `## Layout`" |
+| `check-layout-page` | the block emptied | non-zero, "nothing was compared"; not a pass over a page it could not read |
+| `check-tables` | a `DOCUMENTS` entry naming a page that is not in the tree | non-zero, naming it; previously skipped in silence |
 | `check-status-line` | the Status section saying eleven dialects compile where twelve do | non-zero, both numbers named |
 | `check-status-line` | the `GRX_ENGINE_DFA` row deleted from the engine table - the state the page was actually in | non-zero, naming the enumerator with no row |
 | `check-status-line` | a row for a `GRX_ENGINE_BOGUS` that is in no enum | non-zero, naming the row rather than passing on a count that now matches |

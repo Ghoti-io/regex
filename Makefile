@@ -465,7 +465,7 @@ ALL_TEST_GATES := check-symbols check-layering check-aliasing \
 	check-tables check-status-line check-corpus-seeds check-makefile-hash \
 	check-generated-header-deps \
 	check-oracle-env check-unicode-agreement check-scan-portable test-asan \
-	check-programs
+	check-programs check-layout-page
 TEST_GATES ?= $(ALL_TEST_GATES)
 
 # What a gate that IS a python3 script does when there is no python3.
@@ -879,7 +879,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 
 # General commands
 .PHONY: check-oracle-soak
-.PHONY: clean cloc docs docs-pdf examples tools coverage check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-unicode-agreement check-dump-names check-readme-example check-tables check-status-line check-corpus-seeds check-makefile-hash check-generated-header-deps check-oracle-env check-oracle-syntax check-oracle-match check-oracle-soak check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-linear check-oracle-perl-syntax check-oracle-script-runs check-doc-claims check-wide-classes check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
+.PHONY: clean cloc docs docs-pdf examples tools coverage check-layout-page check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-unicode-agreement check-dump-names check-readme-example check-tables check-status-line check-corpus-seeds check-makefile-hash check-generated-header-deps check-oracle-env check-oracle-syntax check-oracle-match check-oracle-soak check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-linear check-oracle-perl-syntax check-oracle-script-runs check-doc-claims check-wide-classes check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
 	check-programs \
 	check-oracle-properties check-oracle-numeric-properties \
 	check-oracle-folds \
@@ -1891,6 +1891,23 @@ check-tables: ## Fail if a markdown table has a row of the wrong width
 check-tables:
 	@$(REQUIRE_PYTHON3); \
 	python3 tools/check_tables.py
+
+check-layout-page: ## Fail if development.md's layout block disagrees with the tree
+# That page's whole job is to say where the code is, and a directory that
+# arrives after it was written does not disturb it: the block still renders
+# and every path in it still resolves, so the page goes stale in the one way
+# that reads as correct. It had: examples/, pkgconfig/, four directories under
+# tools/, two under tests/data/, tests/test_helpers.h and twelve gate scripts
+# were all missing by the time anybody compared the two, and src/exec/ was
+# described as three engines where it now holds five files' worth of them.
+#
+# Both directions, since each catches a different mistake: a directory the
+# block does not reach is work the page has stopped describing, and a path in
+# the block that is not in the tree is worse, because a reader follows it.
+# Milliseconds, and no reference implementation.
+check-layout-page:
+	@$(REQUIRE_PYTHON3); \
+	python3 tools/check_layout_page.py
 
 check-status-line: ## Fail if README's status paragraph disagrees with the code
 # README.md opens by saying how many dialects are built and how many are

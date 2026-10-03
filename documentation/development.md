@@ -4,10 +4,10 @@ This page is the layout of the code. The pipeline and the engines are in
 [design.md](design.md). Which dialects compile is in
 [dialects.md](dialects.md).
 
-Ten dialects compile and match: ECMAScript (legacy, Unicode and UnicodeSets),
-PCRE2, Perl, POSIX BRE and ERE, GNU BRE and ERE, Python, Vim, and I-Regexp
-(RFC 9485). Java, .NET, Ruby, RE2, Rust, Tcl and Emacs are named and report
-`GRX_ERR_UNSUPPORTED`.
+Which dialects are built, and which are named and refuse, is the status table
+in [README.md](../README.md) and nowhere else on this page: a roster written
+twice goes stale in the copy nobody has a reason to open, and this one did.
+
 Conditionals, recursion and the backtracking control verbs compile as far as
 they can and are then refused, rather than approximated. `grx_regex_replace()`,
 `grx_regex_split()` and `grx_regex_search_next()` apply the dialect's own
@@ -24,21 +24,40 @@ src/syntax/               The dialect table and the front ends
 src/parse/                Pattern text to a syntax tree (the AST)
 src/ir/                   The AST lowered to a dialect-free IR
 src/compile/              IR to a program, and the compiled regex
-src/exec/                 The Pike VM, the backtracker and its bit-state form
+src/exec/                 The Pike VM, the backtracker, its bit-state form,
+                          the lazy DFA and the one-pass capture table
 src/subst/                Replacement templates and splitting
 src/charclass/            Character-class sets and the canonical class table
 src/unicode/              Property lookup, and the adapters onto ghoti.io-unicode
 src/unicode/tables/       What is still generated here; see unicode.md
 src/regex.c               Version entry points
+include/ghoti.io/regex/   Public headers
+examples/                 Programs a reader runs; each one is a gate
+pkgconfig/                The .pc template pkg-config installs
+tests/test_helpers.h      What every test includes: the data paths and
+                          the gtest helpers
 tests/unit/               Unit tests (gtest)
 tests/conformance/        The .rxt vector reader and its runner
 tests/fuzz/               libFuzzer harnesses and seed corpora
 tests/data/vectors/       Checked-in conformance vectors
+tests/data/vectors_selftest/  Fixtures the runner is pointed at to prove it
+                          can fail a record at all
+tests/data/redos/         Patterns that must stay bounded; see testing.md
 tests/data/probe/         What each reference implementation answered
+tools/check_*             The structural gates, one file per check; the
+                          Makefile's check-* targets run these
+tools/coverage.sh         The gcov summary behind `make coverage`, which
+                          reports the never-executed growth paths separately
 tools/unicode/            Fetch the UCD and generate the tables
 tools/oracle/             Drivers and harnesses that ask a reference
                           implementation the same question this library
                           was asked
+tools/corpus/             Importers that turn a reference's own test suite
+                          into .rxt vectors, and the VERSIONS it pins
+tools/limits/             The driver and the measurement behind
+                          grx_limits_default()
+tools/jsonschema/         The driver the JSON-Schema suite is run through
+tools/bench/              The benchmark `make bench` builds three ways
 ```
 
 The headers mirror the modules, with two exceptions: `regex.h` is the umbrella
@@ -234,10 +253,13 @@ rather than the specification.
 
 ## Adding an engine
 
-An engine takes a `GRX_ExecRequest` and fills in a `GRX_Match`. Three are
-intended - a lockstep simulation for the linear-time guarantee, a bit-state
-backtracker, and a full backtracker for everything else (design.md section
-3.5) - and a fourth would need a reason beyond speed.
+An engine takes a `GRX_ExecRequest` and fills in a `GRX_Match`. Four are
+built - a lockstep simulation for the linear-time guarantee, a bit-state
+backtracker, a full backtracker for everything else, and a lazy DFA that
+reports an extent and no groups (design.md section 3.5) - with the one-pass
+capture table under the DFA filling the groups where the subject forces every
+branch. A fifth would need a reason beyond speed, which is what the DFA had:
+design.md section 3.5.5 has its measurement.
 
 Whatever an engine does, three properties are not negotiable:
 
@@ -288,8 +310,10 @@ Three harnesses, and the split between them is the point:
   **subject**, which is where the engines' own defects live. A fuzzer that
   varied both would spend almost all its time on patterns that do not
   compile.
-- `fuzz_crossengine` runs **both engines** on one program and aborts when
-  they disagree.
+- `fuzz_crossengine` runs **every engine that can run one program** on it and
+  aborts when two of them disagree. Its array is `GRX_ENGINE_COUNT` long
+  rather than however many engines there were when it was written, which is
+  how the lazy DFA came to be absent from it for the whole of WP-41.
 
 Keep the budgets small in a harness that runs a subject. `max_steps` defaults
 to ten million, and `fuzz_subject` runs every input four ways; with the

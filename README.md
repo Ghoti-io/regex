@@ -183,6 +183,7 @@ JSON Schema `pattern` and `patternProperties`.
 | Page | What it settles |
 | --- | --- |
 | [documentation/design.md](documentation/design.md) | The pipeline, the four engines, memory, limits, errors |
+| [documentation/development.md](documentation/development.md) | Where the code is, the three representations, and how to add a dialect, an engine or a construct |
 | [documentation/dialects.md](documentation/dialects.md) | Which constructs each syntax has, and where implementations disagree |
 | [documentation/unicode.md](documentation/unicode.md) | Which Unicode data this library still owns, and which it reads from `unicode` |
 | [documentation/testing.md](documentation/testing.md) | Oracles, the vector format, fuzzing |

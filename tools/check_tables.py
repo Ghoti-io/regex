@@ -25,8 +25,14 @@ import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DOCUMENTS = ("README.md", "documentation/dialects.md", "documentation/plan.md",
-    "documentation/design.md", "documentation/unicode.md")
+# Every markdown page the library publishes. testing.md and development.md
+# were missing, which is 190K of tables this never read - and the branch
+# below skipped a path that is not there in silence, so a page renamed or
+# removed left the population smaller with nothing said. Both are errors now.
+DOCUMENTS = ("README.md", "CONTRIBUTING.md", "documentation/dialects.md",
+    "documentation/plan.md", "documentation/design.md",
+    "documentation/unicode.md", "documentation/testing.md",
+    "documentation/development.md")
 
 # Backticks come in runs, and a span opened with two closes with two - which
 # is how a cell writes a literal backtick, `` \` ``. Matching the run length
@@ -47,6 +53,10 @@ def main():
     for name in DOCUMENTS:
         path = os.path.join(ROOT, name)
         if not os.path.exists(path):
+            print(f"check-tables: {name} is in DOCUMENTS and not in the "
+                  "tree; update the list or restore the page",
+                file=sys.stderr)
+            failures += 1
             continue
         width = None
         started = 0
