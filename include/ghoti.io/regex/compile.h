@@ -149,7 +149,7 @@ GRX_API GRX_Result grx_regex_compile_pattern(const GRX_Pattern * pattern,
  * two are about the match, not about the attempt, and `ab\Kcd` reports a
  * span that begins at `c`.
  *
- * Pointers in this structure are owned by the @ref GRX_Regex it was read
+ * Pointers in this structure are owned by the `GRX_Regex` it was read
  * from and are valid until that regex is freed.
  */
 typedef struct GRX_Facts {

@@ -17,8 +17,8 @@
 
 /** One row of the feature table, for the listing below. */
 typedef struct {
-  GRX_Feature feature;
-  const char * name;
+  GRX_Feature feature; ///< The feature flag.
+  const char * name;   ///< Its printed name.
 } FeatureName;
 
 static const FeatureName feature_names[] = {

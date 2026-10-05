@@ -187,7 +187,7 @@ typedef enum {
   ESC_BACKSPACE,   ///< `\b` inside a class.
   ESC_ANCHOR,      ///< `\b`, `\A`, `\z`, `\Z`, `\G`; `anchor`.
   ESC_BACKREF,     ///< `\1`, `\g{-1}`, `\k<name>`.
-  ESC_SUBROUTINE,  ///< `\g<1>`, `\g'name'`.
+  ESC_SUBROUTINE,  ///< `\g<1>`, ``\g'name'``.
   ESC_KEEP,        ///< `\K`.
   ESC_NEWLINE_SET, ///< `\R`.
   ESC_GRAPHEME,    ///< `\X`.

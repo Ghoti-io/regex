@@ -142,9 +142,9 @@ typedef struct GRX_Match GRX_Match;
  *
  * **NOTBOL and NOTEOL are about lines, not about the subject.** They
  * suppress `^` and `$` and leave `\A`, `\Z`, `\z` and GNU's `` \` `` and
- * `\'` alone, which is what both references that have these flags do:
+ * ``\'`` alone, which is what both references that have these flags do:
  * PCRE2_NOTBOL "does not affect \A" in as many words, PCRE2_NOTEOL says the
- * same of `\Z` and `\z`, and glibc's REG_NOTBOL and REG_NOTEOL leave the
+ * same of ``\Z`` and ``\z``, and glibc's REG_NOTBOL and REG_NOTEOL leave the
  * GNU buffer anchors standing. The distinction matters because a caller
  * feeding a buffer in pieces means "this piece is not the whole text" - and
  * the subject anchors are asking about the *buffer*, which is the one thing

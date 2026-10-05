@@ -5,7 +5,7 @@ This page is the layout of the code. The pipeline and the engines are in
 [dialects.md](dialects.md).
 
 Which dialects are built, and which are named and refuse, is the status table
-in [README.md](../README.md) and nowhere else on this page: a roster written
+in README.md and nowhere else on this page: a roster written
 twice goes stale in the copy nobody has a reason to open, and this one did.
 
 Conditionals, recursion and the backtracking control verbs compile as far as

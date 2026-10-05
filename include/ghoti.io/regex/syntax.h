@@ -364,8 +364,8 @@ typedef enum {
  * parser, the same parser reads this flag and swaps the two meanings.
  */
 typedef struct GRX_SyntaxSpec {
-  uint64_t features;        ///< Bitwise OR of @ref GRX_Feature.
-  uint32_t default_options; ///< @ref GRX_Option bits implied by the dialect.
+  uint64_t features;        ///< Bitwise OR of `GRX_Feature`.
+  uint32_t default_options; ///< `GRX_Option` bits implied by the dialect.
   int escaped_specials;     ///< Non-zero when `\(` groups and `(` is literal.
   int allow_empty_class;    ///< Non-zero when `[]` is an empty class, not `]`.
   int newline_is_line_break; ///< Non-zero when `$` stops at `\n` by default.

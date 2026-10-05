@@ -141,7 +141,7 @@ typedef struct {
 
 /** One entry of the backtrack stack. */
 typedef struct {
-  uint8_t kind;      ///< A @ref FrameKind.
+  uint8_t kind;      ///< A `FrameKind`.
   uint32_t pc;       ///< RESUME: where to resume. Others: the slot index.
   size_t position;   ///< RESUME: the subject position. Others: the old value.
 } Frame;
@@ -359,7 +359,7 @@ typedef struct {
   size_t attempt_start;
 
   /**
-   * The spans handed to a @ref GRX_CalloutFn, or NULL when none is
+   * The spans handed to a `GRX_CalloutFn`, or NULL when none is
    * registered.
    *
    * Allocated once for the run rather than per callout: a callout in a loop

@@ -170,21 +170,21 @@ New bits, in addition to the scaffold's:
 | NON_GREEDY | - | - | - | - | yes | yes | yes |
 | POSSESSIVE | - | - | - | - | yes | yes | - |
 | NON_CAPTURING | - | - | - | - | yes | yes | yes |
-| NAMED_CAPTURE | - | - | - | - | `(?<n>)` `(?'n')` `(?P<n>)` | same three | `(?<n>)` |
+| NAMED_CAPTURE | - | - | - | - | `(?<n>)` ``(?'n')`` `(?P<n>)` | same three | `(?<n>)` |
 | BACKREFERENCE | `\1`-`\9` | - (undefined; glibc accepts) | `\1`-`\9` | `\1`-`\9` (GNU extension) | yes, and `\g{-1}` relative | yes | yes |
 | LOOKAHEAD | - | - | - | - | yes | yes | yes |
 | NON_ATOMIC_LOOKAROUND | - | - | - | - | **-** (probed: perl 5.44.0 answers "Unknown '(*...)' construct 'napla'", and "Sequence (?*...) not recognized") | `(*napla:`, `(*naplb:`, `(?*`, `(?<*` | - |
 | LOOKBEHIND | - | - | - | - | yes (§5.4) | yes | yes |
 | ATOMIC_GROUP | - | - | - | - | yes | yes | - |
 | CONDITIONAL | - | - | - | - | yes | yes | - |
-| RECURSION / SUBROUTINE | - | - | - | - | `(?R)`, `(?1)`, `(?&name)`, `(?P>name)` | same, and `\g<1>`, `\g'name'` (probed: perl answers "Unterminated \g... pattern" for those two) | - |
+| RECURSION / SUBROUTINE | - | - | - | - | `(?R)`, `(?1)`, `(?&name)`, `(?P>name)` | same, and `\g<1>`, ``\g'name'`` (probed: perl answers "Unterminated \g... pattern" for those two) | - |
 | INLINE_FLAGS / SCOPED_FLAGS | - | - | - | - | both | both | scoped only (ES2025): `(?i:...)`, `(?-s:...)`, `(?im-s:...)` for `i`, `m`, `s`. A bare `(?i)` is "Invalid group" in V8 13.6 and a syntax error here |
 | COMMENT_GROUP | - | - | - | - | yes | yes | - |
 | POSIX_CLASS | yes | yes | yes | yes | yes (in brackets) | yes | - |
 | UNICODE_PROPERTY | - | - | - | - | yes | yes | `u`/`v` only |
 | CLASS_SET_OPS | - | - | - | - | `(?[ ])` extended classes | same, less what each ignores | `v` only |
 | WORD_BOUNDARY | - | - | `\b \B \< \>` | same | `\b \B`, `\b{wb}` | `\b \B` | `\b \B` |
-| ANCHOR_ESCAPES | - | - | `` \` `` `\'` | same | `\A \z \Z` | `\A \z \Z` | - |
+| ANCHOR_ESCAPES | - | - | `` \` `` ``\'`` | same | `\A \z \Z` | `\A \z \Z` | - |
 | ANCHOR_G | - | - | - | - | yes | yes | - |
 | QUOTING | - | - | - | - | `\Q..\E` | `\Q..\E` | - |
 | HEX_ESCAPE | - | - | - | - | `\xHH \x{...}` | same | `\xHH`; `\u{...}` under `u` |
@@ -238,7 +238,7 @@ references and worth recording now so nobody builds on the wrong row:
   "non-capturing group" plain and "capturing group (-P)" - and lists
   `(?:...)` as `(-P)`, from which a group in the bare dialect groups and
   captures nothing and the explicit non-capturing spelling is PCRE2's. But
-  `ugrep -E -o '(?:ab)'` against "aaab" answered "ab" with no `-P`. One of
+  ``ugrep -E -o '(?:ab)'`` against "aaab" answered "ab" with no `-P`. One of
   the two is wrong and this project has no standing to say which: the row in
   `src/syntax/syntax.c` leaves `NON_CAPTURING` clear, which is the
   reference's answer, and WP-48 asks a RE/flex that can be pinned. The same
@@ -438,14 +438,14 @@ each measured rather than derived:
 
 | Dialect | `$` without multiline | `^`/`$` multiline by default | `\Z`, `\z` |
 | --- | --- | --- | --- |
-| POSIX, GNU | end of string only | no (`REG_NEWLINE` makes them line anchors) | GNU: `` \` `` `\'` for buffer edges |
+| POSIX, GNU | end of string only | no (`REG_NEWLINE` makes them line anchors) | GNU: `` \` `` ``\'`` for buffer edges |
 | Perl, PCRE2, Python, Java, .NET | end, **or before a final newline** | no | `\Z` before final newline, `\z` end only (Python: `\Z` is end only) |
 | ECMAScript | end only | no | none |
 | Ruby | **always** a line anchor | **yes** | `\Z`, `\z` as Perl |
 | RE2, Rust | end only | no | `\z` (Rust: `\z`; Go: `\z`) |
 | Tcl | end only | `(?n)`/`(?w)` | `\Z` |
 | Vim | **end of the subject only**, measured over a string; `\%^` and `\%$` are the two edges | no | `\%^`, `\%$` |
-| Emacs | end of line (the subject is a line) | n/a | Emacs `` \` `` `\'` |
+| Emacs | end of line (the subject is a line) | n/a | Emacs `` \` `` ``\'`` |
 
 ### 5.4 Lookbehind constraint
 
@@ -849,7 +849,7 @@ wrong, and none of the three could be seen from the conformance corpus:
 
 | Name | Was | Is, in both references |
 | --- | --- | --- |
-| `punct` | `\p{P}` plus the whole of `\p{S}` | `\p{P}` plus the nine ASCII symbols `$ + < = > ^ ` \| ~`, and no other symbol - 7,766 code points neither reference has |
+| `punct` | `\p{P}` plus the whole of `\p{S}` | `\p{P}` plus the nine ASCII symbols `` $ + < = > ^ ` \| ~ ``, and no other symbol - 7,766 code points neither reference has |
 | `graph`, `print` | everything but `C` and `Z` | the format characters stay: the excluded set is `Cc`, `Cn`, `Cs`, `Co` and `Z`, which is 164 code points both references keep |
 | `word`, and `\w` and `\b` with it | `L` ∪ `M` ∪ `Nd` ∪ `Pc` ∪ join controls | UTS #18 Annex C spells the first term `\p{alpha}`, which is `Alphabetic` and carries `Nl`: 236 code points, the Roman numerals among them |
 
@@ -1110,8 +1110,8 @@ report the same thing and vim treats them differently:
 So the rule is **the same span twice is not two matches**: search from the
 previous end, and where the answer is the span just reported, move on a
 character and search again. Both rows above fall out of it, and so do
-`substitute("aab", '\|a', "<>", "g")` = `"<>a<>a<>b<>"` and
-`substitute("xaby", '\zea', "X", "g")` = `"xXaby"`.
+``substitute("aab", '\|a', "<>", "g")`` = `"<>a<>a<>b<>"` and
+``substitute("xaby", '\zea', "X", "g")`` = `"xXaby"`.
 
 A rule written as "advance when the match stood still" cannot do both rows,
 whichever span it measures standing still by: the two attempts are
@@ -1124,7 +1124,7 @@ the same one forever.
 
 The cell had never been probed and read Perl's
 `RETRY_NONEMPTY_THEN_ADVANCE` until it was: under that rule
-`substitute("aab", '\|a', "<>", "g")` would be `"<><><><><>b<>"` where vim
+``substitute("aab", '\|a', "<>", "g")`` would be `"<><><><><>b<>"` where vim
 answers `"<>a<>a<>b<>"`.
 
 **What `\G` asserts is a second axis**, independent of the rule above, and
@@ -1190,14 +1190,14 @@ at all.
 
 | Dialect | Group | Named | Whole / prefix / suffix | Escape | Missing group | Unset group | Case ops |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| ECMAScript (`String.prototype.replace`) | `$n`, `$nn` (1-99) | `$<name>` (only if the regex has named groups) | `$&`, `` $` ``, `$'` | `$$` | literal `$n` | empty | none |
-| PCRE2 (`pcre2_substitute`) | `$n`, `${n}` - every digit, no fallback | `$name`, `${name}`, `$<name>` | `$&`, `$0`, `${0}`, `` $` ``, `$'`, `$_` (the whole subject) | `$$` | error | error, or empty with `SUBSTITUTE_UNSET_EMPTY` (exposed as an option) | extended mode: `\U \L \E \u \l`, and `${n:+a:b}`, `${n:-d}` |
-| Perl (interpolation subset) | `$n`, `${n}`, `\n` (deprecated) | `$+{name}` | `$&`, `` $` ``, `$'` | `\$`, `\\` | empty (undef) | empty | `\U \L \F \E \u \l \Q` - **built**, with four rules that are not Vim's; see below |
+| ECMAScript (`String.prototype.replace`) | `$n`, `$nn` (1-99) | `$<name>` (only if the regex has named groups) | `$&`, `` $` ``, ``$'`` | `$$` | literal `$n` | empty | none |
+| PCRE2 (`pcre2_substitute`) | `$n`, `${n}` - every digit, no fallback | `$name`, `${name}`, `$<name>` | `$&`, `$0`, `${0}`, `` $` ``, ``$'``, `$_` (the whole subject) | `$$` | error | error, or empty with `SUBSTITUTE_UNSET_EMPTY` (exposed as an option) | extended mode: `\U \L \E \u \l`, and `${n:+a:b}`, `${n:-d}` |
+| Perl (interpolation subset) | `$n`, `${n}`, `\n` (deprecated) | `$+{name}` | `$&`, `` $` ``, ``$'`` | `\$`, `\\` | empty (undef) | empty | `\U \L \F \E \u \l \Q` - **built**, with four rules that are not Vim's; see below |
 | Python (`re.sub`) | `\n`, `\nn` (1-99, no fallback) | `\g<name>`, `\g<n>` | `\g<0>` only | `\\`, `\a \b \f \n \r \t \v`, octal; `\` before a non-alphanumeric keeps **both**; every other letter is an error | error | empty | none |
 | Java (`appendReplacement`) | `$n` (longest valid prefix) | `${name}` | none | `\` quotes the next character | error | empty (**probe**) | none |
-| .NET | `$n`, `${n}` | `${name}` | `$&`, `` $` ``, `$'`, `$+`, `$_` | `$$` | literal | empty | none |
-| Ruby (`sub`) | `\n` | `\k<name>` | `\0`, `\&`, `` \` ``, `\'` | `\\` | empty | empty | none |
-| Go (RE2) | `$n`, `${n}` - **one word run, classified after it is read**, so `$1x` is the name `1x` and substitutes nothing rather than being group 1 and an "x"; a run with a leading zero is a name, so `$01` is missing | `$name`, `${name}`; `${...}` must close on a word run or the spelling is text | `$0`, `${0}`; **not** `$&`, `` $` ``, `$'` or `$_`, each of which is literal | `$$` | empty | empty | none |
+| .NET | `$n`, `${n}` | `${name}` | `$&`, `` $` ``, ``$'``, `$+`, `$_` | `$$` | literal | empty | none |
+| Ruby (`sub`) | `\n` | `\k<name>` | `\0`, `\&`, `` \` ``, ``\'`` | `\\` | empty | empty | none |
+| Go (RE2) | `$n`, `${n}` - **one word run, classified after it is read**, so `$1x` is the name `1x` and substitutes nothing rather than being group 1 and an "x"; a run with a leading zero is a name, so `$01` is missing | `$name`, `${name}`; `${...}` must close on a word run or the spelling is text | `$0`, `${0}`; **not** `$&`, `` $` ``, ``$'`` or `$_`, each of which is literal | `$$` | empty | empty | none |
 | Rust | as Go, less the leading-zero rule: `$01` is group 1 and `${00}` is the whole match. `${}` is a reference to the empty name and substitutes nothing, where Go leaves it as text | as Go, and `${...}` takes whatever precedes the `}` | `$0`, `${0}`; the same four are literal | `$$` | empty | empty | none |
 | POSIX BRE/ERE | `\1`-`\9`, one digit | none | `&` | `\&`, `\\`, and `\c` for any other `c` | error | empty | none |
 | GNU BRE/ERE | as POSIX, plus `\0` for the whole match | none | `&`, `\0` | as POSIX | error | empty | none - see below |
@@ -1333,7 +1333,7 @@ never reaches it. Here the backslash is dropped.
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `(?<n>...)` | yes | yes | 3.14: no (`(?P<n>)`) | yes | yes | yes | RE2: Go 1.22+; Rust: yes |
 | `(?P<n>...)` | yes | no | yes | no | no | no | yes |
-| `(?'n'...)` | yes | no | no | no | yes | yes | no |
+| ``(?'n'...)`` | yes | no | no | no | yes | yes | no |
 | `\k<n>` | yes | yes | no | yes | yes | yes | no |
 | `(?P=n)` | yes | no | yes | no | no | no | no |
 | `\g{n}`, `\g{-1}` | yes | no | no | no | no | no | no |
@@ -1502,7 +1502,7 @@ function has and the three references answer it three ways:
 | --- | --- | --- | --- |
 | ECMAScript | `[]` | `["a"]` | `["", "a", "b", "c", ""]` |
 | perl | `()` | `("a,b,c")` | `("", "a", "b", "c")` |
-| Python | `['', '']` | `['a', 'b,c']` | `['', 'a', 'b', 'c', '']` |
+| Python | ``['', '']`` | ``['a', 'b,c']`` | ``['', 'a', 'b', 'c', '']`` |
 
 Six hand-written cases agreed with `re` on all of this while 1,848 generated
 rows did not; `tools/oracle/split_diff.py --dialect python` is the gate.
@@ -1550,7 +1550,7 @@ empty matches at either end of it ignored.
 Perl's and Python's cells were **probe** and are now measured, by
 `tools/oracle/split_probe.py` against perl 5.44.0 and CPython 3.14.7; the
 twenty-four cases and their answers are in
-[tests/data/probe/split.md](../tests/data/probe/split.md). Two things came
+`tests/data/probe/split.md`. Two things came
 out of it that reading the documentation would not have given:
 
 - **Perl and ECMAScript agree on the hard row exactly**, not approximately.
@@ -1956,7 +1956,7 @@ Two consequences, both only observable with astral characters:
   difference is a replacement this library does not write, and the witness
   for it can disappear: `tools/oracle/replace_diff.py` recognises the
   deviation by the unpaired surrogates node's answer is left holding, and a
-  template that reinserts the text around the match - `$'ab$`$&` - joins
+  template that reinserts the text around the match - ``$'ab$``$&` - joins
   the two halves back together across the join, so the answer encodes as
   UTF-8 like any other. Such a row is asked a second time with a template
   that cannot heal, one character with no `$` and no surrogate in it, and
@@ -2581,7 +2581,7 @@ would be silent.
 
 Minus five more construct families, found the same way and each accepted
 here until 2026-09-22: callouts `(?C...)` ("Sequence (?C...) not
-recognized"); the subroutine-call spellings `\g<1>` and `\g'name'`
+recognized"); the subroutine-call spellings `\g<1>` and ``\g'name'``
 ("Unterminated \g... pattern" - perl's `\g` takes `\g1`, `\g-1` and
 `\g{...}`, and its subroutine calls are `(?1)` and `(?&name)`);
 `(?(VERSION>=n))` ("Unknown switch condition"); `(?J)` in every position
@@ -2610,7 +2610,7 @@ expressions: no escapes inside; `]` first is literal; `[:class:]`,
 the middle of a BRE are literals. Matching is `LEFTMOST_LONGEST`
 throughout, including inside groups by the POSIX subexpression rule.
 
-**GNU BRE and ERE.** POSIX plus `\w \W \s \S \b \B \< \> `` \` `` `\'`,
+**GNU BRE and ERE.** POSIX plus `\w \W \s \S \b \B \< \>`, `` \` `` and ``\'``,
 `\|` `\+` `\?` in BRE, backreferences in ERE, `a**` accepted, `\{` in ERE
 as a literal brace. `grep` and `sed` are line-oriented, so the vectors from
 them are single-line subjects; glibc `regcomp()` is the oracle for

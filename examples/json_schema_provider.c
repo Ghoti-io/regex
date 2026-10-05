@@ -64,8 +64,8 @@
  * the linear-time guarantee.
  */
 typedef struct {
-  GRX_Limits limits;
-  int refuse_irregular;
+  GRX_Limits limits;       ///< The resource budget a pattern is compiled under.
+  int refuse_irregular;    ///< Non-zero to refuse patterns without the linear-time guarantee.
 } SchemaRegex;
 
 static int schema_regex_compile(void * ctx, const char * pattern,

@@ -412,7 +412,7 @@ on `tests/data/vectors/known-gaps.txt` shows twelve distinct `gnu-*` and
 `posix-*` entries added over its history and every one of them since removed,
 so that all thirteen entries in it today are `perl`'s. A rate published in a
 work package is a rate nobody re-derives, which is why
-[README.md](../README.md) carries the table now and `make test` prints it on
+README.md carries the table now and `make test` prints it on
 every run - the figure and the command that produces it in the same place.
 
 **Landed** for POSIX too, as far as it can be. musl's regex sources are

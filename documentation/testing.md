@@ -235,7 +235,7 @@ expect: 0-$
 
   It is weaker, and the weakness is stated rather than hidden: a wrong span
   that cuts the same bytes out of the subject passes such a record. `-` covers
-  two cases because vim answers `''` for both and cannot be asked which. A
+  two cases because vim answers ``''`` for both and cannot be asked which. A
   space inside a group is `\x20` and a group whose whole text is `-` is
   `\x2D`, or the field could not be told from the separator and the sentinel.
 - `repeat: <n>`: the subject is `subject:` repeated `n` times. A megabyte of
@@ -405,7 +405,7 @@ subsection:
 | 5.11 | replace `(a)(b)?` with `[$2][\2][${2}][$<x>]` | `a` | template grammar and unset groups |
 | 5.12 | `[]a]`, `[^]`, `[\d-z]`, `[[:alpha:]]`, `[a-z&&[^m]]`, `[a--b]` | `]`, `[`, `-`, `m` | class syntax |
 | 5.13 | `a{,3}`, `a{`, `a**`, `(?=a)*`, `a*+` | `aaa`, `a{` | quantifier syntax |
-| 5.14 | `(?<n>a)\k<n>`, `(?P<n>a)(?P=n)`, `(?'n'a)`, `\g{-1}` | `aa` | spellings |
+| 5.14 | `(?<n>a)\k<n>`, `(?P<n>a)(?P=n)`, ``(?'n'a)``, `\g{-1}` | `aa` | spellings |
 | 5.15 | flags `s`, `m`, `x`, `U`, `n` | `a\nb` | flag meanings |
 
 Any later disagreement between an oracle and its profile row is added here
@@ -1454,7 +1454,7 @@ well, so every match-shaped check agrees.
 Five construct families were accepted under `GRX_SYNTAX_PERL` and "not
 recognized" in perl - 5.40.1 when this was written, and 5.44.0 since -
 until this existed, all of them PCRE2's: the
-nineteen leading directives, callouts `(?C...)`, the `\g<1>` and `\g'name'`
+nineteen leading directives, callouts `(?C...)`, the `\g<1>` and ``\g'name'``
 subroutine spellings, `(?(VERSION>=n))`, `(?J)` and `(?U)`, and the
 non-atomic lookarounds in all four spellings. They arrived the way this
 whole class arrives: one front end reads both dialects from one set of
@@ -1776,8 +1776,8 @@ the tree read-only and no network, which is the containment
 Its template vocabulary is the shortest here, and deliberately: a perl
 replacement is perl, so most of the `$` forms the other rows share mean
 something else. `$0` is `$PROGRAM_NAME`, so a template holding it interpolates
-the driver's own path. `$'` is the postmatch and `'` was perl's package
-separator, so `$'X` is the variable `$X`. `$$` is the process id, not an
+the driver's own path. ``$'`` is the postmatch and ``'`` was perl's package
+separator, so ``$'X`` is the variable `$X`. `$$` is the process id, not an
 escaped dollar. Each of those cost a run before it was understood, and each is
 asserted in `tests/unit/test_subst.cpp` instead, where what surrounds it is
 controlled - which is the right place for a rule about adjacency and the wrong
@@ -1785,7 +1785,7 @@ place to discover one.
 
 ECMAScript agreed from the first run and has never disagreed since. The PCRE2
 row had **six** defects, every one of them also an error in the dialects.md
-table the row was written from: no `$&`, `$0` or `${0}`; no `` $` ``, `$'` or
+table the row was written from: no `$&`, `$0` or `${0}`; no `` $` ``, ``$'`` or
 `$_`; no `$<name>`; a sigil beginning no complete reference treated as
 ordinary text where PCRE2 refuses it; `$12` falling back to `$1` and a "2"
 where PCRE2 takes every digit; and a reference to a group that exists and did
@@ -1952,7 +1952,7 @@ it matches at `rm_so`, where PCRE2's and this library's stay at offset 0.
 was documented as making "`^` and `\A` fail", and `GRX_SEARCH_NOTEOL` as
 making "`$`, `\Z` and `\z` fail". Neither reference does that: PCRE2_NOTBOL
 says in as many words that it does not affect `\A`, PCRE2_NOTEOL says the
-same of `\Z` and `\z`, and glibc leaves GNU's `` \` `` and `\'` standing
+same of `\Z` and `\z`, and glibc leaves GNU's `` \` `` and ``\'`` standing
 under REG_NOTBOL and REG_NOTEOL. Two references, one rule, and the
 thirteen hand-written cases all used `^` and `$` - the spelling the author
 was thinking of - so none of them could see it.
@@ -2604,7 +2604,7 @@ absent.
   library and `text` are right *together*, and nothing was asking. Both
   preconditions are now hard failures naming their fix, and a machine that
   genuinely has no `text` drops the gate on the command line -
-  `make test TEST_GATES='$(filter-out check-json-schema-suite,$(ALL_TEST_GATES))'`
+  ``make test TEST_GATES='$(filter-out check-json-schema-suite,$(ALL_TEST_GATES))'``
   - so that the choice is in the command rather than in the output of a run
   that looked like it passed. `ALL_TEST_GATES` exists for that: a
   command-line `TEST_GATES` that names itself is a make recursion error, not

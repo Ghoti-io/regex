@@ -26,7 +26,7 @@
  * One recursive-descent parser for every dialect. What varies between
  * dialects is factored three ways (documentation/design.md section 4): the
  * feature bits say which constructs exist, the profile says what they mean,
- * and the @ref GRX_Frontend hooks say how to *read* the ones a table cannot
+ * and the `GRX_Frontend` hooks say how to *read* the ones a table cannot
  * describe. This file is what is left when those three are taken out - the
  * grammar every regular-expression syntax shares:
  *
