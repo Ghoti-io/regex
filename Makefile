@@ -1815,6 +1815,7 @@ check-diagnostics: ## Fail if a diagnostic exists that no code path produces
 	@$(REQUIRE_PYTHON3); \
 	python3 tools/check_diagnostics.py
 
+check-scan-portable: $(APP_DIR)/$(STATIC_TARGET) $(OBJ_DIR)/tests/test_scan.o $(TEST_HELPER_OBJ)
 check-scan-portable: ## Build and run the byte scan with no vector path
 # src/exec/exec_scan.c has an SSE2 path and a scalar one, chosen by an `#if`.
 # The arms of an `#if` that is never taken are never compiled, so a library
