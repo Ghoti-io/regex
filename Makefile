@@ -1497,9 +1497,16 @@ check-oracle-env: ## Fail if the oracle pin table or its reader has rotted
 # line that parses into the wrong fields or a pin nothing can ask its version
 # is a defect that no differential reports - a differential that cannot reach
 # its reference declines, which is the loud direction.
+# The build container records this gate and does not run it. install.sh runs
+# the recorded line on the host, which is where `oracle pins:` is printed.
 check-oracle-env:
-	@$(REQUIRE_PYTHON3); \
-	python3 tools/oracle/check_oracle_env.py
+	@set -e; \
+	if [ -n "$$GHOTI_BUILD_CONTAINER" ]; then \
+		printf '%s\n' 'regex check-oracle-env' >> "$$GHOTI_ORACLE_GATES"; \
+	else \
+		$(REQUIRE_PYTHON3); \
+		python3 tools/oracle/check_oracle_env.py; \
+	fi
 
 check-oracle-exclusions: ## Put each differential's exclusions their own controls
 # Every exclusion in this directory narrows a gate, and a gate narrowed too
