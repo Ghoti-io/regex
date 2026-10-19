@@ -680,6 +680,12 @@ static GRX_Result item_base_set(Lowering * low, const GRX_ClassItem * item,
  * GRX_OPT_NEWLINE_TERMINATES off is every dialect's default and the whole
  * of this function's cost then is one bit test.
  */
+static GRX_NewlineSet current_newlines(const Lowering * low) {
+  return low->profile.newline_lf_option
+          && (low->options & low->profile.newline_lf_option)
+      ? GRX_NEWLINES_LF : low->profile.newlines;
+}
+
 static GRX_Result exclude_line_terminators(
     Lowering * low, const GRX_Node * node, GRX_CharClass * out) {
   if (!(low->options & GRX_OPT_NEWLINE_TERMINATES)) {
@@ -689,7 +695,7 @@ static GRX_Result exclude_line_terminators(
   GRX_CharClass terminators;
   grx_charclass_init(&terminators, out->allocator);
   GRX_Result result
-      = grx_newline_set(&terminators, low->profile.newlines, low->limits);
+      = grx_newline_set(&terminators, current_newlines(low), low->limits);
   if (result == GRX_OK) {
     result = grx_charclass_union(out, &terminators, low->limits);
   }
@@ -909,7 +915,7 @@ static GRX_Result newline_class(Lowering * low, uint32_t * out_index) {
   GRX_CharClass cls;
   grx_charclass_init(&cls, low->ir->allocator);
   GRX_Result result
-      = grx_newline_set(&cls, low->profile.newlines, low->limits);
+      = grx_newline_set(&cls, current_newlines(low), low->limits);
   if (result == GRX_OK) {
     result = intern(low, &cls, NULL, &low->newline_class);
   }
@@ -1607,7 +1613,7 @@ static GRX_Result lower_any(
   // excluded at all: `(?s).` matches the CR of a pair in pcre2test, and a
   // negated class matches it too, so this belongs to `.` and `\N` alone.
   if (excluded != GRX_INDEX_NONE
-      && grx_newline_has_crlf(low->profile.newlines)) {
+      && grx_newline_has_crlf(current_newlines(low))) {
     grx_ir_node(low->ir, *out_node)->flags |= GRX_IR_NEWLINE_CRLF;
   }
   // `.` over "a" U+0301 is the whole cluster in Vim, and 0-1 everywhere
@@ -1793,7 +1799,7 @@ static GRX_Result lower_anchor(
   // the engines because it is a property of the pattern's convention, and
   // an engine that asked which convention this was would be naming a
   // dialect decision that lowering exists to spend.
-  if (needs_newlines && grx_newline_has_crlf(low->profile.newlines)) {
+  if (needs_newlines && grx_newline_has_crlf(current_newlines(low))) {
     assertion->flags |= GRX_IR_NEWLINE_CRLF;
   }
   return GRX_OK;
@@ -1892,8 +1898,14 @@ static void adopt_options(Lowering * low, uint32_t options) {
   // `shorthands_for(DIGIT)` and leaves `\b` exactly as it was.
   const GRX_ShorthandSet was_word = shorthands_for(low, GRX_SHORTHAND_WORD);
   const GRX_FoldKind was_fold = low->fold;
+  const GRX_NewlineSet was_newlines = current_newlines(low);
   low->options = options;
-  int utf = (options & GRX_OPT_UTF) != 0 || (options & GRX_OPT_UCP) != 0;
+  uint32_t fold_switch = low->profile.fold_wide_option;
+  int utf = fold_switch ? (options & fold_switch) != 0
+                        : (options & (GRX_OPT_UTF | GRX_OPT_UCP)) != 0;
+  if (current_newlines(low) != was_newlines) {
+    low->newline_class = GRX_INDEX_NONE;
+  }
   // The shorthands widen on UCP and the folding widens on UTF, which are
   // two different questions and were one. pcre2test: `(*UTF)\w` does not
   // match "é" and `(*UTF)(*UCP)\w` does, while `(*UTF)(?i)é` matches "É"

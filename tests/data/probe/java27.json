@@ -1055,6 +1055,310 @@
       "flags": "",
       "mode": "replace-first",
       "argument": "$"
+    },
+    {
+      "area": "flags",
+      "pattern": "k",
+      "subject": "K",
+      "flags": "i",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "flags",
+      "pattern": "k",
+      "subject": "K",
+      "flags": "iu",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "flags",
+      "pattern": "k",
+      "subject": "K",
+      "flags": "iU",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "flags",
+      "pattern": "k",
+      "subject": "K",
+      "flags": "U",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "flags",
+      "pattern": "(?-u:k)",
+      "subject": "K",
+      "flags": "iu",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "flags",
+      "pattern": "(?u:k)",
+      "subject": "K",
+      "flags": "i",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "flags",
+      "pattern": "\\d",
+      "subject": "١",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "flags",
+      "pattern": "\\d",
+      "subject": "١",
+      "flags": "U",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "flags",
+      "pattern": "\\bé",
+      "subject": "é",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "flags",
+      "pattern": "\\Bé",
+      "subject": "é",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "flags",
+      "pattern": "\\bé",
+      "subject": "é",
+      "flags": "U",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "flags",
+      "pattern": "\\Bé",
+      "subject": "é",
+      "flags": "U",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "lines",
+      "pattern": "a.b",
+      "subject": "a\rb",
+      "flags": "d",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "lines",
+      "pattern": "^b",
+      "subject": "a\rb",
+      "flags": "md",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "lines",
+      "pattern": "^\\n",
+      "subject": "\r\n",
+      "flags": "m",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "flags",
+      "pattern": "a b",
+      "subject": "ab",
+      "flags": "x",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "flags",
+      "pattern": "[a b]",
+      "subject": "b",
+      "flags": "x",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "unicode-sensitive",
+      "pattern": "\\p{IsGreek}",
+      "subject": "ʹ",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "unicode-sensitive",
+      "pattern": "\\p{sc=Greek}",
+      "subject": "ʹ",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "unicode-sensitive",
+      "pattern": "\\p{sc=Greek}",
+      "subject": "ἀ",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "unicode-sensitive",
+      "pattern": "\\p{InGreek}",
+      "subject": "ʹ",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "unicode-sensitive",
+      "pattern": "\\p{javaWhitespace}",
+      "subject": "\u001c",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "unicode-sensitive",
+      "pattern": "\\p{javaWhitespace}",
+      "subject": " ",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "unicode-sensitive",
+      "pattern": "\\p{javaWhitespace}",
+      "subject": "",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "unicode-sensitive",
+      "pattern": "\\p{javaWhitespace}",
+      "subject": " ",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "unicode-sensitive",
+      "pattern": "\\p{javaWhitespace}",
+      "subject": " ",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "unicode-sensitive",
+      "pattern": "\\p{javaWhitespace}",
+      "subject": " ",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "flags",
+      "pattern": "(k)",
+      "subject": "K",
+      "flags": "iu",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "flags",
+      "pattern": "(a).(b)",
+      "subject": "a\rb",
+      "flags": "d",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "unicode-sensitive",
+      "pattern": "(\\p{javaWhitespace})",
+      "subject": " ",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "unicode-sensitive",
+      "pattern": "(?U)(\\w+)",
+      "subject": "é",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "unicode-sensitive",
+      "pattern": "\\p{javaLowerCase}",
+      "subject": "ʕ",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "flags",
+      "pattern": "𐐀",
+      "subject": "𐐨",
+      "flags": "i",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "flags",
+      "pattern": "𐐀",
+      "subject": "𐐨",
+      "flags": "iu",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "flags",
+      "pattern": "\\w",
+      "subject": "𐐨",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "flags",
+      "pattern": "\\w",
+      "subject": "𐐨",
+      "flags": "U",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "unicode-sensitive",
+      "pattern": "\\p{javaLowerCase}",
+      "subject": "𐐨",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "unicode-sensitive",
+      "pattern": "\\p{javaDigit}",
+      "subject": "𝟎",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
     }
   ],
   "answers": [
@@ -2025,6 +2329,266 @@
       "kind": "template",
       "message": "Illegal group reference: group index is missing",
       "driver_error": true
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          2,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ],
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          4
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          4
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          4
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          4
+        ]
+      ]
     }
   ]
 }

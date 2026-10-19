@@ -73,6 +73,16 @@
  */
 #define GRX_PROPERTY_NAME_MAX 96
 
+// Character.isWhitespace excludes the non-breaking spaces (and NEL) in
+// Unicode White_Space, but includes the four ASCII information separators.
+// Keep it as a distinct Java predicate rather than aliasing White_Space.
+static const GUNI_Range java_whitespace[] = {
+  {0x0009, 0x000D}, {0x001C, 0x0020}, {0x1680, 0x1680},
+  {0x2000, 0x2006}, {0x2008, 0x200A}, {0x2028, 0x2029},
+  {0x205F, 0x205F}, {0x3000, 0x3000},
+};
+#define JAVA_WHITESPACE_COUNT (sizeof java_whitespace / sizeof *java_whitespace)
+
 /**
  * Compare a table entry against a caller's name, which is not terminated.
  *
@@ -417,11 +427,19 @@ GRX_Result grx_unicode_property_lookup(const char * name, size_t name_length,
   // Their complete membership remains part of the Unicode conformance work.
   int java_predicate = 0;
   if (match == GRX_PROPERTY_JAVA && !value) {
+    if (name_length == sizeof "javaWhitespace" - 1
+        && memcmp(name, "javaWhitespace", name_length) == 0) {
+      *out_property = (uint32_t)grx_unicode_property_count;
+      return GRX_OK;
+    }
+    if (name_length == sizeof "javaLowerCase" - 1
+        && memcmp(name, "javaLowerCase", name_length) == 0) {
+      *out_property = (uint32_t)grx_unicode_property_count + 1;
+      return GRX_OK;
+    }
     static const struct { const char * java; const char * unicode; } aliases[] = {
-      {"javaLowerCase", "Lowercase"},
       {"javaUpperCase", "Uppercase"},
       {"javaDigit", "Decimal_Number"},
-      {"javaWhitespace", "White_Space"},
       {"javaMirrored", "Bidi_Mirrored"},
     };
     for (size_t i = 0; i < sizeof aliases / sizeof *aliases; i++) {
@@ -597,10 +615,17 @@ GRX_Result grx_unicode_property_lookup(const char * name, size_t name_length,
       return GRX_OK;
     }
     if (name[0] == 'i' && name[1] == 's') {
-      static const int is_kinds[] = {GRX_UPROP_BINARY, GRX_UPROP_GC,
+      static const int perl_is_kinds[] = {GRX_UPROP_BINARY, GRX_UPROP_GC,
           GRX_UPROP_SCX, GRX_UPROP_SCRIPT, GRX_UPROP_BLOCK};
-      for (size_t i = 0; i < sizeof is_kinds / sizeof *is_kinds; i++) {
-        if (find_name(names, name_count, rest, rest_length, is_kinds[i],
+      static const int java_is_kinds[] = {GRX_UPROP_BINARY, GRX_UPROP_GC,
+          GRX_UPROP_SCRIPT, GRX_UPROP_BLOCK};
+      const int * kinds = match == GRX_PROPERTY_JAVA
+          ? java_is_kinds : perl_is_kinds;
+      size_t kind_count = match == GRX_PROPERTY_JAVA
+          ? sizeof java_is_kinds / sizeof *java_is_kinds
+          : sizeof perl_is_kinds / sizeof *perl_is_kinds;
+      for (size_t i = 0; i < kind_count; i++) {
+        if (find_name(names, name_count, rest, rest_length, kinds[i],
                 out_property)) {
           return GRX_OK;
         }
@@ -902,6 +927,44 @@ GRX_Result grx_unicode_property_ranges(
     return GRX_ERR_INVALID;
   }
   *out_count = 0;
+  if (property == grx_unicode_property_count) {
+    *out_count = JAVA_WHITESPACE_COUNT;
+    if (cap < JAVA_WHITESPACE_COUNT) {
+      return GRX_ERR_LIMIT;
+    }
+    memcpy(out, java_whitespace, sizeof java_whitespace);
+    return GRX_OK;
+  }
+  if (property == grx_unicode_property_count + 1) {
+    uint32_t base;
+    if (grx_unicode_property_lookup("Lowercase", 9, NULL, 0,
+            GRX_PROPERTY_STRICT, &base) != GRX_OK) {
+      return GRX_ERR_INTERNAL;
+    }
+    GUNI_Range source[GRX_PROPERTY_RANGES_MAX];
+    size_t count = 0;
+    GRX_Result result = grx_unicode_property_ranges(base, source,
+        GRX_PROPERTY_RANGES_MAX, &count);
+    if (result != GRX_OK) {
+      return result;
+    }
+    // JDK 25's Character.isLowerCase includes U+0295. UCD 17 and JDK 27
+    // omit it; in UCD 17 the following run begins at U+0296, so widen that
+    // run by one without changing the Unicode Lowercase property itself.
+    int widened = 0;
+    for (size_t i = 0; i < count; i++) {
+      if (source[i].first == 0x0296) {
+        source[i].first = 0x0295;
+        widened = 1;
+        break;
+      }
+    }
+    if (!widened) return GRX_ERR_INTERNAL;
+    *out_count = count;
+    if (cap < count) return GRX_ERR_LIMIT;
+    memcpy(out, source, count * sizeof *source);
+    return GRX_OK;
+  }
 
   Resolved resolved;
   GRX_Result result = resolve(property, &resolved);
@@ -972,6 +1035,22 @@ GRX_Result grx_unicode_property_ranges(
 }
 
 int grx_unicode_property_contains(uint32_t property, uint32_t codepoint) {
+  if (property == grx_unicode_property_count + 1) {
+    uint32_t base;
+    return codepoint == 0x0295
+        || (grx_unicode_property_lookup("Lowercase", 9, NULL, 0,
+            GRX_PROPERTY_STRICT, &base) == GRX_OK
+        && grx_unicode_property_contains(base, codepoint));
+  }
+  if (property == grx_unicode_property_count) {
+    for (size_t i = 0; i < JAVA_WHITESPACE_COUNT; i++) {
+      if (codepoint >= java_whitespace[i].first
+          && codepoint <= java_whitespace[i].last) {
+        return 1;
+      }
+    }
+    return 0;
+  }
   Resolved resolved;
   if (resolve(property, &resolved) != GRX_OK) {
     return 0;
@@ -1004,6 +1083,12 @@ int grx_unicode_property_contains(uint32_t property, uint32_t codepoint) {
 }
 
 const char * grx_unicode_property_name(uint32_t property) {
+  if (property == grx_unicode_property_count + 1) {
+    return "javaLowerCase";
+  }
+  if (property == grx_unicode_property_count) {
+    return "javaWhitespace";
+  }
   if (property >= grx_unicode_property_count) {
     return NULL;
   }
@@ -1012,6 +1097,19 @@ const char * grx_unicode_property_name(uint32_t property) {
 }
 
 size_t grx_unicode_property_total(uint32_t property) {
+  if (property == grx_unicode_property_count + 1) {
+    uint32_t base;
+    return grx_unicode_property_lookup("Lowercase", 9, NULL, 0,
+            GRX_PROPERTY_STRICT, &base) == GRX_OK
+        ? grx_unicode_property_total(base) + 1 : 0;
+  }
+  if (property == grx_unicode_property_count) {
+    size_t total = 0;
+    for (size_t i = 0; i < JAVA_WHITESPACE_COUNT; i++) {
+      total += java_whitespace[i].last - java_whitespace[i].first + 1;
+    }
+    return total;
+  }
   if (property >= grx_unicode_property_count) {
     return 0;
   }
@@ -1020,6 +1118,16 @@ size_t grx_unicode_property_total(uint32_t property) {
 }
 
 uint64_t grx_unicode_property_digest(uint32_t property) {
+  if (property == grx_unicode_property_count + 1) {
+    GUNI_Range ranges[GRX_PROPERTY_RANGES_MAX];
+    size_t count = 0;
+    return grx_unicode_property_ranges(property, ranges,
+        GRX_PROPERTY_RANGES_MAX, &count) == GRX_OK
+        ? grx_unicode_range_digest(ranges, count) : 0;
+  }
+  if (property == grx_unicode_property_count) {
+    return grx_unicode_range_digest(java_whitespace, JAVA_WHITESPACE_COUNT);
+  }
   if (property >= grx_unicode_property_count) {
     return 0;
   }

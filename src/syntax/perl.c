@@ -2460,9 +2460,9 @@ static uint32_t option_for_letter(char c) {
 static uint32_t flavour_option_for_letter(const GRX_Parser * parser, char c) {
   if (flavour(parser) == FLAVOUR_JAVA) {
     switch (c) {
-      case 'U': return GRX_OPT_UCP;
-      case 'u': return GRX_OPT_UTF;
-      case 'd': return GRX_OPT_NEWLINE_TERMINATES;
+      case 'U': return GRX_OPT_UCP | GRX_OPT_JAVA_UNICODE_CASE;
+      case 'u': return GRX_OPT_JAVA_UNICODE_CASE;
+      case 'd': return GRX_OPT_JAVA_UNIX_LINES;
       default: return 0;
     }
   }

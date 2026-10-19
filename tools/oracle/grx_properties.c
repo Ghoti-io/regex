@@ -83,6 +83,9 @@ int main(int argc, char ** argv) {
   if (argc > 1 && strcmp(argv[1], "--perl") == 0) {
     match = GRX_PROPERTY_LOOSE_PERL;
   }
+  else if (argc > 1 && strcmp(argv[1], "--java") == 0) {
+    match = GRX_PROPERTY_JAVA;
+  }
 
   char line[MAX_NAME];
   while (fgets(line, (int)sizeof(line), stdin)) {

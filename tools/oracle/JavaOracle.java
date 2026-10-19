@@ -112,7 +112,7 @@ public final class JavaOracle {
         String flagText = decode(fields[2]), subject = decode(fields[3]);
         String argument = decode(fields[4]);
         switch (mode) {
-            case "compile", "first", "all", "find-from", "matches",
+            case "compile", "first", "all", "find-from", "matches", "ranges",
                  "looking-at", "replace-all", "replace-first", "split" -> { }
             default -> throw new IllegalArgumentException("unknown mode " + mode);
         }
@@ -126,6 +126,23 @@ public final class JavaOracle {
         Matcher matcher = compiled.matcher(subject);
         switch (mode) {
             case "compile": return "{\"kind\":\"compile\"}";
+            case "ranges": {
+                StringBuilder out = new StringBuilder("{\"kind\":\"ranges\",\"ranges\":[");
+                int start = -1;
+                boolean comma = false;
+                for (int cp = 0; cp <= 0x110000; cp++) {
+                    boolean member = cp <= 0x10FFFF && (cp < 0xD800 || cp > 0xDFFF)
+                        && matcher.reset(new String(Character.toChars(cp))).matches();
+                    if (member && start < 0) start = cp;
+                    else if (!member && start >= 0) {
+                        if (comma) out.append(',');
+                        comma = true;
+                        out.append('[').append(start).append(',').append(cp - 1).append(']');
+                        start = -1;
+                    }
+                }
+                return out.append("]}").toString();
+            }
             case "first":
                 return matcher.find() ? "{\"kind\":\"match\",\"groups\":"
                     + spans(matcher, subject) + "}" : "{\"kind\":\"nomatch\"}";

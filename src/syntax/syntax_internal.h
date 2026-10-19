@@ -43,6 +43,11 @@
 #include "../core/semantics_internal.h"
 #include "../unicode/unicode_internal.h"
 
+// Java's u and d flags affect matching rules, not UTF-8 decoding or POSIX
+// REG_NEWLINE. Keep these parser/lowering bits outside the public option API.
+#define GRX_OPT_JAVA_UNICODE_CASE (1u << 23)
+#define GRX_OPT_JAVA_UNIX_LINES (1u << 24)
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -891,6 +896,8 @@ typedef struct GRX_Profile {
   int posix_classes_stay_ascii;
   GRX_FoldKind fold;                ///< Caseless folding without UTF.
   GRX_FoldKind fold_utf;            ///< Caseless folding with UTF.
+  uint32_t fold_wide_option;        ///< Override UTF as the wide-fold switch.
+  uint32_t newline_lf_option;       ///< Switch the newline set to LF only.
   GRX_PropertyMatch property_match; ///< How `\p{...}` names are spelled.
   GRX_TemplateSpec template_spec;   ///< The replacement-template grammar.
   int multiline_by_default;         ///< Ruby: `^`/`$` are always line anchors.

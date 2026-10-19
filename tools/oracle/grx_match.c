@@ -295,46 +295,56 @@ int main(int argc, char ** argv) {
     }
 
     uint32_t options = 0;
-    for (const char * f = line; *f; f++) {
-      switch (*f) {
-        case 'i': options |= GRX_OPT_CASELESS; break;
-        case 'm': options |= GRX_OPT_MULTILINE; break;
-        case 's': options |= GRX_OPT_DOTALL; break;
-        case 'u': options |= GRX_OPT_UTF; break;
-        // Perl's `/a` and Python's `re.ASCII`. Here because a letter this
-        // table does not know is *silently ignored*, so a generator that
-        // ever put one in a flag set would have this driver answering a
-        // different question from the reference - agreement and
-        // disagreement both meaning nothing. No generator spells it:
-        // perl_diff.py reaches every ASCII mode through the pattern -
-        // `(?a)` in both dialects and PCRE2's `(?aD)`, `(?aS)`, `(?aW)`,
-        // `(?aP)` and `(?aT)` besides - which is where a modifier's scope
-        // can be asked about and a flag set's cannot. The five narrower
-        // bits WP-46 added therefore have no letter here, on purpose.
-        case 'a': options |= GRX_OPT_ASCII_CLASSES; break;
-        // Separate from `u`, because PCRE2 separates them and the pair is
-        // the axis this library got wrong: `\w`, `\d` and `\s` widen on
-        // UCP and the case folding widens on UTF.
-        case 'P': options |= GRX_OPT_UCP; break;
-        case 'v': options |= GRX_OPT_UNICODE_SETS | GRX_OPT_UTF; break;
-        // PCRE2's `U`, and the letter RE2 and the Rust crate both spell
-        // the same way - `(?U)` there, a builder method in the crate. It
-        // was missing and the comment above says what that costs: a letter
-        // this table does not know is silently ignored, so every `U` row
-        // linear_diff.py generated asked the reference for ungreedy
-        // matching and asked this library for greedy, and the answers were
-        // scored against each other anyway. 35 disagreements, every one of
-        // them the driver's.
-        case 'U': options |= GRX_OPT_UNGREEDY; break;
-        // `n` is REG_NEWLINE, spelled the way posix_match.c and
-        // musl_match.c spell it, so that a differential can hand the same
-        // flag string to all three. It is *both* of this library's bits,
-        // because regcomp has one flag for the two rules: `^` and `$`
-        // become line anchors, and a newline stops being "any character".
-        case 'n':
-          options |= GRX_OPT_MULTILINE | GRX_OPT_NEWLINE_TERMINATES;
-          break;
-        default: break;
+    if (syntax == GRX_SYNTAX_JAVA) {
+      GRX_Error flag_error;
+      if (grx_options_parse(syntax, line, &options, &flag_error) != GRX_OK) {
+        printf("compile %d\n", (int)flag_error.diag);
+        fflush(stdout);
+        continue;
+      }
+    }
+    else {
+      for (const char * f = line; *f; f++) {
+        switch (*f) {
+          case 'i': options |= GRX_OPT_CASELESS; break;
+          case 'm': options |= GRX_OPT_MULTILINE; break;
+          case 's': options |= GRX_OPT_DOTALL; break;
+          case 'u': options |= GRX_OPT_UTF; break;
+          // Perl's `/a` and Python's `re.ASCII`. Here because a letter this
+          // table does not know is *silently ignored*, so a generator that
+          // ever put one in a flag set would have this driver answering a
+          // different question from the reference - agreement and
+          // disagreement both meaning nothing. No generator spells it:
+          // perl_diff.py reaches every ASCII mode through the pattern -
+          // `(?a)` in both dialects and PCRE2's `(?aD)`, `(?aS)`, `(?aW)`,
+          // `(?aP)` and `(?aT)` besides - which is where a modifier's scope
+          // can be asked about and a flag set's cannot. The five narrower
+          // bits WP-46 added therefore have no letter here, on purpose.
+          case 'a': options |= GRX_OPT_ASCII_CLASSES; break;
+          // Separate from `u`, because PCRE2 separates them and the pair is
+          // the axis this library got wrong: `\w`, `\d` and `\s` widen on
+          // UCP and the case folding widens on UTF.
+          case 'P': options |= GRX_OPT_UCP; break;
+          case 'v': options |= GRX_OPT_UNICODE_SETS | GRX_OPT_UTF; break;
+          // PCRE2's `U`, and the letter RE2 and the Rust crate both spell
+          // the same way - `(?U)` there, a builder method in the crate. It
+          // was missing and the comment above says what that costs: a letter
+          // this table does not know is silently ignored, so every `U` row
+          // linear_diff.py generated asked the reference for ungreedy
+          // matching and asked this library for greedy, and the answers were
+          // scored against each other anyway. 35 disagreements, every one of
+          // them the driver's.
+          case 'U': options |= GRX_OPT_UNGREEDY; break;
+          // `n` is REG_NEWLINE, spelled the way posix_match.c and
+          // musl_match.c spell it, so that a differential can hand the same
+          // flag string to all three. It is *both* of this library's bits,
+          // because regcomp has one flag for the two rules: `^` and `$`
+          // become line anchors, and a newline stops being "any character".
+          case 'n':
+            options |= GRX_OPT_MULTILINE | GRX_OPT_NEWLINE_TERMINATES;
+            break;
+          default: break;
+        }
       }
     }
 

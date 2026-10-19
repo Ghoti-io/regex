@@ -907,11 +907,13 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
   [GRX_SYNTAX_JAVA] = {
     .lookbehind = GRX_LOOKBEHIND_UNBOUNDED,
     .dollar = GRX_DOLLAR_BEFORE_FINAL_NEWLINE,
-    .newlines = GRX_NEWLINES_UNICODE,
+    .newlines = GRX_NEWLINES_ANY,
     .shorthands = GRX_SHORTHANDS_ASCII,
     .shorthands_wide = GRX_SHORTHANDS_UNICODE,
     .fold = GRX_FOLD_ASCII,
     .fold_utf = GRX_FOLD_SIMPLE,
+    .fold_wide_option = GRX_OPT_JAVA_UNICODE_CASE,
+    .newline_lf_option = GRX_OPT_JAVA_UNIX_LINES,
     .property_match = GRX_PROPERTY_JAVA,
     .subject_is_text = 1,
   },
@@ -1405,6 +1407,17 @@ static const FlagRow python_flags[] = {
   {0, FLAG_OPTION, 0, 0, 0},
 };
 
+static const FlagRow java_flags[] = {
+  {'i', FLAG_OPTION, GRX_OPT_CASELESS, 0, 0},
+  {'d', FLAG_OPTION, GRX_OPT_JAVA_UNIX_LINES, 0, 0},
+  {'m', FLAG_OPTION, GRX_OPT_MULTILINE, 0, 0},
+  {'s', FLAG_OPTION, GRX_OPT_DOTALL, 0, 0},
+  {'u', FLAG_OPTION, GRX_OPT_JAVA_UNICODE_CASE, 0, 0},
+  {'x', FLAG_OPTION, GRX_OPT_EXTENDED | GRX_OPT_EXTENDED_MORE, 0, 0},
+  {'U', FLAG_OPTION, GRX_OPT_UCP | GRX_OPT_JAVA_UNICODE_CASE, 0, 0},
+  {0, FLAG_OPTION, 0, 0, 0},
+};
+
 // Go's `regexp` has no flags argument at all: the flags are `(?ims)` groups
 // inside the pattern, which is the dialect's own syntax. So this alphabet is
 // not a second spelling of anything the reference takes - it is the set of
@@ -1450,6 +1463,8 @@ static const FlagRow * flag_alphabet(GRX_Syntax syntax) {
       return perl_flags;
     case GRX_SYNTAX_PYTHON:
       return python_flags;
+    case GRX_SYNTAX_JAVA:
+      return java_flags;
     default:
       // POSIX and GNU have no flag letters at all: their options are API
       // arguments (REG_ICASE, REG_NEWLINE). An empty string is still valid
