@@ -375,3 +375,8 @@ go	docker.io/library/golang@sha256:2c4c60ef415fbfa5e90300722293bef36c5e63fae1757
 # version is in the field too because it is in the image and a reader will
 # want it, but it is not what would make an answer change.
 rust	localhost/ghoti-regex-oracle-rust:1.13.1	regex 1.13.1, UCD 16.0.0, rustc 1.98.1	The Rust dialect: the `regex` crate, its split and its replacement template
+
+# Stock Temurin images. The manifest-list digests pin all platforms; the
+# runtime probe checks the exact Java build before any answer is accepted.
+java25	docker.io/library/eclipse-temurin:25-jdk@sha256:8c052273471ca5128e67f18ffe9e9c32abf1b104bb0090fa10175eda51004145	openjdk version "25.0.4.1" 2026-08-18 LTS OpenJDK Runtime Environment Temurin-25.0.4.1+1 (build 25.0.4.1+1-LTS)	JDK 25 Pattern and Matcher baseline
+java27	docker.io/library/eclipse-temurin:27-jdk@sha256:b7b0b087469d150264d36ef6d50bb56840e7e50e3cbc691df0702167bd2c66e6	openjdk version "27" 2026-09-15 OpenJDK Runtime Environment Temurin-27+35 (build 27+35)	JDK 27 forward comparison

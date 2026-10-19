@@ -879,6 +879,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 
 # General commands
 .PHONY: check-oracle-soak
+.PHONY: check-oracle-java
 .PHONY: clean cloc docs docs-pdf examples tools coverage check-layout-page check-work-packages check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-unicode-agreement check-dump-names check-readme-example check-tables check-status-line check-corpus-seeds check-makefile-hash check-generated-header-deps check-oracle-env check-oracle-syntax check-oracle-match check-oracle-soak check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-linear check-oracle-perl-syntax check-oracle-script-runs check-doc-claims check-wide-classes check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
 	check-programs \
 	check-oracle-properties check-oracle-numeric-properties \
@@ -1128,6 +1129,7 @@ check-oracles: check-oracle-syntax check-oracle-match check-oracle-properties \
 	check-oracle-newlines check-oracle-callouts \
 	check-oracle-sed \
 	check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
+	check-oracle-java \
 	check-oracle-exclusions check-oracle-determinism \
 	check-oracle-iregexp \
 	check-engine-equivalence
@@ -1507,6 +1509,11 @@ check-oracle-env:
 		$(REQUIRE_PYTHON3); \
 		python3 tools/oracle/check_oracle_env.py; \
 	fi
+
+check-oracle-java: ## Compare the independent Java driver against JDK 25 and 27 records
+	$(call run-oracle,java25,python3 tools/oracle/java_probe.py --pin java25)
+	$(call run-oracle,java27,python3 tools/oracle/java_probe.py --pin java27)
+	$(call run-oracle,java25$(comma)java27,python3 tools/oracle/check_java_driver.py)
 
 check-oracle-exclusions: ## Put each differential's exclusions their own controls
 # Every exclusion in this directory narrows a gate, and a gate narrowed too

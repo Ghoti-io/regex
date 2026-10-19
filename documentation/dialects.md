@@ -48,7 +48,7 @@ this design was written on; a CI job installs the rest
 | PCRE2 | `pcre` | PCRE2 10.46 | `pcre2pattern(3)`, `pcre2syntax(3)` for 10.46 | `pcre2test` 10.46 (pinned); `testdata/testinput1`, `testinput2` |
 | ECMAScript | `ecmascript` | ECMA-262 16th edition (ES2025) | clause 22.2 *RegExp (Regular Expression) Objects*; Annex B.1.2 *Regular Expressions Patterns* | Node 24.21 / V8 13.6, Unicode 17.0 (pinned); test262 |
 | Python | `python` | CPython 3.14.7 | `re` module documentation, 3.14 | `python3` (pinned, `tools/oracle/containers/IMAGES`); no corpus to import, a generated one - see below |
-| Java | `java` | JDK 21 | `java.util.regex.Pattern` javadoc, 21 | OpenJDK (install) |
+| Java | `java` | JDK 25 baseline; JDK 27 forward check | `java.util.regex.Pattern` javadoc, 25 and 27 | Digest-pinned Temurin images in `tools/oracle/containers/IMAGES`; measured probe answers are in `tests/data/probe/java25.json` and `java27.json` |
 | .NET | `dotnet` | .NET 8 | "Regular Expression Language - Quick Reference"; "Regular expression options" | .NET SDK (install) |
 | Ruby | `ruby` | Ruby 3.3 / Onigmo 6.2 | Onigmo `doc/RE`; Ruby `Regexp` documentation | `ruby` (install) |
 | RE2 | `re2` | Go 1.25.14 `regexp` | Go `regexp/syntax` documentation, which states that it is RE2's syntax; the RE2 "Syntax" wiki | `go` (pinned, stock image by digest). **The pin names Go and not RE2**: what answers here is Go's implementation of RE2's syntax, not the C++ library, and the two are not identical - `\C` is RE2's and Go has not got it. A second reference would be the way to tell them apart and there is not one here. Carries Unicode 15.0.0, two releases behind this library's; see `containers/IMAGES` |
@@ -279,6 +279,18 @@ oracle and records which of the three it is.
 Each subsection is one axis of `GRX_SyntaxSpec`. The engines implement the
 *values*; the profile says which value each dialect takes. Cells marked
 **probe** are filled by WP-03 before code depends on them.
+
+**Java checkpoint (JDK 25 baseline, JDK 27 forward check):** The exact
+measured cases and separate outputs are in `tests/data/probe/java25.json` and
+`java27.json`. Regenerate them deliberately with
+`tools/oracle/java_probe.py --pin java25 --record` (and `java27`), then check
+both with `make check-oracle-java`. The
+Java `probe` cells in §§5.5, 5.6, 5.8, 5.9, 5.12, 5.13, 5.19, 5.21 and
+5.23 have specific measured examples there; the private working ledger
+`notes/regex/JAVA-ORACLE-LEDGER.md` maps each cell to case indices and names
+the remaining open breadth. A result for one character, flag combination
+or subject does not settle a whole Unicode set or all split limits. The
+Java dialect remains unimplemented at this checkpoint.
 
 ### 5.1 Match preference
 
@@ -1194,7 +1206,7 @@ at all.
 | PCRE2 (`pcre2_substitute`) | `$n`, `${n}` - every digit, no fallback | `$name`, `${name}`, `$<name>` | `$&`, `$0`, `${0}`, `` $` ``, ``$'``, `$_` (the whole subject) | `$$` | error | error, or empty with `SUBSTITUTE_UNSET_EMPTY` (exposed as an option) | extended mode: `\U \L \E \u \l`, and `${n:+a:b}`, `${n:-d}` |
 | Perl (interpolation subset) | `$n`, `${n}`, `\n` (deprecated) | `$+{name}` | `$&`, `` $` ``, ``$'`` | `\$`, `\\` | empty (undef) | empty | `\U \L \F \E \u \l \Q` - **built**, with four rules that are not Vim's; see below |
 | Python (`re.sub`) | `\n`, `\nn` (1-99, no fallback) | `\g<name>`, `\g<n>` | `\g<0>` only | `\\`, `\a \b \f \n \r \t \v`, octal; `\` before a non-alphanumeric keeps **both**; every other letter is an error | error | empty | none |
-| Java (`appendReplacement`) | `$n` (longest valid prefix) | `${name}` | none | `\` quotes the next character | error | empty (**probe**) | none |
+| Java (`appendReplacement`) | `$n` (longest valid prefix) | `${name}` | `$0` for the whole match; no prefix or suffix form | `\` quotes the next character | error | empty (**probe**) | none |
 | .NET | `$n`, `${n}` | `${name}` | `$&`, `` $` ``, ``$'``, `$+`, `$_` | `$$` | literal | empty | none |
 | Ruby (`sub`) | `\n` | `\k<name>` | `\0`, `\&`, `` \` ``, ``\'`` | `\\` | empty | empty | none |
 | Go (RE2) | `$n`, `${n}` - **one word run, classified after it is read**, so `$1x` is the name `1x` and substitutes nothing rather than being group 1 and an "x"; a run with a leading zero is a name, so `$01` is missing | `$name`, `${name}`; `${...}` must close on a word run or the spelling is text | `$0`, `${0}`; **not** `$&`, `` $` ``, ``$'`` or `$_`, each of which is literal | `$$` | empty | empty | none |

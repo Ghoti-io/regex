@@ -86,6 +86,10 @@ class OracleUnavailable(Exception):
 # by hand: a version field that has drifted from the image it names is a lie
 # nothing else would catch.
 PROBE = {
+    # java -version writes to stderr. Redirect only within the probe; the
+    # normal oracle protocol keeps stderr separate from answers.
+    "java25": (["sh", "-c", "java -version 2>&1 | tr '\\n' ' '"], "openjdk version", None),
+    "java27": (["sh", "-c", "java -version 2>&1 | tr '\\n' ' '"], "openjdk version", None),
     "perl": (["perl", "-e", "print \"perl $^V\\n\""], "perl v", None),
     # V8's version, not node's, because the reference here is the regular
     # expression engine rather than the runtime around it - and because the
