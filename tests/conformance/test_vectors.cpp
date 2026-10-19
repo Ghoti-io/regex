@@ -928,18 +928,19 @@ TEST(Conformance, TheRunnerFailsAVectorThatIsWrong) {
   // is reference defects - so the `gap` category, the check that a listed
   // record which has started passing is a failure, and the check that an
   // entry naming no record at all is a failure were about to become code no
-  // test reaches. Two more failures come from there, which is why this
-  // expects five.
+  // test reaches. A Java row with a planted wrong span checks that the new
+  // offline corpus cannot silently accept changed answers. These add three
+  // failures to the three deliberately wrong records above.
   std::vector<std::string> failures;
   std::map<std::string, Tally> by_dialect;
   Tally total = run_directory(
       grxtest::data("vectors_selftest"), &failures, &by_dialect);
 
-  // Four records fail; the fifth failure is the entry that names no record
+  // Five records fail; the sixth failure is the entry that names no record
   // at all, which the counter does not see because the counter counts
   // records. Both halves matter, so both are asserted: the suite fails on
   // the *list*, not on the tally.
-  EXPECT_EQ(total.failed, 4u)
+  EXPECT_EQ(total.failed, 5u)
       << "the deliberately wrong vectors were not caught";
   EXPECT_GT(total.passed, 0u) << "the correct vectors beside it should pass";
   // One counted gap and one exclusion, from records that are wrong and
@@ -948,7 +949,7 @@ TEST(Conformance, TheRunnerFailsAVectorThatIsWrong) {
   EXPECT_EQ(total.gaps, 1u) << "a listed gap was not counted as one";
   EXPECT_EQ(total.reference_defects, 1u)
       << "a listed reference defect was not excluded";
-  ASSERT_EQ(failures.size(), 5u) << [&] {
+  ASSERT_EQ(failures.size(), 6u) << [&] {
     std::string joined;
     for (const std::string & failure : failures) {
       joined += "\n" + failure;

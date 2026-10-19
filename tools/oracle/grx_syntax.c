@@ -138,6 +138,15 @@ int main(int argc, char ** argv) {
     else if (result == GRX_ERR_LIMIT) {
       printf("limit %d\n", (int)error.diag);
     }
+    else if (syntax == GRX_SYNTAX_JAVA && result == GRX_ERR_SYNTAX) {
+      printf("syntax %d\n", (int)error.diag);
+    }
+    else if (syntax == GRX_SYNTAX_JAVA && result == GRX_ERR_UNSUPPORTED) {
+      printf("unsupported %d\n", (int)error.diag);
+    }
+    else if (syntax == GRX_SYNTAX_JAVA) {
+      printf("result %d %d\n", (int)result, (int)error.diag);
+    }
     else {
       printf("err %d\n", (int)error.diag);
     }

@@ -7,13 +7,21 @@ counted as oracle agreements here.
 """
 
 import argparse
+from collections import Counter
 import json
 import os
 import subprocess
 import sys
+import java_probe
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DATA = os.path.join(ROOT, "tests", "data", "probe")
+EXCLUSIONS = {("replacement", "", "😀", "", "replace-all", "X", "offset", "unpaired surrogate")}
+
+
+def exclusion_identity(row, answer):
+    return (row["area"], row["pattern"], row["subject"], row["flags"],
+            row["mode"], row["argument"], answer["kind"], answer.get("message", ""))
 
 
 def main():
@@ -27,7 +35,13 @@ def main():
     if baseline["cases"] != forward["cases"]:
         raise SystemExit("JDK inventories differ")
     indices = [i for i, row in enumerate(baseline["cases"])
-               if row["area"] == "replacement"]
+               if row["area"] in ("replacement", "generated-replacement")]
+    actual_exclusions = [exclusion_identity(baseline["cases"][i], baseline["answers"][i])
+                         for i in indices if baseline["answers"][i]["kind"] in ("offset", "input")]
+    stale = sum((Counter(EXCLUSIONS) - Counter(actual_exclusions)).values())
+    if Counter(actual_exclusions) != Counter(EXCLUSIONS):
+        raise SystemExit(f"stale Java replacement exclusion: {stale} missing; "
+                         "unexpected or duplicate exclusions present")
     lines = []
     for i in indices:
         row = baseline["cases"][i]
@@ -79,9 +93,10 @@ def main():
     for i, actual, wanted in failures[:30]:
         print(f"case {i} {baseline['cases'][i]}: {actual} != {wanted}",
               file=sys.stderr)
-    print(f"JDK25 replacement: {len(indices)} total, {passed} pass, "
+    print(f"fixed inventory revision {java_probe.GENERATED_INVENTORY_REVISION}; JDK25 replacement: {len(indices)} total, {passed} pass, "
           f"{len(failures)} failure, {unsupported} unsupported, "
           f"{excluded} excluded ({split_pair} split-pair output), "
+          f"{stale} stale exclusion, "
           f"{errors_without_oracle_offset} error offsets "
           f"not exposed by JDK, JDK27 differences {changed}")
     return bool(failures)

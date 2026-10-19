@@ -29,6 +29,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 import iregexp_diff
+import java_match_diff
 import iterate_diff
 import perl_diff
 import posix_diff
@@ -46,6 +47,18 @@ BLOCKS = []
 
 def block(label, call, rows):
     BLOCKS.append((label, call, rows))
+
+
+block("java_match_diff.excluded", lambda pattern, subject, flags:
+      java_match_diff.excluded({"pattern": pattern, "subject": subject,
+                                "flags": flags}), [
+    ("LITERAL uppercase answer", ("a", "A", "l"), True),
+    ("CANON_EQ composed and decomposed", ("é", "e\u0301", "c"), True),
+    ("LITERAL metacharacter", ("a+", "a+", "l"), True),
+    ("same literal with comparable flags", ("a", "A", "i"), False),
+    ("same pattern without LITERAL", ("a+", "a+", ""), False),
+    ("unmeasured LITERAL row", ("b", "B", "l"), False),
+])
 
 
 # --------------------------------------------------------------------

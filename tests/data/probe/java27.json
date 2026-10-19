@@ -2215,6 +2215,702 @@
       "flags": "",
       "mode": "split",
       "argument": "-2147483649"
+    },
+    {
+      "area": "generated-syntax",
+      "pattern": "a",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "generated-syntax",
+      "pattern": "(a|b)+",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "generated-syntax",
+      "pattern": "[a&&[a-z]]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "generated-syntax",
+      "pattern": "\\Q[a]+\\E",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "generated-syntax",
+      "pattern": "(?<n>a)",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "generated-syntax",
+      "pattern": "(?R)",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "generated-syntax",
+      "pattern": "(?P<n>a)",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "generated-syntax",
+      "pattern": "[a-\\d]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "generated-syntax",
+      "pattern": "\\g{1}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "generated-match",
+      "pattern": "(a|b)+",
+      "subject": "ab",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "generated-match",
+      "pattern": "(a|b)+",
+      "subject": "aab",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "generated-match",
+      "pattern": "(a|b)+",
+      "subject": "b",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "generated-match",
+      "pattern": "(a|b)+",
+      "subject": "1",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "generated-match",
+      "pattern": "(a|b)+",
+      "subject": "é",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "generated-match",
+      "pattern": "(?i:a)b",
+      "subject": "ab",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "generated-match",
+      "pattern": "(?i:a)b",
+      "subject": "aab",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "generated-match",
+      "pattern": "(?i:a)b",
+      "subject": "b",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "generated-match",
+      "pattern": "(?i:a)b",
+      "subject": "1",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "generated-match",
+      "pattern": "(?i:a)b",
+      "subject": "é",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "generated-match",
+      "pattern": "\\d+",
+      "subject": "ab",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "generated-match",
+      "pattern": "\\d+",
+      "subject": "aab",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "generated-match",
+      "pattern": "\\d+",
+      "subject": "b",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "generated-match",
+      "pattern": "\\d+",
+      "subject": "1",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "generated-match",
+      "pattern": "\\d+",
+      "subject": "é",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "generated-match",
+      "pattern": "[a&&[a-z]]",
+      "subject": "ab",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "generated-match",
+      "pattern": "[a&&[a-z]]",
+      "subject": "aab",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "generated-match",
+      "pattern": "[a&&[a-z]]",
+      "subject": "b",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "generated-match",
+      "pattern": "[a&&[a-z]]",
+      "subject": "1",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "generated-match",
+      "pattern": "[a&&[a-z]]",
+      "subject": "é",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "generated-match",
+      "pattern": "(?<=a)b",
+      "subject": "ab",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "generated-match",
+      "pattern": "(?<=a)b",
+      "subject": "aab",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "generated-match",
+      "pattern": "(?<=a)b",
+      "subject": "b",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "generated-match",
+      "pattern": "(?<=a)b",
+      "subject": "1",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "generated-match",
+      "pattern": "(?<=a)b",
+      "subject": "é",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "generated-match",
+      "pattern": "(?=(a))a",
+      "subject": "ab",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "generated-match",
+      "pattern": "(?=(a))a",
+      "subject": "aab",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "generated-match",
+      "pattern": "(?=(a))a",
+      "subject": "b",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "generated-match",
+      "pattern": "(?=(a))a",
+      "subject": "1",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "generated-match",
+      "pattern": "(?=(a))a",
+      "subject": "é",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "generated-search",
+      "pattern": "a*",
+      "subject": "ab",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "generated-search",
+      "pattern": "a*",
+      "subject": "baa",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "generated-search",
+      "pattern": "a*",
+      "subject": "",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "generated-search",
+      "pattern": "\\G.",
+      "subject": "ab",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "generated-search",
+      "pattern": "\\G.",
+      "subject": "baa",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "generated-search",
+      "pattern": "\\G.",
+      "subject": "",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "generated-search",
+      "pattern": "(?=a)",
+      "subject": "ab",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "generated-search",
+      "pattern": "(?=a)",
+      "subject": "baa",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "generated-search",
+      "pattern": "(?=a)",
+      "subject": "",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "generated-search",
+      "pattern": "(a)?b",
+      "subject": "ab",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "generated-search",
+      "pattern": "(a)?b",
+      "subject": "baa",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "generated-search",
+      "pattern": "(a)?b",
+      "subject": "",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "generated-replacement",
+      "pattern": "(a)",
+      "subject": "a",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "<$1>"
+    },
+    {
+      "area": "generated-replacement",
+      "pattern": "(a)",
+      "subject": "aa",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "<$1>"
+    },
+    {
+      "area": "generated-replacement",
+      "pattern": "(a)",
+      "subject": "ba",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "<$1>"
+    },
+    {
+      "area": "generated-replacement",
+      "pattern": "(?<n>a)",
+      "subject": "a",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "<${n}>"
+    },
+    {
+      "area": "generated-replacement",
+      "pattern": "(?<n>a)",
+      "subject": "aa",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "<${n}>"
+    },
+    {
+      "area": "generated-replacement",
+      "pattern": "(?<n>a)",
+      "subject": "ba",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "<${n}>"
+    },
+    {
+      "area": "generated-replacement",
+      "pattern": "a",
+      "subject": "a",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "\\$"
+    },
+    {
+      "area": "generated-replacement",
+      "pattern": "a",
+      "subject": "aa",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "\\$"
+    },
+    {
+      "area": "generated-replacement",
+      "pattern": "a",
+      "subject": "ba",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "\\$"
+    },
+    {
+      "area": "generated-split",
+      "pattern": ",",
+      "subject": "a,b,",
+      "flags": "",
+      "mode": "split",
+      "argument": "-1"
+    },
+    {
+      "area": "generated-split",
+      "pattern": ",",
+      "subject": "a,b,",
+      "flags": "",
+      "mode": "split",
+      "argument": "0"
+    },
+    {
+      "area": "generated-split",
+      "pattern": ",",
+      "subject": "a,b,",
+      "flags": "",
+      "mode": "split",
+      "argument": "2"
+    },
+    {
+      "area": "generated-split",
+      "pattern": ",",
+      "subject": "aa",
+      "flags": "",
+      "mode": "split",
+      "argument": "-1"
+    },
+    {
+      "area": "generated-split",
+      "pattern": ",",
+      "subject": "aa",
+      "flags": "",
+      "mode": "split",
+      "argument": "0"
+    },
+    {
+      "area": "generated-split",
+      "pattern": ",",
+      "subject": "aa",
+      "flags": "",
+      "mode": "split",
+      "argument": "2"
+    },
+    {
+      "area": "generated-split",
+      "pattern": ",",
+      "subject": "",
+      "flags": "",
+      "mode": "split",
+      "argument": "-1"
+    },
+    {
+      "area": "generated-split",
+      "pattern": ",",
+      "subject": "",
+      "flags": "",
+      "mode": "split",
+      "argument": "0"
+    },
+    {
+      "area": "generated-split",
+      "pattern": ",",
+      "subject": "",
+      "flags": "",
+      "mode": "split",
+      "argument": "2"
+    },
+    {
+      "area": "generated-split",
+      "pattern": "(?=a)",
+      "subject": "a,b,",
+      "flags": "",
+      "mode": "split",
+      "argument": "-1"
+    },
+    {
+      "area": "generated-split",
+      "pattern": "(?=a)",
+      "subject": "a,b,",
+      "flags": "",
+      "mode": "split",
+      "argument": "0"
+    },
+    {
+      "area": "generated-split",
+      "pattern": "(?=a)",
+      "subject": "a,b,",
+      "flags": "",
+      "mode": "split",
+      "argument": "2"
+    },
+    {
+      "area": "generated-split",
+      "pattern": "(?=a)",
+      "subject": "aa",
+      "flags": "",
+      "mode": "split",
+      "argument": "-1"
+    },
+    {
+      "area": "generated-split",
+      "pattern": "(?=a)",
+      "subject": "aa",
+      "flags": "",
+      "mode": "split",
+      "argument": "0"
+    },
+    {
+      "area": "generated-split",
+      "pattern": "(?=a)",
+      "subject": "aa",
+      "flags": "",
+      "mode": "split",
+      "argument": "2"
+    },
+    {
+      "area": "generated-split",
+      "pattern": "(?=a)",
+      "subject": "",
+      "flags": "",
+      "mode": "split",
+      "argument": "-1"
+    },
+    {
+      "area": "generated-split",
+      "pattern": "(?=a)",
+      "subject": "",
+      "flags": "",
+      "mode": "split",
+      "argument": "0"
+    },
+    {
+      "area": "generated-split",
+      "pattern": "(?=a)",
+      "subject": "",
+      "flags": "",
+      "mode": "split",
+      "argument": "2"
+    },
+    {
+      "area": "generated-split",
+      "pattern": "",
+      "subject": "a,b,",
+      "flags": "",
+      "mode": "split",
+      "argument": "-1"
+    },
+    {
+      "area": "generated-split",
+      "pattern": "",
+      "subject": "a,b,",
+      "flags": "",
+      "mode": "split",
+      "argument": "0"
+    },
+    {
+      "area": "generated-split",
+      "pattern": "",
+      "subject": "a,b,",
+      "flags": "",
+      "mode": "split",
+      "argument": "2"
+    },
+    {
+      "area": "generated-split",
+      "pattern": "",
+      "subject": "aa",
+      "flags": "",
+      "mode": "split",
+      "argument": "-1"
+    },
+    {
+      "area": "generated-split",
+      "pattern": "",
+      "subject": "aa",
+      "flags": "",
+      "mode": "split",
+      "argument": "0"
+    },
+    {
+      "area": "generated-split",
+      "pattern": "",
+      "subject": "aa",
+      "flags": "",
+      "mode": "split",
+      "argument": "2"
+    },
+    {
+      "area": "generated-split",
+      "pattern": "",
+      "subject": "",
+      "flags": "",
+      "mode": "split",
+      "argument": "-1"
+    },
+    {
+      "area": "generated-split",
+      "pattern": "",
+      "subject": "",
+      "flags": "",
+      "mode": "split",
+      "argument": "0"
+    },
+    {
+      "area": "generated-split",
+      "pattern": "",
+      "subject": "",
+      "flags": "",
+      "mode": "split",
+      "argument": "2"
     }
   ],
   "answers": [
@@ -4365,6 +5061,604 @@
       "class": "NumberFormatException",
       "message": "For input string: \"-2147483649\"",
       "driver_error": true
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "description": "Unknown inline modifier"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "description": "Unknown inline modifier"
+    },
+    {
+      "kind": "syntax",
+      "index": 4,
+      "description": "Illegal character range"
+    },
+    {
+      "kind": "syntax",
+      "index": 1,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ],
+        [
+          2,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          1,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          1,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          2,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            1,
+            1
+          ]
+        ],
+        [
+          [
+            2,
+            2
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            3
+          ]
+        ],
+        [
+          [
+            3,
+            3
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            0
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            1,
+            2
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            1,
+            2
+          ]
+        ],
+        [
+          [
+            2,
+            3
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": []
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            0
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            1,
+            1
+          ]
+        ],
+        [
+          [
+            2,
+            2
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": []
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            2
+          ],
+          [
+            0,
+            1
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            1
+          ],
+          null
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": []
+    },
+    {
+      "kind": "replace",
+      "text": "<a>"
+    },
+    {
+      "kind": "replace",
+      "text": "<a><a>"
+    },
+    {
+      "kind": "replace",
+      "text": "b<a>"
+    },
+    {
+      "kind": "replace",
+      "text": "<a>"
+    },
+    {
+      "kind": "replace",
+      "text": "<a><a>"
+    },
+    {
+      "kind": "replace",
+      "text": "b<a>"
+    },
+    {
+      "kind": "replace",
+      "text": "$"
+    },
+    {
+      "kind": "replace",
+      "text": "$$"
+    },
+    {
+      "kind": "replace",
+      "text": "b$"
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "a",
+        "b",
+        ""
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "a",
+        "b"
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "a",
+        "b,"
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "aa"
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "aa"
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "aa"
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        ""
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        ""
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        ""
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "a,b,"
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "a,b,"
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "a,b,"
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "a",
+        "a"
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "a",
+        "a"
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "a",
+        "a"
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        ""
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        ""
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        ""
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "a",
+        ",",
+        "b",
+        ",",
+        ""
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "a",
+        ",",
+        "b",
+        ","
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "a",
+        ",b,"
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "a",
+        "a",
+        ""
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "a",
+        "a"
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "a",
+        "a"
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        ""
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        ""
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        ""
+      ]
     }
   ]
 }

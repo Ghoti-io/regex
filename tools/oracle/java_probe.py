@@ -278,6 +278,32 @@ CASES = [case("shared", p, s, f) for p, f, s, _ in SHARED] + [
     case("split-limit-invalid", ",", "a,b", mode="split", argument="-2147483649"),
 ]
 
+# Generated interaction inventory. Append only: the preceding pinned case IDs
+# are cited by the semantic ledger and must remain stable. Keep each cross
+# product small enough that a failing case prints as a useful reproducer.
+GENERATED_INVENTORY_REVISION = "2026-10-19"
+CASES += [case("generated-syntax", pattern, mode="compile") for pattern in (
+    "a", "(a|b)+", "[a&&[a-z]]", "\\Q[a]+\\E", "(?<n>a)",
+    "(?R)", "(?P<n>a)", "[a-\\d]", "\\g{1}")]
+CASES += [case("generated-match", pattern, subject)
+          for pattern in ("(a|b)+", "(?i:a)b", "\\d+", "[a&&[a-z]]",
+                          "(?<=a)b", "(?=(a))a")
+          for subject in ("ab", "aab", "b", "1", "é")]
+CASES += [case("generated-search", pattern, subject, mode="all")
+          for pattern in ("a*", "\\G.", "(?=a)", "(a)?b")
+          for subject in ("ab", "baa", "")]
+CASES += [case("generated-replacement", pattern, subject,
+               mode="replace-all", argument=template)
+          for pattern, template in (("(a)", "<$1>"),
+                                    ("(?<n>a)", "<${n}>"),
+                                    ("a", "\\$"))
+          for subject in ("a", "aa", "ba")]
+CASES += [case("generated-split", pattern, subject, mode="split",
+               argument=str(limit))
+          for pattern in (",", "(?=a)", "")
+          for subject in ("a,b,", "aa", "")
+          for limit in (-1, 0, 2)]
+
 
 def run(pin, rows):
     command = oracle_env.command(pin, ["java", "tools/oracle/JavaOracle.java"])

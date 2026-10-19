@@ -464,7 +464,7 @@ ALL_TEST_GATES := check-symbols check-layering check-aliasing \
 	check-diagnostics check-engine-equivalence check-json-schema-suite \
 	check-tables check-status-line check-corpus-seeds check-makefile-hash \
 	check-generated-header-deps \
-	check-java-match-diff check-java-search-diff check-java-replace-diff \
+	check-java-syntax-diff check-java-match-diff check-java-search-diff check-java-replace-diff check-java-split-diff \
 	check-oracle-env check-unicode-agreement check-scan-portable test-asan \
 	check-programs check-layout-page check-work-packages
 TEST_GATES ?= $(ALL_TEST_GATES)
@@ -880,7 +880,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 
 # General commands
 .PHONY: check-oracle-soak
-.PHONY: check-oracle-java check-java-match-diff check-java-search-diff check-java-replace-diff check-java-split-diff check-oracle-java-properties
+.PHONY: check-oracle-java check-java-syntax-diff check-java-match-diff check-java-search-diff check-java-replace-diff check-java-split-diff check-oracle-java-properties
 .PHONY: clean cloc docs docs-pdf examples tools coverage check-layout-page check-work-packages check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-unicode-agreement check-dump-names check-readme-example check-tables check-status-line check-corpus-seeds check-makefile-hash check-generated-header-deps check-oracle-env check-oracle-syntax check-oracle-match check-oracle-soak check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-linear check-oracle-perl-syntax check-oracle-script-runs check-doc-claims check-wide-classes check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
 	check-programs \
 	check-oracle-properties check-oracle-numeric-properties \
@@ -890,7 +890,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 	check-oracle-exclusions check-oracle-determinism \
 	check-oracles oracle-version oracle-images oracle-clean \
 	check-limits check-json-schema-suite vectors vectors-ecmascript \
-	vectors-pcre vectors-perl vectors-posix vectors-python vectors-vim \
+	vectors-pcre vectors-perl vectors-posix vectors-python vectors-vim vectors-java \
 	vectors-linear
 # Release build commands
 .PHONY: all install test test-quiet test-asan test-valgrind test-valgrind-quiet test-watch uninstall watch
@@ -1513,7 +1513,7 @@ check-oracle-env:
 		python3 tools/oracle/check_oracle_env.py; \
 	fi
 
-check-oracle-java: check-java-replace-diff check-java-split-diff ## Compare the Java driver and operations against JDK pins
+check-oracle-java: check-java-syntax-diff check-java-match-diff check-java-search-diff check-java-replace-diff check-java-split-diff check-oracle-java-properties ## Compare the Java driver and operations against JDK pins
 	$(call run-oracle,java25,python3 tools/oracle/java_probe.py --pin java25)
 	$(call run-oracle,java27,python3 tools/oracle/java_probe.py --pin java27)
 	$(call run-oracle,java25$(comma)java27,python3 tools/oracle/check_java_driver.py)
@@ -1521,6 +1521,10 @@ check-oracle-java: check-java-replace-diff check-java-split-diff ## Compare the 
 check-java-match-diff: $(APP_DIR)/tools/grx_match$(EXE_EXTENSION)
 	@$(REQUIRE_PYTHON3)
 	python3 tools/oracle/java_match_diff.py --driver $(APP_DIR)/tools/grx_match$(EXE_EXTENSION)
+
+check-java-syntax-diff: $(APP_DIR)/tools/grx_syntax$(EXE_EXTENSION)
+	@$(REQUIRE_PYTHON3)
+	python3 tools/oracle/java_syntax_diff.py --driver $(APP_DIR)/tools/grx_syntax$(EXE_EXTENSION)
 
 check-java-search-diff: $(APP_DIR)/tools/grx_match$(EXE_EXTENSION)
 	@$(REQUIRE_PYTHON3)
@@ -1575,15 +1579,14 @@ check-oracle-string-properties: $(TOOLS)
 	$(call run-oracle,node,python3 tools/oracle/string_property_diff.py)
 
 vectors: ## Regenerate every dialect's conformance vectors
-# "Every dialect" and this line named four targets, while the tree held five
-# corpora and nine dialects that compile and match. `vectors-posix` writes
-# both the posix and the gnu corpora, so the count was never the same as the
-# list - and Python and Vim had no corpus at all, so their only gate was a
-# live differential and a machine without containers checked them with unit
-# tests and nothing else. Six targets, seven corpora, nine dialects; the two
-# still missing are the two the POSIX importer covers.
+# Eight regeneration targets cover the committed dialect corpora.
+# `vectors-posix` writes both POSIX and GNU corpora; `vectors-iregexp`
+# combines its two pinned references.
 vectors: vectors-ecmascript vectors-pcre vectors-perl vectors-posix \
-	vectors-python vectors-vim vectors-iregexp
+	vectors-python vectors-vim vectors-iregexp vectors-java
+
+vectors-java: ## Regenerate the Java syntax and match corpus from pinned JDK 25
+	$(call run-oracle,java25,python3 tools/oracle/make_java_vectors.py)
 
 vectors-iregexp: ## Regenerate the I-Regexp vectors from its two references
 # Two references write two kinds of record: a pattern iregexp-check refuses

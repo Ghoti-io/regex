@@ -201,7 +201,7 @@ is in progress. The other five report `GRX_ERR_UNSUPPORTED`.
 
 ### Conformance
 
-`make test` runs 87,215 checked-in conformance vectors and prints this table.
+`make test` runs 87,351 checked-in conformance vectors and prints this table.
 Every expectation in them is a reference implementation's, taken from the
 pinned oracle in `tools/oracle/containers/IMAGES`; none is this library's own
 output. The corpora are committed, so the run needs no oracle, no container
@@ -217,6 +217,7 @@ engine and no network.
 | `rust` | 2,817 | 100.00% | generated from the `regex` crate 1.13.1, which carries UCD 16.0.0; 1 excluded |
 | `python` | 2,177 | 100.00% | generated from CPython 3.14.7 |
 | `pcre` | 1,869 | 100.00% | PCRE2 10.46's `testinput` |
+| `java` | 136 | 100.00% | bounded syntax and match vectors from Temurin 25.0.4.1 |
 | `gnu-ere` | 270 | 100.00% | Spencer's cases, answered by glibc 2.41 |
 | `posix-ere` | 245 | 100.00% | Spencer's cases, where glibc and musl agree |
 | `gnu-bre` | 159 | 100.00% | as `gnu-ere` |

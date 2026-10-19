@@ -1,0 +1,6 @@
+# A planted wrong JDK 25 answer. The offline runner must reject it.
+dialect: java
+
+pattern: (a)b
+subject: ab
+expect: 0-1 0-1

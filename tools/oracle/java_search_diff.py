@@ -6,10 +6,13 @@ window differs. Literal region matches()/lookingAt() use equivalent windows.
 """
 
 import argparse
+from collections import Counter
+from itertools import product
 import json
 import os
 import subprocess
 import sys
+import java_probe
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DATA = os.path.join(ROOT, "tests", "data", "probe")
@@ -17,6 +20,39 @@ ENGINES = ("auto", "pike", "backtrack", "bitstate", "dfa")
 # The committed corpus has at least these eligible rows for each named
 # engine. A regression that turns them all into "unsupported" must fail.
 SUPPORT_FLOOR = {"pike": 27, "bitstate": 26}
+GENERATED_PATTERNS = ("a*", "\\G.", "(?=a)", "(a)?b")
+GENERATED_SUBJECTS = ("ab", "baa", "")
+GENERATED = set(product(GENERATED_PATTERNS, GENERATED_SUBJECTS, ("",),
+                        ("all",), ("",)))
+GENERATED_ELIGIBLE = {
+    "auto": GENERATED, "backtrack": GENERATED,
+    "pike": set(product(("a*", "\\G.", "(a)?b"), GENERATED_SUBJECTS,
+                        ("",), ("all",), ("",))),
+    "bitstate": set(product(("a*", "\\G.", "(a)?b"), GENERATED_SUBJECTS,
+                            ("",), ("all",), ("",))),
+    "dfa": set(),
+}
+REGION_EXCLUSIONS = {
+    ("^a", "ba", "", "region-first", "1,2,0,1"),
+    ("^a", "ba", "", "region-first", "1,2,0,0"),
+    ("(?<=b)a", "ba", "", "region-first", "1,2,0,1"),
+    ("(?<=b)a", "ba", "", "region-first", "1,2,1,1"),
+    ("a$", "ab", "", "region-first", "0,1,0,1"),
+}
+SPLIT_PAIR_EXCLUSIONS = {("", "😀é", "", "all", "", "offset", "split-pair offset 1")}
+
+
+def region_identity(row):
+    return row["pattern"], row["subject"], row["flags"], row["mode"], row["argument"]
+
+
+def generated_identity(row):
+    return row["pattern"], row["subject"], row["flags"], row["mode"], row["argument"]
+
+
+def split_pair_identity(row, answer):
+    return (row["pattern"], row["subject"], row["flags"], row["mode"],
+            row["argument"], answer["kind"], answer.get("message", ""))
 
 
 def parse_spans(text):
@@ -54,13 +90,25 @@ def main():
         raise SystemExit("JDK inventories differ")
     comparable_region = {"region-matches", "region-looking-at"}
     indices = [i for i, row in enumerate(baseline["cases"])
-               if row["area"] in ("search", "iteration")
+               if row["area"] in ("search", "iteration", "generated-search")
                or row["area"] == "region" and row["mode"] in comparable_region]
-    region = sum(row["area"] == "region"
-                 and row["mode"] not in comparable_region
-                 for row in baseline["cases"])
+    excluded_region = [region_identity(row) for row in baseline["cases"]
+                       if row["area"] == "region" and row["mode"] not in comparable_region]
+    region = len(excluded_region)
     split_pair = [i for i in indices if baseline["answers"][i].get("kind")
                   == "offset"]
+    actual_split_pair = [split_pair_identity(baseline["cases"][i], baseline["answers"][i])
+                         for i in split_pair]
+    stale = (sum((Counter(REGION_EXCLUSIONS) - Counter(excluded_region)).values())
+             + sum((Counter(SPLIT_PAIR_EXCLUSIONS) - Counter(actual_split_pair)).values()))
+    if (Counter(excluded_region) != Counter(REGION_EXCLUSIONS)
+            or Counter(actual_split_pair) != Counter(SPLIT_PAIR_EXCLUSIONS)):
+        raise SystemExit(f"stale Java search exclusion: {stale} missing; "
+                         "unexpected or duplicate exclusions present")
+    generated = [generated_identity(row) for row in baseline["cases"]
+                 if row["area"] == "generated-search"]
+    if Counter(generated) != Counter(GENERATED):
+        raise SystemExit("generated Java search inventory changed; update eligibility")
     indices = [i for i in indices if i not in split_pair]
     if not indices or not region:
         raise SystemExit("search or region probe corpus is empty")
@@ -100,6 +148,12 @@ def main():
             for index, line in zip(selected, lines):
                 actual = parse(line, driver_mode)
                 wanted = baseline["answers"][index]
+                row = baseline["cases"][index]
+                if row["area"] == "generated-search":
+                    eligible = generated_identity(row) in GENERATED_ELIGIBLE[engine]
+                    if (actual["kind"] != "unsupported") != eligible:
+                        failures.append((engine, index, actual, wanted))
+                        continue
                 if actual["kind"] == "unsupported" and engine != "auto":
                     unsupported += 1
                 elif actual == wanted:
@@ -116,9 +170,10 @@ def main():
         row = baseline["cases"][index] if isinstance(index, int) else index
         print(f"{engine} case {index} {row}: {actual} != {wanted}",
               file=sys.stderr)
-    print(f"JDK25 comparable search rows {len(indices)}, "
+    print(f"fixed inventory revision {java_probe.GENERATED_INVENTORY_REVISION}; JDK25 comparable search rows {len(indices)}, "
           f"region/bounds exclusions {region}, split-pair exclusions "
           f"{len(split_pair)}, "
+          f"{stale} stale exclusion, "
           f"JDK27 search differences {changed}, region differences "
           f"{region_changed}; DFA requires leftmost-longest and is "
           "ineligible for Java's leftmost-first program")
