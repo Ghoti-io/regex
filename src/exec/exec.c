@@ -871,8 +871,15 @@ GRX_Result grx_regex_search_next(const GRX_Regex * regex,
       else {
         resolved.begin = previous.end;
       }
-      return grx_regex_search_ex(regex, subject, length, &resolved, match,
-          out_matched);
+      // Java's Matcher.find() advances after an empty match, but \G keeps
+      // the end of that match as its anchor. The profile carries this
+      // distinction; ECMAScript still uses the new attempt position.
+      return exec(regex, subject, length, &resolved, 0, GRX_EMPTY_OK,
+          was_empty
+                  && regex->program.search_start
+                      == GRX_SEARCH_START_PREVIOUS_END
+              ? previous.end : GRX_NPOS,
+          match, out_matched);
 
     case GRX_ITERATE_ADVANCE_SKIP_ABUTTING: {
       // Go: "empty matches abutting a preceding match are ignored". The

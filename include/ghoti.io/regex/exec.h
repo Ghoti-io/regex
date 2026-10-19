@@ -287,6 +287,13 @@ typedef GRX_Result (*GRX_CalloutFn)(
  * still mean offset 0, not `begin`. That asymmetry is deliberate and is what
  * makes iteration correct: the second call of a search-all loop must not
  * report `^` as holding where the first match happened to stop.
+ * For Java patterns this window is also distinct from `Matcher.region()`:
+ * Java's region can make `^` match at its start, keep `$` at its end when
+ * anchoring bounds are enabled, and hide text before its start from
+ * lookbehind unless transparent bounds are enabled. This API's `begin`
+ * never changes the subject's start or hides earlier bytes from lookbehind.
+ * `end` is a physical subject end for the search, so it cannot express all
+ * combinations of Java's anchoring and transparent bounds.
  *
  * Zero-initialising the struct gives a search of the whole subject with no
  * flags on GRX_ENGINE_AUTO with default limits, which is what

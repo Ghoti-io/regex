@@ -1391,6 +1391,318 @@
       "flags": "",
       "mode": "first",
       "argument": ""
+    },
+    {
+      "area": "search",
+      "pattern": "",
+      "subject": "ab",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "search",
+      "pattern": "a*",
+      "subject": "baac",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "search",
+      "pattern": "a*",
+      "subject": "a",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "search",
+      "pattern": "\\Ga*",
+      "subject": "baac",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "search",
+      "pattern": "\\Ga*",
+      "subject": "aab",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "search",
+      "pattern": "(?:\\Ga|b)",
+      "subject": "cba",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "search",
+      "pattern": "(?:\\Ga|b)",
+      "subject": "aba",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "search",
+      "pattern": "(?=(a))a|(b)",
+      "subject": "ab",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "search",
+      "pattern": "((a)|b)+",
+      "subject": "ab",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "search",
+      "pattern": "(a*)*",
+      "subject": "bc",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "search",
+      "pattern": "(?<=(a+))b",
+      "subject": "aaabaaab",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "search",
+      "pattern": "(?<=a{1,3})(b)",
+      "subject": "aabaaab",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "search",
+      "pattern": "(?=(a))(a)",
+      "subject": "aa",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "search",
+      "pattern": "(?<=a(?=(b)))b",
+      "subject": "abab",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "search",
+      "pattern": "(?<!a{2,})b",
+      "subject": "ab aab aaab b",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "search",
+      "pattern": "\\Ga*",
+      "subject": "cbaa",
+      "flags": "",
+      "mode": "all-from",
+      "argument": "1"
+    },
+    {
+      "area": "search",
+      "pattern": "",
+      "subject": "😀é",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "search",
+      "pattern": ".",
+      "subject": "😀é",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "search",
+      "pattern": "(?<=😀)(é)",
+      "subject": "😀é",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "search",
+      "pattern": "\\G.",
+      "subject": "abc",
+      "flags": "",
+      "mode": "find-from",
+      "argument": "1"
+    },
+    {
+      "area": "search",
+      "pattern": "(?<=😀)a",
+      "subject": "😀a",
+      "flags": "",
+      "mode": "find-from",
+      "argument": "4"
+    },
+    {
+      "area": "search",
+      "pattern": "a",
+      "subject": "ba",
+      "flags": "",
+      "mode": "find-from",
+      "argument": "2"
+    },
+    {
+      "area": "search",
+      "pattern": "a+",
+      "subject": "aa",
+      "flags": "",
+      "mode": "matches",
+      "argument": ""
+    },
+    {
+      "area": "search",
+      "pattern": "a",
+      "subject": "aa",
+      "flags": "",
+      "mode": "matches",
+      "argument": ""
+    },
+    {
+      "area": "search",
+      "pattern": "a",
+      "subject": "ab",
+      "flags": "",
+      "mode": "looking-at",
+      "argument": ""
+    },
+    {
+      "area": "search",
+      "pattern": "a",
+      "subject": "ba",
+      "flags": "",
+      "mode": "looking-at",
+      "argument": ""
+    },
+    {
+      "area": "search",
+      "pattern": "(?=a)(a*)",
+      "subject": "a",
+      "flags": "",
+      "mode": "matches",
+      "argument": ""
+    },
+    {
+      "area": "search",
+      "pattern": "(?:)",
+      "subject": "",
+      "flags": "",
+      "mode": "matches",
+      "argument": ""
+    },
+    {
+      "area": "search",
+      "pattern": "(?=a)a",
+      "subject": "a",
+      "flags": "",
+      "mode": "matches",
+      "argument": ""
+    },
+    {
+      "area": "search",
+      "pattern": "(?=a)(a*)",
+      "subject": "ab",
+      "flags": "",
+      "mode": "looking-at",
+      "argument": ""
+    },
+    {
+      "area": "search",
+      "pattern": "(?=a)",
+      "subject": "abc",
+      "flags": "",
+      "mode": "looking-at",
+      "argument": ""
+    },
+    {
+      "area": "search",
+      "pattern": "(?<=a)b",
+      "subject": "ab",
+      "flags": "",
+      "mode": "looking-at",
+      "argument": ""
+    },
+    {
+      "area": "region",
+      "pattern": "^a",
+      "subject": "ba",
+      "flags": "",
+      "mode": "region-first",
+      "argument": "1,2,0,1"
+    },
+    {
+      "area": "region",
+      "pattern": "^a",
+      "subject": "ba",
+      "flags": "",
+      "mode": "region-first",
+      "argument": "1,2,0,0"
+    },
+    {
+      "area": "region",
+      "pattern": "(?<=b)a",
+      "subject": "ba",
+      "flags": "",
+      "mode": "region-first",
+      "argument": "1,2,0,1"
+    },
+    {
+      "area": "region",
+      "pattern": "(?<=b)a",
+      "subject": "ba",
+      "flags": "",
+      "mode": "region-first",
+      "argument": "1,2,1,1"
+    },
+    {
+      "area": "region",
+      "pattern": "a$",
+      "subject": "ab",
+      "flags": "",
+      "mode": "region-first",
+      "argument": "0,1,0,1"
+    },
+    {
+      "area": "region",
+      "pattern": "a",
+      "subject": "ba",
+      "flags": "",
+      "mode": "region-matches",
+      "argument": "1,2,0,1"
+    },
+    {
+      "area": "region",
+      "pattern": "a",
+      "subject": "ba",
+      "flags": "",
+      "mode": "region-looking-at",
+      "argument": "1,2,0,1"
     }
   ],
   "answers": [
@@ -2649,6 +2961,547 @@
         [
           0,
           4
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            1
+          ]
+        ],
+        [
+          [
+            2,
+            2
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            3
+          ]
+        ],
+        [
+          [
+            3,
+            3
+          ]
+        ],
+        [
+          [
+            4,
+            4
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            1,
+            1
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            0
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            2
+          ]
+        ],
+        [
+          [
+            2,
+            2
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            1,
+            2
+          ]
+        ],
+        [
+          [
+            2,
+            3
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            1,
+            2
+          ]
+        ],
+        [
+          [
+            2,
+            3
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            1
+          ],
+          [
+            0,
+            1
+          ],
+          null
+        ],
+        [
+          [
+            1,
+            2
+          ],
+          null,
+          [
+            1,
+            2
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            2
+          ],
+          [
+            1,
+            2
+          ],
+          [
+            0,
+            1
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            1
+          ],
+          [
+            1,
+            1
+          ]
+        ],
+        [
+          [
+            2,
+            2
+          ],
+          [
+            2,
+            2
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            3,
+            4
+          ],
+          [
+            2,
+            3
+          ]
+        ],
+        [
+          [
+            7,
+            8
+          ],
+          [
+            6,
+            7
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            2,
+            3
+          ],
+          [
+            2,
+            3
+          ]
+        ],
+        [
+          [
+            6,
+            7
+          ],
+          [
+            6,
+            7
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            1
+          ],
+          [
+            0,
+            1
+          ],
+          [
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            1,
+            2
+          ],
+          [
+            1,
+            2
+          ],
+          [
+            1,
+            2
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            1,
+            2
+          ],
+          [
+            1,
+            2
+          ]
+        ],
+        [
+          [
+            3,
+            4
+          ],
+          [
+            3,
+            4
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            1,
+            2
+          ]
+        ],
+        [
+          [
+            12,
+            13
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            1,
+            1
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "offset",
+      "message": "split-pair offset 1",
+      "driver_error": true
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            4
+          ]
+        ],
+        [
+          [
+            4,
+            6
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          4,
+          6
+        ],
+        [
+          4,
+          6
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          1,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          4,
+          5
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          1,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          1,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          1,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          1,
+          2
         ]
       ]
     }

@@ -272,6 +272,9 @@ static void dump_operands(
       fprintf(out, "%s next=%u", look_name(inst->mode), inst->y);
       if (grx_program_look_span(program, inst->x, &min, &max)) {
         fprintf(out, " forward=%zu..%zu", min, max);
+        if (inst->flags & GRX_INST_LOOK_NEAREST) {
+          fputs(" nearest", out);
+        }
       }
       break;
     }

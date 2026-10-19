@@ -468,8 +468,9 @@ each measured rather than derived:
 | `NONE` | no lookbehind | POSIX, GNU, RE2, Rust, Emacs |
 | `FIXED` | every alternative the same fixed length | Python |
 | `FIXED_PER_ALTERNATIVE` | each alternative fixed, alternatives may differ | Perl before 5.30; Ruby; Tcl (**probe**) |
-| `BOUNDED` | finite maximum length | Perl 5.30+ (experimental, 255), PCRE2 10.43+ (`max_varlookbehind`, default 255), Java |
+| `BOUNDED` | finite maximum length | Perl 5.30+ (experimental, 255), PCRE2 10.43+ (`max_varlookbehind`, default 255) |
 | `UNBOUNDED` | any length; matched right to left | ECMAScript, .NET, Vim |
+| `JAVA` | unbounded length; forward matching from candidate starts, nearest first | Java |
 
 This axis does two things, and the second was added when the first turned out
 not to be enough. It is still the *parse-time* restriction that makes the
@@ -483,6 +484,8 @@ lookbehind models** runs the body ([design.md](design.md) §3.5.2):
   furthest back first, and requires it to arrive exactly where the assertion
   stands. Perl, PCRE2. Affordable *because* the dialect bounds the variation:
   the candidate starts number `max - min + 1`, which that bound caps at 256.
+- `JAVA` also runs the body forwards, but tries the nearest start first and
+  accepts unbounded length. The normal execution step limit bounds the scan.
 
 The two are not interchangeable. Which candidate wins, what a capture inside
 a variable-length body holds, and whether `(*ACCEPT)` has anywhere to stop

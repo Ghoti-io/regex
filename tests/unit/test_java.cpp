@@ -8,6 +8,7 @@
  */
 
 #include <cstring>
+#include <string>
 
 #include "test_helpers.h"
 
@@ -41,6 +42,78 @@ bool matches_java(const char * pattern, const char * subject,
   grx_match_destroy(match);
   grx_regex_free(regex);
   return result == GRX_OK && matched;
+}
+
+std::string search_all_java(const char * pattern, const char * subject,
+    size_t length, size_t begin = 0) {
+  GRX_Regex * regex = nullptr;
+  GRX_Error error;
+  if (grx_regex_compile_with_allocator(pattern, std::strlen(pattern),
+          GRX_SYNTAX_JAVA, GRX_OPT_NONE, nullptr, nullptr, &error,
+          &regex) != GRX_OK) return "compile";
+  GRX_Match * match = nullptr;
+  if (grx_match_create(regex, nullptr, &match) != GRX_OK) {
+    grx_regex_free(regex);
+    return "create";
+  }
+  std::string out;
+  int matched = 0;
+  GRX_SearchOptions options;
+  grx_search_options_default(&options);
+  options.begin = begin;
+  GRX_Result result = grx_regex_search_ex(regex, subject, length, &options,
+      match, &matched);
+  for (int guard = 0; result == GRX_OK && matched && guard < 32; guard++) {
+    if (!out.empty()) out += " ";
+    for (size_t i = 0; i < grx_match_count(match); i++) {
+      if (i) out += ",";
+      GRX_Capture capture;
+      grx_match_group(match, i, &capture);
+      if (capture.start == GRX_NPOS) out += "-";
+      else out += std::to_string(capture.start) + ":"
+          + std::to_string(capture.end);
+    }
+    result = grx_regex_search_next(regex, subject, length, &options,
+        match, &matched);
+  }
+  grx_match_destroy(match);
+  grx_regex_free(regex);
+  return result == GRX_OK && !matched ? out : "error";
+}
+
+std::string anchored_java(const char * pattern, const char * subject,
+    size_t length, size_t begin, size_t end, bool whole) {
+  GRX_Regex * regex = nullptr;
+  GRX_Error error;
+  uint32_t flags = GRX_OPT_ANCHORED | (whole ? GRX_OPT_ANCHORED_END : 0);
+  if (grx_regex_compile_with_allocator(pattern, std::strlen(pattern),
+          GRX_SYNTAX_JAVA, flags, nullptr, nullptr, &error,
+          &regex) != GRX_OK) return "compile";
+  GRX_Match * match = nullptr;
+  if (grx_match_create(regex, nullptr, &match) != GRX_OK) {
+    grx_regex_free(regex);
+    return "create";
+  }
+  GRX_SearchOptions options;
+  grx_search_options_default(&options);
+  options.begin = begin;
+  options.end = end;
+  int matched = 0;
+  GRX_Result result = grx_regex_search_ex(regex, subject, length, &options,
+      match, &matched);
+  std::string out = result == GRX_OK ? matched ? "match" : "nomatch" : "error";
+  if (result == GRX_OK && matched) {
+    for (size_t i = 0; i < grx_match_count(match); i++) {
+      GRX_Capture capture;
+      grx_match_group(match, i, &capture);
+      out += capture.start == GRX_NPOS ? " -" : " "
+          + std::to_string(capture.start) + ":"
+          + std::to_string(capture.end);
+    }
+  }
+  grx_match_destroy(match);
+  grx_regex_free(regex);
+  return out;
 }
 
 } // namespace
@@ -177,6 +250,129 @@ TEST(JavaProperties, CharacterWhitespaceDiffersFromUnicodeWhiteSpace) {
   EXPECT_TRUE(matches_java("\\p{javaLowerCase}", "\xCA\x95"));
   EXPECT_TRUE(matches_java("\\p{javaLowerCase}", "\xF0\x90\x90\xA8"));
   EXPECT_TRUE(matches_java("\\p{javaDigit}", "\xF0\x9D\x9F\x8E"));
+}
+
+TEST(JavaSearch, EmptyProgressAndPreviousEndAnchor) {
+  EXPECT_EQ(search_all_java("", "ab", 2), "0:0 1:1 2:2");
+  EXPECT_EQ(search_all_java("a*", "baac", 4),
+      "0:0 1:3 3:3 4:4");
+  EXPECT_EQ(search_all_java("\\Ga*", "baac", 4), "0:0");
+  EXPECT_EQ(search_all_java("\\Ga*", "aab", 3), "0:2 2:2");
+  EXPECT_EQ(search_all_java("(?:\\Ga|b)", "cba", 3), "1:2 2:3");
+  EXPECT_EQ(search_all_java("\\Ga*", "cbaa", 4, 1), "1:1");
+}
+
+TEST(JavaSearch, RetainsCapturesAndChoosesNearestLookbehindStart) {
+  EXPECT_EQ(search_all_java("(a*)*", "bc", 2),
+      "0:0,0:0 1:1,1:1 2:2,2:2");
+  EXPECT_EQ(search_all_java("((a)|b)+", "ab", 2),
+      "0:2,1:2,0:1");
+  EXPECT_EQ(search_all_java("(?<=(a+))b", "aaabaaab", 8),
+      "3:4,2:3 7:8,6:7");
+  EXPECT_EQ(search_all_java("(?=(a))a|(b)", "ab", 2),
+      "0:1,0:1,- 1:2,-,1:2");
+  EXPECT_EQ(search_all_java("(?<=a(?=(b)))b", "abab", 4),
+      "1:2,1:2 3:4,3:4");
+  EXPECT_EQ(search_all_java("(?<!a{2,})b", "ab aab aaab b", 13),
+      "1:2 12:13");
+  const char * subject = "\xF0\x9F\x98\x80\xC3\xA9";
+  EXPECT_EQ(search_all_java(".", subject, 6), "0:4 4:6");
+}
+
+TEST(JavaSearch, AnchoredAndRepresentableRegionOperations) {
+  EXPECT_EQ(anchored_java("(?=a)(a*)", "a", 1, 0, 1, true),
+      "match 0:1 0:1");
+  EXPECT_EQ(anchored_java("(?:)", "", 0, 0, 0, true), "match 0:0");
+  EXPECT_EQ(anchored_java("(?=a)a", "a", 1, 0, 1, true), "match 0:1");
+  EXPECT_EQ(anchored_java("(?=a)(a*)", "ab", 2, 0, 2, false),
+      "match 0:1 0:1");
+  EXPECT_EQ(anchored_java("(?=a)", "abc", 3, 0, 3, false),
+      "match 0:0");
+  EXPECT_EQ(anchored_java("(?<=a)b", "ab", 2, 0, 2, false), "nomatch");
+  EXPECT_EQ(anchored_java("a", "ba", 2, 1, 2, true), "match 1:2");
+  EXPECT_EQ(anchored_java("a", "ba", 2, 1, 2, false), "match 1:2");
+}
+
+TEST(JavaSearch, UnboundedLookbehindHonorsStepLimit) {
+  GRX_Regex * regex = nullptr;
+  GRX_Error error;
+  const char * pattern = "(?<=(a+))b";
+  ASSERT_EQ(grx_regex_compile_with_allocator(pattern, std::strlen(pattern),
+                GRX_SYNTAX_JAVA, GRX_OPT_NONE, nullptr, nullptr, &error,
+                &regex), GRX_OK);
+  GRX_Match * match = nullptr;
+  ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+  GRX_Limits limits;
+  grx_limits_default(&limits);
+  limits.max_steps = 1;
+  GRX_SearchOptions options;
+  grx_search_options_default(&options);
+  options.engine = GRX_ENGINE_BACKTRACK;
+  options.limits = &limits;
+  int matched = 0;
+  EXPECT_EQ(grx_regex_search_ex(regex, "ab", 2, &options, match, &matched),
+      GRX_ERR_LIMIT);
+  EXPECT_GT(grx_match_steps(match), 0u);
+  grx_match_destroy(match);
+  grx_regex_free(regex);
+}
+
+TEST(JavaSearch, CostlyLookbehindRemainsBounded) {
+  const char * pattern = "(?<=((a+)+)b)b";
+  GRX_Regex * regex = nullptr;
+  GRX_Error error;
+  ASSERT_EQ(grx_regex_compile_with_allocator(pattern, std::strlen(pattern),
+                GRX_SYNTAX_JAVA, GRX_OPT_NONE, nullptr, nullptr, &error,
+                &regex), GRX_OK);
+  GRX_Match * match = nullptr;
+  ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+  GRX_Limits limits;
+  grx_limits_default(&limits);
+  limits.max_steps = 500;
+  GRX_SearchOptions options;
+  grx_search_options_default(&options);
+  options.engine = GRX_ENGINE_BACKTRACK;
+  options.limits = &limits;
+  std::string subject(30, 'a');
+  subject += 'b';
+  int matched = 0;
+  EXPECT_EQ(grx_regex_search_ex(regex, subject.data(), subject.size(),
+                &options, match, &matched), GRX_ERR_LIMIT);
+  EXPECT_GT(grx_match_steps(match), 0u);
+  grx_match_destroy(match);
+  grx_regex_free(regex);
+}
+
+TEST(JavaSearch, SearchWindowKeepsPhysicalAnchorsAndVisibleLookbehind) {
+  struct Row {
+    const char * pattern;
+    int expected;
+  };
+  for (const Row & row : {
+           Row {"a$", 1}, Row {"^a", 0}, Row {"\\Aa", 0},
+           Row {"(?<=b)a", 1}}) {
+    GRX_Regex * regex = nullptr;
+    ASSERT_EQ(grx_regex_compile(row.pattern, GRX_SYNTAX_JAVA, 0, &regex),
+        GRX_OK) << row.pattern;
+    GRX_Match * match = nullptr;
+    ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+    GRX_SearchOptions options;
+    grx_search_options_default(&options);
+    options.begin = 1;
+    options.end = 2;
+    int matched = 0;
+    EXPECT_EQ(grx_regex_search_ex(regex, "baX", 3, &options, match, &matched),
+        GRX_OK) << row.pattern;
+    EXPECT_EQ(matched, row.expected) << row.pattern;
+    if (matched) {
+      GRX_Capture span;
+      ASSERT_EQ(grx_match_span(match, &span), GRX_OK);
+      EXPECT_EQ(span.start, 1u);
+      EXPECT_EQ(span.end, 2u);
+    }
+    grx_match_destroy(match);
+    grx_regex_free(regex);
+  }
 }
 
 int main(int argc, char ** argv) {

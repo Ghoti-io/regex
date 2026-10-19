@@ -194,8 +194,9 @@ typedef enum {
  * 3.5.2). GRX_IR_REVERSE runs the body right to left from the current
  * position, which is what ECMA-262 describes and what lets a lookbehind of
  * *any* length cost what its body costs. This one instead tries each start
- * the body's length allows, furthest back first, and requires the body to
- * arrive exactly where the assertion stands.
+ * the body's length allows and requires the body to arrive exactly where the
+ * assertion stands. Perl/PCRE2 try furthest back first; Java tries nearest
+ * first.
  *
  * The two differ in three observable places, all of them in the corpus:
  * which candidate a variable-length body prefers - Perl takes the longest,
@@ -203,11 +204,8 @@ typedef enum {
  * a capture inside such a body holds, and where `(*ACCEPT)` can end it,
  * since running forwards there is a place for the verb to stop.
  *
- * It is affordable only because a dialect that wants it also bounds the
- * body's variation: GRX_IR::max_variable_lookbehind caps the number of
- * candidate starts at 256, so the assertion stays linear in the subject
- * rather than becoming quadratic. That is why the model follows
- * GRX_LookbehindLimit and is not a free choice.
+ * Bounded dialects cap the body's variation; Java uses an unbounded span
+ * with nearest-first enumeration under the execution step limit.
  *
  * Set on the LOOK node; the body is *not* marked GRX_IR_REVERSE. `a` names
  * the body's byte length in GRX_IR::look_spans, filled in by the analysis
@@ -215,6 +213,8 @@ typedef enum {
  * is empty until then.
  */
 #define GRX_IR_LOOK_FORWARD GRX_BIT(4)
+/** @brief LOOK: enumerate candidate starts nearest the assertion first. */
+#define GRX_IR_LOOK_NEAREST GRX_BIT(7)
 
 /**
  * @brief LOOK: a negative one keeps what its body captured before failing.

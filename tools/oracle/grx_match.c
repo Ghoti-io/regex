@@ -227,6 +227,8 @@ int main(int argc, char ** argv) {
     return 2;
   }
   int find_all = argc > 3 && strcmp(argv[3], "all") == 0;
+  int looking_at = argc > 3 && strcmp(argv[3], "looking-at") == 0;
+  int matches = argc > 3 && strcmp(argv[3], "matches") == 0;
   int tracing = (argc > 2 && strcmp(argv[2], "callout") == 0)
       || (argc > 3 && strcmp(argv[3], "callout") == 0);
   GRX_Engine engine = GRX_ENGINE_AUTO;
@@ -345,6 +347,12 @@ int main(int argc, char ** argv) {
             break;
           default: break;
         }
+      }
+    }
+    if (looking_at || matches) {
+      options |= GRX_OPT_ANCHORED;
+      if (matches) {
+        options |= GRX_OPT_ANCHORED_END;
       }
     }
 

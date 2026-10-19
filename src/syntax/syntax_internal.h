@@ -102,17 +102,17 @@ typedef enum {
 /**
  * @brief How long a lookbehind body a dialect will accept.
  *
- * A *parse-time* restriction only: the engine implements UNBOUNDED
- * (documentation/design.md section 3.5.2), and this is what makes the library
- * reject what the reference would reject rather than accepting more than the
- * dialect does.
+ * The first five values limit accepted lengths. JAVA also selects the
+ * forward candidate-start model, nearest start first, while allowing an
+ * unbounded body under the ordinary execution step limit.
  */
 typedef enum {
   GRX_LOOKBEHIND_NONE = 0,          ///< No lookbehind. POSIX, RE2, Rust.
   GRX_LOOKBEHIND_FIXED,             ///< One fixed length overall. Python.
   GRX_LOOKBEHIND_FIXED_PER_BRANCH,  ///< Each alternative fixed. Ruby.
-  GRX_LOOKBEHIND_BOUNDED,           ///< Finite maximum. PCRE2, Java.
+  GRX_LOOKBEHIND_BOUNDED,           ///< Finite maximum. PCRE2, Perl.
   GRX_LOOKBEHIND_UNBOUNDED,         ///< Any length. ECMAScript, .NET.
+  GRX_LOOKBEHIND_JAVA,              ///< Unbounded, nearest candidate first.
   GRX_LOOKBEHIND_LIMIT_COUNT        ///< Closes the enum; not a constraint.
 } GRX_LookbehindLimit;
 

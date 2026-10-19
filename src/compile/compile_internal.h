@@ -280,6 +280,7 @@ typedef enum {
  * ordinary sub-program that happens to run backwards.
  */
 #define GRX_INST_REVERSE GRX_BIT(0)
+#define GRX_INST_LOOK_NEAREST GRX_BIT(7)
 
 /**
  * @brief This SPLIT is one arm of an alternation, not a quantifier's.

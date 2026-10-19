@@ -2657,10 +2657,11 @@ static GRX_Result lower_repeat(
  *
  * The dialect's own bound decides it, because the bound is what pays for it:
  * a candidate-start loop tries every start the body's length allows, and
- * only a dialect that caps the *variation* caps that loop
+ * a dialect that caps the *variation* caps that loop
  * (documentation/design.md section 3.5.2). ECMAScript's lookbehind is
  * unbounded, so it keeps the reverse model, which costs what the body costs
- * however far back the body reaches.
+ * however far back the body reaches. Java instead tries starts nearest first
+ * through the forward model; the execution step limit bounds that scan.
  *
  * A non-atomic lookbehind keeps the reverse model whatever the dialect says.
  * It is inlined rather than run as a sub-match - that is the whole of what
@@ -2674,7 +2675,8 @@ static GRX_Result lower_repeat(
  */
 static int look_runs_forward(const Lowering * low, GRX_LookKind kind) {
   return kind != GRX_LOOK_BEHIND_NON_ATOMIC
-      && low->profile.lookbehind == GRX_LOOKBEHIND_BOUNDED;
+      && (low->profile.lookbehind == GRX_LOOKBEHIND_BOUNDED
+          || low->profile.lookbehind == GRX_LOOKBEHIND_JAVA);
 }
 
 /** Lower a lookaround, choosing which way its body runs. */
@@ -2709,6 +2711,9 @@ static GRX_Result lower_look(
   }
   if (forward) {
     look->flags |= GRX_IR_LOOK_FORWARD;
+    if (low->profile.lookbehind == GRX_LOOKBEHIND_JAVA) {
+      look->flags |= GRX_IR_LOOK_NEAREST;
+    }
     // The span itself is not knowable yet - measuring a subtree is the
     // analysis pass's job, and the subtree does not exist until below. What
     // is set here is the claim that it will be measured.

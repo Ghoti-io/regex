@@ -1461,16 +1461,15 @@ static int return_from_call(
  * right sub-program; what the assertion adds is the choice of where it
  * begins and the requirement that it arrive exactly here.
  *
- * Furthest back first, which is the order the reference tries and the one
+ * Furthest back first for Perl/PCRE2, which is the order those references
+ * try and the one
  * that settles `(?=foo)(?<=(a??))` against "afoo": the body is lazy and
  * would rather match nothing, but the *assertion* prefers the longest, so
  * Perl reports group one as "a" and running the body in reverse reports it
  * empty.
  *
- * The loop is bounded by `max - min`, not by how far back `max` reaches: a
- * body of one length has one candidate however long it is. That bound is
- * the dialect's - 255 bytes of variation for PCRE2 and Perl, checked at
- * compile time - and it is what keeps an assertion from costing the subject.
+ * Java tries nearest starts first; its unbounded loop is charged to the
+ * ordinary execution step limit. Perl/PCRE2 cap variation at 255 bytes.
  *
  * A start that falls inside a character is not filtered out. It does not
  * need to be: UTF-8 decoding refuses a continuation byte in lead position,
@@ -1487,7 +1486,8 @@ static int return_from_call(
  * @return Non-zero when some start matched.
  */
 static int look_behind_forward(Backtrack * bt, uint32_t body, size_t position,
-    size_t min, size_t max, const size_t * before, size_t * out_end) {
+    size_t min, size_t max, int nearest, const size_t * before,
+    size_t * out_end) {
   size_t available = position - bt->window_start;
   size_t reach = max < available ? max : available;
   if (reach < min) {
@@ -1509,7 +1509,8 @@ static int look_behind_forward(Backtrack * bt, uint32_t body, size_t position,
 
   size_t floor = bt->depth;
   int matched = 0;
-  for (size_t back = reach;; back--) {
+  for (size_t back = nearest ? min : reach;;
+      back = nearest ? back + 1 : back - 1) {
     restore_spans(bt, before);
     bt->depth = floor;
     matched = run(bt, body, position - back, floor, 0, out_end);
@@ -1524,7 +1525,7 @@ static int look_behind_forward(Backtrack * bt, uint32_t body, size_t position,
     if (bt->verb_stop != VERB_NONE) {
       break;
     }
-    if (back == min) {
+    if (back == (nearest ? reach : min)) {
       break;
     }
   }
@@ -1881,7 +1882,8 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
         }
         if (grx_program_look_span(bt->program, inst->x, &min, &max)) {
           body_matched = look_behind_forward(
-              bt, pc + 1, position, min, max, before, &end);
+              bt, pc + 1, position, min, max,
+              (inst->flags & GRX_INST_LOOK_NEAREST) != 0, before, &end);
         }
         else {
           size_t outer_look_end = bt->look_end;

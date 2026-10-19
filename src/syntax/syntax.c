@@ -905,7 +905,10 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     .subject_is_text = 1,
   },
   [GRX_SYNTAX_JAVA] = {
-    .lookbehind = GRX_LOOKBEHIND_UNBOUNDED,
+    .lookbehind = GRX_LOOKBEHIND_JAVA,
+    .empty_loop = GRX_EMPTY_LOOP_BREAK,
+    .iteration = GRX_ITERATE_ADVANCE_ONE,
+    .search_start = GRX_SEARCH_START_PREVIOUS_END,
     .dollar = GRX_DOLLAR_BEFORE_FINAL_NEWLINE,
     .newlines = GRX_NEWLINES_ANY,
     .shorthands = GRX_SHORTHANDS_ASCII,

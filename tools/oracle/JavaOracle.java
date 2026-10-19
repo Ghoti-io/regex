@@ -86,6 +86,16 @@ public final class JavaOracle {
         return out.append(']').toString();
     }
 
+    private static int charIndex(String subject, int byteOffset) {
+        for (int i = 0; i <= subject.length(); i++) {
+            if (i > 0 && i < subject.length()
+                && Character.isHighSurrogate(subject.charAt(i - 1))
+                && Character.isLowSurrogate(subject.charAt(i))) continue;
+            if (byteIndex(subject, i) == byteOffset) return i;
+        }
+        throw new IllegalArgumentException("invalid byte offset");
+    }
+
     private static int flags(String letters) {
         int out = 0;
         for (int i = 0; i < letters.length(); i++) {
@@ -112,8 +122,9 @@ public final class JavaOracle {
         String flagText = decode(fields[2]), subject = decode(fields[3]);
         String argument = decode(fields[4]);
         switch (mode) {
-            case "compile", "first", "all", "find-from", "matches", "ranges",
-                 "looking-at", "replace-all", "replace-first", "split" -> { }
+            case "compile", "first", "all", "all-from", "find-from", "matches", "ranges",
+                 "looking-at", "region-first", "region-all", "region-matches",
+                 "region-looking-at", "replace-all", "replace-first", "split" -> { }
             default -> throw new IllegalArgumentException("unknown mode " + mode);
         }
         Pattern compiled;
@@ -124,6 +135,15 @@ public final class JavaOracle {
                 + ",\"description\":" + quoted(e.getDescription()) + "}";
         }
         Matcher matcher = compiled.matcher(subject);
+        if (mode.startsWith("region-")) {
+            String[] controls = argument.split(",", -1);
+            if (controls.length != 4) throw new IllegalArgumentException("invalid region controls");
+            int begin = charIndex(subject, Integer.parseInt(controls[0]));
+            int end = charIndex(subject, Integer.parseInt(controls[1]));
+            matcher.region(begin, end);
+            matcher.useTransparentBounds(controls[2].equals("1"));
+            matcher.useAnchoringBounds(controls[3].equals("1"));
+        }
         switch (mode) {
             case "compile": return "{\"kind\":\"compile\"}";
             case "ranges": {
@@ -143,35 +163,33 @@ public final class JavaOracle {
                 }
                 return out.append("]}").toString();
             }
-            case "first":
+            case "first", "region-first":
                 return matcher.find() ? "{\"kind\":\"match\",\"groups\":"
                     + spans(matcher, subject) + "}" : "{\"kind\":\"nomatch\"}";
-            case "all": {
+            case "all", "all-from", "region-all": {
                 StringBuilder out = new StringBuilder("{\"kind\":\"all\",\"matches\":[");
                 boolean comma = false;
-                while (matcher.find()) {
+                boolean found = mode.equals("all-from")
+                    ? matcher.find(charIndex(subject, Integer.parseInt(argument)))
+                    : matcher.find();
+                while (found) {
                     if (comma) out.append(',');
                     comma = true;
                     out.append(spans(matcher, subject));
+                    found = matcher.find();
                 }
                 return out.append("]}").toString();
             }
             case "find-from": {
-                int byteOffset = Integer.parseInt(argument);
-                int offset = -1;
-                for (int i = 0; i <= subject.length(); i++) {
-                    if (i > 0 && i < subject.length()
-                        && Character.isHighSurrogate(subject.charAt(i - 1))
-                        && Character.isLowSurrogate(subject.charAt(i))) continue;
-                    if (byteIndex(subject, i) == byteOffset) { offset = i; break; }
-                }
-                if (offset < 0) throw new IllegalArgumentException("invalid byte offset");
+                int offset = charIndex(subject, Integer.parseInt(argument));
                 return matcher.find(offset) ? "{\"kind\":\"match\",\"groups\":"
                     + spans(matcher, subject) + "}" : "{\"kind\":\"nomatch\"}";
             }
             case "matches":
-            case "looking-at": {
-                boolean found = mode.equals("matches") ? matcher.matches() : matcher.lookingAt();
+            case "looking-at":
+            case "region-matches":
+            case "region-looking-at": {
+                boolean found = mode.endsWith("matches") ? matcher.matches() : matcher.lookingAt();
                 return found ? "{\"kind\":\"match\",\"groups\":"
                     + spans(matcher, subject) + "}" : "{\"kind\":\"nomatch\"}";
             }
@@ -209,6 +227,7 @@ public final class JavaOracle {
                     || message.startsWith("expected five fields")
                     || message.startsWith("unknown flag")
                     || message.startsWith("unknown mode")
+                    || message.startsWith("invalid region controls")
                     || message.startsWith("invalid byte offset") ? "input"
                     : line.startsWith("replace-all\t")
                     || line.startsWith("replace-first\t") ? "template" : "runtime";

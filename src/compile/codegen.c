@@ -1743,15 +1743,10 @@ static GRX_Result gen_call(Codegen * codegen, const GRX_IRNode * node) {
 /**
  * Copy a forward lookbehind's body length into the program.
  *
- * The number of candidate starts the engine will try is `max - min + 1`, and
- * lowering only chose this model for a dialect that caps that at 256
- * (documentation/design.md section 3.5.2). An unbounded span here would
- * uncap it, so the pattern is refused as the variable-length lookbehind it
- * is rather than compiled into a loop with nothing to stop it. compile.c's
- * own check catches every body whose *variation* is unmeasurable and every
- * one whose variation is merely too large, so what is left for this to catch
- * is the body whose two ends both saturate - a length no subject could
- * reach, and one no bounded dialect should accept for being nominally fixed.
+ * Bounded dialects cap candidate-start variation at 256. Java permits an
+ * unbounded span and enumerates nearest starts under the execution step
+ * limit. Other unbounded spans here are refused because they have not
+ * selected that model.
  */
 static GRX_Result gen_look_span(
     Codegen * codegen, const GRX_IRNode * node, uint32_t * out_offset) {
@@ -1760,7 +1755,8 @@ static GRX_Result gen_look_span(
   if (!grx_ir_look_span(codegen->ir, node->a, &min, &max)) {
     return fail(codegen, GRX_DIAG_INTERNAL, node);
   }
-  if (max == GRX_NPOS || min > max) {
+  if ((max == GRX_NPOS && !(node->flags & GRX_IR_LOOK_NEAREST))
+      || (max != GRX_NPOS && min > max)) {
     return fail(codegen, GRX_DIAG_VARIABLE_LOOKBEHIND, node);
   }
 
@@ -1810,6 +1806,9 @@ static GRX_Result gen_look_step(Codegen * codegen, GenFrame * frame,
           marked->flags |= (node->flags & GRX_IR_LOOK_CONDITION)
               ? GRX_INST_COND_ELSE : 0u;
         }
+      }
+      if (node->flags & GRX_IR_LOOK_NEAREST) {
+        grx_program_at(codegen->program, look)->flags |= GRX_INST_LOOK_NEAREST;
       }
       frame->u.look.mark = look;
 

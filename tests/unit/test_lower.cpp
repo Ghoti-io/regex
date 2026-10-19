@@ -701,6 +701,15 @@ TEST(Lower, WhichLookbehindModelIsTheDialectsAndNotTheEngines) {
   EXPECT_NE(perl.disassembly().find("forward=1..3"), std::string::npos)
       << perl.disassembly();
 
+  Compiled java("(?<=(a+))b", "", nullptr, GRX_SYNTAX_JAVA);
+  ASSERT_TRUE(java.ok());
+  EXPECT_NE(java.disassembly().find("forward=1.."), std::string::npos)
+      << java.disassembly();
+  EXPECT_NE(java.disassembly().find("nearest"), std::string::npos)
+      << java.disassembly();
+  EXPECT_EQ(perl.disassembly().find("nearest"), std::string::npos)
+      << perl.disassembly();
+
   // Both answer the assertion the same way when the body has one length to
   // find. The models are only distinguishable where the body has several.
   EXPECT_EQ(spans(ecma, "aab"), "2:3");
