@@ -202,6 +202,8 @@ run_case perl_extract 0 ""
 run_case perl_extract 0 "" '(?<k>\w+)=(?<v>\S+)' 'a=1 b=2'
 run_case perl_extract 0 "" --perl '(?<k>\w+)=(?<v>\S+)' 'a=1 b=2'
 
+run_case java_named 0 ""
+
 run_case linear_guarantee 0 ""
 run_case linear_guarantee 0 "" 'a(b*)c' 'abbc'
 run_case linear_guarantee 0 "" --rust 'a(b*)c' 'abbc'

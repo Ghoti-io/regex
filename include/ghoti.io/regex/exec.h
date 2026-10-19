@@ -44,10 +44,8 @@
  * gets GRX_ERR_UNSUPPORTED for a pattern it cannot run, rather than silently
  * getting the engine that can hang.
  *
- * Status: all three are built. The constructs none of them runs yet -
- * conditionals, recursion and the backtracking control verbs - compile and
- * are then refused, rather than being ignored: a plausible wrong answer is
- * worse than no answer.
+ * The engines run the constructs their facts permit. A caller can select one
+ * explicitly to require its guarantee; unsupported combinations are refused.
  */
 
 #ifndef GHOTI_IO_GRX_EXEC_H
@@ -115,8 +113,12 @@ typedef enum {
 /**
  * @brief The span one capturing group matched.
  *
- * Both offsets are byte offsets into the subject. A group that did not
- * participate in the match has both set to GRX_NPOS, which is distinct from a
+ * Both offsets are byte offsets into the subject, which need not be UTF-8 in
+ * byte-mode dialects. Java Matcher reports UTF-16 code-unit indices, so its
+ * indices cannot be used here without conversion. A Java match boundary
+ * inside a surrogate pair cannot be represented in this API, and
+ * lone-surrogate subjects cannot be supplied as valid UTF-8. A group that
+ * did not participate in the match has both set to GRX_NPOS, distinct from a
  * group that matched the empty string (`start == end`, both valid).
  */
 typedef struct GRX_Capture {

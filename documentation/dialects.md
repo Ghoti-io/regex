@@ -14,15 +14,16 @@ replaces
 ## 1. What is implemented
 
 Eighteen dialects are named in `GRX_Syntax`, so the enum does not move when
-one of them is added. Twelve have completed conformance; Java now has a
-parser, with matching and operation conformance still in progress.
+one of them is added. Twelve have completed conformance; Java has an
+implemented parser and operations, with its completion evidence tracked in
+[work-packages.md](work-packages.md#java-readiness-evidence).
 
 | Dialects | Status |
 | --- | --- |
 | **ECMAScript**, **PCRE2**, **Perl**, **Python**, **Vim**, **POSIX BRE/ERE**, **GNU BRE/ERE** | Implemented. Each has an oracle on this machine. |
 | **RE2**, **Rust** | Implemented, WP-34 and WP-35. Each has a pinned oracle: Go 1.25.14's `regexp` and the `regex` crate 1.13.1. They are the two dialects where a *refusal* is the guarantee - no backreference, no lookaround, so a pattern accepted here is one `GRX_ENGINE_PIKE` will run. |
 | **I-Regexp** (RFC 9485) | Implemented. The only one whose references are not implementations *of it*: an ABNF is the authority, and two programs answer its two halves (§10). |
-| **Java** | JDK 25 pattern syntax is parsed and replacement templates are implemented. Unicode, matching, iteration and split conformance remain in progress. |
+| **Java** | JDK 25.0.4.1+1 syntax, matching, iteration, replacement and split are implemented. The committed 136-vector corpus passes; this is a bounded result, not complete Java conformance. JDK 27+35 observations are separate. |
 | .NET, Ruby, Tcl, Emacs, RE/flex | Not implemented. Selecting one is `GRX_ERR_UNSUPPORTED` with `GRX_DIAG_DIALECT_NOT_IMPLEMENTED`, never a silent fallback to another dialect. |
 
 A pattern accepted under `GRX_SYNTAX_RE2`, once that dialect exists, is one
@@ -282,17 +283,17 @@ Each subsection is one axis of `GRX_SyntaxSpec`. The engines implement the
 *values*; the profile says which value each dialect takes. Cells marked
 **probe** are filled by WP-03 before code depends on them.
 
-**Java checkpoint (JDK 25 baseline, JDK 27 forward check):** The exact
+**Java reference (JDK 25.0.4.1+1 baseline, JDK 27+35 forward check):** The exact
 measured cases and separate outputs are in `tests/data/probe/java25.json` and
 `java27.json`. Regenerate them deliberately with
 `tools/oracle/java_probe.py --pin java25 --record` (and `java27`), then check
 both with `make check-oracle-java`. The
-Java `probe` cells in §§5.5, 5.6, 5.8, 5.9, 5.12, 5.13, 5.19, 5.21 and
-5.23 have specific measured examples there; the private working ledger
-`notes/regex/JAVA-ORACLE-LEDGER.md` maps each cell to case indices and names
-the remaining open breadth. A result for one character, flag combination
-or subject does not settle a whole Unicode set or all split limits. The
-Java dialect remains unimplemented at this checkpoint.
+Java cells in §§5.5, 5.6, 5.8, 5.9, 5.12, 5.13, 5.19, 5.21 and 5.23 have
+specific measured examples there. The generated live differentials add
+syntax, match, search, replacement and split combinations, while the
+committed conformance denominator remains 136. A result for one character,
+flag combination or subject does not settle a whole Unicode set or all
+split limits. [§6](#6-deviations) names the known support limits.
 
 ### 5.1 Match preference
 
@@ -517,13 +518,13 @@ The two rules that make `(a*)*` against `b` report different things:
 | Axis | Value | Dialects |
 | --- | --- | --- |
 | Empty iteration | `FAIL_IF_EMPTY_AFTER_MIN`: an iteration that consumes nothing, once `min` is satisfied, fails (22.2.2.3.1 RepeatMatcher step 2.b) | ECMAScript |
-| | `BREAK_ON_EMPTY`: the iteration succeeds and the loop stops | Perl, PCRE2, Python, Java (**probe**), .NET (**probe**), Ruby (**probe**) |
+| | `BREAK_ON_EMPTY`: the iteration succeeds and the loop stops | Perl, PCRE2, Python, Java (JDK 25 probe cases 0–3), .NET (**probe**), Ruby (**probe**) |
 | | `BREAK_IF_UNMOVED`: the iteration succeeds and the loop stops, but only while the *repeat* has consumed nothing; once it has, the empty iteration does not run at all | POSIX, GNU, Vim |
 | | `ALREADY_THERE`: there is no iteration rule, because the loop is not a loop the engine can enter twice at one position; it ends where the simulation has already been | RE2, Rust |
 | | `LONGEST`: irrelevant; the match is the longest, and an empty iteration adds nothing | Tcl |
 | Capture reset | `RESET_EACH_ITERATION`: captures inside the group are cleared at the **start** of every iteration (RepeatMatcher step 4) | ECMAScript |
 | | `RESET_AFTER_EACH_ITERATION`: an iteration clears, on the way **out**, the ones it did not itself set | **Perl** (probed) |
-| | `KEEP_LAST_SET`: a capture set in an earlier iteration survives if a later one does not set it | PCRE2, Python, Java (**probe**), .NET, Ruby (**probe**), RE2, Rust |
+| | `KEEP_LAST_SET`: a capture set in an earlier iteration survives if a later one does not set it | PCRE2, Python, Java (JDK 25 probe cases 2–3, 55), .NET, Ruby (**probe**), RE2, Rust |
 
 `BREAK_IF_UNMOVED` is neither of the two above it, and it took both
 references to see that. `(a*)*` against `"b"` reports group 1 as 0-0 in glibc
@@ -674,7 +675,8 @@ could follow.
 | Unset group | `MATCH_EMPTY` | ECMAScript; PCRE2 with `PCRE2_MATCH_UNSET_BACKREF` (exposed as `GRX_OPT_MATCH_UNSET_BACKREF`); Vim (`\(a\)\?\1` matches the empty string against "b") |
 | | `FAIL` | Perl, PCRE2, Python, Java, .NET, Ruby, GNU, Tcl (**probe**), Emacs (**probe**) |
 | Forward reference `\2(a)(b)` | allowed, behaves as unset | ECMAScript, Perl, PCRE2 |
-| | syntax error | Python ("invalid group reference"), Java (**probe**), RE2/Rust (no backreferences) |
+| | syntax error | Python ("invalid group reference"), RE2/Rust (no backreferences) |
+| | compiles, then fails to match when not yet set | Java (JDK 25 probe cases 5–6, 56–59) |
 | Reference to the group it is inside, `(a\1)` | allowed; reads the span the group last **closed** with | Perl, PCRE2, ECMAScript |
 | | syntax error | Python |
 
@@ -1106,7 +1108,7 @@ here.
 | Value | Rule | Dialects |
 | --- | --- | --- |
 | `RETRY_NONEMPTY_THEN_ADVANCE` | at the same position, retry refusing an empty match; if that fails, advance one character | Perl, PCRE2 (its documented `NOTEMPTY_ATSTART` loop), Python 3.7+ |
-| `ADVANCE_ONE` | advance one code point (one code unit without `u`) and search again; an empty match immediately after a non-empty one is reported | ECMAScript (`RegExpBuiltinExec` / `AdvanceStringIndex`), Java (**probe**), .NET (**probe**), Ruby (**probe**) |
+| `ADVANCE_ONE` | after an empty match, advance and search again; an empty match immediately after a non-empty one is reported | ECMAScript uses `AdvanceStringIndex`: one code unit without `u`/`v`, one code point with either flag. Java's `Matcher.find()` advances one UTF-16 code unit (JDK 25 probe cases 60–62 cover scalar subjects); this API advances over a valid UTF-8 scalar and cannot represent a boundary between surrogate halves. .NET and Ruby remain **probe**. |
 | `ADVANCE_ONE_SKIP_ABUTTING` | as above, but an empty match abutting the previous match is not reported | Go (`regexp` documentation: "empty matches abutting a preceding match are ignored", and now measured: `tools/oracle/iterate_diff.py --dialect re2`); Rust (measured, 4,200 rows - the cell held Go's value copied across with nothing asking the crate) |
 | `ADVANCE_ONE_STOP_AT_END` | a match reaching the end of the subject ends the loop, and the search goes on from the previous match's end - where that finds the span just reported, it advances one character rather than reporting it twice | Vim |
 
@@ -1332,7 +1334,7 @@ never reaches it. Here the backslash is dropped.
 
 | Rule | POSIX/GNU | Perl/PCRE2 | ECMAScript | Python | Java | Ruby | RE2/Rust |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `]` first is a literal | yes | yes | no: `[]` is empty, `[^]` is everything | yes | **probe** | yes, with a warning | yes |
+| `]` first is a literal | yes | yes | no: `[]` is empty, `[^]` is everything | yes | yes (JDK 25 probe cases 15, 47) | yes, with a warning | yes |
 | Backslash inside brackets | literal | escape | escape | escape | escape | escape | escape |
 | `-` literal at the ends | yes | yes | yes (legacy); `u`: yes; `v`: must be escaped | yes | yes | yes | yes |
 | Class escape as a range endpoint, `[\d-z]` | n/a | PCRE2: error; Perl: `-` literal, with a warning | legacy: union; `u`: error | error (probed: Python 3.14.7 raises) | error | **probe** | error |
@@ -1346,8 +1348,8 @@ never reaches it. Here the backslash is dropped.
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `{,n}` | BRE: literal; ERE: undefined (glibc: literal) | `{0,n}` (Perl 5.34+, PCRE2 10.43+) | legacy: literal; `u`: error | `{0,n}` | error | `{0,n}` | RE2: literal (`a{,3}` matches the five characters); Rust: **error** (measured - the crate refuses the pattern, so the two part here) |
 | `{` not starting a valid quantifier | literal | literal | legacy: literal; `u`: error | literal | error | literal | literal (RE2); error (Rust) |
-| `a**`, `a+*` | GNU: allowed | error | error | error | **probe** | allowed with warning | error |
-| Quantifier on an assertion | ERE: error, for every anchor; BRE: a `*` after one is a literal asterisk (§5.18) | error (`(?=a)*`) | legacy: lookahead is quantifiable; `u`: error | error | **probe** | error | n/a |
+| `a**`, `a+*` | GNU: allowed | error | error | error | `a**` error (JDK 25 probe case 18); `a+*` unmeasured | allowed with warning | error |
+| Quantifier on an assertion | ERE: error, for every anchor; BRE: a `*` after one is a literal asterisk (§5.18) | error (`(?=a)*`) | legacy: lookahead is quantifiable; `u`: error | error | `(?=a)*` accepted (JDK 25 probe case 19); other assertions unmeasured | error | n/a |
 | Possessive spelling | - | `*+ ++ ?+ {m,n}+` | - | same (3.11+) | same | same | - |
 | Lazy spelling | - | `*? +? ?? {m,n}?` | same | same | same | same | same |
 | Nothing to repeat: `*a`, `(*a)` | BRE: literal `*` at start; ERE: undefined (glibc: error) | error | error | error | error | error | error |
@@ -1614,9 +1616,10 @@ trailing *fields* and leaves a trailing capture standing, so
 *no limit* where ECMAScript's `limit` of 0 means no pieces at all - two
 functions whose zero means opposite things.
 
-Java's and Go's cells stay **probe** because neither toolchain is on the
-machine this was measured on, and a cell copied out of their documentation is
-what the first two rows of this table used to be.
+Java's split cells are measured separately against the digest-pinned JDK 25
+image in `tests/data/probe/java25.json` and the generated split differential.
+The older Perl/Python report did not measure Java. Go's cells in that report
+also remain separate from the later pinned Go differential.
 
 Splitting is reachable from every dialect that compiles - ECMAScript, Perl,
 PCRE2, and the POSIX and GNU rows - and an earlier version of this section
@@ -1916,7 +1919,10 @@ answer.
 
 | Dialect | Deviation | Reason | Reported as |
 | --- | --- | --- | --- |
-| all | Offsets are UTF-8 byte offsets | [design.md](design.md) §2 | - |
+| all | Offsets are byte offsets; byte-mode inputs need not be UTF-8 | [design.md](design.md) §2 | - |
+| Java | JDK `Pattern.LITERAL` and `Pattern.CANON_EQ` cases are excluded from the Java match differential, not counted as passes | The Java differential has no checked C flag mapping for these modes. The generic `GRX_OPT_LITERAL` exists, but has not been established as a complete JDK `Pattern.LITERAL` equivalent; there is no `CANON_EQ` option | Excluded from the published comparison |
+| Java | Five `Matcher.region()` `region-first` rows with anchoring or transparent bounds are excluded from the search differential, not counted as passes | This API's `begin` only restricts where a match starts; it does not rebase `^` or hide prior text from lookbehind. Its `end` is the effective subject end and cannot model every Java anchoring/transparent-bounds combination. The excluded `^a`, `(?<=b)a` and `a$` identities are pinned in `tools/oracle/java_search_diff.py` | Excluded from the published comparison |
+| Java | Lone UTF-16 surrogates and match or split boundaries between surrogate halves cannot be represented | Subjects and spans use UTF-8 bytes; Java's reference uses UTF-16 code units. Scalar-valid comparisons convert indices to byte offsets, while the split-pair cases are explicitly excluded | `GRX_ERR_INVALID` for invalid UTF-8 subjects; split-pair oracle cases excluded |
 | all | `{m,n}` bounds above `max_repeat_count`, and expansions above `max_program_size`, are refused | bounded compile time | `GRX_ERR_LIMIT` |
 | all | No locale; POSIX classes and case folding are C-locale ASCII or Unicode, never `LC_CTYPE` | [unicode.md](unicode.md) §7 | - |
 | ECMAScript | Lone surrogates cannot occur in the subject | UTF-8 | - |

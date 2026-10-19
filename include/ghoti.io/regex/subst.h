@@ -33,8 +33,10 @@
  * something a caller should have to reimplement per dialect, and both are
  * things they will get subtly wrong if they do.
  *
- * Status: ECMAScript. Every expectation in the tests is Node 22's own output
- * for the same pattern, subject and template.
+ * Dialect-specific rules are measured against their pinned references.
+ * Java replacement and split use JDK 25.0.4.1+1 as the baseline; JDK 27+35
+ * is checked separately. See documentation/dialects.md sections 5.11 and
+ * 5.16 for the rule tables and known limits.
  */
 
 #ifndef GHOTI_IO_GRX_SUBST_H
@@ -85,7 +87,9 @@ GRX_API void grx_text_free(GRX_Text * text);
  * piece to hand back bytes that are already addressable. A piece whose
  * `start` is GRX_NPOS is a capturing group that did not participate - what
  * ECMAScript reports as `undefined` - which is why the pieces are
- * GRX_Capture and not pointers.
+ * GRX_Capture and not pointers. Piece positions are byte offsets;
+ * Java Pattern.split uses UTF-16 strings, and a field boundary inside a
+ * surrogate pair cannot be represented here.
  */
 typedef struct GRX_Split {
   GRX_Capture * pieces;            ///< Spans into the subject.
@@ -134,7 +138,7 @@ typedef enum {
  * quotes the next byte; a final backslash, bare `$`, malformed name or missing
  * group is an error when a match exists. An unset group expands to empty text.
  * GRX_REPLACE_LITERAL preserves every replacement byte, including `$` and
- * backslash. Offsets in template errors count UTF-8 bytes, not Java UTF-16
+ * backslash. Offsets in template errors count bytes, not Java UTF-16
  * code units. Subjects containing lone UTF-16 surrogates are not representable
  * through this byte-oriented API.
  *
@@ -226,7 +230,7 @@ GRX_API GRX_Result grx_regex_split(const GRX_Regex * regex,
  * Split with Java Pattern.split(String, int) limits. Only Java regexes are
  * accepted. Positive limits cap fields and leave the final remainder whole;
  * zero discards trailing empty fields; negative limits retain them. Captures
- * never become fields. Spans are UTF-8 byte offsets, not Java UTF-16 indices;
+ * never become fields. Spans are byte offsets, not Java UTF-16 indices;
  * a subject containing a lone UTF-16 surrogate is not representable here.
  */
 GRX_API GRX_Result grx_regex_split_java(const GRX_Regex * regex,

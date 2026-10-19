@@ -15,14 +15,16 @@ Twelve dialects compile and match: ECMAScript (legacy, `u` and `v`), PCRE2,
 Perl, POSIX BRE and ERE, GNU BRE and ERE, Python, Vim, I-Regexp (RFC 9485,
 the interoperable subset JSONPath is specified over), RE2 and Rust.
 
-Java has a JDK 25 syntax parser. Its Unicode, matching, iteration,
-replacement and split semantics are still being aligned with the oracle.
+Java has a JDK 25 syntax, match, iteration, replacement and split
+implementation. Its bounded committed corpus passes, but the wider
+differentials and eight-hour selected-dialect fuzz condition are separate
+completion evidence; see [the Java readiness record](documentation/work-packages.md#java-readiness-evidence).
 .NET, Ruby, Tcl, Emacs and RE/flex are named and report `GRX_ERR_UNSUPPORTED`.
 
 | Dialect | What it means here |
 | --- | --- |
 | ECMAScript, PCRE2, Perl, POSIX BRE, POSIX ERE, GNU BRE, GNU ERE, Python, Vim, I-Regexp, RE2, Rust | Compiles and matches, on whichever engine can run the pattern. |
-| Java | JDK 25 pattern syntax is parsed; semantic conformance is in progress. |
+| Java | JDK 25.0.4.1+1 baseline: syntax and operations implemented; dialect completion awaits the six evidence conditions below. JDK 27+35 is a separate forward comparison. |
 | .NET, Ruby, Tcl, Emacs, RE/flex | Named. A pattern reports `GRX_ERR_UNSUPPORTED`. |
 
 RE2 and Rust are the two where a *refusal* is the point. Neither has
@@ -94,7 +96,21 @@ Corey
 program per family; the last is the two linear dialects, where a construct
 being refused at compile time is what buys the linear-time bound.
 `examples/json_schema_provider.c` is this engine behind `text`'s JSON Schema
-`pattern` keyword.
+`pattern` keyword. `examples/java_named.c` is Java's.
+
+To build and run one, install `cutil` and `unicode` into a private prefix,
+then from this directory:
+
+```sh
+make examples PREFIX=/path/to/private-prefix
+build/linux/release/apps/examples/java_named
+```
+
+That one checks Java `U` flag parsing, Unicode text in named captures and
+byte spans, `${name}` replacement, and a negative-limit `Pattern.split`
+result. A failed operation or an unexpected value exits nonzero, so it is a
+check rather than a demonstration; `tools/check_programs.sh` runs it under
+the sanitizers for the same reason.
 
 ## Compile and link
 
@@ -217,7 +233,7 @@ engine and no network.
 | `rust` | 2,817 | 100.00% | generated from the `regex` crate 1.13.1, which carries UCD 16.0.0; 1 excluded |
 | `python` | 2,177 | 100.00% | generated from CPython 3.14.7 |
 | `pcre` | 1,869 | 100.00% | PCRE2 10.46's `testinput` |
-| `java` | 136 | 100.00% | bounded syntax and match vectors from Temurin 25.0.4.1 |
+| `java` | 136 | 100.00% | bounded committed syntax and match vectors from Temurin 25.0.4.1+1; live differential cases and excluded cases are outside this denominator |
 | `gnu-ere` | 270 | 100.00% | Spencer's cases, answered by glibc 2.41 |
 | `posix-ere` | 245 | 100.00% | Spencer's cases, where glibc and musl agree |
 | `gnu-bre` | 159 | 100.00% | as `gnu-ere` |

@@ -177,6 +177,86 @@ TEST(JavaParser, DistinguishesMeasuredClassAndReferenceMatches) {
   EXPECT_TRUE(matches_java("\\N{LATIN CAPITAL LETTER A}", "A"));
 }
 
+TEST(JavaParser, AFlatClassIsOneUnionNodeAndNotAChainOfThem) {
+  // Adjacent atoms in a Java class are one flat union. Rewrapping the
+  // accumulated operand per atom built a left-associated chain instead, and
+  // `evaluate_class_set()` walks a chain with one stack frame per link: the
+  // soak of 2026-10-19 overflowed the stack under ASan on a 7KB class.
+  //
+  // The assertion is the *node count*, because "it compiles and matches" is
+  // not a witness. The first version of this test asked exactly that over
+  // 512 atoms and passed at the unfixed commit - a chain of 511 links
+  // compiles and matches perfectly well, and even 9,999 of them survive an
+  // 8MB stack in a release build. What fails is the shape, every time:
+  // N atoms are N+1 nodes flat and 2N-1 nodes chained.
+  const size_t atoms = 512;
+  std::string pattern = "[";
+  pattern.append(atoms, 'a');
+  pattern += ']';
+
+  GRX_Pattern * parsed = nullptr;
+  GRX_Error error;
+  ASSERT_EQ(grx_pattern_parse_with_allocator(pattern.data(), pattern.size(),
+                GRX_SYNTAX_JAVA, GRX_OPT_NONE, nullptr, nullptr, &error,
+                &parsed),
+      GRX_OK)
+      << error.message;
+  EXPECT_EQ(grx_pattern_node_count(parsed), atoms + 1)
+      << "a flat class of " << atoms << " atoms should be one union node "
+         "over " << atoms << " items; " << (2 * atoms - 1)
+      << " nodes is the left-associated chain this guards against";
+  grx_pattern_free(parsed);
+
+  EXPECT_EQ(compile_java(pattern.c_str(), &error), GRX_OK) << error.message;
+  EXPECT_TRUE(matches_java(pattern.c_str(), "a"));
+  EXPECT_FALSE(matches_java(pattern.c_str(), "b"));
+}
+
+TEST(JavaParser, ConsecutiveIntersectionsAreOneNodeToo) {
+  // The `&&` operands accumulate in a second variable, so they are a second
+  // place the same chain could be built, and the fix has to cover both.
+  const size_t operands = 256;
+  std::string pattern = "[a";
+  for (size_t i = 1; i < operands; i++) {
+    pattern += "&&a";
+  }
+  pattern += ']';
+
+  GRX_Pattern * parsed = nullptr;
+  GRX_Error error;
+  ASSERT_EQ(grx_pattern_parse_with_allocator(pattern.data(), pattern.size(),
+                GRX_SYNTAX_JAVA, GRX_OPT_NONE, nullptr, nullptr, &error,
+                &parsed),
+      GRX_OK)
+      << error.message;
+  EXPECT_EQ(grx_pattern_node_count(parsed), operands + 1)
+      << "consecutive && operands should be one intersection node";
+  grx_pattern_free(parsed);
+
+  EXPECT_TRUE(matches_java(pattern.c_str(), "a"));
+  EXPECT_FALSE(matches_java(pattern.c_str(), "b"));
+}
+
+TEST(JavaParser, ANestedBracketStaysItsOwnNode) {
+  // Flattening must not reach across a bracket: `[ab[cd]]` is a union of
+  // three things, one of which is a class of its own, and the guard that
+  // keeps them apart is the operator's own start offset. If flattening
+  // ignored that, a nested class would be spliced into its parent and the
+  // diagnostic for a bad range inside it would underline the wrong span.
+  GRX_Pattern * parsed = nullptr;
+  GRX_Error error;
+  ASSERT_EQ(grx_pattern_parse_with_allocator("[ab[cd]]", 8, GRX_SYNTAX_JAVA,
+                GRX_OPT_NONE, nullptr, nullptr, &error, &parsed),
+      GRX_OK)
+      << error.message;
+  // a, b, the nested union node, c, d, and the outer union: six.
+  EXPECT_EQ(grx_pattern_node_count(parsed), 6u);
+  grx_pattern_free(parsed);
+
+  EXPECT_TRUE(matches_java("[ab[cd]]", "c"));
+  EXPECT_FALSE(matches_java("[ab[cd]]", "e"));
+}
+
 TEST(JavaParser, ReportsUtf8ByteOffsets) {
   GRX_Error error;
   EXPECT_EQ(compile_java("\xF0\x9F\x98\x80(", &error), GRX_ERR_SYNTAX);

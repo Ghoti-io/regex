@@ -1079,7 +1079,7 @@ hold:
 4. The pattern fuzzer has run eight hours clean with the dialect selected.
 5. `grx_options_parse()` accepts its alphabet and its replacement template
    grammar is implemented.
-6. `examples/` has one example in the dialect. Nine of them:
+6. `examples/` has one example in the dialect. Ten of them:
    `regex_info` and the two JSON Schema programs are ECMAScript's,
    `posix_stream` is a grep and a sed across the four POSIX and GNU rows,
    `perl_extract` is PCRE2's and Perl's - the same pattern under both,
@@ -1092,7 +1092,65 @@ hold:
    `linear_guarantee` is `re2` and `rust` together - the same pattern under
    both for the same reason `perl_extract` pairs its two, since these part on
    the template and the split rule and agree on every row of the matching
-   battery.
+   battery; `java_named` checks Java's `U` option, named captures,
+   `${name}` replacement and signed split limit.
+
+### Java readiness evidence
+
+Reference baseline: Temurin JDK **25.0.4.1+1** at digest
+`sha256:8c052273471ca5128e67f18ffe9e9c32abf1b104bb0090fa10175eda51004145`.
+Temurin **27+35** at
+`sha256:b7b0b087469d150264d36ef6d50bb56840e7e50e3cbc691df0702167bd2c66e6`
+is a forward comparison, not a second baseline. The primary auditable
+records are the committed cases and expected answers in
+`tests/data/probe/java25.json`, `java27.json` and the 136 records in
+`tests/data/vectors/java/`, the exact image pins in
+`tools/oracle/containers/IMAGES`, and the result counts below. From a
+checkout with installed dependencies and required oracle images, replay the
+offline corpus with `make test PREFIX=$PREFIX`, and replay both pinned JDK
+records and generated comparisons with
+`GHOTI_ORACLE_REQUIRED=1 make check-oracle-java PREFIX=$PREFIX`.
+
+| §2 condition | Java verdict and evidence |
+| --- | --- |
+| 1. Profile values sourced, no `probe` cell | **Partially met.** The JDK 25 probe files have 364/364 pinned answers in the final Story 8 replay, and the former Java `probe` cells now cite measured cases or state the unmeasured breadth. The measured examples do not settle all Unicode sets, flag interactions, lookbehind bounds or split limits. Java's full semantic profile is not yet certified. |
+| 2. Hooks and rule tests | **Partially met.** Java parser/profile and operation paths are built; the focused unit tests, bounded vectors and generated differentials cover the measured rules. A rule-by-rule audit over the full Java profile is still needed before asserting *every* rule has a test. |
+| 3. Oracle vectors and rate | **Bounded corpus passes; completion target unmet.** Offline `make test` on the final Story 8 tree passed **136/136 Java vectors (100.00%)**, within **87,351/87,351** total vectors. This denominator is only the committed bounded syntax/match corpus. Live JDK 25 generated checks passed syntax **9/9**, match **106/106 auto**, search **52/52 auto**, replacement **55** comparable cases, and split **57** comparable cases plus **8 invalid-limit rejections**. Match excluded 3 `LITERAL`/`CANON_EQ` cases; search excluded 5 region/bounds and 1 split-pair case; replacement excluded 1 split-pair case; split excluded 1 split-pair case. None counts as a pass. The JDK's own comprehensive corpus and the §2 99.5% target are not established by these bounded inventories. `dialects.md` §6 names the current representational and mode exclusions. |
+| 4. Eight-hour selected pattern fuzz | **Unmet, and the first attempt found a real defect.** Capped EVO job `cutil-java-readiness-soak-20261019-1003` ran `GRX_FUZZ_SYNTAX=java make fuzz-run-pattern FUZZ_TIME=28800 PREFIX=$PREFIX` under an 8 GB cap and a private prefix, and exited after 278,453 inputs with an ASan stack overflow. Replayed on this host in 50 ms rather than on EVO: a saved input needs one binary and one process. The fault was `evaluate_class_set()` in `src/ir/lower.c` taking one stack frame per link of a left-associated `GRX_NODE_CLASS_OP` chain, which `java_class_join()` built for an ordinary flat Java class; ECMAScript's `v` mode already appended to one flat node and Java's parser had reintroduced the chain. Fixed in `src/syntax/perl.c`. A flat class of N atoms is now N+1 nodes rather than 2N-1, which is what the three tests added to `tests/unit/test_java.cpp` assert - they report 1023, 511 and 7 nodes against the unfixed parser. A fresh eight-hour run on the fixed revision is still required, and this verdict does not change until a clean exit, duration, iteration count and fetched result are recorded here. |
+| 5. Option alphabet and replacement grammar | **Met for the documented scope.** `grx_options_parse()` handles Java `idmsuxU`; the JDK 25 replacement differential passed its 55 comparable cases and focused invalid-template probes. The match differential separately excludes the JDK `Pattern.LITERAL` and `Pattern.CANON_EQ` modes as explained in `dialects.md` §6. |
+| 6. Runnable example | **Met.** `make examples PREFIX=$PREFIX` under capped EVO GCC 16 built `examples/java_named.c`, and its checked run exited 0, printing Unicode text in a named capture with byte spans, a `${name}` replacement and a negative-limit Java split. Reproduce with the command in `README.md` §Examples; `tools/check_programs.sh` also runs it under sanitizers. |
+
+The Story 8 safety evidence used GCC 16.2.0 under the 16 GB capped EVO job:
+ASan+UBSan, engine equivalence, moving allocator (351,212 relocations), OOM,
+symbols and layering passed. Unfiltered Valgrind ran 775 tests: Java, vectors,
+allocator and OOM suites had zero Memcheck errors and leaks, while three
+pre-existing wall-time assertions exceeded their 0.5 s or 1.0 s thresholds
+under Memcheck. Excluding only those timing assertions, the two affected
+executables passed 22/22 and 17/17 with zero memory errors and leaks. The
+final Story 8 `make test` rerun passed. This readiness change has its own
+full-suite run: `make test` on 2026-10-19 with the fix, the three shape tests
+and these documentation edits in place, against Debian GCC 14.2.0 on the
+host with every Java oracle reachable - 87,351 vectors passed with 0 failed
+and 0 skipped, 13 dialects built, and all five JDK 25 differentials ran. The
+host is not the compiler that decides: CLAUDE.md names GCC 16.2.0 in
+`ghoti-build:gcc16`, and that run is recorded separately below. The first
+attempt at this run failed `Documents.TheReadmeExampleDoesWhatItSays`,
+because the Java example's `sh` block had been added ahead of the README's C
+example and that gate reads the first fenced block after the heading; the
+example prose now sits with the other example programs.
+Local EVO logs in `.evo/cutil-java-story8-reviewed-final-20261019-0943/`,
+`.evo/cutil-regex-java-story8-git-20261019-0909/` and
+`.evo/cutil-java-readiness-verify-20261019-1002/` supplement these tracked
+records; `.evo/` is Git ignored and is not required to replay the claims.
+
+JDK 27 is reported only as a forward check: the 364/364 probe replay passed
+against its separately committed answers. Its `javaLowerCase` answer differs
+from JDK 25 at U+0295; the whole-property comparison counted 28 set
+differences, one on the common-assigned domain. This is not a JDK 25 failure.
+
+**Java is not yet claimed done.** The incomplete condition verdicts above
+remain visible independently of the first stable release's separate 24-hour
+three-fuzzer soak in §3.
 
 ## 3. What "done" means for the first stable release
 

@@ -36,7 +36,8 @@
  *   PCRE            pcre2pattern (PCRE2 10.44)
  *   ECMAScript      ECMA-262, clause 22.2
  *   Python          CPython `re` module documentation (3.13)
- *   Java            java.util.regex.Pattern (JDK 21)
+ *   Java            java.util.regex.Pattern (JDK 25.0.4.1+1 baseline;
+ *                   JDK 27+35 forward comparison)
  *   .NET            System.Text.RegularExpressions, "Regular Expression
  *                   Language - Quick Reference"
  *   Ruby            Onigmo RE.txt
@@ -244,16 +245,9 @@ static const GRX_SyntaxSpec spec_table[GRX_SYNTAX_COUNT] = {
     // perl reads each as a lazy `a*`. See the field's own comment.
     .quantifier_suffix_is_adjacent = 1,
   },
-  // **No SFLG below this line**, and that is a statement about what has
-  // been probed rather than about the dialects. GRX_FEATURE_SCOPED_FLAGS
-  // was split out of GRX_FEATURE_INLINE_FLAGS on 2026-09-26 because
-  // ECMAScript has the scoped spelling and not the bare one, and the four
-  // rows above were each asked for both spellings, one dialect at a time.
-  // These have no front end and their profile rows are read off their
-  // reference documents; dialects.md section 5 marks their cells `probe`
-  // for the same reason, and WP-31..WP-37 each begin with the probing.
-  // Setting a bit here from memory is how a table starts answering for a
-  // dialect nobody asked.
+  // Java is now probed against JDK 25 and has its own Perl-family front end,
+  // including scoped flags. The remaining unimplemented rows stay provisional:
+  // a feature bit is set only after the reference has been asked.
   [GRX_SYNTAX_JAVA] = {
     .features = ALT | REP | LAZY | POSS | NCAP | NAME | BREF | LAH | LBH
         | ATOM | FLAG | SFLG | UPRP | CSET | WORD | ANCH | QUOT | HEX | OCT

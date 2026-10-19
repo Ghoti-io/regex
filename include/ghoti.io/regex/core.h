@@ -266,7 +266,9 @@ GRX_API const char * grx_diag_string(GRX_Diag diag);
 typedef struct GRX_Error {
   GRX_Result code;   ///< The failing result code.
   GRX_Diag diag;     ///< Which specific failure, for a test or a caller.
-  size_t offset;     ///< Byte offset into the pattern, or GRX_NPOS.
+  size_t offset;     ///< Byte offset into pattern or replacement template
+                     ///< (per operation), or GRX_NPOS; Java's
+                     ///< UTF-16 diagnostic indices are not used here.
   size_t length;     ///< Bytes spanned by the construct, or 0 if unknown.
   char message[192]; ///< NUL-terminated English description.
 } GRX_Error;

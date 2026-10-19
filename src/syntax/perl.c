@@ -3479,6 +3479,23 @@ static GRX_Result complement_wrap(GRX_Parser * parser, unsigned complements,
 /** Join two Java class operands without interleaving their item spans. */
 static GRX_Result java_class_join(GRX_Parser * parser, GRX_ClassOpKind op,
     size_t start, uint32_t left, uint32_t right, uint32_t * out_node) {
+  // Adjacent Java class atoms form a flat union (and consecutive `&&`
+  // operands a flat intersection). Rewrapping the accumulated left operand
+  // for every atom makes an ordinary long class a deep AST and overflows the
+  // recursive class evaluator's stack before the class nesting cap applies.
+  // Keep an explicitly nested bracket expression separate for diagnostics.
+  GRX_Node * accumulated = grx_pattern_node(parser->pattern, left);
+  if (accumulated && accumulated->kind == GRX_NODE_CLASS_OP
+      && accumulated->a == (uint32_t)op && accumulated->offset == start
+      && !(accumulated->flags & GRX_NODE_NEGATED)) {
+    if (grx_pattern_add_child(parser->pattern, left, right) != GRX_OK) {
+      return grx_parse_fail(parser, GRX_DIAG_INTERNAL, start, 0);
+    }
+    grx_pattern_node(parser->pattern, left)->length
+        = parser->position - start;
+    *out_node = left;
+    return GRX_OK;
+  }
   GRX_Result result = class_op_node(parser, op, start, left, out_node);
   if (result != GRX_OK) {
     return result;
