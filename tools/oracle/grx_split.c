@@ -14,7 +14,8 @@
  *   compile                          the pattern was refused
  *   error <code>                     a limit, or a bad subject
  *
- * `limit` is a decimal count, or `-` for GRX_NPOS. Hex for the reason
+ * `limit` is a decimal count, or `-` for GRX_NPOS in older dialects. Java
+ * takes signed decimal int32 text, as Integer.parseInt does. Hex for the reason
  * grx_match.c uses it: a subject or a piece may contain a newline or a NUL.
  *
  * The count is printed as well as the pieces because `limit` 0 yields *no*
@@ -32,6 +33,8 @@
  */
 
 #include <ghoti.io/regex/regex.h>
+#include <errno.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -143,7 +146,41 @@ int main(int argc, char ** argv) {
     }
 
     size_t limit = GRX_NPOS;
-    if (strcmp(fields[3], "-") != 0) {
+    int32_t java_limit = 0;
+    if (syntax == GRX_SYNTAX_JAVA) {
+      const char * digits = fields[3];
+      if (*digits == '+' || *digits == '-') {
+        digits++;
+      }
+      if (!*digits) {
+        printf("error limit\n");
+        fflush(stdout);
+        continue;
+      }
+      int decimal = 1;
+      for (const char * p = digits; *p; p++) {
+        if (*p < '0' || *p > '9') {
+          decimal = 0;
+          break;
+        }
+      }
+      if (!decimal) {
+        printf("error limit\n");
+        fflush(stdout);
+        continue;
+      }
+      char * tail = NULL;
+      errno = 0;
+      long parsed = strtol(fields[3], &tail, 10);
+      if (errno || !tail || *tail || parsed < INT32_MIN
+          || parsed > INT32_MAX) {
+        printf("error limit\n");
+        fflush(stdout);
+        continue;
+      }
+      java_limit = (int32_t)parsed;
+    }
+    else if (strcmp(fields[3], "-") != 0) {
       limit = (size_t)strtoull(fields[3], NULL, 10);
     }
 
@@ -173,8 +210,11 @@ int main(int argc, char ** argv) {
     GRX_Split split;
     memset(&split, 0, sizeof(split));
     grx_error_clear(&error);
-    GRX_Result result = grx_regex_split(regex, subject, subject_length, limit,
-        &search, NULL, &error, &split);
+    GRX_Result result = syntax == GRX_SYNTAX_JAVA
+        ? grx_regex_split_java(regex, subject, subject_length, java_limit,
+            &search, NULL, &error, &split)
+        : grx_regex_split(regex, subject, subject_length, limit, &search,
+            NULL, &error, &split);
     if (result == GRX_OK) {
       printf("ok %zu ", split.count);
       for (size_t i = 0; i < split.count; i++) {

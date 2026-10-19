@@ -1498,10 +1498,10 @@ ECMA-262 does; Python the way `re.split` does. PCRE2, POSIX and GNU define no
 split at all, so they take ECMAScript's, which is the library's default
 rather than a claim about them.
 
-**Five values, not two.** Python's was the third and Go's and the crate's are
+**Six values, not two.** Python's was the third and Go's and the crate's are
 the fourth and fifth - and those two are each other's closest neighbour and
 still differ, which is the finding worth stating first. Both drop what the
-groups captured, which no other row here does; both read `limit` as a count of
+groups captured, as Java does too; Go and Rust both read `limit` as a count of
 *pieces* with the last being the unsplit remainder and zero meaning none,
 which is ECMAScript's spelling with perl's remainder and is a fourth reading
 again. Where they part is an empty match at either end of the subject: Go
@@ -1540,12 +1540,28 @@ do with a trailing empty field.
 | Rule | ECMAScript | Perl | Python | Java | Go | Rust |
 | --- | --- | --- | --- | --- | --- | --- |
 | Capturing groups appear in the output | yes | yes | yes (`re.split` since 3.7) | no | no | no |
-| An empty match where a piece begins | not a separator | not a separator | a separator | **probe** | a separator | a separator |
-| A zero-width match at the **start** of the subject | not a separator | not a separator | a separator | **probe** | **not a separator** | a separator |
-| A zero-width match at the end of the subject | not a separator | **a separator** | a separator | **probe** | **not a separator** | a separator |
-| An empty subject | one empty piece, or none if the pattern matches empty | none, whatever the pattern | one empty piece, or two if the pattern matches empty | **probe** | one empty piece, or **none if the pattern's text is empty** | one empty piece, or two if the pattern matches empty |
-| Trailing empties | kept | dropped unless a limit was given, and *elements* rather than fields - an unset capture goes too | kept | dropped unless a negative limit | kept | kept |
+| An empty match where a piece begins | not a separator | not a separator | a separator | a separator except at the subject start | a separator | a separator |
+| A zero-width match at the **start** of the subject | not a separator | not a separator | a separator | not a separator | **not a separator** | a separator |
+| A zero-width match at the end of the subject | not a separator | **a separator** | a separator | a separator | **not a separator** | a separator |
+| An empty subject | one empty piece, or none if the pattern matches empty | none, whatever the pattern | one empty piece, or two if the pattern matches empty | one empty piece | one empty piece, or **none if the pattern's text is empty** | one empty piece, or two if the pattern matches empty |
+| Trailing empties | kept | dropped unless a limit was given, and *elements* rather than fields - an unset capture goes too | kept | dropped at zero limit; retained at positive or negative limits | kept | kept |
 | `limit` counts | pieces, captures included; 0 yields none | fields, captures not counted; the last is the unsplit remainder; 0 means no limit | splits, not fields; 0 means no limit | fields | pieces, the last the unsplit remainder, and the *matches* as well; 0 yields none | pieces, the last the unsplit remainder; 0 yields none |
+
+Java's rule is implemented by `grx_regex_split_java()` with a signed
+`int32_t` limit. A positive limit caps fields and keeps the unsplit remainder;
+zero splits without a cap and removes trailing empty fields; any negative
+limit splits without a cap and retains them. Captures never enter the output.
+A zero-width match at the beginning does not make a leading empty field, but
+one at the end can make a trailing empty field. An empty subject yields one
+empty field. `grx_regex_split()` retains its `size_t` ABI: for Java, zero and
+`GRX_NPOS` map to the signed zero case, values 1 through `INT32_MAX` are
+accepted, and other values return `GRX_ERR_INVALID`.
+
+Split results are spans into UTF-8 input, so their offsets count bytes.
+Java's `Pattern.split(String, int)` operates on UTF-16 strings: a Java subject
+with a lone surrogate cannot be passed to this byte API, and splitting inside
+a surrogate pair may produce Java fields that cannot be converted to UTF-8.
+The pinned split comparison counts such cases as interface exclusions.
 
 Two of Perl's cells came from `tools/oracle/split_diff.py` and not from
 perlfunc, after the twenty-four probe cases below had agreed with perl

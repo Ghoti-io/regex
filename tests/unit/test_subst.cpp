@@ -118,6 +118,84 @@ std::string split_into(const char * pattern, const std::string & subject,
 
 } // namespace
 
+namespace {
+std::string java_split(const char * pattern, const std::string & subject,
+    int32_t limit) {
+  Regex regex(pattern, 0, GRX_SYNTAX_JAVA);
+  if (!regex.ok()) return "<compile failed>";
+  GRX_Split split {};
+  if (grx_regex_split_java(regex.get(), subject.data(), subject.size(), limit,
+          nullptr, nullptr, nullptr, &split) != GRX_OK) return "<error>";
+  std::string out = "[";
+  for (size_t i = 0; i < split.count; ++i) {
+    if (i) out += ",";
+    out += "\"" + subject.substr(split.pieces[i].start,
+        split.pieces[i].end - split.pieces[i].start) + "\"";
+  }
+  out += "]";
+  grx_split_free(&split);
+  return out;
+}
+}
+
+TEST(Subst, JavaSplitSignedLimitsAndBoundaries) {
+  EXPECT_EQ(java_split(",", "a,b,", 0), "[\"a\",\"b\"]");
+  EXPECT_EQ(java_split(",", "a,b,", -1), "[\"a\",\"b\",\"\"]");
+  EXPECT_EQ(java_split(",", "a,b,", 2), "[\"a\",\"b,\"]");
+  EXPECT_EQ(java_split("(,)", "a,b", 0), "[\"a\",\"b\"]");
+  EXPECT_EQ(java_split("(?=a)", "abc", 0), "[\"abc\"]");
+  EXPECT_EQ(java_split("", "ab", -1), "[\"a\",\"b\",\"\"]");
+  EXPECT_EQ(java_split("$", "ab", -1), "[\"ab\",\"\"]");
+  EXPECT_EQ(java_split(",", "", 0), "[\"\"]");
+  EXPECT_EQ(java_split(",", "", -1), "[\"\"]");
+  EXPECT_EQ(java_split(",", ",a,", 0), "[\"\",\"a\"]");
+  EXPECT_EQ(java_split(",", ",a,", -1), "[\"\",\"a\",\"\"]");
+}
+
+TEST(Subst, JavaSplitOldApiAndDialectGuard) {
+  Regex java(",", 0, GRX_SYNTAX_JAVA);
+  Regex ecma(",");
+  ASSERT_TRUE(java.ok());
+  ASSERT_TRUE(ecma.ok());
+  GRX_Split split {};
+  EXPECT_EQ(grx_regex_split_java(ecma.get(), "a,b", 3, -1, nullptr,
+                nullptr, nullptr, &split), GRX_ERR_INVALID);
+  EXPECT_EQ(grx_regex_split(java.get(), "a,b,", 4, INT32_MAX + size_t{1},
+                nullptr, nullptr, nullptr, &split), GRX_ERR_INVALID);
+  for (size_t limit : {size_t{0}, GRX_NPOS}) {
+    ASSERT_EQ(grx_regex_split(java.get(), "a,b,", 4, limit, nullptr,
+                  nullptr, nullptr, &split), GRX_OK);
+    ASSERT_EQ(split.count, 2u);
+    EXPECT_EQ(split.pieces[0].start, 0u);
+    EXPECT_EQ(split.pieces[0].end, 1u);
+    EXPECT_EQ(split.pieces[1].start, 2u);
+    EXPECT_EQ(split.pieces[1].end, 3u);
+    grx_split_free(&split);
+  }
+  ASSERT_EQ(grx_regex_split(java.get(), "a,b,", 4, 2, nullptr,
+                nullptr, nullptr, &split), GRX_OK);
+  EXPECT_EQ(split.count, 2u);
+  EXPECT_EQ(split.pieces[1].end, 4u);
+  grx_split_free(&split);
+}
+
+TEST(Subst, JavaSplitReturnsByteSpansIncludingEmptyField) {
+  Regex regex(",", 0, GRX_SYNTAX_JAVA);
+  ASSERT_TRUE(regex.ok());
+  const std::string subject = "é,a,";
+  GRX_Split split {};
+  ASSERT_EQ(grx_regex_split_java(regex.get(), subject.data(), subject.size(),
+                -1, nullptr, nullptr, nullptr, &split), GRX_OK);
+  ASSERT_EQ(split.count, 3u);
+  EXPECT_EQ(split.pieces[0].start, 0u);
+  EXPECT_EQ(split.pieces[0].end, 2u);
+  EXPECT_EQ(split.pieces[1].start, 3u);
+  EXPECT_EQ(split.pieces[1].end, 4u);
+  EXPECT_EQ(split.pieces[2].start, 5u);
+  EXPECT_EQ(split.pieces[2].end, 5u);
+  grx_split_free(&split);
+}
+
 // --------------------------------------------------------------------------
 // The owned results
 // --------------------------------------------------------------------------

@@ -222,6 +222,9 @@ typedef enum {
    * the argument for two rows rather than one shared "linear" rule.
    */
   GRX_SPLIT_RUST,
+  /** Java Pattern.split: fields only, signed limit and no leading empty
+   * field from a zero-width match at the subject's start. */
+  GRX_SPLIT_JAVA,
   GRX_SPLIT_COUNT              ///< Closes the enum; not a rule.
 } GRX_SplitRule;
 

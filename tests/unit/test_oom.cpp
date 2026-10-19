@@ -129,6 +129,21 @@ GRX_Result replace_java(const GRX_Allocator * allocator) {
   return result;
 }
 
+GRX_Result split_java(const GRX_Allocator * allocator) {
+  GRX_Regex * regex = nullptr;
+  GRX_Error error;
+  grx_error_clear(&error);
+  GRX_Result result = grx_regex_compile_with_allocator(",", 1,
+      GRX_SYNTAX_JAVA, 0, nullptr, allocator, &error, &regex);
+  if (result != GRX_OK) return result;
+  GRX_Split split {};
+  result = grx_regex_split_java(regex, "a,b,", 4, -1, nullptr, allocator,
+      &error, &split);
+  grx_split_free(&split);
+  grx_regex_free(regex);
+  return result;
+}
+
 /** Patterns chosen to allocate in as many different places as possible. */
 struct Workload {
   const char * pattern;
@@ -255,6 +270,21 @@ TEST(OutOfMemory, JavaReplacementReportsEveryFailureAndLeaksNothing) {
   for (long n = 1; n <= counter.requested(); n++) {
     grxtest::FailingAllocator allocator(n);
     GRX_Result result = replace_java(allocator.get());
+    if (result != GRX_OK) {
+      EXPECT_TRUE(result == GRX_ERR_OOM || result == GRX_ERR_LIMIT
+          || result == GRX_ERR_INTERNAL) << "n=" << n;
+    }
+    EXPECT_EQ(allocator.live(), 0) << "n=" << n;
+  }
+}
+
+TEST(OutOfMemory, JavaSplitReportsEveryFailureAndLeaksNothing) {
+  grxtest::FailingAllocator counter(0);
+  ASSERT_EQ(split_java(counter.get()), GRX_OK);
+  ASSERT_EQ(counter.live(), 0);
+  for (long n = 1; n <= counter.requested(); n++) {
+    grxtest::FailingAllocator allocator(n);
+    GRX_Result result = split_java(allocator.get());
     if (result != GRX_OK) {
       EXPECT_TRUE(result == GRX_ERR_OOM || result == GRX_ERR_LIMIT
           || result == GRX_ERR_INTERNAL) << "n=" << n;

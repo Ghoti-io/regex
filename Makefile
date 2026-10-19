@@ -880,7 +880,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 
 # General commands
 .PHONY: check-oracle-soak
-.PHONY: check-oracle-java check-java-match-diff check-java-search-diff check-java-replace-diff check-oracle-java-properties
+.PHONY: check-oracle-java check-java-match-diff check-java-search-diff check-java-replace-diff check-java-split-diff check-oracle-java-properties
 .PHONY: clean cloc docs docs-pdf examples tools coverage check-layout-page check-work-packages check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-unicode-agreement check-dump-names check-readme-example check-tables check-status-line check-corpus-seeds check-makefile-hash check-generated-header-deps check-oracle-env check-oracle-syntax check-oracle-match check-oracle-soak check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-linear check-oracle-perl-syntax check-oracle-script-runs check-doc-claims check-wide-classes check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
 	check-programs \
 	check-oracle-properties check-oracle-numeric-properties \
@@ -1427,7 +1427,7 @@ check-oracle-replace: $(TOOLS)
 	$(call run-oracle,rust,python3 tools/oracle/replace_diff.py \
 		--dialect rust --seed $(ORACLE_SEED))
 
-check-oracle-split: ## Compare grx_regex_split() against all five split rules
+check-oracle-split: ## Compare grx_regex_split() against all six split rules
 # The last documented surface of the substitution API with no generator
 # behind it. Its six hand-written tests each assert a rule the author had
 # already decided was right; deleting any one of ECMA-262 22.2.6.14's four
@@ -1513,7 +1513,7 @@ check-oracle-env:
 		python3 tools/oracle/check_oracle_env.py; \
 	fi
 
-check-oracle-java: check-java-replace-diff ## Compare the Java driver and replacement against JDK pins
+check-oracle-java: check-java-replace-diff check-java-split-diff ## Compare the Java driver and operations against JDK pins
 	$(call run-oracle,java25,python3 tools/oracle/java_probe.py --pin java25)
 	$(call run-oracle,java27,python3 tools/oracle/java_probe.py --pin java27)
 	$(call run-oracle,java25$(comma)java27,python3 tools/oracle/check_java_driver.py)
@@ -1529,6 +1529,10 @@ check-java-search-diff: $(APP_DIR)/tools/grx_match$(EXE_EXTENSION)
 check-java-replace-diff: $(APP_DIR)/tools/grx_replace$(EXE_EXTENSION)
 	@$(REQUIRE_PYTHON3)
 	python3 tools/oracle/java_replace_diff.py --driver $(APP_DIR)/tools/grx_replace$(EXE_EXTENSION)
+
+check-java-split-diff: $(APP_DIR)/tools/grx_split$(EXE_EXTENSION)
+	@$(REQUIRE_PYTHON3)
+	python3 tools/oracle/java_split_diff.py --driver $(APP_DIR)/tools/grx_split$(EXE_EXTENSION)
 
 check-oracle-java-properties: $(APP_DIR)/tools/grx_properties$(EXE_EXTENSION)
 	@$(REQUIRE_PYTHON3)

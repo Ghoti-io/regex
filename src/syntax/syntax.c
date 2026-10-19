@@ -906,6 +906,7 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
   },
   [GRX_SYNTAX_JAVA] = {
     .lookbehind = GRX_LOOKBEHIND_JAVA,
+    .split = GRX_SPLIT_JAVA,
     .template_spec = {
       .sigil = '$',
       .features = GRX_TMPL_NUMBER_JAVA | GRX_TMPL_NAME_BRACED

@@ -40,6 +40,7 @@
 #ifndef GHOTI_IO_GRX_SUBST_H
 #define GHOTI_IO_GRX_SUBST_H
 
+#include <stdint.h>
 #include <ghoti.io/regex/allocator.h>
 #include <ghoti.io/regex/compile.h>
 #include <ghoti.io/regex/core.h>
@@ -205,6 +206,9 @@ GRX_API GRX_Result grx_regex_replace(const GRX_Regex * regex,
  *   the most *pieces* to produce under ECMAScript's rule and Perl's, where
  *   zero yields none - ECMAScript's `split(re, 0)` - and the most *splits*
  *   to make under Python's, where the remainder is kept as the last piece.
+ *   For Java, 0 and GRX_NPOS mean Java's zero limit, 1 through INT32_MAX
+ *   retain the final remainder, and larger values are invalid. Use
+ *   grx_regex_split_java() for negative Java limits.
  * @param options The window, search flags, engine and limits. NULL uses the
  *   defaults.
  * @param allocator Allocator for the result. NULL uses the default.
@@ -215,6 +219,18 @@ GRX_API GRX_Result grx_regex_replace(const GRX_Regex * regex,
  */
 GRX_API GRX_Result grx_regex_split(const GRX_Regex * regex,
     const char * subject, size_t length, size_t limit,
+    const GRX_SearchOptions * options, const GRX_Allocator * allocator,
+    GRX_Error * out_error, GRX_Split * out_split);
+
+/**
+ * Split with Java Pattern.split(String, int) limits. Only Java regexes are
+ * accepted. Positive limits cap fields and leave the final remainder whole;
+ * zero discards trailing empty fields; negative limits retain them. Captures
+ * never become fields. Spans are UTF-8 byte offsets, not Java UTF-16 indices;
+ * a subject containing a lone UTF-16 surrogate is not representable here.
+ */
+GRX_API GRX_Result grx_regex_split_java(const GRX_Regex * regex,
+    const char * subject, size_t length, int32_t limit,
     const GRX_SearchOptions * options, const GRX_Allocator * allocator,
     GRX_Error * out_error, GRX_Split * out_split);
 

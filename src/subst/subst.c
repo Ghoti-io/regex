@@ -1709,10 +1709,10 @@ static GRX_Result add_piece(GRX_Arena * pieces, size_t start, size_t stop) {
   return grx_arena_append(pieces, &piece, NULL);
 }
 
-GRX_Result grx_regex_split(const GRX_Regex * regex, const char * subject,
+static GRX_Result split_worker(const GRX_Regex * regex, const char * subject,
     size_t length, size_t limit, const GRX_SearchOptions * options,
     const GRX_Allocator * allocator, GRX_Error * out_error,
-    GRX_Split * out_split) {
+    GRX_Split * out_split, int java_negative) {
   if (out_error) {
     grx_error_clear(out_error);
   }
@@ -1735,7 +1735,7 @@ GRX_Result grx_regex_split(const GRX_Regex * regex, const char * subject,
     return GRX_ERR_INVALID;
   }
 
-  // Which of the two splits this dialect has. Read from the profile rather
+  // Read the dialect's split rule from its profile rather
   // than threaded through the program, because splitting is a fact about the
   // library function and not about the compiled pattern.
   GRX_Profile profile;
@@ -1752,17 +1752,16 @@ GRX_Result grx_regex_split(const GRX_Regex * regex, const char * subject,
   const int python_rule = profile.split == GRX_SPLIT_PYTHON;
   const int go_rule = profile.split == GRX_SPLIT_GO;
   const int rust_rule = profile.split == GRX_SPLIT_RUST;
+  const int java_rule = profile.split == GRX_SPLIT_JAVA;
   // The plain walk: every match separates, an empty one included, with no
   // rule about a piece boundary and none about either end of the subject.
   // Python reached it first and the two linear dialects walk it too; what
   // they add - dropped captures, dropped end pieces, a fourth reading of
   // `limit` - is below rather than here.
   const int plain_walk = python_rule || go_rule || rust_rule;
-  // Go's `Split` and the crate's `split` both hand back the text between the
-  // matches and nothing else, where ECMAScript, perl and Python interleave
-  // what the groups captured. `(,)` over "a,b" is two pieces there and three
-  // everywhere else.
-  const int drop_captures = go_rule || rust_rule;
+  // Go, Rust and Java return only text between matches. ECMAScript, perl
+  // and Python interleave captured groups.
+  const int drop_captures = go_rule || rust_rule || java_rule;
 
   // perlfunc: a split pattern of `/^/` "is treated as if the /m modifier
   // were supplied". Which patterns count is not what that sentence suggests,
@@ -1822,20 +1821,22 @@ GRX_Result grx_regex_split(const GRX_Regex * regex, const char * subject,
   // remainder. ECMAScript's `limit` of 0 means no pieces at all, which is the
   // same spelling for the opposite thing.
   const int drop_trailing
-      = perl_rule && (limit == 0 || limit == GRX_NPOS);
+      = (perl_rule && (limit == 0 || limit == GRX_NPOS))
+          || (java_rule && !java_negative && limit == 0);
   // Python's `maxsplit` counts splits and not pieces, and zero means no
   // limit - perl's spelling, against ECMAScript's, where zero means no
   // pieces at all. The field count below is what makes the *remainder*
   // stand as the last field, which is the half Python takes from perl.
   const size_t field_limit
-      = ((perl_rule || python_rule) && limit == 0) ? GRX_NPOS : limit;
+      = ((perl_rule || python_rule || java_rule) && limit == 0)
+            ? GRX_NPOS : limit;
 
   GRX_Arena pieces;
   grx_arena_init(&pieces, allocator, sizeof(GRX_Capture), 0,
       GRX_DIAG_OUT_OF_MEMORY);
 
   GRX_Result result = GRX_OK;
-  if (!perl_rule && !python_rule && !limit) {
+  if (!perl_rule && !python_rule && !java_rule && !limit) {
     // ECMAScript's `split(re, 0)`: no pieces, whatever the subject is.
     goto publish_pieces;
   }
@@ -1872,7 +1873,8 @@ GRX_Result grx_regex_split(const GRX_Regex * regex, const char * subject,
     // it. An empty subject with a pattern that does not match yields the one
     // empty piece the final-field step emits, and one that matches empty
     // yields two - the piece before the separator and the piece after it.
-    if (resolved.begin == end && !python_rule && !rust_rule) {
+    if (resolved.begin == end && !python_rule && !rust_rule
+        && !java_rule) {
       if (go_rule) {
         // Go's is a test on the length of the pattern *text*: `len(re.expr) >
         // 0 && len(s) == 0` returns one empty piece, and the empty pattern
@@ -1916,10 +1918,16 @@ GRX_Result grx_regex_split(const GRX_Regex * regex, const char * subject,
       // trailing-empty drop removes the field again - which is why the
       // twenty-four hand-written probe cases missed it and the generator
       // found it.
-      if (whole.start >= end && !perl_rule && !plain_walk) {
+      if (whole.start >= end && !perl_rule && !plain_walk && !java_rule) {
         break;
       }
-      if (whole.end == piece_start && !plain_walk) {
+      if (java_rule && whole.start == resolved.begin
+          && whole.end == whole.start) {
+        result = grx_regex_search_next(regex, subject, length, &resolved,
+            match, &matched);
+        continue;
+      }
+      if (whole.end == piece_start && !plain_walk && !java_rule) {
         // An empty match where this piece begins. Not a separator; step on.
         //
         // ECMA-262 22.2.6.14's rule, and perl's. Python has no such rule
@@ -1944,7 +1952,8 @@ GRX_Result grx_regex_split(const GRX_Regex * regex, const char * subject,
       // count of *splits*, which is the same remainder reached one field
       // later: `re.split(",", "a,b,c", maxsplit=1)` is `['a', 'b,c']` where
       // `split /,/, "a,b,c", 1` is `("a,b,c")`.
-      if (perl_rule && field_limit != GRX_NPOS && fields + 1 >= field_limit) {
+      if ((perl_rule || java_rule) && field_limit != GRX_NPOS
+          && fields + 1 >= field_limit) {
         break;
       }
       if (python_rule && field_limit != GRX_NPOS && fields >= field_limit) {
@@ -1983,7 +1992,8 @@ GRX_Result grx_regex_split(const GRX_Regex * regex, const char * subject,
       // `limit` zero meaning "no limit" there this test would have stopped
       // the walk after the very first piece - which is what it did.
       if (result != GRX_OK
-          || (!perl_rule && !plain_walk && pieces.count >= limit)) {
+          || (!perl_rule && !plain_walk && !java_rule
+              && pieces.count >= limit)) {
         goto done;
       }
       fields++;
@@ -1994,7 +2004,8 @@ GRX_Result grx_regex_split(const GRX_Regex * regex, const char * subject,
         grx_match_group(match, group, &capture);
         result = grx_arena_append(&pieces, &capture, NULL);
         if (result != GRX_OK
-            || (!perl_rule && !plain_walk && pieces.count >= limit)) {
+            || (!perl_rule && !plain_walk && !java_rule
+                && pieces.count >= limit)) {
           goto done;
         }
       }
@@ -2024,7 +2035,8 @@ GRX_Result grx_regex_split(const GRX_Regex * regex, const char * subject,
     // negative limit perl gives "x", "a", undef, "" and without one it gives
     // "x", "a", having removed the empty field *and* the unset capture
     // behind it.
-    if (result == GRX_OK && drop_trailing) {
+    if (result == GRX_OK && drop_trailing
+        && (!java_rule || fields > 1)) {
       while (pieces.count) {
         const GRX_Capture * last
             = GRX_ARENA_AT(const GRX_Capture, &pieces, pieces.count - 1);
@@ -2055,4 +2067,38 @@ publish_pieces:
   out_split->count = pieces.count;
   out_split->allocator = allocator;
   return GRX_OK;
+}
+
+GRX_Result grx_regex_split(const GRX_Regex * regex, const char * subject,
+    size_t length, size_t limit, const GRX_SearchOptions * options,
+    const GRX_Allocator * allocator, GRX_Error * out_error,
+    GRX_Split * out_split) {
+  if (regex && regex->syntax == GRX_SYNTAX_JAVA) {
+    if (limit != GRX_NPOS && limit > INT32_MAX) {
+      if (out_error) {
+        grx_error_clear(out_error);
+      }
+      return GRX_ERR_INVALID;
+    }
+    if (limit == GRX_NPOS) {
+      limit = 0;
+    }
+  }
+  return split_worker(regex, subject, length, limit, options, allocator,
+      out_error, out_split, 0);
+}
+
+GRX_Result grx_regex_split_java(const GRX_Regex * regex,
+    const char * subject, size_t length, int32_t limit,
+    const GRX_SearchOptions * options, const GRX_Allocator * allocator,
+    GRX_Error * out_error, GRX_Split * out_split) {
+  if (!regex || regex->syntax != GRX_SYNTAX_JAVA) {
+    if (out_error) {
+      grx_error_clear(out_error);
+    }
+    return GRX_ERR_INVALID;
+  }
+  return split_worker(regex, subject, length,
+      limit < 0 ? 0 : (size_t)limit, options, allocator, out_error,
+      out_split, limit < 0);
 }

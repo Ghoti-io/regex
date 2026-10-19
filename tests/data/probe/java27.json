@@ -1983,6 +1983,238 @@
       "flags": "",
       "mode": "replace-first-literal",
       "argument": "$0\\q"
+    },
+    {
+      "area": "split",
+      "pattern": ",",
+      "subject": "a,b,",
+      "flags": "",
+      "mode": "split",
+      "argument": "1"
+    },
+    {
+      "area": "split",
+      "pattern": ",",
+      "subject": "a,b,",
+      "flags": "",
+      "mode": "split",
+      "argument": "3"
+    },
+    {
+      "area": "split",
+      "pattern": ",",
+      "subject": "a,b,",
+      "flags": "",
+      "mode": "split",
+      "argument": "-2147483648"
+    },
+    {
+      "area": "split",
+      "pattern": ",",
+      "subject": "a,b,",
+      "flags": "",
+      "mode": "split",
+      "argument": "2147483647"
+    },
+    {
+      "area": "split",
+      "pattern": ",",
+      "subject": "",
+      "flags": "",
+      "mode": "split",
+      "argument": "0"
+    },
+    {
+      "area": "split",
+      "pattern": "",
+      "subject": "",
+      "flags": "",
+      "mode": "split",
+      "argument": "0"
+    },
+    {
+      "area": "split",
+      "pattern": "",
+      "subject": "",
+      "flags": "",
+      "mode": "split",
+      "argument": "-1"
+    },
+    {
+      "area": "split",
+      "pattern": "",
+      "subject": "ab",
+      "flags": "",
+      "mode": "split",
+      "argument": "0"
+    },
+    {
+      "area": "split",
+      "pattern": "",
+      "subject": "ab",
+      "flags": "",
+      "mode": "split",
+      "argument": "2"
+    },
+    {
+      "area": "split",
+      "pattern": "(?=a)",
+      "subject": "abc",
+      "flags": "",
+      "mode": "split",
+      "argument": "-1"
+    },
+    {
+      "area": "split",
+      "pattern": "(?=b)",
+      "subject": "abc",
+      "flags": "",
+      "mode": "split",
+      "argument": "-1"
+    },
+    {
+      "area": "split",
+      "pattern": "(?=b)",
+      "subject": "abc",
+      "flags": "",
+      "mode": "split",
+      "argument": "2"
+    },
+    {
+      "area": "split",
+      "pattern": "$",
+      "subject": "ab",
+      "flags": "",
+      "mode": "split",
+      "argument": "0"
+    },
+    {
+      "area": "split",
+      "pattern": "$",
+      "subject": "ab",
+      "flags": "",
+      "mode": "split",
+      "argument": "2"
+    },
+    {
+      "area": "split",
+      "pattern": ",",
+      "subject": ",a,",
+      "flags": "",
+      "mode": "split",
+      "argument": "2"
+    },
+    {
+      "area": "split",
+      "pattern": "(,)",
+      "subject": "a,b,",
+      "flags": "",
+      "mode": "split",
+      "argument": "-1"
+    },
+    {
+      "area": "split",
+      "pattern": ",",
+      "subject": "a,,",
+      "flags": "",
+      "mode": "split",
+      "argument": "0"
+    },
+    {
+      "area": "split",
+      "pattern": ",",
+      "subject": "a,,",
+      "flags": "",
+      "mode": "split",
+      "argument": "-1"
+    },
+    {
+      "area": "split",
+      "pattern": "",
+      "subject": "😀",
+      "flags": "",
+      "mode": "split",
+      "argument": "-1"
+    },
+    {
+      "area": "split-limit-valid",
+      "pattern": ",",
+      "subject": "a,b",
+      "flags": "",
+      "mode": "split",
+      "argument": "+1"
+    },
+    {
+      "area": "split-limit-valid",
+      "pattern": ",",
+      "subject": "a,b",
+      "flags": "",
+      "mode": "split",
+      "argument": "01"
+    },
+    {
+      "area": "split-limit-invalid",
+      "pattern": ",",
+      "subject": "a,b",
+      "flags": "",
+      "mode": "split",
+      "argument": ""
+    },
+    {
+      "area": "split-limit-invalid",
+      "pattern": ",",
+      "subject": "a,b",
+      "flags": "",
+      "mode": "split",
+      "argument": "-"
+    },
+    {
+      "area": "split-limit-invalid",
+      "pattern": ",",
+      "subject": "a,b",
+      "flags": "",
+      "mode": "split",
+      "argument": "+"
+    },
+    {
+      "area": "split-limit-invalid",
+      "pattern": ",",
+      "subject": "a,b",
+      "flags": "",
+      "mode": "split",
+      "argument": " 1"
+    },
+    {
+      "area": "split-limit-invalid",
+      "pattern": ",",
+      "subject": "a,b",
+      "flags": "",
+      "mode": "split",
+      "argument": "1 "
+    },
+    {
+      "area": "split-limit-invalid",
+      "pattern": ",",
+      "subject": "a,b",
+      "flags": "",
+      "mode": "split",
+      "argument": "1x"
+    },
+    {
+      "area": "split-limit-invalid",
+      "pattern": ",",
+      "subject": "a,b",
+      "flags": "",
+      "mode": "split",
+      "argument": "2147483648"
+    },
+    {
+      "area": "split-limit-invalid",
+      "pattern": ",",
+      "subject": "a,b",
+      "flags": "",
+      "mode": "split",
+      "argument": "-2147483649"
     }
   ],
   "answers": [
@@ -3943,6 +4175,196 @@
     {
       "kind": "replace",
       "text": "$0\\qa"
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "a,b,"
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "a",
+        "b",
+        ""
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "a",
+        "b",
+        ""
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "a",
+        "b",
+        ""
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        ""
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        ""
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        ""
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "a",
+        "b"
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "a",
+        "b"
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "abc"
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "a",
+        "bc"
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "a",
+        "bc"
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "ab"
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "ab",
+        ""
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "",
+        "a,"
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "a",
+        "b",
+        ""
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "a"
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "a",
+        "",
+        ""
+      ]
+    },
+    {
+      "kind": "offset",
+      "class": "IllegalArgumentException",
+      "message": "unpaired surrogate",
+      "driver_error": true
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "a,b"
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "a,b"
+      ]
+    },
+    {
+      "kind": "input",
+      "class": "NumberFormatException",
+      "message": "For input string: \"\"",
+      "driver_error": true
+    },
+    {
+      "kind": "input",
+      "class": "NumberFormatException",
+      "message": "For input string: \"-\"",
+      "driver_error": true
+    },
+    {
+      "kind": "input",
+      "class": "NumberFormatException",
+      "message": "For input string: \"+\"",
+      "driver_error": true
+    },
+    {
+      "kind": "input",
+      "class": "NumberFormatException",
+      "message": "For input string: \" 1\"",
+      "driver_error": true
+    },
+    {
+      "kind": "input",
+      "class": "NumberFormatException",
+      "message": "For input string: \"1 \"",
+      "driver_error": true
+    },
+    {
+      "kind": "input",
+      "class": "NumberFormatException",
+      "message": "For input string: \"1x\"",
+      "driver_error": true
+    },
+    {
+      "kind": "input",
+      "class": "NumberFormatException",
+      "message": "For input string: \"2147483648\"",
+      "driver_error": true
+    },
+    {
+      "kind": "input",
+      "class": "NumberFormatException",
+      "message": "For input string: \"-2147483649\"",
+      "driver_error": true
     }
   ]
 }

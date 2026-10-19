@@ -119,6 +119,7 @@
 #define grx_regex_search_next GHOTIIO_REGEX(grx_regex_search_next)
 #define grx_regex_replace GHOTIIO_REGEX(grx_regex_replace)
 #define grx_regex_split GHOTIIO_REGEX(grx_regex_split)
+#define grx_regex_split_java GHOTIIO_REGEX(grx_regex_split_java)
 #define grx_split_free GHOTIIO_REGEX(grx_split_free)
 #define grx_text_free GHOTIIO_REGEX(grx_text_free)
 #define grx_search_options_default GHOTIIO_REGEX(grx_search_options_default)

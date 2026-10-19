@@ -233,7 +233,9 @@ public final class JavaOracle {
                     || message.startsWith("unknown flag")
                     || message.startsWith("unknown mode")
                     || message.startsWith("invalid region controls")
-                    || message.startsWith("invalid byte offset") ? "input"
+                    || message.startsWith("invalid byte offset")
+                    || (line.startsWith("split\t")
+                        && e instanceof NumberFormatException) ? "input"
                     : line.startsWith("replace-all\t")
                     || line.startsWith("replace-first\t")
                     || line.startsWith("replace-all-literal\t")
