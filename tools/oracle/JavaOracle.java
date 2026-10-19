@@ -124,7 +124,8 @@ public final class JavaOracle {
         switch (mode) {
             case "compile", "first", "all", "all-from", "find-from", "matches", "ranges",
                  "looking-at", "region-first", "region-all", "region-matches",
-                 "region-looking-at", "replace-all", "replace-first", "split" -> { }
+                 "region-looking-at", "replace-all", "replace-first",
+                 "replace-all-literal", "replace-first-literal", "split" -> { }
             default -> throw new IllegalArgumentException("unknown mode " + mode);
         }
         Pattern compiled;
@@ -197,6 +198,10 @@ public final class JavaOracle {
                 + quoted(matcher.replaceAll(argument)) + "}";
             case "replace-first": return "{\"kind\":\"replace\",\"text\":"
                 + quoted(matcher.replaceFirst(argument)) + "}";
+            case "replace-all-literal": return "{\"kind\":\"replace\",\"text\":"
+                + quoted(matcher.replaceAll(Matcher.quoteReplacement(argument))) + "}";
+            case "replace-first-literal": return "{\"kind\":\"replace\",\"text\":"
+                + quoted(matcher.replaceFirst(Matcher.quoteReplacement(argument))) + "}";
             case "split": {
                 int limit = Integer.parseInt(argument);
                 String[] pieces = compiled.split(subject, limit);
@@ -230,8 +235,11 @@ public final class JavaOracle {
                     || message.startsWith("invalid region controls")
                     || message.startsWith("invalid byte offset") ? "input"
                     : line.startsWith("replace-all\t")
-                    || line.startsWith("replace-first\t") ? "template" : "runtime";
+                    || line.startsWith("replace-first\t")
+                    || line.startsWith("replace-all-literal\t")
+                    || line.startsWith("replace-first-literal\t") ? "template" : "runtime";
                 System.out.println("error\t" + hex("{\"kind\":" + quoted(kind)
+                    + ",\"class\":" + quoted(e.getClass().getSimpleName())
                     + ",\"message\":" + quoted(message) + "}"));
             }
         }

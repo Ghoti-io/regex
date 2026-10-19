@@ -51,10 +51,6 @@ UNPRODUCED = {
     # An unterminated `\Q` runs to the end of the pattern rather than
     # failing, in both dialects that have `\Q` at all.
     "GRX_DIAG_UNTERMINATED_QUOTE": "an unterminated \\Q runs to the end",
-    # Reached through grx_error_set() with a code rather than a diagnostic,
-    # so the enumerator is spelled nowhere. Worth a look when the error
-    # plumbing is next touched.
-    "GRX_DIAG_INVALID_ARGUMENT": "callers return GRX_ERR_INVALID directly",
 }
 
 

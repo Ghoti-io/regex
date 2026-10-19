@@ -112,6 +112,23 @@ GRX_Result replace_and_split(const GRX_Allocator * allocator,
   return result;
 }
 
+GRX_Result replace_java(const GRX_Allocator * allocator) {
+  GRX_Regex * regex = nullptr;
+  GRX_Error error;
+  grx_error_clear(&error);
+  GRX_Result result = grx_regex_compile_with_allocator("(?<x>a)", 7,
+      GRX_SYNTAX_JAVA, 0, nullptr, allocator, &error, &regex);
+  if (result != GRX_OK) {
+    return result;
+  }
+  GRX_Text out {};
+  result = grx_regex_replace(regex, "aaa", 3, "${x}-$0", 7,
+      GRX_REPLACE_GLOBAL, nullptr, allocator, &error, &out);
+  grx_text_free(&out);
+  grx_regex_free(regex);
+  return result;
+}
+
 /** Patterns chosen to allocate in as many different places as possible. */
 struct Workload {
   const char * pattern;
@@ -229,6 +246,58 @@ TEST(OutOfMemory, ReplaceAndSplitReportEveryFailureAndLeakNothing) {
           << " leaked " << allocator.live() << " block(s)";
     }
   }
+}
+
+TEST(OutOfMemory, JavaReplacementReportsEveryFailureAndLeaksNothing) {
+  grxtest::FailingAllocator counter(0);
+  ASSERT_EQ(replace_java(counter.get()), GRX_OK);
+  ASSERT_EQ(counter.live(), 0);
+  for (long n = 1; n <= counter.requested(); n++) {
+    grxtest::FailingAllocator allocator(n);
+    GRX_Result result = replace_java(allocator.get());
+    if (result != GRX_OK) {
+      EXPECT_TRUE(result == GRX_ERR_OOM || result == GRX_ERR_LIMIT
+          || result == GRX_ERR_INTERNAL) << "n=" << n;
+    }
+    EXPECT_EQ(allocator.live(), 0) << "n=" << n;
+  }
+}
+
+TEST(OutOfMemory, JavaNoMatchCopyReportsEveryFailureAndLeaksNothing) {
+  GRX_Regex * regex = nullptr;
+  ASSERT_EQ(grx_regex_compile("a", GRX_SYNTAX_JAVA, 0, &regex), GRX_OK);
+  auto run = [regex](const GRX_Allocator * allocator, GRX_Error * error) {
+    GRX_Text out {};
+    GRX_Result result = grx_regex_replace(regex, "bbbb", 4, "$", 1,
+        GRX_REPLACE_GLOBAL, nullptr, allocator, error, &out);
+    if (result == GRX_OK) {
+      EXPECT_EQ(std::string(out.data, out.length), "bbbb");
+    }
+    else {
+      EXPECT_EQ(out.data, nullptr);
+    }
+    grx_text_free(&out);
+    return result;
+  };
+  grxtest::FailingAllocator counter(0);
+  GRX_Error error;
+  grx_error_clear(&error);
+  ASSERT_EQ(run(counter.get(), &error), GRX_OK);
+  EXPECT_EQ(error.diag, GRX_DIAG_NONE);
+  ASSERT_EQ(counter.live(), 0);
+  const long total = counter.requested();
+  ASSERT_GT(total, 0);
+  for (long n = 1; n <= total; n++) {
+    grxtest::FailingAllocator allocator(n);
+    grx_error_clear(&error);
+    GRX_Result result = run(allocator.get(), &error);
+    if (result != GRX_OK) {
+      EXPECT_EQ(result, GRX_ERR_OOM) << "n=" << n;
+      EXPECT_EQ(error.diag, GRX_DIAG_OUT_OF_MEMORY) << "n=" << n;
+    }
+    EXPECT_EQ(allocator.live(), 0) << "n=" << n;
+  }
+  grx_regex_free(regex);
 }
 
 /**

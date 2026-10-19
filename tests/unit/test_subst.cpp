@@ -168,6 +168,66 @@ TEST(Subst, RejectsNullArguments) {
 // The template grammar
 // --------------------------------------------------------------------------
 
+TEST(Subst, JavaReplacementTemplates) {
+  constexpr GRX_Syntax java = GRX_SYNTAX_JAVA;
+  EXPECT_EQ(replaced("(a)", "a", "$0/$1/$12", GRX_REPLACE_GLOBAL,
+                GRX_ENGINE_AUTO, java), "a/a/a2");
+  EXPECT_EQ(replaced("(a)(b)", "ab", "$12", GRX_REPLACE_GLOBAL,
+                GRX_ENGINE_AUTO, java), "a2");
+  EXPECT_EQ(replaced("(?<x>a)", "a", "${x}$1", GRX_REPLACE_GLOBAL,
+                GRX_ENGINE_AUTO, java), "aa");
+  EXPECT_EQ(replaced("(a)?b", "b", "<$1>", GRX_REPLACE_GLOBAL,
+                GRX_ENGINE_AUTO, java), "<>");
+  EXPECT_EQ(replaced("a", "a", "\\$\\\\\\q", GRX_REPLACE_GLOBAL,
+                GRX_ENGINE_AUTO, java), "$\\q");
+  EXPECT_EQ(replaced("a", "aa", "<$0>", GRX_REPLACE_NONE,
+                GRX_ENGINE_AUTO, java), "<a>a");
+  EXPECT_EQ(replaced("", "é", "X", GRX_REPLACE_GLOBAL,
+                GRX_ENGINE_AUTO, java), "XéX");
+  EXPECT_EQ(replaced("(😀)", "😀😀", "<$1>", GRX_REPLACE_NONE,
+                GRX_ENGINE_AUTO, java), "<😀>😀");
+  EXPECT_EQ(replaced("😀", "😀", "\\😀", GRX_REPLACE_GLOBAL,
+                GRX_ENGINE_AUTO, java), "😀");
+  EXPECT_EQ(replaced("a", "a", "$0\\q", GRX_REPLACE_LITERAL,
+                GRX_ENGINE_AUTO, java), "$0\\q");
+  // Java only reads a malformed template when at least one match exists.
+  EXPECT_EQ(replaced("a", "bbb", "$", GRX_REPLACE_GLOBAL,
+                GRX_ENGINE_AUTO, java), "bbb");
+}
+
+TEST(Subst, JavaTemplateErrorsHaveByteOffsets) {
+  Regex regex("(a)", 0, GRX_SYNTAX_JAVA);
+  ASSERT_TRUE(regex.ok());
+  struct Row {
+    const char * replacement;
+    GRX_Diag diag;
+    size_t offset;
+    size_t length;
+  };
+  const Row rows[] = {
+    {"é$2", GRX_DIAG_TEMPLATE_UNKNOWN_GROUP, 2, 2},
+    {"é$", GRX_DIAG_INVALID_TEMPLATE, 2, 1},
+    {"é\\", GRX_DIAG_INVALID_TEMPLATE, 2, 1},
+    {"é${missing}", GRX_DIAG_TEMPLATE_UNKNOWN_GROUP, 2, 10},
+    {"é${}", GRX_DIAG_INVALID_TEMPLATE, 2, 3},
+    {"é${x", GRX_DIAG_INVALID_TEMPLATE, 2, 3},
+    {"é${1}", GRX_DIAG_INVALID_TEMPLATE, 2, 4},
+  };
+  for (const Row & row : rows) {
+    GRX_Text out {};
+    GRX_Error error;
+    grx_error_clear(&error);
+    const std::string replacement(row.replacement);
+    EXPECT_EQ(grx_regex_replace(regex.get(), "a", 1, replacement.data(),
+                  replacement.size(), GRX_REPLACE_GLOBAL, nullptr, nullptr,
+                  &error, &out), GRX_ERR_SYNTAX);
+    EXPECT_EQ(error.diag, row.diag);
+    EXPECT_EQ(error.offset, row.offset);
+    EXPECT_EQ(error.length, row.length);
+    grx_text_free(&out);
+  }
+}
+
 TEST(Replace, PlainTextAndTheFirstMatchOnly) {
   EXPECT_EQ(replaced("a", "banana", "X", GRX_REPLACE_NONE), "bXnana");
   EXPECT_EQ(replaced("a", "banana", "X"), "bXnXnX");

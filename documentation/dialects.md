@@ -22,7 +22,7 @@ parser, with matching and operation conformance still in progress.
 | **ECMAScript**, **PCRE2**, **Perl**, **Python**, **Vim**, **POSIX BRE/ERE**, **GNU BRE/ERE** | Implemented. Each has an oracle on this machine. |
 | **RE2**, **Rust** | Implemented, WP-34 and WP-35. Each has a pinned oracle: Go 1.25.14's `regexp` and the `regex` crate 1.13.1. They are the two dialects where a *refusal* is the guarantee - no backreference, no lookaround, so a pattern accepted here is one `GRX_ENGINE_PIKE` will run. |
 | **I-Regexp** (RFC 9485) | Implemented. The only one whose references are not implementations *of it*: an ABNF is the authority, and two programs answer its two halves (§10). |
-| **Java** | JDK 25 pattern syntax is parsed. Unicode, matching, iteration, replacement and split conformance remain in progress. |
+| **Java** | JDK 25 pattern syntax is parsed and replacement templates are implemented. Unicode, matching, iteration and split conformance remain in progress. |
 | .NET, Ruby, Tcl, Emacs, RE/flex | Not implemented. Selecting one is `GRX_ERR_UNSUPPORTED` with `GRX_DIAG_DIALECT_NOT_IMPLEMENTED`, never a silent fallback to another dialect. |
 
 A pattern accepted under `GRX_SYNTAX_RE2`, once that dialect exists, is one
@@ -1211,7 +1211,15 @@ at all.
 | PCRE2 (`pcre2_substitute`) | `$n`, `${n}` - every digit, no fallback | `$name`, `${name}`, `$<name>` | `$&`, `$0`, `${0}`, `` $` ``, ``$'``, `$_` (the whole subject) | `$$` | error | error, or empty with `SUBSTITUTE_UNSET_EMPTY` (exposed as an option) | extended mode: `\U \L \E \u \l`, and `${n:+a:b}`, `${n:-d}` |
 | Perl (interpolation subset) | `$n`, `${n}`, `\n` (deprecated) | `$+{name}` | `$&`, `` $` ``, ``$'`` | `\$`, `\\` | empty (undef) | empty | `\U \L \F \E \u \l \Q` - **built**, with four rules that are not Vim's; see below |
 | Python (`re.sub`) | `\n`, `\nn` (1-99, no fallback) | `\g<name>`, `\g<n>` | `\g<0>` only | `\\`, `\a \b \f \n \r \t \v`, octal; `\` before a non-alphanumeric keeps **both**; every other letter is an error | error | empty | none |
-| Java (`appendReplacement`) | `$n` (longest valid prefix) | `${name}` | `$0` for the whole match; no prefix or suffix form | `\` quotes the next character | error | empty (**probe**) | none |
+| Java (`appendReplacement`) | `$n` (longest valid prefix) | `${name}` | `$0` for the whole match; no prefix or suffix form | `\` quotes the next character | error | empty | none |
+
+The Java template row is implemented against pinned JDK 25 and checked
+separately against JDK 27. A malformed template is left unread when the
+pattern has no match, as with `Matcher.replaceAll` and `replaceFirst`.
+`GRX_REPLACE_LITERAL` supplies Java's `Matcher.quoteReplacement` behavior.
+Template error offsets in this API are UTF-8 byte offsets; Java replacement
+exceptions expose no comparable source index. Lone UTF-16 surrogates cannot
+be passed through the byte-oriented subject interface.
 | .NET | `$n`, `${n}` | `${name}` | `$&`, `` $` ``, ``$'``, `$+`, `$_` | `$$` | literal | empty | none |
 | Ruby (`sub`) | `\n` | `\k<name>` | `\0`, `\&`, `` \` ``, ``\'`` | `\\` | empty | empty | none |
 | Go (RE2) | `$n`, `${n}` - **one word run, classified after it is read**, so `$1x` is the name `1x` and substitutes nothing rather than being group 1 and an "x"; a run with a leading zero is a name, so `$01` is missing | `$name`, `${name}`; `${...}` must close on a word run or the spelling is text | `$0`, `${0}`; **not** `$&`, `` $` ``, ``$'`` or `$_`, each of which is literal | `$$` | empty | empty | none |

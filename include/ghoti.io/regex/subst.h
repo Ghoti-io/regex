@@ -128,6 +128,14 @@ typedef enum {
  * Anything else beginning with `$` - including a reference to a group the
  * pattern does not have - is literal text, which is ECMAScript's rule and
  * not a fallback.
+ * Java templates use `$0` for the whole match, `$n` for the longest prefix
+ * that names an existing group, and `${name}` for a named group. A backslash
+ * quotes the next byte; a final backslash, bare `$`, malformed name or missing
+ * group is an error when a match exists. An unset group expands to empty text.
+ * GRX_REPLACE_LITERAL preserves every replacement byte, including `$` and
+ * backslash. Offsets in template errors count UTF-8 bytes, not Java UTF-16
+ * code units. Subjects containing lone UTF-16 surrogates are not representable
+ * through this byte-oriented API.
  *
  * @param regex The regex. NULL is invalid.
  * @param subject The bytes to search. May be NULL only when `length` is 0.

@@ -610,6 +610,11 @@ GRX_Result grx_template_parse(const GRX_TemplateSpec * spec,
   size_t i = 0;
   size_t literal_from = 0;
   while (i < length) {
+    if (text[i] == '\\' && (spec->features & GRX_TMPL_NUMBER_JAVA)
+        && i + 1 == length) {
+      grx_template_clear(out_template);
+      return fail(out_error, GRX_DIAG_INVALID_TEMPLATE, i, 1);
+    }
     if (text[i] == '\\' && (spec->features & GRX_TMPL_CASE_ESCAPES)
         && i + 1 < length
         && perl_case(text[i + 1]) != GRX_TPL_CASE_COUNT) {
@@ -733,6 +738,28 @@ GRX_Result grx_template_parse(const GRX_TemplateSpec * spec,
       else if (c == '{'
           && (spec->features
               & (GRX_TMPL_NUMBER_BRACED | GRX_TMPL_NAME_BRACED))) {
+        if (spec->features & GRX_TMPL_NUMBER_JAVA) {
+          size_t close = after + 1;
+          while (close < length && text[close] != '}') {
+            close++;
+          }
+          if (close == length || close == after + 1) {
+            grx_template_clear(out_template);
+            return fail(out_error, GRX_DIAG_INVALID_TEMPLATE, start,
+                close == length ? length - start : close - start + 1);
+          }
+          for (size_t pos = after + 1; pos < close; pos++) {
+            unsigned char ch = (unsigned char)text[pos];
+            int letter = (ch >= 'A' && ch <= 'Z')
+                || (ch >= 'a' && ch <= 'z');
+            int digit = ch >= '0' && ch <= '9';
+            if (!letter && (pos == after + 1 || !digit)) {
+              grx_template_clear(out_template);
+              return fail(out_error, GRX_DIAG_INVALID_TEMPLATE, start,
+                  close - start + 1);
+            }
+          }
+        }
         consumed = braced_reference(spec, regex, text, length, after,
             captures, &kind, &group, &name_at, &name_length);
         if (consumed && kind == GRX_TPL_NOTHING
@@ -819,6 +846,30 @@ GRX_Result grx_template_parse(const GRX_TemplateSpec * spec,
           return fail(out_error, GRX_DIAG_TEMPLATE_UNKNOWN_GROUP, start,
               1 + consumed);
         }
+      }
+      else if (c >= '0' && c <= '9'
+          && (spec->features & GRX_TMPL_NUMBER_JAVA)) {
+        // Matcher.appendReplacement starts with one digit (including zero),
+        // then takes each further digit only while the resulting group exists.
+        // A missing first digit is an error; a later invalid digit is text.
+        uint32_t value = (uint32_t)(c - '0');
+        if (value > captures) {
+          grx_template_clear(out_template);
+          return fail(out_error, GRX_DIAG_TEMPLATE_UNKNOWN_GROUP, start, 2);
+        }
+        consumed = 1;
+        while (after + consumed < length
+            && text[after + consumed] >= '0'
+            && text[after + consumed] <= '9') {
+          uint32_t digit = (uint32_t)(text[after + consumed] - '0');
+          if (digit > captures || value > (captures - digit) / 10) {
+            break;
+          }
+          value = value * 10 + digit;
+          consumed++;
+        }
+        kind = value ? GRX_TPL_GROUP : GRX_TPL_WHOLE;
+        group = value;
       }
       else if (c >= '0' && c <= '9'
           && (spec->features & GRX_TMPL_NUMBER_GREEDY)) {
@@ -1013,7 +1064,8 @@ GRX_Result grx_template_parse(const GRX_TemplateSpec * spec,
         // question rather than this one.
         grx_template_clear(out_template);
         return fail(out_error, GRX_DIAG_INVALID_TEMPLATE, start,
-            after > start ? after - start + 1 : 1);
+            (spec->features & GRX_TMPL_NUMBER_JAVA) ? length - start
+              : after > start ? after - start + 1 : 1);
       }
       // Not a reference. The sigil is ordinary text, which is ECMAScript's
       // rule for every spelling it does not recognise - including `$3` in a
@@ -1512,6 +1564,56 @@ GRX_Result grx_regex_replace(const GRX_Regex * regex, const char * subject,
         0, 0);
   }
 
+  GRX_Match * match = NULL;
+  int matched = 0;
+  GRX_Result result = GRX_OK;
+  if (!(flags & GRX_REPLACE_LITERAL)
+      && (profile.template_spec.features & GRX_TMPL_NUMBER_JAVA)) {
+    // Matcher.replaceAll/replaceFirst do not parse a replacement if find()
+    // finds nothing. Keep this first match for expansion after parsing.
+    result = grx_match_create(regex, allocator, &match);
+    if (result != GRX_OK) {
+      return grx_error_set(out_error, result,
+          result == GRX_ERR_OOM ? GRX_DIAG_OUT_OF_MEMORY : GRX_DIAG_INTERNAL,
+          GRX_NPOS, 0);
+    }
+    result = grx_regex_search_ex(regex, subject, length, &resolved,
+        match, &matched);
+    if (result != GRX_OK) {
+      const GRX_Error * match_error = grx_match_error(match);
+      if (out_error) {
+        if (match_error && match_error->diag != GRX_DIAG_NONE) {
+          *out_error = *match_error;
+        }
+        else {
+          grx_error_set(out_error, result,
+              result == GRX_ERR_OOM ? GRX_DIAG_OUT_OF_MEMORY
+              : result == GRX_ERR_INVALID ? GRX_DIAG_INVALID_ARGUMENT
+                                          : GRX_DIAG_INTERNAL,
+              GRX_NPOS, 0);
+        }
+      }
+      grx_match_destroy(match);
+      return result;
+    }
+    if (!matched) {
+      GRX_Arena copy;
+      grx_arena_init(&copy, allocator, 1, 0, GRX_DIAG_OUT_OF_MEMORY);
+      GRX_Result result = push(&copy, subject, end);
+      if (result == GRX_OK) {
+        result = publish(&copy, allocator, out_text);
+      }
+      grx_arena_clear(&copy);
+      grx_match_destroy(match);
+      if (result != GRX_OK) {
+        grx_error_set(out_error, result,
+            result == GRX_ERR_OOM ? GRX_DIAG_OUT_OF_MEMORY : GRX_DIAG_INTERNAL,
+            GRX_NPOS, 0);
+      }
+      return result;
+    }
+  }
+
   GRX_Template tmpl = {0};
   if (flags & GRX_REPLACE_LITERAL) {
     grx_arena_init(&tmpl.ops, allocator, sizeof(GRX_TemplateOp), 0,
@@ -1521,6 +1623,7 @@ GRX_Result grx_regex_replace(const GRX_Regex * regex, const char * subject,
     if (replacement_length
         && emit_literal(&tmpl, 0, replacement_length) != GRX_OK) {
       grx_template_clear(&tmpl);
+      grx_match_destroy(match);
       return GRX_ERR_OOM;
     }
   }
@@ -1528,6 +1631,7 @@ GRX_Result grx_regex_replace(const GRX_Regex * regex, const char * subject,
     GRX_Result parsed = grx_template_parse(&profile.template_spec, regex,
         replacement, replacement_length, allocator, out_error, &tmpl);
     if (parsed != GRX_OK) {
+      grx_match_destroy(match);
       return parsed;
     }
   }
@@ -1535,17 +1639,17 @@ GRX_Result grx_regex_replace(const GRX_Regex * regex, const char * subject,
   GRX_Arena out;
   grx_arena_init(&out, allocator, 1, 0, GRX_DIAG_OUT_OF_MEMORY);
 
-  GRX_Match * match = NULL;
-  GRX_Result result = grx_match_create(regex, allocator, &match);
-  if (result != GRX_OK) {
-    grx_template_clear(&tmpl);
-    return result;
+  if (!match) {
+    result = grx_match_create(regex, allocator, &match);
+    if (result != GRX_OK) {
+      grx_template_clear(&tmpl);
+      return result;
+    }
+    result = grx_regex_search_ex(regex, subject, length, &resolved, match,
+        &matched);
   }
 
   size_t copied = 0;
-  int matched = 0;
-  result = grx_regex_search_ex(regex, subject, length, &resolved, match,
-      &matched);
 
   while (result == GRX_OK && matched) {
     GRX_Capture whole = {GRX_NPOS, GRX_NPOS};

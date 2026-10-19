@@ -628,6 +628,8 @@ typedef enum {
  * answer differently.
  */
 #define GRX_TMPL_BRACED_EMPTY_NAME GRX_BIT(27)
+/** Java Matcher replacement: take the longest existing numeric group prefix. */
+#define GRX_TMPL_NUMBER_JAVA GRX_BIT(28)
 
 
 

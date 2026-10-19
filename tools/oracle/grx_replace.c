@@ -5,12 +5,16 @@
  * dialect's replacement-template grammar can be compared with the tool that
  * defines it.
  *
- * Reads `<flags>\t<pattern hex>\t<subject hex>\t<template hex>` lines and
- * writes one answer per line:
+ * Reads `<flags>\t<pattern hex>\t<subject hex>\t<template hex>` lines. For
+ * Java comparisons it also accepts a leading mode: `first`, `all`,
+ * `first-literal`, or `all-literal`. The original four-field protocol and
+ * responses remain unchanged for older differential drivers.
+ * Writes one answer per line:
  *
  *   ok <result hex>   the subject with every match replaced
  *   compile           the pattern was refused
  *   template          the template was refused
+ *   template D O L    five-field mode only: diagnostic, byte offset, length
  *   error <code>      a limit, or a bad subject
  *
  * Hex for the reason grx_match.c uses it: a pattern, a subject or a template
@@ -99,24 +103,46 @@ int main(int argc, char ** argv) {
     }
 
     // Four fields, so three tabs, and any of the last three may be empty.
-    char * fields[4] = {line, NULL, NULL, NULL};
+    char * fields[5] = {line, NULL, NULL, NULL, NULL};
     size_t count = 1;
-    for (size_t i = 0; i < length && count < 4; i++) {
+    for (size_t i = 0; i < length && count < 5; i++) {
       if (line[i] == '\t') {
         line[i] = '\0';
         fields[count++] = line + i + 1;
       }
     }
-    if (count != 4) {
+    if (count != 4 && count != 5) {
       printf("error malformed\n");
       fflush(stdout);
       continue;
     }
 
-    size_t pattern_length = unhex(fields[1], strlen(fields[1]), pattern);
-    size_t subject_length = unhex(fields[2], strlen(fields[2]), subject);
+    uint32_t replace_flags = GRX_REPLACE_GLOBAL;
+    size_t base = 0;
+    if (count == 5) {
+      if (!strcmp(fields[0], "first")) {
+        replace_flags = 0;
+      }
+      else if (!strcmp(fields[0], "all")) {
+        replace_flags = GRX_REPLACE_GLOBAL;
+      }
+      else if (!strcmp(fields[0], "first-literal")) {
+        replace_flags = GRX_REPLACE_LITERAL;
+      }
+      else if (!strcmp(fields[0], "all-literal")) {
+        replace_flags = GRX_REPLACE_GLOBAL | GRX_REPLACE_LITERAL;
+      }
+      else {
+        printf("error mode\n");
+        fflush(stdout);
+        continue;
+      }
+      base = 1;
+    }
+    size_t pattern_length = unhex(fields[base + 1], strlen(fields[base + 1]), pattern);
+    size_t subject_length = unhex(fields[base + 2], strlen(fields[base + 2]), subject);
     size_t replacement_length
-        = unhex(fields[3], strlen(fields[3]), replacement);
+        = unhex(fields[base + 3], strlen(fields[base + 3]), replacement);
     if (pattern_length == (size_t)-1 || subject_length == (size_t)-1
         || replacement_length == (size_t)-1) {
       printf("error malformed hex\n");
@@ -125,7 +151,7 @@ int main(int argc, char ** argv) {
     }
 
     uint32_t options = 0;
-    if (grx_options_parse(syntax, fields[0], &options, NULL) != GRX_OK) {
+    if (grx_options_parse(syntax, fields[base], &options, NULL) != GRX_OK) {
       printf("error flags\n");
       fflush(stdout);
       continue;
@@ -152,7 +178,7 @@ int main(int argc, char ** argv) {
     memset(&out, 0, sizeof(out));
     grx_error_clear(&error);
     GRX_Result result = grx_regex_replace(regex, subject, subject_length,
-        replacement, replacement_length, GRX_REPLACE_GLOBAL, NULL, NULL, &error,
+        replacement, replacement_length, replace_flags, NULL, NULL, &error,
         &out);
     if (result == GRX_OK) {
       printf("ok ");
@@ -161,7 +187,13 @@ int main(int argc, char ** argv) {
       grx_text_free(&out);
     }
     else if (result == GRX_ERR_SYNTAX) {
-      printf("template\n");
+      if (count == 5) {
+        printf("template %d %zu %zu\n", (int)error.diag, error.offset,
+            error.length);
+      }
+      else {
+        printf("template\n");
+      }
     }
     else {
       printf("error %d\n", (int)result);

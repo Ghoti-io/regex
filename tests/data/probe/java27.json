@@ -1703,6 +1703,286 @@
       "flags": "",
       "mode": "region-looking-at",
       "argument": "1,2,0,1"
+    },
+    {
+      "area": "replacement",
+      "pattern": "(a)",
+      "subject": "a",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "$0/$1/$12"
+    },
+    {
+      "area": "replacement",
+      "pattern": "(a)(b)",
+      "subject": "ab",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "$12"
+    },
+    {
+      "area": "replacement",
+      "pattern": "(a)",
+      "subject": "a",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "$01"
+    },
+    {
+      "area": "replacement",
+      "pattern": "(a)",
+      "subject": "a",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "$00"
+    },
+    {
+      "area": "replacement",
+      "pattern": "(a)",
+      "subject": "a",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "$123"
+    },
+    {
+      "area": "replacement",
+      "pattern": "(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)(k)(l)",
+      "subject": "abcdefghijkl",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "$123"
+    },
+    {
+      "area": "replacement",
+      "pattern": "(?<x>a)",
+      "subject": "a",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "${x}$1"
+    },
+    {
+      "area": "replacement",
+      "pattern": "(a)?b",
+      "subject": "b",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "<$1>"
+    },
+    {
+      "area": "replacement",
+      "pattern": "a",
+      "subject": "a",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "\\$\\\\\\q"
+    },
+    {
+      "area": "replacement",
+      "pattern": "a",
+      "subject": "a",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "\\"
+    },
+    {
+      "area": "replacement",
+      "pattern": "a",
+      "subject": "a",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "$"
+    },
+    {
+      "area": "replacement",
+      "pattern": "a",
+      "subject": "a",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "$x"
+    },
+    {
+      "area": "replacement",
+      "pattern": "(a)",
+      "subject": "a",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "$2"
+    },
+    {
+      "area": "replacement",
+      "pattern": "(a)",
+      "subject": "a",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "${missing}"
+    },
+    {
+      "area": "replacement",
+      "pattern": "(a)",
+      "subject": "a",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "${}"
+    },
+    {
+      "area": "replacement",
+      "pattern": "(a)",
+      "subject": "a",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "${1}"
+    },
+    {
+      "area": "replacement",
+      "pattern": "(?<x>a)",
+      "subject": "a",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "${x\u0000}"
+    },
+    {
+      "area": "replacement",
+      "pattern": "(a)",
+      "subject": "a",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "${x"
+    },
+    {
+      "area": "replacement",
+      "pattern": "a",
+      "subject": "bbb",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "$"
+    },
+    {
+      "area": "replacement",
+      "pattern": "a",
+      "subject": "bbb",
+      "flags": "",
+      "mode": "replace-first",
+      "argument": "$"
+    },
+    {
+      "area": "replacement",
+      "pattern": "a",
+      "subject": "bbb",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "\\"
+    },
+    {
+      "area": "replacement",
+      "pattern": "a",
+      "subject": "bbb",
+      "flags": "",
+      "mode": "replace-first",
+      "argument": "\\"
+    },
+    {
+      "area": "replacement",
+      "pattern": "a",
+      "subject": "bbb",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "${x"
+    },
+    {
+      "area": "replacement",
+      "pattern": "a",
+      "subject": "bbb",
+      "flags": "",
+      "mode": "replace-first",
+      "argument": "${}"
+    },
+    {
+      "area": "replacement",
+      "pattern": "a",
+      "subject": "aa",
+      "flags": "",
+      "mode": "replace-first",
+      "argument": "<$0>"
+    },
+    {
+      "area": "replacement",
+      "pattern": "a",
+      "subject": "aa",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "<$0>"
+    },
+    {
+      "area": "replacement",
+      "pattern": "",
+      "subject": "é",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "X"
+    },
+    {
+      "area": "replacement",
+      "pattern": "(é)",
+      "subject": "é",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "<$1>"
+    },
+    {
+      "area": "replacement",
+      "pattern": "(😀)",
+      "subject": "😀😀",
+      "flags": "",
+      "mode": "replace-first",
+      "argument": "<$1>"
+    },
+    {
+      "area": "replacement",
+      "pattern": "(😀)",
+      "subject": "😀😀",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "<$1>"
+    },
+    {
+      "area": "replacement",
+      "pattern": "",
+      "subject": "😀",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "X"
+    },
+    {
+      "area": "replacement",
+      "pattern": "😀",
+      "subject": "😀",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "\\😀"
+    },
+    {
+      "area": "replacement",
+      "pattern": "a",
+      "subject": "a\u0000a",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "X"
+    },
+    {
+      "area": "replacement",
+      "pattern": "a",
+      "subject": "a",
+      "flags": "",
+      "mode": "replace-all-literal",
+      "argument": "$0\\q"
+    },
+    {
+      "area": "replacement",
+      "pattern": "a",
+      "subject": "aa",
+      "flags": "",
+      "mode": "replace-first-literal",
+      "argument": "$0\\q"
     }
   ],
   "answers": [
@@ -2398,6 +2678,7 @@
     },
     {
       "kind": "template",
+      "class": "IndexOutOfBoundsException",
       "message": "No group 2",
       "driver_error": true
     },
@@ -2407,6 +2688,7 @@
     },
     {
       "kind": "template",
+      "class": "IllegalArgumentException",
       "message": "Illegal group reference: group index is missing",
       "driver_error": true
     },
@@ -2552,6 +2834,7 @@
     },
     {
       "kind": "template",
+      "class": "IllegalArgumentException",
       "message": "No group with name {missing}",
       "driver_error": true
     },
@@ -2671,6 +2954,7 @@
     },
     {
       "kind": "template",
+      "class": "IllegalArgumentException",
       "message": "Illegal group reference: group index is missing",
       "driver_error": true
     },
@@ -3314,6 +3598,7 @@
     },
     {
       "kind": "offset",
+      "class": "IllegalArgumentException",
       "message": "split-pair offset 1",
       "driver_error": true
     },
@@ -3498,6 +3783,166 @@
           2
         ]
       ]
+    },
+    {
+      "kind": "replace",
+      "text": "a/a/a2"
+    },
+    {
+      "kind": "replace",
+      "text": "a2"
+    },
+    {
+      "kind": "replace",
+      "text": "a"
+    },
+    {
+      "kind": "replace",
+      "text": "a"
+    },
+    {
+      "kind": "replace",
+      "text": "a23"
+    },
+    {
+      "kind": "replace",
+      "text": "l3"
+    },
+    {
+      "kind": "replace",
+      "text": "aa"
+    },
+    {
+      "kind": "replace",
+      "text": "<>"
+    },
+    {
+      "kind": "replace",
+      "text": "$\\q"
+    },
+    {
+      "kind": "template",
+      "class": "IllegalArgumentException",
+      "message": "character to be escaped is missing",
+      "driver_error": true
+    },
+    {
+      "kind": "template",
+      "class": "IllegalArgumentException",
+      "message": "Illegal group reference: group index is missing",
+      "driver_error": true
+    },
+    {
+      "kind": "template",
+      "class": "IllegalArgumentException",
+      "message": "Illegal group reference",
+      "driver_error": true
+    },
+    {
+      "kind": "template",
+      "class": "IndexOutOfBoundsException",
+      "message": "No group 2",
+      "driver_error": true
+    },
+    {
+      "kind": "template",
+      "class": "IllegalArgumentException",
+      "message": "No group with name {missing}",
+      "driver_error": true
+    },
+    {
+      "kind": "template",
+      "class": "IllegalArgumentException",
+      "message": "named capturing group has 0 length name",
+      "driver_error": true
+    },
+    {
+      "kind": "template",
+      "class": "IllegalArgumentException",
+      "message": "capturing group name {1} starts with digit character",
+      "driver_error": true
+    },
+    {
+      "kind": "template",
+      "class": "IllegalArgumentException",
+      "message": "named capturing group is missing trailing '}'",
+      "driver_error": true
+    },
+    {
+      "kind": "template",
+      "class": "IllegalArgumentException",
+      "message": "named capturing group is missing trailing '}'",
+      "driver_error": true
+    },
+    {
+      "kind": "replace",
+      "text": "bbb"
+    },
+    {
+      "kind": "replace",
+      "text": "bbb"
+    },
+    {
+      "kind": "replace",
+      "text": "bbb"
+    },
+    {
+      "kind": "replace",
+      "text": "bbb"
+    },
+    {
+      "kind": "replace",
+      "text": "bbb"
+    },
+    {
+      "kind": "replace",
+      "text": "bbb"
+    },
+    {
+      "kind": "replace",
+      "text": "<a>a"
+    },
+    {
+      "kind": "replace",
+      "text": "<a><a>"
+    },
+    {
+      "kind": "replace",
+      "text": "XéX"
+    },
+    {
+      "kind": "replace",
+      "text": "<é>"
+    },
+    {
+      "kind": "replace",
+      "text": "<😀>😀"
+    },
+    {
+      "kind": "replace",
+      "text": "<😀><😀>"
+    },
+    {
+      "kind": "offset",
+      "class": "IllegalArgumentException",
+      "message": "unpaired surrogate",
+      "driver_error": true
+    },
+    {
+      "kind": "replace",
+      "text": "😀"
+    },
+    {
+      "kind": "replace",
+      "text": "X\u0000X"
+    },
+    {
+      "kind": "replace",
+      "text": "$0\\q"
+    },
+    {
+      "kind": "replace",
+      "text": "$0\\qa"
     }
   ]
 }

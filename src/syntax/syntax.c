@@ -906,6 +906,13 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
   },
   [GRX_SYNTAX_JAVA] = {
     .lookbehind = GRX_LOOKBEHIND_JAVA,
+    .template_spec = {
+      .sigil = '$',
+      .features = GRX_TMPL_NUMBER_JAVA | GRX_TMPL_NAME_BRACED
+          | GRX_TMPL_WHOLE_ZERO | GRX_TMPL_BACKSLASH_ESCAPE
+          | GRX_TMPL_SIGIL_STRICT,
+      .missing = GRX_TMPL_MISSING_ERROR,
+    },
     .empty_loop = GRX_EMPTY_LOOP_BREAK,
     .iteration = GRX_ITERATE_ADVANCE_ONE,
     .search_start = GRX_SEARCH_START_PREVIOUS_END,
