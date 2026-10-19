@@ -124,6 +124,8 @@ TEST(JavaFlags, ExternalAndScopedCaseWidth) {
   EXPECT_TRUE(matches_java("\\d", "\xD9\xA1", U));
   EXPECT_FALSE(matches_java("\\w", "\xF0\x90\x90\xA8"));
   EXPECT_TRUE(matches_java("\\w", "\xF0\x90\x90\xA8", U));
+  EXPECT_FALSE(matches_java("[\\w]", "\xC3\xA9"));
+  EXPECT_TRUE(matches_java("[\\w]", "\xC3\xA9", U));
   EXPECT_FALSE(matches_java("\xF0\x90\x90\x80", "\xF0\x90\x90\xA8", i));
   EXPECT_TRUE(matches_java("\xF0\x90\x90\x80", "\xF0\x90\x90\xA8", iu));
   EXPECT_FALSE(matches_java("\\b\xC3\xA9", "\xC3\xA9"));
@@ -146,17 +148,25 @@ TEST(JavaFlags, UnixLinesAndVerbose) {
   EXPECT_TRUE(matches_java("^b", "a\rb", m));
   EXPECT_FALSE(matches_java("^b", "a\rb", m | d));
   EXPECT_FALSE(matches_java("^\\n", "\r\n", m));
+  EXPECT_TRUE(matches_java("(?d:a.\\nb)", "a\r\nb"));
+  EXPECT_FALSE(matches_java("(?-d:a.\\nb)", "a\r\nb", d));
   EXPECT_TRUE(matches_java("a b", "ab", x));
   EXPECT_TRUE(matches_java("[a b]", "b", x));
 }
 
 TEST(JavaProperties, CharacterWhitespaceDiffersFromUnicodeWhiteSpace) {
   const char * property = "\\p{javaWhitespace}";
-  for (const char * subject : {" ", "\t", "\xE2\x80\x83", "\x1C"}) {
+  for (const char * subject : {"\t", "\r", "\x1C", " ",
+           "\xE1\x9A\x80", "\xE2\x80\x80", "\xE2\x80\x86",
+           "\xE2\x80\x88", "\xE2\x80\x8A", "\xE2\x80\xA8",
+           "\xE2\x80\xA9", "\xE2\x81\x9F", "\xE3\x80\x80"}) {
     EXPECT_TRUE(matches_java(property, subject)) << subject;
   }
-  for (const char * subject : {"\xC2\xA0", "\xC2\x85",
-           "\xE2\x80\x87", "\xE2\x80\xAF"}) {
+  for (const char * subject : {"\x1B", "!", "\xC2\x85", "\xC2\xA0",
+           "\xE1\x99\xBF", "\xE1\x9A\x81", "\xE1\xBF\xBF",
+           "\xE2\x80\x87", "\xE2\x80\x8B", "\xE2\x80\xA7",
+           "\xE2\x80\xAA", "\xE2\x80\xAF", "\xE2\x81\x9E",
+           "\xE2\x81\xA0", "\xE2\xBF\xBF", "\xE3\x80\x81"}) {
     EXPECT_FALSE(matches_java(property, subject)) << subject;
   }
   EXPECT_FALSE(matches_java("\\p{IsGreek}", "\xCD\xB4"));

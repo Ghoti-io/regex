@@ -47,6 +47,8 @@ def main():
     excluded = [i for i in indices if any(c in baseline["cases"][i]["flags"]
                                           for c in "lc")]
     indices = [i for i in indices if i not in excluded]
+    if not indices:
+        raise SystemExit("focused Java match/capture corpus is empty")
     changed = [i for i in indices
                if baseline["answers"][i] != forward["answers"][i]]
     payload = "".join("%s\t%s\t%s\n" % (
@@ -67,6 +69,9 @@ def main():
         for index, line in zip(indices, answers):
             actual = parse(line)
             wanted = baseline["answers"][index]
+            if engine == "auto" and actual["kind"] not in ("match", "nomatch", "syntax"):
+                failures.append((engine, index, actual, wanted))
+                continue
             if actual["kind"] == "unsupported":
                 unsupported += 1
                 continue
