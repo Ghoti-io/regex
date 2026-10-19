@@ -676,7 +676,8 @@ TEST(Parse, AnUnbuiltDialectSaysSoRatherThanGuessing) {
         || syntax == GRX_SYNTAX_POSIX_ERE || syntax == GRX_SYNTAX_GNU_BRE
         || syntax == GRX_SYNTAX_GNU_ERE || syntax == GRX_SYNTAX_PYTHON
         || syntax == GRX_SYNTAX_VIM || syntax == GRX_SYNTAX_IREGEXP
-        || syntax == GRX_SYNTAX_RE2 || syntax == GRX_SYNTAX_RUST) {
+        || syntax == GRX_SYNTAX_RE2 || syntax == GRX_SYNTAX_RUST
+        || syntax == GRX_SYNTAX_JAVA) {
       continue;
     }
     GRX_Pattern * parsed = nullptr;

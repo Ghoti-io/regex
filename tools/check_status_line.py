@@ -67,9 +67,7 @@ def claimed():
     end = rest.find("\n## ")
     paragraph = rest if end < 0 else rest[:end]
 
-    works = re.search(
-        r"(\w+) dialects\b[^.]*compile and match",
-        paragraph)
+    works = re.search(r"(\w+) dialects have parsers", paragraph)
     unsupported = re.search(
         r"other (\w+)\b[^.]*report",
         paragraph)
@@ -123,11 +121,11 @@ def main():
     problems = []
     if says_built is None:
         problems.append(
-            "could not find \"<N> dialects ... compile and match\" in the "
+            "could not find \"<N> dialects have parsers\" in the "
             "Status section")
     elif says_built != built:
         problems.append(
-            f"README says {says_built} dialects compile and match; "
+            f"README says {says_built} dialects have parsers; "
             f"grx_frontend_for() answers for {built}")
 
     if says_unsupported is None:

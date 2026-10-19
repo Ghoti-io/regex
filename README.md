@@ -15,13 +15,15 @@ Twelve dialects compile and match: ECMAScript (legacy, `u` and `v`), PCRE2,
 Perl, POSIX BRE and ERE, GNU BRE and ERE, Python, Vim, I-Regexp (RFC 9485,
 the interoperable subset JSONPath is specified over), RE2 and Rust.
 
-Java, .NET, Ruby, Tcl, Emacs and RE/flex are named and report
-`GRX_ERR_UNSUPPORTED`.
+Java has a JDK 25 syntax parser. Its Unicode, matching, iteration,
+replacement and split semantics are still being aligned with the oracle.
+.NET, Ruby, Tcl, Emacs and RE/flex are named and report `GRX_ERR_UNSUPPORTED`.
 
 | Dialect | What it means here |
 | --- | --- |
 | ECMAScript, PCRE2, Perl, POSIX BRE, POSIX ERE, GNU BRE, GNU ERE, Python, Vim, I-Regexp, RE2, Rust | Compiles and matches, on whichever engine can run the pattern. |
-| Java, .NET, Ruby, Tcl, Emacs, RE/flex | Named. A pattern reports `GRX_ERR_UNSUPPORTED`. |
+| Java | JDK 25 pattern syntax is parsed; semantic conformance is in progress. |
+| .NET, Ruby, Tcl, Emacs, RE/flex | Named. A pattern reports `GRX_ERR_UNSUPPORTED`. |
 
 RE2 and Rust are the two where a *refusal* is the point. Neither has
 backreferences or lookaround, because neither can be run in linear time, so
@@ -193,8 +195,9 @@ JSON Schema `pattern` and `patternProperties`.
 
 ## Status
 
-The twelve dialects above compile and match on whichever of the four
-engines can run the pattern. The other six report `GRX_ERR_UNSUPPORTED`.
+Thirteen dialects have parsers. The twelve completed dialects above compile
+and match on whichever of the four engines can run the pattern. Java syntax
+is in progress. The other five report `GRX_ERR_UNSUPPORTED`.
 
 ### Conformance
 

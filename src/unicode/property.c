@@ -413,6 +413,28 @@ GRX_Result grx_unicode_property_lookup(const char * name, size_t name_length,
     return GRX_ERR_INVALID;
   }
 
+  // The measured Character predicates are spelled with the java prefix.
+  // Their complete membership remains part of the Unicode conformance work.
+  int java_predicate = 0;
+  if (match == GRX_PROPERTY_JAVA && !value) {
+    static const struct { const char * java; const char * unicode; } aliases[] = {
+      {"javaLowerCase", "Lowercase"},
+      {"javaUpperCase", "Uppercase"},
+      {"javaDigit", "Decimal_Number"},
+      {"javaWhitespace", "White_Space"},
+      {"javaMirrored", "Bidi_Mirrored"},
+    };
+    for (size_t i = 0; i < sizeof aliases / sizeof *aliases; i++) {
+      if (name_length == strlen(aliases[i].java)
+          && memcmp(name, aliases[i].java, name_length) == 0) {
+        name = aliases[i].unicode;
+        name_length = strlen(name);
+        java_predicate = 1;
+        break;
+      }
+    }
+  }
+
   char name_buffer[GRX_PROPERTY_NAME_MAX];
   char value_buffer[GRX_PROPERTY_NAME_MAX];
   const GRX_UnicodeName * names = grx_unicode_strict_names;
@@ -445,6 +467,10 @@ GRX_Result grx_unicode_property_lookup(const char * name, size_t name_length,
     if (!find_prop_kind(props, prop_count, name, name_length, &kind)) {
       return GRX_ERR_SYNTAX;
     }
+    if (match == GRX_PROPERTY_JAVA && kind != GRX_UPROP_GC
+        && kind != GRX_UPROP_SCRIPT && kind != GRX_UPROP_BLOCK) {
+      return GRX_ERR_SYNTAX;
+    }
 
     // Numeric_Value before the value is loosened, because loosening drops
     // the `-` that tells `nv=-1/2` from `nv=1/2`. Perl's alone: pcre2test
@@ -462,7 +488,8 @@ GRX_Result grx_unicode_property_lookup(const char * name, size_t name_length,
     // `\p{blk=...}` and `\p{Block=...}`, which only perl has. pcre2test
     // 10.46 answers error 147 to both, so PCRE2 must keep refusing them
     // even though it shares this resolver and the loose tables with perl.
-    if (kind == GRX_UPROP_BLOCK && match != GRX_PROPERTY_LOOSE_PERL) {
+    if (kind == GRX_UPROP_BLOCK && match != GRX_PROPERTY_LOOSE_PERL
+        && match != GRX_PROPERTY_JAVA) {
       return GRX_ERR_SYNTAX;
     }
 
@@ -484,7 +511,8 @@ GRX_Result grx_unicode_property_lookup(const char * name, size_t name_length,
   // value: those are the two things ECMA-262 22.2.2.9.7 allows without a
   // property name, and the loose dialects accept the same two plus the
   // synthetic classes their own hooks add.
-  if (find_name(names, name_count, name, name_length, GRX_UPROP_BINARY,
+  if ((match != GRX_PROPERTY_JAVA || java_predicate)
+      && find_name(names, name_count, name, name_length, GRX_UPROP_BINARY,
           out_property)) {
     return GRX_OK;
   }
@@ -517,12 +545,12 @@ GRX_Result grx_unicode_property_lookup(const char * name, size_t name_length,
   // script value is also an scx value, so the fallback is for a name the
   // extensions table does not carry - `Unknown` being the one this
   // library adds to Script itself, Scripts.txt not listing it.
-  if (match != GRX_PROPERTY_STRICT
+  if (match != GRX_PROPERTY_STRICT && match != GRX_PROPERTY_JAVA
       && find_name(names, name_count, name, name_length, GRX_UPROP_SCX,
           out_property)) {
     return GRX_OK;
   }
-  if (match != GRX_PROPERTY_STRICT
+  if (match != GRX_PROPERTY_STRICT && match != GRX_PROPERTY_JAVA
       && find_name(names, name_count, name, name_length, GRX_UPROP_SCRIPT,
           out_property)) {
     return GRX_OK;
@@ -559,7 +587,8 @@ GRX_Result grx_unicode_property_lookup(const char * name, size_t name_length,
   //
   // Both are tried only after every unprefixed reading has failed, so a
   // property whose own name begins with "In" or "Is" is unaffected.
-  if (match == GRX_PROPERTY_LOOSE_PERL && name_length > 2) {
+  if ((match == GRX_PROPERTY_LOOSE_PERL || match == GRX_PROPERTY_JAVA)
+      && name_length > 2) {
     const char * rest = name + 2;
     size_t rest_length = name_length - 2;
     if (name[0] == 'i' && name[1] == 'n'

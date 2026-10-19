@@ -41,7 +41,7 @@ TEST(Parse, UnknownDialectIsInvalid) {
 // rather than hunting for every test that happened to pick the same example:
 // these said POSIX until WP-23, Python until WP-30, and Java until whenever
 // WP-31 lands.
-static const GRX_Syntax kUnbuiltDialect = GRX_SYNTAX_JAVA;
+static const GRX_Syntax kUnbuiltDialect = GRX_SYNTAX_DOTNET;
 
 TEST(Parse, OutputIsNullOnFailure) {
   // Nothing is allocated for the caller to free on a failing call

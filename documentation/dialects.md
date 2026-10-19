@@ -14,14 +14,16 @@ replaces
 ## 1. What is implemented
 
 Eighteen dialects are named in `GRX_Syntax`, so the enum does not move when
-one of them is added. Twelve are built.
+one of them is added. Twelve have completed conformance; Java now has a
+parser, with matching and operation conformance still in progress.
 
 | Dialects | Status |
 | --- | --- |
 | **ECMAScript**, **PCRE2**, **Perl**, **Python**, **Vim**, **POSIX BRE/ERE**, **GNU BRE/ERE** | Implemented. Each has an oracle on this machine. |
 | **RE2**, **Rust** | Implemented, WP-34 and WP-35. Each has a pinned oracle: Go 1.25.14's `regexp` and the `regex` crate 1.13.1. They are the two dialects where a *refusal* is the guarantee - no backreference, no lookaround, so a pattern accepted here is one `GRX_ENGINE_PIKE` will run. |
 | **I-Regexp** (RFC 9485) | Implemented. The only one whose references are not implementations *of it*: an ABNF is the authority, and two programs answer its two halves (§10). |
-| Java, .NET, Ruby, Tcl, Emacs, RE/flex | Not implemented. Selecting one is `GRX_ERR_UNSUPPORTED` with `GRX_DIAG_DIALECT_NOT_IMPLEMENTED`, never a silent fallback to another dialect. |
+| **Java** | JDK 25 pattern syntax is parsed. Unicode, matching, iteration, replacement and split conformance remain in progress. |
+| .NET, Ruby, Tcl, Emacs, RE/flex | Not implemented. Selecting one is `GRX_ERR_UNSUPPORTED` with `GRX_DIAG_DIALECT_NOT_IMPLEMENTED`, never a silent fallback to another dialect. |
 
 A pattern accepted under `GRX_SYNTAX_RE2`, once that dialect exists, is one
 the linear engine is guaranteed to run. RE2 and Rust are deliberate subsets

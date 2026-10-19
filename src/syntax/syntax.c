@@ -256,8 +256,9 @@ static const GRX_SyntaxSpec spec_table[GRX_SYNTAX_COUNT] = {
   // dialect nobody asked.
   [GRX_SYNTAX_JAVA] = {
     .features = ALT | REP | LAZY | POSS | NCAP | NAME | BREF | LAH | LBH
-        | ATOM | FLAG | PCLS | UPRP | CSET | WORD | ANCH | QUOT | HEX | OCT
+        | ATOM | FLAG | SFLG | UPRP | CSET | WORD | ANCH | QUOT | HEX | OCT
         | CTRL,
+    .default_options = GRX_OPT_UTF,
   },
   [GRX_SYNTAX_DOTNET] = {
     .features = ALT | REP | LAZY | NCAP | NAME | BREF | LAH | LBH | ATOM
@@ -904,14 +905,15 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     .subject_is_text = 1,
   },
   [GRX_SYNTAX_JAVA] = {
-    .lookbehind = GRX_LOOKBEHIND_BOUNDED,
+    .lookbehind = GRX_LOOKBEHIND_UNBOUNDED,
     .dollar = GRX_DOLLAR_BEFORE_FINAL_NEWLINE,
     .newlines = GRX_NEWLINES_UNICODE,
     .shorthands = GRX_SHORTHANDS_ASCII,
     .shorthands_wide = GRX_SHORTHANDS_UNICODE,
     .fold = GRX_FOLD_ASCII,
     .fold_utf = GRX_FOLD_SIMPLE,
-    .property_match = GRX_PROPERTY_LOOSE,
+    .property_match = GRX_PROPERTY_JAVA,
+    .subject_is_text = 1,
   },
   [GRX_SYNTAX_DOTNET] = {
     .lookbehind = GRX_LOOKBEHIND_UNBOUNDED,

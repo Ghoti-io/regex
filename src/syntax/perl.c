@@ -58,11 +58,12 @@
 #include "../parse/parse_internal.h"
 #include "../unicode/unicode_internal.h"
 
-/** Which of the three dialects this parse is reading. */
+/** Which dialect this shared reader is parsing. */
 typedef enum {
   FLAVOUR_PCRE = 0, ///< PCRE2 10.46.
   FLAVOUR_PERL,     ///< Perl 5.40.
-  FLAVOUR_PYTHON    ///< CPython 3.13 `re`.
+  FLAVOUR_PYTHON,   ///< CPython 3.13 `re`.
+  FLAVOUR_JAVA      ///< JDK 25 Pattern.
 } Flavour;
 
 /**
@@ -83,6 +84,8 @@ static Flavour flavour(const GRX_Parser * parser) {
       return FLAVOUR_PERL;
     case GRX_SYNTAX_PYTHON:
       return FLAVOUR_PYTHON;
+    case GRX_SYNTAX_JAVA:
+      return FLAVOUR_JAVA;
     case GRX_SYNTAX_PCRE:
     default:
       return FLAVOUR_PCRE;
@@ -274,11 +277,12 @@ static GRX_Result read_hex(GRX_Parser * parser, size_t start,
       if (!is_hex(byte_at(parser, scan))) {
         break;
       }
-      value = (value << 4) | hex_value(byte_at(parser, scan));
-      if (value > GRX_CODEPOINT_MAX) {
+      uint32_t digit = hex_value(byte_at(parser, scan));
+      if (value > (GRX_CODEPOINT_MAX - digit) / 16u) {
         return grx_parse_fail(
             parser, GRX_DIAG_CODEPOINT_OUT_OF_RANGE, start, scan + 2);
       }
+      value = (value << 4) | digit;
       digits++;
       scan++;
     }
@@ -291,6 +295,20 @@ static GRX_Result read_hex(GRX_Parser * parser, size_t start,
           parser, GRX_DIAG_INVALID_HEX_ESCAPE, start, scan + 2);
     }
     parser->position += scan + 1;
+    *out_value = value;
+    return GRX_OK;
+  }
+
+  if (flavour(parser) == FLAVOUR_JAVA) {
+    uint32_t value = 0;
+    for (int digit = 0; digit < 2; digit++) {
+      if (!is_hex(byte_at(parser, 0))) {
+        return grx_parse_fail(parser, GRX_DIAG_INVALID_HEX_ESCAPE,
+            start, digit + 2);
+      }
+      value = (value << 4) | hex_value(byte_at(parser, 0));
+      parser->position++;
+    }
     *out_value = value;
     return GRX_OK;
   }
@@ -419,12 +437,17 @@ static GRX_Result read_name(GRX_Parser * parser, char terminator,
   }
 
   size_t first = parser->position;
-  if (!is_name_start(byte_at(parser, 0))) {
+  if (!is_name_start(byte_at(parser, 0))
+      || (flavour(parser) == FLAVOUR_JAVA && byte_at(parser, 0) == '_')) {
     return grx_parse_fail(parser, GRX_DIAG_INVALID_GROUP_NAME, start,
         parser->position - start + 1);
   }
 
   while (is_name_char(byte_at(parser, 0))) {
+    if (flavour(parser) == FLAVOUR_JAVA && byte_at(parser, 0) == '_') {
+      return grx_parse_fail(parser, GRX_DIAG_INVALID_GROUP_NAME, start,
+          parser->position - start + 1);
+    }
     parser->position++;
   }
   size_t length = parser->position - first;
@@ -433,7 +456,7 @@ static GRX_Result read_name(GRX_Parser * parser, char terminator,
       parser->position++;
     }
   }
-  if (length > GRX_PCRE_NAME_MAX) {
+  if (length > GRX_PCRE_NAME_MAX && flavour(parser) != FLAVOUR_JAVA) {
     return grx_parse_fail(
         parser, GRX_DIAG_INVALID_GROUP_NAME, start, parser->position - start);
   }
@@ -708,7 +731,9 @@ static const BoundType bound_types[] = {
 static GRX_Result read_bound_type(GRX_Parser * parser, size_t start,
     int negated, int * out_handled, GRX_AnchorKind * out_anchor) {
   *out_handled = 0;
-  if (flavour(parser) != FLAVOUR_PERL || byte_at(parser, 0) != '{') {
+  if ((flavour(parser) != FLAVOUR_PERL
+          && flavour(parser) != FLAVOUR_JAVA)
+      || byte_at(parser, 0) != '{') {
     return GRX_OK;
   }
 
@@ -733,6 +758,11 @@ static GRX_Result read_bound_type(GRX_Parser * parser, size_t start,
   *out_handled = 1;
   const char * name = parser->text + parser->position + first;
   parser->position += scan + 1;
+  if (flavour(parser) == FLAVOUR_JAVA
+      && (length != 1 || name[0] != 'g')) {
+    return grx_parse_fail(parser, GRX_DIAG_INVALID_ESCAPE,
+        start, parser->position - start);
+  }
   if (!length) {
     // perl: "Empty \b{} in regex".
     return grx_parse_fail(
@@ -784,7 +814,8 @@ static GRX_Result read_named_codepoint(GRX_Parser * parser, int in_class,
     // Python has no bare `\N`. `re` answers "missing {" for it, inside a
     // class and outside alike: `\N{NAME}` is the whole construct there,
     // where Perl also reads a lone `\N` as "not a newline".
-    if (flavour(parser) == FLAVOUR_PYTHON) {
+    if (flavour(parser) == FLAVOUR_PYTHON
+        || flavour(parser) == FLAVOUR_JAVA) {
       return grx_parse_fail(parser, GRX_DIAG_INVALID_ESCAPE, start, 2);
     }
     if (in_class) {
@@ -829,7 +860,8 @@ static GRX_Result read_named_codepoint(GRX_Parser * parser, int in_class,
   // "undefined character name" in `re`, which looks the brace contents up in
   // the Unicode name table and nowhere else. Refused rather than read,
   // because reading it would accept a spelling the reference rejects.
-  if (flavour(parser) == FLAVOUR_PYTHON && byte_at(parser, scan) == 'U'
+  if ((flavour(parser) == FLAVOUR_PYTHON
+          || flavour(parser) == FLAVOUR_JAVA) && byte_at(parser, scan) == 'U'
       && byte_at(parser, scan + 1) == '+') {
     return grx_parse_fail(parser, GRX_DIAG_INVALID_ESCAPE, start, scan + 2);
   }
@@ -1101,6 +1133,9 @@ static GRX_Result read_g_reference(GRX_Parser * parser, size_t start,
 static GRX_Result read_k_reference(GRX_Parser * parser, size_t start,
     Escape * out) {
   char open = byte_at(parser, 0);
+  if (flavour(parser) == FLAVOUR_JAVA && open != '<') {
+    return grx_parse_fail(parser, GRX_DIAG_INVALID_BACKREFERENCE, start, 2);
+  }
   char terminator = open == '<' ? '>' : (open == '\'' ? '\'' : '}');
   if (open != '<' && open != '\'' && open != '{') {
     return grx_parse_fail(parser, GRX_DIAG_INVALID_BACKREFERENCE, start, 2);
@@ -1202,9 +1237,15 @@ static GRX_Result read_escape(GRX_Parser * parser, int in_class, Escape * out) {
   // the identity-escape tail would accept `\q` as "q" - which is what the
   // ECMAScript front end does in its own dialect and what `re` does not do
   // in this one.
-  if (flavour(parser) == FLAVOUR_PYTHON
+  if ((flavour(parser) == FLAVOUR_PYTHON
+          || flavour(parser) == FLAVOUR_JAVA)
       && ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))
-      && !python_knows_escape(c, in_class)) {
+      && (flavour(parser) == FLAVOUR_PYTHON
+          ? !python_knows_escape(c, in_class)
+          : c == 'g' || c == 'K' || c == 'C' || c == 'o'
+              || c == 'U' || c == 'l' || c == 'L' || c == 'F'
+              || (c == 'E'
+                  && !(parser->spec.features & GRX_FEATURE_QUOTING)))) {
     parser->position++;
     return grx_parse_fail(parser,
         in_class ? GRX_DIAG_INVALID_CLASS_ITEM : GRX_DIAG_INVALID_ESCAPE,
@@ -1362,7 +1403,8 @@ static GRX_Result read_escape(GRX_Parser * parser, int in_class, Escape * out) {
       // a mode this library does not offer, and perl answers the same.
       // python_knows_escape() is what stops the other two dialects reaching
       // this case, so the guard here is only for a reader.
-      if (flavour(parser) != FLAVOUR_PYTHON) {
+      if (flavour(parser) != FLAVOUR_PYTHON
+          && !(flavour(parser) == FLAVOUR_JAVA && c == 'u')) {
         break;
       }
       int width = c == 'u' ? 4 : 8;
@@ -1401,7 +1443,12 @@ static GRX_Result read_escape(GRX_Parser * parser, int in_class, Escape * out) {
 
     case '0':
       parser->position++;
-      out->codepoint = read_octal_digits(parser, 2);
+      if (flavour(parser) == FLAVOUR_JAVA && !is_octal(byte_at(parser, 0))) {
+        return grx_parse_fail(parser, GRX_DIAG_INVALID_OCTAL_ESCAPE, start, 2);
+      }
+      out->codepoint = read_octal_digits(parser,
+          flavour(parser) == FLAVOUR_JAVA
+              ? (byte_at(parser, 0) <= '3' ? 3 : 2) : 2);
       out->length = parser->position - start;
       return GRX_OK;
 
@@ -1422,6 +1469,9 @@ static GRX_Result read_escape(GRX_Parser * parser, int in_class, Escape * out) {
 
     case 'k': {
       if (in_class) {
+        if (flavour(parser) == FLAVOUR_JAVA) {
+          return grx_parse_fail(parser, GRX_DIAG_INVALID_CLASS_ITEM, start, 2);
+        }
         parser->position++;
         out->codepoint = (uint32_t)c;
         out->length = parser->position - start;
@@ -1439,9 +1489,26 @@ static GRX_Result read_escape(GRX_Parser * parser, int in_class, Escape * out) {
 
   if (c >= '1' && c <= '9') {
     if (in_class) {
+      if (flavour(parser) == FLAVOUR_JAVA) {
+        return grx_parse_fail(parser, GRX_DIAG_INVALID_CLASS_ITEM, start, 2);
+      }
       // Inside a class there are no backreferences, so a digit escape is
       // octal from the first digit: `[\1]` is U+0001.
       out->codepoint = read_octal_digits(parser, 3);
+      out->length = parser->position - start;
+      return GRX_OK;
+    }
+    if (flavour(parser) == FLAVOUR_JAVA) {
+      parser->position++;
+      out->kind = ESC_BACKREF;
+      out->group = (uint32_t)(c - '0');
+      out->name = GRX_INDEX_NONE;
+      while (is_decimal(byte_at(parser, 0))
+          && out->group * 10u + (uint32_t)(byte_at(parser, 0) - '0')
+              <= parser->groups_opened) {
+        out->group = out->group * 10u + (uint32_t)(byte_at(parser, 0) - '0');
+        parser->position++;
+      }
       out->length = parser->position - start;
       return GRX_OK;
     }
@@ -1815,6 +1882,10 @@ static GRX_Result pcre_atom_escape(GRX_Parser * parser, uint32_t * out_node) {
       return result;
 
     case ESC_BACKREF:
+      if (flavour(parser) == FLAVOUR_JAVA && parser->in_lookbehind) {
+        return grx_parse_fail(parser, GRX_DIAG_INVALID_LOOKAROUND,
+            start, escape.length);
+      }
       result = plain_node(
           parser, GRX_NODE_BACKREF, start, escape.length, out_node);
       if (result == GRX_OK) {
@@ -2387,6 +2458,14 @@ static uint32_t option_for_letter(char c) {
  * greediness of every quantifier.
  */
 static uint32_t flavour_option_for_letter(const GRX_Parser * parser, char c) {
+  if (flavour(parser) == FLAVOUR_JAVA) {
+    switch (c) {
+      case 'U': return GRX_OPT_UCP;
+      case 'u': return GRX_OPT_UTF;
+      case 'd': return GRX_OPT_NEWLINE_TERMINATES;
+      default: return 0;
+    }
+  }
   if (flavour(parser) != FLAVOUR_PCRE) {
     return 0;
   }
@@ -2524,6 +2603,10 @@ static GRX_Result read_option_letters(GRX_Parser * parser, size_t start,
   CharsetChoice charset_choice = {0, 0};
 
   int reset = grx_parse_eat(parser, '^');
+  if (reset && flavour(parser) == FLAVOUR_JAVA) {
+    return grx_parse_fail(parser, GRX_DIAG_UNKNOWN_FLAG,
+        parser->position - 1, 1);
+  }
   if (reset) {
     clear = GRX_OPT_CASELESS | GRX_OPT_MULTILINE | GRX_OPT_DOTALL
         | GRX_OPT_EXTENDED | GRX_OPT_EXTENDED_MORE | GRX_OPT_NO_CAPTURE;
@@ -2652,7 +2735,8 @@ static GRX_Result read_option_letters(GRX_Parser * parser, size_t start,
     // `(?n)` is PCRE2's and perl's, and "unknown extension ?n" in `re`.
     // option_for_letter() is the shared table, so the letter has to be
     // taken back here rather than left out of it.
-    if (flavour(parser) == FLAVOUR_PYTHON && c == 'n') {
+    if ((flavour(parser) == FLAVOUR_PYTHON
+            || flavour(parser) == FLAVOUR_JAVA) && c == 'n') {
       option = 0;
     }
     if (!option) {
@@ -2670,7 +2754,10 @@ static GRX_Result read_option_letters(GRX_Parser * parser, size_t start,
     }
 
     parser->position++;
-    if (option == GRX_OPT_EXTENDED && byte_at(parser, 0) == 'x') {
+    if (option == GRX_OPT_EXTENDED && flavour(parser) == FLAVOUR_JAVA) {
+      option |= GRX_OPT_EXTENDED_MORE;
+    }
+    else if (option == GRX_OPT_EXTENDED && byte_at(parser, 0) == 'x') {
       parser->position++;
       option |= GRX_OPT_EXTENDED_MORE;
     }
@@ -3387,6 +3474,158 @@ static GRX_Result complement_wrap(GRX_Parser * parser, unsigned complements,
   uint32_t operand = *out_node;
   return class_op_node(
       parser, GRX_CLASS_OP_COMPLEMENT, start, operand, out_node);
+}
+
+/** Join two Java class operands without interleaving their item spans. */
+static GRX_Result java_class_join(GRX_Parser * parser, GRX_ClassOpKind op,
+    size_t start, uint32_t left, uint32_t right, uint32_t * out_node) {
+  GRX_Result result = class_op_node(parser, op, start, left, out_node);
+  if (result != GRX_OK) {
+    return result;
+  }
+  if (grx_pattern_add_child(parser->pattern, *out_node, right) != GRX_OK) {
+    return grx_parse_fail(parser, GRX_DIAG_OUT_OF_MEMORY, start, 1);
+  }
+  return GRX_OK;
+}
+
+/** Java's ordinary bracket grammar: adjacent sets unite, `&&` intersects. */
+static GRX_Result java_class_expression(GRX_Parser * parser,
+    unsigned depth, uint32_t * out_node) {
+  size_t start = parser->position - 1;
+  if (depth > 64) {
+    return grx_parse_fail(parser, GRX_DIAG_LIMIT_NESTING_DEPTH, start, 1);
+  }
+  int negated = grx_parse_eat(parser, '^');
+  int first = 1;
+  uint32_t union_node = GRX_INDEX_NONE;
+  uint32_t expression = GRX_INDEX_NONE;
+  size_t quote_end = 0;
+
+  for (;;) {
+    skip_class_ignorable(parser, &quote_end);
+    if (grx_parse_at_end(parser)) {
+      return grx_parse_fail(parser, GRX_DIAG_UNMATCHED_OPEN_BRACKET, start, 1);
+    }
+    if (byte_at(parser, 0) == ']' && !first
+        && parser->position >= quote_end) {
+      parser->position++;
+      break;
+    }
+    if (byte_at(parser, 0) == '&' && byte_at(parser, 1) == '&'
+        && parser->position >= quote_end) {
+      if (union_node != GRX_INDEX_NONE && expression == GRX_INDEX_NONE) {
+        expression = union_node;
+      }
+      else if (union_node != GRX_INDEX_NONE) {
+        uint32_t joined = GRX_INDEX_NONE;
+        GRX_Result result = java_class_join(parser,
+            GRX_CLASS_OP_INTERSECT, start, expression, union_node, &joined);
+        if (result != GRX_OK) return result;
+        expression = joined;
+      }
+      union_node = GRX_INDEX_NONE;
+      parser->position += 2;
+      first = 0;
+      continue;
+    }
+
+    uint32_t atom = GRX_INDEX_NONE;
+    GRX_Result result = GRX_OK;
+    if (byte_at(parser, 0) == '[' && parser->position >= quote_end) {
+      parser->position++;
+      result = java_class_expression(parser, depth + 1, &atom);
+    }
+    else {
+      GRX_ClassItem low;
+      int is_item = 0;
+      result = read_class_atom(parser, &low, &is_item, &quote_end);
+      if (result != GRX_OK) return result;
+      if (!is_item) continue;
+      size_t after_low = parser->position;
+      if (parser->position >= quote_end) skip_class_ignorable(parser, &quote_end);
+      if (byte_at(parser, 0) == '-' && byte_at(parser, 1) != ']'
+          && byte_at(parser, 1) != '\0' && byte_at(parser, 1) != '['
+          && parser->position >= quote_end) {
+        size_t dash = parser->position++;
+        GRX_ClassItem high;
+        int high_is_item = 0;
+        result = read_class_atom(parser, &high, &high_is_item, &quote_end);
+        if (result != GRX_OK) return result;
+        if (!high_is_item || (is_single(&low) && !is_single(&high))) {
+          return grx_parse_fail(parser, GRX_DIAG_CLASS_ESCAPE_IN_RANGE,
+              low.offset, parser->position - low.offset);
+        }
+        if (is_single(&low) && is_single(&high)) {
+          if (low.lo > high.lo) {
+            return grx_parse_fail(parser, GRX_DIAG_INVALID_CLASS_RANGE,
+                low.offset, parser->position - low.offset);
+          }
+          low.kind = GRX_CLASS_ITEM_RANGE;
+          low.hi = high.lo;
+          low.length = parser->position - low.offset;
+        }
+        else {
+          GRX_ClassItem hyphen = {GRX_CLASS_ITEM_SINGLE, 0, '-', 0, 0,
+              dash, 1};
+          uint32_t middle = GRX_INDEX_NONE;
+          uint32_t end = GRX_INDEX_NONE;
+          result = item_as_node(parser, &low, &atom);
+          if (result != GRX_OK) return result;
+          result = item_as_node(parser, &hyphen, &middle);
+          if (result != GRX_OK) return result;
+          uint32_t joined = GRX_INDEX_NONE;
+          result = java_class_join(parser, GRX_CLASS_OP_UNION, start,
+              atom, middle, &joined);
+          if (result != GRX_OK) return result;
+          result = item_as_node(parser, &high, &end);
+          if (result != GRX_OK) return result;
+          result = java_class_join(parser, GRX_CLASS_OP_UNION, start,
+              joined, end, &atom);
+          if (result != GRX_OK) return result;
+        }
+      }
+      else {
+        parser->position = after_low;
+      }
+      if (atom == GRX_INDEX_NONE) {
+        result = item_as_node(parser, &low, &atom);
+      }
+    }
+    if (result != GRX_OK) return result;
+    if (union_node == GRX_INDEX_NONE) {
+      union_node = atom;
+    }
+    else {
+      uint32_t joined = GRX_INDEX_NONE;
+      result = java_class_join(parser, GRX_CLASS_OP_UNION,
+          start, union_node, atom, &joined);
+      if (result != GRX_OK) return result;
+      union_node = joined;
+    }
+    first = 0;
+  }
+  if (union_node == GRX_INDEX_NONE) {
+    if (expression == GRX_INDEX_NONE) {
+      return grx_parse_fail(parser, GRX_DIAG_INVALID_CLASS_ITEM, start,
+          parser->position - start);
+    }
+    *out_node = expression;
+    return complement_wrap(parser, (unsigned)negated, start, out_node);
+  }
+  if (expression != GRX_INDEX_NONE) {
+    GRX_Result result = java_class_join(parser, GRX_CLASS_OP_INTERSECT,
+        start, expression, union_node, out_node);
+    if (result != GRX_OK) return result;
+  }
+  else {
+    *out_node = union_node;
+  }
+  return complement_wrap(parser, (unsigned)negated, start, out_node);
+}
+
+static GRX_Result java_char_class(GRX_Parser * parser, uint32_t * out_node) {
+  return java_class_expression(parser, 1, out_node);
 }
 
 /**
@@ -4337,6 +4576,9 @@ static GRX_Result pcre_group_open(GRX_Parser * parser, GRX_GroupOpen * out) {
   };
 
   if (byte_at(parser, 0) == '*') {
+    if (flavour(parser) == FLAVOUR_JAVA) {
+      return grx_parse_fail(parser, GRX_DIAG_INVALID_GROUP_SYNTAX, start, 2);
+    }
     return read_star_construct(parser, start, out);
   }
 
@@ -4366,6 +4608,13 @@ static GRX_Result pcre_group_open(GRX_Parser * parser, GRX_GroupOpen * out) {
   // has named groups, so accepting `(?<n>a)` would not be adding a
   // construct - it would be accepting a pattern `re` rejects and telling
   // the caller it is valid Python.
+  if (flavour(parser) == FLAVOUR_JAVA
+      && (c == '[' || c == '|' || c == '(' || c == 'R' || c == '&'
+          || c == '+' || (c == '-' && is_decimal(byte_at(parser, 1)))
+          || is_decimal(c) || c == '\''
+          || c == 'P' || c == 'C' || c == '{')) {
+    return grx_parse_fail(parser, GRX_DIAG_INVALID_GROUP_SYNTAX, start, 2);
+  }
   if (flavour(parser) == FLAVOUR_PYTHON
       && ((c == '<' && byte_at(parser, 1) != '=' && byte_at(parser, 1) != '!')
           || c == '\'' || c == '|' || c == '&' || c == 'R'
@@ -4744,7 +4993,9 @@ static GRX_Result pcre_group_open(GRX_Parser * parser, GRX_GroupOpen * out) {
 
 static GRX_Result check_repeat_bound(
     GRX_Parser * parser, uint64_t min, uint64_t max) {
-  if (min > GRX_PCRE_REPEAT_MAX || max > GRX_PCRE_REPEAT_MAX) {
+  uint64_t limit = flavour(parser) == FLAVOUR_JAVA
+      ? 0x7FFFFFFFu : GRX_PCRE_REPEAT_MAX;
+  if (min > limit || max > limit) {
     // The dialect's cap, not a caller's: pcre2test reports `/z{65536}/` as
     // "number too big in {} quantifier", and no option raises it. A limit is
     // what GRX_Limits sets.
@@ -4780,6 +5031,10 @@ static GRX_Result pcre_brace_quantifier(
 
   if (byte_at(parser, scan) == '}') {
     if (!min_digits) {
+      if (flavour(parser) == FLAVOUR_JAVA) {
+        return grx_parse_fail(parser, GRX_DIAG_INVALID_QUANTIFIER,
+            parser->position - 1, scan + 2);
+      }
       return GRX_OK;
     }
     parser->position += scan + 1;
@@ -4805,6 +5060,11 @@ static GRX_Result pcre_brace_quantifier(
   skip_quantifier_space(parser, &scan);
   if (byte_at(parser, scan) != '}' || (!min_digits && !max_digits)) {
     return GRX_OK;
+  }
+
+  if (flavour(parser) == FLAVOUR_JAVA && !min_digits) {
+    return grx_parse_fail(parser, GRX_DIAG_INVALID_QUANTIFIER,
+        parser->position - 1, scan + 2);
   }
 
   parser->position += scan + 1;
@@ -5120,7 +5380,8 @@ static GRX_Result pcre_validate(GRX_Parser * parser) {
     // The relative spellings never had this: `\g{-1}` and `(?-1)` are
     // resolved against the same counter as they are read, so `(?n)(a)\g{-1}`
     // was already refused. It is the absolute form alone.
-    if (node->kind == GRX_NODE_BACKREF && !(node->flags & GRX_NODE_NAMED)
+    if (flavour(parser) != FLAVOUR_JAVA
+        && node->kind == GRX_NODE_BACKREF && !(node->flags & GRX_NODE_NAMED)
         && node->a > (uint32_t)parser->groups_opened) {
       return grx_parse_fail(parser, GRX_DIAG_INVALID_BACKREFERENCE,
           node->offset, node->length);
@@ -5209,6 +5470,19 @@ const GRX_Frontend grx_frontend_perl = {
   .atom_escape = pcre_atom_escape,
   .class_escape = pcre_class_escape,
   .char_class = pcre_char_class,
+  .group_open = pcre_group_open,
+  .brace_quantifier = pcre_brace_quantifier,
+  .literal_atom = pcre_literal_atom,
+  .check_quantifier_target = pcre_check_quantifier_target,
+  .skip_ignorable = pcre_skip_ignorable,
+  .validate = pcre_validate,
+};
+
+const GRX_Frontend grx_frontend_java = {
+  .name = "java",
+  .atom_escape = pcre_atom_escape,
+  .class_escape = pcre_class_escape,
+  .char_class = java_char_class,
   .group_open = pcre_group_open,
   .brace_quantifier = pcre_brace_quantifier,
   .literal_atom = pcre_literal_atom,

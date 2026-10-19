@@ -528,7 +528,8 @@ typedef enum {
    * difference, and it is not expressible as a table row - see
    * cased_letter_alias() - so it is a third spelling rule instead.
    */
-  GRX_PROPERTY_LOOSE_PERL
+  GRX_PROPERTY_LOOSE_PERL,
+  GRX_PROPERTY_JAVA ///< Java Pattern aliases measured against JDK 25.
 } GRX_PropertyMatch;
 
 /**
