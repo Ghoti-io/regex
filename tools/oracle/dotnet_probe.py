@@ -258,6 +258,57 @@ CASES += [case("split", pattern, subject, "", mode, argument)
     (",", "a,b,c", "split-count", "99"),
 )]
 
+# The feature bits in `GRX_SyntaxSpec::features`, asked as "does this
+# construct compile" rather than read off Microsoft's reference page. The
+# mask for this dialect was written before there was a .NET to ask, so every
+# bit in it was a claim; `compile` mode turns each into an answer. A syntax
+# error means the construct is absent, which is what a missing bit asserts.
+CASES += [case("features", pattern, "", flags, "compile")
+          for pattern, flags in (
+    ("a|b", ""),                 # ALT
+    ("a*", ""),                  # REP
+    ("a*?", ""),                 # LAZY
+    ("a*+", ""),                 # POSS: absent in .NET, so expect an error
+    ("(?:a)", ""),               # NCAP
+    ("(?<n>a)", ""),             # NAME, angle spelling
+    ("(?'n'a)", ""),             # NAME, quote spelling - .NET's second one
+    (r"(a)\1", ""),              # BREF
+    (r"(?<n>a)\k<n>", ""),       # BREF by name
+    ("(?=a)", ""),               # LAH
+    ("(?!a)", ""),
+    ("(?<=a)", ""),              # LBH
+    ("(?<!a)", ""),
+    ("(?>a)", ""),               # ATOM
+    ("(a)(?(1)b|c)", ""),        # COND, by group number
+    ("(?(?=a)b|c)", ""),         # COND, by assertion
+    ("(a)(?1)", ""),             # SUBR: absent, expect an error
+    ("a(?R)?b", ""),             # RECU: absent, expect an error
+    ("(?i)a", ""),               # FLAG
+    ("(?i:a)", ""),              # SFLG, which the mask does not claim
+    ("(?n:(a))", ""),            # SFLG with .NET's own `n`
+    ("(?#x)a", ""),              # CMNT
+    (r"\p{L}", ""),              # UPRP
+    (r"\p{IsGreek}", ""),        # UPRP, block spelling
+    ("[a-z-[aeiou]]", ""),       # CSET
+    (r"\b", ""),                 # WORD
+    (r"\A", ""),                 # ANCH
+    (r"\Z", ""),
+    (r"\z", ""),
+    (r"\G", ""),
+    (r"\Qa.b\E", ""),           # QUOT: absent in .NET, expect an error
+    (r"\x41", ""),               # HEX
+    (r"\u0041", ""),
+    (r"\052", ""),               # OCT
+    (r"\cA", ""),                # CTRL
+    (r"\e", ""),                 # .NET has `\e` for escape; perl does not
+    (r"\a", ""),
+    # Balancing groups, which are out of scope and deferred to their own
+    # package. Asked anyway, because "deferred" should rest on the reference
+    # having the construct rather than on nobody having looked.
+    ("(?<n>a)(?<-n>b)", ""),
+    (r"(?<a>x)(?<-a>y)(?(a)z)", ""),
+)]
+
 # The GRX_Profile axes. Each row names the field it separates, and the rule
 # from the Java audit applies: a case that answers the same under both values
 # of a field pins nothing, so several come as pairs.

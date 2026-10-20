@@ -256,9 +256,22 @@ static const GRX_SyntaxSpec spec_table[GRX_SYNTAX_COUNT] = {
     // `a{3}{4}` compiles and matches three; `a{3}*` does not compile.
     .brace_quantifier_after_quantifier_ignored = 1,
   },
+  // **Probed on 2026-10-20 against the pinned .NET 10.0.13**, where this mask
+  // had been read off Microsoft's reference page. Every bit it claimed is
+  // confirmed, and four it withholds are confirmed absent - `a*+` is "Nested
+  // quantifier", `(a)(?1)` and `a(?R)?b` are "Unrecognized grouping
+  // construct", and `\Qa.b\E` is "Unrecognized escape sequence \Q". One bit
+  // was missing: **`(?i:a)` and `(?n:(a))` both compile**, so the dialect has
+  // scoped flags and the mask denied them. `tools/oracle/dotnet_probe.py`'s
+  // `features` area is the 39 rows, and `tests/data/probe/dotnet.json` the
+  // answers.
   [GRX_SYNTAX_DOTNET] = {
     .features = ALT | REP | LAZY | NCAP | NAME | BREF | LAH | LBH | ATOM
-        | COND | FLAG | CMNT | UPRP | CSET | WORD | ANCH | HEX | OCT | CTRL,
+        | COND | FLAG | SFLG | CMNT | UPRP | CSET | WORD | ANCH | HEX | OCT
+        | CTRL,
+    // A .NET string is UTF-16 and `Regex` matches over it as text, so a
+    // pattern and a subject are characters rather than bytes.
+    .default_options = GRX_OPT_UTF,
   },
   [GRX_SYNTAX_RUBY] = {
     .features = ALT | REP | LAZY | POSS | NCAP | NAME | BREF | LAH | LBH
@@ -1458,6 +1471,30 @@ static const FlagRow java_flags[] = {
   {0, FLAG_OPTION, 0, 0, 0},
 };
 
+// The five options .NET spells inline as well as in RegexOptions, which is
+// what makes them an alphabet: `(?imnsx-imnsx:...)` takes exactly these.
+//
+// **`x` is GRX_OPT_EXTENDED alone, where Java's is EXTENDED | EXTENDED_MORE**,
+// and that is measured rather than copied from the neighbouring table:
+// `[a b]` under `x` matches a space on .NET 10.0.13, so whitespace inside a
+// class is kept. There is no second `x` spelling here either - the repeat
+// field is what PCRE2 and Perl need for `xx` and .NET has no such letter.
+//
+// RegexOptions carries five more with no inline spelling - ECMAScript,
+// CultureInvariant, RightToLeft, Compiled and NonBacktracking - and none of
+// them is here. A letter for one would be a letter the reference does not
+// take, which is the opposite of what this table is for; the oracle driver
+// gives them capitals of its own so a differential can reach them, and says
+// so.
+static const FlagRow dotnet_flags[] = {
+  {'i', FLAG_OPTION, GRX_OPT_CASELESS, 0, 0},
+  {'m', FLAG_OPTION, GRX_OPT_MULTILINE, 0, 0},
+  {'n', FLAG_OPTION, GRX_OPT_NO_CAPTURE, 0, 0}, // RegexOptions.ExplicitCapture.
+  {'s', FLAG_OPTION, GRX_OPT_DOTALL, 0, 0},     // RegexOptions.Singleline.
+  {'x', FLAG_OPTION, GRX_OPT_EXTENDED, 0, 0},
+  {0, FLAG_OPTION, 0, 0, 0},
+};
+
 // Go's `regexp` has no flags argument at all: the flags are `(?ims)` groups
 // inside the pattern, which is the dialect's own syntax. So this alphabet is
 // not a second spelling of anything the reference takes - it is the set of
@@ -1505,6 +1542,8 @@ static const FlagRow * flag_alphabet(GRX_Syntax syntax) {
       return python_flags;
     case GRX_SYNTAX_JAVA:
       return java_flags;
+    case GRX_SYNTAX_DOTNET:
+      return dotnet_flags;
     default:
       // POSIX and GNU have no flag letters at all: their options are API
       // arguments (REG_ICASE, REG_NEWLINE). An empty string is still valid

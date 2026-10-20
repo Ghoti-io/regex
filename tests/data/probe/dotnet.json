@@ -929,6 +929,318 @@
       "argument": "99"
     },
     {
+      "area": "features",
+      "pattern": "a|b",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "features",
+      "pattern": "a*",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "features",
+      "pattern": "a*?",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "features",
+      "pattern": "a*+",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "features",
+      "pattern": "(?:a)",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "features",
+      "pattern": "(?<n>a)",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "features",
+      "pattern": "(?'n'a)",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "features",
+      "pattern": "(a)\\1",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "features",
+      "pattern": "(?<n>a)\\k<n>",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "features",
+      "pattern": "(?=a)",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "features",
+      "pattern": "(?!a)",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "features",
+      "pattern": "(?<=a)",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "features",
+      "pattern": "(?<!a)",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "features",
+      "pattern": "(?>a)",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "features",
+      "pattern": "(a)(?(1)b|c)",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "features",
+      "pattern": "(?(?=a)b|c)",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "features",
+      "pattern": "(a)(?1)",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "features",
+      "pattern": "a(?R)?b",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "features",
+      "pattern": "(?i)a",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "features",
+      "pattern": "(?i:a)",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "features",
+      "pattern": "(?n:(a))",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "features",
+      "pattern": "(?#x)a",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "features",
+      "pattern": "\\p{L}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "features",
+      "pattern": "\\p{IsGreek}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "features",
+      "pattern": "[a-z-[aeiou]]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "features",
+      "pattern": "\\b",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "features",
+      "pattern": "\\A",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "features",
+      "pattern": "\\Z",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "features",
+      "pattern": "\\z",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "features",
+      "pattern": "\\G",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "features",
+      "pattern": "\\Qa.b\\E",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "features",
+      "pattern": "\\x41",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "features",
+      "pattern": "\\u0041",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "features",
+      "pattern": "\\052",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "features",
+      "pattern": "\\cA",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "features",
+      "pattern": "\\e",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "features",
+      "pattern": "\\a",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "features",
+      "pattern": "(?<n>a)(?<-n>b)",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "features",
+      "pattern": "(?<a>x)(?<-a>y)(?(a)z)",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
       "area": "profile",
       "pattern": "a|ab",
       "subject": "ab",
@@ -2008,6 +2320,135 @@
         "b",
         "c"
       ]
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 3,
+      "error": "NestedQuantifiersNotParenthesized",
+      "description": "Invalid pattern 'a*+' at offset 3. Nested quantifier '+'."
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 6,
+      "error": "InvalidGroupingConstruct",
+      "description": "Invalid pattern '(a)(?1)' at offset 6. Unrecognized grouping construct."
+    },
+    {
+      "kind": "syntax",
+      "index": 4,
+      "error": "InvalidGroupingConstruct",
+      "description": "Invalid pattern 'a(?R)?b' at offset 4. Unrecognized grouping construct."
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '\\Qa.b\\E' at offset 2. Unrecognized escape sequence \\Q."
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
     },
     {
       "kind": "match",
