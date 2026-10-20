@@ -57,6 +57,7 @@ typedef enum {
   GRX_TPL_PREFIX,      ///< The subject before the match.
   GRX_TPL_SUFFIX,      ///< The subject after the match.
   GRX_TPL_SUBJECT,     ///< The whole subject, match and all.
+  GRX_TPL_LAST_GROUP,  ///< `$+`: the highest-numbered group.
   GRX_TPL_GROUP_NAMED, ///< A group named by `offset`/`length` in the text.
   GRX_TPL_NOTHING,     ///< Substitutes the empty string.
   /**

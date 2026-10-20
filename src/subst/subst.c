@@ -721,6 +721,10 @@ GRX_Result grx_template_parse(const GRX_TemplateSpec * spec,
         kind = GRX_TPL_SUBJECT;
         consumed = 1;
       }
+      else if (c == '+' && (spec->features & GRX_TMPL_LAST_GROUP)) {
+        kind = GRX_TPL_LAST_GROUP;
+        consumed = 1;
+      }
       else if (c == '<' && (spec->features & GRX_TMPL_NAME_ANGLE)
           && (named || !(spec->features & GRX_TMPL_NAME_NEEDS_NAMED_GROUPS))) {
         consumed = named_reference(regex, text, length, after, '<', '>',
@@ -768,6 +772,19 @@ GRX_Result grx_template_parse(const GRX_TemplateSpec * spec,
           grx_template_clear(out_template);
           return fail(out_error, GRX_DIAG_TEMPLATE_UNKNOWN_GROUP, start,
               1 + consumed);
+        }
+        // `GRX_TMPL_MISSING_LITERAL` had reached the numeric spellings only.
+        // A braced reference that resolves to nothing fell through to
+        // GRX_TPL_NOTHING and substituted the empty string, which is
+        // MISSING_EMPTY's answer under another name. .NET is the first
+        // dialect here to pair LITERAL with a braced *name*, and it leaves
+        // the whole thing standing: `${nope}` substitutes `${nope}`, the
+        // same way `$9` with no group 9 substitutes `$9`. Dropping `consumed`
+        // hands it to the not-a-reference arm below, which is where every
+        // other unrecognised spelling already becomes text.
+        if (consumed && kind == GRX_TPL_NOTHING
+            && spec->missing == GRX_TMPL_MISSING_LITERAL) {
+          consumed = 0;
         }
       }
       else if (c == 'g' && (spec->features & GRX_TMPL_G_ANGLE)
@@ -1478,6 +1495,23 @@ static GRX_Result expand(const GRX_Template * tmpl, const GRX_Match * match,
         // same stretch and not a third opinion about where the subject is.
         result = push_cased(&cased, out, subject, end);
         break;
+      case GRX_TPL_LAST_GROUP: {
+        // The highest number, which grx_match_count() gives directly because
+        // it counts group 0 as one of the spans. Not a search for the highest
+        // group that *participated*: `(a)(b)?` over "a" substitutes nothing
+        // on .NET, and a loop looking for the last set group would substitute
+        // "a". The unset arm is deliberately silent rather than an error even
+        // where a missing group is one, because `$+` names no group - there
+        // is nothing for the caller to have got wrong.
+        size_t count = grx_match_count(match);
+        GRX_Capture capture = {GRX_NPOS, GRX_NPOS};
+        if (count && grx_match_group(match, count - 1, &capture) == GRX_OK
+            && capture.start != GRX_NPOS) {
+          result = push_cased(&cased, out, subject + capture.start,
+              capture.end - capture.start);
+        }
+        break;
+      }
       case GRX_TPL_GROUP: {
         GRX_Capture capture = {GRX_NPOS, GRX_NPOS};
         if (grx_match_group(match, op->a, &capture) == GRX_OK
@@ -1592,16 +1626,6 @@ GRX_Result grx_regex_replace(const GRX_Regex * regex, const char * subject,
   if (!regex || !out_text || (!subject && length)
       || (!replacement && replacement_length)) {
     return GRX_ERR_INVALID;
-  }
-  if (regex->syntax == GRX_SYNTAX_DOTNET) {
-    // .NET's replacement grammar is not built, and the same argument as
-    // grx_regex_split()'s applies with a different field: an unset
-    // `template_spec` has sigil 0, so `$1` would be copied through as
-    // literal text rather than refused. Measured, the grammar is `$1`,
-    // `${1}`, `${name}`, `$&`, `` $` ``, `$'`, `$+`, `$_`, `$$` and `$0`,
-    // with a *missing* group left literal - `$9` with no group 9 stays `$9`
-    // where Java raises - so two of those have no GRX_TMPL_ bit yet.
-    return GRX_ERR_UNSUPPORTED;
   }
   if (flags & ~(uint32_t)(GRX_REPLACE_GLOBAL | GRX_REPLACE_LITERAL)) {
     return GRX_ERR_INVALID;
@@ -1841,12 +1865,13 @@ static GRX_Result split_worker(const GRX_Regex * regex, const char * subject,
   const int go_rule = profile.split == GRX_SPLIT_GO;
   const int rust_rule = profile.split == GRX_SPLIT_RUST;
   const int java_rule = profile.split == GRX_SPLIT_JAVA;
+  const int dotnet_rule = profile.split == GRX_SPLIT_DOTNET;
   // The plain walk: every match separates, an empty one included, with no
   // rule about a piece boundary and none about either end of the subject.
   // Python reached it first and the two linear dialects walk it too; what
   // they add - dropped captures, dropped end pieces, a fourth reading of
   // `limit` - is below rather than here.
-  const int plain_walk = python_rule || go_rule || rust_rule;
+  const int plain_walk = python_rule || go_rule || rust_rule || dotnet_rule;
   // Go, Rust and Java return only text between matches. ECMAScript, perl
   // and Python interleave captured groups.
   const int drop_captures = go_rule || rust_rule || java_rule;
@@ -1916,7 +1941,7 @@ static GRX_Result split_worker(const GRX_Regex * regex, const char * subject,
   // pieces at all. The field count below is what makes the *remainder*
   // stand as the last field, which is the half Python takes from perl.
   const size_t field_limit
-      = ((perl_rule || python_rule || java_rule) && limit == 0)
+      = ((perl_rule || python_rule || java_rule || dotnet_rule) && limit == 0)
             ? GRX_NPOS : limit;
 
   GRX_Arena pieces;
@@ -1924,7 +1949,7 @@ static GRX_Result split_worker(const GRX_Regex * regex, const char * subject,
       GRX_DIAG_OUT_OF_MEMORY);
 
   GRX_Result result = GRX_OK;
-  if (!perl_rule && !python_rule && !java_rule && !limit) {
+  if (!perl_rule && !python_rule && !java_rule && !dotnet_rule && !limit) {
     // ECMAScript's `split(re, 0)`: no pieces, whatever the subject is.
     goto publish_pieces;
   }
@@ -2040,7 +2065,10 @@ static GRX_Result split_worker(const GRX_Regex * regex, const char * subject,
       // count of *splits*, which is the same remainder reached one field
       // later: `re.split(",", "a,b,c", maxsplit=1)` is `['a', 'b,c']` where
       // `split /,/, "a,b,c", 1` is `("a,b,c")`.
-      if ((perl_rule || java_rule) && field_limit != GRX_NPOS
+      // .NET's count is perl's and Java's reading - pieces, with the last
+      // one the unsplit remainder - on Python's walk. `Regex.Split(",", 2)`
+      // over "a,b,c" is `["a", "b,c"]`, not Python's `["a", "b", "c"]`.
+      if ((perl_rule || java_rule || dotnet_rule) && field_limit != GRX_NPOS
           && fields + 1 >= field_limit) {
         break;
       }
@@ -2161,22 +2189,6 @@ GRX_Result grx_regex_split(const GRX_Regex * regex, const char * subject,
     size_t length, size_t limit, const GRX_SearchOptions * options,
     const GRX_Allocator * allocator, GRX_Error * out_error,
     GRX_Split * out_split) {
-  if (regex && regex->syntax == GRX_SYNTAX_DOTNET) {
-    // .NET's split rule is not built, and refusing is not the same as
-    // leaving it alone: `GRX_SyntaxSpec::split`'s zero value is
-    // GRX_SPLIT_ECMASCRIPT, so a dialect that has not set the field answers
-    // with *another dialect's* rule rather than failing. Measured, .NET's
-    // differs in three ways at once - `Regex.Split` interleaves the
-    // separator's captured groups between the pieces, keeps a leading and a
-    // trailing empty piece, and throws on a negative count where Java reads
-    // one as "no limit" - so an ECMAScript answer here would be wrong rather
-    // than approximate. Built by its own work package; until then this says
-    // so.
-    if (out_error) {
-      grx_error_clear(out_error);
-    }
-    return GRX_ERR_UNSUPPORTED;
-  }
   if (regex && regex->syntax == GRX_SYNTAX_JAVA) {
     if (limit != GRX_NPOS && limit > INT32_MAX) {
       if (out_error) {

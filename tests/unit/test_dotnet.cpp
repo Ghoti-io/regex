@@ -231,22 +231,31 @@ TEST(DotNetClasses, ABareBracketInsideAClassIsALiteral) {
   EXPECT_TRUE(matches_dotnet("[[:alpha:]]", "a]"));
 }
 
-// Replace and split refuse, and refusing is the point: both dispatch on a
-// profile field whose zero value is *another dialect*'s rule, so a routed
-// dialect that has not set them answers wrongly instead of failing.
-// `GRX_SyntaxSpec::split`'s zero is GRX_SPLIT_ECMASCRIPT and an unset
-// template has sigil 0, which would copy `$1` through as literal text.
-TEST(DotNetOperations, ReplaceAndSplitRefuseUntilTheyAreBuilt) {
+// Replace and split answer now. They refused until their rules were set,
+// because both read a profile field whose zero value is *another dialect*'s
+// rule - GRX_SPLIT_ECMASCRIPT, and a template with no sigil - so a routed
+// dialect that had not set them would have answered wrongly rather than
+// failing. This test was that refusal and is now its removal.
+TEST(DotNetOperations, ReplaceAndSplitAnswer) {
   GRX_Regex * regex = nullptr;
   GRX_Error error;
   ASSERT_EQ(grx_regex_compile_with_allocator("a", 1, GRX_SYNTAX_DOTNET,
       GRX_OPT_NONE, nullptr, nullptr, &error, &regex), GRX_OK);
   GRX_Text text = {};
-  EXPECT_EQ(grx_regex_replace(regex, "aa", 2, "$0", 2, 0, nullptr, nullptr,
-      &error, &text), GRX_ERR_UNSUPPORTED);
+  // GRX_REPLACE_GLOBAL, because .NET's Regex.Replace replaces every match
+  // and this API's default is the first one. The probe asks in `replace-all`
+  // mode for the same reason; a first-match call compared against it would
+  // be comparing two different questions, and the template tests above only
+  // happen to agree because each of their subjects holds one match.
+  EXPECT_EQ(grx_regex_replace(regex, "aa", 2, "[$0]", 4, GRX_REPLACE_GLOBAL,
+      nullptr, nullptr, &error, &text), GRX_OK);
+  EXPECT_EQ(std::string(text.data, text.length), "[a][a]");
+  grx_text_free(&text);
   GRX_Split split = {};
-  EXPECT_EQ(grx_regex_split(regex, "aa", 2, GRX_NPOS, nullptr, nullptr,
-      &error, &split), GRX_ERR_UNSUPPORTED);
+  EXPECT_EQ(grx_regex_split(regex, "xax", 3, 0, nullptr, nullptr,
+      &error, &split), GRX_OK);
+  EXPECT_EQ(split.count, 2u);
+  grx_split_free(&split);
   grx_regex_free(regex);
 }
 
@@ -331,6 +340,123 @@ TEST(DotNetCaptures, ExplicitCaptureLeavesTheNamedGroupsNumberedFromOne) {
 TEST(DotNetCaptures, ANamedBackreferenceFollowsTheRenumbering) {
   EXPECT_EQ(groups_dotnet("(?<n>a)\\k<n>", "aa"), "0:2 0:1");
   EXPECT_EQ(groups_dotnet("(y)(?<n>a)\\k<n>", "yaa"), "0:3 0:1 1:2");
+}
+
+namespace {
+
+std::string replace_dotnet(const char * pattern, const char * subject,
+    const char * tmpl) {
+  GRX_Regex * regex = nullptr;
+  GRX_Error error;
+  if (grx_regex_compile_with_allocator(pattern, std::strlen(pattern),
+          GRX_SYNTAX_DOTNET, GRX_OPT_NONE, nullptr, nullptr, &error,
+          &regex) != GRX_OK) return "compile-failed";
+  GRX_Text text = {};
+  std::string out = "error";
+  if (grx_regex_replace(regex, subject, std::strlen(subject), tmpl,
+          std::strlen(tmpl), GRX_REPLACE_GLOBAL, nullptr, nullptr, &error,
+          &text) == GRX_OK) {
+    out.assign(text.data, text.length);
+  }
+  grx_text_free(&text);
+  grx_regex_free(regex);
+  return out;
+}
+
+std::string split_dotnet(const char * pattern, const char * subject,
+    size_t limit = 0) {
+  GRX_Regex * regex = nullptr;
+  GRX_Error error;
+  if (grx_regex_compile_with_allocator(pattern, std::strlen(pattern),
+          GRX_SYNTAX_DOTNET, GRX_OPT_NONE, nullptr, nullptr, &error,
+          &regex) != GRX_OK) return "compile-failed";
+  GRX_Split split = {};
+  std::string out = "error";
+  if (grx_regex_split(regex, subject, std::strlen(subject), limit, nullptr,
+          nullptr, &error, &split) == GRX_OK) {
+    out.clear();
+    for (size_t i = 0; i < split.count; i++) {
+      if (i) out += "|";
+      if (split.pieces[i].start != GRX_NPOS) {
+        out.append(subject + split.pieces[i].start,
+            split.pieces[i].end - split.pieces[i].start);
+      }
+    }
+  }
+  grx_split_free(&split);
+  grx_regex_free(regex);
+  return out;
+}
+
+} // namespace
+
+// The replacement grammar, every row a measured answer from the pinned
+// .NET 10.0.13 (probe `template` area).
+TEST(DotNetTemplate, TheGrammarIsTheMeasuredOne) {
+  EXPECT_EQ(replace_dotnet("b", "abc", "[$0]"), "a[b]c");
+  EXPECT_EQ(replace_dotnet("(b)", "abc", "[$1]"), "a[b]c");
+  EXPECT_EQ(replace_dotnet("(b)", "abc", "[${1}]"), "a[b]c");
+  EXPECT_EQ(replace_dotnet("(?<n>b)", "abc", "[${n}]"), "a[b]c");
+  EXPECT_EQ(replace_dotnet("b", "abc", "[$&]"), "a[b]c");
+  EXPECT_EQ(replace_dotnet("b", "abc", "[$`]"), "a[a]c");
+  EXPECT_EQ(replace_dotnet("b", "abc", "[$\']"), "a[c]c");
+  EXPECT_EQ(replace_dotnet("b", "abc", "[$_]"), "a[abc]c");
+  EXPECT_EQ(replace_dotnet("b", "abc", "[$$]"), "a[$]c");
+}
+
+// **A missing reference stands as written**, which is where this dialect and
+// Java part company on a whole rule rather than a spelling: `$9` with no
+// group 9 is the two characters `$9` here and an error on the JDK.
+//
+// The braced *name* is the row that found a gap. GRX_TMPL_MISSING_LITERAL
+// had only ever reached the numeric spellings, because .NET is the first
+// dialect here to pair it with a braced name; an unresolvable `${nope}`
+// substituted the empty string, which is MISSING_EMPTY's answer under
+// another name.
+TEST(DotNetTemplate, AMissingReferenceStandsAsWritten) {
+  EXPECT_EQ(replace_dotnet("b", "abc", "[$9]"), "a[$9]c");
+  EXPECT_EQ(replace_dotnet("b", "abc", "[${nope}]"), "a[${nope}]c");
+  EXPECT_EQ(replace_dotnet("b", "abc", "[$"), "a[$c");
+}
+
+// `$+` is the highest-*numbered* group, not the highest that participated,
+// and the second row is the one that says so: `(a)(b)?` over "a" leaves
+// group 2 unset and substitutes nothing, where a search for the last group
+// that matched would substitute "a". The third row shows it reads the
+// dialect's own numbering - the named group is number 2 under .NET's
+// renumbering, so `$+` is "a" and not "b". The fourth is group 0 standing
+// in when a pattern has no groups at all.
+TEST(DotNetTemplate, LastGroupIsTheHighestNumberAndMayBeUnset) {
+  EXPECT_EQ(replace_dotnet("(a)(b)", "ab", "[$+]"), "[b]");
+  EXPECT_EQ(replace_dotnet("(a)(b)?", "a", "[$+]"), "[]");
+  EXPECT_EQ(replace_dotnet("(?<n>a)(b)", "ab", "[$+]"), "[a]");
+  EXPECT_EQ(replace_dotnet("a", "a", "[$+]"), "[a]");
+}
+
+// Split is two existing readings crossed, and each test below is one half.
+// The walk is Python's: an empty match separates and neither end of the
+// subject is special.
+TEST(DotNetSplit, TheWalkKeepsBothEndsAndEmptyMatches) {
+  EXPECT_EQ(split_dotnet(",", "a,b,c"), "a|b|c");
+  EXPECT_EQ(split_dotnet(",", ",a,"), "|a|");
+  EXPECT_EQ(split_dotnet("", "ab"), "|a|b|");
+  EXPECT_EQ(split_dotnet("x*", "abc"), "|a|b|c|");
+}
+
+// The captures interleave, as Python's and ECMAScript's do and Java's and
+// the two linear dialects' do not.
+TEST(DotNetSplit, TheSeparatorsCapturesAppearBetweenThePieces) {
+  EXPECT_EQ(split_dotnet("(,)", "a,b,c"), "a|,|b|,|c");
+}
+
+// The limit is perl's and Java's reading - pieces, with the last the unsplit
+// remainder - and *not* Python's count of splits, although the walk above is
+// Python's. Both rows are needed: Python's reading of 2 would give "a|b|c",
+// and a rule that stopped dead at two pieces would give "a|b".
+TEST(DotNetSplit, TheLimitCountsPiecesAndLeavesTheRemainderWhole) {
+  EXPECT_EQ(split_dotnet(",", "a,b,c", 2), "a|b,c");
+  EXPECT_EQ(split_dotnet(",", "a,b,c", 99), "a|b|c");
+  EXPECT_EQ(split_dotnet(",", "a,b,c", 0), "a|b|c");
 }
 
 int main(int argc, char ** argv) {

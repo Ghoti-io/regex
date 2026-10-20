@@ -1012,6 +1012,24 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     .shorthands_wide = GRX_SHORTHANDS_UNICODE,
     .fold = GRX_FOLD_SIMPLE,
     .fold_utf = GRX_FOLD_SIMPLE,
+    .split = GRX_SPLIT_DOTNET,
+    // The replacement grammar, every feature of it a measured answer from
+    // the pinned .NET 10.0.13 (probe `template` area).
+    //
+    // `missing` is LITERAL and that is the field's default, recorded here
+    // because it is the one place .NET and Java differ on a whole rule
+    // rather than a spelling: `$9` in a pattern with no group 9 stays the
+    // two characters `$9` on .NET and raises on the JDK. A trailing `$`
+    // stays a `$` for the same reason, so there is no GRX_TMPL_SIGIL_STRICT
+    // here either.
+    .template_spec = {
+      .sigil = '$',
+      .features = GRX_TMPL_NUMBER | GRX_TMPL_NUMBER_BRACED
+          | GRX_TMPL_NAME_BRACED | GRX_TMPL_WHOLE | GRX_TMPL_WHOLE_ZERO
+          | GRX_TMPL_PREFIX | GRX_TMPL_SUFFIX | GRX_TMPL_SUBJECT
+          | GRX_TMPL_LAST_GROUP | GRX_TMPL_DOUBLE_SIGIL,
+      .missing = GRX_TMPL_MISSING_LITERAL,
+    },
     // A .NET string is UTF-16 and `Regex` matches over it as text, so the
     // subject is characters rather than bytes - and an unpaired surrogate is
     // ordinary text to it, which is what makes GRX_OPT_WTF8 a request this

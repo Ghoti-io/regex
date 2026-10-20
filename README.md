@@ -20,15 +20,13 @@ implementation. Its bounded committed corpus passes, but the wider
 differentials and eight-hour selected-dialect fuzz condition are separate
 completion evidence; see [the Java readiness record](documentation/work-packages.md#java-readiness-evidence).
 Ruby, Tcl, Emacs and RE/flex are named and report `GRX_ERR_UNSUPPORTED`.
-.NET compiles and matches; its replacement templates and split rule are not
-built and report `GRX_ERR_UNSUPPORTED` rather than approximating another
-dialect's.
+.NET compiles, matches, replaces and splits; balancing groups are refused.
 
 | Dialect | What it means here |
 | --- | --- |
 | ECMAScript, PCRE2, Perl, POSIX BRE, POSIX ERE, GNU BRE, GNU ERE, Python, Vim, I-Regexp, RE2, Rust | Compiles and matches, on whichever engine can run the pattern. |
 | Java | JDK 25.0.4.1+1 baseline: syntax and operations implemented; dialect completion awaits the six evidence conditions below. JDK 27+35 is a separate forward comparison. |
-| .NET | .NET 10.0.13 baseline: syntax, class subtraction and matching implemented. `grx_regex_replace()` and `grx_regex_split()` report `GRX_ERR_UNSUPPORTED`, because the zero value of each rule they read is another dialect's and an approximation there would be a wrong answer rather than a missing one. |
+| .NET | .NET 10.0.13 baseline: syntax, class subtraction, matching, replacement templates and splitting implemented, each measured against the pinned reference. Balancing groups are refused and deferred. A bounded result rather than .NET conformance: no differential and no imported corpus yet. |
 | Ruby, Tcl, Emacs, RE/flex | Named. A pattern reports `GRX_ERR_UNSUPPORTED`. |
 
 RE2 and Rust are the two where a *refusal* is the point. Neither has

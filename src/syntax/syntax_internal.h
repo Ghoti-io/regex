@@ -225,6 +225,26 @@ typedef enum {
   /** Java Pattern.split: fields only, signed limit and no leading empty
    * field from a zero-width match at the subject's start. */
   GRX_SPLIT_JAVA,
+  /**
+   * .NET's `Regex.Split`, which is two existing readings crossed.
+   *
+   * The *walk* is Python's: every match separates, an empty one included,
+   * and neither end of the subject is special - `,` over ",a," is
+   * `["", "a", ""]` and the empty pattern over "ab" is `["", "a", "b", ""]`.
+   * Captured groups interleave between the pieces, as Python's and
+   * ECMAScript's do and Java's and the two linear dialects' do not:
+   * `(,)` over "a,b,c" is `["a", ",", "b", ",", "c"]`.
+   *
+   * The *limit* is perl's and Java's: a count of pieces whose last one is
+   * the unsplit remainder, so 2 over "a,b,c" is `["a", "b,c"]` where
+   * Python's `maxsplit=2` would be `["a", "b", "c"]`. Zero means no limit.
+   *
+   * Measured on .NET 10.0.13; tools/oracle/dotnet_probe.py's `split` area
+   * holds the rows. A negative count throws there, which this API cannot
+   * express: `limit` is a size_t and GRX_NPOS already means "no limit", so
+   * there is no value for a caller to pass that .NET would refuse.
+   */
+  GRX_SPLIT_DOTNET,
   GRX_SPLIT_COUNT              ///< Closes the enum; not a rule.
 } GRX_SplitRule;
 
@@ -501,6 +521,23 @@ typedef enum {
  * template, and a row claiming it would be claiming something else.
  */
 #define GRX_TMPL_SUBJECT GRX_BIT(18)
+
+/**
+ * `$+`: the group with the highest number, or nothing if it did not match.
+ *
+ * .NET's, and no other dialect here has it. The name "last captured group"
+ * is the documentation's and is misleading in the one case that matters:
+ * measured on .NET 10.0.13, `(a)(b)?` over "a" substitutes **nothing**
+ * rather than "a", so this is the highest-*numbered* group and not the
+ * highest one that participated. `(a)(b)` gives "b", `((a)(b))` gives "b"
+ * from group 3, and a pattern with no groups at all gives the whole match,
+ * group 0 being the highest number there is.
+ *
+ * It reads the dialect's own numbering, so under .NET's renumbering
+ * `(?<n>a)(b)` substitutes "a": the named group is number 2 and the
+ * unnamed one is 1.
+ */
+#define GRX_TMPL_LAST_GROUP GRX_BIT(29)
 
 /**
  * @brief A reference to a group that did not participate is an error.
