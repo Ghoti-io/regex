@@ -321,8 +321,17 @@ size_t grx_exec_scan_ranges(const GRX_ByteRanges * ranges,
  */
 #define GRX_REQUIRED_WINDOW_MAX 64
 
-static inline size_t grx_exec_skip_to_first_byte(const GRX_Program * program,
-    const char * subject, size_t length, size_t from) {
+/**
+ * @brief The skip itself, before the result is put back on a character
+ *   boundary.
+ *
+ * Separate from grx_exec_skip_to_first_byte() so that the rounding is written
+ * once and cannot be forgotten at one of this function's several returns.
+ * Callers want the wrapper.
+ */
+static inline size_t grx_exec_skip_to_first_byte_unaligned(
+    const GRX_Program * program, const char * subject, size_t length,
+    size_t from) {
   // The required literal earns a place here only when its offset is bounded.
   // Unbounded, the question "is there an occurrence at or after here" has the
   // same answer at every position until one is passed, so asking it per
@@ -438,6 +447,67 @@ static inline size_t grx_exec_skip_to_first_byte(const GRX_Program * program,
       return from;
     }
   }
+}
+
+/**
+ * @brief Advance to the next character boundary, in UTF mode.
+ *
+ * A position inside an encoded character cannot begin a match: both engines
+ * decode forward from where they are told to start, and the first thing they
+ * would read is a continuation byte. So rounding a skipped-to position *up*
+ * discards no start a true answer needs - the next start a match could have
+ * is the next boundary - and it is only ever forwards, which is what keeps
+ * the alternating loop above terminating.
+ *
+ * @param program The program, for the UTF flag. Bytes are characters without
+ *   it and nothing moves.
+ * @param subject The subject.
+ * @param length The subject's length.
+ * @param from The position to round.
+ * @return The first boundary at or after `from`.
+ */
+static inline size_t grx_exec_boundary_forward(const GRX_Program * program,
+    const char * subject, size_t length, size_t from) {
+  if (!(program->flags & GRX_PROGRAM_UTF)) {
+    return from;
+  }
+  while (from < length && ((unsigned char)subject[from] & 0xC0u) == 0x80u) {
+    from++;
+  }
+  return from;
+}
+
+/**
+ * @brief Advance to the first position at or after `from` that could begin a
+ *   match, on a character boundary.
+ *
+ * The window filter works in bytes - `required_offset_max` is a byte count -
+ * and so can back a candidate start off into the middle of a character:
+ * `/.a/` in UTF mode over `U+2028 U+00E9 a` finds the required `a` at byte 5,
+ * subtracts the four bytes a dot may be wide, and offers byte 1, which is
+ * the second byte of U+2028. Both engines then read a continuation byte where
+ * a character has to start and report GRX_ERR_INVALID - an invalid *subject*,
+ * for a subject that is perfectly valid UTF-8. The literal-prefix and
+ * byte-set filters cannot do this, because what they find is a lead byte;
+ * only the arithmetic can, and only a subtraction, which is why this was
+ * invisible until a subject put a wide character before a narrow one.
+ *
+ * @param program The program whose filters to apply.
+ * @param subject The subject.
+ * @param length The subject's length.
+ * @param from Where to start looking.
+ * @return A position at or after `from`, or `length` when no match can begin
+ *   at or after it.
+ */
+static inline size_t grx_exec_skip_to_first_byte(const GRX_Program * program,
+    const char * subject, size_t length, size_t from) {
+  size_t to = grx_exec_skip_to_first_byte_unaligned(
+      program, subject, length, from);
+  // `from` itself is left exactly as the caller gave it. A caller who names a
+  // start inside a character is making a different mistake and still hears
+  // about it; this only answers for positions the skip chose.
+  return to == from ? from
+                    : grx_exec_boundary_forward(program, subject, length, to);
 }
 
 /**

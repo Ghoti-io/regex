@@ -503,6 +503,15 @@ const char * const kPrefilterUtfPatterns[] = {
   "[\\x{1F600}-\\x{1F64F}]", "\\x{4E00}+", "[a\\x{80}\\x{7FF}\\x{800}]",
   "[\\x{7F}-\\x{81}]", "[\\x{FFFF}-\\x{10000}]", "é|ü|漢",
   "[^\\x{100}]q", "\\w+\\x{E9}", "[\\x{10FFFF}]", "(?:漢字)+",
+  // A required literal behind something that may be wider than it, which is
+  // the one shape where the window filter *subtracts*. `required_offset_max`
+  // is a byte count, so `.a` backs off four bytes from the `a` it found -
+  // and four bytes before an `a` that follows U+2028 is the middle of
+  // U+2028. The engines then read a continuation byte where a character has
+  // to begin and refuse the subject. Nothing in the list above subtracts
+  // anything: a pattern whose literal is at a fixed narrow offset, or at no
+  // bounded offset at all, never lands between two bytes of one character.
+  ".a", ".q", ".{0,2}q", "\\w.q", "(?s).+é",
 };
 
 /**
@@ -533,6 +542,13 @@ std::vector<std::string> utf_subjects() {
     "a\xC2\x80", "\xC2\x80", "\xDF\xBF", "\xE0\xA0\x80", "\xEF\xBF\xBF",
     "\xF0\x90\x80\x80", "\xF4\x8F\xBF\xBF", "K", "\xE2\x84\xAA",
     "aébü", "xé漢🙂z", "漢aé", "AÉÎ", "kK\xE2\x84\xAA",
+    // A wide character immediately before a narrow one, so that a byte
+    // count subtracted from the narrow one's position falls inside the wide
+    // one. Three bytes then two is the first pair where it does: with é
+    // first the subtraction reaches past the start of the subject and is
+    // clamped to zero, which is a boundary, and the defect hides.
+    "\xE2\x80\xA8\xC3\xA9" "a", "\xE2\x80\xA8\xE2\x80\xA8" "a",
+    "x\xE2\x80\xA8\xC3\xA9" "a", "🙂\xC3\xA9" "q", "漢é漢q",
   };
 }
 
@@ -690,6 +706,65 @@ TEST(Compile, SkippingPositionsFindsTheSameMatchesAsTryingThemAll) {
   // set, since nothing is skipped for it.
   EXPECT_GE(known, 25u) << "only " << known << " patterns produced a set";
   EXPECT_GE(compared, 5000u) << "only " << compared << " searches compared";
+}
+
+TEST(Compile, TheWindowFilterNeverOffersAStartInsideACharacter) {
+  // The sweep above would now catch this, and did not before its population
+  // grew, so the case is written out here too: a sweep says two things agree
+  // and this says what the answer is.
+  //
+  // `/.a/` over "U+2028 U+00E9 a" in UTF mode. The required literal is `a`,
+  // a dot may be four bytes wide, and the `a` is at byte 5 - so the window
+  // filter offers byte 1 as a possible start, which is the second byte of
+  // U+2028. Both engines decode forward from where they are told to start,
+  // read a continuation byte, and report GRX_ERR_INVALID with
+  // GRX_DIAG_INVALID_SUBJECT_UTF8: an invalid subject, for a subject that is
+  // valid UTF-8 throughout. grx_utf8_validate() accepts it, and the gate in
+  // exec() had already accepted it before the skip ran.
+  //
+  // It reached a user as `check-oracle-replace`'s one perl disagreement,
+  // where grx_regex_replace() answered "error" to a row Perl answers, and it
+  // is a matching defect rather than a substitution one.
+  const std::string subject = "\xE2\x80\xA8\xC3\xA9" "a";
+  for (GRX_Engine engine : {GRX_ENGINE_AUTO, GRX_ENGINE_PIKE,
+           GRX_ENGINE_BACKTRACK, GRX_ENGINE_BITSTATE}) {
+    GRX_Regex * regex = nullptr;
+    ASSERT_EQ(grx_regex_compile_with_allocator(".a", 2, GRX_SYNTAX_PCRE,
+                  GRX_OPT_UTF, nullptr, nullptr, nullptr, &regex),
+        GRX_OK);
+    GRX_Match * match = nullptr;
+    ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+    int matched = 0;
+    EXPECT_EQ(grx_regex_search(regex, subject.data(), subject.size(), 0,
+                  engine, nullptr, match, &matched),
+        GRX_OK)
+        << "engine " << (int)engine;
+    EXPECT_TRUE(matched) << "engine " << (int)engine;
+    GRX_Capture span {};
+    if (matched && grx_match_span(match, &span) == GRX_OK) {
+      // The é and the `a`, not the three bytes of U+2028 that precede them.
+      EXPECT_EQ(span.start, 3u) << "engine " << (int)engine;
+      EXPECT_EQ(span.end, 6u) << "engine " << (int)engine;
+    }
+    grx_match_destroy(match);
+    grx_regex_free(regex);
+  }
+
+  // A start the *caller* names inside a character is a different mistake and
+  // is still refused: the rounding answers for positions the skip chose, not
+  // for the caller's own offset.
+  GRX_Regex * regex = nullptr;
+  ASSERT_EQ(grx_regex_compile_with_allocator(".a", 2, GRX_SYNTAX_PCRE,
+                GRX_OPT_UTF, nullptr, nullptr, nullptr, &regex),
+      GRX_OK);
+  GRX_Match * match = nullptr;
+  ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+  int matched = 0;
+  EXPECT_EQ(grx_regex_search(regex, subject.data(), subject.size(), 1,
+                GRX_ENGINE_AUTO, nullptr, match, &matched),
+      GRX_ERR_INVALID);
+  grx_match_destroy(match);
+  grx_regex_free(regex);
 }
 
 TEST(Compile, AnEmptyMatchLeavesNoFirstByteSetUnlessKeepMovedTheStart) {
