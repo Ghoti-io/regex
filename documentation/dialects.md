@@ -518,23 +518,31 @@ The two rules that make `(a*)*` against `b` report different things:
 | Axis | Value | Dialects |
 | --- | --- | --- |
 | Empty iteration | `FAIL_IF_EMPTY_AFTER_MIN`: an iteration that consumes nothing, once `min` is satisfied, fails (22.2.2.3.1 RepeatMatcher step 2.b) | ECMAScript |
-| | `BREAK_ON_EMPTY`: the iteration succeeds and the loop stops | Perl, PCRE2, Python, Java (JDK 25 probe cases 0–3), .NET (**probe**), Ruby (**probe**) |
+| | `BREAK_ON_EMPTY`: the iteration succeeds and the loop stops | Perl, PCRE2, Python, Java (JDK 25 probe cases 0–3), .NET (.NET 10 probe cases 35–37), Ruby (**probe**) |
 | | `BREAK_IF_UNMOVED`: the iteration succeeds and the loop stops, but only while the *repeat* has consumed nothing; once it has, the empty iteration does not run at all | POSIX, GNU, Vim |
 | | `ALREADY_THERE`: there is no iteration rule, because the loop is not a loop the engine can enter twice at one position; it ends where the simulation has already been | RE2, Rust |
 | | `LONGEST`: irrelevant; the match is the longest, and an empty iteration adds nothing | Tcl |
 | Capture reset | `RESET_EACH_ITERATION`: captures inside the group are cleared at the **start** of every iteration (RepeatMatcher step 4) | ECMAScript |
 | | `RESET_AFTER_EACH_ITERATION`: an iteration clears, on the way **out**, the ones it did not itself set | **Perl** (probed) |
-| | `KEEP_LAST_SET`: a capture set in an earlier iteration survives if a later one does not set it | PCRE2, Python, Java (JDK 25 probe cases 2–3, 55), .NET, Ruby (**probe**), RE2, Rust |
+| | `KEEP_LAST_SET`: a capture set in an earlier iteration survives if a later one does not set it | PCRE2, Python, Java (JDK 25 probe cases 2–3, 55), .NET (.NET 10 probe case 38), Ruby (**probe**), RE2, Rust |
 
 `BREAK_IF_UNMOVED` is neither of the two above it, and it took both
 references to see that. `(a*)*` against `"b"` reports group 1 as 0-0 in glibc
 and in musl, so an empty iteration *does* run when nothing else has - the
 subexpression takes part rather than going unset, which `FAIL_IF_EMPTY` would
-give. And `(a|)*` against `"aaaa"` reports group 1 as 3-4 in both, not 4-4,
-so once an iteration has consumed, a trailing empty one does *not* run -
-which is what plain `BREAK_ON_EMPTY` gives, the empty body having written its
-captures before the loop exited. Both halves are the same rule seen from two
-sides, and the thing that divides them is where the repeat began.
+give. And `(a|)*` against `"aaaa"` reports group 1 as 3-4 in both.
+Plain `BREAK_ON_EMPTY` gives **4-4** there - the trailing empty iteration
+runs, writes its captures, and *then* the loop stops - so 3-4 says that once
+an iteration has consumed, the empty one does not run at all. Both halves are
+the same rule seen from two sides, and the thing that divides them is where
+the repeat began.
+
+**`(a|)*` is the only case here that divides those two**, and saying so is
+the point of this paragraph: `(a*)*` against `"b"` is 0-0 under
+`BREAK_ON_EMPTY` and under `BREAK_IF_UNMOVED` alike, so it rules out
+`FAIL_IF_EMPTY_AFTER_MIN` and nothing else. The four numbers, each from a
+pinned reference: glibc 2.41 and musl v1.2.6 answer 3-4, and the JDK 25 and
+.NET 10 oracles answer 4-4.
 
 **Vim is here too, and it took `\zs` to see it.** The cell had never been
 probed, so it read ECMAScript's - and an empty iteration's *writes* are what
@@ -673,7 +681,7 @@ could follow.
 | Axis | Value | Dialects |
 | --- | --- | --- |
 | Unset group | `MATCH_EMPTY` | ECMAScript; PCRE2 with `PCRE2_MATCH_UNSET_BACKREF` (exposed as `GRX_OPT_MATCH_UNSET_BACKREF`); Vim (`\(a\)\?\1` matches the empty string against "b") |
-| | `FAIL` | Perl, PCRE2, Python, Java, .NET, Ruby, GNU, Tcl (**probe**), Emacs (**probe**) |
+| | `FAIL` | Perl, PCRE2, Python, Java, .NET (.NET 10 probe case 50: `(a)?b\1` over "b" is no match), Ruby, GNU, Tcl (**probe**), Emacs (**probe**) |
 | Forward reference `\2(a)(b)` | allowed, behaves as unset | ECMAScript, Perl, PCRE2 |
 | | syntax error | Python ("invalid group reference"), RE2/Rust (no backreferences) |
 | | compiles, then fails to match when not yet set | Java (JDK 25 probe cases 5–6, 56–59) |
@@ -1107,7 +1115,7 @@ is a defect in that library rather than in this one.
 | Value | Rule | Dialects |
 | --- | --- | --- |
 | `RETRY_NONEMPTY_THEN_ADVANCE` | at the same position, retry refusing an empty match; if that fails, advance one character | Perl, PCRE2 (its documented `NOTEMPTY_ATSTART` loop), Python 3.7+ |
-| `ADVANCE_ONE` | after an empty match, advance and search again; an empty match immediately after a non-empty one is reported | ECMAScript uses `AdvanceStringIndex`: one code unit without `u`/`v`, one code point with either flag. Java's `Matcher.find()` advances one UTF-16 code unit (JDK 25 probe cases 60–62 cover scalar subjects); this API advances over a valid UTF-8 scalar and cannot represent a boundary between surrogate halves. .NET and Ruby remain **probe**. |
+| `ADVANCE_ONE` | after an empty match, advance and search again; an empty match immediately after a non-empty one is reported | ECMAScript uses `AdvanceStringIndex`: one code unit without `u`/`v`, one code point with either flag. Java's `Matcher.find()` advances one UTF-16 code unit (JDK 25 probe cases 60–62 cover scalar subjects); this API advances over a valid UTF-8 scalar and cannot represent a boundary between surrogate halves. .NET is `ADVANCE_ONE` over UTF-16 code units, measured: the empty pattern over "ab" is 0-0, 1-1 and 2-2, and `a*` over "ba" is 0-0, 1-2 and **2-2**, so an empty match immediately after a non-empty one is reported (.NET 10 probe cases 29-30). Over an astral character the advance is one *unit*, which is §6's .NET row rather than this one: the empty pattern's second position there is inside the character and this API has no offset for it. Ruby remains **probe**. |
 | `ADVANCE_ONE_SKIP_ABUTTING` | as above, but an empty match abutting the previous match is not reported | Go (`regexp` documentation: "empty matches abutting a preceding match are ignored", and now measured: `tools/oracle/iterate_diff.py --dialect re2`); Rust (measured, 4,200 rows - the cell held Go's value copied across with nothing asking the crate) |
 | `ADVANCE_ONE_STOP_AT_END` | a match reaching the end of the subject ends the loop, and the search goes on from the previous match's end - where that finds the span just reported, it advances one character rather than reporting it twice | Vim |
 

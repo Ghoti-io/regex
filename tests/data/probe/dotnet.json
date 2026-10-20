@@ -282,6 +282,30 @@
     },
     {
       "area": "iteration",
+      "pattern": "(a*)*",
+      "subject": "b",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "iteration",
+      "pattern": "(a|)*",
+      "subject": "aaaa",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "iteration",
+      "pattern": "(a*?)+?b",
+      "subject": "aab",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "iteration",
       "pattern": "((a)|b)+",
       "subject": "ab",
       "flags": "",
@@ -1349,6 +1373,45 @@
         [
           0,
           0
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          4
+        ],
+        [
+          4,
+          4
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ],
+        [
+          1,
+          2
         ]
       ]
     },

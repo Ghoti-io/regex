@@ -135,6 +135,19 @@ CASES += [case("iteration", pattern, subject, flags, mode, argument)
     (r"\G.", "abc", "", "all", ""),
     ("(a*)*", "", "", "first", ""),
     ("(a*)+", "b", "", "first", ""),
+    # The three cases section 5.5 names as the ones that separate its five
+    # empty-iteration values, rather than three that merely exercise a loop.
+    # `(a*)*` over "b" divides FAIL_IF_EMPTY_AFTER_MIN, where the group goes
+    # unset, from every value where the empty iteration takes part; `(a|)*`
+    # over "aaaa" divides BREAK_ON_EMPTY at 4-4, the empty body having written
+    # its captures on the way out, from BREAK_IF_UNMOVED at 3-4, where once
+    # the repeat has consumed the empty iteration does not run; and
+    # `(a*?)+?b` over "aab" divides ALREADY_THERE at 0-2, which no rule about
+    # what an empty iteration *does* can produce, from every backtracking
+    # engine's 1-2.
+    ("(a*)*", "b", "", "first", ""),
+    ("(a|)*", "aaaa", "", "first", ""),
+    ("(a*?)+?b", "aab", "", "first", ""),
     ("((a)|b)+", "ab", "", "first", ""),
     ("a", "ba", "", "find-from", "1"),
     ("a", "ba", "", "all-from", "1"),
