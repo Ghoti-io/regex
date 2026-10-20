@@ -384,6 +384,21 @@ java27	docker.io/library/eclipse-temurin:27-jdk@sha256:b7b0b087469d150264d36ef6d
 # .NET's System.Text.RegularExpressions, for the `dotnet` dialect. A stock
 # Microsoft image, so the manifest digest is the whole guarantee.
 #
+# **The 10.0 channel because it is the LTS, checked rather than assumed.**
+# dotnet/core's releases-index.json on 2026-10-20: 10.0 is `lts`, support
+# phase `active`, EOL **2028-11-14**, latest release 10.0.13 - which is what
+# this image answers, so the tag resolved to the channel's current patch and
+# the digest now fixes it there. 11.0 exists and is `sts` in `go-live` with
+# 11.0.0-rc.2; 8.0 is the previous LTS and reaches EOL on 2026-11-10, three
+# weeks from this line, which is why a channel choice wants the date beside
+# it and not just the word.
+#
+# 11.0 is the obvious **`dotnet-next`**, the role `java27` plays for Java and
+# `python-next` for CPython: a release read before anything commits to it,
+# never the gating pin. It is not added here yet, because adding a reference
+# and adding a second one ahead of it are two changes, and doing both at once
+# means the first disagreement cannot be attributed to either.
+#
 # **Three versions decide an answer and this field names two.** The *runtime*
 # carries `Regex` and the Unicode tables `\p{...}` reads; the *SDK* carries
 # the Roslyn that compiles tools/oracle/DotNetOracle.cs at run time, so it
