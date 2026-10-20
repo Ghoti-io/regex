@@ -1219,8 +1219,9 @@ separately against JDK 27. A malformed template is left unread when the
 pattern has no match, as with `Matcher.replaceAll` and `replaceFirst`.
 `GRX_REPLACE_LITERAL` supplies Java's `Matcher.quoteReplacement` behavior.
 Template error offsets in this API are UTF-8 byte offsets; Java replacement
-exceptions expose no comparable source index. Lone UTF-16 surrogates cannot
-be passed through the byte-oriented subject interface.
+exceptions expose no comparable source index. A lone UTF-16 surrogate reaches
+the byte-oriented subject interface as WTF-8 under `GRX_OPT_WTF8`, and is
+`GRX_ERR_INVALID` without it.
 | .NET | `$n`, `${n}` | `${name}` | `$&`, `` $` ``, ``$'``, `$+`, `$_` | `$$` | literal | empty | none |
 | Ruby (`sub`) | `\n` | `\k<name>` | `\0`, `\&`, `` \` ``, ``\'`` | `\\` | empty | empty | none |
 | Go (RE2) | `$n`, `${n}` - **one word run, classified after it is read**, so `$1x` is the name `1x` and substitutes nothing rather than being group 1 and an "x"; a run with a leading zero is a name, so `$01` is missing | `$name`, `${name}`; `${...}` must close on a word run or the spelling is text | `$0`, `${0}`; **not** `$&`, `` $` ``, ``$'`` or `$_`, each of which is literal | `$$` | empty | empty | none |
@@ -1560,9 +1561,11 @@ accepted, and other values return `GRX_ERR_INVALID`.
 
 Split results are spans into UTF-8 input, so their offsets count bytes.
 Java's `Pattern.split(String, int)` operates on UTF-16 strings: a Java subject
-with a lone surrogate cannot be passed to this byte API, and splitting inside
-a surrogate pair may produce Java fields that cannot be converted to UTF-8.
-The pinned split comparison counts such cases as interface exclusions.
+with a lone surrogate is carried as WTF-8 under `GRX_OPT_WTF8` and refused
+without it, and splitting *inside* a surrogate pair may still produce Java
+fields with no byte offset at all, because WTF-8 spells a pair as one
+four-byte scalar and that scalar has no interior position. The pinned split
+comparison counts those cases as interface exclusions.
 
 Two of Perl's cells came from `tools/oracle/split_diff.py` and not from
 perlfunc, after the twenty-four probe cases below had agreed with perl
@@ -1926,13 +1929,13 @@ answer.
 | Java | Java's POSIX classes are US-ASCII without `U` and their Unicode equivalents with it | `\p{Digit}` is `[0-9]`, not `\p{Nd}`, until UNICODE_CHARACTER_CLASS. They resolve to the same sets as `[[:digit:]]` and widen by the same rule. Until 2026-10-20 twelve of the fifteen were refused outright and three - `Digit`, `Punct`, `Cntrl` - resolved as Unicode properties, so they compiled and matched U+0660, U+2010 and U+0085 where the JDK matches none; `tools/corpus/import_jdk_tests.py` is what found it | implemented; no deviation remains |
 | all | `{m,n}` bounds above `max_repeat_count`, and expansions above `max_program_size`, are refused | bounded compile time | `GRX_ERR_LIMIT` |
 | all | No locale; POSIX classes and case folding are C-locale ASCII or Unicode, never `LC_CTYPE` | [unicode.md](unicode.md) §7 | - |
-| ECMAScript | Lone surrogates cannot occur in the subject | UTF-8 | - |
+| ECMAScript | An unpaired UTF-16 surrogate needs `GRX_OPT_WTF8`; without it a subject is `GRX_ERR_INVALID` | A JavaScript string is UTF-16 and V8 matches over one as ordinary text, so this is the same deviation as Java's above and the same option answers it. Measured on the pinned node 24.21.0 / V8 13.6 through `tools/oracle/node_runner.py`, in UTF-16 code units converted to bytes: under `u`, `.` is one character of three bytes against a lone surrogate and one of four against a pair, `\p{Cs}`, `\p{C}`, `\p{Any}`, `\W`, `[^a]`, `[\uD800]` and `[\uD7FF-\uE000]` match it, `\w` and `\p{L}` do not, and `^..$` against a pair is no match because a pair is one code point - the same table the JDK gives, which is the argument for one option across the UTF-16 dialects rather than one per dialect. Under `u` only: without it ECMA-262 counts code units and `/./` matches half a pair, which is §6.1's deviation and not something an encoding can reconcile, and `GRX_OPT_WTF8` requires `GRX_OPT_UTF` | `GRX_OPT_WTF8`; refused by default |
 | ECMAScript | V8's regexp interpreter and its compiled code disagree, and this library is the interpreter's | `/(?:(?=a)a)*\B../u` over "\nabc" from offset 1 is 1-4 on the first execution in a fresh Node process and **no match** on every execution after it, so the answer depends on how many times the pattern has run. `--regexp-interpret-all` gives 1-4 always and `--no-regexp-tier-up` gives no match always, which places the disagreement in V8's optimizing compiler. 1-4 is right: pcre2test 10.46 and perl 5.40.1 both give it, and it is what ordered alternation requires - the same pattern's first alternative alone matches 1-4 there too. Found at seed 4009 of the replacement soak; the oracle now runs with the interpreter, because a reference whose answer moves with the execution count cannot settle anything. Fixed in a later V8 and not in this one: the same reproducer run 200 times in Chrome 153.0.8010.36 is 1-4 every time. Present in V8 12.4.254.21, which is what Node 22 carried; **gone in V8 13.6.233.17, which is the pin since 2026-09-25** - the same reproducer is 1-4 forty times out of forty there without the flag, and on V8 14.1 too, so the boundary is now measured from both sides. No public report matching it was found, so which change fixed it is still unknown. The flag stays: `check-oracle-determinism` asserts the answer is 1-4 rather than merely stable, so it remains a live assertion about whichever V8 is pinned. `tools/corpus/VERSIONS` and `tools/oracle/node_runner.py` | - |
 | ECMAScript | ~~RegExp Modifiers are not built~~ **Built 2026-09-26** | Stage 4, shipped in V8 12.5, and this library reported `GRX_DIAG_INVALID_GROUP_SYNTAX` until the node pin moved to V8 13.6 and made the gap visible - the gate had been green over a construct neither side had. The 122 rows are compared now, and `syntax_diff.py`'s "construct this library has not built" bucket, which held them and the 12 duplicate-name rows, is gone: what took its place counts the one family V8 accepts and this library refuses, above. Section 8.5 states the rules | - |
 | ECMAScript | V8 accepts a duplicate group name that one match then fills twice; this refuses it | The rule ES2025 states is that a name may be reused only where "it's impossible for a single match to actually use the same name multiple times". `(?<n>a)(?:b|(?<n>c))` is accepted by V8 13.6 and over "ac" it fills both - group 1 `"a"`, group 2 `"c"`, `groups.n` `"c"` - which is a single match using the name twice. It is positional rather than a rule: `(?:b|(?<n>c))(?<n>a)`, the same pattern with its halves swapped, is refused there, and so is `(?<n>a)(?:(?<n>b))`, which differs only in that the second occurrence stands in the *first* alternative. This library implements the stated rule, so it refuses the family and answers `GRX_ERR_SYNTAX` with `GRX_DIAG_DUPLICATE_GROUP_NAME`. `tools/oracle/syntax_diff.py` re-asks node every run whether the defect is still there and counts the rows in a bucket of its own; if a later V8 fixes it the bucket must be empty and the gate says so. 32 rows of `check-oracle-syntax` | `GRX_ERR_SYNTAX` |
 | ECMAScript | Repeat counts are limited (the grammar admits 2^53 - 1) | as above | `GRX_ERR_LIMIT` |
 | ECMAScript | **The subject is code points, not UTF-16 code units, in *both* modes** | see below | - |
-| ECMAScript | A match cannot begin or end between the halves of a surrogate pair | as above | - |
+| ECMAScript | A match cannot begin or end between the halves of a surrogate pair, with or without `GRX_OPT_WTF8` | as above, and the option does not reach it: WTF-8 spells a pair as one four-byte scalar, so there is no byte offset between its halves to report. CESU-8, which would give one, is refused - taking it would let `.` match half a character | - |
 | ECMAScript | **The pattern source is code points too**, so a literal astral character written in it is one atom without `u` and not two | ECMA-262's source is UTF-16 code units, so without `u` or `v` a fish written into the pattern is a high surrogate followed by a low one and every postfix operator takes the low half alone. In Node 22.23 `/\u{1F41F}+/` over two fish is 0-2, `/[\u{1F41F}]/` is a class of *two* code units and matches one of them, and `/\u{1F41F}{2}/` is no match; here each is the whole character, 0-8, 0-4 and 0-8. It shows in the accept-or-reject half as a class range: `[\uDC1F-\u{1F41F}]` is DC1F to D83D there, descending, and "Range out of order in character class", where here it is DC1F to 1F41F and ascending. The escaped spelling `[\uDC1F-\uD83D\uDC1F]` is two units on both sides and both refuse it, which is what says this is the source and not the range rule. `v` mode reads the source as code points in both, so it is `u`-less patterns only. `tools/oracle/syntax_diff.py` counts these rows, and asks rather than assumes: it puts a BMP character where the astral one stood and keeps the row only if Node then accepts it | - |
 | Perl | `(?{ })`, `(??{ })` | code execution | `GRX_ERR_UNSUPPORTED` |
 | Perl | A replacement's double-quotish escapes other than the case operators are the bare letter | perl's replacement is an interpolated string, so `\t` is a tab, `\e` is U+001B and `\x41` is "A" there; `GRX_TMPL_BACKSLASH_ESCAPE` reads each as the letter, which is what gives `\$` and `\\` their meaning. `\Uab\ecd` is "AB" U+001B "CD" in perl and "ABECD" here - the `\e` became an "e" that the `\U` run then upper-cased. A **gap** rather than a deviation: there is no argument for not having it, and the six case operators were built first because they are what §5.11 had listed as absent. In `replace_diff.py`'s perl vocabulary and counted there, so the number is printed rather than the shape being missing | - |
@@ -1996,6 +1999,15 @@ Two consequences, both only observable with astral characters:
 
 - `.` matches one character where ECMA-262 without `u` matches one code unit,
   so a subject containing an emoji gives a different count.
+A third consequence had been that a subject holding an *unpaired* surrogate
+could not be passed at all. `GRX_OPT_WTF8` answers that one: the subject is
+read as WTF-8, where an unpaired surrogate is its own three bytes and a pair
+is the four-byte scalar, and the dialect then gives node's own answers. It is
+off by default and requires `GRX_OPT_UTF`, so it is reachable only where
+ECMAScript itself counts code points. The deviation that remains is the
+*interior* of a pair, below, which no encoding this library will accept has a
+position for.
+
 - A zero-width assertion can match *between* the halves of a surrogate pair
   in ECMAScript, including under `u`: `/\B/u` against `"0"` + an emoji + `"B"`
   reports index 2. UTF-8 has no such position, so this library reports the

@@ -76,6 +76,7 @@ import sys
 sys.path.insert(0, os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "oracle"))
 import java_probe
+import wtf8 as wtf8_codec
 import make_vectors
 import oracle_env
 
@@ -161,31 +162,12 @@ def scalars(text):
     grabLine() produces one UTF-16 code unit per escape, so a supplementary
     character arrives as a pair and has to be joined before it is WTF-8 - a
     pair is the four-byte scalar and only an *unpaired* surrogate keeps its
-    own three bytes. Getting that wrong is not a crash: it is a comparison
-    that reports every supplementary row as a disagreement, which is what
-    the whole-string round trip did here twice. The first version joined
-    nothing when a lone surrogate was present anywhere in the string,
-    because decoding the whole thing raised and the fallback returned it
-    untouched.
-
-    So this walks the units. One pass, no exceptions, and the only thing it
-    ever leaves as a surrogate is one that genuinely has no partner.
+    own three bytes. Getting it wrong is not a crash: it is a comparison
+    that reports every supplementary row as a disagreement, which happened
+    here twice. The walk that does it correctly now lives in
+    `tools/oracle/wtf8.py`, next to the encoder that has the same rule.
     """
-    units = text.encode("utf-16-le", "surrogatepass")
-    out = []
-    i = 0
-    while i < len(units):
-        unit = units[i] | (units[i + 1] << 8)
-        i += 2
-        if 0xD800 <= unit <= 0xDBFF and i + 1 < len(units):
-            low = units[i] | (units[i + 1] << 8)
-            if 0xDC00 <= low <= 0xDFFF:
-                i += 2
-                out.append(chr(0x10000 + ((unit - 0xD800) << 10)
-                               + (low - 0xDC00)))
-                continue
-        out.append(chr(unit))
-    return "".join(out)
+    return wtf8_codec.scalars(text)
 
 
 def split_flags(pattern_line):

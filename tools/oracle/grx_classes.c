@@ -22,10 +22,17 @@
  * because the caller asks for several at once and the container start-up is
  * most of the cost on the other side.
  *
- * The surrogate block is swept like any other code point. It cannot appear in
- * a UTF-8 subject, so no class contains it and all three sides agree by
- * construction; leaving it out would make the three outputs disagree about
- * their own length for a reason that is not a rule.
+ * The surrogate block is swept like any other code point, and the sentence
+ * that used to be here - "no class contains it" - was wrong twice over.
+ * `\p{Cs}` is exactly `[D800-DFFF]`, 2,048 code points, so a class does
+ * contain them; and a subject can now present one, because GRX_OPT_WTF8
+ * reads an unpaired surrogate as its own three bytes in the UTF-16 dialects.
+ * What is true is narrower: this sweep asks only about *class membership*,
+ * which the references answer for the block whether or not a subject could
+ * carry one, so the three sides agree here for a reason that has nothing to
+ * do with what a subject may hold. Leaving the block out would make the
+ * three outputs disagree about their own length for a reason that is not a
+ * rule.
  *
  * Usage:  grx_classes <dialect> [class ...]
  *         grx_classes <dialect> gc <hex code point> ...

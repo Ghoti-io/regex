@@ -27,6 +27,7 @@ import random
 import subprocess
 import sys
 import node_runner
+import wtf8 as wtf8_codec
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
@@ -94,6 +95,23 @@ SUBJECT_PIECES = ["a", "b", "c", "x", "ab", "abc", "aab", "", " ", "\t", "\n",
 # it forty times per seed would bury the defects that are.
 ASTRAL_PIECES = [FISH, GRIN]
 
+# And unpaired surrogates, for the same rows and for the same reason in
+# reverse: a JavaScript string may hold one, V8 matches over it as ordinary
+# text, and GRX_OPT_WTF8 is what lets this library be asked the question at
+# all. Before the option they could not appear in a subject here, so the
+# population could not reach the behaviour - the differential was reporting
+# zero disagreements over an axis it never varied.
+#
+# A high and a low one adjacent would be a *pair* in a JavaScript string and
+# the four-byte scalar on this side, which is a different case and already
+# covered by ASTRAL_PIECES, so the pieces here each carry one surrogate with
+# ordinary text beside it. Two adjacent pieces can still compose a pair by
+# accident, which is correct rather than a problem: node reads it as one code
+# point and so does the WTF-8 encoder.
+LONE_HIGH = "\ud800"
+LONE_LOW = "\udc00"
+SURROGATE_PIECES = [LONE_HIGH, LONE_LOW, LONE_HIGH + "a", "a" + LONE_LOW]
+
 FLAG_SETS = ("", "u", "i", "iu", "m", "s", "imsu", "v", "iv")
 
 # The atoms that exist only with `v`. Mixed into a pattern only when the row
@@ -135,9 +153,50 @@ def make_pattern(rng, unicode_sets=False):
     return "".join(parts)
 
 
-def make_subject(rng, unicode_mode):
+def make_subject(rng, unicode_mode, surrogates=False):
+    """A subject for one row.
+
+    `surrogates` is opt-in, and off by default on purpose. Five other tools
+    call this function - engine_diff.py, make_vectors.py, replace_diff.py,
+    split_diff.py and iterate_diff.py - and none of them carries the WTF-8
+    transport yet: a lone surrogate in their populations would be a runtime
+    error on this side of a comparison whose reference answered, or, in
+    make_vectors.py's case, a byte sequence written into a committed `.rxt`
+    vector that the conformance harness has no option to ask about. Adding
+    the pieces here unconditionally changed all five populations at once,
+    which is the kind of edit that looks like one line.
+
+    So the axis is varied where it can be measured, and each of the others
+    is a deliberate step of its own.
+    """
     pieces = SUBJECT_PIECES + (ASTRAL_PIECES if unicode_mode else [])
+    if unicode_mode and surrogates:
+        pieces = pieces + SURROGATE_PIECES
     return "".join(rng.choice(pieces) for _ in range(rng.randint(0, 6)))
+
+
+def has_lone(text):
+    """Whether `text` holds a surrogate that has no partner.
+
+    After joining, so that a high followed by a low - a pair, and an
+    ordinary four-byte scalar once encoded - does not count. That
+    distinction is the whole value of the count: a pair needs no option and
+    answers the same either way.
+    """
+    return any(0xD800 <= ord(c) <= 0xDFFF for c in wtf8_codec.scalars(text))
+
+
+def wtf8(text):
+    """WTF-8 bytes for a string that may hold an unpaired surrogate.
+
+    `wtf8.encode()` rather than `str.encode(..., "surrogatepass")`, which is
+    what this used first and which is CESU-8: it encodes each surrogate it
+    finds, so two adjacent surrogate pieces - a *pair* to `JSON.parse` and
+    therefore one code point to node - reached this library as two
+    three-byte sequences and were refused. Four rows of the first run, and
+    the shared codec's docstring is where that is written down.
+    """
+    return wtf8_codec.encode(text)
 
 
 def ask_node(rows):
@@ -149,8 +208,17 @@ def ask_node(rows):
 
 
 def ask_library(driver, rows, engine):
+    # `W` is GRX_OPT_WTF8, on every row whose flags put this library in UTF
+    # mode - which is where the option is reachable, since it requires UTF.
+    # Not only on the rows that happen to carry a surrogate: the reference's
+    # subject is a UTF-16 string in *every* row, so WTF-8 is the faithful
+    # transport for all of them, and the two encodings agree byte for byte on
+    # a subject with no unpaired surrogate in it. A transport that changed
+    # shape according to the content of a row would be one more thing a
+    # disagreement could be blamed on.
     lines = "".join("%s\t%s\t%s\n" % (
-        flags, pattern.encode("utf-8").hex(), subject.encode("utf-8").hex())
+        flags + ("W" if ("u" in flags or "v" in flags) else ""),
+        wtf8(pattern).hex(), wtf8(subject).hex())
         for flags, pattern, subject in rows)
     command = [driver, "ecmascript"]
     if engine:
@@ -212,7 +280,8 @@ def main(argv):
         pattern = make_pattern(rng, "v" in flags)
         for _ in range(args.subjects):
             rows.append((flags, pattern,
-                         make_subject(rng, "u" in flags or "v" in flags)))
+                         make_subject(rng, "u" in flags or "v" in flags,
+                                      surrogates=True)))
 
     reference = ask_node(rows)
     ours = [parse_ours(line) for line in ask_library(driver, rows, args.engine)]
@@ -222,6 +291,21 @@ def main(argv):
 
     skipped = {"unsupported": 0, "rejected by both": 0, "error": 0,
                "surrogate": 0}
+    # The denominator for the surrogate axis, because every way this axis can
+    # break is a *skip* rather than a disagreement: a driver that stopped
+    # sending `W` would answer "error" to each of these rows, and every one
+    # of them would be counted away while the gate still printed zero
+    # disagreements. A population that varies an axis nothing compares is a
+    # gate that cannot see it.
+    #
+    # Counted after the pairs are joined, which is the correction a mutation
+    # found. Two adjacent surrogate pieces are a *pair*, which encodes as the
+    # four-byte scalar and is ordinary UTF-8 - so those rows pass with or
+    # without the option, and counting them made the denominator look alive
+    # while the option was off: 874 rows, 2 compared, exit 0.
+    surrogate_rows = sum(1 for _, _, subject in rows if has_lone(subject))
+    surrogate_compared = 0
+    surrogate_errors = 0
     disagreements = []
     compared = 0
 
@@ -247,9 +331,16 @@ def main(argv):
             continue
         if actual == "error":
             skipped["error"] += 1
+            # And a row the reference answered while this library reported a
+            # runtime error is the shape a broken transport takes, so the
+            # surrogate rows are counted separately rather than only skipped.
+            if has_lone(subject):
+                surrogate_errors += 1
             continue
 
         compared += 1
+        if has_lone(subject):
+            surrogate_compared += 1
         if ours_rejected or reference_rejected or expected != actual:
             disagreements.append((flags, pattern, subject, expected, actual))
 
@@ -264,6 +355,17 @@ def main(argv):
     print("skipped: " + ", ".join(
         "%s %d" % (name, count) for name, count in sorted(skipped.items())
         if count))
+    print("unpaired surrogates: %d rows, %d compared, %d this library could "
+          "not read" % (surrogate_rows, surrogate_compared, surrogate_errors))
+    if surrogate_errors:
+        sys.stderr.write(
+            "%d rows carrying an unpaired surrogate were answered by the "
+            "reference and\nnot by this library. They are carried as WTF-8 "
+            "under GRX_OPT_WTF8, spelled `W`\nto the driver; without it each "
+            "is a runtime error that would be skipped, so\nthis would "
+            "otherwise read as zero disagreements over an axis nothing "
+            "asked\nabout.\n" % surrogate_errors)
+        return 2
     return 1 if disagreements else 0
 
 

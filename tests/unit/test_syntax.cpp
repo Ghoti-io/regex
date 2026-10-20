@@ -326,6 +326,137 @@ TEST(Options, RejectsArgumentsItCannotUse) {
       GRX_ERR_INVALID);
 }
 
+namespace {
+
+/** Search `subject` for `pattern` in one dialect, reporting the whole span. */
+GRX_Result search_wtf8(GRX_Syntax syntax, const char * pattern,
+    const std::string & subject, uint32_t options, int * out_matched,
+    GRX_Capture * out_span) {
+  GRX_Error error;
+  GRX_Regex * regex = nullptr;
+  GRX_Result result = grx_regex_compile_with_allocator(pattern,
+      strlen(pattern), syntax, options, nullptr, nullptr, &error, &regex);
+  if (result != GRX_OK) {
+    return result;
+  }
+  GRX_Match * match = nullptr;
+  if (grx_match_create(regex, nullptr, &match) != GRX_OK) {
+    grx_regex_free(regex);
+    return GRX_ERR_OOM;
+  }
+  result = grx_regex_search(regex, subject.data(), subject.size(), 0,
+      GRX_ENGINE_AUTO, nullptr, match, out_matched);
+  if (result == GRX_OK && *out_matched && out_span) {
+    grx_match_span(match, out_span);
+  }
+  grx_match_destroy(match);
+  grx_regex_free(regex);
+  return result;
+}
+
+const std::string kLoneHigh = "\xED\xA0\x80";       // U+D800
+const std::string kLoneLow = "\xED\xB0\x80";        // U+DC00
+const std::string kPair = "\xF0\x90\x81\xA1";      // U+10061
+
+} // namespace
+
+TEST(EcmaScriptSurrogates, TheOptionIsHonouredAndMatchesTheReference) {
+  // A JavaScript string is UTF-16, so ECMAScript is the second dialect whose
+  // reference answers over an unpaired surrogate rather than refusing one -
+  // which is what .subject_is_utf16 says and what this holds it to.
+  //
+  // The expectations are node 24.21.0 / V8 13.6's own, taken through
+  // tools/oracle/node_runner.py so the tier-up cannot change them, and
+  // converted from UTF-16 code units to bytes: a lone surrogate is one unit
+  // and three bytes, a pair is two units and four. They are the same answers
+  // the JDK gives, which is the argument for one option rather than two.
+  //
+  // Only under `u`. Without it ECMAScript counts code units and `/./`
+  // matches *half* a pair - `[[0,1]]` of a two-unit subject - which is the
+  // deviation in dialects.md section 6.1 and is not something an encoding
+  // option can reconcile. GRX_OPT_WTF8 requires GRX_OPT_UTF, so the shape of
+  // the option already keeps this out of reach.
+  struct Row {
+    const char * pattern;
+    const std::string * subject;
+    int matched;
+    size_t start;
+    size_t end;
+  };
+  const Row rows[] = {
+    {".", &kLoneHigh, 1, 0, 3},               // node: [[0,1]], one unit
+    {".", &kLoneLow, 1, 0, 3},                // a low one alone, the same
+    {".", &kPair, 1, 0, 4},                   // node: [[0,2]], two units
+    {"\\p{Cs}", &kLoneHigh, 1, 0, 3},         // node matches: they *are* Cs
+    {"\\p{C}", &kLoneHigh, 1, 0, 3},
+    {"\\w", &kLoneHigh, 0, 0, 0},             // and are not word characters
+    {"\\p{L}", &kLoneHigh, 0, 0, 0},          // nor letters
+    {"\\W", &kLoneHigh, 1, 0, 3},
+    {"[^a]", &kLoneHigh, 1, 0, 3},
+    {"[\\uD800]", &kLoneHigh, 1, 0, 3},       // named by escape
+    {"[\\uD7FF-\\uE000]", &kLoneHigh, 1, 0, 3},   // or by a range over them
+    {"\\uD800", &kLoneHigh, 1, 0, 3},
+    {"^.$", &kLoneHigh, 1, 0, 3},             // one character, not three
+    {"^..$", &kPair, 0, 0, 0},                // node: nomatch, a pair is one
+    {"\\p{Any}", &kLoneHigh, 1, 0, 3},
+    {"[\\u{10000}-\\u{10FFFF}]", &kPair, 1, 0, 4},
+  };
+  for (const Row & row : rows) {
+    int matched = 0;
+    GRX_Capture span = {GRX_NPOS, GRX_NPOS};
+    ASSERT_EQ(search_wtf8(GRX_SYNTAX_ECMASCRIPT, row.pattern, *row.subject,
+                  GRX_OPT_UTF | GRX_OPT_WTF8, &matched, &span),
+        GRX_OK)
+        << row.pattern;
+    EXPECT_EQ(matched != 0, row.matched != 0) << row.pattern;
+    if (matched && row.matched) {
+      EXPECT_EQ(span.start, row.start) << row.pattern;
+      EXPECT_EQ(span.end, row.end) << row.pattern;
+    }
+  }
+
+  // Caseless changes none of it - a surrogate has no case - which is the
+  // one axis where a fold table could have quietly treated them as
+  // unassigned scalars.
+  int matched = 0;
+  GRX_Capture span = {GRX_NPOS, GRX_NPOS};
+  ASSERT_EQ(search_wtf8(GRX_SYNTAX_ECMASCRIPT, ".", kLoneHigh,
+                GRX_OPT_UTF | GRX_OPT_WTF8 | GRX_OPT_CASELESS, &matched,
+                &span),
+      GRX_OK);
+  EXPECT_TRUE(matched);
+  EXPECT_EQ(span.end, 3u);
+}
+
+TEST(EcmaScriptSurrogates, WithoutTheOptionTheSubjectIsStillRefused) {
+  // The option-off half, because widening what input is accepted must not
+  // happen to a caller who did not ask.
+  int matched = 0;
+  EXPECT_EQ(search_wtf8(GRX_SYNTAX_ECMASCRIPT, ".", kLoneHigh, GRX_OPT_UTF,
+                &matched, nullptr),
+      GRX_ERR_INVALID);
+}
+
+TEST(EcmaScriptSurrogates, ACesu8PairIsStillRefused) {
+  // The rule that makes this an encoding rather than a relaxation, asserted
+  // on this dialect too: a pair spelled as two three-byte sequences is
+  // CESU-8, and accepting it would let `.` match half a character and put
+  // every byte offset at odds with the reference. node reads the same two
+  // code units as one code point, so the four-byte scalar is what carries
+  // that subject and the CESU-8 spelling has no reading at all.
+  int matched = 0;
+  EXPECT_EQ(search_wtf8(GRX_SYNTAX_ECMASCRIPT, ".", kLoneHigh + kLoneLow,
+                GRX_OPT_UTF | GRX_OPT_WTF8, &matched, nullptr),
+      GRX_ERR_INVALID);
+  // And the same pair spelled right is one character.
+  GRX_Capture span = {GRX_NPOS, GRX_NPOS};
+  ASSERT_EQ(search_wtf8(GRX_SYNTAX_ECMASCRIPT, ".", kPair,
+                GRX_OPT_UTF | GRX_OPT_WTF8, &matched, &span),
+      GRX_OK);
+  EXPECT_TRUE(matched);
+  EXPECT_EQ(span.end, 4u);
+}
+
 int main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

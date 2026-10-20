@@ -13,10 +13,14 @@
  * about it - and it is ECMAScript's own loop rather than one written here,
  * which is what makes it an oracle rather than a second opinion.
  *
- * The spans are **byte offsets into the UTF-8 subject**, not the UTF-16 code
+ * The spans are **byte offsets into the WTF-8 subject**, not the UTF-16 code
  * unit indices JavaScript works in. Converting here rather than on the other
  * side keeps the comparison honest: the two implementations disagree about
  * what a position *is*, and one of them has to say so in the other's terms.
+ *
+ * WTF-8 rather than UTF-8 because a JavaScript string may hold an unpaired
+ * surrogate and this is the encoding that can carry one: the two coincide on
+ * every subject that has none, so nothing about an existing row changes.
  *
  * Copyright 2026 by Corey Pennycuff
  */
@@ -30,16 +34,34 @@ process.stderr.write(
 /**
  * UTF-16 index to UTF-8 byte offset, for one subject.
  *
- * By code point rather than by code unit: `Buffer.byteLength` of a lone
- * surrogate is three, the length of the replacement character, so summing it
- * per code unit puts every position after an astral character six bytes out.
- * A position *between* the halves of a surrogate pair has no byte offset at
- * all, and it is reachable: `\B` matches there even under the `u` flag,
- * because both halves are non-word characters, so `/\B/u` against "0<emoji>B"
- * reports index 2. UTF-8 has no such position, so a result that lands on one
- * is reported as "surrogate" and the comparison skips it rather than
- * inventing an offset for it.
+ * By code point rather than by code unit: summing a width per code unit puts
+ * every position after an astral character six bytes out.
+ *
+ * The width is computed from the code point rather than measured with
+ * `Buffer.byteLength`. They agree on every subject either side can carry -
+ * `Buffer.byteLength` of a lone surrogate is three, because it encodes the
+ * replacement character, which is the width WTF-8 gives a surrogate as well
+ * - and agreeing by arithmetic is not the same as agreeing by accident. The
+ * other side reads these subjects as WTF-8 under GRX_OPT_WTF8, where a lone
+ * surrogate is its own three bytes; a measurement that happened to match
+ * because U+FFFD is also three bytes long would stop matching the moment
+ * either encoder changed.
+ *
+ * A position *between* the halves of a surrogate pair still has no byte
+ * offset at all, and it is reachable: `\B` matches there even under the `u`
+ * flag, because both halves are non-word characters, so `/\B/u` against
+ * "0<emoji>B" reports index 2. Neither UTF-8 nor WTF-8 has such a position -
+ * WTF-8 spells a pair as one four-byte scalar, and CESU-8, which would give
+ * one, is refused - so a result that lands there is reported as "surrogate"
+ * and the comparison skips it rather than inventing an offset for it.
  */
+function wtf8Width(codePoint) {
+  if (codePoint <= 0x7F) { return 1; }
+  if (codePoint <= 0x7FF) { return 2; }
+  if (codePoint <= 0xFFFF) { return 3; }
+  return 4;
+}
+
 function byteOffsets(subject) {
   const offsets = new Array(subject.length + 1);
   const midPair = new Array(subject.length + 1).fill(false);
@@ -53,7 +75,7 @@ function byteOffsets(subject) {
       offsets[i + 1] = bytes;
       midPair[i + 1] = true;
     }
-    bytes += Buffer.byteLength(String.fromCodePoint(codePoint), "utf8");
+    bytes += wtf8Width(codePoint);
     i += units;
   }
   offsets[subject.length] = bytes;

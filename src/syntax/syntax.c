@@ -776,6 +776,19 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     .fold_utf = GRX_FOLD_SIMPLE,
     .property_match = GRX_PROPERTY_STRICT,
     .subject_is_text = 1,
+    // A JavaScript string is UTF-16 and may hold an unpaired surrogate,
+    // which V8 matches over as ordinary text. Measured on the pinned node
+    // 24.21.0 / V8 13.6: under `u`, `.` matches a lone surrogate as one
+    // character, `\p{Cs}` and `[^a]` and `[\uD7FF-\uE000]` match it, and
+    // `\w` and `\p{L}` do not - the same table the JDK gives. `(.)(.)`
+    // against a *pair* is nomatch there, because a pair is one code point,
+    // which is WTF-8's rule and not CESU-8's.
+    //
+    // Only under `u` or `v`, which is where GRX_OPT_WTF8's requirement of
+    // UTF mode puts it: without them ECMAScript counts code units and `.`
+    // matches half a pair, which is dialects.md section 6.1's deviation and
+    // not something an encoding option can reconcile.
+    .subject_is_utf16 = 1,
     // String.prototype.replace's grammar, GetSubstitution (22.1.3.19.1).
     // No case operators and no `${n}`: both are Perl spellings ECMAScript
     // never took. `$<name>` is conditional on the pattern having named

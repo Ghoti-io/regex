@@ -11,6 +11,7 @@ import subprocess
 import sys
 
 import oracle_env
+import wtf8 as wtf8_codec
 from probe import CASES as SHARED
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -309,34 +310,11 @@ def wtf8(text):
     """WTF-8 bytes: a surrogate pair as the four-byte scalar, an unpaired
     surrogate as its own three bytes.
 
-    Python keeps an unpaired surrogate in a `str` and refuses to encode one
-    as UTF-8, which is the whole reason these cases could not be asked.
-    Round-tripping through UTF-16 joins the pairs first, so a pair becomes
-    one scalar and only the genuinely unpaired ones take the three-byte
-    form - which is WTF-8's rule and not CESU-8's.
+    One line, because the encoder moved to `wtf8.py` when the ECMAScript
+    differential needed the same one and reproduced the CESU-8 mistake
+    writing its own. The name stays here because the callers use it.
     """
-    out = bytearray()
-    units = text.encode("utf-16-le", "surrogatepass")
-    i = 0
-    while i < len(units):
-        unit = units[i] | (units[i + 1] << 8)
-        i += 2
-        if 0xD800 <= unit <= 0xDBFF and i + 1 < len(units):
-            low = units[i] | (units[i + 1] << 8)
-            if 0xDC00 <= low <= 0xDFFF:
-                i += 2
-                unit = 0x10000 + ((unit - 0xD800) << 10) + (low - 0xDC00)
-        if unit < 0x80:
-            out.append(unit)
-        elif unit < 0x800:
-            out += bytes((0xC0 | unit >> 6, 0x80 | unit & 0x3F))
-        elif unit < 0x10000:
-            out += bytes((0xE0 | unit >> 12, 0x80 | (unit >> 6) & 0x3F,
-                          0x80 | unit & 0x3F))
-        else:
-            out += bytes((0xF0 | unit >> 18, 0x80 | (unit >> 12) & 0x3F,
-                          0x80 | (unit >> 6) & 0x3F, 0x80 | unit & 0x3F))
-    return bytes(out)
+    return wtf8_codec.encode(text)
 
 
 # What the reference does with an unpaired UTF-16 surrogate.
