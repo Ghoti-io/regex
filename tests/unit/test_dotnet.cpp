@@ -250,6 +250,89 @@ TEST(DotNetOperations, ReplaceAndSplitRefuseUntilTheyAreBuilt) {
   grx_regex_free(regex);
 }
 
+namespace {
+
+// Every group's span, in the dialect's own numbering, as "lo:hi" joined by
+// spaces with "-" for a group that did not take part. The numbering is the
+// thing under test, so the helper reports it positionally rather than by
+// name.
+std::string groups_dotnet(const char * pattern, const char * subject,
+    uint32_t options = GRX_OPT_NONE) {
+  GRX_Regex * regex = nullptr;
+  GRX_Error error;
+  if (grx_regex_compile_with_allocator(pattern, std::strlen(pattern),
+          GRX_SYNTAX_DOTNET, options, nullptr, nullptr, &error,
+          &regex) != GRX_OK) return "compile-failed";
+  GRX_Match * match = nullptr;
+  if (grx_match_create(regex, nullptr, &match) != GRX_OK) {
+    grx_regex_free(regex);
+    return "match-create-failed";
+  }
+  int matched = 0;
+  std::string out;
+  if (grx_regex_search(regex, subject, std::strlen(subject), 0,
+          GRX_ENGINE_AUTO, nullptr, match, &matched) == GRX_OK && matched) {
+    size_t count = grx_match_count(match);
+    for (size_t i = 0; i < count; i++) {
+      GRX_Capture capture;
+      if (!out.empty()) out += " ";
+      if (grx_match_group(match, i, &capture) == GRX_OK
+          && capture.start != GRX_NPOS) {
+        out += std::to_string(capture.start) + ":"
+            + std::to_string(capture.end);
+      }
+      else {
+        out += "-";
+      }
+    }
+  }
+  else {
+    out = "nomatch";
+  }
+  grx_match_destroy(match);
+  grx_regex_free(regex);
+  return out;
+}
+
+} // namespace
+
+// **.NET numbers unnamed groups before named ones**, which is the reverse of
+// every other dialect here. Both rows are measured answers from the pinned
+// .NET 10.0.13 (probe `captures` area), and the second is the one that shows
+// the rule is a partition rather than a swap: `(a)(?<b>c)(d)` gives the two
+// unnamed groups 1 and 2 in source order and the named one 3, so `d` is
+// numbered before `c` although it is written after it.
+TEST(DotNetCaptures, UnnamedGroupsAreNumberedBeforeNamedOnes) {
+  EXPECT_EQ(groups_dotnet("(?<a>x)(y)", "xy"), "0:2 1:2 0:1");
+  EXPECT_EQ(groups_dotnet("(a)(?<b>c)(d)", "acd"), "0:3 0:1 2:3 1:2");
+}
+
+// The two homogeneous cases, which the partition must leave in source order.
+// They are the control: a rule that simply reversed the two kinds, or that
+// numbered named groups from 1 regardless, would pass the rows above and
+// fail one of these.
+TEST(DotNetCaptures, OneKindOfGroupIsStillSourceOrder) {
+  EXPECT_EQ(groups_dotnet("(a)(b)", "ab"), "0:2 0:1 1:2");
+  EXPECT_EQ(groups_dotnet("(?<x>a)(?<y>b)", "ab"), "0:2 0:1 1:2");
+}
+
+// Under ExplicitCapture the base is zero rather than the count of unnamed
+// groups, because the letter stops an unnamed group capturing at all - so
+// there is nothing for the named ones to come after, and a named group is
+// group 1. Measured: `(?<n>a)(b)` under `n` reports one group and it is "a".
+TEST(DotNetCaptures, ExplicitCaptureLeavesTheNamedGroupsNumberedFromOne) {
+  EXPECT_EQ(groups_dotnet("(?<n>a)(b)", "ab", GRX_OPT_NO_CAPTURE),
+      "0:2 0:1");
+  EXPECT_EQ(groups_dotnet("(a)(b)", "ab", GRX_OPT_NO_CAPTURE), "0:2");
+}
+
+// A name still resolves to its renumbered group, which is what says the
+// renumbering reached the reference and not only the span list.
+TEST(DotNetCaptures, ANamedBackreferenceFollowsTheRenumbering) {
+  EXPECT_EQ(groups_dotnet("(?<n>a)\\k<n>", "aa"), "0:2 0:1");
+  EXPECT_EQ(groups_dotnet("(y)(?<n>a)\\k<n>", "yaa"), "0:3 0:1 1:2");
+}
+
 int main(int argc, char ** argv) {
   testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

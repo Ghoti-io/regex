@@ -559,6 +559,9 @@ static void prescan(GRX_Parser * parser) {
 
     if (i + 1 >= parser->length || parser->text[i + 1] != '?') {
       parser->group_count++;
+      // .NET's base: see GRX_Parser::unnamed_groups. Counted for every
+      // dialect because the scan is here anyway, and read by one.
+      parser->unnamed_groups++;
       continue;
     }
     if (i + 2 < parser->length && parser->text[i + 2] == '(') {

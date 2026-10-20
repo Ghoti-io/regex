@@ -564,6 +564,22 @@ typedef struct GRX_Parser {
   size_t group_count;              ///< Capturing groups the prescan counted.
   size_t groups_opened;            ///< Capturing groups numbered so far.
   /**
+   * Unnamed capturing groups the prescan counted, for .NET's numbering.
+   *
+   * .NET numbers unnamed groups 1..k and named ones k+1..n, so a named
+   * group's number depends on how many unnamed ones the *whole* pattern
+   * has - including any written after it. The prescan already walks every
+   * `(` to answer ECMAScript's `\1`-or-octal question, so counting them
+   * there costs nothing and is the only place the answer can be had before
+   * the first group is numbered.
+   *
+   * Zero for every other dialect, which number in source order and need no
+   * base.
+   */
+  size_t unnamed_groups;
+  size_t named_opened;             ///< Named groups numbered so far (.NET).
+  size_t unnamed_opened;           ///< Unnamed groups numbered so far (.NET).
+  /**
    * How many group bodies are open around the current position.
    *
    * Distinct from `depth`, which counts alternation branches and bracket

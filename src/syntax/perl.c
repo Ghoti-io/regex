@@ -4836,6 +4836,15 @@ static GRX_Result pcre_group_open(GRX_Parser * parser, GRX_GroupOpen * out) {
     parser->groups_opened++;
     out->flags = GRX_NODE_CAPTURING;
     out->a = (uint32_t)parser->groups_opened;
+    // .NET keeps two running numbers rather than one, because its named and
+    // unnamed groups are numbered from different bases. `groups_opened`
+    // stays the count of capturing groups opened - every other reader of it
+    // means that - and the *number* comes from the counter for this kind.
+    // Sharing one counter gave `(?<a>x)(y)` two groups both numbered 2.
+    if (flavour(parser) == FLAVOUR_DOTNET) {
+      parser->unnamed_opened++;
+      out->a = (uint32_t)parser->unnamed_opened;
+    }
     return GRX_OK;
   }
 
@@ -5025,6 +5034,23 @@ static GRX_Result pcre_group_open(GRX_Parser * parser, GRX_GroupOpen * out) {
     parser->groups_opened++;
     out->flags = GRX_NODE_CAPTURING | GRX_NODE_NAMED;
     out->a = (uint32_t)parser->groups_opened;
+    // **.NET numbers named groups after every unnamed one**, so `(?<a>x)(y)`
+    // makes `y` group 1 and `a` group 2 - the reverse of every other dialect
+    // here, and measured on the pinned .NET 10.0.13 (probe `captures` area).
+    // An unnamed group's number is its source order in both schemes, so that
+    // site needs nothing; only this one moves, by the count of unnamed groups
+    // the prescan found anywhere in the pattern.
+    //
+    // Under ExplicitCapture the base is zero rather than that count: the `n`
+    // letter stops an unnamed group capturing at all, so there is nothing for
+    // the named ones to come after. Measured: `(?<n>a)(b)` under `n` reports
+    // one group and it is "a".
+    if (flavour(parser) == FLAVOUR_DOTNET) {
+      size_t base = (parser->options & GRX_OPT_NO_CAPTURE)
+          ? 0 : parser->unnamed_groups;
+      parser->named_opened++;
+      out->a = (uint32_t)(base + parser->named_opened);
+    }
     out->b = offset;
     return GRX_OK;
   }
