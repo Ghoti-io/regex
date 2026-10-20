@@ -1027,6 +1027,7 @@ extern const GRX_Frontend grx_frontend_perl;
 /** @brief CPython's `re`: the Perl-family rules, less what Python lacks. */
 extern const GRX_Frontend grx_frontend_python;
 extern const GRX_Frontend grx_frontend_java;
+extern const GRX_Frontend grx_frontend_dotnet;
 
 /** @brief Vim's four magic levels. */
 extern const GRX_Frontend grx_frontend_vim;

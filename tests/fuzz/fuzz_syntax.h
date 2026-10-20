@@ -59,6 +59,7 @@ static const GRX_Syntax kBuiltSyntaxes[] = {
   GRX_SYNTAX_RE2,
   GRX_SYNTAX_RUST,
   GRX_SYNTAX_JAVA,
+  GRX_SYNTAX_DOTNET,
 };
 static const size_t kBuiltSyntaxCount
     = sizeof(kBuiltSyntaxes) / sizeof(kBuiltSyntaxes[0]);

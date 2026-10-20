@@ -39,9 +39,9 @@ TEST(Parse, UnknownDialectIsInvalid) {
 // A dialect this library names and has not built, for the tests that need
 // one. Naming it once means building the next dialect changes this line
 // rather than hunting for every test that happened to pick the same example:
-// these said POSIX until WP-23, Python until WP-30, and Java until whenever
-// WP-31 lands.
-static const GRX_Syntax kUnbuiltDialect = GRX_SYNTAX_DOTNET;
+// these said POSIX until WP-23, Python until WP-30, Java until WP-31, and
+// .NET until WP-32 routed it on 2026-10-20.
+static const GRX_Syntax kUnbuiltDialect = GRX_SYNTAX_RUBY;
 
 TEST(Parse, OutputIsNullOnFailure) {
   // Nothing is allocated for the caller to free on a failing call

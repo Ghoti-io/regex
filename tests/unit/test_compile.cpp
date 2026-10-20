@@ -44,7 +44,7 @@ TEST(Compile, NullArgumentsAreInvalid) {
 // A dialect this library names and has not built. Named once so that
 // building the next one changes this line rather than four call sites: these
 // said POSIX until WP-23 built it and Python until WP-30 did.
-static const GRX_Syntax kUnbuiltDialect = GRX_SYNTAX_DOTNET;
+static const GRX_Syntax kUnbuiltDialect = GRX_SYNTAX_RUBY;
 
 TEST(Compile, OutputIsNullOnFailure) {
   GRX_Regex * regex = (GRX_Regex *)0x1;

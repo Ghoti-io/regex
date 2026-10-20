@@ -56,6 +56,8 @@ const GRX_Frontend * grx_frontend_for(GRX_Syntax syntax) {
       return &grx_frontend_python;
     case GRX_SYNTAX_JAVA:
       return &grx_frontend_java;
+    case GRX_SYNTAX_DOTNET:
+      return &grx_frontend_dotnet;
     case GRX_SYNTAX_VIM:
       return &grx_frontend_vim;
     case GRX_SYNTAX_POSIX_BRE:

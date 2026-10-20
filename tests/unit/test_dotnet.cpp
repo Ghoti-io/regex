@@ -14,10 +14,41 @@
  * turned out to discriminate nothing.
  */
 #include <cstdint>
+#include <cstring>
 
 #include "test_helpers.h"
 
 namespace {
+
+GRX_Result compile_dotnet(const char * text, GRX_Error * error = nullptr) {
+  GRX_Regex * regex = nullptr;
+  GRX_Error local;
+  GRX_Result result = grx_regex_compile_with_allocator(text, std::strlen(text),
+      GRX_SYNTAX_DOTNET, GRX_OPT_NONE, nullptr, nullptr,
+      error ? error : &local, &regex);
+  grx_regex_free(regex);
+  return result;
+}
+
+bool matches_dotnet(const char * pattern, const char * subject,
+    uint32_t options = GRX_OPT_NONE) {
+  GRX_Regex * regex = nullptr;
+  GRX_Error error;
+  if (grx_regex_compile_with_allocator(pattern, std::strlen(pattern),
+          GRX_SYNTAX_DOTNET, options, nullptr, nullptr, &error,
+          &regex) != GRX_OK) return false;
+  GRX_Match * match = nullptr;
+  if (grx_match_create(regex, nullptr, &match) != GRX_OK) {
+    grx_regex_free(regex);
+    return false;
+  }
+  int matched = 0;
+  GRX_Result result = grx_regex_search(regex, subject, std::strlen(subject),
+      0, GRX_ENGINE_AUTO, nullptr, match, &matched);
+  grx_match_destroy(match);
+  grx_regex_free(regex);
+  return result == GRX_OK && matched;
+}
 
 GRX_SyntaxSpec SpecFor(GRX_Syntax syntax) {
   GRX_SyntaxSpec spec;
@@ -138,6 +169,85 @@ TEST(DotNetOptions, TheAlphabetIsNotJavas) {
   EXPECT_EQ(grx_options_parse(GRX_SYNTAX_JAVA, "n", &options, &error),
       GRX_ERR_SYNTAX);
   EXPECT_EQ(error.diag, GRX_DIAG_UNKNOWN_FLAG);
+}
+
+// The dialect is selectable. It answered GRX_ERR_UNSUPPORTED with
+// GRX_DIAG_DIALECT_NOT_IMPLEMENTED until the front end was routed, which is
+// what `kUnbuiltDialect` in test_pattern.cpp and test_compile.cpp used it
+// for; those now name Ruby.
+TEST(DotNetParser, TheDialectIsSelectable) {
+  EXPECT_EQ(compile_dotnet("a"), GRX_OK);
+  EXPECT_TRUE(matches_dotnet("a", "a"));
+}
+
+// Class subtraction, every row an answer the pinned .NET 10.0.13 gives
+// (probe `classes` area). The three subjects together are the control: "b"
+// is in the base and not the subtrahend, "a" is in both, and "-" is in
+// neither - and that last one is the row that separates a subtraction from
+// a class that merely contains a literal dash, which is what the PCRE
+// reader would have made of it.
+TEST(DotNetClasses, SubtractionRemovesTheOperandFromTheBase) {
+  EXPECT_TRUE(matches_dotnet("[a-z-[aeiou]]", "b"));
+  EXPECT_FALSE(matches_dotnet("[a-z-[aeiou]]", "a"));
+  EXPECT_FALSE(matches_dotnet("[a-z-[aeiou]]", "-"));
+}
+
+// Nested, and the nesting is what says the operand is parsed as a class
+// rather than scanned to the next `]`: c is subtracted from b-d, which is
+// subtracted from a-z, so c survives.
+TEST(DotNetClasses, ASubtrahendMayItselfSubtract) {
+  EXPECT_TRUE(matches_dotnet("[a-z-[b-d-[c]]]", "c"));
+  EXPECT_FALSE(matches_dotnet("[a-z-[b-d-[c]]]", "b"));
+}
+
+// Shorthands are sets, so they can stand on either side.
+TEST(DotNetClasses, SubtractionWorksOnShorthands) {
+  EXPECT_TRUE(matches_dotnet("[\\w-[\\d]]", "a"));
+  EXPECT_FALSE(matches_dotnet("[\\w-[\\d]]", "5"));
+}
+
+// .NET's own rule, with .NET's own diagnostic: "A subtraction must be the
+// last element". Both spellings it refuses are here, because one of them -
+// a second subtraction - is the shape a reader that treated `-[` as an
+// ordinary operator would accept.
+TEST(DotNetClasses, ASubtractionMustBeTheLastElement) {
+  GRX_Error error;
+  EXPECT_EQ(compile_dotnet("[a-z-[aeiou]x]", &error), GRX_ERR_SYNTAX);
+  EXPECT_EQ(error.diag, GRX_DIAG_INVALID_CLASS_SET_OP);
+  EXPECT_EQ(compile_dotnet("[a-z-[aeiou]-[b]]", &error), GRX_ERR_SYNTAX);
+  EXPECT_EQ(error.diag, GRX_DIAG_INVALID_CLASS_SET_OP);
+}
+
+// A bare `[` inside a class is a literal here and opens a nested set in
+// Java, and this is the pair that proves it rather than asserting it: `[[a]`
+// matches both of its members. It is also why `[[:alpha:]]` is no match -
+// a class of six characters followed by a literal `]`, so it needs two
+// characters - and so why POSIX bracket names are absent from this dialect
+// by rule rather than by omission.
+TEST(DotNetClasses, ABareBracketInsideAClassIsALiteral) {
+  EXPECT_TRUE(matches_dotnet("[[a]", "["));
+  EXPECT_TRUE(matches_dotnet("[[a]", "a"));
+  EXPECT_FALSE(matches_dotnet("[[:alpha:]]", "a"));
+  EXPECT_TRUE(matches_dotnet("[[:alpha:]]", "a]"));
+}
+
+// Replace and split refuse, and refusing is the point: both dispatch on a
+// profile field whose zero value is *another dialect*'s rule, so a routed
+// dialect that has not set them answers wrongly instead of failing.
+// `GRX_SyntaxSpec::split`'s zero is GRX_SPLIT_ECMASCRIPT and an unset
+// template has sigil 0, which would copy `$1` through as literal text.
+TEST(DotNetOperations, ReplaceAndSplitRefuseUntilTheyAreBuilt) {
+  GRX_Regex * regex = nullptr;
+  GRX_Error error;
+  ASSERT_EQ(grx_regex_compile_with_allocator("a", 1, GRX_SYNTAX_DOTNET,
+      GRX_OPT_NONE, nullptr, nullptr, &error, &regex), GRX_OK);
+  GRX_Text text = {};
+  EXPECT_EQ(grx_regex_replace(regex, "aa", 2, "$0", 2, 0, nullptr, nullptr,
+      &error, &text), GRX_ERR_UNSUPPORTED);
+  GRX_Split split = {};
+  EXPECT_EQ(grx_regex_split(regex, "aa", 2, GRX_NPOS, nullptr, nullptr,
+      &error, &split), GRX_ERR_UNSUPPORTED);
+  grx_regex_free(regex);
 }
 
 int main(int argc, char ** argv) {

@@ -24,7 +24,8 @@ implemented parser and operations, with its completion evidence tracked in
 | **RE2**, **Rust** | Implemented, WP-34 and WP-35. Each has a pinned oracle: Go 1.25.14's `regexp` and the `regex` crate 1.13.1. They are the two dialects where a *refusal* is the guarantee - no backreference, no lookaround, so a pattern accepted here is one `GRX_ENGINE_PIKE` will run. |
 | **I-Regexp** (RFC 9485) | Implemented. The only one whose references are not implementations *of it*: an ABNF is the authority, and two programs answer its two halves (§10). |
 | **Java** | JDK 25.0.4.1+1 syntax, matching, iteration, replacement and split are implemented. The committed 136-vector corpus passes; this is a bounded result, not complete Java conformance. JDK 27+35 observations are separate. |
-| .NET, Ruby, Tcl, Emacs, RE/flex | Not implemented. Selecting one is `GRX_ERR_UNSUPPORTED` with `GRX_DIAG_DIALECT_NOT_IMPLEMENTED`, never a silent fallback to another dialect. |
+| **.NET** | Syntax, class subtraction and matching implemented against the pinned .NET 10.0.13 (WP-32). `grx_regex_replace()` and `grx_regex_split()` are `GRX_ERR_UNSUPPORTED`: the zero value of `GRX_SyntaxSpec::split` is `GRX_SPLIT_ECMASCRIPT` and an unset template has no sigil, so a routed dialect that has not set them answers with *another dialect's rule* rather than failing - which is the one thing §4 says never happens. Astral subjects carry the §6 deviations. |
+| Ruby, Tcl, Emacs, RE/flex | Not implemented. Selecting one is `GRX_ERR_UNSUPPORTED` with `GRX_DIAG_DIALECT_NOT_IMPLEMENTED`, never a silent fallback to another dialect. |
 
 A pattern accepted under `GRX_SYNTAX_RE2`, once that dialect exists, is one
 the linear engine is guaranteed to run. RE2 and Rust are deliberate subsets

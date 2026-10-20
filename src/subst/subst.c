@@ -1593,6 +1593,16 @@ GRX_Result grx_regex_replace(const GRX_Regex * regex, const char * subject,
       || (!replacement && replacement_length)) {
     return GRX_ERR_INVALID;
   }
+  if (regex->syntax == GRX_SYNTAX_DOTNET) {
+    // .NET's replacement grammar is not built, and the same argument as
+    // grx_regex_split()'s applies with a different field: an unset
+    // `template_spec` has sigil 0, so `$1` would be copied through as
+    // literal text rather than refused. Measured, the grammar is `$1`,
+    // `${1}`, `${name}`, `$&`, `` $` ``, `$'`, `$+`, `$_`, `$$` and `$0`,
+    // with a *missing* group left literal - `$9` with no group 9 stays `$9`
+    // where Java raises - so two of those have no GRX_TMPL_ bit yet.
+    return GRX_ERR_UNSUPPORTED;
+  }
   if (flags & ~(uint32_t)(GRX_REPLACE_GLOBAL | GRX_REPLACE_LITERAL)) {
     return GRX_ERR_INVALID;
   }
@@ -2151,6 +2161,22 @@ GRX_Result grx_regex_split(const GRX_Regex * regex, const char * subject,
     size_t length, size_t limit, const GRX_SearchOptions * options,
     const GRX_Allocator * allocator, GRX_Error * out_error,
     GRX_Split * out_split) {
+  if (regex && regex->syntax == GRX_SYNTAX_DOTNET) {
+    // .NET's split rule is not built, and refusing is not the same as
+    // leaving it alone: `GRX_SyntaxSpec::split`'s zero value is
+    // GRX_SPLIT_ECMASCRIPT, so a dialect that has not set the field answers
+    // with *another dialect's* rule rather than failing. Measured, .NET's
+    // differs in three ways at once - `Regex.Split` interleaves the
+    // separator's captured groups between the pieces, keeps a leading and a
+    // trailing empty piece, and throws on a negative count where Java reads
+    // one as "no limit" - so an ECMAScript answer here would be wrong rather
+    // than approximate. Built by its own work package; until then this says
+    // so.
+    if (out_error) {
+      grx_error_clear(out_error);
+    }
+    return GRX_ERR_UNSUPPORTED;
+  }
   if (regex && regex->syntax == GRX_SYNTAX_JAVA) {
     if (limit != GRX_NPOS && limit > INT32_MAX) {
       if (out_error) {

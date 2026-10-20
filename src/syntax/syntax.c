@@ -970,14 +970,55 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     .empty_subject_is_a_boundary = 1,
     .subject_is_text = 1,
   },
+  // **Probed on 2026-10-20 against the pinned .NET 10.0.13.** The rows below
+  // were read off Microsoft's reference page; `tools/oracle/dotnet_probe.py`
+  // can contradict them now, and `tests/data/probe/dotnet.json` holds the
+  // answers. One field was wrong in the way that matters most here - an
+  // absent field is not an unset field, it is whatever zero means:
+  //
+  //   `empty_loop` was absent, so it took **GRX_EMPTY_LOOP_FAIL**, which is
+  //   ECMA-262's RepeatMatcher rule and not .NET's. Measured, .NET is BREAK
+  //   and not BREAK_FIRST either, settled by the one case that divides them:
+  //   `(a|)*` over "aaaa" reports group 1 as 4-4 here and 3-4 under
+  //   BREAK_FIRST, which is glibc's and musl's answer. `(a*)*` over "b" is
+  //   0-0 under both and so divides nothing.
+  //
+  // Four more are right at their defaults and are recorded rather than left
+  // implicit, because a cell that is right by default and a cell that has
+  // been measured are not the same cell - only one of them stays right when
+  // something nearby moves. `capture_reset` is KEEP_LAST_SET: `((a)|b)+`
+  // over "ab" reports group 2 as 0-1, so an iteration that does not write a
+  // group does not clear it. `newlines` is LF alone: `.` matches `\r` *and*
+  // U+2028, and `a$` over "a\u2028" is no match, so nothing but `\n` ends a
+  // line. `composing` is SEPARATE: `^.$` over "e" plus a combining acute is
+  // no match and `^..$` matches. And the preference is leftmost-first:
+  // `a|ab` over "ab" is 0-1.
+  //
+  // `fold_utf` stays SIMPLE and that is a **deviation rather than a
+  // measurement**: `(?i)` on .NET is `ToLower`, not case folding, so
+  // `(?i)\u017F` does not match "s" there and does here.
+  // documentation/dialects.md section 5.8 carries the row - .NET's CULTURE
+  // implemented as SIMPLE_FOLD, i.e. CultureInvariant.
+  //
+  // Not measured, and so not set: `search_start`. `\G.` over "abc" gives
+  // three adjacent matches, which PREVIOUS_END and ATTEMPT both produce, so
+  // the probe has no case that divides them yet.
   [GRX_SYNTAX_DOTNET] = {
     .lookbehind = GRX_LOOKBEHIND_UNBOUNDED,
+    .empty_loop = GRX_EMPTY_LOOP_BREAK,
     .iteration = GRX_ITERATE_ADVANCE_ONE,
     .dollar = GRX_DOLLAR_BEFORE_FINAL_NEWLINE,
     .shorthands = GRX_SHORTHANDS_UNICODE,
     .shorthands_wide = GRX_SHORTHANDS_UNICODE,
     .fold = GRX_FOLD_SIMPLE,
     .fold_utf = GRX_FOLD_SIMPLE,
+    // A .NET string is UTF-16 and `Regex` matches over it as text, so the
+    // subject is characters rather than bytes - and an unpaired surrogate is
+    // ordinary text to it, which is what makes GRX_OPT_WTF8 a request this
+    // dialect can honour. The *interior* of a pair is section 6's .NET row
+    // and is not this field's business.
+    .subject_is_text = 1,
+    .subject_is_utf16 = 1,
   },
   [GRX_SYNTAX_RUBY] = {
     .lookbehind = GRX_LOOKBEHIND_FIXED_PER_BRANCH,

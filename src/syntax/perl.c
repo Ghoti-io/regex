@@ -63,7 +63,8 @@ typedef enum {
   FLAVOUR_PCRE = 0, ///< PCRE2 10.46.
   FLAVOUR_PERL,     ///< Perl 5.40.
   FLAVOUR_PYTHON,   ///< CPython 3.13 `re`.
-  FLAVOUR_JAVA      ///< JDK 25 Pattern.
+  FLAVOUR_JAVA,     ///< JDK 25 Pattern.
+  FLAVOUR_DOTNET    ///< .NET 10 System.Text.RegularExpressions.
 } Flavour;
 
 /**
@@ -86,6 +87,8 @@ static Flavour flavour(const GRX_Parser * parser) {
       return FLAVOUR_PYTHON;
     case GRX_SYNTAX_JAVA:
       return FLAVOUR_JAVA;
+    case GRX_SYNTAX_DOTNET:
+      return FLAVOUR_DOTNET;
     case GRX_SYNTAX_PCRE:
     default:
       return FLAVOUR_PCRE;
@@ -3740,6 +3743,139 @@ static GRX_Result java_char_class(GRX_Parser * parser, uint32_t * out_node) {
 }
 
 /**
+ * .NET's bracket grammar: adjacent items unite, and `-[` subtracts.
+ *
+ * Java's reader one function up is the model, and the three differences are
+ * all measured on the pinned .NET 10.0.13 rather than read off Microsoft's
+ * page (`tools/oracle/dotnet_probe.py`, `features` and `classes` areas):
+ *
+ *   * **`-[set]` is a subtraction**, where Java spells its set operation
+ *     `&&` and means intersection. `[a-z-[aeiou]]` matches "b" and not "a",
+ *     and `[\w-[\d]]` matches "a" and not "5".
+ *   * **A subtraction must be the last element**, which is .NET's own rule
+ *     and its own diagnostic: `[a-z-[aeiou]x]` and `[a-z-[aeiou]-[b]]` are
+ *     both "A subtraction must be the last element" at the offset of the
+ *     `-`. So one operand, at the end, and anything after it is an error
+ *     rather than a union.
+ *   * **A bare `[` inside a class is a literal**, where Java's opens a
+ *     nested set. `[[a]` matches "[" *and* "a" there, which is also why
+ *     `[[:alpha:]]` is no match: it is a class of six characters followed by
+ *     a literal `]`, so it needs two characters and a one-character subject
+ *     cannot satisfy it. POSIX bracket names are absent from this dialect
+ *     for that reason and not by omission.
+ *
+ * The range reader is Java's unchanged, and it already declines to read `-[`
+ * as a range - the condition excludes `[` explicitly - so the dash arrives
+ * at the loop's next turn for the branch below to claim.
+ */
+static GRX_Result dotnet_class_expression(GRX_Parser * parser,
+    unsigned depth, uint32_t * out_node) {
+  size_t start = parser->position - 1;
+  if (depth > 64) {
+    return grx_parse_fail(parser, GRX_DIAG_LIMIT_NESTING_DEPTH, start, 1);
+  }
+  int negated = grx_parse_eat(parser, '^');
+  int first = 1;
+  uint32_t union_node = GRX_INDEX_NONE;
+  size_t quote_end = 0;
+
+  for (;;) {
+    skip_class_ignorable(parser, &quote_end);
+    if (grx_parse_at_end(parser)) {
+      return grx_parse_fail(parser, GRX_DIAG_UNMATCHED_OPEN_BRACKET, start, 1);
+    }
+    if (byte_at(parser, 0) == ']' && !first
+        && parser->position >= quote_end) {
+      parser->position++;
+      break;
+    }
+    // The subtraction, and it ends the class: what follows the operand has
+    // to be the closing bracket.
+    if (byte_at(parser, 0) == '-' && byte_at(parser, 1) == '['
+        && !first && parser->position >= quote_end) {
+      size_t dash = parser->position;
+      parser->position += 2;
+      uint32_t operand = GRX_INDEX_NONE;
+      GRX_Result result = dotnet_class_expression(parser, depth + 1, &operand);
+      if (result != GRX_OK) {
+        return result;
+      }
+      skip_class_ignorable(parser, &quote_end);
+      if (byte_at(parser, 0) != ']') {
+        return grx_parse_fail(parser, GRX_DIAG_INVALID_CLASS_SET_OP, dash,
+            parser->position - dash);
+      }
+      parser->position++;
+      uint32_t joined = GRX_INDEX_NONE;
+      result = java_class_join(parser, GRX_CLASS_OP_SUBTRACT, start,
+          union_node, operand, &joined);
+      if (result != GRX_OK) {
+        return result;
+      }
+      union_node = joined;
+      break;
+    }
+
+    uint32_t atom = GRX_INDEX_NONE;
+    GRX_ClassItem low;
+    int is_item = 0;
+    GRX_Result result = read_class_atom(parser, &low, &is_item, &quote_end);
+    if (result != GRX_OK) return result;
+    if (!is_item) continue;
+    size_t after_low = parser->position;
+    if (parser->position >= quote_end) {
+      skip_class_ignorable(parser, &quote_end);
+    }
+    if (byte_at(parser, 0) == '-' && byte_at(parser, 1) != ']'
+        && byte_at(parser, 1) != '\0' && byte_at(parser, 1) != '['
+        && parser->position >= quote_end) {
+      parser->position++;
+      GRX_ClassItem high;
+      int high_is_item = 0;
+      result = read_class_atom(parser, &high, &high_is_item, &quote_end);
+      if (result != GRX_OK) return result;
+      if (!high_is_item || !is_single(&low) || !is_single(&high)) {
+        return grx_parse_fail(parser, GRX_DIAG_CLASS_ESCAPE_IN_RANGE,
+            low.offset, parser->position - low.offset);
+      }
+      if (low.lo > high.lo) {
+        return grx_parse_fail(parser, GRX_DIAG_INVALID_CLASS_RANGE,
+            low.offset, parser->position - low.offset);
+      }
+      low.kind = GRX_CLASS_ITEM_RANGE;
+      low.hi = high.lo;
+      low.length = parser->position - low.offset;
+    }
+    else {
+      parser->position = after_low;
+    }
+    result = item_as_node(parser, &low, &atom);
+    if (result != GRX_OK) return result;
+    if (union_node == GRX_INDEX_NONE) {
+      union_node = atom;
+    }
+    else {
+      uint32_t joined = GRX_INDEX_NONE;
+      result = java_class_join(parser, GRX_CLASS_OP_UNION, start,
+          union_node, atom, &joined);
+      if (result != GRX_OK) return result;
+      union_node = joined;
+    }
+    first = 0;
+  }
+  if (union_node == GRX_INDEX_NONE) {
+    return grx_parse_fail(parser, GRX_DIAG_INVALID_CLASS_ITEM, start,
+        parser->position - start);
+  }
+  *out_node = union_node;
+  return complement_wrap(parser, (unsigned)negated, start, out_node);
+}
+
+static GRX_Result dotnet_char_class(GRX_Parser * parser, uint32_t * out_node) {
+  return dotnet_class_expression(parser, 1, out_node);
+}
+
+/**
  * Read one operand of an extended class.
  *
  * Five things can stand here, and a bare character is not one of them:
@@ -5696,6 +5832,19 @@ const GRX_Frontend grx_frontend_perl = {
   .atom_escape = pcre_atom_escape,
   .class_escape = pcre_class_escape,
   .char_class = pcre_char_class,
+  .group_open = pcre_group_open,
+  .brace_quantifier = pcre_brace_quantifier,
+  .literal_atom = pcre_literal_atom,
+  .check_quantifier_target = pcre_check_quantifier_target,
+  .skip_ignorable = pcre_skip_ignorable,
+  .validate = pcre_validate,
+};
+
+const GRX_Frontend grx_frontend_dotnet = {
+  .name = "dotnet",
+  .atom_escape = pcre_atom_escape,
+  .class_escape = pcre_class_escape,
+  .char_class = dotnet_char_class,
   .group_open = pcre_group_open,
   .brace_quantifier = pcre_brace_quantifier,
   .literal_atom = pcre_literal_atom,
