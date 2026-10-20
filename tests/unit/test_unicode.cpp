@@ -981,11 +981,6 @@ TEST(UnicodeVersion, IsThePinnedRelease) {
   EXPECT_STREQ(grx_unicode_version(), "17.0.0");
 }
 
-int main(int argc, char ** argv) {
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}
-
 TEST(Utf8, SurrogatesDecodeOnlyWhenAskedFor) {
   // A surrogate has no UTF-8 encoding, which is why the strict answer is
   // zero; WTF-8 spells one as the three bytes its code point would take,
@@ -1052,4 +1047,9 @@ TEST(Utf8, WtfValidateTakesLoneSurrogatesAndRefusesCesu8) {
   const std::string low_after_a = "a\xED\xB1\xA1";
   EXPECT_EQ(grx_wtf8_validate(low_after_a.data(), low_after_a.size(), &offset),
       GRX_OK);
+}
+
+int main(int argc, char ** argv) {
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
 }
