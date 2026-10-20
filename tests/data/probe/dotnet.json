@@ -370,6 +370,62 @@
     },
     {
       "area": "captures",
+      "pattern": "(?<5>a)(b)",
+      "subject": "",
+      "flags": "",
+      "mode": "names",
+      "argument": ""
+    },
+    {
+      "area": "captures",
+      "pattern": "(?<5>a)(b)",
+      "subject": "ab",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "captures",
+      "pattern": "(a)(?<1>b)",
+      "subject": "",
+      "flags": "",
+      "mode": "names",
+      "argument": ""
+    },
+    {
+      "area": "captures",
+      "pattern": "(a)(?<1>b)",
+      "subject": "ab",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "captures",
+      "pattern": "(?<n>a)(?<n>b)",
+      "subject": "ab",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "captures",
+      "pattern": "(?<n>a)(?<n>b)",
+      "subject": "b",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "captures",
+      "pattern": "(a)(?<b>c)(d)",
+      "subject": "acd",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "captures",
       "pattern": "(?<n>a)\\k<n>",
       "subject": "aa",
       "flags": "",
@@ -1779,6 +1835,11 @@
           2,
           "a"
         ]
+      ],
+      "numbers": [
+        0,
+        1,
+        2
       ]
     },
     {
@@ -1817,6 +1878,12 @@
           3,
           "b"
         ]
+      ],
+      "numbers": [
+        0,
+        1,
+        2,
+        3
       ]
     },
     {
@@ -1834,6 +1901,11 @@
           2,
           "2"
         ]
+      ],
+      "numbers": [
+        0,
+        1,
+        2
       ]
     },
     {
@@ -1846,6 +1918,116 @@
         [
           1,
           "n"
+        ]
+      ],
+      "numbers": [
+        0,
+        1
+      ]
+    },
+    {
+      "kind": "names",
+      "names": [
+        [
+          0,
+          "0"
+        ],
+        [
+          1,
+          "1"
+        ],
+        [
+          5,
+          "5"
+        ]
+      ],
+      "numbers": [
+        0,
+        1,
+        5
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "names",
+      "names": [
+        [
+          0,
+          "0"
+        ],
+        [
+          1,
+          "1"
+        ]
+      ],
+      "numbers": [
+        0,
+        1
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          1,
+          2
         ]
       ]
     },
@@ -1869,6 +2051,9 @@
           0,
           "0"
         ]
+      ],
+      "numbers": [
+        0
       ]
     },
     {

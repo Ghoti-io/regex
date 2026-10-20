@@ -163,6 +163,25 @@ CASES += [case("captures", pattern, subject, flags, mode, argument)
     ("(a)(?<b>c)(d)", "", "", "names", ""),
     ("(?<2>a)(b)", "", "", "names", ""),
     ("(?<n>a)(?<n>b)", "", "", "names", ""),
+    # The numbering, which is .NET's alone and is **sparse**. Each row below
+    # is a rule the parser has to reproduce, and together they are what
+    # "unnamed groups are numbered before named ones" leaves out:
+    #
+    #   `(?<5>a)(b)`     numbers are 0, 1 and 5 - 2 to 4 do not exist, and
+    #                    Groups.Count is 3, which is what made this driver
+    #                    report a group 2 and never report group 5.
+    #   `(a)(?<1>b)`     an explicit number may *collide* with an unnamed
+    #                    group's, and the two become one group holding the
+    #                    later value: group 1 is "b".
+    #   `(?<n>a)(?<n>b)` a repeated name is one group, and the pattern still
+    #                    needs both halves to match in sequence.
+    ("(?<5>a)(b)", "", "", "names", ""),
+    ("(?<5>a)(b)", "ab", "", "first", ""),
+    ("(a)(?<1>b)", "", "", "names", ""),
+    ("(a)(?<1>b)", "ab", "", "first", ""),
+    ("(?<n>a)(?<n>b)", "ab", "", "first", ""),
+    ("(?<n>a)(?<n>b)", "b", "", "first", ""),
+    ("(a)(?<b>c)(d)", "acd", "", "first", ""),
     (r"(?<n>a)\k<n>", "aa", "", "first", ""),
     ("(a)(b)", "ab", "n", "names", ""),
     ("(?<n>a)(b)", "ab", "n", "first", ""),

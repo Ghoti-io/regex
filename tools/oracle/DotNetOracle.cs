@@ -263,14 +263,37 @@ public static class DotNetOracle {
     /// .NET's order is the point - that renumbering is a dialect rule this
     /// library has to implement, so the oracle must not hide it.
     /// </summary>
-    private static string Spans(Match m, string subject) {
+    private static string Spans(Regex compiled, Match m, string subject) {
         StringBuilder outText = new StringBuilder("[");
-        for (int i = 0; i < m.Groups.Count; i++) {
+        int[] numbers = compiled.GetGroupNumbers();
+        for (int i = 0; i < numbers.Length; i++) {
             if (i != 0) outText.Append(',');
-            Group g = m.Groups[i];
+            Group g = m.Groups[numbers[i]];
             if (!g.Success) outText.Append("null");
             else outText.Append('[').Append(ByteIndex(subject, g.Index))
                 .Append(',').Append(ByteIndex(subject, g.Index + g.Length)).Append(']');
+        }
+        return outText.Append(']').ToString();
+    }
+
+    /**
+     * The group numbers this pattern actually has, which is not 0..n.
+     *
+     * .NET's numbering is **sparse**: `(?<5>a)(b)` has groups 0, 1 and 5,
+     * and `Groups.Count` is 3. Walking `0..Count-1` - which this driver did
+     * until 2026-10-20 - therefore asks for a group 2 that does not exist,
+     * gets an unsuccessful one back, and reports it as unset while never
+     * reporting group 5 at all. Two wrong answers from one off-by-naming,
+     * and neither looks like an error. So the spans above are walked by
+     * GetGroupNumbers() and this field says what those numbers were, since
+     * a reader of the spans otherwise cannot tell 5 from 2.
+     */
+    private static string Numbers(Regex compiled) {
+        StringBuilder outText = new StringBuilder("[");
+        int[] numbers = compiled.GetGroupNumbers();
+        for (int i = 0; i < numbers.Length; i++) {
+            if (i != 0) outText.Append(',');
+            outText.Append(numbers[i]);
         }
         return outText.Append(']').ToString();
     }
@@ -337,7 +360,8 @@ public static class DotNetOracle {
         switch (mode) {
             case "compile": return "{\"kind\":\"compile\"}";
             case "names":
-                return "{\"kind\":\"names\",\"names\":" + Names(compiled) + "}";
+                return "{\"kind\":\"names\",\"names\":" + Names(compiled)
+                    + ",\"numbers\":" + Numbers(compiled) + "}";
             case "ranges": {
                 // Whole-string membership, which is what Java's
                 // Matcher.matches() answers. .NET has no such method - IsMatch
@@ -368,12 +392,12 @@ public static class DotNetOracle {
             case "first": {
                 Match m = compiled.Match(subject);
                 return m.Success ? "{\"kind\":\"match\",\"groups\":"
-                    + Spans(m, subject) + "}" : "{\"kind\":\"nomatch\"}";
+                    + Spans(compiled, m, subject) + "}" : "{\"kind\":\"nomatch\"}";
             }
             case "find-from": {
                 Match m = compiled.Match(subject, CharIndex(subject, int.Parse(argument, CultureInfo.InvariantCulture)));
                 return m.Success ? "{\"kind\":\"match\",\"groups\":"
-                    + Spans(m, subject) + "}" : "{\"kind\":\"nomatch\"}";
+                    + Spans(compiled, m, subject) + "}" : "{\"kind\":\"nomatch\"}";
             }
             case "all": case "all-from": {
                 StringBuilder outText = new StringBuilder("{\"kind\":\"all\",\"matches\":[");
@@ -384,7 +408,7 @@ public static class DotNetOracle {
                 while (m.Success) {
                     if (comma) outText.Append(',');
                     comma = true;
-                    outText.Append(Spans(m, subject));
+                    outText.Append(Spans(compiled, m, subject));
                     m = m.NextMatch();
                 }
                 return outText.Append("]}").ToString();
