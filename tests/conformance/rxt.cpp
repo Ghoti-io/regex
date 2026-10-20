@@ -33,10 +33,18 @@ std::string trim(const std::string & text) {
   return text.substr(first, last - first + 1);
 }
 
-/** Append one code point as UTF-8. */
+/**
+ * Append one code point as WTF-8.
+ *
+ * Surrogates allowed, so that a vector file can *spell* one: whether a
+ * dialect will accept it is the matcher's business, decided by
+ * GRX_OPT_WTF8, and refusing it here would make an unrepresentable escape
+ * silently append nothing instead of producing the input the vector asked
+ * for.
+ */
 void append_utf8(std::string * out, uint32_t codepoint) {
   char buffer[4];
-  size_t width = grx_unicode_utf8_encode(codepoint, buffer);
+  size_t width = grx_unicode_utf8_encode(codepoint, buffer, 1);
   out->append(buffer, width);
 }
 

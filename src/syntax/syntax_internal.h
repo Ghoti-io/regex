@@ -915,6 +915,20 @@ typedef struct GRX_Profile {
    * dialect but one already had.
    */
   int property_caret_is_error;
+
+  /**
+   * The reference's strings are UTF-16, so an unpaired surrogate is text.
+   *
+   * What makes GRX_OPT_WTF8 a request this dialect can honour. Java and
+   * ECMAScript are defined over UTF-16 code units and their engines match
+   * over an unpaired surrogate without complaint; the POSIX family, Python
+   * and the linear dialects have no concept of one, and asking them for it
+   * is GRX_ERR_UNSUPPORTED rather than a bit that quietly does nothing.
+   *
+   * A dialect that leaves it out refuses the option, which is the safe
+   * default for an axis that widens what input is accepted.
+   */
+  int subject_is_utf16;
   GRX_FoldKind fold;                ///< Caseless folding without UTF.
   GRX_FoldKind fold_utf;            ///< Caseless folding with UTF.
   uint32_t fold_wide_option;        ///< Override UTF as the wide-fold switch.

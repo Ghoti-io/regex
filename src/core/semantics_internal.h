@@ -60,6 +60,19 @@ extern "C" {
 #define GRX_PROGRAM_UTF GRX_BIT(0)
 
 /**
+ * @brief The subject may hold an unpaired UTF-16 surrogate, as WTF-8.
+ *
+ * GRX_OPT_WTF8 surviving lowering, for the same reason GRX_PROGRAM_UTF
+ * does: it decides what the engines may decode, and by the time they run
+ * the option is gone - every one of them reads `program->flags` and not a
+ * caller's bits.
+ *
+ * Only meaningful with GRX_PROGRAM_UTF, which the option's own validation
+ * guarantees by refusing GRX_OPT_WTF8 without GRX_OPT_UTF.
+ */
+#define GRX_PROGRAM_WTF8 GRX_BIT(12)
+
+/**
  * @brief The bit-state engine's memo would be unsound for this program.
  *
  * `(pc, position)` identifies a state only when what the program does next

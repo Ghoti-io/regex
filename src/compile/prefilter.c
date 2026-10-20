@@ -155,6 +155,13 @@ int grx_program_first_bytes(
     return 0;
   }
   int utf = (program->flags & GRX_PROGRAM_UTF) != 0;
+  // No WTF-8 companion here, and that is not an omission:
+  // add_leading_bytes() derives lead bytes arithmetically over the
+  // encoding-length classes and excludes no code point, so a range
+  // holding a surrogate already contributes 0xED whether or not one
+  // can be decoded. Conservative in the direction that is safe for a
+  // prefilter: a byte it need not have costs a wasted start, where one
+  // it lacks costs a missed match.
 
   // One bit per instruction for "walked", one slot per instruction for the
   // stack. Both on the heap for the reason codegen's frames are: the depth
@@ -349,12 +356,15 @@ static int start_or_end_moves(const GRX_Program * program) {
  *
  * @return Non-zero when the whole code point was written.
  */
-static int literal_append(
-    char * out, size_t cap, size_t * written, uint32_t codepoint, int utf) {
+static int literal_append(char * out, size_t cap, size_t * written,
+    uint32_t codepoint, int utf, int wtf8) {
   char encoded[8];
   size_t width;
   if (utf) {
-    width = grx_unicode_utf8_encode(codepoint, encoded);
+    // The surrogate form matters here as much as in the engines: a literal
+    // one must put its lead byte in the first-byte set, or a search would
+    // skip the position a match starts at.
+    width = grx_unicode_utf8_encode(codepoint, encoded, wtf8);
     if (!width) {
       return 0;
     }
@@ -384,6 +394,7 @@ size_t grx_program_literal_prefix(
     return 0;
   }
   int utf = (program->flags & GRX_PROGRAM_UTF) != 0;
+  int wtf8 = (program->flags & GRX_PROGRAM_WTF8) != 0;
 
   size_t written = 0;
   uint32_t pc = 0;
@@ -397,7 +408,7 @@ size_t grx_program_literal_prefix(
     }
 
     if (inst->op == GRX_OP_CHAR) {
-      if (!literal_append(out, cap, &written, inst->x, utf)) {
+      if (!literal_append(out, cap, &written, inst->x, utf, wtf8)) {
         break;
       }
       pc++;
@@ -564,8 +575,8 @@ static uint32_t dom_intersect(
  * whether it holds anything above U+007F - conservative, and conservative
  * here means a wider window, which is the safe direction.
  */
-static void inst_width(
-    const GRX_Inst * inst, int utf, size_t * out_min, size_t * out_max) {
+static void inst_width(const GRX_Inst * inst, int utf, int wtf8,
+    size_t * out_min, size_t * out_max) {
   switch (inst->op) {
     case GRX_OP_CHAR: {
       if (!utf) {
@@ -573,7 +584,7 @@ static void inst_width(
         return;
       }
       char encoded[8];
-      size_t width = grx_unicode_utf8_encode(inst->x, encoded);
+      size_t width = grx_unicode_utf8_encode(inst->x, encoded, wtf8);
       *out_min = *out_max = width ? width : 1;
       return;
     }
@@ -605,6 +616,7 @@ size_t grx_program_required_literal(const GRX_Program * program, char * out,
     return 0;
   }
   int utf = (program->flags & GRX_PROGRAM_UTF) != 0;
+  int wtf8 = (program->flags & GRX_PROGRAM_WTF8) != 0;
   const GRX_Allocator * allocator = program->insts.allocator;
 
   Dominators d;
@@ -829,7 +841,7 @@ size_t grx_program_required_literal(const GRX_Program * program, char * out,
         }
         size_t wmin = 0;
         size_t wmax = 0;
-        inst_width(inst, utf, &wmin, &wmax);
+        inst_width(inst, utf, wtf8, &wmin, &wmax);
         for (size_t sx = 0; sx < succ_count; sx++) {
           uint32_t to = d.number[succ[sx]];
           if (to == GRX_INDEX_NONE) {
@@ -882,7 +894,7 @@ size_t grx_program_required_literal(const GRX_Program * program, char * out,
           = GRX_ARENA_AT(const GRX_Inst, &program->insts, d.order[at]);
       if (!inst || inst->op != GRX_OP_CHAR
           || (inst->flags & GRX_INST_REVERSE)
-          || !literal_append(candidate, limit, &written, inst->x, utf)) {
+          || !literal_append(candidate, limit, &written, inst->x, utf, wtf8)) {
         break;
       }
       // On to the next instruction that consumes, stepping over the ones

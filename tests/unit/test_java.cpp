@@ -354,6 +354,134 @@ TEST(JavaParser, ACaretInsidePropertyBracesIsASyntaxError) {
   EXPECT_FALSE(matches_java("\\P{L}", "a"));
 }
 
+// U+D800 as WTF-8, and U+10061 - the scalar a D800/DC61 pair means - as the
+// four-byte UTF-8 every encoding agrees on.
+static const char kLoneHigh[] = "\xED\xA0\x80";
+static const char kLoneLow[] = "\xED\xB1\xA1";
+static const char kCesu8Pair[] = "\xED\xA0\x80\xED\xB1\xA1";
+static const char kScalarPair[] = "\xF0\x90\x81\xA1";
+
+/** Search `subject` for `pattern` under the given options. */
+static GRX_Result search_java(const char * pattern, size_t pattern_length,
+    const char * subject, size_t subject_length, uint32_t options,
+    int * out_matched, GRX_Capture * out_span,
+    GRX_Syntax syntax = GRX_SYNTAX_JAVA) {
+  GRX_Regex * regex = nullptr;
+  GRX_Error error;
+  GRX_Result result = grx_regex_compile_with_allocator(pattern,
+      pattern_length, syntax, options, nullptr, nullptr, &error, &regex);
+  if (result != GRX_OK) {
+    return result;
+  }
+  GRX_Match * match = nullptr;
+  if (grx_match_create(regex, nullptr, &match) != GRX_OK) {
+    grx_regex_free(regex);
+    return GRX_ERR_INTERNAL;
+  }
+  *out_matched = 0;
+  result = grx_regex_search(regex, subject, subject_length, 0,
+      GRX_ENGINE_AUTO, nullptr, match, out_matched);
+  if (result == GRX_OK && *out_matched && out_span) {
+    grx_match_span(match, out_span);
+  }
+  grx_match_destroy(match);
+  grx_regex_free(regex);
+  return result;
+}
+
+TEST(JavaSurrogates, WithTheOptionTheReferenceAnswersAreMatched) {
+  // Every row is a pinned JDK 25 answer from tests/data/probe/java25.json's
+  // `surrogate` area, which is where these came from rather than from
+  // reasoning about what UTF-16 ought to do.
+  struct Row {
+    const char * pattern;
+    const char * subject;
+    size_t subject_length;
+    int matched;
+    size_t start;
+    size_t end;
+  };
+  static const Row rows[] = {
+    // `.` takes an unpaired surrogate as one position of three bytes, and a
+    // pair as one of four.
+    {".", kLoneHigh, 3, 1, 0, 3},
+    {".", kLoneLow, 3, 1, 0, 3},
+    {".", kScalarPair, 4, 1, 0, 4},
+    // Surrogates are general category Cs, and are not unassigned.
+    {"\\p{Cs}", kLoneHigh, 3, 1, 0, 3},
+    {"\\p{Cn}", kLoneHigh, 3, 0, 0, 0},
+    // Not word characters, and the complement says so.
+    {"\\w", kLoneHigh, 3, 0, 0, 0},
+    {"\\W", kLoneHigh, 3, 1, 0, 3},
+    {"\\p{L}", kLoneHigh, 3, 0, 0, 0},
+    // A negated class, and a range spanning the block, include them.
+    {"[^a]", kLoneHigh, 3, 1, 0, 3},
+    {"[\\uD7FF-\\uE000]", kLoneHigh, 3, 1, 0, 3},
+    // And a pattern may name one, bare or in a class.
+    {"\\uD800", kLoneHigh, 3, 1, 0, 3},
+    {"[\\uD800]", kLoneHigh, 3, 1, 0, 3},
+  };
+  const uint32_t options = GRX_OPT_UTF | GRX_OPT_WTF8;
+  for (const Row & row : rows) {
+    int matched = 0;
+    GRX_Capture span = {GRX_NPOS, GRX_NPOS};
+    ASSERT_EQ(search_java(row.pattern, std::strlen(row.pattern), row.subject,
+                  row.subject_length, options, &matched, &span),
+        GRX_OK)
+        << row.pattern;
+    EXPECT_EQ(matched, row.matched) << row.pattern;
+    if (row.matched) {
+      EXPECT_EQ(span.start, row.start) << row.pattern;
+      EXPECT_EQ(span.end, row.end) << row.pattern;
+    }
+  }
+}
+
+TEST(JavaSurrogates, WithoutTheOptionNothingChanges) {
+  // The whole point of an option: today's behaviour is what happens when
+  // nobody asks. A refusal rather than a wrong answer, by name.
+  int matched = 0;
+  EXPECT_EQ(search_java(".", 1, kLoneHigh, 3, GRX_OPT_UTF, &matched, nullptr),
+      GRX_ERR_INVALID);
+  GRX_Error error;
+  EXPECT_EQ(compile_java(kLoneHigh, &error), GRX_ERR_SYNTAX);
+  EXPECT_EQ(error.diag, GRX_DIAG_INVALID_UTF8_IN_PATTERN);
+}
+
+TEST(JavaSurrogates, ACesu8PairIsStillRefused) {
+  // WTF-8 wants a pair as the four-byte scalar. The two-sequence spelling is
+  // CESU-8 and taking it would make `.` match half a character while every
+  // offset drifted from the reference - so accepting WTF-8 is *more*
+  // validation than strict UTF-8, not less.
+  int matched = 0;
+  const uint32_t options = GRX_OPT_UTF | GRX_OPT_WTF8;
+  EXPECT_EQ(search_java(".", 1, kCesu8Pair, 6, options, &matched, nullptr),
+      GRX_ERR_INVALID);
+  // The correctly spelled pair is fine, and is one position.
+  GRX_Capture span = {GRX_NPOS, GRX_NPOS};
+  ASSERT_EQ(search_java(".", 1, kScalarPair, 4, options, &matched, &span),
+      GRX_OK);
+  EXPECT_EQ(matched, 1);
+  EXPECT_EQ(span.end, 4u);
+}
+
+TEST(JavaSurrogates, ADialectWhoseReferenceHasNoneRefusesTheOption) {
+  // Asking for it where the reference has no concept of an unpaired
+  // surrogate is GRX_ERR_UNSUPPORTED, not a bit that quietly does nothing.
+  int matched = 0;
+  for (GRX_Syntax syntax : {GRX_SYNTAX_POSIX_ERE, GRX_SYNTAX_PYTHON}) {
+    EXPECT_EQ(search_java(".", 1, kLoneHigh, 3, GRX_OPT_UTF | GRX_OPT_WTF8,
+                  &matched, nullptr, syntax),
+        GRX_ERR_UNSUPPORTED);
+  }
+  // And Java accepts it, which is what makes the refusal a statement about
+  // the dialect rather than about the option.
+  GRX_Capture span = {GRX_NPOS, GRX_NPOS};
+  EXPECT_EQ(search_java(".", 1, kLoneHigh, 3, GRX_OPT_UTF | GRX_OPT_WTF8,
+                &matched, &span),
+      GRX_OK);
+}
+
 TEST(JavaParser, AnUnpairedSurrogateIsRefusedRatherThanAnswered) {
   // The JDK answers these: a lone surrogate is an ordinary `char` to
   // `Matcher`, and of the 101 cases in the JDK's own corpus that carry one,

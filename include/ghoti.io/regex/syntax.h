@@ -273,7 +273,38 @@ typedef enum {
    * them from here, because the option belongs to the caller rather than to
    * the pattern text.
    */
-  GRX_OPT_ANCHORED_END = GRX_BIT(22)
+  GRX_OPT_ANCHORED_END = GRX_BIT(22),
+
+  /**
+   * @brief Read patterns and subjects as WTF-8 rather than strict UTF-8.
+   *
+   * An unpaired UTF-16 surrogate is ordinary text in a Java or JavaScript
+   * string, and their regular expression engines match over one without
+   * complaint: of the 101 cases in the JDK's own regex corpus that carry
+   * one, 62 match, 39 do not, and none is an error. A surrogate is not a
+   * Unicode scalar value and has no well-formed UTF-8 encoding, so without
+   * this bit such a subject is `GRX_ERR_INVALID` and such a pattern is
+   * `GRX_DIAG_INVALID_UTF8_IN_PATTERN` - a refusal rather than a wrong
+   * answer, but a refusal where the reference answers.
+   *
+   * With it, the three-byte form of an unpaired surrogate is accepted and is
+   * one position, as the reference treats it.
+   *
+   * **This is WTF-8 and not CESU-8.** A surrogate *pair* must still arrive
+   * as the four-byte scalar; a high surrogate immediately followed by a low
+   * one is refused. That is a rule strict UTF-8 never needed, because it
+   * rejected every surrogate and so never had to tell the two spellings
+   * apart - accepting WTF-8 is *more* validation, not less. Without the
+   * rule, `.` would match half a character and every byte offset would
+   * drift from the reference.
+   *
+   * Off by default in every dialect, and refused with
+   * `GRX_ERR_UNSUPPORTED` by a dialect whose reference has no concept of an
+   * unpaired surrogate - the POSIX family and Python among them. Requires
+   * GRX_OPT_UTF: the two are separate axes and the combination without it
+   * means nothing, so it is `GRX_ERR_INVALID` rather than a guess.
+   */
+  GRX_OPT_WTF8 = GRX_BIT(23)
 } GRX_Option;
 
 /**

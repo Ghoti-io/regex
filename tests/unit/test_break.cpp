@@ -53,7 +53,7 @@ struct Row {
 
 void encode(uint32_t codepoint, std::string * out) {
   char buffer[4];
-  size_t written = grx_unicode_utf8_encode(codepoint, buffer);
+  size_t written = grx_unicode_utf8_encode(codepoint, buffer, 0);
   out->append(buffer, written);
 }
 

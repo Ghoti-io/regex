@@ -37,8 +37,8 @@
 #include "tables/tables_internal.h"
 #include "unicode_internal.h"
 
-size_t grx_unicode_utf8_decode(
-    const char * text, size_t length, uint32_t * out_codepoint) {
+size_t grx_unicode_utf8_decode(const char * text, size_t length,
+    int surrogates, uint32_t * out_codepoint) {
   if (!text || !length || !out_codepoint) {
     return 0;
   }
@@ -95,8 +95,16 @@ size_t grx_unicode_utf8_decode(
   if (codepoint > GRX_CODEPOINT_MAX) {
     return 0;
   }
-  // Surrogates are not characters; UTF-8 may not encode them.
-  if (codepoint >= 0xD800u && codepoint <= 0xDFFFu) {
+  // Surrogates are not characters and UTF-8 may not encode them, which is
+  // why this is the default. WTF-8 may, as one three-byte sequence, and a
+  // caller that asked for GRX_OPT_WTF8 wants that: a Java or JavaScript
+  // string can hold an unpaired surrogate and their engines match over it.
+  //
+  // Only the three-byte form. A surrogate arriving any other way - as a
+  // four-byte sequence, say - is still malformed, which the width check
+  // above has already settled, since 0xD800 needs three bytes and the
+  // overlong test refuses a wider spelling of it.
+  if (codepoint >= 0xD800u && codepoint <= 0xDFFFu && !surrogates) {
     return 0;
   }
 
@@ -104,9 +112,10 @@ size_t grx_unicode_utf8_decode(
   return needed;
 }
 
-size_t grx_unicode_utf8_encode(uint32_t codepoint, char * buffer) {
+size_t grx_unicode_utf8_encode(
+    uint32_t codepoint, char * buffer, int surrogates) {
   if (!buffer || codepoint > GRX_CODEPOINT_MAX
-      || (codepoint >= 0xD800u && codepoint <= 0xDFFFu)) {
+      || (codepoint >= 0xD800u && codepoint <= 0xDFFFu && !surrogates)) {
     return 0;
   }
 
@@ -135,8 +144,8 @@ size_t grx_unicode_utf8_encode(uint32_t codepoint, char * buffer) {
   return 4;
 }
 
-size_t grx_unicode_utf8_decode_prev(
-    const char * text, size_t offset, uint32_t * out_codepoint) {
+size_t grx_unicode_utf8_decode_prev(const char * text, size_t offset,
+    int surrogates, uint32_t * out_codepoint) {
   if (!text || !offset || !out_codepoint) {
     return 0;
   }
@@ -154,8 +163,8 @@ size_t grx_unicode_utf8_decode_prev(
     unsigned char candidate = bytes[offset - back];
     if ((candidate & 0xC0u) != 0x80u) {
       uint32_t codepoint = 0;
-      size_t used
-          = grx_unicode_utf8_decode(text + offset - back, back, &codepoint);
+      size_t used = grx_unicode_utf8_decode(
+          text + offset - back, back, surrogates, &codepoint);
       if (used != back) {
         return 0;
       }
@@ -180,15 +189,58 @@ GRX_Result grx_utf8_validate(
   size_t position = 0;
   while (position < length) {
     uint32_t codepoint = 0;
-    size_t used
-        = grx_unicode_utf8_decode(text + position, length - position,
-            &codepoint);
+    size_t used = grx_unicode_utf8_decode(
+        text + position, length - position, 0, &codepoint);
     if (!used) {
       if (out_offset) {
         *out_offset = position;
       }
       return GRX_ERR_INVALID;
     }
+    position += used;
+  }
+
+  return GRX_OK;
+}
+
+GRX_Result grx_wtf8_validate(
+    const char * text, size_t length, size_t * out_offset) {
+  if (!text && length) {
+    if (out_offset) {
+      *out_offset = 0;
+    }
+    return GRX_ERR_INVALID;
+  }
+
+  size_t position = 0;
+  int previous_was_high = 0;
+  size_t previous_start = 0;
+  while (position < length) {
+    uint32_t codepoint = 0;
+    size_t used = grx_unicode_utf8_decode(
+        text + position, length - position, 1, &codepoint);
+    if (!used) {
+      if (out_offset) {
+        *out_offset = position;
+      }
+      return GRX_ERR_INVALID;
+    }
+
+    // The CESU-8 refusal. A pair spelled as two three-byte sequences is not
+    // WTF-8, which wants the four-byte scalar, and taking it would make `.`
+    // match half a character while every byte offset drifted from the
+    // reference. The offset reported is where the *pair* began, because that
+    // is the construct at fault rather than its second half.
+    int high = codepoint >= 0xD800u && codepoint <= 0xDBFFu;
+    int low = codepoint >= 0xDC00u && codepoint <= 0xDFFFu;
+    if (previous_was_high && low) {
+      if (out_offset) {
+        *out_offset = previous_start;
+      }
+      return GRX_ERR_INVALID;
+    }
+    previous_was_high = high;
+    previous_start = position;
     position += used;
   }
 

@@ -207,6 +207,11 @@ static const DiagRow diag_table[GRX_DIAG_COUNT] = {
   // callout that returned something that is not a GRX_Result at all, which
   // is a caller-supplied function behaving out of contract.
   [GRX_DIAG_CALLOUT_STOPPED] = {"a callout stopped the match", GRX_ERR_INVALID},
+  // GRX_ERR_UNSUPPORTED is the table's answer because that is the reading a
+  // caller most needs: the dialect cannot do this. The precondition failure
+  // sets GRX_ERR_INVALID explicitly at its own site.
+  [GRX_DIAG_OPTION_NOT_SUPPORTED]
+      = {"this dialect does not support that option", GRX_ERR_UNSUPPORTED},
 };
 
 const char * grx_diag_string(GRX_Diag diag) {

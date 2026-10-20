@@ -149,8 +149,13 @@ GRX_Result grx_match_create(const GRX_Regex * regex,
  * @param out_codepoint Receives the base.
  * @return Non-zero when there was a character to read.
  */
+int grx_match_allows_surrogates(const GRX_Match * match) {
+  return match && match->regex
+      && (match->regex->program.flags & GRX_PROGRAM_WTF8) != 0;
+}
+
 int grx_cluster_base_before(const char * subject, size_t start,
-    size_t position, int utf, uint32_t * out_codepoint) {
+    size_t position, int utf, int wtf8, uint32_t * out_codepoint) {
   size_t at = position;
   uint32_t codepoint = 0;
   int seen = 0;
@@ -161,7 +166,8 @@ int grx_cluster_base_before(const char * subject, size_t start,
       seen = 1;
       break;
     }
-    size_t width = grx_unicode_utf8_decode_prev(subject, at, &codepoint);
+    size_t width
+        = grx_unicode_utf8_decode_prev(subject, at, wtf8, &codepoint);
     if (!width) {
       return 0;
     }
@@ -200,7 +206,8 @@ static uint32_t * build_columns(const GRX_Regex * regex,
       break;
     }
     uint32_t codepoint = 0;
-    size_t width = grx_unicode_utf8_decode(subject + at, end - at, &codepoint);
+    size_t width = grx_unicode_utf8_decode(subject + at, end - at,
+        (regex->program.flags & GRX_PROGRAM_WTF8) != 0, &codepoint);
     if (!width) {
       // Not a character, so it is drawn as the byte it is. One cell, which
       // is what vim shows for a stray byte too.
@@ -290,7 +297,13 @@ static GRX_Result exec(const GRX_Regex * regex, const char * subject,
   if ((regex->program.flags & GRX_PROGRAM_UTF)
       && !(options->flags & GRX_SEARCH_NO_UTF_CHECK)) {
     size_t at = 0;
-    GRX_Result valid = grx_utf8_validate(subject, end, &at);
+    // WTF-8 accepts an unpaired surrogate and still refuses a pair spelled
+    // as two of them; the public grx_utf8_validate() stays strict, because
+    // its contract is published and a caller may be relying on it as their
+    // own input validation.
+    GRX_Result valid = (regex->program.flags & GRX_PROGRAM_WTF8)
+        ? grx_wtf8_validate(subject, end, &at)
+        : grx_utf8_validate(subject, end, &at);
     if (valid != GRX_OK) {
       // The offset is into the *subject*, which is the one match-time
       // diagnostic that has a position at all.
@@ -710,8 +723,8 @@ static size_t advance_one(const GRX_Regex * regex, const char * subject,
     return offset + 1;
   }
   uint32_t codepoint = 0;
-  size_t width
-      = grx_unicode_utf8_decode(subject + offset, end - offset, &codepoint);
+  size_t width = grx_unicode_utf8_decode(subject + offset, end - offset,
+      (regex->program.flags & GRX_PROGRAM_WTF8) != 0, &codepoint);
   return offset + (width ? width : 1);
 }
 

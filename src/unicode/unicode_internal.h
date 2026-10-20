@@ -109,12 +109,15 @@ extern "C" {
  *
  * @param text The bytes to decode. NULL is invalid.
  * @param length Bytes available at `text`.
+ * @param surrogates Non-zero to accept the three-byte form of an unpaired
+ *   UTF-16 surrogate, which is WTF-8 rather than UTF-8. Whether a *pair* so
+ *   spelled is refused is not decidable here - one code point at a time
+ *   cannot see what preceded it - and belongs to grx_wtf8_validate().
  * @param out_codepoint Receives the code point on success. Required.
- * @return The number of bytes consumed, or 0 when the sequence is not valid
- *   UTF-8.
+ * @return The number of bytes consumed, or 0 when the sequence is not valid.
  */
-size_t grx_unicode_utf8_decode(
-    const char * text, size_t length, uint32_t * out_codepoint);
+size_t grx_unicode_utf8_decode(const char * text, size_t length,
+    int surrogates, uint32_t * out_codepoint);
 
 /**
  * @brief Decode the code point that *ends* at an offset.
@@ -127,23 +130,49 @@ size_t grx_unicode_utf8_decode(
  *
  * @param text The buffer. NULL is invalid.
  * @param offset Byte offset one past the end of the sequence wanted.
+ * @param surrogates As for grx_unicode_utf8_decode().
  * @param out_codepoint Receives the code point on success. Required.
  * @return The number of bytes consumed, so that the sequence begins at
  *   `offset - result`, or 0 when there is no valid sequence ending there.
  */
-size_t grx_unicode_utf8_decode_prev(
-    const char * text, size_t offset, uint32_t * out_codepoint);
+size_t grx_unicode_utf8_decode_prev(const char * text, size_t offset,
+    int surrogates, uint32_t * out_codepoint);
 
 /**
  * @brief Encode one code point as UTF-8.
  *
- * @param codepoint The code point. Surrogates and values above U+10FFFF are
- *   invalid.
+ * @param codepoint The code point. Values above U+10FFFF are always
+ *   invalid; a surrogate is invalid unless `surrogates` asks for its
+ *   three-byte WTF-8 form.
  * @param buffer Destination, at least 4 bytes. Not NUL-terminated.
+ * @param surrogates Non-zero to emit the three-byte form of a surrogate.
  * @return The number of bytes written (1 to 4), or 0 for an invalid code
  *   point.
  */
-size_t grx_unicode_utf8_encode(uint32_t codepoint, char * buffer);
+size_t grx_unicode_utf8_encode(
+    uint32_t codepoint, char * buffer, int surrogates);
+
+/**
+ * @brief Validate WTF-8: strict UTF-8, plus unpaired surrogates.
+ *
+ * The counterpart of the public grx_utf8_validate(), which stays strict
+ * because its contract is published and a caller may be relying on it as
+ * their own input validation.
+ *
+ * **This is where the CESU-8 refusal lives**, and it has to: a high
+ * surrogate immediately followed by a low one is a pair spelled the wrong
+ * way, WTF-8 wants the four-byte scalar for that, and only something
+ * looping over the text can see two sequences in a row. The per-code-point
+ * decoder cannot, which is why it takes the acceptance flag and not the
+ * rule.
+ *
+ * @param text The bytes. NULL is invalid when `length` is non-zero.
+ * @param length Bytes available.
+ * @param out_offset Receives the offset of the first bad byte. Optional.
+ * @return GRX_OK, or GRX_ERR_INVALID with `out_offset` set.
+ */
+GRX_Result grx_wtf8_validate(
+    const char * text, size_t length, size_t * out_offset);
 
 /**
  * @brief Simple case folding of one code point.

@@ -30,9 +30,14 @@
 
 namespace {
 
-/** Decode one sequence, returning the bytes consumed. */
+/** Decode one sequence strictly, returning the bytes consumed. */
 size_t decode(const std::string & bytes, uint32_t * out) {
-  return grx_unicode_utf8_decode(bytes.data(), bytes.size(), out);
+  return grx_unicode_utf8_decode(bytes.data(), bytes.size(), 0, out);
+}
+
+/** The same, accepting an unpaired surrogate's three-byte WTF-8 form. */
+size_t decode_wtf8(const std::string & bytes, uint32_t * out) {
+  return grx_unicode_utf8_decode(bytes.data(), bytes.size(), 1, out);
 }
 
 } // namespace
@@ -51,7 +56,7 @@ TEST(Utf8, DecodesEachLength) {
 
   for (const auto & test : cases) {
     uint32_t codepoint = 0;
-    EXPECT_EQ(grx_unicode_utf8_decode(test.bytes, test.length, &codepoint),
+    EXPECT_EQ(grx_unicode_utf8_decode(test.bytes, test.length, 0, &codepoint),
         test.length);
     EXPECT_EQ(codepoint, test.codepoint);
   }
@@ -89,15 +94,15 @@ TEST(Utf8, DecodeRejectsMalformedSequences) {
   EXPECT_EQ(decode(std::string("\xC3", 1), &codepoint), 0u); // truncated
   EXPECT_EQ(decode(std::string("\xC3\x41", 2), &codepoint), 0u); // bad tail
   EXPECT_EQ(decode(std::string("\xE2\x82", 2), &codepoint), 0u); // truncated
-  EXPECT_EQ(grx_unicode_utf8_decode(nullptr, 1, &codepoint), 0u);
-  EXPECT_EQ(grx_unicode_utf8_decode("A", 0, &codepoint), 0u);
-  EXPECT_EQ(grx_unicode_utf8_decode("A", 1, nullptr), 0u);
+  EXPECT_EQ(grx_unicode_utf8_decode(nullptr, 1, 0, &codepoint), 0u);
+  EXPECT_EQ(grx_unicode_utf8_decode("A", 0, 0, &codepoint), 0u);
+  EXPECT_EQ(grx_unicode_utf8_decode("A", 1, 0, nullptr), 0u);
 }
 
 TEST(Utf8, DecodeStopsAtTheEndOfTheSequence) {
   // A valid sequence followed by more input consumes only its own bytes.
   uint32_t codepoint = 0;
-  EXPECT_EQ(grx_unicode_utf8_decode("\xC3\xA9Z", 3, &codepoint), 2u);
+  EXPECT_EQ(grx_unicode_utf8_decode("\xC3\xA9Z", 3, 0, &codepoint), 2u);
   EXPECT_EQ(codepoint, 0xE9u);
 }
 
@@ -108,16 +113,16 @@ TEST(Utf8, EncodeRoundTripsEveryValidCodePoint) {
   char buffer[4];
   for (uint32_t codepoint = 0; codepoint <= GRX_CODEPOINT_MAX; codepoint++) {
     if (codepoint >= 0xD800u && codepoint <= 0xDFFFu) {
-      EXPECT_EQ(grx_unicode_utf8_encode(codepoint, buffer), 0u);
+      EXPECT_EQ(grx_unicode_utf8_encode(codepoint, buffer, 0), 0u);
       continue;
     }
 
-    size_t written = grx_unicode_utf8_encode(codepoint, buffer);
+    size_t written = grx_unicode_utf8_encode(codepoint, buffer, 0);
     ASSERT_GT(written, 0u) << "U+" << std::hex << codepoint;
     ASSERT_LE(written, 4u);
 
     uint32_t decoded = 0;
-    ASSERT_EQ(grx_unicode_utf8_decode(buffer, written, &decoded), written)
+    ASSERT_EQ(grx_unicode_utf8_decode(buffer, written, 0, &decoded), written)
         << "U+" << std::hex << codepoint;
     EXPECT_EQ(decoded, codepoint);
   }
@@ -125,9 +130,9 @@ TEST(Utf8, EncodeRoundTripsEveryValidCodePoint) {
 
 TEST(Utf8, EncodeRejectsWhatItCannotRepresent) {
   char buffer[4];
-  EXPECT_EQ(grx_unicode_utf8_encode(GRX_CODEPOINT_MAX + 1, buffer), 0u);
-  EXPECT_EQ(grx_unicode_utf8_encode(0xD800u, buffer), 0u);
-  EXPECT_EQ(grx_unicode_utf8_encode(0x41u, nullptr), 0u);
+  EXPECT_EQ(grx_unicode_utf8_encode(GRX_CODEPOINT_MAX + 1, buffer, 0), 0u);
+  EXPECT_EQ(grx_unicode_utf8_encode(0xD800u, buffer, 0), 0u);
+  EXPECT_EQ(grx_unicode_utf8_encode(0x41u, nullptr, 0), 0u);
 }
 
 // --------------------------------------------------------------------------
@@ -142,7 +147,7 @@ TEST(Utf8, DecodePrevWalksBackOverEachLength) {
   size_t offset = text.size();
   for (size_t i = 0; i < 4; i++) {
     uint32_t codepoint = 0;
-    size_t used = grx_unicode_utf8_decode_prev(text.data(), offset,
+    size_t used = grx_unicode_utf8_decode_prev(text.data(), offset, 0,
         &codepoint);
     ASSERT_EQ(used, lengths[i]) << "step " << i;
     EXPECT_EQ(codepoint, expected[i]);
@@ -157,13 +162,13 @@ TEST(Utf8, DecodePrevRefusesToLandInsideACharacter) {
   // and let a lookbehind step to an offset that is not a character boundary.
   const std::string euro = "\xE2\x82\xAC";
   uint32_t codepoint = 0;
-  EXPECT_EQ(grx_unicode_utf8_decode_prev(euro.data(), 1, &codepoint), 0u);
-  EXPECT_EQ(grx_unicode_utf8_decode_prev(euro.data(), 2, &codepoint), 0u);
-  EXPECT_EQ(grx_unicode_utf8_decode_prev(euro.data(), 3, &codepoint), 3u);
+  EXPECT_EQ(grx_unicode_utf8_decode_prev(euro.data(), 1, 0, &codepoint), 0u);
+  EXPECT_EQ(grx_unicode_utf8_decode_prev(euro.data(), 2, 0, &codepoint), 0u);
+  EXPECT_EQ(grx_unicode_utf8_decode_prev(euro.data(), 3, 0, &codepoint), 3u);
 
-  EXPECT_EQ(grx_unicode_utf8_decode_prev(euro.data(), 0, &codepoint), 0u);
-  EXPECT_EQ(grx_unicode_utf8_decode_prev(nullptr, 3, &codepoint), 0u);
-  EXPECT_EQ(grx_unicode_utf8_decode_prev(euro.data(), 3, nullptr), 0u);
+  EXPECT_EQ(grx_unicode_utf8_decode_prev(euro.data(), 0, 0, &codepoint), 0u);
+  EXPECT_EQ(grx_unicode_utf8_decode_prev(nullptr, 3, 0, &codepoint), 0u);
+  EXPECT_EQ(grx_unicode_utf8_decode_prev(euro.data(), 3, 0, nullptr), 0u);
 }
 
 TEST(Utf8, DecodePrevIsTheInverseOfEncode) {
@@ -173,11 +178,11 @@ TEST(Utf8, DecodePrevIsTheInverseOfEncode) {
     if (codepoint >= 0xD800u && codepoint <= 0xDFFFu) {
       continue;
     }
-    size_t written = grx_unicode_utf8_encode(codepoint, buffer);
+    size_t written = grx_unicode_utf8_encode(codepoint, buffer, 0);
     ASSERT_GT(written, 0u);
 
     uint32_t decoded = 0;
-    ASSERT_EQ(grx_unicode_utf8_decode_prev(buffer, written, &decoded), written)
+    ASSERT_EQ(grx_unicode_utf8_decode_prev(buffer, written, 0, &decoded), written)
         << "U+" << std::hex << codepoint;
     EXPECT_EQ(decoded, codepoint);
   }
@@ -979,4 +984,72 @@ TEST(UnicodeVersion, IsThePinnedRelease) {
 int main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
+}
+
+TEST(Utf8, SurrogatesDecodeOnlyWhenAskedFor) {
+  // A surrogate has no UTF-8 encoding, which is why the strict answer is
+  // zero; WTF-8 spells one as the three bytes its code point would take,
+  // and GRX_OPT_WTF8 is what asks for that.
+  const std::string lone_high = "\xED\xA0\x80";   // U+D800
+  const std::string lone_low = "\xED\xB1\xA1";    // U+DC61
+  uint32_t codepoint = 0;
+
+  EXPECT_EQ(decode(lone_high, &codepoint), 0u);
+  EXPECT_EQ(decode(lone_low, &codepoint), 0u);
+
+  ASSERT_EQ(decode_wtf8(lone_high, &codepoint), 3u);
+  EXPECT_EQ(codepoint, 0xD800u);
+  ASSERT_EQ(decode_wtf8(lone_low, &codepoint), 3u);
+  EXPECT_EQ(codepoint, 0xDC61u);
+
+  // Everything else is unchanged by the flag, which is the point of it
+  // being a flag: the two differ on surrogates and on nothing else.
+  for (const std::string & text : {std::string("A"), std::string("\xC3\xA9"),
+                                   std::string("\xE2\x82\xAC"),
+                                   std::string("\xF0\x9F\x90\x9F")}) {
+    uint32_t strict = 0;
+    uint32_t wide = 0;
+    EXPECT_EQ(decode(text, &strict), decode_wtf8(text, &wide));
+    EXPECT_EQ(strict, wide);
+  }
+
+  // And the encoder is the same story in reverse.
+  char buffer[4];
+  EXPECT_EQ(grx_unicode_utf8_encode(0xD800u, buffer, 0), 0u);
+  ASSERT_EQ(grx_unicode_utf8_encode(0xD800u, buffer, 1), 3u);
+  EXPECT_EQ(std::string(buffer, 3), lone_high);
+  // Above the range is invalid either way: the flag widens surrogates only.
+  EXPECT_EQ(grx_unicode_utf8_encode(GRX_CODEPOINT_MAX + 1, buffer, 1), 0u);
+}
+
+TEST(Utf8, WtfValidateTakesLoneSurrogatesAndRefusesCesu8) {
+  // grx_utf8_validate() stays strict because its contract is published;
+  // grx_wtf8_validate() is the one that accepts a lone surrogate, and it
+  // carries the rule the per-code-point decoder cannot: a pair must be the
+  // four-byte scalar, so a high surrogate immediately followed by a low one
+  // is CESU-8 and is refused. Accepting WTF-8 is *more* validation.
+  const std::string lone = "\xED\xA0\x80";
+  const std::string cesu8 = "\xED\xA0\x80\xED\xB1\xA1";
+  const std::string scalar = "\xF0\x90\x81\xA1";   // the same pair, right
+  size_t offset = GRX_NPOS;
+
+  EXPECT_EQ(grx_utf8_validate(lone.data(), lone.size(), &offset),
+      GRX_ERR_INVALID);
+  EXPECT_EQ(grx_wtf8_validate(lone.data(), lone.size(), &offset), GRX_OK);
+
+  offset = GRX_NPOS;
+  EXPECT_EQ(grx_wtf8_validate(cesu8.data(), cesu8.size(), &offset),
+      GRX_ERR_INVALID);
+  // The offset names where the *pair* began, not its second half, because
+  // the pair is the construct at fault.
+  EXPECT_EQ(offset, 0u);
+
+  EXPECT_EQ(grx_wtf8_validate(scalar.data(), scalar.size(), &offset), GRX_OK);
+  EXPECT_EQ(grx_utf8_validate(scalar.data(), scalar.size(), &offset), GRX_OK);
+
+  // A low surrogate that follows something else is fine; it is only a pair
+  // spelled in two sequences that is refused.
+  const std::string low_after_a = "a\xED\xB1\xA1";
+  EXPECT_EQ(grx_wtf8_validate(low_after_a.data(), low_after_a.size(), &offset),
+      GRX_OK);
 }

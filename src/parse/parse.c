@@ -87,7 +87,8 @@ GRX_Result grx_parse_peek(
   // one code point rather than two, which is a deviation and is recorded as
   // one in documentation/dialects.md section 6.
   size_t width = grx_unicode_utf8_decode(parser->text + parser->position,
-      parser->length - parser->position, out_codepoint);
+      parser->length - parser->position,
+      (parser->options & GRX_OPT_WTF8) != 0, out_codepoint);
   if (!width) {
     return GRX_ERR_SYNTAX;
   }
@@ -1371,6 +1372,22 @@ GRX_Result grx_parse_pattern(const char * pattern, size_t length,
   if (result != GRX_OK) {
     return result;
   }
+  // GRX_OPT_WTF8 is checked before the dialect's defaults are folded in,
+  // so that what is refused is what the *caller* asked for. Two conditions,
+  // and they fail differently on purpose: a dialect whose reference has no
+  // unpaired surrogates cannot honour the request at all, while UTF mode is
+  // a precondition the caller got wrong.
+  if (options & GRX_OPT_WTF8) {
+    if (!parser.profile.subject_is_utf16) {
+      return grx_error_set(out_error, GRX_ERR_UNSUPPORTED,
+          GRX_DIAG_OPTION_NOT_SUPPORTED, GRX_NPOS, 0);
+    }
+    if (!((options | parser.spec.default_options) & GRX_OPT_UTF)) {
+      return grx_error_set(out_error, GRX_ERR_INVALID,
+          GRX_DIAG_OPTION_NOT_SUPPORTED, GRX_NPOS, 0);
+    }
+  }
+
   // The dialect's own default options are the floor; the caller adds to them.
   parser.options |= parser.spec.default_options;
 

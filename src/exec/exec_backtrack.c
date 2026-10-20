@@ -169,6 +169,7 @@ typedef struct {
   size_t capacity;       ///< Frames allocated.
   size_t steps;          ///< Instructions executed, against max_steps.
   int utf;               ///< Whether a step is a code point or a byte.
+  int wtf8;              ///< Whether an unpaired surrogate decodes.
   GRX_Result failure;    ///< Set when a limit stopped the run.
   /** Which limit, so the caller is told more than "a limit". */
   GRX_Diag failure_diag;
@@ -767,7 +768,7 @@ static int read_forward(const Backtrack * bt, size_t position,
   }
 
   size_t width = grx_unicode_utf8_decode(bt->request->subject + position,
-      bt->window_end - position, out_codepoint);
+      bt->window_end - position, bt->wtf8, out_codepoint);
   if (!width) {
     return 0;
   }
@@ -789,7 +790,7 @@ static int read_backward(const Backtrack * bt, size_t position,
   }
 
   size_t width = grx_unicode_utf8_decode_prev(
-      bt->request->subject, position, out_codepoint);
+      bt->request->subject, position, bt->wtf8, out_codepoint);
   if (!width) {
     return 0;
   }
@@ -1055,7 +1056,7 @@ static int assertion_holds(
       // keyword characters and no boundary falls.
       uint32_t base = 0;
       int has_base = grx_cluster_base_before(
-          text, bt->window_start, position, bt->utf, &base);
+          text, bt->window_start, position, bt->utf, bt->wtf8, &base);
       return inst->mode == GRX_ASSERT_WORD_CLASS_START
           ? grx_vim_word_start(has_base, base, has_after, after)
           : grx_vim_word_end(has_base, base, has_after, after);
@@ -2427,6 +2428,7 @@ GRX_Result grx_exec_backtrack(
     .capacity = 0,
     .steps = 0,
     .utf = (program->flags & GRX_PROGRAM_UTF) != 0,
+    .wtf8 = (program->flags & GRX_PROGRAM_WTF8) != 0,
     .failure = GRX_OK,
     .failure_diag = GRX_DIAG_NONE,
     .longest = program->preference == GRX_PREFER_LEFTMOST_LONGEST,

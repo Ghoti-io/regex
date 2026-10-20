@@ -398,7 +398,7 @@ static GRX_Result read_group_name(GRX_Parser * parser, char terminator,
     first = 0;
 
     char encoded[4];
-    size_t width = grx_unicode_utf8_encode(codepoint, encoded);
+    size_t width = grx_unicode_utf8_encode(codepoint, encoded, 0);
     if (!width || written + width >= capacity) {
       return grx_parse_fail(parser, GRX_DIAG_INVALID_GROUP_NAME, start,
           parser->position - start);

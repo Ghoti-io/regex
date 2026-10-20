@@ -205,6 +205,7 @@ typedef struct {
   PikeState * free_states;
   size_t memory;         ///< Bytes handed out, against max_match_memory.
   int utf;               ///< Whether a step is a code point or a byte.
+  int wtf8;              ///< Whether an unpaired surrogate decodes.
   GRX_Result failure;    ///< Set when a limit stopped the run.
   /** Which limit, so the caller is told more than "a limit". */
   GRX_Diag failure_diag;
@@ -485,7 +486,7 @@ static int read_forward(const Pike * pike, size_t position,
   }
 
   size_t width = grx_unicode_utf8_decode(request->subject + position,
-      request->length - position, out_codepoint);
+      request->length - position, pike->wtf8, out_codepoint);
   if (!width) {
     return 0;
   }
@@ -505,7 +506,7 @@ static int read_backward(
   }
 
   return grx_unicode_utf8_decode_prev(
-             pike->request->subject, position, out_codepoint)
+             pike->request->subject, position, pike->wtf8, out_codepoint)
       != 0;
 }
 
@@ -627,7 +628,7 @@ static int assertion_holds(
       // keyword characters and no boundary falls.
       uint32_t base = 0;
       int has_base = grx_cluster_base_before(
-          text, 0, position, pike->utf, &base);
+          text, 0, position, pike->utf, pike->wtf8, &base);
       return inst->mode == GRX_ASSERT_WORD_CLASS_START
           ? grx_vim_word_start(has_base, base, has_after, after)
           : grx_vim_word_end(has_base, base, has_after, after);
@@ -1402,6 +1403,7 @@ GRX_Result grx_exec_pike(const GRX_ExecRequest * request, int * out_matched) {
     .steps = 0,
     .memory = 0,
     .utf = (program->flags & GRX_PROGRAM_UTF) != 0,
+    .wtf8 = (program->flags & GRX_PROGRAM_WTF8) != 0,
     .failure = GRX_OK,
     .failure_diag = GRX_DIAG_NONE,
   };

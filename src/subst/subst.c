@@ -40,6 +40,7 @@
 
 #include "../compile/compile_internal.h"
 #include "../core/core_internal.h"
+#include "../exec/exec_internal.h"
 #include "../parse/parse_internal.h"
 #include "../unicode/unicode_internal.h"
 #include "subst_internal.h"
@@ -1182,6 +1183,16 @@ typedef struct CaseState {
    */
   uint8_t stack[GRX_TPL_CASE_DEPTH];
   uint8_t depth;
+  /**
+   * Whether an unpaired surrogate decodes and encodes here.
+   *
+   * Read from the match's program rather than threaded through every
+   * caller. Without it a template naming a surrogate would encode to zero
+   * bytes and push nothing - a silent wrong answer under GRX_OPT_WTF8
+   * rather than a refusal, which is the one outcome worth engineering
+   * against.
+   */
+  int wtf8;
 } CaseState;
 
 /** The innermost case run in force, or GRX_TPL_CASE_NONE. */
@@ -1247,8 +1258,8 @@ static GRX_Result push_cased(CaseState * state, GRX_Arena * out,
   size_t at = 0;
   while (at < length) {
     uint32_t codepoint = 0;
-    size_t width
-        = grx_unicode_utf8_decode(bytes + at, length - at, &codepoint);
+    size_t width = grx_unicode_utf8_decode(
+        bytes + at, length - at, state->wtf8, &codepoint);
     if (!width) {
       // Not valid UTF-8, so there is no character here to change the case
       // of. Passed through as the byte it is, which is what every other
@@ -1292,7 +1303,8 @@ static GRX_Result push_cased(CaseState * state, GRX_Arena * out,
       GRX_Result result = GRX_OK;
       for (size_t i = 0; i < produced && result == GRX_OK; i++) {
         char encoded[4];
-        size_t encoded_width = grx_unicode_utf8_encode(mapped[i], encoded);
+        size_t encoded_width
+            = grx_unicode_utf8_encode(mapped[i], encoded, state->wtf8);
         result = push(out, encoded, encoded_width);
       }
       if (result != GRX_OK) {
@@ -1318,7 +1330,8 @@ static GRX_Result push_cased(CaseState * state, GRX_Arena * out,
     }
     else {
       char encoded[4];
-      size_t encoded_width = grx_unicode_utf8_encode(written, encoded);
+      size_t encoded_width
+          = grx_unicode_utf8_encode(written, encoded, state->wtf8);
       result = push(out, encoded, encoded_width);
     }
     if (result != GRX_OK) {
@@ -1343,6 +1356,7 @@ static GRX_Result expand(const GRX_Template * tmpl, const GRX_Match * match,
   CaseState cased;
   memset(&cased, 0, sizeof(cased));
   cased.perl = tmpl->perl_case_ops;
+  cased.wtf8 = grx_match_allows_surrogates(match);
 
   for (size_t i = 0; i < tmpl->ops.count; i++) {
     const GRX_TemplateOp * op
@@ -1419,7 +1433,8 @@ static GRX_Result expand(const GRX_Template * tmpl, const GRX_Match * match,
         // The one piece whose bytes are in neither the template nor the
         // subject: a decoded escape. See GRX_TPL_CODEPOINT.
         char encoded[4];
-        size_t width = grx_unicode_utf8_encode(op->a, encoded);
+        size_t width
+            = grx_unicode_utf8_encode(op->a, encoded, cased.wtf8);
         result = push_cased(&cased, out, encoded, width);
         break;
       }

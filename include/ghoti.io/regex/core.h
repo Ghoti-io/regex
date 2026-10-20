@@ -224,6 +224,20 @@ typedef enum {
    */
   GRX_DIAG_CALLOUT_STOPPED,
 
+  /**
+   * @brief An option this dialect cannot honour, or a precondition it lacks.
+   *
+   * Appended for the same reason GRX_DIAG_CALLOUT_STOPPED was: every other
+   * enumerator keeps the value it had.
+   *
+   * Two failures share it and the *result* tells them apart.
+   * GRX_ERR_UNSUPPORTED is a dialect that cannot do what was asked -
+   * GRX_OPT_WTF8 on a dialect whose reference has no unpaired surrogates.
+   * GRX_ERR_INVALID is a caller who asked for a combination that means
+   * nothing, such as GRX_OPT_WTF8 without GRX_OPT_UTF.
+   */
+  GRX_DIAG_OPTION_NOT_SUPPORTED,
+
   GRX_DIAG_COUNT ///< Closes the enum; not a diagnostic.
 } GRX_Diag;
 

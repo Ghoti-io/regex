@@ -923,6 +923,11 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     // JDK 25 refuses `\p{^Name}`; every other dialect here reads the caret
     // as the negation. See the field.
     .property_caret_is_error = 1,
+    // A Java String is UTF-16 and may hold an unpaired surrogate, which
+    // Matcher treats as ordinary text: measured on JDK 25, 62 of the 101
+    // such cases in the JDK's own corpus match. So GRX_OPT_WTF8 is a
+    // request this dialect can honour.
+    .subject_is_utf16 = 1,
     .subject_is_text = 1,
   },
   [GRX_SYNTAX_DOTNET] = {

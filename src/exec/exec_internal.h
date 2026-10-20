@@ -553,8 +553,17 @@ static inline int grx_exec_submatch_better(const size_t * candidate,
  * @param out_codepoint Receives the base.
  * @return Non-zero when there was a character to read.
  */
+/**
+ * @brief Whether this match's program decodes unpaired surrogates.
+ *
+ * Substitution needs the program's WTF-8 bit and holds only a match, and
+ * reaching through two structs at four call sites is how one of them comes
+ * to read the wrong thing.
+ */
+int grx_match_allows_surrogates(const GRX_Match * match);
+
 int grx_cluster_base_before(const char * subject, size_t start,
-    size_t position, int utf, uint32_t * out_codepoint);
+    size_t position, int utf, int wtf8, uint32_t * out_codepoint);
 
 int grx_exec_program_needs_backtracking(const GRX_Regex * regex);
 
