@@ -90,6 +90,22 @@ PROBE = {
     # normal oracle protocol keeps stderr separate from answers.
     "java25": (["sh", "-c", "java -version 2>&1 | tr '\\n' ' '"], "openjdk version", None),
     "java27": (["sh", "-c", "java -version 2>&1 | tr '\\n' ' '"], "openjdk version", None),
+    # .NET. Two versions and both decide answers: the runtime carries `Regex`
+    # and the Unicode tables, and the SDK carries the Roslyn that compiles
+    # DotNetOracle.cs at run time. Neither is in the image's tag - `sdk:10.0`
+    # is SDK 10.0.402 on runtime 10.0.13 - so both are asked.
+    #
+    # `--list-runtimes` rather than compiling anything, because a version
+    # probe that has to build a program fails for two different reasons and
+    # reports one of them. What it cannot answer is the UCD version, which
+    # .NET states nowhere; IMAGES says so and names the gate that measures it.
+    "dotnet": (["sh", "-c",
+                "printf '.NET %s, SDK %s\\n'"
+                " \"$(dotnet --list-runtimes"
+                " | sed -n 's/^Microsoft.NETCore.App \\([^ ]*\\).*/\\1/p'"
+                " | head -1)\""
+                " \"$(dotnet --version)\""],
+               ".NET 10.", None),
     "perl": (["perl", "-e", "print \"perl $^V\\n\""], "perl v", None),
     # V8's version, not node's, because the reference here is the regular
     # expression engine rather than the runtime around it - and because the

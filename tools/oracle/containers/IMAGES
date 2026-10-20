@@ -380,3 +380,39 @@ rust	localhost/ghoti-regex-oracle-rust:1.13.1	regex 1.13.1, UCD 16.0.0, rustc 1.
 # runtime probe checks the exact Java build before any answer is accepted.
 java25	docker.io/library/eclipse-temurin:25-jdk@sha256:8c052273471ca5128e67f18ffe9e9c32abf1b104bb0090fa10175eda51004145	openjdk version "25.0.4.1" 2026-08-18 LTS OpenJDK Runtime Environment Temurin-25.0.4.1+1 (build 25.0.4.1+1-LTS)	JDK 25 Pattern and Matcher baseline
 java27	docker.io/library/eclipse-temurin:27-jdk@sha256:b7b0b087469d150264d36ef6d50bb56840e7e50e3cbc691df0702167bd2c66e6	openjdk version "27" 2026-09-15 OpenJDK Runtime Environment Temurin-27+35 (build 27+35)	JDK 27 forward comparison
+
+# .NET's System.Text.RegularExpressions, for the `dotnet` dialect. A stock
+# Microsoft image, so the manifest digest is the whole guarantee.
+#
+# **Three versions decide an answer and this field names two.** The *runtime*
+# carries `Regex` and the Unicode tables `\p{...}` reads; the *SDK* carries
+# the Roslyn that compiles tools/oracle/DotNetOracle.cs at run time, so it
+# decides whether the driver builds at all. Both are asked of the image rather
+# than read off the tag - `dotnet --list-runtimes` for the first, `dotnet
+# --version` for the second - because an SDK image's tag names neither
+# precisely: `sdk:10.0` gave SDK 10.0.402 and runtime 10.0.13 here.
+#
+# **The third is the UCD version, and it is deliberately not in this field,
+# because nothing in .NET states it.** Java prints its own; node prints
+# `process.versions.unicode`; the Rust crate writes it into a generated
+# table's header comment. .NET has no equivalent at all: `CharUnicodeInfo`'s
+# tables are generated when the runtime is built and the version is not kept.
+# `CompareInfo.Version.FullVersion` is ICU's collation version (31129 here)
+# and answers a different question - collation, not character properties.
+#
+# So the skew against tools/unicode/UCD_VERSION (17.0.0) is **unmeasured as of
+# 2026-10-20**, and this comment says so rather than naming a number nobody
+# checked. It is measured rather than asked: the driver's `ranges` mode walks
+# a property's whole code point set, which is what `check-oracle-properties`
+# already does against node, so `check-oracle-dotnet-properties` will state
+# the gap in code points. Until then, treat any `\p{...}` or case-folding
+# comparison against this reference as carrying an unknown Unicode gap - go's
+# row is the warning, where two releases' drift means a property differential
+# measures the Consortium and reports it here.
+#
+# The driver is compiled **inside** the image at run time, the way pcre2's and
+# rust's are, and by Roslyn directly rather than by `dotnet run`: a .NET 10
+# file-based app runs an implicit NuGet restore and fails inside
+# `--network none` with four lines about api.nuget.org. tools/oracle/
+# dotnet_runner.py has the measurement and the reason.
+dotnet	mcr.microsoft.com/dotnet/sdk:10.0@sha256:3a48280a9a7c6276c3eeaba1efa6a08820f18c84fb9e6274c187719ecfaf9fbc	.NET 10.0.13, SDK 10.0.402	The .NET dialect: Regex, its split, its replacement template and its group renumbering

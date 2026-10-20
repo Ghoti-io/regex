@@ -880,6 +880,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 
 # General commands
 .PHONY: check-oracle-soak
+.PHONY: check-oracle-dotnet check-oracle-dotnet-driver
 .PHONY: check-oracle-java check-java-jdk-corpus check-java-syntax-diff check-java-match-diff check-java-search-diff check-java-replace-diff check-java-split-diff check-oracle-java-properties
 .PHONY: clean cloc docs docs-pdf examples tools coverage check-layout-page check-work-packages check-citations check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-unicode-agreement check-dump-names check-readme-example check-tables check-status-line check-corpus-seeds check-makefile-hash check-generated-header-deps check-oracle-env check-oracle-syntax check-oracle-match check-oracle-soak check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-linear check-oracle-perl-syntax check-oracle-script-runs check-doc-claims check-wide-classes check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
 	check-programs \
@@ -1131,6 +1132,7 @@ check-oracles: check-oracle-syntax check-oracle-match check-oracle-properties \
 	check-oracle-sed \
 	check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
 	check-oracle-java \
+	check-oracle-dotnet \
 	check-java-search-diff \
 	check-oracle-java-properties \
 	check-oracle-exclusions check-oracle-determinism \
@@ -1512,6 +1514,19 @@ check-oracle-env:
 		$(REQUIRE_PYTHON3); \
 		python3 tools/oracle/check_oracle_env.py; \
 	fi
+
+check-oracle-dotnet: ## Compare the .NET driver against the pinned .NET
+# Only the driver's own controls so far: the differentials that will use it
+# are not written yet, and an oracle nothing runs is a file that compiles
+# rather than a reference. The controls are in check_dotnet_driver.py and
+# each was seen to fail by mutating the driver - including two that first
+# passed against a broken driver, which is why the ECMAScript control is a
+# *pair* of rows and why the mid-character refusal is checked at both of its
+# two sites.
+check-oracle-dotnet: check-oracle-dotnet-driver
+
+check-oracle-dotnet-driver:
+	$(call run-oracle,dotnet,python3 tools/oracle/check_dotnet_driver.py)
 
 check-oracle-java: check-java-syntax-diff check-java-match-diff check-java-search-diff check-java-replace-diff check-java-split-diff check-oracle-java-properties check-java-jdk-corpus ## Compare the Java driver and operations against JDK pins
 	$(call run-oracle,java25,python3 tools/oracle/java_probe.py --pin java25)
