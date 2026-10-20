@@ -4085,6 +4085,9 @@ GRX_Result grx_lower_pattern(const GRX_Pattern * pattern,
   if (low.options & GRX_OPT_WTF8) {
     low.ir->flags |= GRX_PROGRAM_WTF8;
   }
+  if (low.profile.empty_subject_is_a_boundary) {
+    low.ir->flags |= GRX_PROGRAM_EMPTY_IS_BOUNDARY;
+  }
   // The two halves of pcre2api's CRLF skip: the convention says a pair is
   // one terminator, and the pattern's own spelling says whether to
   // suppress it.

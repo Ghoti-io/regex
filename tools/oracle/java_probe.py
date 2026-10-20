@@ -282,7 +282,7 @@ CASES = [case("shared", p, s, f) for p, f, s, _ in SHARED] + [
 # Generated interaction inventory. Append only: the preceding pinned case IDs
 # are cited by the semantic ledger and must remain stable. Keep each cross
 # product small enough that a failing case prints as a useful reproducer.
-GENERATED_INVENTORY_REVISION = "2026-10-20b"
+GENERATED_INVENTORY_REVISION = "2026-10-20c"
 CASES += [case("generated-syntax", pattern, mode="compile") for pattern in (
     "a", "(a|b)+", "[a&&[a-z]]", "\\Q[a]+\\E", "(?<n>a)",
     "(?R)", "(?P<n>a)", "[a-\\d]", "\\g{1}")]
@@ -392,6 +392,39 @@ CASES += [case("brace", pattern, subject)
         ("^{3}", "aaa"), ("(?=a){3}", "aaa"), ("\\b{3}", "aaa"),
         ("(){3}", ""), ("{3}{4}", "aaa"), ("a{1,2}{3}", "aaa"),
         ("\\{3}", "{3}"), ("[{3}]", "{"),
+    )]
+
+# The grapheme boundary, where the JDK and perl answer the ends of an *empty*
+# subject differently. UAX #29 breaks at the start of text and at the end of
+# text and does not say which applies when they are the same offset, so this
+# is a corner two conforming implementations may split on - and they do:
+# `\b{g}` against "" is 0-0 here and no match in perl 5.44.
+#
+# `\B{g}` is in the list because the JDK has no negated bound at all, and the
+# *message* is what says so: "Illegal repetition" rather than an unknown bound
+# type, which means the `{g}` went to the counted-closure reader. `\B{3}`
+# compiling is the other half of that.
+CASES += [case("grapheme-bound", pattern, subject, "", "all")
+    for pattern, subject in (
+        ("\\b{g}", ""),            # the empty subject: a boundary at 0
+        ("\\b{g}", "a"),
+        ("\\b{g}", "ab"),
+        ("\\b{g}", "e\u0301"),     # one cluster, so 0 and 3
+        ("\\b{g}", "\r\n"),        # CRLF is one cluster too
+        ("a\\b{g}", "ab"),
+        ("\\b{g}a", "a"),
+        ("\\b{g}$", "a"),
+        ("^\\b{g}$", ""),
+        ("\\b{g}\\b{g}", ""),      # twice over, still the one position
+        ("()\\b{g}", ""),
+        ("\\A\\b{g}\\z", ""),
+        ("\\b{g}{3}", ""),          # a closure on the bound, not a name
+        ("\\b", ""),                # and the word boundary, which has none
+        ("\\B", ""),
+        ("\\B{g}", "a"),            # refused: no negated bound
+        ("\\B{3}", "aaa"),          # while a closure after `\B` is fine
+        ("\\b{gcb}", "a"),          # perl's spelling; not Java's
+        ("\\b{wb}", "a"),
     )]
 
 

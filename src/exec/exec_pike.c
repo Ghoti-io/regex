@@ -687,7 +687,7 @@ static int assertion_holds(
         GRX_BREAK_LINE, GRX_BREAK_LINE,
       };
       size_t which = (size_t)inst->mode - GRX_ASSERT_GRAPHEME_BOUNDARY;
-      int boundary = grx_unicode_break_at(
+      int boundary = grx_exec_break_at(pike->program,
           kinds[which], request->subject, request->length, position);
       // The odd members of the run are the `\B{...}` spellings.
       return (which % 2) ? !boundary : boundary;

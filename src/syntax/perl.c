@@ -814,6 +814,16 @@ static GRX_Result read_bound_type(GRX_Parser * parser, size_t start,
   if (flavour(parser) == FLAVOUR_JAVA && brace_is_repeat(parser, 0)) {
     return GRX_OK;
   }
+  // And Java has no negated bound at all. `\B{g}` is "Illegal repetition"
+  // on JDK 25, not "unknown bound type" - the message says which reader saw
+  // it: `\B` is the plain non-boundary and the `{g}` after it went to the
+  // counted-closure reader, which refuses it. `\B{gcb}` and `\B{3}` are
+  // the two halves that confirm it, the first an error and the second a
+  // compile. So the brace is left where it is and the quantifier reader
+  // gives the same answer the reference gives, for the same reason.
+  if (flavour(parser) == FLAVOUR_JAVA && negated) {
+    return GRX_OK;
+  }
 
   size_t scan = 1;
   while (byte_at(parser, scan) == ' ' || byte_at(parser, scan) == '\t') {

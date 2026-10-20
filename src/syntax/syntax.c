@@ -943,6 +943,10 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     // such cases in the JDK's own corpus match. So GRX_OPT_WTF8 is a
     // request this dialect can honour.
     .subject_is_utf16 = 1,
+    // `\b{g}` against "" is 0-0 on JDK 25 and no match in perl 5.44. See
+    // the field: UAX #29 does not say which of "start of text" and "end of
+    // text" applies when they are the same offset.
+    .empty_subject_is_a_boundary = 1,
     .subject_is_text = 1,
   },
   [GRX_SYNTAX_DOTNET] = {

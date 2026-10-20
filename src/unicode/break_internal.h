@@ -75,6 +75,13 @@ typedef enum {
  * between. All four were checked against Perl 5.40 rather than read off the
  * rules, because this is exactly the corner where the two could differ.
  *
+ * **And where two references do differ.** `\b{g}` against "" is a match at
+ * 0-0 on JDK 25. This function keeps Perl's answer, because that is its
+ * published contract; the dialect axis that overrides it for an empty
+ * subject is GRX_PROGRAM_EMPTY_IS_BOUNDARY, applied by
+ * grx_exec_break_at() so that the override lives at one call site rather
+ * than inside the segmentation.
+ *
  * @param kind Which segmentation.
  * @param subject The subject. NULL is valid only when `length` is 0.
  * @param length Bytes in the subject.

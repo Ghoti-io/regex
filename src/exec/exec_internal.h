@@ -38,6 +38,7 @@
 #include <string.h>
 
 #include "../compile/compile_internal.h"
+#include "../unicode/break_internal.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -508,6 +509,34 @@ static inline size_t grx_exec_skip_to_first_byte(const GRX_Program * program,
   // about it; this only answers for positions the skip chose.
   return to == from ? from
                     : grx_exec_boundary_forward(program, subject, length, to);
+}
+
+/**
+ * @brief Whether a segmentation boundary falls here, with the dialect's
+ *   answer for an empty subject.
+ *
+ * grx_unicode_break_at() answers perl's way - an empty subject has no
+ * boundary of any kind, which is neither UAX #29's wording nor UAX #14's -
+ * and that stays its published contract. Java disagrees: `\b{g}` against
+ * "" is 0-0 on JDK 25. The difference is one position in one case, so it is
+ * settled here rather than by a parameter on the segmentation routine, and
+ * it is settled in *one* place because both engines ask the same question
+ * and a second copy is a second chance to answer it differently.
+ *
+ * @param program The program, for GRX_PROGRAM_EMPTY_IS_BOUNDARY.
+ * @param kind Which segmentation.
+ * @param subject The subject.
+ * @param length Bytes in the subject.
+ * @param position Byte offset to ask about.
+ * @return Non-zero when a boundary falls there.
+ */
+static inline int grx_exec_break_at(const GRX_Program * program,
+    GRX_BreakKind kind, const char * subject, size_t length,
+    size_t position) {
+  if (!length) {
+    return (program->flags & GRX_PROGRAM_EMPTY_IS_BOUNDARY) != 0;
+  }
+  return grx_unicode_break_at(kind, subject, length, position);
 }
 
 /**

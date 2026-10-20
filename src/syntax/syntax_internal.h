@@ -929,6 +929,21 @@ typedef struct GRX_Profile {
    * default for an axis that widens what input is accepted.
    */
   int subject_is_utf16;
+  /**
+   * An empty subject has a grapheme cluster boundary at offset 0.
+   *
+   * `\b{g}` against "" is a match at 0-0 on JDK 25 and no match in perl
+   * 5.44. UAX #29 breaks at the start of text and at the end of text and
+   * does not say which applies when they are the same offset, so this is a
+   * place two conforming implementations may differ and do.
+   *
+   * Java is the only dialect here that sets it, and `\b{g}` is the only
+   * construct that can see it: Java's bound-type alphabet is the one name
+   * `g`. perl, which has `\b{wb}`, `\b{sb}` and `\b{lb}` as well, answers
+   * no boundary for all four - which is what grx_unicode_break_at() states
+   * as its own contract.
+   */
+  int empty_subject_is_a_boundary;
   GRX_FoldKind fold;                ///< Caseless folding without UTF.
   GRX_FoldKind fold_utf;            ///< Caseless folding with UTF.
   uint32_t fold_wide_option;        ///< Override UTF as the wide-fold switch.

@@ -73,6 +73,24 @@ extern "C" {
 #define GRX_PROGRAM_WTF8 GRX_BIT(12)
 
 /**
+ * @brief An empty subject has a segmentation boundary at offset 0.
+ *
+ * `\b{g}` against "" matches 0-0 on JDK 25 and does not match in perl
+ * 5.44, and both were measured rather than read off UAX #29 - which breaks
+ * at the start and the end of text and does not say what happens when those
+ * are the same position. grx_unicode_break_at() answers perl's way and says
+ * so in its contract, so the dialect that differs carries a bit.
+ *
+ * Only Java sets it, and only `\b{g}` can observe it: Java's bound-type
+ * alphabet is the single name `g`, so the word, sentence and line
+ * boundaries have no spelling there. The flag is written as a fact about
+ * the *subject's ends* rather than about one assertion so that a dialect
+ * which later spells the others does not need a second bit, but nothing
+ * measured today reaches them.
+ */
+#define GRX_PROGRAM_EMPTY_IS_BOUNDARY GRX_BIT(8)
+
+/**
  * @brief The bit-state engine's memo would be unsound for this program.
  *
  * `(pc, position)` identifies a state only when what the program does next

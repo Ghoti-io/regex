@@ -946,6 +946,108 @@ TEST(JavaBraces, AClosureWithNothingToRepeatRepeatsNothing) {
   grx_regex_free(regex);
 }
 
+TEST(JavaBounds, AnEmptySubjectHasAGraphemeBoundaryHereAndNotInPerl) {
+  // UAX #29 breaks at the start of text and at the end of text, and says
+  // nothing about which applies when they are the same offset. So an empty
+  // subject is a corner two conforming implementations can split on, and
+  // they do: `\b{g}` against "" is 0-0 on JDK 25 and no match in perl 5.44,
+  // both measured rather than reasoned about.
+  //
+  // grx_unicode_break_at() answers perl's way and says so in its published
+  // contract, which is why the dialect that differs carries a program flag
+  // rather than the segmentation routine growing a parameter. Only `\b{g}`
+  // can observe it in Java: the bound-type alphabet there is the single
+  // name `g`.
+  struct Row {
+    const char * pattern;
+    const char * subject;
+    int java_matches;
+    int perl_matches;
+  };
+  const Row rows[] = {
+    {"\\b{g}", "", 1, 0},          // the one row the two references split on
+    {"^\\b{g}$", "", 1, 0},
+    {"\\b{g}\\b{g}", "", 1, 0},    // twice over, still the one position
+    {"\\b{g}", "a", 1, 1},         // and everywhere else they agree
+    {"\\b{g}", "ab", 1, 1},
+    {"\\b", "", 0, 0},             // the word boundary has none either way
+    {"\\B", "", 1, 1},
+  };
+  for (const Row & row : rows) {
+    for (GRX_Syntax syntax : {GRX_SYNTAX_JAVA, GRX_SYNTAX_PERL}) {
+      const int want = syntax == GRX_SYNTAX_JAVA ? row.java_matches
+                                                 : row.perl_matches;
+      // Every engine, because the flag is read in two of them and a
+      // dialect axis that only one honours is worse than none.
+      for (GRX_Engine engine : {GRX_ENGINE_AUTO, GRX_ENGINE_PIKE,
+               GRX_ENGINE_BACKTRACK, GRX_ENGINE_BITSTATE}) {
+        GRX_Regex * regex = nullptr;
+        GRX_Error error;
+        ASSERT_EQ(grx_regex_compile_with_allocator(row.pattern,
+                      strlen(row.pattern), syntax, GRX_OPT_UTF, nullptr,
+                      nullptr, &error, &regex),
+            GRX_OK)
+            << row.pattern;
+        GRX_Match * match = nullptr;
+        ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+        int matched = 0;
+        const GRX_Result result = grx_regex_search(regex, row.subject,
+            strlen(row.subject), 0, engine, nullptr, match, &matched);
+        if (result == GRX_OK) {
+          EXPECT_EQ(matched != 0, want != 0)
+              << row.pattern << " in "
+              << (syntax == GRX_SYNTAX_JAVA ? "java" : "perl")
+              << " on engine " << (int)engine;
+          if (matched && want) {
+            GRX_Capture span = {GRX_NPOS, GRX_NPOS};
+            grx_match_span(match, &span);
+            EXPECT_EQ(span.start, span.end) << row.pattern;
+          }
+        }
+        grx_match_destroy(match);
+        grx_regex_free(regex);
+      }
+    }
+  }
+}
+
+TEST(JavaBounds, ThereIsNoNegatedBoundAndTheMessageSaysWhy) {
+  // `\B{g}` is "Illegal repetition" on JDK 25, not "unknown bound type" -
+  // and which message it is settles which reader saw the brace. `\B` is the
+  // plain non-boundary and the `{g}` after it went to the counted-closure
+  // reader, which refuses it. So this library leaves the brace where it is
+  // and lets the same reader give the same answer, rather than naming a
+  // construct the reference does not have.
+  //
+  // `\B{3}` is the other half: a closure after `\B` compiles there, so the
+  // refusal is about the *name* and not about the brace.
+  for (const char * pattern : {"\\B{g}", "\\B{gcb}", "\\B{foo}"}) {
+    GRX_Regex * regex = nullptr;
+    GRX_Error error;
+    EXPECT_EQ(grx_regex_compile_with_allocator(pattern, strlen(pattern),
+                  GRX_SYNTAX_JAVA, GRX_OPT_UTF, nullptr, nullptr, &error,
+                  &regex),
+        GRX_ERR_SYNTAX)
+        << pattern;
+    EXPECT_EQ(error.diag, GRX_DIAG_INVALID_QUANTIFIER) << pattern;
+    grx_regex_free(regex);
+  }
+
+  int matched = 0;
+  GRX_Capture span = {GRX_NPOS, GRX_NPOS};
+  EXPECT_EQ(search_java("\\B{3}", 5, "aaa", 3, GRX_OPT_UTF, &matched, &span),
+      GRX_OK);
+  EXPECT_TRUE(matched);
+
+  // perl has the negated bound, which is what makes the refusal Java's
+  // rather than this library's.
+  GRX_Regex * perl = nullptr;
+  EXPECT_EQ(grx_regex_compile_with_allocator("\\B{g}", 5, GRX_SYNTAX_PERL,
+                GRX_OPT_UTF, nullptr, nullptr, nullptr, &perl),
+      GRX_OK);
+  grx_regex_free(perl);
+}
+
 int main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

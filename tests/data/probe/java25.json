@@ -3511,6 +3511,158 @@
       "flags": "",
       "mode": "first",
       "argument": ""
+    },
+    {
+      "area": "grapheme-bound",
+      "pattern": "\\b{g}",
+      "subject": "",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "grapheme-bound",
+      "pattern": "\\b{g}",
+      "subject": "a",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "grapheme-bound",
+      "pattern": "\\b{g}",
+      "subject": "ab",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "grapheme-bound",
+      "pattern": "\\b{g}",
+      "subject": "e\u0301",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "grapheme-bound",
+      "pattern": "\\b{g}",
+      "subject": "\r\n",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "grapheme-bound",
+      "pattern": "a\\b{g}",
+      "subject": "ab",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "grapheme-bound",
+      "pattern": "\\b{g}a",
+      "subject": "a",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "grapheme-bound",
+      "pattern": "\\b{g}$",
+      "subject": "a",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "grapheme-bound",
+      "pattern": "^\\b{g}$",
+      "subject": "",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "grapheme-bound",
+      "pattern": "\\b{g}\\b{g}",
+      "subject": "",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "grapheme-bound",
+      "pattern": "()\\b{g}",
+      "subject": "",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "grapheme-bound",
+      "pattern": "\\A\\b{g}\\z",
+      "subject": "",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "grapheme-bound",
+      "pattern": "\\b{g}{3}",
+      "subject": "",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "grapheme-bound",
+      "pattern": "\\b",
+      "subject": "",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "grapheme-bound",
+      "pattern": "\\B",
+      "subject": "",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "grapheme-bound",
+      "pattern": "\\B{g}",
+      "subject": "a",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "grapheme-bound",
+      "pattern": "\\B{3}",
+      "subject": "aaa",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "grapheme-bound",
+      "pattern": "\\b{gcb}",
+      "subject": "a",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "grapheme-bound",
+      "pattern": "\\b{wb}",
+      "subject": "a",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
     }
   ],
   "answers": [
@@ -6690,6 +6842,230 @@
           1
         ]
       ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            0
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            1
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            1
+          ]
+        ],
+        [
+          [
+            2,
+            2
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            3,
+            3
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            2,
+            2
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            1
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            1
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            1,
+            1
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            0
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            0
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            0
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            0
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            0
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": []
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            0
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "syntax",
+      "index": 3,
+      "description": "Illegal repetition"
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            1,
+            1
+          ]
+        ],
+        [
+          [
+            2,
+            2
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "syntax",
+      "index": 4,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "syntax",
+      "index": 3,
+      "description": "Illegal repetition"
     }
   ]
 }

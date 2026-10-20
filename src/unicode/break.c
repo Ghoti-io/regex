@@ -51,7 +51,9 @@ int grx_unicode_break_at(GRX_BreakKind kind, const char * subject,
   // The empty subject has no boundary of any kind. Neither standard says so
   // in those words - both would break at offset 0 - and it is what perl
   // answers, which is why break_internal.h states it as this library's
-  // contract. The unicode library documents the same answer for the same
+  // contract. The JDK answers the other way, and the dialect axis for that
+  // is in grx_exec_break_at() rather than here: this function has one
+  // answer and it is the documented one. The unicode library documents the same answer for the same
   // reason, so this is belt and braces rather than a correction; it is here
   // because a contract that depends on a dependency's wording is one that
   // can change under you without a compile error.
