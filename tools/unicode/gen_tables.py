@@ -931,9 +931,8 @@ def build_tables(ucd, version):
     # `blk; Greek ; Greek_And_Coptic` with underscores. An exact lookup
     # between them finds nothing, which is not hypothetical - it is the
     # defect this work found in ghoti.io-unicode, where every one of the
-    # 143 blocks with a distinct short alias is unreachable because of it
-    # (notes/unicode/BLOCK-VALUE-ALIASES.md in the workspace). Here the
-    # short name is where the value is: `ASCII` is Basic_Latin's.
+    # 143 blocks with a distinct short alias is unreachable because of it.
+    # Here the short name is where the value is: `ASCII` is Basic_Latin's.
     blocks = read_property_file(os.path.join(ucd, "Blocks.txt"))
     block_by_loose = {}
     for spelling, entry in block_values.items():

@@ -259,7 +259,8 @@ EOF
 run_case grx_syntax 0 "$SYNTAX_ROWS" ecmascript
 run_case grx_syntax 0 "$SYNTAX_ROWS" rust
 # An unknown dialect is refused by name, unlike an unknown *flag letter*,
-# which this directory still drops silently; notes/regex/TODO.md section 19.
+# which this directory still drops silently. That is open, and it has bitten
+# the Go driver twice.
 run_case grx_syntax 2 "$SYNTAX_ROWS" no-such-dialect
 
 MATCH_ROWS=$(stdin_file match <<'EOF'

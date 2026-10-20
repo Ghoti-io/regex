@@ -10,12 +10,11 @@ exactly the six mixtures that pair Han with two families" - probed once by
 hand, written down with the version they were taken against, and never asked
 again.
 
-`notes/regex/TODO.md` section 9-probes is the bill for that: seven such
-claims in `dialects.md` still named perl 5.40.1 a day after the pin moved to
-5.44.0, and the only reason nobody was misled is that all seven happened to
-carry. **A claim with no gate goes stale silently, and a claim whose version
-label is wrong is worse than one with no label** - it says a measurement was
-made that was not.
+The bill for that came due: seven such claims in `dialects.md` still named
+perl 5.40.1 a day after the pin moved to 5.44.0, and the only reason nobody
+was misled is that all seven happened to carry. **A claim with no gate goes
+stale silently, and a claim whose version label is wrong is worse than one
+with no label** - it says a measurement was made that was not.
 
 So each claim is held here as data, and this gate asserts three things about
 it:

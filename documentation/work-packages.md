@@ -1116,7 +1116,7 @@ records and generated comparisons with
 | 1. Profile values sourced, no `probe` cell | **Partially met.** The JDK 25 probe files have 364/364 pinned answers in the final Story 8 replay, and the former Java `probe` cells now cite measured cases or state the unmeasured breadth. The measured examples do not settle all Unicode sets, flag interactions, lookbehind bounds or split limits. Java's full semantic profile is not yet certified. |
 | 2. Hooks and rule tests | **Partially met.** Java parser/profile and operation paths are built; the focused unit tests, bounded vectors and generated differentials cover the measured rules. A rule-by-rule audit over the full Java profile is still needed before asserting *every* rule has a test. |
 | 3. Oracle vectors and rate | **Bounded corpus passes; completion target unmet.** Offline `make test` on the final Story 8 tree passed **136/136 Java vectors (100.00%)**, within **87,351/87,351** total vectors. This denominator is only the committed bounded syntax/match corpus. Live JDK 25 generated checks passed syntax **9/9**, match **106/106 auto**, search **52/52 auto**, replacement **55** comparable cases, and split **57** comparable cases plus **8 invalid-limit rejections**. Match excluded 3 `LITERAL`/`CANON_EQ` cases; search excluded 5 region/bounds and 1 split-pair case; replacement excluded 1 split-pair case; split excluded 1 split-pair case. None counts as a pass. The JDK's own comprehensive corpus and the §2 99.5% target are not established by these bounded inventories. `dialects.md` §6 names the current representational and mode exclusions. |
-| 4. Eight-hour selected pattern fuzz | **Unmet, and the first attempt found a real defect.** Capped EVO job `cutil-java-readiness-soak-20261019-1003` ran `GRX_FUZZ_SYNTAX=java make fuzz-run-pattern FUZZ_TIME=28800 PREFIX=$PREFIX` under an 8 GB cap and a private prefix, and exited after 278,453 inputs with an ASan stack overflow. Replayed on this host in 50 ms rather than on EVO: a saved input needs one binary and one process. The fault was `evaluate_class_set()` in `src/ir/lower.c` taking one stack frame per link of a left-associated `GRX_NODE_CLASS_OP` chain, which `java_class_join()` built for an ordinary flat Java class; ECMAScript's `v` mode already appended to one flat node and Java's parser had reintroduced the chain. Fixed in `src/syntax/perl.c`. A flat class of N atoms is now N+1 nodes rather than 2N-1, which is what the three tests added to `tests/unit/test_java.cpp` assert - they report 1023, 511 and 7 nodes against the unfixed parser. A fresh eight-hour run on the fixed revision is still required, and this verdict does not change until a clean exit, duration, iteration count and fetched result are recorded here. |
+| 4. Eight-hour selected pattern fuzz | **Met, on the second attempt.** The first run, capped EVO job `cutil-java-readiness-soak-20261019-1003`, exited after 278,453 inputs with an ASan stack overflow: `evaluate_class_set()` in `src/ir/lower.c` took one stack frame per link of a left-associated `GRX_NODE_CLASS_OP` chain that `java_class_join()` built for an ordinary flat Java class. ECMAScript's `v` mode already appended operands to one flat node; the Java parser had reintroduced the chain. Fixed in `src/syntax/perl.c`, so a flat class of N atoms is N+1 nodes rather than 2N-1, and the three tests in `tests/unit/test_java.cpp` assert that count - they report 1023, 511 and 7 nodes against the unfixed parser. The qualifying run then ran clean on the fixed revision: `GRX_FUZZ_SYNTAX=java make fuzz-run-pattern FUZZ_TIME=28800` under an 8 GB cap in a private prefix, 2026-10-19T16:16:21Z to 2026-10-20T00:16:33Z, **28,801 seconds and 5,541,088 inputs, exit 0**, 29,967 new corpus units, slowest unit under a second, peak RSS 884 MB. No crash, slow-unit, OOM or timeout artifact, and no sanitizer or leak diagnostic anywhere in its 4 MB log. The revision fuzzed was the committed one with a clean tree, which is what makes it a run on the final implementation rather than near it. |
 | 5. Option alphabet and replacement grammar | **Met for the documented scope.** `grx_options_parse()` handles Java `idmsuxU`; the JDK 25 replacement differential passed its 55 comparable cases and focused invalid-template probes. The match differential separately excludes the JDK `Pattern.LITERAL` and `Pattern.CANON_EQ` modes as explained in `dialects.md` §6. |
 | 6. Runnable example | **Met.** `make examples PREFIX=$PREFIX` under capped EVO GCC 16 built `examples/java_named.c`, and its checked run exited 0, printing Unicode text in a named capture with byte spans, a `${name}` replacement and a negative-limit Java split. Reproduce with the command in `README.md` §Examples; `tools/check_programs.sh` also runs it under sanitizers. |
 
@@ -1132,25 +1132,34 @@ full-suite run: `make test` on 2026-10-19 with the fix, the three shape tests
 and these documentation edits in place, against Debian GCC 14.2.0 on the
 host with every Java oracle reachable - 87,351 vectors passed with 0 failed
 and 0 skipped, 13 dialects built, and all five JDK 25 differentials ran. The
-host is not the compiler that decides: CLAUDE.md names GCC 16.2.0 in
-`ghoti-build:gcc16`, and that run is recorded separately below. The first
+host is not the compiler that decides: the suite names GCC 16.2.0 in its
+build image, and that run is the one recorded here - from a clean build,
+exit 0, the same vector count and every gate green. A host build on top of
+objects the container compiled does *not* relink: the flag stamps do not
+notice a compiler change, and `rxt.o` from a GCC 16 build failed a GCC 14
+link with `relocation R_X86_64_32 ... can not be used when making a PIE
+object`. `make clean` between the two is not optional. The first
 attempt at this run failed `Documents.TheReadmeExampleDoesWhatItSays`,
 because the Java example's `sh` block had been added ahead of the README's C
 example and that gate reads the first fenced block after the heading; the
 example prose now sits with the other example programs.
-Local EVO logs in `.evo/cutil-java-story8-reviewed-final-20261019-0943/`,
-`.evo/cutil-regex-java-story8-git-20261019-0909/` and
-`.evo/cutil-java-readiness-verify-20261019-1002/` supplement these tracked
-records; `.evo/` is Git ignored and is not required to replay the claims.
+
+The job logs those runs left behind are not published and are not needed:
+every claim above is replayable from this checkout with the two commands at
+the top of this section. A reader who wants the raw logs is better served by
+re-running them than by a path into somebody's scratch directory.
 
 JDK 27 is reported only as a forward check: the 364/364 probe replay passed
 against its separately committed answers. Its `javaLowerCase` answer differs
 from JDK 25 at U+0295; the whole-property comparison counted 28 set
 differences, one on the common-assigned domain. This is not a JDK 25 failure.
 
-**Java is not yet claimed done.** The incomplete condition verdicts above
-remain visible independently of the first stable release's separate 24-hour
-three-fuzzer soak in §3.
+**Java is still not claimed done.** Condition 4 is met and conditions 5 and
+6 were already; what remains is the breadth of conditions 1, 2 and 3 - the
+full semantic profile, a rule-by-rule audit, and a corpus wider than the
+committed 136 vectors. Those three are the gate now, and the eight-hour
+dialect soak is unrelated to the first stable release's separate 24-hour
+three-fuzzer soak in §3, which is still outstanding on its own terms.
 
 ## 3. What "done" means for the first stable release
 

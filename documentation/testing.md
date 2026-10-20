@@ -1538,9 +1538,9 @@ gates.
 [doc_claims_diff.py](../tools/oracle/doc_claims_diff.py). Most of what
 [dialects.md](dialects.md) asserts about a reference is checked by a
 generator; a handful of claims are sentences, probed once by hand and written
-down with the version they were taken against. Those had no gate at all, and
-`notes/regex/TODO.md` section 9-probes is the bill: **seven of them still
-named perl 5.40.1 a day after the pin moved to 5.44.0**, and the only reason
+down with the version they were taken against. Those had no gate at all, and the
+bill came due: **seven of them still named perl 5.40.1 a day after the pin
+moved to 5.44.0**, and the only reason
 nobody was misled is that all seven happened to carry when they were finally
 re-asked.
 
@@ -2309,6 +2309,44 @@ Run by `make test` alongside `check-symbols`:
   change the
   `**WP-NN` heading style - the last two because a gate that cannot read its
   page must fail rather than pass every citation vacuously.
+- **A published file does not cite a private workspace path.**
+  `tools/check_citations.py`, the `check-citations` gate, fails on a tracked
+  file that references one of the workspace's private trees: the development
+  notes, the planning tree, the story artifacts or a fetched job directory.
+  `PRIVATE` in that file is the list, and it is deliberately the only copy -
+  a second roster in prose is a roster that goes stale. **Built.** 316 files
+  read.
+
+  Everything here is published and those trees are not; they are a different
+  repository, kept private on purpose. Fourteen such citations had
+  accumulated, naming five sections of this library's own TODO and one of
+  another library's notes, across the Makefile, two documentation pages, two
+  source files, three test files and three tools. Every one was provenance
+  for a figure whose substance was already written out beside it - the
+  slow-unit names and the measurements were in the text - so all fourteen
+  came out without losing anything, and three sites now point at a published
+  test instead, which is a better citation than a note was. The last one the
+  gate found was in the Java readiness evidence, which named three job
+  directories.
+
+  **The general rule was written first and does not work here.** "Every
+  repository-relative path must resolve" flagged about a hundred lines on
+  its first run, and every one was correct: `.gitignore` names paths that
+  are not there by definition, `$(wildcard tests/test_helpers.cpp)` is a
+  probe for a file that may not exist, `tools/check_*` is a glob, a Makefile
+  comment explains what a page *used* to be called, and `make -C libs/regex
+  test` is the command a reader is meant to run. Naming a sibling path in
+  prose is ordinary in this suite, so the gate asks the question that has
+  one answer instead: is this a path into a tree the reader does not have?
+
+  **Its marker is its own, and not the one `check-work-packages` uses.**
+  Sharing a spelling made every line either gate had marked exempt from
+  both: the first clean run reported seventeen exempt where six had been
+  marked for it. An exemption that widens silently into a second gate is
+  exactly what the printed count exists to make visible.
+  **To check the gate itself:** reference a private tree from a published
+  file, or put the marker on the line *before* the reference rather than on
+  it.
 - **Every page the library publishes is in `check-tables`' population.**
   `documentation/testing.md` and `documentation/development.md` were not,
   which is 190K of tables it never read, and a `DOCUMENTS` entry that is not
@@ -2806,6 +2844,10 @@ when the gate changes:
 | `check-work-packages` | the page moved out of the tree | non-zero, and before any citation is read |
 | `check-work-packages` | the `**WP-NN` heading style changed | non-zero, "too few to be the page"; not a vacuous pass over an empty definition set |
 | `check-work-packages` | the `not-a-citation` marker on the line *after* a bad citation | non-zero; the marker exempts its own line and no other, which is what makes the exemption auditable |
+| `check-citations` | a development note referenced from a published page | non-zero, naming the file, the line and the path |
+| `check-citations` | a planning-tree path referenced from a published page | non-zero; the rule is the private tree, not one note |
+| `check-citations` | a fetched job directory referenced from a source comment | non-zero; this is what it found in the Java readiness record |
+| `check-citations` | its own marker on the line *before* the reference | non-zero, at the reference's line rather than the marker's |
 | `check-tables` | a `DOCUMENTS` entry naming a page that is not in the tree | non-zero, naming it; previously skipped in silence |
 | `check-status-line` | the Status section saying eleven dialects compile where twelve do | non-zero, both numbers named |
 | `check-status-line` | the `GRX_ENGINE_DFA` row deleted from the engine table - the state the page was actually in | non-zero, naming the enumerator with no row |

@@ -3668,7 +3668,7 @@ TEST(Perl, AShortBlockAliasResolvesAndIsWhereTheValueIs) {
   // ghoti.io-unicode cannot resolve any of them today - the two UCD files
   // spell the long name differently and its generator joins them exactly -
   // so this is also the assertion that this library is not simply passing
-  // the name through. See notes/unicode/BLOCK-VALUE-ALIASES.md.
+  // the name through.
   EXPECT_TRUE(search("\\p{blk=Greek}", kU0374, GRX_SYNTAX_PERL, "u").matched);
   EXPECT_TRUE(search("\\p{blk=Greek_Ext}", kU1F00, GRX_SYNTAX_PERL, "u")
                   .matched);

@@ -400,7 +400,7 @@ TEST(UnicodeSets, ASetIsBuiltInTimeProportionalToItsMembersNotTheirSquare) {
   //
   // The soak found what was left as two slow units,
   // `pattern-ecmascript/slow-unit-baad77df` at 1.91 s and `slow-unit-175057e1`
-  // at 0.93 s - notes/regex/TODO.md section 14u. They are 0.085 s and 0.039 s
+  // at 0.93 s. They are 0.085 s and 0.039 s
   // now. The tell that the cost was construction and not content: both produce
   // the same 17,100-instruction program from 10,860 and 5,804 bytes of pattern
   // and differed 2:1 in time.

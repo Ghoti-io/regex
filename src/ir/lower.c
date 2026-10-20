@@ -3002,7 +3002,9 @@ typedef struct {
    * meant comparing against every member. That is the second factor of n in
    * the same place the offsets array above removed the third: adding n members
    * stayed O(n^2), which two soak artifacts found as 1.91 s and 0.93 s spent
-   * lowering `v`-mode classes - notes/regex/TODO.md section 14u.
+   * lowering `v`-mode classes. Both are 0.085 s and 0.039 s now, and
+   * `UnicodeSets.ASetIsBuiltInTimeProportionalToItsMembersNotTheirSquare`
+   * in tests/unit/test_unicodesets.cpp is what holds them there.
    *
    * An index rather than sorting the runs, because the order members were
    * written in is the order they are emitted in, and a set that sorted itself

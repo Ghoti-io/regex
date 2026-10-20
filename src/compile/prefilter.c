@@ -30,7 +30,8 @@
  * glibc and Python with a memchr, V8 with generated code - and measured on
  * the same failing search this library was 27 ns per subject byte where Node
  * was 0.014 and glibc 0.47, a factor of nineteen hundred against the best of
- * them (notes/regex/TODO.md section 14x).
+ * them. `TEST(Compile, TheEngineSkipsWhatThePrefilterRulesOut)` is the same
+ * comparison as a bound this library has to clear.
  *
  * Nothing about a linear-time engine requires that. What it needs is the set
  * of bytes a match can start with, and a position whose byte is not in it can

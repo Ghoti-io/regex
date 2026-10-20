@@ -1100,8 +1100,7 @@ with underscores beside the short one, `blk; Greek ; Greek_And_Coptic`. 143
 of the 347 blocks have a short alias that differs, `ASCII` for `Basic_Latin`
 among them. This library reads the alias file and joins the two loosely;
 ghoti.io-unicode joins them exactly and so resolves none of the 143, which
-is `notes/unicode/BLOCK-VALUE-ALIASES.md` in the workspace and not a defect
-here.
+is a defect in that library rather than in this one.
 
 ## 5.10 Iteration after an empty match
 

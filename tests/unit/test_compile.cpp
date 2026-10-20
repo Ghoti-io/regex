@@ -194,8 +194,7 @@ TEST(Compile, AGroupThatReferencesItselfIsMeasuredOnceNotOncePerReference) {
   // Found by replaying the soak's slow units: `pattern-pcre/slow-unit-2fcdef60`
   // is 24,901 bytes, took 20,384 body walks and **zero** cache hits -
   // 265,488,928 walk steps and 7.89 s. It is 1.95 s now, and the two artifacts
-  // either side of it in notes/regex/TODO.md section 14u went 6.03 s to 1.09 s
-  // and 0.32 s to 0.006 s.
+  // either side of it went 6.03 s to 1.09 s and 0.32 s to 0.006 s.
   //
   // The witness here is one group whose body is expensive to walk and contains
   // a reference to itself, plus many references to it from outside. Old cost
@@ -329,9 +328,8 @@ TEST(Compile, ASubtreeIsAskedAboutTheEmptyStringOncePerNodeNotOncePerCopy) {
   // 65,536 copies of one body out of a 381-byte pattern.
   //
   // A fuzz artifact found it as 15.9 seconds spent *refusing* a 2,465-byte
-  // pattern - 2,036 IR nodes, 92 repeats, 125 backreferences - which is
-  // notes/regex/TODO.md section 14s. Measured here: 1.37 s before the per-node
-  // cache and 0.017 s after, a factor of eighty.
+  // pattern - 2,036 IR nodes, 92 repeats, 125 backreferences. Measured here:
+  // 1.37 s before the per-node cache and 0.017 s after, a factor of eighty.
   //
   // Half a second sits between those two populations in both builds, which is
   // the only property a bound like this needs. Release: 0.017 s fixed against
@@ -386,8 +384,8 @@ TEST(Compile, AnAlternationBranchIsMeasuredOncePerNodeNotOncePerCopy) {
   // per expanded copy of the body around it.
   //
   // It appeared in none of the stack samples that found the empty-string memo,
-  // so it was left in notes/regex/TODO.md section 14s as "the same kind of pure
-  // function inside the same loops" rather than fixed with it. The shape was
+  // so it was left for later as the same kind of pure function inside the same
+  // loops, rather than being fixed alongside it. The shape was
   // the whole argument and the measurement bore it out: 1.99 s asking per copy
   // against 0.019 s asking per node, a factor of a hundred.
   //
@@ -836,7 +834,8 @@ TEST(Compile, TheEngineSkipsWhatThePrefilterRulesOut) {
   // Without the skip, a literal that is not in the subject costs a closure at
   // every byte: measured over a megabyte, 27 ns per byte before and 0.9 after,
   // which is thirty-one times and is also the difference between this library
-  // and everything it is compared against in notes/regex/TODO.md section 14x.
+  // and everything it is compared against; src/compile/prefilter.c's file
+  // comment carries those figures.
   //
   // A megabyte at the unskipped rate is 28 ms per search and 2.8 s for the
   // hundred here; skipped it is under 0.1 s. The bound is one second, which

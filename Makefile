@@ -466,7 +466,7 @@ ALL_TEST_GATES := check-symbols check-layering check-aliasing \
 	check-generated-header-deps \
 	check-java-syntax-diff check-java-match-diff check-java-search-diff check-java-replace-diff check-java-split-diff \
 	check-oracle-env check-unicode-agreement check-scan-portable test-asan \
-	check-programs check-layout-page check-work-packages
+	check-programs check-layout-page check-work-packages check-citations
 TEST_GATES ?= $(ALL_TEST_GATES)
 
 # What a gate that IS a python3 script does when there is no python3.
@@ -881,7 +881,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 # General commands
 .PHONY: check-oracle-soak
 .PHONY: check-oracle-java check-java-syntax-diff check-java-match-diff check-java-search-diff check-java-replace-diff check-java-split-diff check-oracle-java-properties
-.PHONY: clean cloc docs docs-pdf examples tools coverage check-layout-page check-work-packages check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-unicode-agreement check-dump-names check-readme-example check-tables check-status-line check-corpus-seeds check-makefile-hash check-generated-header-deps check-oracle-env check-oracle-syntax check-oracle-match check-oracle-soak check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-linear check-oracle-perl-syntax check-oracle-script-runs check-doc-claims check-wide-classes check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
+.PHONY: clean cloc docs docs-pdf examples tools coverage check-layout-page check-work-packages check-citations check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-unicode-agreement check-dump-names check-readme-example check-tables check-status-line check-corpus-seeds check-makefile-hash check-generated-header-deps check-oracle-env check-oracle-syntax check-oracle-match check-oracle-soak check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-linear check-oracle-perl-syntax check-oracle-script-runs check-doc-claims check-wide-classes check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
 	check-programs \
 	check-oracle-properties check-oracle-numeric-properties \
 	check-oracle-folds \
@@ -1279,7 +1279,7 @@ check-doc-claims: ## Re-ask the references every hand-probed claim the docs stat
 # by hand and written down with the version they were taken against, and those
 # had no gate at all. Seven of them still named perl 5.40.1 a day after the
 # pin moved to 5.44.0 and the only reason nobody was misled is that all seven
-# happened to carry - see notes/regex/TODO.md section 9-probes.
+# happened to carry.
 #
 # Needs no build of ours: every claim here is a claim about a reference, and
 # where a sentence also states this library's answer that half has a unit test.
@@ -1950,6 +1950,26 @@ check-layout-page: ## Fail if development.md's layout block disagrees with the t
 check-layout-page:
 	@$(REQUIRE_PYTHON3); \
 	python3 tools/check_layout_page.py
+
+check-citations: ## Fail if a published file cites a private workspace path
+# Everything here is published; the development notes are not. Fourteen such
+# citations had accumulated - five sections of this library's own TODO and
+# one of another library's notes - across the Makefile, two documentation
+# pages, two source files, three test files and three tools. Each was
+# provenance for a figure whose substance was already written out beside it,
+# so each came out without losing anything, and three sites gained a pointer
+# to a published test instead.
+#
+# The general form of this - every repository-relative path must resolve -
+# was written first and flagged a hundred correct lines: a `.gitignore`
+# pattern, a `$(wildcard)` probe, a glob, a comment about what a page used to
+# be called, and `make -C libs/regex test`, which is the command a reader is
+# meant to run. Naming a sibling path in prose is normal here. So the gate
+# asks the question with one answer instead: is this a path into a tree the
+# reader does not have?
+check-citations:
+	@$(REQUIRE_PYTHON3); \
+	python3 tools/check_citations.py
 
 check-work-packages: ## Fail if a WP-NN citation names a package the page lacks
 # Thirty-three work packages are cited by number from source comments, test
