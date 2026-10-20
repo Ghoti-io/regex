@@ -482,6 +482,91 @@ TEST(JavaSurrogates, ADialectWhoseReferenceHasNoneRefusesTheOption) {
       GRX_OK);
 }
 
+TEST(JavaSurrogates, SubstitutionCarriesTheOptionThrough) {
+  // Substitution reads the option from the match's program rather than from
+  // a caller, so this is what says the path is connected.
+  //
+  // Through the *subject*, deliberately. A first version of this test
+  // expected `\x{D800}` in a replacement to emit three bytes and got seven:
+  // Java's replacement grammar has no codepoint escape, so `\x` quotes `x`
+  // and the rest is literal. GRX_TPL_CODEPOINT comes from vim's `\n`, `\r`,
+  // `\t` and `\b` and from the control-escape path, none of which can name
+  // a surrogate - so the encoder's flag in CaseState is defensive for the
+  // dialects that have those escapes, and unreachable from this one. Worth
+  // knowing rather than asserting something that cannot happen.
+  const uint32_t options = GRX_OPT_UTF | GRX_OPT_WTF8;
+  GRX_Error error;
+  GRX_Regex * dash = nullptr;
+  ASSERT_EQ(grx_regex_compile_with_allocator("-", 1, GRX_SYNTAX_JAVA, options,
+                nullptr, nullptr, &error, &dash),
+      GRX_OK)
+      << error.message;
+
+  const std::string lone(kLoneHigh, 3);
+  const std::string subject = lone + "-" + lone;
+
+  GRX_Text text;
+  memset(&text, 0, sizeof(text));
+  ASSERT_EQ(grx_regex_replace(dash, subject.data(), subject.size(), "=", 1,
+                GRX_REPLACE_GLOBAL, nullptr, nullptr, &error, &text),
+      GRX_OK)
+      << error.message;
+  EXPECT_EQ(std::string(text.data, text.length), lone + "=" + lone);
+  grx_text_free(&text);
+
+  // A group reference carries one out of the subject untouched.
+  GRX_Regex * group = nullptr;
+  ASSERT_EQ(grx_regex_compile_with_allocator("(.)-", 4, GRX_SYNTAX_JAVA,
+                options, nullptr, nullptr, &error, &group),
+      GRX_OK)
+      << error.message;
+  memset(&text, 0, sizeof(text));
+  ASSERT_EQ(grx_regex_replace(group, subject.data(), subject.size(), "[$1]", 4,
+                GRX_REPLACE_GLOBAL, nullptr, nullptr, &error, &text),
+      GRX_OK)
+      << error.message;
+  EXPECT_EQ(std::string(text.data, text.length), "[" + lone + "]" + lone);
+  grx_text_free(&text);
+  grx_regex_free(group);
+
+  // And splitting gives two fields, each the three bytes of a surrogate.
+  GRX_Split split;
+  memset(&split, 0, sizeof(split));
+  ASSERT_EQ(grx_regex_split_java(dash, subject.data(), subject.size(), -1,
+                nullptr, nullptr, &error, &split),
+      GRX_OK)
+      << error.message;
+  ASSERT_EQ(split.count, 2u);
+  EXPECT_EQ(split.pieces[0].end - split.pieces[0].start, 3u);
+  EXPECT_EQ(split.pieces[1].end - split.pieces[1].start, 3u);
+  grx_split_free(&split);
+  grx_regex_free(dash);
+}
+
+TEST(JavaSurrogates, WithoutTheOptionSubstitutionStillRefuses) {
+  // The other half: a caller who does not ask sees exactly what they saw
+  // before, from substitution as much as from matching.
+  GRX_Regex * regex = nullptr;
+  GRX_Error error;
+  ASSERT_EQ(grx_regex_compile_with_allocator("-", 1, GRX_SYNTAX_JAVA,
+                GRX_OPT_UTF, nullptr, nullptr, &error, &regex),
+      GRX_OK);
+  const std::string subject = std::string(kLoneHigh, 3) + "-";
+
+  GRX_Text text;
+  memset(&text, 0, sizeof(text));
+  EXPECT_EQ(grx_regex_replace(regex, subject.data(), subject.size(), "=", 1,
+                GRX_REPLACE_GLOBAL, nullptr, nullptr, &error, &text),
+      GRX_ERR_INVALID);
+
+  GRX_Split split;
+  memset(&split, 0, sizeof(split));
+  EXPECT_EQ(grx_regex_split_java(regex, subject.data(), subject.size(), -1,
+                nullptr, nullptr, &error, &split),
+      GRX_ERR_INVALID);
+  grx_regex_free(regex);
+}
+
 TEST(JavaParser, AnUnpairedSurrogateIsRefusedRatherThanAnswered) {
   // The JDK answers these: a lone surrogate is an ordinary `char` to
   // `Matcher`, and of the 101 cases in the JDK's own corpus that carry one,

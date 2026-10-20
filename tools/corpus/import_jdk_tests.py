@@ -46,11 +46,12 @@ carries no group array, no driver mode reports a group count without a
 match, so only the verdict is compared and the count is not. Both
 populations are reported separately.
 
-**Supplementary cases are surrogate pairs** - `grabLine()` builds one code
-unit per escape - and a pair is a scalar this byte-oriented API represents
-fine. A *lone* surrogate is not valid UTF-8 and cannot be passed to the
-driver at all, which `dialects.md` §6 already records as a deviation; those
-rows are excluded and counted rather than dropped quietly.
+**Supplementary cases are UTF-16 code units** - `grabLine()` builds one per
+escape - so a pair has to be joined into its scalar and an unpaired
+surrogate kept as itself. Both go to the oracle through its `w:` WTF-8
+transport and to this library with `GRX_OPT_WTF8`, spelled `W` to the
+driver. Before that option existed, 101 of the 860 could not be asked at
+all; all 860 are asked now.
 
 **Licence.** These files are GPL-2.0-only with no Classpath exception, and
 this library is LGPL-3.0-only. Every other corpus in `tools/corpus/VERSIONS`
@@ -143,18 +144,48 @@ def grab_lines(path):
     return out
 
 
+def wtf8(text):
+    """WTF-8 bytes for text that may hold an unpaired surrogate.
+
+    A pair becomes the four-byte scalar and an unpaired surrogate its own
+    three bytes, which is what both the driver's `w:` transport and
+    GRX_OPT_WTF8 expect. Python keeps an unpaired surrogate in a `str` and
+    refuses to encode one as UTF-8, which is why this exists at all.
+    """
+    return java_probe.wtf8(text)
+
+
 def scalars(text):
-    """Combine surrogate pairs into scalars; refuse a lone surrogate.
+    """Join every surrogate pair; leave an unpaired surrogate alone.
 
     grabLine() produces one UTF-16 code unit per escape, so a supplementary
-    character arrives as a pair and has to be joined before it is UTF-8.
-    Round-tripping through UTF-16 joins the pairs and raises on anything
-    left over, which is exactly the line this API cannot cross.
+    character arrives as a pair and has to be joined before it is WTF-8 - a
+    pair is the four-byte scalar and only an *unpaired* surrogate keeps its
+    own three bytes. Getting that wrong is not a crash: it is a comparison
+    that reports every supplementary row as a disagreement, which is what
+    the whole-string round trip did here twice. The first version joined
+    nothing when a lone surrogate was present anywhere in the string,
+    because decoding the whole thing raised and the fallback returned it
+    untouched.
+
+    So this walks the units. One pass, no exceptions, and the only thing it
+    ever leaves as a surrogate is one that genuinely has no partner.
     """
-    try:
-        return text.encode("utf-16-le", "surrogatepass").decode("utf-16-le")
-    except UnicodeDecodeError:
-        raise Unreadable("lone UTF-16 surrogate")
+    units = text.encode("utf-16-le", "surrogatepass")
+    out = []
+    i = 0
+    while i < len(units):
+        unit = units[i] | (units[i + 1] << 8)
+        i += 2
+        if 0xD800 <= unit <= 0xDBFF and i + 1 < len(units):
+            low = units[i] | (units[i + 1] << 8)
+            if 0xDC00 <= low <= 0xDFFF:
+                i += 2
+                out.append(chr(0x10000 + ((unit - 0xD800) << 10)
+                               + (low - 0xDC00)))
+                continue
+        out.append(chr(unit))
+    return "".join(out)
 
 
 def split_flags(pattern_line):
@@ -177,12 +208,16 @@ def expected_line(answer, subject):
     """processFile()'s result string, rebuilt from the oracle's answer."""
     if answer["kind"] == "nomatch":
         return None             # No group count without a match.
-    data = subject.encode("utf-8")
+    data = wtf8(subject)
     groups = answer["groups"]
     texts = []
     for span in groups:
         texts.append(None if span is None
-                     else data[span[0]:span[1]].decode("utf-8"))
+                     # surrogatepass, because a span may cover an unpaired
+                     # surrogate's three bytes and strict UTF-8 cannot read
+                     # back what WTF-8 wrote.
+                     else data[span[0]:span[1]].decode(
+                         "utf-8", "surrogatepass"))
     parts = ["true", texts[0], str(len(groups) - 1)]
     parts.extend(text for text in texts[1:] if text is not None)
     return " ".join(parts)
@@ -305,7 +340,8 @@ def main(argv=None):
 
     cases, refused = read_cases(corpus)
     answers = java_probe.run(PIN, [
-        java_probe.case("jdk", c["pattern"], c["subject"], c["flags"], "first")
+        java_probe.case("jdk", c["pattern"], c["subject"], c["flags"],
+                        "w:first")
         for c in cases])
 
     agreed_exact = agreed_verdict = 0
@@ -361,10 +397,13 @@ def main(argv=None):
         # anything: the same questions go to this library and the answers are
         # compared span for span. Only rows the corpus and the oracle already
         # agree on are asked, so a disagreement here is this library's.
+        # `W` is GRX_OPT_WTF8, and the text is WTF-8 on this side too: a
+        # subject encoded one way and measured the other is how a transport
+        # comes to answer a different question accurately.
         payload = "".join(
-            "%s\t%s\t%s\n" % (case["flags"],
-                                case["pattern"].encode("utf-8").hex(),
-                                case["subject"].encode("utf-8").hex())
+            "%s\t%s\t%s\n" % (case["flags"] + "W",
+                                wtf8(case["pattern"]).hex(),
+                                wtf8(case["subject"]).hex())
             for case, answer in kept)
         result = subprocess.run([args.driver, "java"], input=payload,
                                 text=True, capture_output=True)

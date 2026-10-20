@@ -297,16 +297,38 @@ int main(int argc, char ** argv) {
     }
 
     uint32_t options = 0;
+    // `W` is GRX_OPT_WTF8 in every dialect this driver speaks, and Java
+    // reaches its flags through grx_options_parse() rather than the table
+    // below - its alphabet is `idmsuxU` and `W` is not in it. So the letter
+    // is lifted out before the dialect sees the rest. One spelling across
+    // every dialect, because a differential that spells the same request
+    // two ways is one edit away from asking two different questions.
+    char letters[64];
+    size_t kept = 0;
+    int want_wtf8 = 0;
+    for (const char * f = line; *f && kept + 1 < sizeof letters; f++) {
+      if (*f == 'W') {
+        want_wtf8 = 1;
+        continue;
+      }
+      letters[kept++] = *f;
+    }
+    letters[kept] = '\0';
+    if (want_wtf8) {
+      options |= GRX_OPT_WTF8 | GRX_OPT_UTF;
+    }
     if (syntax == GRX_SYNTAX_JAVA) {
       GRX_Error flag_error;
-      if (grx_options_parse(syntax, line, &options, &flag_error) != GRX_OK) {
+      uint32_t parsed = 0;
+      if (grx_options_parse(syntax, letters, &parsed, &flag_error) != GRX_OK) {
         printf("compile %d\n", (int)flag_error.diag);
         fflush(stdout);
         continue;
       }
+      options |= parsed;
     }
     else {
-      for (const char * f = line; *f; f++) {
+      for (const char * f = letters; *f; f++) {
         switch (*f) {
           case 'i': options |= GRX_OPT_CASELESS; break;
           case 'm': options |= GRX_OPT_MULTILINE; break;
@@ -345,7 +367,32 @@ int main(int argc, char ** argv) {
           case 'n':
             options |= GRX_OPT_MULTILINE | GRX_OPT_NEWLINE_TERMINATES;
             break;
-          default: break;
+          // `b` selects a basic expression for the POSIX references, where
+          // it clears REG_EXTENDED - posix_match.c and musl_match.c both
+          // spell it, and posix_diff.py sends it for every BRE row. Here the
+          // *dialect argument* already says `posix-bre` or `gnu-bre`, so
+          // there is nothing left for the letter to do.
+          //
+          // An explicit no-op rather than a silent one, which is the whole
+          // distinction: this letter costs nothing to ignore because the
+          // same fact arrives another way, and saying so is what separates
+          // it from a letter that was dropped because nobody had written it
+          // down. Closing the `default` is what turned this up.
+          case 'b': break;
+          // GRX_OPT_WTF8, and GRX_OPT_UTF with it because the option
+          // requires UTF mode and refusing the pair here would be a
+          // precondition failure reported as a flag-letter failure.
+          // **An unknown letter is an error, not a shrug.** Two comments
+          // above say what the old `default: break;` cost - a `U` nothing
+          // honoured asked the reference for ungreedy matching and this
+          // library for greedy, and 35 rows were scored against each other
+          // anyway, every disagreement the driver's. A silently dropped
+          // flag makes agreement and disagreement mean the same thing,
+          // which is worse than a refusal by exactly the margin that makes
+          // a differential worth running.
+          default:
+            fprintf(stderr, "grx_match: unknown flag letter '%c'\n", *f);
+            return 2;
         }
       }
     }
