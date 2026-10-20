@@ -281,7 +281,7 @@ CASES = [case("shared", p, s, f) for p, f, s, _ in SHARED] + [
 # Generated interaction inventory. Append only: the preceding pinned case IDs
 # are cited by the semantic ledger and must remain stable. Keep each cross
 # product small enough that a failing case prints as a useful reproducer.
-GENERATED_INVENTORY_REVISION = "2026-10-19"
+GENERATED_INVENTORY_REVISION = "2026-10-20"
 CASES += [case("generated-syntax", pattern, mode="compile") for pattern in (
     "a", "(a|b)+", "[a&&[a-z]]", "\\Q[a]+\\E", "(?<n>a)",
     "(?R)", "(?P<n>a)", "[a-\\d]", "\\g{1}")]
@@ -305,11 +305,90 @@ CASES += [case("generated-split", pattern, subject, mode="split",
           for limit in (-1, 0, 2)]
 
 
+def wtf8(text):
+    """WTF-8 bytes: a surrogate pair as the four-byte scalar, an unpaired
+    surrogate as its own three bytes.
+
+    Python keeps an unpaired surrogate in a `str` and refuses to encode one
+    as UTF-8, which is the whole reason these cases could not be asked.
+    Round-tripping through UTF-16 joins the pairs first, so a pair becomes
+    one scalar and only the genuinely unpaired ones take the three-byte
+    form - which is WTF-8's rule and not CESU-8's.
+    """
+    out = bytearray()
+    units = text.encode("utf-16-le", "surrogatepass")
+    i = 0
+    while i < len(units):
+        unit = units[i] | (units[i + 1] << 8)
+        i += 2
+        if 0xD800 <= unit <= 0xDBFF and i + 1 < len(units):
+            low = units[i] | (units[i + 1] << 8)
+            if 0xDC00 <= low <= 0xDFFF:
+                i += 2
+                unit = 0x10000 + ((unit - 0xD800) << 10) + (low - 0xDC00)
+        if unit < 0x80:
+            out.append(unit)
+        elif unit < 0x800:
+            out += bytes((0xC0 | unit >> 6, 0x80 | unit & 0x3F))
+        elif unit < 0x10000:
+            out += bytes((0xE0 | unit >> 12, 0x80 | (unit >> 6) & 0x3F,
+                          0x80 | unit & 0x3F))
+        else:
+            out += bytes((0xF0 | unit >> 18, 0x80 | (unit >> 12) & 0x3F,
+                          0x80 | (unit >> 6) & 0x3F, 0x80 | unit & 0x3F))
+    return bytes(out)
+
+
+# What the reference does with an unpaired UTF-16 surrogate.
+#
+# These are the cases that decided the lone-surrogate option's shape, and
+# they are here rather than in a note because the answers are the reference
+# for an implementation that does not exist yet. `\p{Cs}` is the one that
+# matters most: the JDK matches it and this library compiles it to an empty
+# set, so without this row the first surrogate a decoder accepted would
+# produce a silent no-match.
+#
+# `w:first` puts them through the driver's WTF-8 transport; strict UTF-8
+# cannot carry the subject at all. A lone surrogate in a Python `str` is
+# legal, which is why the inventory can hold them.
+LONE_HIGH = "\ud800"
+# Spelled as the scalar it is, not as the two code units that make it.
+# `json.loads` *combines* two consecutive `\uXXXX` escapes into one astral
+# character, so an inventory holding the pair as units does not survive its
+# own round trip - recorded as `\ud800\udc61`, read back as `\U00010061`,
+# and `--record` then fails its own "case inventory changed" check on the
+# next run. Both spellings encode to the same four WTF-8 bytes, so only the
+# inventory cares, and this is the spelling that is stable in it.
+SURROGATE_PAIR = "\U00010061"
+CASES += [case("surrogate", pattern, subject, flags, "w:first")
+    for pattern, subject, flags in (
+        (".", LONE_HIGH, ""),             # one position, three bytes
+        (".", SURROGATE_PAIR, ""),        # one position, four bytes
+        (".", LONE_HIGH, "iu"),           # and nothing here folds
+        ("\\w", LONE_HIGH, ""),           # not a word character
+        ("\\W", LONE_HIGH, ""),           # and the complement says so
+        ("\\p{Cs}", LONE_HIGH, ""),       # category Cs: the JDK matches
+        ("\\p{Cn}", LONE_HIGH, ""),       # and they are not unassigned
+        ("\\p{L}", LONE_HIGH, ""),        # not letters
+        ("\\p{all}", LONE_HIGH, ""),      # Java's `all` includes them
+        ("[\\uD800]", LONE_HIGH, ""),     # named by escape in a class
+        ("[\\uD7FF-\\uE000]", LONE_HIGH, ""),  # a range spanning the block
+        ("\\uD800", LONE_HIGH, ""),       # a bare escape
+        ("[^a]", LONE_HIGH, ""),          # a negated class
+        ("[^a]", SURROGATE_PAIR, ""),     # and over a pair
+    )]
+
+
 def run(pin, rows):
     command = oracle_env.command(pin, ["java", "tools/oracle/JavaOracle.java"])
     lines = []
     for row in rows:
-        values = [row["mode"]] + [row[k].encode("utf-8").hex()
+        # A `w:` mode's text fields are WTF-8, matching the driver. The
+        # encoding and the offsets it reports are one decision, so they are
+        # selected by one thing.
+        encode = wtf8 if row["mode"].startswith("w:") \
+            else (lambda s: s.encode("utf-8"))
+        values = [row["mode"]] + [encode(row[k]).hex()
             for k in ("pattern", "flags", "subject", "argument")]
         lines.append("\t".join(values))
     finished = subprocess.run(command, input="\n".join(lines) + "\n",
@@ -346,7 +425,18 @@ def main():
     if args.record:
         os.makedirs(DATA, exist_ok=True)
         with open(path, "w", encoding="utf-8") as out:
-            json.dump(payload, out, ensure_ascii=False, indent=2)
+            # ensure_ascii, which this did not use until the surrogate area
+            # arrived. An unpaired surrogate has no UTF-8 encoding, so
+            # writing one into a UTF-8 file raises - and `--record` had
+            # already truncated both pins' files before it did, which is how
+            # this was found. JSON's own `\uXXXX` escape is the mechanism for
+            # exactly this and round-trips the surrogate back out.
+            #
+            # The cost is that the twenty-one other non-ASCII characters in
+            # here are escaped too, where they used to read as themselves.
+            # Worth it over inventing a second escaping convention inside a
+            # file that already has one.
+            json.dump(payload, out, ensure_ascii=True, indent=2)
             out.write("\n")
         print(f"recorded {len(answers)} answers in {path}")
         return 0

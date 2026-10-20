@@ -83,7 +83,7 @@
     {
       "area": "shared",
       "pattern": "[a-z]",
-      "subject": "ſ",
+      "subject": "\u017f",
       "flags": "i",
       "mode": "first",
       "argument": ""
@@ -91,7 +91,7 @@
     {
       "area": "shared",
       "pattern": "k",
-      "subject": "K",
+      "subject": "\u212a",
       "flags": "i",
       "mode": "first",
       "argument": ""
@@ -99,7 +99,7 @@
     {
       "area": "shared",
       "pattern": "\\w",
-      "subject": "é",
+      "subject": "\u00e9",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -107,7 +107,7 @@
     {
       "area": "shared",
       "pattern": "\\d",
-      "subject": "١",
+      "subject": "\u0661",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -115,7 +115,7 @@
     {
       "area": "shared",
       "pattern": "\\s",
-      "subject": " ",
+      "subject": "\u00a0",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -211,7 +211,7 @@
     {
       "area": "control",
       "pattern": ".",
-      "subject": "😀",
+      "subject": "\ud83d\ude00",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -219,7 +219,7 @@
     {
       "area": "control",
       "pattern": "a",
-      "subject": "😀a",
+      "subject": "\ud83d\ude00a",
       "flags": "",
       "mode": "find-from",
       "argument": "4"
@@ -234,8 +234,8 @@
     },
     {
       "area": "flags",
-      "pattern": "é",
-      "subject": "É",
+      "pattern": "\u00e9",
+      "subject": "\u00c9",
       "flags": "iu",
       "mode": "first",
       "argument": ""
@@ -243,7 +243,7 @@
     {
       "area": "flags",
       "pattern": "(?U)\\w",
-      "subject": "é",
+      "subject": "\u00e9",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -251,7 +251,7 @@
     {
       "area": "flags",
       "pattern": "\\w",
-      "subject": "é",
+      "subject": "\u00e9",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -314,8 +314,8 @@
     },
     {
       "area": "flags",
-      "pattern": "é",
-      "subject": "é",
+      "pattern": "\u00e9",
+      "subject": "e\u0301",
       "flags": "c",
       "mode": "first",
       "argument": ""
@@ -539,7 +539,7 @@
     {
       "area": "escapes",
       "pattern": "\\x{1F600}",
-      "subject": "😀",
+      "subject": "\ud83d\ude00",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -547,7 +547,7 @@
     {
       "area": "escapes",
       "pattern": "\\u00E9",
-      "subject": "é",
+      "subject": "\u00e9",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -571,7 +571,7 @@
     {
       "area": "escapes",
       "pattern": "\\h",
-      "subject": " ",
+      "subject": "\u00a0",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -595,7 +595,7 @@
     {
       "area": "escapes",
       "pattern": "\\X",
-      "subject": "é",
+      "subject": "e\u0301",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -603,7 +603,7 @@
     {
       "area": "escapes",
       "pattern": "\\b{g}",
-      "subject": "é",
+      "subject": "e\u0301",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -611,7 +611,7 @@
     {
       "area": "unicode-sensitive",
       "pattern": "\\p{IsGreek}",
-      "subject": "Ω",
+      "subject": "\u03a9",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -619,7 +619,7 @@
     {
       "area": "unicode",
       "pattern": "\\p{InGreek}",
-      "subject": "Ω",
+      "subject": "\u03a9",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -627,7 +627,7 @@
     {
       "area": "unicode",
       "pattern": "\\p{javaLowerCase}",
-      "subject": "é",
+      "subject": "\u00e9",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -643,7 +643,7 @@
     {
       "area": "unicode",
       "pattern": "\\d",
-      "subject": "١",
+      "subject": "\u0661",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -651,7 +651,7 @@
     {
       "area": "unicode",
       "pattern": "(?U)\\d",
-      "subject": "١",
+      "subject": "\u0661",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -659,7 +659,7 @@
     {
       "area": "unicode",
       "pattern": "(?iu)k",
-      "subject": "K",
+      "subject": "\u212a",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -715,7 +715,7 @@
     {
       "area": "replacement",
       "pattern": "",
-      "subject": "é",
+      "subject": "\u00e9",
       "flags": "",
       "mode": "replace-all",
       "argument": "X"
@@ -819,7 +819,7 @@
     {
       "area": "lines",
       "pattern": ".",
-      "subject": "",
+      "subject": "\u0085",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -827,7 +827,7 @@
     {
       "area": "lines",
       "pattern": ".",
-      "subject": " ",
+      "subject": "\u2028",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -835,7 +835,7 @@
     {
       "area": "lines",
       "pattern": ".",
-      "subject": " ",
+      "subject": "\u2029",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -851,7 +851,7 @@
     {
       "area": "lines",
       "pattern": "\\R",
-      "subject": "",
+      "subject": "\u0085",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -859,7 +859,7 @@
     {
       "area": "lines",
       "pattern": "(?d).",
-      "subject": "",
+      "subject": "\u0085",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -1035,14 +1035,14 @@
     {
       "area": "flags",
       "pattern": "\\w",
-      "subject": "é",
+      "subject": "\u00e9",
       "flags": "U",
       "mode": "first",
       "argument": ""
     },
     {
       "area": "control",
-      "pattern": "😀(",
+      "pattern": "\ud83d\ude00(",
       "subject": "",
       "flags": "",
       "mode": "compile",
@@ -1059,7 +1059,7 @@
     {
       "area": "flags",
       "pattern": "k",
-      "subject": "K",
+      "subject": "\u212a",
       "flags": "i",
       "mode": "first",
       "argument": ""
@@ -1067,7 +1067,7 @@
     {
       "area": "flags",
       "pattern": "k",
-      "subject": "K",
+      "subject": "\u212a",
       "flags": "iu",
       "mode": "first",
       "argument": ""
@@ -1075,7 +1075,7 @@
     {
       "area": "flags",
       "pattern": "k",
-      "subject": "K",
+      "subject": "\u212a",
       "flags": "iU",
       "mode": "first",
       "argument": ""
@@ -1083,7 +1083,7 @@
     {
       "area": "flags",
       "pattern": "k",
-      "subject": "K",
+      "subject": "\u212a",
       "flags": "U",
       "mode": "first",
       "argument": ""
@@ -1091,7 +1091,7 @@
     {
       "area": "flags",
       "pattern": "(?-u:k)",
-      "subject": "K",
+      "subject": "\u212a",
       "flags": "iu",
       "mode": "first",
       "argument": ""
@@ -1099,7 +1099,7 @@
     {
       "area": "flags",
       "pattern": "(?u:k)",
-      "subject": "K",
+      "subject": "\u212a",
       "flags": "i",
       "mode": "first",
       "argument": ""
@@ -1107,7 +1107,7 @@
     {
       "area": "flags",
       "pattern": "\\d",
-      "subject": "١",
+      "subject": "\u0661",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -1115,7 +1115,7 @@
     {
       "area": "flags",
       "pattern": "\\d",
-      "subject": "١",
+      "subject": "\u0661",
       "flags": "U",
       "mode": "first",
       "argument": ""
@@ -1123,7 +1123,7 @@
     {
       "area": "flags",
       "pattern": "[\\w]",
-      "subject": "é",
+      "subject": "\u00e9",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -1131,39 +1131,39 @@
     {
       "area": "flags",
       "pattern": "[\\w]",
-      "subject": "é",
+      "subject": "\u00e9",
       "flags": "U",
       "mode": "first",
       "argument": ""
     },
     {
       "area": "flags",
-      "pattern": "\\bé",
-      "subject": "é",
+      "pattern": "\\b\u00e9",
+      "subject": "\u00e9",
       "flags": "",
       "mode": "first",
       "argument": ""
     },
     {
       "area": "flags",
-      "pattern": "\\Bé",
-      "subject": "é",
+      "pattern": "\\B\u00e9",
+      "subject": "\u00e9",
       "flags": "",
       "mode": "first",
       "argument": ""
     },
     {
       "area": "flags",
-      "pattern": "\\bé",
-      "subject": "é",
+      "pattern": "\\b\u00e9",
+      "subject": "\u00e9",
       "flags": "U",
       "mode": "first",
       "argument": ""
     },
     {
       "area": "flags",
-      "pattern": "\\Bé",
-      "subject": "é",
+      "pattern": "\\B\u00e9",
+      "subject": "\u00e9",
       "flags": "U",
       "mode": "first",
       "argument": ""
@@ -1227,7 +1227,7 @@
     {
       "area": "unicode-sensitive",
       "pattern": "\\p{IsGreek}",
-      "subject": "ʹ",
+      "subject": "\u0374",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -1235,7 +1235,7 @@
     {
       "area": "unicode-sensitive",
       "pattern": "\\p{sc=Greek}",
-      "subject": "ʹ",
+      "subject": "\u0374",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -1243,7 +1243,7 @@
     {
       "area": "unicode-sensitive",
       "pattern": "\\p{sc=Greek}",
-      "subject": "ἀ",
+      "subject": "\u1f00",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -1251,7 +1251,7 @@
     {
       "area": "unicode-sensitive",
       "pattern": "\\p{InGreek}",
-      "subject": "ʹ",
+      "subject": "\u0374",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -1267,7 +1267,7 @@
     {
       "area": "unicode-sensitive",
       "pattern": "\\p{javaWhitespace}",
-      "subject": " ",
+      "subject": "\u00a0",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -1275,7 +1275,7 @@
     {
       "area": "unicode-sensitive",
       "pattern": "\\p{javaWhitespace}",
-      "subject": "",
+      "subject": "\u0085",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -1283,7 +1283,7 @@
     {
       "area": "unicode-sensitive",
       "pattern": "\\p{javaWhitespace}",
-      "subject": " ",
+      "subject": "\u2003",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -1291,7 +1291,7 @@
     {
       "area": "unicode-sensitive",
       "pattern": "\\p{javaWhitespace}",
-      "subject": " ",
+      "subject": "\u2007",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -1299,7 +1299,7 @@
     {
       "area": "unicode-sensitive",
       "pattern": "\\p{javaWhitespace}",
-      "subject": " ",
+      "subject": "\u202f",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -1307,7 +1307,7 @@
     {
       "area": "flags",
       "pattern": "(k)",
-      "subject": "K",
+      "subject": "\u212a",
       "flags": "iu",
       "mode": "first",
       "argument": ""
@@ -1323,7 +1323,7 @@
     {
       "area": "unicode-sensitive",
       "pattern": "(\\p{javaWhitespace})",
-      "subject": " ",
+      "subject": "\u2003",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -1331,7 +1331,7 @@
     {
       "area": "unicode-sensitive",
       "pattern": "(?U)(\\w+)",
-      "subject": "é",
+      "subject": "\u00e9",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -1339,23 +1339,23 @@
     {
       "area": "unicode-sensitive",
       "pattern": "\\p{javaLowerCase}",
-      "subject": "ʕ",
+      "subject": "\u0295",
       "flags": "",
       "mode": "first",
       "argument": ""
     },
     {
       "area": "flags",
-      "pattern": "𐐀",
-      "subject": "𐐨",
+      "pattern": "\ud801\udc00",
+      "subject": "\ud801\udc28",
       "flags": "i",
       "mode": "first",
       "argument": ""
     },
     {
       "area": "flags",
-      "pattern": "𐐀",
-      "subject": "𐐨",
+      "pattern": "\ud801\udc00",
+      "subject": "\ud801\udc28",
       "flags": "iu",
       "mode": "first",
       "argument": ""
@@ -1363,7 +1363,7 @@
     {
       "area": "flags",
       "pattern": "\\w",
-      "subject": "𐐨",
+      "subject": "\ud801\udc28",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -1371,7 +1371,7 @@
     {
       "area": "flags",
       "pattern": "\\w",
-      "subject": "𐐨",
+      "subject": "\ud801\udc28",
       "flags": "U",
       "mode": "first",
       "argument": ""
@@ -1379,7 +1379,7 @@
     {
       "area": "unicode-sensitive",
       "pattern": "\\p{javaLowerCase}",
-      "subject": "𐐨",
+      "subject": "\ud801\udc28",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -1387,7 +1387,7 @@
     {
       "area": "unicode-sensitive",
       "pattern": "\\p{javaDigit}",
-      "subject": "𝟎",
+      "subject": "\ud835\udfce",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -1523,7 +1523,7 @@
     {
       "area": "search",
       "pattern": "",
-      "subject": "😀é",
+      "subject": "\ud83d\ude00\u00e9",
       "flags": "",
       "mode": "all",
       "argument": ""
@@ -1531,15 +1531,15 @@
     {
       "area": "search",
       "pattern": ".",
-      "subject": "😀é",
+      "subject": "\ud83d\ude00\u00e9",
       "flags": "",
       "mode": "all",
       "argument": ""
     },
     {
       "area": "search",
-      "pattern": "(?<=😀)(é)",
-      "subject": "😀é",
+      "pattern": "(?<=\ud83d\ude00)(\u00e9)",
+      "subject": "\ud83d\ude00\u00e9",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -1554,8 +1554,8 @@
     },
     {
       "area": "search",
-      "pattern": "(?<=😀)a",
-      "subject": "😀a",
+      "pattern": "(?<=\ud83d\ude00)a",
+      "subject": "\ud83d\ude00a",
       "flags": "",
       "mode": "find-from",
       "argument": "4"
@@ -1915,31 +1915,31 @@
     {
       "area": "replacement",
       "pattern": "",
-      "subject": "é",
+      "subject": "\u00e9",
       "flags": "",
       "mode": "replace-all",
       "argument": "X"
     },
     {
       "area": "replacement",
-      "pattern": "(é)",
-      "subject": "é",
+      "pattern": "(\u00e9)",
+      "subject": "\u00e9",
       "flags": "",
       "mode": "replace-all",
       "argument": "<$1>"
     },
     {
       "area": "replacement",
-      "pattern": "(😀)",
-      "subject": "😀😀",
+      "pattern": "(\ud83d\ude00)",
+      "subject": "\ud83d\ude00\ud83d\ude00",
       "flags": "",
       "mode": "replace-first",
       "argument": "<$1>"
     },
     {
       "area": "replacement",
-      "pattern": "(😀)",
-      "subject": "😀😀",
+      "pattern": "(\ud83d\ude00)",
+      "subject": "\ud83d\ude00\ud83d\ude00",
       "flags": "",
       "mode": "replace-all",
       "argument": "<$1>"
@@ -1947,18 +1947,18 @@
     {
       "area": "replacement",
       "pattern": "",
-      "subject": "😀",
+      "subject": "\ud83d\ude00",
       "flags": "",
       "mode": "replace-all",
       "argument": "X"
     },
     {
       "area": "replacement",
-      "pattern": "😀",
-      "subject": "😀",
+      "pattern": "\ud83d\ude00",
+      "subject": "\ud83d\ude00",
       "flags": "",
       "mode": "replace-all",
-      "argument": "\\😀"
+      "argument": "\\\ud83d\ude00"
     },
     {
       "area": "replacement",
@@ -2131,7 +2131,7 @@
     {
       "area": "split",
       "pattern": "",
-      "subject": "😀",
+      "subject": "\ud83d\ude00",
       "flags": "",
       "mode": "split",
       "argument": "-1"
@@ -2323,7 +2323,7 @@
     {
       "area": "generated-match",
       "pattern": "(a|b)+",
-      "subject": "é",
+      "subject": "\u00e9",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -2363,7 +2363,7 @@
     {
       "area": "generated-match",
       "pattern": "(?i:a)b",
-      "subject": "é",
+      "subject": "\u00e9",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -2403,7 +2403,7 @@
     {
       "area": "generated-match",
       "pattern": "\\d+",
-      "subject": "é",
+      "subject": "\u00e9",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -2443,7 +2443,7 @@
     {
       "area": "generated-match",
       "pattern": "[a&&[a-z]]",
-      "subject": "é",
+      "subject": "\u00e9",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -2483,7 +2483,7 @@
     {
       "area": "generated-match",
       "pattern": "(?<=a)b",
-      "subject": "é",
+      "subject": "\u00e9",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -2523,7 +2523,7 @@
     {
       "area": "generated-match",
       "pattern": "(?=(a))a",
-      "subject": "é",
+      "subject": "\u00e9",
       "flags": "",
       "mode": "first",
       "argument": ""
@@ -2911,6 +2911,118 @@
       "flags": "",
       "mode": "split",
       "argument": "2"
+    },
+    {
+      "area": "surrogate",
+      "pattern": ".",
+      "subject": "\ud800",
+      "flags": "",
+      "mode": "w:first",
+      "argument": ""
+    },
+    {
+      "area": "surrogate",
+      "pattern": ".",
+      "subject": "\ud800\udc61",
+      "flags": "",
+      "mode": "w:first",
+      "argument": ""
+    },
+    {
+      "area": "surrogate",
+      "pattern": ".",
+      "subject": "\ud800",
+      "flags": "iu",
+      "mode": "w:first",
+      "argument": ""
+    },
+    {
+      "area": "surrogate",
+      "pattern": "\\w",
+      "subject": "\ud800",
+      "flags": "",
+      "mode": "w:first",
+      "argument": ""
+    },
+    {
+      "area": "surrogate",
+      "pattern": "\\W",
+      "subject": "\ud800",
+      "flags": "",
+      "mode": "w:first",
+      "argument": ""
+    },
+    {
+      "area": "surrogate",
+      "pattern": "\\p{Cs}",
+      "subject": "\ud800",
+      "flags": "",
+      "mode": "w:first",
+      "argument": ""
+    },
+    {
+      "area": "surrogate",
+      "pattern": "\\p{Cn}",
+      "subject": "\ud800",
+      "flags": "",
+      "mode": "w:first",
+      "argument": ""
+    },
+    {
+      "area": "surrogate",
+      "pattern": "\\p{L}",
+      "subject": "\ud800",
+      "flags": "",
+      "mode": "w:first",
+      "argument": ""
+    },
+    {
+      "area": "surrogate",
+      "pattern": "\\p{all}",
+      "subject": "\ud800",
+      "flags": "",
+      "mode": "w:first",
+      "argument": ""
+    },
+    {
+      "area": "surrogate",
+      "pattern": "[\\uD800]",
+      "subject": "\ud800",
+      "flags": "",
+      "mode": "w:first",
+      "argument": ""
+    },
+    {
+      "area": "surrogate",
+      "pattern": "[\\uD7FF-\\uE000]",
+      "subject": "\ud800",
+      "flags": "",
+      "mode": "w:first",
+      "argument": ""
+    },
+    {
+      "area": "surrogate",
+      "pattern": "\\uD800",
+      "subject": "\ud800",
+      "flags": "",
+      "mode": "w:first",
+      "argument": ""
+    },
+    {
+      "area": "surrogate",
+      "pattern": "[^a]",
+      "subject": "\ud800",
+      "flags": "",
+      "mode": "w:first",
+      "argument": ""
+    },
+    {
+      "area": "surrogate",
+      "pattern": "[^a]",
+      "subject": "\ud800\udc61",
+      "flags": "",
+      "mode": "w:first",
+      "argument": ""
     }
   ],
   "answers": [
@@ -3622,7 +3734,7 @@
     },
     {
       "kind": "replace",
-      "text": "XéX"
+      "text": "X\u00e9X"
     },
     {
       "kind": "split",
@@ -4842,19 +4954,19 @@
     },
     {
       "kind": "replace",
-      "text": "XéX"
+      "text": "X\u00e9X"
     },
     {
       "kind": "replace",
-      "text": "<é>"
+      "text": "<\u00e9>"
     },
     {
       "kind": "replace",
-      "text": "<😀>😀"
+      "text": "<\ud83d\ude00>\ud83d\ude00"
     },
     {
       "kind": "replace",
-      "text": "<😀><😀>"
+      "text": "<\ud83d\ude00><\ud83d\ude00>"
     },
     {
       "kind": "offset",
@@ -4864,7 +4976,7 @@
     },
     {
       "kind": "replace",
-      "text": "😀"
+      "text": "\ud83d\ude00"
     },
     {
       "kind": "replace",
@@ -5664,6 +5776,114 @@
       "kind": "split",
       "pieces": [
         ""
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          4
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          4
+        ]
       ]
     }
   ]
