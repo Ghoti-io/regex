@@ -54,7 +54,11 @@ observation of this machine - see §2.1.
 | GNU sed 4.9 | the POSIX and GNU replacement templates | `tools/oracle/sed_match.py`, which runs sed's per-case loop *inside* the image: sed's `s` command takes one script and one subject, so it is the one reference here with no batch protocol of its own |
 | GNU grep 3.11 | the `gnu-ere` probe column | `tools/oracle/probe.py`. Only "did a line match", which is all `grep -c` can answer |
 | vim 9.2, patches 1-1129 | Vim | `tools/oracle/vim_diff.py`: **one** `vim -es` for a whole run, reading a file of cases and writing a file of answers, through `matchstrpos()` and `matchlist()`. It asks vim's *other* engine (`set re=1`) about the rows that came back different, because vim ships two and they do not always agree. `vim_runner.py` is the one place its command line is spelled |
-| OpenJDK, .NET, Ruby, Go, Rust `regex`, Tcl, Emacs | Java, .NET, Ruby, RE2, Rust, Tcl, Emacs | one driver each, same output form. **None is installed on the machine this was written on**, and with the references in images that is no longer what decides whether they can be asked |
+| .NET 10.0.13 (SDK 10.0.402) | .NET | `tools/oracle/DotNetOracle.cs`, compiled **inside** the image at run time by Roslyn - `csc.dll` directly, against the reference assemblies already there, because `dotnet run DotNetOracle.cs` synthesises a project and restores from api.nuget.org, which a container with no network cannot do. Speaks JavaOracle.java's protocol byte for byte, `w:` WTF-8 mode included, since both are UTF-16 engines. `dotnet_runner.py` is the one place its command line is spelled |
+| Temurin JDK 25.0.4.1+1, and JDK 27+35 beside it | Java | `tools/oracle/JavaOracle.java`, run from source by `java tools/oracle/JavaOracle.java` - the JDK launches a single file without a build step, which is what .NET's row above tried and could not have. **Two pins, and only one of them gates**: `java25` is the baseline every vector was taken against and `java27` is the forward check, the `python-next` mechanism under a different name. Its `w:` mode reads WTF-8 so that an unpaired surrogate can be asked about at all, a `Matcher` answering 62 of the JDK corpus's 101 such cases with a match; `check_java_driver.py` holds the controls and `java_probe.py` the 494 pinned cases |
+| go1.25.14 (Unicode 15.0.0) | RE2 | `tools/oracle/go_match.go`, built inside the image by `go_runner.py`. **`regexp` is in the standard library**, so unlike the Rust row there is no crate to vendor and no lock file: the digest pins the compiler and the compiler carries the implementation, which is why this is a stock image where `rust`'s is built here. Three environment variables point the build cache, the module cache and GOPATH at `/tmp`, because `go build` wants all three writable and the tree is mounted read-only. **The largest Unicode skew of any pin here**: two releases behind `tools/unicode/UCD_VERSION`, so a `\p{...}` or case-fold disagreement about a code point that moved between 15.0.0 and 17.0.0 is a fact about the two versions and not a defect, and has to be excluded by name |
+| `regex` 1.13.1 (UCD 16.0.0, rustc 1.98.1) | Rust | `tools/oracle/rust_match.rs`, compiled inside the image by `rust_runner.py` against the dependency graph the image already built, so a run pays for the leaf crate only. **The one reference here pinned by a package manager's resolution**, which takes two pins and neither is enough: `=1.13.1` in the Dockerfile fixes `regex` and nothing else - its four dependencies are caret requirements, and `regex-automata` is where the matching actually happens - so `containers/rust/Cargo.lock` is committed beside it and `--locked` refuses to resolve anything else. `--offline` is load-bearing rather than an optimisation: it turns a missing crate into a build error naming it, instead of a network fetch failing obscurely inside an empty network namespace |
+| Ruby, Tcl, Emacs | Ruby, Tcl, Emacs | one driver each, same output form, and **no reference pinned yet**. The rows above were this row once: what changed is not that the machine gained them but that a reference stopped being whatever happened to be installed - so what is left here is work not done, rather than a limit of this laptop |
 
 Every driver reads a pattern, a flag string and a subject from a JSON line
 and prints one JSON line: `{"ok":true,"spans":[[0,3],[1,2],null]}`,
@@ -95,9 +99,12 @@ This library supplied the finding that pays for pinning the environment:
 from `$LANG`, which no file here recorded, and answered **1,855 of 50,980
 rows** wrongly at its own defaults on a shell with `LANG=C`. The environment
 was invisible until it had to be written down. The same argument applies to
-every row of the table above that this machine cannot run at all - OpenJDK,
-Ruby, .NET, Go - which stay unasked only because installing them is a
-decision about this laptop rather than about the library.
+every row of the table above that this machine cannot run at all -
+Ruby, Tcl, Emacs - which stay unasked only because installing them is a
+decision about this laptop rather than about the library. OpenJDK, .NET, Go
+and Rust were in that list and are not any more: each is a pinned image, and
+the argument for containerising a reference is this paragraph rather than
+convenience.
 
 Four things it is built around:
 

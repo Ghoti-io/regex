@@ -79,9 +79,11 @@ subject and prints spans or an error in one common form; `probe.py`, which
 runs the discriminating cases of [testing.md](testing.md) §5 through every
 driver and writes a report; then **every `probe` cell in
 [dialects.md](dialects.md) §5 replaced by a value with the oracle's answer
-cited**. Also a CI recipe installing the absent oracles (OpenJDK, .NET,
-Ruby, Go, Rust, Tcl, Emacs) so those probes can run when the dialect
-is implemented. *Done:* no `probe` cell remains for the implemented dialects; the report is
+cited**. Also a way to reach the absent oracles so those probes can
+run when the dialect is implemented - written here as a CI recipe installing them
+(OpenJDK, .NET, Ruby, Go, Rust, Tcl, Emacs), and since answered by pinned
+images instead: OpenJDK, .NET, Go and Rust are in `tools/oracle/containers/IMAGES`,
+and Ruby, Tcl and Emacs are not yet. *Done:* no `probe` cell remains for the implemented dialects; the report is
 committed under `tests/data/probe/`. *Depends on:* nothing.
 
 **WP-04 Conformance infrastructure.** *conformance, M.* **Landed**, less
