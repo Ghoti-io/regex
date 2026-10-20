@@ -1007,3 +1007,87 @@ TEST(Subst, PerlsReplacementCaseOperators) {
   EXPECT_EQ(replaced("(x)", "x", "\\U$1", GRX_REPLACE_GLOBAL,
                 GRX_ENGINE_AUTO, GRX_SYNTAX_PCRE), "\\Ux");
 }
+
+TEST(Subst, ConcatenationJoinsASurrogatePairItCreated) {
+  // **WTF-8 is not closed under concatenation**, and a replacement is
+  // concatenation. A piece ending in an unpaired high surrogate and a piece
+  // beginning with an unpaired low one are each valid WTF-8; put them
+  // together and the six bytes between them spell a pair the CESU-8 way,
+  // which this library refuses as *input*. So the output has to be joined,
+  // or grx_regex_replace() hands back a string grx_regex_search() will not
+  // take - which is what it did.
+  //
+  // The row is from check-oracle-replace's ecmascript arm, the first run
+  // with unpaired surrogates in its subjects: `/(a)(b)(c)/u` with the
+  // template `` $`X- `` over U+DC00 U+D800 "abcc". The prefix is written
+  // twice, so the second copy's leading low surrogate lands against the
+  // first copy's trailing high one.
+  //
+  // node's answer holds the joined character, and it could not do otherwise:
+  // a JavaScript string is UTF-16, so concatenating [..., D800] with
+  // [DC00, ...] *is* a string whose two units are one supplementary
+  // character. This is the reference's behaviour rather than a tidy-up.
+  const std::string high = "\xED\xA0\x80";          // U+D800
+  const std::string low = "\xED\xB0\x80";           // U+DC00
+  const std::string pair = "\xF0\x90\x80\x80";      // U+10000, the two joined
+  const std::string subject = low + high + "abcc";
+  const uint32_t options = GRX_OPT_UTF | GRX_OPT_WTF8;
+
+  GRX_Regex * regex = nullptr;
+  GRX_Error error;
+  ASSERT_EQ(grx_regex_compile_with_allocator("(a)(b)(c)", 9,
+                GRX_SYNTAX_ECMASCRIPT, options, nullptr, nullptr, &error,
+                &regex),
+      GRX_OK);
+  GRX_Text text {};
+  ASSERT_EQ(grx_regex_replace(regex, subject.data(), subject.size(), "$`X-",
+                4, GRX_REPLACE_GLOBAL, nullptr, nullptr, &error, &text),
+      GRX_OK);
+  const std::string got(text.data, text.length);
+  EXPECT_EQ(got, low + pair + high + "X-c");
+
+  // And the point of it: the answer is something this library will read.
+  // Before the join it was nine bytes that came back
+  // GRX_DIAG_INVALID_SUBJECT_UTF8, which is a round trip a caller is
+  // entitled to.
+  GRX_Regex * dot = nullptr;
+  ASSERT_EQ(grx_regex_compile_with_allocator(".", 1, GRX_SYNTAX_ECMASCRIPT,
+                options, nullptr, nullptr, &error, &dot),
+      GRX_OK);
+  GRX_Match * match = nullptr;
+  ASSERT_EQ(grx_match_create(dot, nullptr, &match), GRX_OK);
+  int matched = 0;
+  EXPECT_EQ(grx_regex_search(dot, got.data(), got.size(), 0, GRX_ENGINE_AUTO,
+                nullptr, match, &matched),
+      GRX_OK);
+  EXPECT_TRUE(matched);
+  grx_match_destroy(match);
+  grx_regex_free(dot);
+  grx_text_free(&text);
+
+  // Without the option nothing is joined, because nothing can have been
+  // built: a subject holding an unpaired surrogate is refused outright, and
+  // the pass is skipped for every caller who did not ask.
+  GRX_Regex * strict = nullptr;
+  ASSERT_EQ(grx_regex_compile_with_allocator("(a)(b)(c)", 9,
+                GRX_SYNTAX_ECMASCRIPT, GRX_OPT_UTF, nullptr, nullptr, &error,
+                &strict),
+      GRX_OK);
+  GRX_Text refused {};
+  EXPECT_EQ(grx_regex_replace(strict, subject.data(), subject.size(), "$`X-",
+                4, GRX_REPLACE_GLOBAL, nullptr, nullptr, &error, &refused),
+      GRX_ERR_INVALID);
+  grx_regex_free(strict);
+
+  // A pair already written as the four-byte scalar is left alone, and a high
+  // surrogate that is *not* followed by a low one stays as itself: the join
+  // must not reach either.
+  GRX_Text other {};
+  const std::string keeps = high + "-" + low;
+  ASSERT_EQ(grx_regex_replace(regex, keeps.data(), keeps.size(), "X", 1,
+                GRX_REPLACE_GLOBAL, nullptr, nullptr, &error, &other),
+      GRX_OK);
+  EXPECT_EQ(std::string(other.data, other.length), keeps);
+  grx_text_free(&other);
+  grx_regex_free(regex);
+}

@@ -116,6 +116,11 @@ def make_pattern(rng, dialect, unicode_sets=False):
     return "".join(parts)
 
 
+def wants_wtf8(dialect, flags):
+    """Whether this row is asked with GRX_OPT_WTF8."""
+    return dialect == "ecmascript" and ("u" in flags or "v" in flags)
+
+
 def ask_library(rows, dialect):
     driver = None
     for platform in ("linux", "mac", "win64", "win32"):
@@ -129,8 +134,15 @@ def ask_library(rows, dialect):
             break
     if not driver:
         return None
+    # WTF-8 and `W` for the ECMAScript rows, whose subjects may hold an
+    # unpaired surrogate: a JavaScript string can, node answers over one,
+    # and the iteration rule is what this tool is about - what follows an
+    # empty match next to a three-byte character that is not a scalar is
+    # precisely the kind of question a byte advance gets wrong. The encoding
+    # is the same bytes as UTF-8 for every subject without one.
     lines = "".join("%s\t%s\t%s\n" % (
-        flags, pattern.encode("utf-8").hex(), subject.encode("utf-8").hex())
+        flags + ("W" if wants_wtf8(dialect, flags) else ""),
+        match_diff.wtf8(pattern).hex(), match_diff.wtf8(subject).hex())
         for flags, pattern, subject in rows)
     finished = subprocess.run([driver, dialect, "auto", "all"], input=lines,
         capture_output=True, text=True, check=True)
@@ -328,7 +340,8 @@ def compare(dialect, rng, patterns, subjects, examples):
         if dialect == "ecmascript":
             for _ in range(subjects):
                 rows.append((flags, pattern,
-                    match_diff.make_subject(rng, "u" in flags or "v" in flags)))
+                    match_diff.make_subject(rng, "u" in flags or "v" in flags,
+                        surrogates="u" in flags or "v" in flags)))
         elif dialect in LINEAR:
             for subject in linear_diff.SUBJECTS:
                 rows.append((flags, pattern, subject))
@@ -358,6 +371,14 @@ def compare(dialect, rng, patterns, subjects, examples):
     start = 0
     quoting = []
     quoted = 0
+    # The surrogate axis's denominator. Both "declined" branches above
+    # swallow it silently: without `W` this library answers `error` to every
+    # such row, which is not `all ...`, so each would be counted as declined
+    # beside node's genuine mid-pair "surrogate" answers and the run would
+    # print zero disagreements over an axis it never asked about.
+    surrogate_rows = sum(1 for _, _, subject in rows
+                         if match_diff.has_lone(subject))
+    surrogate_errors = 0
 
     for index, (flags, pattern, subject) in enumerate(rows):
         a = trim(mine[index])
@@ -372,6 +393,8 @@ def compare(dialect, rng, patterns, subjects, examples):
         # loop. None of them is a disagreement about iteration.
         if not a.startswith("all ") or not b.startswith("all "):
             declined += 1
+            if a.startswith("error") and match_diff.has_lone(subject):
+                surrogate_errors += 1
             continue
         if perl_diff.reference_defect(dialect, pattern, b, subject, a):
             declined += 1
@@ -424,6 +447,19 @@ def compare(dialect, rng, patterns, subjects, examples):
         print("%-11s %d perl beginning a match before pos()" % ("", start))
     if quoted:
         print("%-11s %d perl's quoting" % ("", quoted))
+    if surrogate_rows:
+        print("%-11s %d rows hold an unpaired surrogate, %d of them this "
+              "library could not read" % ("", surrogate_rows,
+                                          surrogate_errors))
+    if surrogate_errors:
+        sys.stderr.write(
+            "%s: %d rows carrying an unpaired surrogate were a runtime error "
+            "here and an\nanswer there. They are carried as WTF-8 under "
+            "GRX_OPT_WTF8, spelled `W` to the\ndriver; without it each is "
+            "counted as \"one side declined to answer\", next to\nnode's "
+            "genuine mid-pair answers, and the rate stands over an axis "
+            "nothing\nasked about.\n" % (dialect, surrogate_errors))
+        return None
     if compared < len(rows) // 3:
         sys.stderr.write(
             "%s: fewer than a third of the rows were compared; the "

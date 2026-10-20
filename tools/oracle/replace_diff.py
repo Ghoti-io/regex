@@ -380,7 +380,26 @@ def ask_pcre2(driver, rows):
 def parse_driver(line):
     """A grx_replace line, as the shape node's answers have."""
     if line.startswith("ok "):
-        return bytes.fromhex(line[3:]).decode("utf-8", "replace")
+        data = bytes.fromhex(line[3:])
+        # surrogatepass first, because under GRX_OPT_WTF8 a result may
+        # legitimately hold an unpaired surrogate and `errors="replace"`
+        # would turn it into U+FFFD - a *different* string, so a correct
+        # answer would read as a disagreement and a mangled one as a pass.
+        #
+        # And "replace" behind it, because the byte dialects are not
+        # Unicode. perl, pcre2 and CPython here are given subjects that are
+        # arbitrary bytes - perl_diff's vocabulary carries ill-formed ones on
+        # purpose - and a replacement over those is not text in any encoding.
+        # What makes the fallback safe is that *both* sides come through this
+        # function: the reference drivers print grx_replace's own vocabulary,
+        # so an unrepresentable byte is mapped the same way on both sides and
+        # the comparison still asks about the replacement. Making it strict
+        # for everyone was a one-line change that failed the perl arm with a
+        # UnicodeDecodeError.
+        try:
+            return data.decode("utf-8", "surrogatepass")
+        except UnicodeDecodeError:
+            return data.decode("utf-8", "replace")
     if line == "ok":
         return ""
     if line.startswith("compile"):
@@ -659,6 +678,11 @@ def ask_perl(rows):
     return out
 
 
+def wants_wtf8(dialect, flags):
+    """Whether this row is asked with GRX_OPT_WTF8."""
+    return dialect == "ecmascript" and ("u" in flags or "v" in flags)
+
+
 def ask_library(driver, dialect, rows):
     r"""This library's answers, and the raw lines beside them.
 
@@ -669,9 +693,15 @@ def ask_library(driver, dialect, rows):
     turns the first into the second, which is how `\C` arrived here as 96
     disagreements on the day it was added to the shared pattern list.
     """
+    # `W` is GRX_OPT_WTF8, on the ECMAScript rows whose flags put this
+    # library in UTF mode: a JavaScript string may hold an unpaired
+    # surrogate, so a subject and therefore a *result* may. The bytes are
+    # WTF-8 for every row, which is the same bytes as UTF-8 wherever there is
+    # no unpaired surrogate to spell.
     lines = "".join("%s\t%s\t%s\t%s\n" % (
-        flags, pattern.encode("utf-8").hex(), subject.encode("utf-8").hex(),
-        template.encode("utf-8").hex())
+        flags + ("W" if wants_wtf8(dialect, flags) else ""),
+        match_diff.wtf8(pattern).hex(), match_diff.wtf8(subject).hex(),
+        match_diff.wtf8(template).hex())
         for flags, pattern, subject, template in rows)
     finished = subprocess.run([driver, dialect], input=lines,
         capture_output=True, text=True, check=True)
@@ -686,66 +716,26 @@ def ask_library(driver, dialect, rows):
 parse_ours = parse_driver
 
 
-def splits_a_surrogate_pair(text):
-    """Whether node's answer put a replacement inside a surrogate pair.
-
-    The documented deviation, dialects.md section 6: ECMA-262 matches over
-    UTF-16 code units and a zero-width assertion may therefore match between
-    the halves of a surrogate pair, where this library's subject is code
-    points and a match can begin and end only on a character boundary. A
-    global replace visits every position, so every astral subject reaches it.
-
-    Detected rather than assumed. When node replaces at such a position the
-    two halves end up separated, and the result is a string holding unpaired
-    surrogates - which is precisely a string that cannot be encoded as UTF-8.
-    Nothing else produces one, so this cannot quietly cover anything but the
-    deviation it names.
-    """
-    try:
-        text.encode("utf-8")
-    except UnicodeEncodeError:
-        return True
-    return False
-
-
-# A template with no `$` in it and no surrogate in it either, so that a
-# replacement node writes between the halves of a pair cannot be healed by
-# the text the template reinserts. See heal_split_pairs below.
-SURROGATE_PROBE = "\u00b7"
-
-
-def heal_split_pairs(text, marker):
-    """Take the marker back out from between the halves of every split pair.
-
-    A high surrogate, the marker, and a low surrogate can only have come
-    from a replacement written at a position inside a character, because
-    nothing else in this file's alphabet produces an unpaired surrogate.
-
-    The halves are then put back together, which is not cosmetic: node
-    reports them as two lone surrogates and this library reports one
-    character, and the two print the same because `json.dumps` spells an
-    astral character as a surrogate pair either way. Re-encoding through
-    UTF-16 is what makes the comparison ask about the text.
-    """
-    out = []
-    index = 0
-    while index < len(text):
-        after = index + 1 + len(marker)
-        if (0xD800 <= ord(text[index]) <= 0xDBFF
-                and text[index + 1:after] == marker
-                and after < len(text)
-                and 0xDC00 <= ord(text[after]) <= 0xDFFF):
-            out.append(text[index])
-            index = after
-            continue
-        out.append(text[index])
-        index += 1
-    joined = "".join(out)
-    try:
-        return joined.encode("utf-16", "surrogatepass").decode("utf-16")
-    except UnicodeDecodeError:
-        return joined
-
+# Two predicates stood here and are gone, replaced by an answer from the
+# oracle itself. `splits_a_surrogate_pair()` decided the deviation by asking
+# whether node's *result* could be encoded as UTF-8, on the stated premise
+# that nothing else produces an unpaired surrogate in a result; and
+# `heal_split_pairs()` with SURROGATE_PROBE re-asked the rows where a
+# template reinserted the text around the match and put the halves back
+# together, destroying the witness.
+#
+# GRX_OPT_WTF8 killed the premise: a *subject* may now hold an unpaired
+# surrogate, so a result may hold one for an entirely ordinary reason, and
+# the first run with surrogate subjects produced exactly that - `(?<n>a)(b)`
+# over "9\ud800aabxB", unmatched and returned unchanged, which the predicate
+# read as a split pair. node_replace.mjs now answers `"surrogate"` when a
+# match of the pattern begins or ends inside a pair, which is the question
+# both predicates were approximating, asked where the UTF-16 indices
+# actually are. node_split.mjs makes the same test.
+#
+# So the exclusion needs no predicate, needs no re-ask, and has no near
+# misses to control - which is why the two blocks in check_exclusions.py went
+# with it.
 
 TEMPLATE_GROUP = re.compile(r"\\[1-9]")
 
@@ -821,7 +811,8 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
         for _ in range(templates):
             template = make_template(dialect, rng)
             for _ in range(subjects):
-                subject = match_diff.make_subject(rng, "u" in flags)
+                subject = match_diff.make_subject(rng, "u" in flags,
+                    surrogates=wants_wtf8(dialect, flags))
                 rows.append((flags, pattern, subject, template))
 
     if dialect == "ecmascript":
@@ -865,6 +856,12 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
     deviation = 0
     lazy = 0
     defect = 0
+    # The surrogate axis's denominator, and the only counter here that is
+    # meant to stay at zero: every other one names a difference between two
+    # references, this one names a subject this library could not read.
+    surrogate_rows = sum(1 for _, _, subject, _ in rows
+                         if match_diff.has_lone(subject))
+    surrogate_errors = 0
 
     for (flags, pattern, subject, template), (them, count), us, raw in \
             zip(rows, theirs, mine, raw_mine):
@@ -976,8 +973,19 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
                 and nested_case_operators(template)):
             nested += 1
             continue
-        if splits_a_surrogate_pair(them):
+        if them == "surrogate":
+            # node saying a match of this pattern begins or ends inside a
+            # surrogate pair, which has no byte position here. The oracle's
+            # own answer now, asked of the match boundaries; the predicate
+            # below guessed it from the result's encodability and that
+            # premise died when a *subject* could hold a lone surrogate.
             deviation += 1
+            continue
+        if us == "error" and match_diff.has_lone(subject):
+            # The surrogate axis's denominator: a row the reference answered
+            # and this library could not read. Without `W` every one of them
+            # lands here, and "error" is otherwise an ordinary skip.
+            surrogate_errors += 1
             continue
         if count == 0 and us == "template":
             # pcre2 parses a replacement template *lazily* - only when it has
@@ -1032,48 +1040,6 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
                 disagreements.append(row)
             else:
                 tokenizer += 1
-
-    if dialect == "ecmascript" and disagreements:
-        # The surrogate-pair deviation again, for the rows the check inside
-        # the loop cannot see. That one reads node's answer and asks whether
-        # it holds an unpaired surrogate, which is what a replacement
-        # written between the halves of a pair leaves behind - but only
-        # while the template writes something that keeps them apart. A
-        # template that reinserts the text around the match puts the two
-        # halves back together across the join: `\B.??` over "aab" U+1F600
-        # "Abx" with `$'ab$`$&` heals into a string that encodes as UTF-8
-        # like any other, and the witness for the deviation is gone.
-        #
-        # So ask again with a template that cannot heal - one character,
-        # no `$`, no surrogate - and put the same rows to this library.
-        # Take node's extra marker back out from between the halves it
-        # split, and the two answers have to be equal. That is the
-        # deviation stated as a property rather than guessed from a
-        # spelling: the match sets agree except for the positions inside a
-        # character, and a replacement is a function of the match set and
-        # the template, so the row this exclusion covers is the row where
-        # nothing else differs. Anything left over is a disagreement.
-        astral = [index for index, row in enumerate(disagreements)
-            if any(ord(character) > 0xFFFF for character in row[2])]
-        if astral:
-            probe = [(disagreements[index][0], disagreements[index][1],
-                disagreements[index][2], SURROGATE_PROBE)
-                for index in astral]
-            theirs_probe = ask_node(probe)
-            ours_probe = ask_library(driver, dialect, probe)
-            healed = set()
-            if len(theirs_probe) == len(probe) \
-                    and len(ours_probe) == len(probe):
-                for index, theirs_one, ours_one in zip(
-                        astral, theirs_probe, ours_probe):
-                    if heal_split_pairs(theirs_one, SURROGATE_PROBE) \
-                            == ours_one:
-                        healed.add(index)
-            if healed:
-                deviation += len(healed)
-                compared -= len(healed)
-                disagreements = [row for index, row
-                    in enumerate(disagreements) if index not in healed]
 
     split = 0
     both_axes = []
@@ -1171,6 +1137,18 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
              unimplemented, split,
              len(both_axes),
              len(disagreements)))
+    if surrogate_rows:
+        print("%-11s %d rows hold an unpaired surrogate, %d of them this "
+              "library could not read" % ("", surrogate_rows,
+                                          surrogate_errors))
+    if surrogate_errors:
+        sys.stderr.write(
+            "%s: %d rows carrying an unpaired surrogate were a runtime error "
+            "here and an\nanswer there. They are carried as WTF-8 under "
+            "GRX_OPT_WTF8, spelled `W` to the\ndriver; without it each is a "
+            "skip and the rate stands over an axis nothing\nasked about.\n"
+            % (dialect, surrogate_errors))
+        return None
     if not rejected:
         sys.stderr.write(
             "%s: no generated pattern was rejected, so the accept/reject "

@@ -84,6 +84,11 @@ OTHER_DIALECTS = ("vim", "perl", "pcre", "python")
 ENGINES = ("pike", "backtrack", "bitstate", "dfa")
 
 
+def wants_wtf8(syntax, flags):
+    """Whether this row is asked with GRX_OPT_WTF8."""
+    return syntax == "ecmascript" and ("u" in flags or "v" in flags)
+
+
 def rows_for(syntax, rng, patterns, subjects):
     """The (flags, pattern, subject) rows to put through every engine."""
     if syntax == "ecmascript":
@@ -93,7 +98,8 @@ def rows_for(syntax, rng, patterns, subjects):
             flags = rng.choice(match_diff.FLAG_SETS)
             for _ in range(subjects):
                 out.append((flags, pattern,
-                    match_diff.make_subject(rng, "u" in flags)))
+                    match_diff.make_subject(rng, "u" in flags,
+                        surrogates="u" in flags or "v" in flags)))
         return out
 
     if syntax == "vim":
@@ -142,8 +148,19 @@ def rows_for(syntax, rng, patterns, subjects):
 
 
 def ask(driver, syntax, rows, engine):
+    # WTF-8 and `W` wherever an unpaired surrogate can appear, which is the
+    # ECMAScript rows: a JavaScript string may hold one and every engine has
+    # its own byte advance to get wrong over it. The encoding is WTF-8 for
+    # every row, because it is UTF-8 for every subject that has no unpaired
+    # surrogate in it - there is no second transport here, only a wider one.
+    #
+    # The letter goes on only where GRX_OPT_UTF is in force, since the
+    # option requires it; `match_diff.has_lone()` is not the test, because a
+    # transport that changed shape with the content of a row would be one
+    # more thing a disagreement between engines could be blamed on.
     lines = "".join("%s\t%s\t%s\n" % (
-        flags, pattern.encode("utf-8").hex(), subject.encode("utf-8").hex())
+        flags + ("W" if wants_wtf8(syntax, flags) else ""),
+        match_diff.wtf8(pattern).hex(), match_diff.wtf8(subject).hex())
         for flags, pattern, subject in rows)
     finished = subprocess.run([driver, syntax, engine], input=lines,
         capture_output=True, text=True, check=True)
@@ -175,6 +192,17 @@ def compare(driver, syntax, rng, patterns, subjects, examples):
     # should refuse it or none should. This counts the rows where that is
     # untrue, which no counter here could previously express.
     mixed_refusal = []
+    # The denominator for the surrogate axis. Every engine reads the subject
+    # through one validation gate in exec(), so a transport that stopped
+    # sending `W` would make all four answer "error" *in lockstep* - and four
+    # engines agreeing is exactly what this tool is looking for, so the rows
+    # would be counted as compared and the run would print 0 disagreements
+    # over an axis none of them had reached. A shared gate upstream of the
+    # thing being compared is the one way an engine differential can agree
+    # for a reason that has nothing to do with the engines.
+    surrogate_rows = sum(1 for _, _, subject in rows
+                         if match_diff.has_lone(subject))
+    surrogate_errors = 0
 
     for index, (flags, pattern, subject) in enumerate(rows):
         lines = {engine: answers[engine][index] for engine in ENGINES}
@@ -202,6 +230,9 @@ def compare(driver, syntax, rng, patterns, subjects, examples):
             else:
                 mixed_refusal.append((flags, pattern, subject, lines))
             continue
+        if (any(line.startswith("error") for line in lines.values())
+                and match_diff.has_lone(subject)):
+            surrogate_errors += 1
         able = {engine: line for engine, line in lines.items()
                 if not line.startswith("unsupported")}
         if len(able) < 2:
@@ -249,6 +280,19 @@ def compare(driver, syntax, rng, patterns, subjects, examples):
             for engine in ENGINES:
                 sys.stderr.write("    %-10s %s\n"
                     % (engine + ":", lines[engine]))
+        return None
+    if surrogate_rows:
+        print("%-11s %d rows hold an unpaired surrogate, %d of them this "
+              "library could not read" % ("", surrogate_rows,
+                                          surrogate_errors))
+    if surrogate_errors:
+        sys.stderr.write(
+            "%s: %d rows carrying an unpaired surrogate were a runtime error "
+            "on every engine.\nThey are carried as WTF-8 under GRX_OPT_WTF8, "
+            "spelled `W` to the driver; without\nit the subject is refused "
+            "before any engine runs, and four engines refusing in\nlockstep "
+            "is indistinguishable here from four engines agreeing.\n"
+            % (syntax, surrogate_errors))
         return None
     if sum(1 for engine in ENGINES if ran[engine]) < 2:
         sys.stderr.write(

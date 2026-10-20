@@ -33,6 +33,8 @@
  */
 
 #include <ghoti.io/regex/regex.h>
+
+#include "grx_flags.h"
 #include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -185,11 +187,29 @@ int main(int argc, char ** argv) {
     }
 
     uint32_t options = 0;
-    if (grx_options_parse(syntax, fields[0], &options, NULL) != GRX_OK) {
+    // `W` first: see grx_flags.h. No dialect's alphabet has the letter, so
+    // grx_options_parse() would refuse the whole flag string over it, and
+    // this driver's "error flags" would read as the dialect rejecting a
+    // request it had never been asked.
+    char letters[64];
+    if (!grx_oracle_take_wtf8(fields[0], letters, sizeof letters, &options)) {
       printf("error flags\n");
       fflush(stdout);
       continue;
     }
+    // Into a second variable and then ORed: grx_options_parse() *assigns*
+    // what the letters mean, so passing `&options` here would overwrite the
+    // GRX_OPT_WTF8 the lift above had just put in it. That cost 482 rows of
+    // the split differential, all of them reported as this library refusing
+    // a subject the reference answered - which is what its surrogate
+    // denominator exists to say out loud.
+    uint32_t parsed = 0;
+    if (grx_options_parse(syntax, letters, &parsed, NULL) != GRX_OK) {
+      printf("error flags\n");
+      fflush(stdout);
+      continue;
+    }
+    options |= parsed;
 
     GRX_Regex * regex = NULL;
     GRX_Error error;

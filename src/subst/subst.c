@@ -1508,6 +1508,62 @@ static GRX_Result expand(const GRX_Template * tmpl, const GRX_Match * match,
 }
 
 /** Hand a finished byte arena to the caller as a NUL-terminated GRX_Text. */
+/**
+ * Join every high surrogate immediately followed by a low one.
+ *
+ * **WTF-8 is not closed under concatenation**, which is the whole reason this
+ * exists. A piece ending in an unpaired high surrogate and a piece beginning
+ * with an unpaired low one are each valid WTF-8; put them together and the
+ * three-plus-three bytes between them spell a pair the CESU-8 way, which this
+ * library refuses as *input* - so a replacement could hand back a string its
+ * own matcher would not take. `/(a)(b)(c)/u` with the template `` $`X- ``
+ * over U+DC00 U+D800 "abcc" is the row that found it: the prefix is written
+ * twice, the second copy's leading low surrogate lands against the first
+ * copy's trailing high one, and `grx_regex_replace()` returned nine bytes
+ * that `grx_regex_search()` then answered GRX_DIAG_INVALID_SUBJECT_UTF8 to.
+ *
+ * The references do this implicitly and cannot avoid it: a Java or
+ * JavaScript string is UTF-16, so concatenating [..., D800] with [DC00, ...]
+ * *is* a string whose two units are one supplementary character. node's
+ * answer to that row holds the joined scalar, which is why this is the
+ * faithful behaviour and not a convenience.
+ *
+ * One pass, in place, only under GRX_PROGRAM_WTF8: each rewrite replaces six
+ * bytes with four, so the write cursor never passes the read cursor.
+ *
+ * @param data The output bytes.
+ * @param length In, the byte count; out, the byte count after joining.
+ */
+static void join_surrogate_pairs(char * data, size_t * length) {
+  const unsigned char * bytes = (const unsigned char *)data;
+  size_t read = 0;
+  size_t write = 0;
+  const size_t end = *length;
+  while (read < end) {
+    if (end - read >= 6 && bytes[read] == 0xEDu
+        && bytes[read + 1] >= 0xA0u && bytes[read + 1] <= 0xAFu
+        && (bytes[read + 2] & 0xC0u) == 0x80u
+        && bytes[read + 3] == 0xEDu
+        && bytes[read + 4] >= 0xB0u && bytes[read + 4] <= 0xBFu
+        && (bytes[read + 5] & 0xC0u) == 0x80u) {
+      const uint32_t high = 0xD000u | ((uint32_t)(bytes[read + 1] & 0x3Fu) << 6)
+          | (uint32_t)(bytes[read + 2] & 0x3Fu);
+      const uint32_t low = 0xD000u | ((uint32_t)(bytes[read + 4] & 0x3Fu) << 6)
+          | (uint32_t)(bytes[read + 5] & 0x3Fu);
+      const uint32_t codepoint
+          = 0x10000u + ((high - 0xD800u) << 10) + (low - 0xDC00u);
+      data[write++] = (char)(0xF0u | (codepoint >> 18));
+      data[write++] = (char)(0x80u | ((codepoint >> 12) & 0x3Fu));
+      data[write++] = (char)(0x80u | ((codepoint >> 6) & 0x3Fu));
+      data[write++] = (char)(0x80u | (codepoint & 0x3Fu));
+      read += 6;
+      continue;
+    }
+    data[write++] = data[read++];
+  }
+  *length = write;
+}
+
 static GRX_Result publish(GRX_Arena * out, const GRX_Allocator * allocator,
     GRX_Text * out_text) {
   GRX_Result result = grx_arena_reserve(out, out->count + 1);
@@ -1700,6 +1756,13 @@ GRX_Result grx_regex_replace(const GRX_Regex * regex, const char * subject,
     result = push(&out, subject + copied, end - copied);
   }
   if (result == GRX_OK) {
+    // Before publishing, because the arena's bytes are what the caller gets
+    // and a concatenation here can have spelled a pair the CESU-8 way. The
+    // other publish() above hands back the subject unchanged, which was
+    // already valid whatever it held.
+    if (regex->program.flags & GRX_PROGRAM_WTF8) {
+      join_surrogate_pairs((char *)out.data, &out.count);
+    }
     result = publish(&out, allocator, out_text);
   }
 

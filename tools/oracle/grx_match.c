@@ -62,6 +62,8 @@
  */
 
 #include <ghoti.io/regex/regex.h>
+
+#include "grx_flags.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -297,25 +299,15 @@ int main(int argc, char ** argv) {
     }
 
     uint32_t options = 0;
-    // `W` is GRX_OPT_WTF8 in every dialect this driver speaks, and Java
-    // reaches its flags through grx_options_parse() rather than the table
-    // below - its alphabet is `idmsuxU` and `W` is not in it. So the letter
-    // is lifted out before the dialect sees the rest. One spelling across
-    // every dialect, because a differential that spells the same request
-    // two ways is one edit away from asking two different questions.
+    // `W` is GRX_OPT_WTF8 in every dialect this driver speaks, and no
+    // dialect's own alphabet has it - Java's is `idmsuxU` - so it comes out
+    // before the rest is handed to the dialect. The lift is in a header
+    // because grx_replace and grx_split need the same letter to mean the
+    // same thing.
     char letters[64];
-    size_t kept = 0;
-    int want_wtf8 = 0;
-    for (const char * f = line; *f && kept + 1 < sizeof letters; f++) {
-      if (*f == 'W') {
-        want_wtf8 = 1;
-        continue;
-      }
-      letters[kept++] = *f;
-    }
-    letters[kept] = '\0';
-    if (want_wtf8) {
-      options |= GRX_OPT_WTF8 | GRX_OPT_UTF;
+    if (!grx_oracle_take_wtf8(line, letters, sizeof letters, &options)) {
+      fprintf(stderr, "grx_match: too many flag letters\n");
+      return 2;
     }
     if (syntax == GRX_SYNTAX_JAVA) {
       GRX_Error flag_error;

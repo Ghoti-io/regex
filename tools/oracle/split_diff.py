@@ -100,8 +100,13 @@ LIMITS = [None, None, None, 0, 1, 2, 3, 4, 5, 7, 100]
 SUBJECT_PIECES = match_diff.SUBJECT_PIECES + [",", ",,", ";", "a,b", ",a", "a,"]
 
 
-def make_subject(rng, unicode_mode):
+def make_subject(rng, unicode_mode, surrogates=False):
     pieces = SUBJECT_PIECES + (match_diff.ASTRAL_PIECES if unicode_mode else [])
+    if unicode_mode and surrogates:
+        # A JavaScript string may hold an unpaired surrogate and `split`
+        # answers over one, so a field can *be* one. See match_diff for why
+        # the pieces are opt-in rather than in the shared list.
+        pieces = pieces + match_diff.SURROGATE_PIECES
     return "".join(rng.choice(pieces) for _ in range(rng.randint(0, 6)))
 
 
@@ -158,16 +163,29 @@ def ask_node(rows):
     return json.loads(finished.stdout)
 
 
-def wire(rows):
-    """The rows in the transport both drivers read."""
+def wire(rows, dialect=None):
+    """The rows in the transport both drivers read.
+
+    `dialect` is only ever this library's own driver: `W` is GRX_OPT_WTF8 and
+    the reference runners - python_match, perl_split, the linear ones - have
+    no such letter and are handed the flags they expect. The *bytes* are
+    WTF-8 for everyone, which changes nothing for a subject with no unpaired
+    surrogate in it, because then WTF-8 and UTF-8 are the same bytes.
+    """
     return "".join("%s\t%s\t%s\t%s\n" % (
-        flags, pattern.encode("utf-8").hex(), subject.encode("utf-8").hex(),
+        flags + ("W" if wants_wtf8(dialect, flags) else ""),
+        match_diff.wtf8(pattern).hex(), match_diff.wtf8(subject).hex(),
         "-" if limit is None else limit)
         for flags, pattern, subject, limit in rows)
 
 
+def wants_wtf8(dialect, flags):
+    """Whether this row is asked with GRX_OPT_WTF8."""
+    return dialect == "ecmascript" and ("u" in flags or "v" in flags)
+
+
 def ask_library(driver, rows, dialect):
-    finished = subprocess.run([driver, dialect], input=wire(rows),
+    finished = subprocess.run([driver, dialect], input=wire(rows, dialect),
         capture_output=True, text=True, check=True)
     return finished.stdout.splitlines()
 
@@ -223,7 +241,11 @@ def parse_ours(line):
     count = int(fields[1])
     if not count:
         return []
-    return [None if field == "-" else bytes.fromhex(field).decode("utf-8")
+    # surrogatepass, because a field may *be* an unpaired surrogate under
+    # GRX_OPT_WTF8 and strict UTF-8 cannot read back what WTF-8 wrote. It is
+    # the right decoder and the wrong encoder: see tools/oracle/wtf8.py.
+    return [None if field == "-"
+            else bytes.fromhex(field).decode("utf-8", "surrogatepass")
             for field in fields[2].split("|")]
 
 
@@ -266,7 +288,9 @@ def main(argv):
         pattern = make_pattern(rng, "v" in flags, args.dialect)
         for _ in range(args.subjects):
             rows.append((flags, pattern, make_subject(rng, "u" in flags or
-                "v" in flags), rng.choice(LIMITS)))
+                "v" in flags,
+                surrogates=wants_wtf8(args.dialect, flags)),
+                rng.choice(LIMITS)))
 
     ours = ask_library(driver, rows, args.dialect)
     if len(ours) != len(rows):
@@ -287,6 +311,13 @@ def main(argv):
     refused = 0
     one_sided = 0
     surrogates = 0
+    # The denominator for the surrogate axis. Without `W` this library
+    # answers `error` to every row holding one, which lands in `refused`
+    # beside the rows both sides refuse - so the rate would stand over an
+    # axis nothing asked about, under a label that explains it away.
+    surrogate_rows = sum(1 for _, _, subject, _ in rows
+                         if match_diff.has_lone(subject))
+    surrogate_errors = 0
 
     for index, (flags, pattern, subject, limit) in enumerate(rows):
         mine = parse_ours(ours[index])
@@ -314,6 +345,11 @@ def main(argv):
         if yours == "error":
             refused += 1
             continue
+        if mine == "error":
+            refused += 1
+            if match_diff.has_lone(subject):
+                surrogate_errors += 1
+            continue
 
         compared += 1
         if mine != yours:
@@ -335,8 +371,18 @@ def main(argv):
         print("%-6s %d refused by one side only - a syntax question, and "
               "syntax_diff.py's" % ("", one_sided))
     if surrogates:
-        print("%-6s %d hold half a surrogate pair and cannot be compared"
+        print("%-6s %d cut a surrogate pair in half and cannot be compared"
               % ("", surrogates))
+    if surrogate_rows:
+        print("%-6s %d hold an unpaired surrogate, %d of them this library "
+              "could not read" % ("", surrogate_rows, surrogate_errors))
+    if surrogate_errors:
+        sys.stderr.write(
+            "%d rows carrying an unpaired surrogate were a runtime error "
+            "here and an\nanswer there. They are carried as WTF-8 under "
+            "GRX_OPT_WTF8, spelled `W` to the\ndriver; without it each is "
+            "counted under \"refused by both\".\n" % surrogate_errors)
+        return 2
     # A run that compared almost nothing reports zero disagreements and looks
     # exactly like a run that compared everything, which is the failure this
     # suite has already been caught by twice.

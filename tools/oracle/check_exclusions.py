@@ -95,39 +95,23 @@ block("iterate_diff.search_start_before_pos",
 
 # --------------------------------------------------------------------
 # ECMAScript: a replacement written between the halves of a pair.
+#
+# Two blocks stood here, for replace_diff.heal_split_pairs() and
+# replace_diff.splits_a_surrogate_pair(), and both predicates are gone. The
+# deviation is now reported by node itself - node_replace.mjs and
+# node_split.mjs answer "surrogate" when a match begins or ends inside a
+# pair - so there is no predicate to put a table and no near miss to refuse.
+#
+# Worth keeping as the shape rather than only as a deletion: the predicates
+# recognised the deviation by its *consequence*, an unpaired surrogate in
+# the result, on the premise that nothing else could produce one. An option
+# that let a subject hold one falsified the premise, and the first run with
+# such subjects produced a row the predicate read as a split pair when
+# nothing had been split. An exclusion identified by a side effect is an
+# exclusion that widens when something else starts producing that side
+# effect, and the fix was to ask the oracle where its own match boundaries
+# fell.
 # --------------------------------------------------------------------
-MARKER = replace_diff.SURROGATE_PROBE
-
-block("replace_diff.heal_split_pairs",
-    lambda theirs, ours:
-        replace_diff.heal_split_pairs(theirs, MARKER) == ours,
-    [
-    ("node split a pair and nothing else differs",
-     ("a" + MARKER + "b\ud83d" + MARKER + "\ude00c" + MARKER,
-      "a" + MARKER + "b\U0001F600c" + MARKER), True),
-    ("no pair was split and the two still agree",
-     ("ab" + MARKER + "\U0001F600" + MARKER + "c",
-      "ab" + MARKER + "\U0001F600" + MARKER + "c"), True),
-    ("node split a pair and this library also missed one elsewhere",
-     ("a" + MARKER + "b\ud83d" + MARKER + "\ude00c" + MARKER,
-      "a" + MARKER + "b\U0001F600c"), False),
-    ("node split a pair and this library wrote one node did not",
-     ("a" + MARKER + "b\ud83d" + MARKER + "\ude00c" + MARKER,
-      "a" + MARKER + "b\U0001F600" + MARKER + "c" + MARKER), False),
-    ("no pair was split and the answers differ anyway",
-     ("a" + MARKER + "b\U0001F600c" + MARKER,
-      "a" + MARKER + "b\U0001F600c"), False),
-])
-
-block("replace_diff.splits_a_surrogate_pair",
-    lambda text: replace_diff.splits_a_surrogate_pair(text),
-    [
-    ("a high half left on its own", ("ab\ud83dxc",), True),
-    ("a low half left on its own", ("abx\ude00c",), True),
-    ("the halves still together", ("ab\U0001F600c",), False),
-    ("no astral character at all", ("abc",), False),
-])
-
 
 # --------------------------------------------------------------------
 # glibc: the empty final iteration under a stacked quantifier.
