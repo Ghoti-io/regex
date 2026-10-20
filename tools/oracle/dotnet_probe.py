@@ -18,9 +18,8 @@ is a fact the parser will then be built against.
 
 Three of its areas earn their place:
 
-  * **`unit`** is WP-49's inventory (`notes/regex/WP-49-INTERIOR-POSITIONS.md`
-    in the workspace). .NET matches over UTF-16 code units with no code-point
-    mode, so a match boundary can fall inside a character, and this library's
+  * **`unit`** is WP-49's inventory. .NET matches over UTF-16 code units
+    with no code-point mode, so a match boundary can fall inside a character, and this library's
     spans are byte offsets into UTF-8 where it cannot. What was known before
     this file was that `.` splits a surrogate pair; what WP-49 needs is which
     *other* constructs reach an interior position - lookaround, `\b`, the

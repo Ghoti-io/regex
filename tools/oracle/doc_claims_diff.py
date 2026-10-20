@@ -111,6 +111,30 @@ def script_run_probes():
 
 CLAIMS = [
     {
+        "id": "dotnet-code-unit-label",
+        "doc": "documentation/dialects.md",
+        "quote": "Measured on the pinned .NET 10.0.13 through "
+                 "`tools/oracle/dotnet_probe.py`",
+        "labels": {"dotnet": "10.0.13"},
+        "probes": [],
+        "why": "The .NET deviation row's version label, and this claim exists "
+               "because its predecessor had none. That row said \".NET 8\" "
+               "for months with an oracle column reading \".NET SDK "
+               "(install)\", and nothing could contradict it: with no .NET "
+               "pinned there was no reference to ask, so the sentence was "
+               "unfalsifiable exactly where it was read. The label is checked "
+               "here so that raising the pin turns the row red in one run.\n"
+               "\n"
+               "No probe, and that is deliberate rather than a gap. The three "
+               "assertions this file makes are that the sentence is still "
+               "present, that the version it names is the version that "
+               "answers, and that the reference still answers what it says. "
+               "The third is already a gate: dotnet_probe.py holds all 130 "
+               "answers, the row's `unit` area among them, and compares every "
+               "one. Probing them again here would be two places to update "
+               "and one of them forgotten.",
+    },
+    {
         "id": "perl-version-label",
         "doc": "documentation/dialects.md",
         "quote": "| Feature | POSIX BRE | POSIX ERE | GNU BRE | GNU ERE "

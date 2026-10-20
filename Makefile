@@ -1287,7 +1287,7 @@ check-doc-claims: ## Re-ask the references every hand-probed claim the docs stat
 # where a sentence also states this library's answer that half has a unit test.
 check-doc-claims:
 	@$(REQUIRE_PYTHON3)
-	$(call run-oracle,perl$(comma)pcre2$(comma)node,python3 tools/oracle/doc_claims_diff.py)
+	$(call run-oracle,perl$(comma)pcre2$(comma)node$(comma)dotnet,python3 tools/oracle/doc_claims_diff.py)
 
 check-oracle-newlines: ## Compare PCRE2's newline conventions against pcre2
 # Six conventions, each deciding four things at once - what `.` refuses,

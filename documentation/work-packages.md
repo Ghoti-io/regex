@@ -1064,6 +1064,52 @@ built**, and nothing has asked for it. **WP-43 UTF-16 offset helper** if a
 consumer asks. **Not built**; no consumer has asked, which is the condition
 the package was written with.
 
+**WP-49 Positions inside a character, when the caller asks.** *engines, L.*
+**Not built**; named 2026-10-20. A search may report a match boundary inside
+a UTF-8 character, for a caller that sets a new option and for nobody else.
+
+It exists because five differences in [dialects.md](dialects.md) §6 have one
+cause: spans here are byte offsets and [design.md](design.md) §2 says a match
+may not end inside a character, while every UTF-16 reference counts code
+units and half a surrogate pair is a position those references have and this
+library does not. ECMAScript's `.` without `u`; a zero-width assertion
+landing between the halves, which bites **under** `u` and is therefore the row
+that makes this a defect rather than a concession; Java's `Matcher.find()`
+advancing one code unit, which §5.10 says this API "cannot represent";
+Java's split-pair search rows, excluded; and PCRE2's `\C`, the only construct
+in that dialect `pcre2test` accepts and this library refuses.
+
+**The default contract does not move, and that is the whole design.** Any
+offset this library returns today can slice the subject and yield valid
+UTF-8, which is what makes a span safe to pass on without checking it.
+Removing that globally would buy exactness for three dialects on subjects
+holding a character above U+FFFF and make every other consumer wrong in a way
+nothing tests. So this is an option bit, inert until set - `GRX_OPT_WTF8`'s
+shape, and §6.1 records that precedent in its own words.
+
+**Built against ECMAScript, PCRE2 and Java, and judged by them.** Those three
+have oracles, committed vectors and a red row today; .NET has no corpus at
+all, so building this for .NET first would mean designing against a guess
+with nothing to turn green. **Done** is each of the exclusions above flipping
+from a skipped row to a compared one with its count at zero, and
+`tools/oracle/check_exclusions.py` losing the blocks that guarded them - a
+finish line that already exists rather than one this package invents.
+
+**What it does not deliver**, measured rather than assumed: exact .NET
+conformance. .NET's `\p{...}` cannot match a character above U+FFFF at all -
+`\p{L}` declines U+10400, an unambiguous `Lu`, where Java matches it -
+because that engine sees two surrogates and a surrogate is `Cs`. That is what
+a class is tested *against* rather than where a boundary may *fall*, and
+fixing it means the class machinery reading code units, which is design.md
+§2's "UTF-16 or UTF-32 subjects" non-goal itself. The .NET row in §6 carries
+all three differences and marks that third one as having no package.
+
+**Nine completed dialects get re-verified by it**, which is the real cost and
+the reason it is sized L: ECMAScript, PCRE2, Perl, Python, Vim, POSIX BRE/ERE,
+GNU BRE/ERE, RE2 and Rust all answer through the same spans. *Depends on:*
+nothing built; the measurements it needs are in
+`tests/data/probe/dotnet.json`'s `unit` rows and the exclusions named above.
+
 ## 2. What "done" means for a dialect
 
 A dialect is claimed in `README.md`'s status table only when all of these
