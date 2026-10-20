@@ -1,0 +1,2069 @@
+{
+  "cases": [
+    {
+      "area": "control",
+      "pattern": "a",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "control",
+      "pattern": "a",
+      "subject": "b",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "control",
+      "pattern": "a(",
+      "subject": "",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "control",
+      "pattern": "(a)?b",
+      "subject": "b",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "control",
+      "pattern": "a",
+      "subject": "\ud83d\ude00a",
+      "flags": "",
+      "mode": "find-from",
+      "argument": "4"
+    },
+    {
+      "area": "control",
+      "pattern": "a",
+      "subject": "a",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "unit",
+      "pattern": ".",
+      "subject": "\ud83d\ude00",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "unit",
+      "pattern": "..",
+      "subject": "\ud83d\ude00",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "unit",
+      "pattern": "[\\s\\S]",
+      "subject": "\ud83d\ude00",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "unit",
+      "pattern": "[^x]",
+      "subject": "\ud83d\ude00",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "unit",
+      "pattern": ".{2}",
+      "subject": "\ud83d\ude00",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "unit",
+      "pattern": "^.$",
+      "subject": "\ud83d\ude00",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "unit",
+      "pattern": "^..$",
+      "subject": "\ud83d\ude00",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "unit",
+      "pattern": ".",
+      "subject": "a\ud83d\ude00b",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "unit",
+      "pattern": "\\p{L}",
+      "subject": "\ud83d\ude00",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "unit",
+      "pattern": "\\p{Cs}",
+      "subject": "\ud83d\ude00",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "unit",
+      "pattern": "\\p{So}",
+      "subject": "\ud83d\ude00",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "unit",
+      "pattern": "\\B",
+      "subject": "0\ud83d\ude00B",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "unit",
+      "pattern": "\\b",
+      "subject": "0\ud83d\ude00B",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "unit",
+      "pattern": "(?=.)",
+      "subject": "\ud83d\ude00",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "unit",
+      "pattern": "(?<=.)",
+      "subject": "\ud83d\ude00",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "unit",
+      "pattern": "(?<=.)x",
+      "subject": "\ud83d\ude00x",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "unit",
+      "pattern": "",
+      "subject": "\ud83d\ude00",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "unit",
+      "pattern": "x*",
+      "subject": "\ud83d\ude00",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "unit",
+      "pattern": ".",
+      "subject": "\ud83d\ude00",
+      "flags": "",
+      "mode": "split",
+      "argument": ""
+    },
+    {
+      "area": "unit",
+      "pattern": "",
+      "subject": "\ud83d\ude00",
+      "flags": "",
+      "mode": "split",
+      "argument": ""
+    },
+    {
+      "area": "unit",
+      "pattern": ".",
+      "subject": "\ud83d\ude00",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "X"
+    },
+    {
+      "area": "unit",
+      "pattern": "",
+      "subject": "\ud83d\ude00",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "-"
+    },
+    {
+      "area": "unit",
+      "pattern": ".",
+      "subject": "\ud83d\ude00",
+      "flags": "R",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "iteration",
+      "pattern": "",
+      "subject": "ab",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "iteration",
+      "pattern": "a*",
+      "subject": "ba",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "iteration",
+      "pattern": "a*",
+      "subject": "",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "iteration",
+      "pattern": "\\G.",
+      "subject": "abc",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "iteration",
+      "pattern": "(a*)*",
+      "subject": "",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "iteration",
+      "pattern": "(a*)+",
+      "subject": "b",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "iteration",
+      "pattern": "((a)|b)+",
+      "subject": "ab",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "iteration",
+      "pattern": "a",
+      "subject": "ba",
+      "flags": "",
+      "mode": "find-from",
+      "argument": "1"
+    },
+    {
+      "area": "iteration",
+      "pattern": "a",
+      "subject": "ba",
+      "flags": "",
+      "mode": "all-from",
+      "argument": "1"
+    },
+    {
+      "area": "captures",
+      "pattern": "(?<a>x)(y)",
+      "subject": "",
+      "flags": "",
+      "mode": "names",
+      "argument": ""
+    },
+    {
+      "area": "captures",
+      "pattern": "(?<a>x)(y)",
+      "subject": "xy",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "captures",
+      "pattern": "(a)(?<b>c)(d)",
+      "subject": "",
+      "flags": "",
+      "mode": "names",
+      "argument": ""
+    },
+    {
+      "area": "captures",
+      "pattern": "(?<2>a)(b)",
+      "subject": "",
+      "flags": "",
+      "mode": "names",
+      "argument": ""
+    },
+    {
+      "area": "captures",
+      "pattern": "(?<n>a)(?<n>b)",
+      "subject": "",
+      "flags": "",
+      "mode": "names",
+      "argument": ""
+    },
+    {
+      "area": "captures",
+      "pattern": "(?<n>a)\\k<n>",
+      "subject": "aa",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "captures",
+      "pattern": "(a)(b)",
+      "subject": "ab",
+      "flags": "n",
+      "mode": "names",
+      "argument": ""
+    },
+    {
+      "area": "captures",
+      "pattern": "(?<n>a)(b)",
+      "subject": "ab",
+      "flags": "n",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "captures",
+      "pattern": "(?!(a))b",
+      "subject": "b",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "captures",
+      "pattern": "(a)?b\\1",
+      "subject": "b",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "classes",
+      "pattern": "[a-z-[aeiou]]",
+      "subject": "b",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "classes",
+      "pattern": "[a-z-[aeiou]]",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "classes",
+      "pattern": "[a-z-[b-d-[c]]]",
+      "subject": "c",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "classes",
+      "pattern": "[a-z-[aeiou]]",
+      "subject": "-",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "classes",
+      "pattern": "[\\p{L}-[\\p{Lu}]]",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "classes",
+      "pattern": "[\\p{L}-[\\p{Lu}]]",
+      "subject": "A",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "classes",
+      "pattern": "\\p{IsGreek}",
+      "subject": "\u03b1",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "classes",
+      "pattern": "\\p{IsBasicLatin}",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "classes",
+      "pattern": "[[:alpha:]]",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "classes",
+      "pattern": "\\d",
+      "subject": "\u0661",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "classes",
+      "pattern": "\\d",
+      "subject": "\u0661",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "classes",
+      "pattern": "\\w",
+      "subject": "\u00e9",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "classes",
+      "pattern": "\\w",
+      "subject": "\u00e9",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "classes",
+      "pattern": "\\s",
+      "subject": "\u00a0",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "classes",
+      "pattern": "\\s",
+      "subject": "\u00a0",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "flags",
+      "pattern": "a",
+      "subject": "A",
+      "flags": "i",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "flags",
+      "pattern": "a",
+      "subject": "A",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "flags",
+      "pattern": "^b",
+      "subject": "a\nb",
+      "flags": "m",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "flags",
+      "pattern": "^b",
+      "subject": "a\nb",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "flags",
+      "pattern": ".",
+      "subject": "\n",
+      "flags": "s",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "flags",
+      "pattern": ".",
+      "subject": "\n",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "flags",
+      "pattern": "a # hi\n b",
+      "subject": "ab",
+      "flags": "x",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "flags",
+      "pattern": "a # hi\n b",
+      "subject": "ab",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "flags",
+      "pattern": "(a)",
+      "subject": "a",
+      "flags": "n",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "flags",
+      "pattern": "(a)",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "flags",
+      "pattern": "\u017f",
+      "subject": "S",
+      "flags": "i",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "flags",
+      "pattern": "\u017f",
+      "subject": "S",
+      "flags": "iC",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "flags",
+      "pattern": "(?i)a",
+      "subject": "A",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "flags",
+      "pattern": "(?-i)a",
+      "subject": "A",
+      "flags": "i",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "anchors",
+      "pattern": "a$",
+      "subject": "a\n",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "anchors",
+      "pattern": "a\\Z",
+      "subject": "a\n",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "anchors",
+      "pattern": "a\\z",
+      "subject": "a\n",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "anchors",
+      "pattern": "\\Aa",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "anchors",
+      "pattern": "a$",
+      "subject": "a\n",
+      "flags": "m",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "anchors",
+      "pattern": "$",
+      "subject": "a\n",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "lookbehind",
+      "pattern": "(?<=ab)c",
+      "subject": "abc",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "lookbehind",
+      "pattern": "(?<=a|ab)c",
+      "subject": "abc",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "lookbehind",
+      "pattern": "(?<=a{1,3})b",
+      "subject": "aaab",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "lookbehind",
+      "pattern": "(?<=a+)b",
+      "subject": "aab",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "lookbehind",
+      "pattern": "(?<=a*)b",
+      "subject": "aaab",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "lookbehind",
+      "pattern": "(?<=(a)\\1)b",
+      "subject": "aab",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "lookbehind",
+      "pattern": "(?<!a)b",
+      "subject": "cb",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "template",
+      "pattern": "b",
+      "subject": "abc",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "[$0]"
+    },
+    {
+      "area": "template",
+      "pattern": "(b)",
+      "subject": "abc",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "[$1]"
+    },
+    {
+      "area": "template",
+      "pattern": "(b)",
+      "subject": "abc",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "[${1}]"
+    },
+    {
+      "area": "template",
+      "pattern": "(?<n>b)",
+      "subject": "abc",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "[${n}]"
+    },
+    {
+      "area": "template",
+      "pattern": "b",
+      "subject": "abc",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "[$&]"
+    },
+    {
+      "area": "template",
+      "pattern": "b",
+      "subject": "abc",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "[$`]"
+    },
+    {
+      "area": "template",
+      "pattern": "b",
+      "subject": "abc",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "[$']"
+    },
+    {
+      "area": "template",
+      "pattern": "(a)(b)",
+      "subject": "ab",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "[$+]"
+    },
+    {
+      "area": "template",
+      "pattern": "b",
+      "subject": "abc",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "[$_]"
+    },
+    {
+      "area": "template",
+      "pattern": "b",
+      "subject": "abc",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "[$$]"
+    },
+    {
+      "area": "template",
+      "pattern": "b",
+      "subject": "abc",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "[$9]"
+    },
+    {
+      "area": "template",
+      "pattern": "b",
+      "subject": "abc",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "[${nope}]"
+    },
+    {
+      "area": "template",
+      "pattern": "b",
+      "subject": "abc",
+      "flags": "",
+      "mode": "replace-all",
+      "argument": "[$"
+    },
+    {
+      "area": "template",
+      "pattern": "b",
+      "subject": "abcb",
+      "flags": "",
+      "mode": "replace-first",
+      "argument": "[$0]"
+    },
+    {
+      "area": "split",
+      "pattern": ",",
+      "subject": "a,b,c",
+      "flags": "",
+      "mode": "split",
+      "argument": ""
+    },
+    {
+      "area": "split",
+      "pattern": "(,)",
+      "subject": "a,b,c",
+      "flags": "",
+      "mode": "split",
+      "argument": ""
+    },
+    {
+      "area": "split",
+      "pattern": ",",
+      "subject": "a,b,c",
+      "flags": "",
+      "mode": "split-count",
+      "argument": "2"
+    },
+    {
+      "area": "split",
+      "pattern": ",",
+      "subject": "a,b,c",
+      "flags": "",
+      "mode": "split-count",
+      "argument": "0"
+    },
+    {
+      "area": "split",
+      "pattern": ",",
+      "subject": "a,b,c",
+      "flags": "",
+      "mode": "split-count",
+      "argument": "-1"
+    },
+    {
+      "area": "split",
+      "pattern": ",",
+      "subject": ",a,",
+      "flags": "",
+      "mode": "split",
+      "argument": ""
+    },
+    {
+      "area": "split",
+      "pattern": "",
+      "subject": "ab",
+      "flags": "",
+      "mode": "split",
+      "argument": ""
+    },
+    {
+      "area": "split",
+      "pattern": "x*",
+      "subject": "abc",
+      "flags": "",
+      "mode": "split",
+      "argument": ""
+    },
+    {
+      "area": "split",
+      "pattern": ",",
+      "subject": "a,b,c",
+      "flags": "",
+      "mode": "split-count",
+      "argument": "99"
+    },
+    {
+      "area": "profile",
+      "pattern": "a|ab",
+      "subject": "ab",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "profile",
+      "pattern": "(a|ab)(c|bcd)",
+      "subject": "abcd",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "profile",
+      "pattern": "^.$",
+      "subject": "e\u0301",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "profile",
+      "pattern": "^..$",
+      "subject": "e\u0301",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "profile",
+      "pattern": "(?m)^$",
+      "subject": "a\n",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "profile",
+      "pattern": "(?m)^",
+      "subject": "a\n",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "profile",
+      "pattern": "\\w",
+      "subject": "\u00b2",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "profile",
+      "pattern": "\\w",
+      "subject": "\u0345",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "profile",
+      "pattern": "\\w",
+      "subject": "\u24b6",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "profile",
+      "pattern": "\\w",
+      "subject": "_",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "profile",
+      "pattern": "(?i)\u017f",
+      "subject": "s",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "profile",
+      "pattern": "(?i)\\w",
+      "subject": "\u017f",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "profile",
+      "pattern": ".",
+      "subject": "\r",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "profile",
+      "pattern": ".",
+      "subject": "\u2028",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "profile",
+      "pattern": "a$",
+      "subject": "a\u2028",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "profile",
+      "pattern": "\\s",
+      "subject": "\u180e",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "profile",
+      "pattern": "\\s",
+      "subject": "\u200b",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    }
+  ],
+  "answers": [
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "InsufficientClosingParentheses",
+      "description": "Invalid pattern 'a(' at offset 2. Not enough )'s."
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ],
+        null
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          4,
+          5
+        ]
+      ]
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "offset",
+      "class": "ArgumentException",
+      "message": "split-pair offset 1",
+      "driver_error": true
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          4
+        ]
+      ]
+    },
+    {
+      "kind": "offset",
+      "class": "ArgumentException",
+      "message": "split-pair offset 1",
+      "driver_error": true
+    },
+    {
+      "kind": "offset",
+      "class": "ArgumentException",
+      "message": "split-pair offset 1",
+      "driver_error": true
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          4
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          4
+        ]
+      ]
+    },
+    {
+      "kind": "offset",
+      "class": "ArgumentException",
+      "message": "split-pair offset 2",
+      "driver_error": true
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "offset",
+      "class": "ArgumentException",
+      "message": "split-pair offset 1",
+      "driver_error": true
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "offset",
+      "class": "ArgumentException",
+      "message": "split-pair offset 2",
+      "driver_error": true
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            1
+          ]
+        ],
+        [
+          [
+            5,
+            5
+          ]
+        ],
+        [
+          [
+            6,
+            6
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "offset",
+      "class": "ArgumentException",
+      "message": "split-pair offset 1",
+      "driver_error": true
+    },
+    {
+      "kind": "offset",
+      "class": "ArgumentException",
+      "message": "split-pair offset 1",
+      "driver_error": true
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          4,
+          5
+        ]
+      ]
+    },
+    {
+      "kind": "offset",
+      "class": "ArgumentException",
+      "message": "split-pair offset 1",
+      "driver_error": true
+    },
+    {
+      "kind": "offset",
+      "class": "ArgumentException",
+      "message": "split-pair offset 1",
+      "driver_error": true
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "kind": "offset",
+      "class": "ArgumentException",
+      "message": "unpaired surrogate",
+      "driver_error": true
+    },
+    {
+      "kind": "replace",
+      "text": "XX"
+    },
+    {
+      "kind": "offset",
+      "class": "ArgumentException",
+      "message": "unpaired surrogate",
+      "driver_error": true
+    },
+    {
+      "kind": "offset",
+      "class": "ArgumentException",
+      "message": "split-pair offset 1",
+      "driver_error": true
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            1
+          ]
+        ],
+        [
+          [
+            2,
+            2
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            2
+          ]
+        ],
+        [
+          [
+            2,
+            2
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            0
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            1,
+            2
+          ]
+        ],
+        [
+          [
+            2,
+            3
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          1,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            1,
+            2
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "names",
+      "names": [
+        [
+          0,
+          "0"
+        ],
+        [
+          1,
+          "1"
+        ],
+        [
+          2,
+          "a"
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "names",
+      "names": [
+        [
+          0,
+          "0"
+        ],
+        [
+          1,
+          "1"
+        ],
+        [
+          2,
+          "2"
+        ],
+        [
+          3,
+          "b"
+        ]
+      ]
+    },
+    {
+      "kind": "names",
+      "names": [
+        [
+          0,
+          "0"
+        ],
+        [
+          1,
+          "1"
+        ],
+        [
+          2,
+          "2"
+        ]
+      ]
+    },
+    {
+      "kind": "names",
+      "names": [
+        [
+          0,
+          "0"
+        ],
+        [
+          1,
+          "n"
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ],
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "names",
+      "names": [
+        [
+          0,
+          "0"
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ],
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ],
+        null
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          2,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            1,
+            1
+          ]
+        ],
+        [
+          [
+            2,
+            2
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          2,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          2,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          3,
+          4
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          2,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          3,
+          4
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          1,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "replace",
+      "text": "a[b]c"
+    },
+    {
+      "kind": "replace",
+      "text": "a[b]c"
+    },
+    {
+      "kind": "replace",
+      "text": "a[b]c"
+    },
+    {
+      "kind": "replace",
+      "text": "a[b]c"
+    },
+    {
+      "kind": "replace",
+      "text": "a[b]c"
+    },
+    {
+      "kind": "replace",
+      "text": "a[a]c"
+    },
+    {
+      "kind": "replace",
+      "text": "a[c]c"
+    },
+    {
+      "kind": "replace",
+      "text": "[b]"
+    },
+    {
+      "kind": "replace",
+      "text": "a[abc]c"
+    },
+    {
+      "kind": "replace",
+      "text": "a[$]c"
+    },
+    {
+      "kind": "replace",
+      "text": "a[$9]c"
+    },
+    {
+      "kind": "replace",
+      "text": "a[${nope}]c"
+    },
+    {
+      "kind": "replace",
+      "text": "a[$c"
+    },
+    {
+      "kind": "replace",
+      "text": "a[b]cb"
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "a",
+        "b",
+        "c"
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "a",
+        ",",
+        "b",
+        ",",
+        "c"
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "a",
+        "b,c"
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "a",
+        "b",
+        "c"
+      ]
+    },
+    {
+      "kind": "runtime",
+      "class": "ArgumentOutOfRangeException",
+      "message": "Count cannot be less than -1. (Parameter 'count')",
+      "driver_error": true
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "",
+        "a",
+        ""
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "",
+        "a",
+        "b",
+        ""
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "",
+        "a",
+        "b",
+        "c",
+        ""
+      ]
+    },
+    {
+      "kind": "split",
+      "pieces": [
+        "a",
+        "b",
+        "c"
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          4
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          4
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          2,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    }
+  ]
+}
