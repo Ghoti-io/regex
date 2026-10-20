@@ -282,7 +282,7 @@ CASES = [case("shared", p, s, f) for p, f, s, _ in SHARED] + [
 # Generated interaction inventory. Append only: the preceding pinned case IDs
 # are cited by the semantic ledger and must remain stable. Keep each cross
 # product small enough that a failing case prints as a useful reproducer.
-GENERATED_INVENTORY_REVISION = "2026-10-20c"
+GENERATED_INVENTORY_REVISION = "2026-10-20d"
 CASES += [case("generated-syntax", pattern, mode="compile") for pattern in (
     "a", "(a|b)+", "[a&&[a-z]]", "\\Q[a]+\\E", "(?<n>a)",
     "(?R)", "(?P<n>a)", "[a-\\d]", "\\g{1}")]
@@ -426,6 +426,58 @@ CASES += [case("grapheme-bound", pattern, subject, "", "all")
         ("\\b{gcb}", "a"),          # perl's spelling; not Java's
         ("\\b{wb}", "a"),
     )]
+
+# One row per profile field that no other case here discriminates.
+#
+# The audit behind this: GRX_Profile has 41 fields, Java's entry assigns 19
+# of them, and the other 22 take the zero value. A zero that is the measured
+# answer and a zero that nobody decided look identical in the table, so each
+# of those fields needs a case whose answer would *change* if the value
+# were different. 28 of the 29 confirmed the default; the twenty-ninth found
+# a defect - `(?U)\p{Graph}` matches U+E000 on JDK 25 and this library said
+# no, because posix_graph_takes_private_use had been left at the value for
+# "a dialect with no reference on this machine".
+#
+# Four fields have no case because no Java pattern can reach them:
+# ascii_classes_fold_ascii wants a narrowing ASCII flag Java does not have,
+# and the three posix_case_classes_* fields describe vim's split between its
+# own case tables and the C library's.
+CASES += [case("profile", pattern, subject) for pattern, subject in (
+    # preference and submatch: leftmost-first, not leftmost-longest.
+    ("a|ab", "ab"), ("(a|ab)(c|bcd)", "abcd"),
+    # empty_loop: what a loop over an empty body does.
+    ("(a*)*", ""), ("(a*)+", "b"),
+    # negative_look: the captures a failed body made.
+    ("(?!(a))b", "b"), ("(?!(a)|(b))c", "c"),
+    # composing: a combining mark is its own character.
+    ("^.$", "e\u0301"), ("^..$", "e\u0301"),
+    # caret_after_final_newline.
+    ("(?m)^$", "a\n"), ("(?m)^", "a\n"),
+    # word_set: which categories `\w` gains under `U`.
+    ("(?U)\\w", "\u00b2"), ("(?U)\\w", "\u0345"),
+    ("(?U)\\w", "\u24b6"), ("(?U)\\w", "_"),
+    # posix_classes_stay_ascii: they widen under `U` and are ASCII without.
+    ("(?U)\\p{Alpha}", "\u00e9"), ("\\p{Alpha}", "\u00e9"),
+    # posix_wide_general_category: which reading `Alpha` and `Alnum` take.
+    ("(?U)\\p{Alpha}", "\u0345"), ("(?U)\\p{Alpha}", "\u24b6"),
+    ("(?U)\\p{Alnum}", "\u2160"),
+    # posix_graph_takes_private_use, and the rows that bound it: assigned-ness
+    # is still excluded and the ASCII reading never reaches it.
+    ("(?U)\\p{Graph}", "\ue000"), ("(?U)\\p{Print}", "\ue000"),
+    ("(?U)\\p{Graph}", "\U000F0000"), ("\\p{Graph}", "\ue000"),
+    ("(?U)\\p{Graph}", "\u0378"),
+    # posix_graph_drops_invisibles.
+    ("(?U)\\p{Graph}", "\u00ad"), ("(?U)\\p{Graph}", "\u200b"),
+    ("(?U)\\p{Print}", "\u00ad"),
+    # and the two `Z` rows that say which categories `Print` keeps.
+    ("(?U)\\p{Graph}", "\u2028"), ("(?U)\\p{Print}", "\u2028"),
+    # mongolian_separator_is_space.
+    ("(?U)\\p{Space}", "\u180e"), ("(?U)\\s", "\u180e"),
+    # caseless_widens_shorthands and caseless_leaves_boundary_narrow.
+    ("(?i)\\w", "\u017f"), ("(?iu)\\w", "\u017f"), ("(?i)\\bs", "\u017fs"),
+    # posix_classes_fold.
+    ("(?i)\\p{Alpha}", "\u017f"), ("(?i)\\p{Lower}", "S"),
+)]
 
 
 def run(pin, rows):

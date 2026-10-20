@@ -935,6 +935,14 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     .fold_wide_option = GRX_OPT_JAVA_UNICODE_CASE,
     .newline_lf_option = GRX_OPT_JAVA_UNIX_LINES,
     .property_match = GRX_PROPERTY_JAVA,
+    // `\p{Graph}` and `\p{Print}` keep the private-use block under
+    // UNICODE_CHARACTER_CLASS: `(?U)\p{Graph}` matches U+E000 and U+F0000
+    // on JDK 25, which is perl's side of this axis and not pcre2's. Found
+    // by the profile audit - the field had been left at the default, which
+    // is the answer for a dialect with no reference on this machine and was
+    // never Java's. Unassigned (`Cn`, U+0378) is still excluded, and
+    // `\p{Graph}` without `U` is ASCII, so neither reaches this.
+    .posix_graph_takes_private_use = 1,
     // JDK 25 refuses `\p{^Name}`; every other dialect here reads the caret
     // as the negation. See the field.
     .property_caret_is_error = 1,

@@ -1048,6 +1048,46 @@ TEST(JavaBounds, ThereIsNoNegatedBoundAndTheMessageSaysWhy) {
   grx_regex_free(perl);
 }
 
+TEST(JavaClasses, GraphAndPrintKeepThePrivateUseBlockUnderU) {
+  // Found by auditing the profile rather than by a failing gate: GRX_Profile
+  // has 41 fields, Java's entry assigned 19 of them, and this was one of the
+  // 22 sitting at a zero that nobody had checked against the reference. The
+  // zero is the answer for "a dialect with no reference on this machine",
+  // which Java is not.
+  //
+  // JDK 25, measured: `(?U)\p{Graph}` and `(?U)\p{Print}` both match U+E000
+  // and U+F0000, so Java keeps `Co` - perl's side of the axis, not pcre2's,
+  // which drops it. The rows below are the bounds of the fix as much as the
+  // fix: unassigned code points stay out, and without `U` the class is
+  // ASCII and never reaches the question at all.
+  struct Row {
+    const char * pattern;
+    const char * subject;
+    int matches;
+  };
+  const Row rows[] = {
+    {"(?U)\\p{Graph}", "\xEE\x80\x80", 1},          // U+E000, private use
+    {"(?U)\\p{Print}", "\xEE\x80\x80", 1},
+    {"(?U)\\p{Graph}", "\xF3\xB0\x80\x80", 1},      // U+F0000, plane 15
+    {"\\p{Graph}", "\xEE\x80\x80", 0},              // ASCII without `U`
+    {"(?U)\\p{Graph}", "\xCD\xB8", 0},              // U+0378, unassigned
+    {"(?U)\\p{Graph}", "\xC2\xAD", 1},              // U+00AD, soft hyphen
+    {"(?U)\\p{Graph}", "\xE2\x80\x8B", 1},          // U+200B
+    {"(?U)\\p{Graph}", "\xE2\x80\xA8", 0},          // U+2028, a line separator
+    {"(?U)\\p{Print}", "\xE2\x80\xA8", 0},
+  };
+  for (const Row & row : rows) {
+    int matched = 0;
+    GRX_Capture span = {GRX_NPOS, GRX_NPOS};
+    ASSERT_EQ(search_java(row.pattern, strlen(row.pattern), row.subject,
+                  strlen(row.subject), GRX_OPT_UTF, &matched, &span),
+        GRX_OK)
+        << row.pattern << " on " << row.subject;
+    EXPECT_EQ(matched != 0, row.matches != 0)
+        << row.pattern << " on " << row.subject;
+  }
+}
+
 int main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
