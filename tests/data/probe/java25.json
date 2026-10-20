@@ -3023,6 +3023,494 @@
       "flags": "",
       "mode": "w:first",
       "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "a{^InGreek}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "a{foo}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "a{",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "a{1",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "a{1,",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "a{,3}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "a{}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "a{ 1}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "a{1,2,3}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "a{-1}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "{foo}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "{",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "{}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "{,3}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "a{1}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "a{1,}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "a{1,2}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "{3}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "{3,}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "(?:{3})",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "a|{3}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "(){3}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "^{3}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "a${3}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "(?=a){3}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "\\b{3}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "\\B{3}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "\\A{3}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "\\b{3,}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "a*{3}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "a+{3}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "a?{3}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "a{3}{4}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "a{3}{4}{5}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "(?:a){3}{4}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "[{3}]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "\\{3}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "[a{]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "a\\{foo}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "\\Q{3}\\E",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "a**",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "a{3}*",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "a{3}+",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "a{3}?",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "a{2,1}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "{3}",
+      "subject": "aaa",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "{3}",
+      "subject": "",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "{3}a",
+      "subject": "aaa",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "a{3}{4}",
+      "subject": "aaaaaaaaaaaa",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "x{2}{3}",
+      "subject": "xxxxxx",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "a*{3}",
+      "subject": "aaaa",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "a+{3}",
+      "subject": "aaaa",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "a?{3}",
+      "subject": "aaaa",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "^{3}",
+      "subject": "aaa",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "(?=a){3}",
+      "subject": "aaa",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "\\b{3}",
+      "subject": "aaa",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "(){3}",
+      "subject": "",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "{3}{4}",
+      "subject": "aaa",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "a{1,2}{3}",
+      "subject": "aaa",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "\\{3}",
+      "subject": "{3}",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "brace",
+      "pattern": "[{3}]",
+      "subject": "{",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
     }
   ],
   "answers": [
@@ -5883,6 +6371,323 @@
         [
           0,
           4
+        ]
+      ]
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "description": "Illegal repetition"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "description": "Illegal repetition"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "description": "Illegal repetition"
+    },
+    {
+      "kind": "syntax",
+      "index": 3,
+      "description": "Unclosed counted closure"
+    },
+    {
+      "kind": "syntax",
+      "index": 4,
+      "description": "Unclosed counted closure"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "description": "Illegal repetition"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "description": "Illegal repetition"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "description": "Illegal repetition"
+    },
+    {
+      "kind": "syntax",
+      "index": 5,
+      "description": "Unclosed counted closure"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "description": "Illegal repetition"
+    },
+    {
+      "kind": "syntax",
+      "index": 1,
+      "description": "Illegal repetition"
+    },
+    {
+      "kind": "syntax",
+      "index": 1,
+      "description": "Illegal repetition"
+    },
+    {
+      "kind": "syntax",
+      "index": 1,
+      "description": "Illegal repetition"
+    },
+    {
+      "kind": "syntax",
+      "index": 1,
+      "description": "Illegal repetition"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "description": "Dangling meta character '*'"
+    },
+    {
+      "kind": "syntax",
+      "index": 4,
+      "description": "Dangling meta character '*'"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 5,
+      "description": "Illegal repetition range"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          4
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          4
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
         ]
       ]
     }

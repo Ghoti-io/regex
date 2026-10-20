@@ -805,6 +805,147 @@ TEST(JavaSearch, SearchWindowKeepsPhysicalAnchorsAndVisibleLookbehind) {
   }
 }
 
+TEST(JavaBraces, EveryUnescapedBraceBeginsACountedClosure) {
+  // Java's rule, which is one rule where this family has two. Everywhere
+  // else here a `{` that spells no quantifier is an ordinary character -
+  // perl, pcre2 and CPython all match the text "a{foo}" with `/a{foo}/` -
+  // and the parser says so by rewinding and reading the brace as a literal.
+  // The JDK has no such fallback, and these are its own answers from
+  // tests/data/probe/java25.json's `brace` area.
+  //
+  // A brace is a literal there only where it cannot be an operator at all:
+  // inside a class, behind a backslash, or inside `\Q...\E`.
+  struct Row { const char * pattern; int compiles; };
+  const Row rows[] = {
+    {"a{^InGreek}", 0},    // the three rows of the JDK's own corpus that
+    {"a{foo}", 0},         // used to be excluded by name were this one
+    {"a{", 0},
+    {"a{1", 0},            // "Unclosed counted closure" there
+    {"a{1,", 0},
+    {"a{,3}", 0},
+    {"a{}", 0},
+    {"a{ 1}", 0},          // no space inside a closure, where perl allows it
+    {"a{1,2,3}", 0},
+    {"a{-1}", 0},
+    {"{foo}", 0},          // and with nothing before it either
+    {"{", 0},
+    {"{}", 0},
+    {"{,3}", 0},
+    {"a{2,1}", 0},         // "Illegal repetition range"
+    {"a**", 0},            // "Dangling meta character '*'", still an error
+    {"a{3}*", 0},          // and so is a `*` after a closure
+    {"a{1}", 1},
+    {"a{1,}", 1},
+    {"a{1,2}", 1},
+    {"a{3}+", 1},          // the possessive suffix, not a second quantifier
+    {"a{3}?", 1},          // and the lazy one
+    {"[{3}]", 1},          // a literal brace: in a class,
+    {"\\{3}", 1},          // behind a backslash,
+    {"[a{]", 1},
+    {"a\\{foo}", 1},
+    {"\\Q{3}\\E", 1},      // and inside a quoted run
+  };
+  for (const Row & row : rows) {
+    GRX_Regex * regex = nullptr;
+    GRX_Error error;
+    GRX_Result result = grx_regex_compile_with_allocator(row.pattern,
+        strlen(row.pattern), GRX_SYNTAX_JAVA, GRX_OPT_UTF, nullptr, nullptr,
+        &error, &regex);
+    EXPECT_EQ(result == GRX_OK, row.compiles != 0)
+        << row.pattern << ": " << error.message;
+    grx_regex_free(regex);
+  }
+
+  // The same patterns the other way round: every one of the refusals above
+  // is a *pattern* in perl, which is what makes this a dialect rule rather
+  // than a grammar this library tightened for everyone.
+  for (const char * pattern : {"a{^InGreek}", "a{foo}", "a{", "a{1",
+           "a{1,", "a{1,2,3}", "a{-1}", "{foo}", "{", "{}"}) {
+    GRX_Regex * regex = nullptr;
+    EXPECT_EQ(grx_regex_compile_with_allocator(pattern, strlen(pattern),
+                  GRX_SYNTAX_PERL, GRX_OPT_UTF, nullptr, nullptr, nullptr,
+                  &regex),
+        GRX_OK)
+        << pattern << " is a literal brace in perl";
+    grx_regex_free(regex);
+  }
+}
+
+TEST(JavaBraces, AClosureWithNothingToRepeatRepeatsNothing) {
+  // The other half of the rule, and the half a verdict cannot check: the
+  // JDK accepts a closure with no atom to its left and *drops* it. `{3}`
+  // matches the empty string, `a{3}{4}` matches three rather than twelve,
+  // and `x{2}{3}` matches two rather than six - so a parser that nested the
+  // second closure would compile every one of these and answer the wrong
+  // span. The subjects are long enough for either reading to show.
+  //
+  // Implemented as a repeat of an *empty node* rather than as a rule that
+  // imitates the reference: the brace is left unread, the parser reads the
+  // quantifier it is, and a repeat of nothing is nothing. The second
+  // closure on an atom that already has one is dropped by
+  // GRX_SyntaxSpec::brace_quantifier_after_quantifier_ignored, because
+  // there nesting would be observable.
+  struct Row {
+    const char * pattern;
+    const char * subject;
+    int matched;
+    size_t start;
+    size_t end;
+  };
+  const Row rows[] = {
+    {"{3}", "aaa", 1, 0, 0},
+    {"{3}", "", 1, 0, 0},
+    {"{3}a", "aaa", 1, 0, 1},
+    {"{3}{4}", "aaa", 1, 0, 0},
+    {"a{3}{4}", "aaaaaaaaaaaa", 1, 0, 3},     // three, not twelve
+    {"x{2}{3}", "xxxxxx", 1, 0, 2},           // two, not six
+    {"a{3}{4}{5}", "aaaaaaaaaaaa", 1, 0, 3},
+    {"a{1,2}{3}", "aaa", 1, 0, 2},
+    {"a*{3}", "aaaa", 1, 0, 4},
+    {"a+{3}", "aaaa", 1, 0, 4},
+    {"a?{3}", "aaaa", 1, 0, 1},               // one, not three
+    {"^{3}", "aaa", 1, 0, 0},
+    {"a${3}", "aaa", 1, 2, 3},
+    {"(?=a){3}", "aaa", 1, 0, 0},
+    {"\\b{3}", "aaa", 1, 0, 0},               // `\b{3}` is a closure on the
+    {"\\B{3}", "aaa", 1, 1, 1},               // boundary, not a bound name
+    {"\\A{3}", "aaa", 1, 0, 0},
+    {"(){3}", "", 1, 0, 0},
+    {"(?:{3})", "aaa", 1, 0, 0},
+    {"a|{3}", "aaa", 1, 0, 1},
+    {"\\{3}", "{3}", 1, 0, 3},                // and the literal still is one
+    {"[{3}]", "{", 1, 0, 1},
+  };
+  for (const Row & row : rows) {
+    int matched = 0;
+    GRX_Capture span = {GRX_NPOS, GRX_NPOS};
+    ASSERT_EQ(search_java(row.pattern, strlen(row.pattern), row.subject,
+                  strlen(row.subject), GRX_OPT_UTF, &matched, &span),
+        GRX_OK)
+        << row.pattern;
+    EXPECT_EQ(matched != 0, row.matched != 0) << row.pattern;
+    if (matched && row.matched) {
+      EXPECT_EQ(span.start, row.start) << row.pattern << " start";
+      EXPECT_EQ(span.end, row.end) << row.pattern << " end";
+    }
+  }
+
+  // `\b{g}` is still the grapheme bound, which is the name the quantifier
+  // rule must not swallow: it is a brace that cannot be a count.
+  int matched = 0;
+  GRX_Capture span = {GRX_NPOS, GRX_NPOS};
+  ASSERT_EQ(search_java("\\b{g}", 5, "ab", 2, GRX_OPT_UTF, &matched, &span),
+      GRX_OK);
+  EXPECT_TRUE(matched);
+  // And an unknown bound name is still an error rather than a closure.
+  GRX_Regex * regex = nullptr;
+  EXPECT_NE(grx_regex_compile_with_allocator("\\b{nosuch}", 10,
+                GRX_SYNTAX_JAVA, GRX_OPT_UTF, nullptr, nullptr, nullptr,
+                &regex),
+      GRX_OK);
+  grx_regex_free(regex);
+}
+
 int main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

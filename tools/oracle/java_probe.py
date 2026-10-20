@@ -282,7 +282,7 @@ CASES = [case("shared", p, s, f) for p, f, s, _ in SHARED] + [
 # Generated interaction inventory. Append only: the preceding pinned case IDs
 # are cited by the semantic ledger and must remain stable. Keep each cross
 # product small enough that a failing case prints as a useful reproducer.
-GENERATED_INVENTORY_REVISION = "2026-10-20"
+GENERATED_INVENTORY_REVISION = "2026-10-20b"
 CASES += [case("generated-syntax", pattern, mode="compile") for pattern in (
     "a", "(a|b)+", "[a&&[a-z]]", "\\Q[a]+\\E", "(?<n>a)",
     "(?R)", "(?P<n>a)", "[a-\\d]", "\\g{1}")]
@@ -354,6 +354,44 @@ CASES += [case("surrogate", pattern, subject, flags, "w:first")
         ("\\uD800", LONE_HIGH, ""),       # a bare escape
         ("[^a]", LONE_HIGH, ""),          # a negated class
         ("[^a]", SURROGATE_PAIR, ""),     # and over a pair
+    )]
+
+# The counted closure, which is one rule the JDK applies where every other
+# dialect in this family applies two. An unescaped `{` always begins one
+# there - `a{foo}` is "Illegal repetition" where perl, pcre2 and CPython all
+# match the text "a{foo}" - and a closure with no atom to its left is
+# accepted and repeats nothing: `{3}` matches empty, `a{3}{4}` matches three
+# rather than twelve, and `a{3}*` is still an error.
+#
+# Asked as compile *and* match rows, because the two halves fail
+# differently: a parser that refused `{3}` would be caught by the verdict
+# alone, while one that nested `a{3}{4}` into twelve would compile and give
+# the wrong span. The subject is long enough for either reading to show.
+CASES += [case("brace", pattern, mode="compile") for pattern in (
+    # Malformed, and each is a syntax error in the JDK and a literal brace
+    # everywhere else here.
+    "a{^InGreek}", "a{foo}", "a{", "a{1", "a{1,", "a{,3}", "a{}", "a{ 1}",
+    "a{1,2,3}", "a{-1}", "{foo}", "{", "{}", "{,3}",
+    # Well formed, including where there is nothing to repeat.
+    "a{1}", "a{1,}", "a{1,2}", "{3}", "{3,}", "(?:{3})", "a|{3}", "(){3}",
+    "^{3}", "a${3}", "(?=a){3}", "\\b{3}", "\\B{3}", "\\A{3}", "\\b{3,}",
+    "a*{3}", "a+{3}", "a?{3}", "a{3}{4}", "a{3}{4}{5}", "(?:a){3}{4}",
+    # Where a brace is a literal even in the JDK.
+    "[{3}]", "\\{3}", "[a{]", "a\\{foo}", "\\Q{3}\\E",
+    # And the orderings and suffixes the rule must not swallow: `a{3}*` is
+    # "Dangling meta character" there, while `a{3}+` and `a{3}?` are the
+    # possessive and lazy suffixes.
+    "a**", "a{3}*", "a{3}+", "a{3}?", "a{2,1}",
+)]
+CASES += [case("brace", pattern, subject)
+    for pattern, subject in (
+        ("{3}", "aaa"), ("{3}", ""), ("{3}a", "aaa"),
+        ("a{3}{4}", "aaaaaaaaaaaa"),      # three, not twelve
+        ("x{2}{3}", "xxxxxx"),            # two, not six
+        ("a*{3}", "aaaa"), ("a+{3}", "aaaa"), ("a?{3}", "aaaa"),
+        ("^{3}", "aaa"), ("(?=a){3}", "aaa"), ("\\b{3}", "aaa"),
+        ("(){3}", ""), ("{3}{4}", "aaa"), ("a{1,2}{3}", "aaa"),
+        ("\\{3}", "{3}"), ("[{3}]", "{"),
     )]
 
 

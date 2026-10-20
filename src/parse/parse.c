@@ -1031,6 +1031,34 @@ static GRX_Result parse_term(GRX_Parser * parser, uint32_t * out_node) {
     return GRX_OK;
   }
 
+  // A braced second quantifier, where the dialect reads one and discards it.
+  // Java: `a{3}{4}` compiles and matches three rather than twelve, so the
+  // closure is dropped and not nested - while `a{3}*` is still an error, and
+  // that asymmetry is the whole reason this is a separate field from
+  // allow_double_quantifier. Consumed in a loop because `a{3}{4}{5}`
+  // compiles too.
+  //
+  // Before the second parse_quantifier() call rather than after it, so that
+  // nothing is ever wrapped and then unwrapped: a repeat node built here
+  // would change what the engines see for a construct the reference ignores.
+  if (parser->spec.brace_quantifier_after_quantifier_ignored) {
+    while (!in_quote(parser) && at_operator(parser, '{')) {
+      size_t brace = parser->position;
+      parser->position += operator_width(parser, '{');
+      GRX_Quantifier dropped = {0, GRX_REPEAT_INF, 0, GRX_REPEAT_GREEDY};
+      GRX_Result read = parser->frontend->brace_quantifier(parser, &dropped);
+      if (read != GRX_OK) {
+        return read;
+      }
+      if (!dropped.is_quantifier) {
+        // Not a closure after all, so it is whatever else a `{` can be in
+        // this dialect and the next atom reads it.
+        parser->position = brace;
+        break;
+      }
+    }
+  }
+
   // A second quantifier on the same atom. `a**` is an error everywhere but
   // GNU's syntaxes, which is a feature bit rather than a special case here.
   size_t second = parser->position;

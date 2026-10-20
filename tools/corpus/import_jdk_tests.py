@@ -104,11 +104,12 @@ FLAGS = {"i": "i", "m": "m"}
 # By case id rather than by shape: a predicate for "a brace that is not a
 # quantifier" would quietly absorb the next case of something else, and an
 # exclusion nobody can see is an exclusion nobody audits.
-EXCLUDED = {
-    ("TestCases.txt", 141): "a non-quantifier brace after an atom",
-    ("BMPTestCases.txt", 103): "a non-quantifier brace after an atom",
-    ("SupplementaryTestCases.txt", 126): "a non-quantifier brace after an atom",
-}
+# Empty, and the stale check below is what keeps it honest: a key whose row
+# this library now agrees on is reported as "AGREES NOW - remove it from
+# EXCLUDED" rather than counted as an exclusion. That is how the three
+# `{^InGreek}` rows left - they were the brace deviation, and the parser
+# gained the rule on 2026-10-20.
+EXCLUDED = {}
 
 
 class Unreadable(Exception):

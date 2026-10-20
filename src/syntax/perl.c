@@ -795,12 +795,23 @@ static const BoundType bound_types[] = {
  * cannot say that: grx_parse_fail() returns GRX_ERR_SYNTAX too, and reading
  * "not a bound" out of "an unknown bound type" let `\b{nosuch}` compile.
  */
+static int brace_is_repeat(const GRX_Parser * parser, size_t at);
+
 static GRX_Result read_bound_type(GRX_Parser * parser, size_t start,
     int negated, int * out_handled, GRX_AnchorKind * out_anchor) {
   *out_handled = 0;
   if ((flavour(parser) != FLAVOUR_PERL
           && flavour(parser) != FLAVOUR_JAVA)
       || byte_at(parser, 0) != '{') {
+    return GRX_OK;
+  }
+  // Java reads a brace holding a count as a *quantifier* on the boundary,
+  // not as a bound name: `\b{3}` compiles on JDK 25, where perl answers
+  // "'3' is an unknown bound type in regex". `\b{g}` is still the grapheme
+  // bound in both. So the brace is handed back to the quantifier reader
+  // whenever it could be one - the same question `\N{...}` already asks
+  // below, and for the same reason.
+  if (flavour(parser) == FLAVOUR_JAVA && brace_is_repeat(parser, 0)) {
     return GRX_OK;
   }
 
@@ -5103,6 +5114,90 @@ static void skip_quantifier_space(const GRX_Parser * parser, size_t * scan) {
   }
 }
 
+/**
+ * Whether this dialect reads every unescaped `{` as a counted closure.
+ *
+ * Java does, which is one rule rather than the two it looks like. Everywhere
+ * else in this family a `{` that does not spell a quantifier is an ordinary
+ * character - `a{foo}` matches the text "a{foo}" in perl, pcre2 and CPython -
+ * and `pcre_brace_quantifier()` says so by returning GRX_OK with
+ * `is_quantifier` clear, which rewinds the parser and lets the brace be read
+ * as a literal. The JDK has no such fallback: measured on JDK 25,
+ * `a{^InGreek}`, `a{foo}`, `a{`, `a{}`, `a{,3}`, `a{ 1}`, `a{-1}`, `a{1`,
+ * `a{1,` and `a{1,2,3}` are each a PatternSyntaxException, and so are
+ * `{foo}`, `{`, `{}` and `{,3}` with nothing before them. A brace is a
+ * literal there only inside a class or behind a backslash: `[{3}]` and
+ * `\{3}` both compile.
+ *
+ * The two messages it gives are the two states this scan can be in, which is
+ * why the offsets below are where they are. No digit where the first one has
+ * to be is "Illegal repetition" at the character after the `{`; digits read
+ * and then something that is neither `,` nor `}` is "Unclosed counted
+ * closure" at that character. Both are GRX_DIAG_INVALID_QUANTIFIER here,
+ * which is the diagnostic for a malformed repetition count.
+ */
+static int brace_must_be_a_quantifier(const GRX_Parser * parser) {
+  return flavour(parser) == FLAVOUR_JAVA;
+}
+
+/**
+ * Java's grammar for the inside of a counted closure, which admits no space.
+ *
+ * `a{ 1}` is "Illegal repetition" on JDK 25 where perl and pcre2 both read
+ * `{ 1 }` as `{1}`, so the shared scan's skip_quantifier_space() is not
+ * Java's and this is a separate reader rather than a flag inside that one.
+ * `parser->position` is just past the `{`.
+ */
+static GRX_Result java_brace_quantifier(
+    GRX_Parser * parser, GRX_Quantifier * out) {
+  size_t scan = 0;
+  uint64_t min = 0;
+  int min_digits = 0;
+  while (is_decimal(byte_at(parser, scan)) && min < 0xFFFFFFFFu) {
+    min = min * 10 + (uint64_t)(byte_at(parser, scan) - '0');
+    scan++;
+    min_digits++;
+  }
+  if (!min_digits) {
+    // Nothing that could begin a count. The JDK reports this at the
+    // character after the brace, including at the end of the pattern.
+    return grx_parse_fail(parser, GRX_DIAG_INVALID_QUANTIFIER,
+        parser->position, 0);
+  }
+
+  if (byte_at(parser, scan) == '}') {
+    parser->position += scan + 1;
+    out->min = (uint32_t)min;
+    out->max = (uint32_t)min;
+    out->is_quantifier = 1;
+    return check_repeat_bound(parser, min, min);
+  }
+
+  if (byte_at(parser, scan) != ',') {
+    return grx_parse_fail(parser, GRX_DIAG_INVALID_QUANTIFIER,
+        parser->position + scan, 0);
+  }
+  scan++;
+
+  uint64_t max = 0;
+  int max_digits = 0;
+  while (is_decimal(byte_at(parser, scan)) && max < 0xFFFFFFFFu) {
+    max = max * 10 + (uint64_t)(byte_at(parser, scan) - '0');
+    scan++;
+    max_digits++;
+  }
+  if (byte_at(parser, scan) != '}') {
+    return grx_parse_fail(parser, GRX_DIAG_INVALID_QUANTIFIER,
+        parser->position + scan, 0);
+  }
+
+  parser->position += scan + 1;
+  out->min = (uint32_t)min;
+  out->max = max_digits ? (uint32_t)max : GRX_REPEAT_INF;
+  out->is_quantifier = 1;
+  return check_repeat_bound(parser, min, max_digits ? max : 0);
+}
+
 static GRX_Result pcre_brace_quantifier(
     GRX_Parser * parser, GRX_Quantifier * out) {
   size_t scan = 0;
@@ -5110,6 +5205,10 @@ static GRX_Result pcre_brace_quantifier(
   int min_digits = 0;
 
   *out = (GRX_Quantifier) {0, GRX_REPEAT_INF, 0, GRX_REPEAT_GREEDY};
+
+  if (brace_must_be_a_quantifier(parser)) {
+    return java_brace_quantifier(parser, out);
+  }
 
   skip_quantifier_space(parser, &scan);
   while (is_decimal(byte_at(parser, scan)) && min < 0xFFFFFFFFu) {
@@ -5121,10 +5220,6 @@ static GRX_Result pcre_brace_quantifier(
 
   if (byte_at(parser, scan) == '}') {
     if (!min_digits) {
-      if (flavour(parser) == FLAVOUR_JAVA) {
-        return grx_parse_fail(parser, GRX_DIAG_INVALID_QUANTIFIER,
-            parser->position - 1, scan + 2);
-      }
       return GRX_OK;
     }
     parser->position += scan + 1;
@@ -5152,11 +5247,6 @@ static GRX_Result pcre_brace_quantifier(
     return GRX_OK;
   }
 
-  if (flavour(parser) == FLAVOUR_JAVA && !min_digits) {
-    return grx_parse_fail(parser, GRX_DIAG_INVALID_QUANTIFIER,
-        parser->position - 1, scan + 2);
-  }
-
   parser->position += scan + 1;
   out->min = (uint32_t)min;
   out->max = max_digits ? (uint32_t)max : GRX_REPEAT_INF;
@@ -5176,6 +5266,28 @@ static GRX_Result pcre_literal_atom(GRX_Parser * parser, uint32_t codepoint,
     GRX_Quantifier bounds = {0, GRX_REPEAT_INF, 0, GRX_REPEAT_GREEDY};
     GRX_Result probe = pcre_brace_quantifier(parser, &bounds);
     parser->position = resume;
+    if (brace_must_be_a_quantifier(parser)) {
+      // Java has no literal-brace reading to fall back to, so the probe's
+      // verdict is the answer: either the closure is malformed and its own
+      // diagnostic stands, or it is well formed and applies to *nothing*.
+      //
+      // `{3}` compiles on JDK 25 and matches the empty string, `{3}a`
+      // matches just the "a", and `(?:{3})` and `a|{3}` compile too - so
+      // the closure is not an error and not an atom either. An empty node
+      // is exactly what it repeats: the brace is left unread, the parser
+      // reads it as the quantifier it is, and the repeat of nothing is
+      // nothing, which is the reference's answer by construction rather
+      // than by a rule written to imitate it.
+      if (probe != GRX_OK) {
+        return probe;
+      }
+      parser->position = offset;
+      if (grx_pattern_add_node(parser->pattern, GRX_NODE_EMPTY, offset, 0,
+              out_node) != GRX_OK) {
+        return grx_parse_fail(parser, GRX_DIAG_OUT_OF_MEMORY, offset, 0);
+      }
+      return GRX_OK;
+    }
     if (probe == GRX_OK && bounds.is_quantifier) {
       return grx_parse_fail(parser, GRX_DIAG_NOTHING_TO_REPEAT, offset, 1);
     }
@@ -5368,7 +5480,13 @@ static GRX_Result pcre_check_quantifier_target(
       // corpus row that asked is `m?^xy\?$?`, which reads as the match
       // operator in Perl's own harness and as a pattern ending in a
       // quantified `$` everywhere the importer looks at it.
-      if (flavour(parser) == FLAVOUR_PERL) {
+      //
+      // Java is perl's side of it, measured rather than assumed: `^*`,
+      // `a$*`, `\b*`, `^{3}`, `a${3}`, `\b{3}`, `\B{3}` and `\A{3}` all
+      // compile on JDK 25. Repeating a zero-width assertion changes
+      // nothing, which is why neither reference minds.
+      if (flavour(parser) == FLAVOUR_PERL
+          || flavour(parser) == FLAVOUR_JAVA) {
         return GRX_OK;
       }
       return grx_parse_fail(
@@ -5379,6 +5497,14 @@ static GRX_Result pcre_check_quantifier_target(
     // is a syntax error in ECMAScript's Unicode mode. So is `(*ACCEPT)*`.
     // Both were refused until the corpus said otherwise.
     case GRX_NODE_EMPTY:
+      // Java reaches this through its own door: pcre_literal_atom() answers
+      // a leading counted closure with an empty node for the closure to
+      // repeat, so refusing it here would refuse `{3}`, and `{3}{4}` is the
+      // case that needs it twice. Nothing else in this dialect produces an
+      // empty node at a quantifier's left.
+      if (flavour(parser) == FLAVOUR_JAVA) {
+        return GRX_OK;
+      }
       return grx_parse_fail(
           parser, GRX_DIAG_NOTHING_TO_REPEAT, offset, length);
 

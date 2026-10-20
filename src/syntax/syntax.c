@@ -253,6 +253,8 @@ static const GRX_SyntaxSpec spec_table[GRX_SYNTAX_COUNT] = {
         | ATOM | FLAG | SFLG | UPRP | CSET | WORD | ANCH | QUOT | HEX | OCT
         | CTRL,
     .default_options = GRX_OPT_UTF,
+    // `a{3}{4}` compiles and matches three; `a{3}*` does not compile.
+    .brace_quantifier_after_quantifier_ignored = 1,
   },
   [GRX_SYNTAX_DOTNET] = {
     .features = ALT | REP | LAZY | NCAP | NAME | BREF | LAH | LBH | ATOM

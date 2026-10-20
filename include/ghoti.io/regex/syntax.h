@@ -410,6 +410,23 @@ typedef struct GRX_SyntaxSpec {
    */
   int allow_double_quantifier;
   /**
+   * Non-zero when a *braced* second quantifier is accepted and ignored.
+   *
+   * Java, and only for the braced form, which is why this is not
+   * allow_double_quantifier. `a{3}*` is "Dangling meta character '*'" there
+   * and `a{3}{4}` compiles - and matches three, not twelve, so the second
+   * closure is dropped rather than nested. Measured on JDK 25: `a{3}{4}`
+   * and `x{2}{3}` match 0-3 and 0-2 on subjects long enough for either
+   * reading, `a{3}{4}{5}` compiles, and `a**` and `a{3}*` are both errors.
+   *
+   * It is the same rule as a closure with nothing before it at all - `{3}`
+   * compiles and matches empty - seen from the other side: Java's parser
+   * reads a counted closure wherever it meets one and applies it to the
+   * previous *atom* only if it just read one. What is unusual is not the
+   * acceptance but the silence, so a dialect has to ask for it.
+   */
+  int brace_quantifier_after_quantifier_ignored;
+  /**
    * Non-zero when something ignorable between two quantifiers separates
    * them, so that the second is not a second quantifier at all.
    *
