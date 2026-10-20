@@ -354,6 +354,46 @@ TEST(JavaParser, ACaretInsidePropertyBracesIsASyntaxError) {
   EXPECT_FALSE(matches_java("\\P{L}", "a"));
 }
 
+TEST(JavaParser, AnUnpairedSurrogateIsRefusedRatherThanAnswered) {
+  // The JDK answers these: a lone surrogate is an ordinary `char` to
+  // `Matcher`, and of the 101 cases in the JDK's own corpus that carry one,
+  // 62 match there and 39 do not - none is an error. This dialect refuses
+  // them instead, on both sides, because a lone surrogate is not a Unicode
+  // scalar value and has no well-formed UTF-8 encoding.
+  //
+  // Pinned here because it is a documented deviation in dialects.md section
+  // 6 and a documented deviation nobody tests is a sentence. What must not
+  // happen is the third possibility: taking the WTF-8 bytes as opaque and
+  // reporting a span the JDK would not. `pcre` does match them bytewise,
+  // which is why this is a property of this dialect rather than of the API.
+  const char wtf8_d800[] = "\xED\xA0\x80";          // U+D800 in WTF-8
+  GRX_Error error;
+
+  // In the pattern: refused by name, not matched and not accepted.
+  EXPECT_EQ(compile_java(wtf8_d800, &error), GRX_ERR_SYNTAX);
+  EXPECT_EQ(error.diag, GRX_DIAG_INVALID_UTF8_IN_PATTERN);
+
+  // In the subject: refused, rather than scanned as three bytes.
+  GRX_Regex * regex = nullptr;
+  ASSERT_EQ(grx_regex_compile_with_allocator(".", 1, GRX_SYNTAX_JAVA,
+                GRX_OPT_NONE, nullptr, nullptr, &error, &regex),
+      GRX_OK)
+      << error.message;
+  GRX_Match * match = nullptr;
+  ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+  int matched = 0;
+  EXPECT_EQ(grx_regex_search(regex, wtf8_d800, sizeof wtf8_d800 - 1, 0,
+                GRX_ENGINE_AUTO, nullptr, match, &matched),
+      GRX_ERR_INVALID);
+  grx_match_destroy(match);
+  grx_regex_free(regex);
+
+  // A surrogate *pair* is a scalar, encodes, and is handled normally: this
+  // is U+10061, which the corpus's supplementary cases are full of.
+  EXPECT_TRUE(matches_java("\\x{10061}", "\U00010061"));
+  EXPECT_TRUE(matches_java(".", "\U00010061"));
+}
+
 TEST(JavaParser, ReportsUtf8ByteOffsets) {
   GRX_Error error;
   EXPECT_EQ(compile_java("\xF0\x9F\x98\x80(", &error), GRX_ERR_SYNTAX);
