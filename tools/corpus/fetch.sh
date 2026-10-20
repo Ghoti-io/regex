@@ -11,7 +11,7 @@
 #
 # Everything lands in third_party/<name>/<ref>/, which .gitignore excludes.
 #
-# Usage:  tools/corpus/fetch.sh [test262|pcre2|perl|glibc|musl|all]
+# Usage:  tools/corpus/fetch.sh [test262|pcre2|perl|glibc|musl|jdk|all]
 #
 # Copyright 2026 by Corey Pennycuff
 
@@ -119,15 +119,41 @@ fetch_musl() {
   done
 }
 
+# The JDK's own regular expression test cases: three data files read by
+# test/jdk/java/util/regex/RegExTest.java, in a documented three-line format
+# that file's own comment describes. 860 cases.
+#
+# Pinned to the jdk25u update train rather than to jdk-25-ga, because the
+# oracle is Temurin 25.0.4.1+1 and a corpus should name the release it was
+# taken beside. The three files are byte-identical across jdk-25-ga,
+# jdk-25.0.4-ga and jdk-25.0.4+1 - they were last touched in 2009 - so the
+# precise pin costs nothing and says what was fetched.
+#
+# **These files are GPL-2.0-only with no Classpath exception**, which is why
+# only the pin is committed and the files are not. Every other corpus here is
+# permissive or upgrade-compatible; this one cannot be combined into an
+# LGPL-3.0-only work, so nothing derived from it is committed either without
+# a decision that is not this script's to make.
+fetch_jdk() {
+  ref=$(ref_for jdk)
+  base="https://raw.githubusercontent.com/openjdk/jdk25u/$ref/test/jdk/java/util/regex"
+  dest="$root/third_party/jdk/$ref"
+  for file in TestCases.txt BMPTestCases.txt SupplementaryTestCases.txt; do
+    fetch_file "$dest/$file" "$base/$file"
+  done
+}
+
 case "$what" in
   test262) fetch_test262 ;;
   pcre2)   fetch_pcre2 ;;
   perl)    fetch_perl ;;
   glibc)   fetch_glibc ;;
   musl)    fetch_musl ;;
-  all)     fetch_test262; fetch_pcre2; fetch_perl; fetch_glibc; fetch_musl ;;
+  jdk)     fetch_jdk ;;
+  all)     fetch_test262; fetch_pcre2; fetch_perl; fetch_glibc; fetch_musl
+           fetch_jdk ;;
   *)
-    printf 'usage: %s [test262|pcre2|perl|glibc|musl|all]\n' "$0" >&2
+    printf 'usage: %s [test262|pcre2|perl|glibc|musl|jdk|all]\n' "$0" >&2
     exit 2
     ;;
 esac

@@ -257,6 +257,103 @@ TEST(JavaParser, ANestedBracketStaysItsOwnNode) {
   EXPECT_FALSE(matches_java("[ab[cd]]", "e"));
 }
 
+TEST(JavaParser, ThePosixClassesAreAsciiUntilTheUnicodeFlag) {
+  // `java.util.regex.Pattern` documents these as US-ASCII, and maps every
+  // one of them to its Unicode equivalent under UNICODE_CHARACTER_CLASS.
+  //
+  // Three of them used to resolve as Unicode *properties* instead - loose
+  // matching found a property of the same name - so they compiled and then
+  // matched where the JDK does not. A wrong answer rather than a refusal,
+  // which is why neither the committed corpus nor a compile-only syntax
+  // differential saw it: both ask only whether the pattern is accepted.
+  // These three rows are that regression.
+  struct Row { const char * klass; const char * subject; };
+  static const Row rows[] = {
+    {"Digit", "\u0660"},   // ARABIC-INDIC DIGIT ZERO, Nd but not [0-9]
+    {"Punct", "\u2010"},   // HYPHEN, P but not ASCII punctuation
+    {"Cntrl", "\u0085"},   // NEL, Cc but not [\x00-\x1F\x7F]
+    {"Lower", "\u00e9"},
+    {"Upper", "\u00c9"},
+    {"Alpha", "\u00e9"},
+    {"Alnum", "\u00e9"},
+    {"Space", "\u00a0"},
+    {"XDigit", "\uff10"},
+    {"Graph", "\u00e9"},
+    {"Print", "\u00e9"},
+    {"Blank", "\u3000"},
+  };
+  for (const Row & row : rows) {
+    const std::string pattern = std::string("\\p{") + row.klass + "}";
+    EXPECT_FALSE(matches_java(pattern.c_str(), row.subject))
+        << row.klass << " is US-ASCII without the U flag";
+    EXPECT_TRUE(matches_java(pattern.c_str(), row.subject, GRX_OPT_UCP))
+        << row.klass << " is its Unicode equivalent under U";
+    // The ASCII member is in both.
+    EXPECT_TRUE(matches_java(pattern.c_str(), "0")
+                || matches_java(pattern.c_str(), "a")
+                || matches_java(pattern.c_str(), "A")
+                || matches_java(pattern.c_str(), "!")
+                || matches_java(pattern.c_str(), " ")
+                || matches_java(pattern.c_str(), "\x01"))
+        << row.klass << " matches nothing in ASCII, so it is not that class";
+  }
+}
+
+TEST(JavaParser, TheTwoPosixClassesWithNoPosixSpelling) {
+  // `L1` is Latin-1 and `all` is every code point, and neither moves when
+  // UNICODE_CHARACTER_CLASS is on, because neither is a narrowed form of
+  // something wider.
+  const uint32_t both[] = {(uint32_t)GRX_OPT_NONE, (uint32_t)GRX_OPT_UCP};
+  for (uint32_t options : both) {
+    EXPECT_TRUE(matches_java("\\p{L1}", "\u00ff", options));
+    EXPECT_FALSE(matches_java("\\p{L1}", "\u0100", options));
+    EXPECT_TRUE(matches_java("\\p{all}", "\u0100", options));
+    EXPECT_TRUE(matches_java("\\p{all}", "a", options));
+  }
+  // And the two names did not become POSIX bracket classes anywhere. They
+  // are in the lowering set builder, which is shared, and the only thing
+  // keeping `[[:l1:]]` from resolving is that the parsers' own name lists
+  // were left alone. Asked in Perl, which has POSIX classes - Java has no
+  // `[[:name:]]` syntax at all, so asking there would prove nothing.
+  GRX_Error error;
+  GRX_Regex * regex = nullptr;
+  for (const char * spelling : {"[[:l1:]]", "[[:all:]]"}) {
+    EXPECT_EQ(grx_regex_compile_with_allocator(spelling, std::strlen(spelling),
+                  GRX_SYNTAX_PERL, GRX_OPT_NONE, nullptr, nullptr, &error,
+                  &regex),
+        GRX_ERR_SYNTAX)
+        << spelling << " resolved as a POSIX class";
+    grx_regex_free(regex);
+    regex = nullptr;
+  }
+}
+
+TEST(JavaParser, TheExactSpellingIsTheOnlyOneAccepted) {
+  // The JDK takes `\p{Alpha}` and refuses `\p{alpha}`; loose property
+  // matching would have taken both, which is the other half of routing
+  // these away from the property table.
+  GRX_Error error;
+  EXPECT_EQ(compile_java("\\p{Alpha}", &error), GRX_OK) << error.message;
+  EXPECT_EQ(compile_java("\\p{alpha}", &error), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_java("\\p{ASCII}", &error), GRX_OK) << error.message;
+  EXPECT_EQ(compile_java("\\p{ascii}", &error), GRX_ERR_SYNTAX);
+}
+
+TEST(JavaParser, ACaretInsidePropertyBracesIsASyntaxError) {
+  // Perl and PCRE2 read it as the negation; the JDK refuses it and wants
+  // `\P{Name}`. Measured on JDK 25 - every one of these compiled here
+  // before, and the JDK rejects all six.
+  GRX_Error error;
+  for (const char * pattern : {"\\p{^L}", "\\P{^L}", "\\p{^InGreek}",
+                               "\\P{^InGreek}", "[\\p{^InGreek}]",
+                               "[\\P{^L}]"}) {
+    EXPECT_EQ(compile_java(pattern, &error), GRX_ERR_SYNTAX) << pattern;
+  }
+  // The spelling the JDK does want still works, and still negates.
+  EXPECT_TRUE(matches_java("\\P{L}", "1"));
+  EXPECT_FALSE(matches_java("\\P{L}", "a"));
+}
+
 TEST(JavaParser, ReportsUtf8ByteOffsets) {
   GRX_Error error;
   EXPECT_EQ(compile_java("\xF0\x9F\x98\x80(", &error), GRX_ERR_SYNTAX);

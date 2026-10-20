@@ -285,6 +285,13 @@ static GRX_Result posix_class_named_set(Lowering * low, const char * name,
   static const struct Range word[] = {{'0', '9'}, {'A', 'Z'}, {'_', '_'},
       {'a', 'z'}};
   static const struct Range xdigit[] = {{'0', '9'}, {'A', 'F'}, {'a', 'f'}};
+  // Java's two that have no POSIX spelling. Both are fixed whatever
+  // UNICODE_CHARACTER_CLASS says - `\p{L1}` is Latin-1 and `\p{all}` is
+  // every code point - so they carry no widening property and the parser
+  // keeps them out of posix_class_names, which is what stops `[[:l1:]]`
+  // becoming a class in the dialects that have POSIX classes.
+  static const struct Range latin1[] = {{0x00, 0xFF}};
+  static const struct Range everything[] = {{0x00, 0x10FFFF}};
 
   const struct Range * ranges = NULL;
   size_t count = 0;
@@ -308,6 +315,8 @@ static GRX_Result posix_class_named_set(Lowering * low, const char * name,
   POSIX_ROW("upper", upper, "Uppercase", NULL, 0)
   POSIX_ROW("word", word, NULL, NULL, 0)
   POSIX_ROW("xdigit", xdigit, NULL, NULL, 0)
+  POSIX_ROW("l1", latin1, NULL, NULL, 0)
+  POSIX_ROW("all", everything, NULL, NULL, 0)
   {
     // The parser checked the name against the same list, so a name that is
     // unknown here is the two lists disagreeing.

@@ -880,7 +880,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 
 # General commands
 .PHONY: check-oracle-soak
-.PHONY: check-oracle-java check-java-syntax-diff check-java-match-diff check-java-search-diff check-java-replace-diff check-java-split-diff check-oracle-java-properties
+.PHONY: check-oracle-java check-java-jdk-corpus check-java-syntax-diff check-java-match-diff check-java-search-diff check-java-replace-diff check-java-split-diff check-oracle-java-properties
 .PHONY: clean cloc docs docs-pdf examples tools coverage check-layout-page check-work-packages check-citations check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-unicode-agreement check-dump-names check-readme-example check-tables check-status-line check-corpus-seeds check-makefile-hash check-generated-header-deps check-oracle-env check-oracle-syntax check-oracle-match check-oracle-soak check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-linear check-oracle-perl-syntax check-oracle-script-runs check-doc-claims check-wide-classes check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
 	check-programs \
 	check-oracle-properties check-oracle-numeric-properties \
@@ -1513,10 +1513,34 @@ check-oracle-env:
 		python3 tools/oracle/check_oracle_env.py; \
 	fi
 
-check-oracle-java: check-java-syntax-diff check-java-match-diff check-java-search-diff check-java-replace-diff check-java-split-diff check-oracle-java-properties ## Compare the Java driver and operations against JDK pins
+check-oracle-java: check-java-syntax-diff check-java-match-diff check-java-search-diff check-java-replace-diff check-java-split-diff check-oracle-java-properties check-java-jdk-corpus ## Compare the Java driver and operations against JDK pins
 	$(call run-oracle,java25,python3 tools/oracle/java_probe.py --pin java25)
 	$(call run-oracle,java27,python3 tools/oracle/java_probe.py --pin java27)
 	$(call run-oracle,java25$(comma)java27,python3 tools/oracle/check_java_driver.py)
+
+check-java-jdk-corpus: ## Run the JDK's own regex corpus against this library
+# The JDK's three test-case data files - 860 cases that RegExTest.java reads
+# - asked of the pinned oracle and of this library, and compared. Java's
+# committed corpus is 136 rows this project chose for itself, and a corpus
+# grown from cases we picked measures our picking; every other implemented
+# dialect reads its reference's suite instead.
+#
+# Live rather than committed, and that is a licence decision rather than a
+# preference: those files are GPL-2.0-only with no Classpath exception, and
+# this library is LGPL-3.0-only. Every other corpus in tools/corpus/VERSIONS
+# is permissive or upgrade-compatible and appears here as vectors. This one
+# cannot, so the gate reads it where it lies and commits nothing. The
+# importer writes vectors only when `--out` asks.
+#
+# What it found on its first run: twelve of Java's POSIX class names were
+# refused outright, and three more - Digit, Punct and Cntrl - compiled and
+# then matched U+0660, U+2010 and U+0085, where the JDK matches none of
+# them. A wrong answer rather than a refusal, invisible to a compile-only
+# differential and to the 136 rows.
+check-java-jdk-corpus: $(APP_DIR)/tools/grx_match$(EXE_EXTENSION)
+	@$(REQUIRE_PYTHON3)
+	$(call run-oracle,java25,python3 tools/corpus/import_jdk_tests.py \
+		--driver $(APP_DIR)/tools/grx_match$(EXE_EXTENSION))
 
 check-java-match-diff: $(APP_DIR)/tools/grx_match$(EXE_EXTENSION)
 	@$(REQUIRE_PYTHON3)

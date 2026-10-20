@@ -920,6 +920,9 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     .fold_wide_option = GRX_OPT_JAVA_UNICODE_CASE,
     .newline_lf_option = GRX_OPT_JAVA_UNIX_LINES,
     .property_match = GRX_PROPERTY_JAVA,
+    // JDK 25 refuses `\p{^Name}`; every other dialect here reads the caret
+    // as the negation. See the field.
+    .property_caret_is_error = 1,
     .subject_is_text = 1,
   },
   [GRX_SYNTAX_DOTNET] = {

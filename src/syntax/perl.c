@@ -187,6 +187,7 @@ typedef enum {
   ESC_LITERAL = 0, ///< One code point, in `codepoint`.
   ESC_SHORTHAND,   ///< `\d` and kin; `shorthand` and `negated`.
   ESC_PROPERTY,    ///< `\p{...}`; `name` and `negated`.
+  ESC_POSIX,       ///< Java's `\p{Alpha}` and kin; `name` and `negated`.
   ESC_BACKSPACE,   ///< `\b` inside a class.
   ESC_ANCHOR,      ///< `\b`, `\A`, `\z`, `\Z`, `\G`; `anchor`.
   ESC_BACKREF,     ///< `\1`, `\g{-1}`, `\k<name>`.
@@ -203,7 +204,8 @@ typedef struct {
   uint32_t codepoint;  ///< ESC_LITERAL.
   int shorthand;       ///< ESC_SHORTHAND: a GRX_ShorthandKind.
   int negated;         ///< ESC_SHORTHAND, ESC_PROPERTY.
-  uint32_t name;       ///< ESC_PROPERTY, ESC_BACKREF, ESC_SUBROUTINE.
+  uint32_t name;       ///< ESC_PROPERTY, ESC_POSIX, ESC_BACKREF,
+                       ///< ESC_SUBROUTINE.
   uint32_t group;      ///< ESC_BACKREF, ESC_SUBROUTINE: a number, or 0.
   int relative;        ///< ESC_BACKREF, ESC_SUBROUTINE: `\g{-1}`.
   /**
@@ -622,13 +624,54 @@ static uint32_t simple_escape(char c) {
  * ECMAScript does not have) and the one-letter `\pL`. The name is stored as
  * written; resolving it against the Unicode tables is lowering's job.
  */
+/**
+ * Java's POSIX classes, and the set each one names here.
+ *
+ * `java.util.regex.Pattern` documents these as US-ASCII: `\p{Digit}` is
+ * `[0-9]` and not `\p{Nd}`, and that holds until UNICODE_CHARACTER_CLASS
+ * (`U`, GRX_OPT_UCP) is on, when Java maps every one of them to its Unicode
+ * equivalent. That is exactly what posix_class_is_wide() already does for
+ * `[[:digit:]]`, so these resolve to the POSIX machinery rather than to a
+ * Unicode property and the duality costs nothing.
+ *
+ * Routing them anywhere else is how three of them came to be wrong. `Digit`,
+ * `Punct` and `Cntrl` resolved as Unicode properties - loose matching found
+ * a property of that name - so they *compiled*, and matched U+0660, U+2010
+ * and U+0085 where the JDK matches none of them. A wrong answer rather than
+ * a refusal, which is why neither the committed corpus nor a compile-only
+ * syntax differential saw it: both ask whether the pattern is accepted.
+ *
+ * `L1` and `all` have no POSIX spelling and are fixed ranges whatever `U`
+ * says. They are in the lowering set builder under these names and
+ * deliberately not in posix_class_names, so `[[:l1:]]` stays an unknown
+ * class in every dialect that has POSIX classes at all.
+ */
+static const struct { const char * java; const char * set; }
+java_posix_classes[] = {
+  {"Lower", "lower"}, {"Upper", "upper"}, {"ASCII", "ascii"},
+  {"Alpha", "alpha"}, {"Digit", "digit"}, {"Alnum", "alnum"},
+  {"Punct", "punct"}, {"Graph", "graph"}, {"Print", "print"},
+  {"Blank", "blank"}, {"Cntrl", "cntrl"}, {"XDigit", "xdigit"},
+  {"Space", "space"}, {"L1", "l1"}, {"all", "all"},
+};
+
+
 static GRX_Result read_property(GRX_Parser * parser, int negated, size_t start,
     Escape * out) {
   size_t first = parser->position;
   size_t length = 0;
 
   if (grx_parse_eat(parser, '{')) {
-    if (grx_parse_eat(parser, '^')) {
+    if (byte_at(parser, 0) == '^') {
+      // Perl and PCRE2 read the caret as the negation; Java refuses it and
+      // wants `\P{Name}`. Measured on JDK 25: `\p{^L}`, `\P{^L}`,
+      // `\p{^InGreek}` and the in-class spellings are all
+      // PatternSyntaxException there and all compiled here.
+      if (parser->profile.property_caret_is_error) {
+        return grx_parse_fail(parser, GRX_DIAG_INVALID_PROPERTY_SYNTAX, start,
+            parser->position - start + 1);
+      }
+      parser->position++;
       negated = !negated;
     }
     first = parser->position;
@@ -660,6 +703,30 @@ static GRX_Result read_property(GRX_Parser * parser, int negated, size_t start,
   // it cannot resolve, on the stated grounds that the parser has already
   // resolved it - and for this front end that was not true, so `\p{Nosuch}`
   // came back as an internal fault rather than as the unknown property it is.
+  // Java's POSIX classes are not properties and must not be looked up as
+  // ones. Exact spelling: the JDK accepts `\p{Alpha}` and refuses
+  // `\p{alpha}`, and loose matching here would take both.
+  if (parser->profile.property_match == GRX_PROPERTY_JAVA) {
+    const char * text = parser->text + first;
+    for (size_t i = 0;
+         i < sizeof java_posix_classes / sizeof *java_posix_classes; i++) {
+      const char * java = java_posix_classes[i].java;
+      if (strlen(java) != length || memcmp(text, java, length) != 0) {
+        continue;
+      }
+      const char * set = java_posix_classes[i].set;
+      uint32_t slot = GRX_INDEX_NONE;
+      if (grx_pattern_add_name(parser->pattern, set, strlen(set), &slot)
+          != GRX_OK) {
+        return grx_parse_fail(parser, GRX_DIAG_OUT_OF_MEMORY, start, 0);
+      }
+      out->kind = ESC_POSIX;
+      out->name = slot;
+      out->negated = negated;
+      return GRX_OK;
+    }
+  }
+
   {
     const char * text = parser->text + first;
     const char * equals = memchr(text, '=', length);
@@ -1570,6 +1637,11 @@ static GRX_Result escape_as_item(GRX_Parser * parser, const Escape * escape,
       out->a = escape->name;
       return GRX_OK;
 
+    case ESC_POSIX:
+      out->kind = GRX_CLASS_ITEM_POSIX;
+      out->a = escape->name;
+      return GRX_OK;
+
     default:
       // Everything else - the anchors, `\K`, `\R`, `\X`, `\Q` - has already
       // been refused by read_escape() in class context, so arriving here is
@@ -1863,6 +1935,7 @@ static GRX_Result pcre_atom_escape(GRX_Parser * parser, uint32_t * out_node) {
           (GRX_ShorthandKind)escape.shorthand, escape.negated, start,
           escape.length, out_node);
 
+    case ESC_POSIX:
     case ESC_PROPERTY: {
       GRX_ClassItem item;
       result = escape_as_item(parser, &escape, &item);

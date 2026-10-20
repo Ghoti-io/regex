@@ -320,3 +320,28 @@ musl v1.2.6
 vim 9.1.1244
 cpython 3.13.5
 node v24.21.0
+
+# openjdk/jdk25u. The three data files under test/jdk/java/util/regex that
+# RegExTest.java's processFile() reads - TestCases.txt, BMPTestCases.txt and
+# SupplementaryTestCases.txt - which is the JDK's own regular expression
+# corpus in a format its own comment documents: pattern, subject, expected
+# result, three lines per case, 860 cases.
+#
+# The update train rather than jdk-25-ga, because the oracle is Temurin
+# 25.0.4.1+1 and a corpus should name the release it was taken beside. The
+# three files are byte-identical across jdk-25-ga, jdk-25.0.4-ga and
+# jdk-25.0.4+1 - none has been touched since 2009 - so the precise pin costs
+# nothing and records what was actually fetched.
+#
+# **GPL-2.0-only, and no Classpath exception.** That is why this entry is a
+# pin and not a committed corpus, and why nothing derived from it is
+# committed either. Every other corpus named in this file is permissive or
+# upgrade-compatible - test262 is BSD, pcre2 BSD, Spencer's suite BSD, the
+# `re_tests` PSF, glibc LGPL-2.1-or-later - and can therefore appear as
+# vectors under this library's LGPL-3.0-only terms. GPL-2.0-only cannot:
+# combining it with a GPLv3-family work is the one case the version
+# incompatibility actually bites. tools/corpus/import_jdk_tests.py therefore
+# measures and reports by default and writes vectors only when asked, so
+# that the licence decision is a command somebody typed rather than a
+# default nobody noticed.
+jdk jdk-25.0.4+1

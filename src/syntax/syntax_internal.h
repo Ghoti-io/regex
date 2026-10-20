@@ -899,6 +899,22 @@ typedef struct GRX_Profile {
    * the same probe.
    */
   int posix_classes_stay_ascii;
+
+  /**
+   * `\p{^Name}` is a syntax error rather than the negation.
+   *
+   * Perl and PCRE2 read the caret inside the braces as the negation, so
+   * `\p{^L}` is `\P{L}`. Java refuses it and wants `\P{Name}`: measured on
+   * JDK 25, `\p{^L}`, `\P{^L}`, `\p{^InGreek}` and the in-class spellings
+   * are each a PatternSyntaxException, and each compiled here until this
+   * bit existed.
+   *
+   * Written as "is an error" rather than "negates" so that a dialect which
+   * leaves it out keeps the Perl reading. A zeroed field is the first value
+   * of its enum, and for this axis that has to be the behaviour every
+   * dialect but one already had.
+   */
+  int property_caret_is_error;
   GRX_FoldKind fold;                ///< Caseless folding without UTF.
   GRX_FoldKind fold_utf;            ///< Caseless folding with UTF.
   uint32_t fold_wide_option;        ///< Override UTF as the wide-fold switch.
