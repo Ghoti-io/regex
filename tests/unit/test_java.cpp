@@ -1088,6 +1088,110 @@ TEST(JavaClasses, GraphAndPrintKeepThePrivateUseBlockUnderU) {
   }
 }
 
+TEST(JavaProfile, EveryObservableProfileValueHasAnOfflineRowThatPinsIt) {
+  // The output of a mutation audit, not a reading of the table. GRX_Profile
+  // has 40 fields that Java reaches; each was set to a different legal value
+  // in turn and the whole offline suite - 37 binaries - re-run. 22 of them
+  // failed something, which is what a rule with a test looks like. The other
+  // 18 left every binary green, and that has two causes a green run cannot
+  // tell apart: the rule is untested, or the value cannot be observed in
+  // this dialect at all.
+  //
+  // Twelve were observable, and these are their rows. Each is a JDK 25
+  // answer and each *changes* when its field does, which is the property
+  // that makes it a test of the rule rather than a row that happens to
+  // pass: tools/oracle/java_probe.py's `profile` area holds the same
+  // questions for the live gate, and this holds them for `make test`, where
+  // there is no container and no JDK.
+  //
+  // Six fields are left without a row because no Java pattern can reach
+  // them, and that is recorded rather than quietly skipped:
+  // `ascii_classes_fold_ascii` wants a narrowing ASCII flag Java has not
+  // got; `subject_is_text` cannot matter because Java's default options
+  // already include GRX_OPT_UTF, so the condition it guards is already
+  // true; `submatch` is only read under leftmost-longest and Java is
+  // leftmost-first; `caseless_leaves_boundary_narrow` is read only where
+  // `caseless_widens_shorthands` is set, which Java leaves clear;
+  // `posix_case_classes_collapse_wide` is read only for a class
+  // posix_class_is_wide() answers for, which Java's do not reach; and
+  // `word_boundary` is read only when lowering GRX_ANCHOR_WORD_START and
+  // GRX_ANCHOR_WORD_END, which are `\<` and `\>` - a spelling Java does
+  // not have. `\<a` is the literal "<a" there, matching "<a" and not "a",
+  // which is the JDK's answer too, and `\b` lowers through a different
+  // anchor entirely.
+  //
+  // Two of those six are contingent rather than structural -
+  // `caseless_leaves_boundary_narrow` and
+  // `posix_case_classes_collapse_wide` are dead because a *sibling field*
+  // holds a particular value. Setting that sibling, here or in a dialect
+  // copied from this row, makes a value nobody has measured go live. That
+  // is the hazard worth the comment; the other four are dead because the
+  // dialect has no way to ask.
+  struct Row {
+    const char * pattern;
+    const char * subject;
+    const char * spans;
+  };
+  const Row rows[] = {
+    // preference
+    {"a|ab", "ab", "0:1"},
+    {"(a|ab)(c|bcd)", "abcd", "0:4,0:1,1:4"},
+    // iteration
+    {"a*?", "aa", "0:0 1:1 2:2"},
+    {"(?:|a)", "aa", "0:0 1:1 2:2"},
+    {"a*", "ba", "0:0 1:2 2:2"},
+    // negative_look
+    {"(?!(a)x)ay", "ay", "0:2,-"},
+    {"(?!(a)x)a(y)", "ay", "0:2,-,1:2"},
+    // composing
+    {"^.$", "e\xCC\x81", ""},
+    {"^..$", "e\xCC\x81", "0:3"},
+    // word_set
+    {"(?U)\\w", "\xC2\xB2", ""},
+    {"(?U)\\w", "\xCD\x85", "0:2"},
+    {"(?U)\\w", "\xE2\x92\xB6", "0:3"},
+    {"(?U)\\w", "_", "0:1"},
+    // caret_after_final_newline
+    {"(?m)^$", "a\n", ""},
+    {"(?m)^", "a\n", "0:0"},
+    {"(?m)^", "a\nb", "0:0 2:2"},
+    // caseless_widens_shorthands
+    {"(?i)\\w", "\xC5\xBF", ""},
+    {"(?iu)\\w", "\xC5\xBF", ""},
+    // mongolian_separator_is_space
+    {"(?U)\\p{Space}", "\xE1\xA0\x8E", ""},
+    {"(?U)\\s", "\xE1\xA0\x8E", ""},
+    // posix_classes_fold
+    {"(?i)\\p{Alpha}", "\xC5\xBF", ""},
+    {"(?iu)\\p{Alpha}", "\xC5\xBF", ""},
+    {"(?i)\\p{Lower}", "S", "0:1"},
+    // posix_graph_drops_invisibles
+    {"(?U)\\p{Graph}", "\xD8\x9C", "0:2"},
+    {"(?U)\\p{Graph}", "\xE2\x81\xA6", "0:3"},
+    {"(?U)\\p{Print}", "\xE2\x81\xA6", "0:3"},
+    // posix_wide_general_category
+    {"(?U)\\p{Alpha}", "\xCD\x85", "0:2"},
+    {"(?U)\\p{Alpha}", "\xE2\x92\xB6", "0:3"},
+    {"(?U)\\p{Alnum}", "\xE2\x85\xA0", "0:3"},
+    // word_boundary, by the construct that reads it: Java has no `\<`, so
+    // the field cannot be reached. These rows are the reading it has
+    // instead, and they are the JDK's.
+    {"\\<a", "a", ""},
+    {"\\<a", "<a", "0:2"},
+    {"a\\>", "a>", "0:2"},
+    // posix_case_classes_case_mapped
+    {"(?U)\\p{Lower}", "\xC4\xB8", "0:2"},
+    {"(?U)\\p{Lower}", "\xC3\x9F", "0:2"},
+    {"(?U)\\p{Upper}", "\xC7\x85", ""},
+  };
+  for (const Row & row : rows) {
+    EXPECT_EQ(search_all_java(row.pattern, row.subject,
+                  std::strlen(row.subject)),
+        std::string(row.spans))
+        << row.pattern << " on " << row.subject;
+  }
+}
+
 int main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
