@@ -332,6 +332,13 @@ bool parse_options(
     // names both halves, because `regcomp` has one flag for the two and
     // this library has a bit for each.
     {"newline-terminates", GRX_OPT_NEWLINE_TERMINATES},
+    // The subject is WTF-8, so an unpaired surrogate in it is text. Named
+    // here rather than spelled as a flag letter because no dialect's own
+    // alphabet has one: it is a caller's choice in Java and ECMAScript,
+    // like the POSIX options above, and `\x{D800}` in a vector was already
+    // encodable - append_utf8() allows surrogates - with no way to say that
+    // the matcher should accept it.
+    {"wtf8", GRX_OPT_WTF8},
   };
 
   std::istringstream fields(value);

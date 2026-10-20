@@ -217,7 +217,7 @@ is in progress. The other five report `GRX_ERR_UNSUPPORTED`.
 
 ### Conformance
 
-`make test` runs 87,351 checked-in conformance vectors and prints this table.
+`make test` runs 87,848 checked-in conformance vectors and prints this table.
 Every expectation in them is a reference implementation's, taken from the
 pinned oracle in `tools/oracle/containers/IMAGES`; none is this library's own
 output. The corpora are committed, so the run needs no oracle, no container
@@ -226,7 +226,7 @@ engine and no network.
 | Dialect | Vectors | Pass | Notes |
 | --- | ---: | ---: | --- |
 | `i-regexp` | 30,015 | 100.00% | generated from two references, RFC 9485 naming none: iregexp-check 0.1.4 for the syntax, libxml2 2.14.6 for XSD's semantics |
-| `ecmascript` | 28,559 | 100.00% | test262, plus generated from node 24.21 |
+| `ecmascript` | 29,056 | 100.00% | test262, plus generated from node 24.21; 497 of them hold an unpaired UTF-16 surrogate and carry `options: wtf8` |
 | `perl` | 11,705 | 100.00% | perl 5.44's `re_tests`, plus generated: full folds, `\N{}` names, boundaries, and property names with more than one reading; 8 excluded |
 | `vim` | 6,317 | 100.00% | generated from vim 9.2.1129 |
 | `re2` | 2,947 | 100.00% | generated from Go 1.25.14's `regexp`, which carries Unicode 15.0.0 |
@@ -240,7 +240,7 @@ engine and no network.
 | `posix-bre` | 135 | 100.00% | as `posix-ere` |
 
 Read the denominators with the rates: they differ by two orders of magnitude,
-and 100% of 135 vectors is a smaller claim than 100% of 28,559.
+and 100% of 135 vectors is a smaller claim than 100% of 29,056.
 
 There are no known gaps. The one there was arrived with the `rust` dialect
 and turned out not to be one row: `(a*)+b` under `U` reported group 1 as 1-2
