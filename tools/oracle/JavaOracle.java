@@ -3,6 +3,22 @@
 // Each request and response occupies one line. Text fields are strict UTF-8
 // encoded as hex; response payload is hex UTF-8 JSON. Numeric offsets in the
 // JSON are UTF-8 byte offsets, or an explicit offset-error is returned.
+//
+// A mode prefixed `w:` reads its text fields as WTF-8 instead and reports
+// WTF-8 byte offsets. That exists because a Java String may hold an unpaired
+// surrogate and strict UTF-8 cannot carry one, so the reference could not be
+// asked about them at all: `Matcher` answers 62 of the 101 such cases in the
+// JDK's own corpus with a match, and this driver had no way to pass them.
+//
+// WTF-8 and not CESU-8: a surrogate *pair* must arrive as the four-byte
+// scalar, and a high surrogate immediately followed by a low one is refused.
+// That rule is what keeps `.` from matching half a character and keeps every
+// byte offset aligned with the reference. It is a rule the strict decoder
+// never needed, because it rejected all surrogates and so never had to tell
+// the two spellings apart - accepting WTF-8 is *more* validation, not less.
+//
+// The prefix leaves every existing mode byte-identical, which matters: the
+// other Java differentials are measured through this driver.
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.ByteBuffer;
@@ -17,6 +33,89 @@ import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
 public final class JavaOracle {
+    /** Hex to bytes, with no opinion about what the bytes mean. */
+    private static byte[] unhex(String hex) {
+        if ((hex.length() & 1) != 0) throw new IllegalArgumentException("odd hex length");
+        byte[] bytes = new byte[hex.length() / 2];
+        for (int i = 0; i < bytes.length; i++) {
+            int hi = Character.digit(hex.charAt(i * 2), 16);
+            int lo = Character.digit(hex.charAt(i * 2 + 1), 16);
+            if (hi < 0 || lo < 0) throw new IllegalArgumentException("non-hex input");
+            bytes[i] = (byte) ((hi << 4) | lo);
+        }
+        return bytes;
+    }
+
+    /**
+     * WTF-8 bytes to a String, unpaired surrogates and all.
+     *
+     * Written out rather than handed to a Charset because no JDK charset is
+     * WTF-8: UTF_8 reports a surrogate sequence as malformed and CESU-8 is a
+     * different format with the opposite rule about pairs.
+     */
+    private static String wtf8Decode(byte[] bytes) {
+        StringBuilder out = new StringBuilder();
+        int i = 0;
+        boolean previousWasHigh = false;
+        while (i < bytes.length) {
+            int b = bytes[i] & 0xFF;
+            int value;
+            int width;
+            if (b < 0x80) { value = b; width = 1; }
+            else if ((b & 0xE0) == 0xC0) { value = b & 0x1F; width = 2; }
+            else if ((b & 0xF0) == 0xE0) { value = b & 0x0F; width = 3; }
+            else if ((b & 0xF8) == 0xF0) { value = b & 0x07; width = 4; }
+            else throw new IllegalArgumentException("malformed WTF-8 lead byte");
+            if (i + width > bytes.length)
+                throw new IllegalArgumentException("truncated WTF-8 sequence");
+            for (int k = 1; k < width; k++) {
+                int c = bytes[i + k] & 0xFF;
+                if ((c & 0xC0) != 0x80)
+                    throw new IllegalArgumentException("malformed WTF-8 continuation");
+                value = (value << 6) | (c & 0x3F);
+            }
+            int[] lowest = {0, 0x00, 0x80, 0x800, 0x10000};
+            if (value < lowest[width])
+                throw new IllegalArgumentException("overlong WTF-8 sequence");
+            if (value > 0x10FFFF)
+                throw new IllegalArgumentException("WTF-8 value out of range");
+            boolean high = value >= 0xD800 && value <= 0xDBFF;
+            boolean low = value >= 0xDC00 && value <= 0xDFFF;
+            // The CESU-8 refusal. A pair has to be the four-byte scalar.
+            if (previousWasHigh && low)
+                throw new IllegalArgumentException(
+                    "surrogate pair spelled as two sequences; WTF-8 wants the "
+                    + "four-byte form");
+            if (value < 0x10000) out.append((char) value);
+            else out.append(Character.toChars(value));
+            previousWasHigh = high;
+            i += width;
+        }
+        return out.toString();
+    }
+
+    /** A String to WTF-8: a pair is four bytes, an unpaired surrogate three. */
+    private static int wtf8Length(String s, int end) {
+        int bytes = 0;
+        for (int i = 0; i < end; i++) {
+            char c = s.charAt(i);
+            if (Character.isHighSurrogate(c) && i + 1 < s.length()
+                && Character.isLowSurrogate(s.charAt(i + 1))) {
+                bytes += 4;
+                i++;
+                if (i >= end) {
+                    // The caller asked for an offset inside a pair, which is
+                    // not a position in WTF-8 any more than it is in UTF-8.
+                    throw new IllegalArgumentException("split-pair offset " + end);
+                }
+                continue;
+            }
+            int cp = c;
+            bytes += cp < 0x80 ? 1 : cp < 0x800 ? 2 : 3;
+        }
+        return bytes;
+    }
+
     private static String decode(String hex) throws Exception {
         if ((hex.length() & 1) != 0) throw new IllegalArgumentException("odd hex length");
         byte[] bytes = new byte[hex.length() / 2];
@@ -56,9 +155,21 @@ public final class JavaOracle {
         return out.append('"').toString();
     }
 
+    /**
+     * Which encoding the offsets of the request in flight are measured in.
+     *
+     * A field rather than an argument because byteIndex() is reached from
+     * spans(), split() and the replace modes, and threading a flag through
+     * all of them invites exactly one site being missed - which would report
+     * UTF-8 offsets for a WTF-8 subject and look like an off-by-one.
+     */
+    private static final ThreadLocal<Boolean> WIDE
+        = ThreadLocal.withInitial(() -> Boolean.FALSE);
+
     private static int byteIndex(String s, int index) {
         if (index < 0) return -1;
         if (index > s.length()) throw new IllegalArgumentException("offset beyond string");
+        if (WIDE.get()) return wtf8Length(s, index);
         if (index > 0 && index < s.length()
             && Character.isHighSurrogate(s.charAt(index - 1))
             && Character.isLowSurrogate(s.charAt(index)))
@@ -118,9 +229,18 @@ public final class JavaOracle {
     private static String answer(String line) throws Exception {
         String[] fields = line.split("\\t", -1);
         if (fields.length != 5) throw new IllegalArgumentException("expected five fields");
-        String mode = fields[0], pattern = decode(fields[1]);
-        String flagText = decode(fields[2]), subject = decode(fields[3]);
-        String argument = decode(fields[4]);
+        String mode = fields[0];
+        // `w:` switches the text fields to WTF-8 and the reported offsets
+        // with them. One switch for both, because a subject decoded one way
+        // and measured the other is the shape that produces an accurate
+        // answer to a different question.
+        boolean wtf8 = mode.startsWith("w:");
+        if (wtf8) mode = mode.substring(2);
+        WIDE.set(wtf8);
+        String pattern = wtf8 ? wtf8Decode(unhex(fields[1])) : decode(fields[1]);
+        String flagText = decode(fields[2]);
+        String subject = wtf8 ? wtf8Decode(unhex(fields[3])) : decode(fields[3]);
+        String argument = wtf8 ? wtf8Decode(unhex(fields[4])) : decode(fields[4]);
         switch (mode) {
             case "compile", "first", "all", "all-from", "find-from", "matches", "ranges",
                  "looking-at", "region-first", "region-all", "region-matches",
