@@ -248,7 +248,14 @@ static GRX_Result read_hex(GRX_Parser * parser, size_t start,
   // in `re`. Reading them the Perl family's way would accept three patterns
   // the reference refuses, and read `\x4` as U+0004 where `re` reads
   // nothing at all.
-  if (flavour(parser) == FLAVOUR_PYTHON) {
+  //
+  // .NET has the same rule and is measured, not assumed: on .NET 10.0.13
+  // `\x41` compiles, `\x4142` compiles as U+0041 then "42", and `\x4`,
+  // `\x` and `\x{41}` are all refused. The letter cannot be closed out by
+  // dotnet_knows_escape() the way `\o` and `\g` are, because `\x` *is* in
+  // .NET's alphabet - it is the argument that differs, which is why this is
+  // a second gate rather than one more letter in that table.
+  if (flavour(parser) == FLAVOUR_PYTHON || flavour(parser) == FLAVOUR_DOTNET) {
     uint32_t value = 0;
     for (int digit = 0; digit < 2; digit++) {
       if (!is_hex(byte_at(parser, 0))) {
@@ -631,6 +638,59 @@ static int python_knows_escape(char c, int in_class) {
     case 's': case 't': case 'v': case 'w':
     case 'D': case 'S': case 'W':
     case 'N': case 'u': case 'x': case 'U':
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+/**
+ * Whether .NET's `Regex` gives this letter any meaning after a backslash.
+ *
+ * .NET's escape alphabet is closed, the way Python's is and unlike the Perl
+ * family's: a letter it has no meaning for is "Unrecognized escape sequence
+ * \X" and not the literal. This table is the measured answer for all 52
+ * letters on .NET 10.0.13, asked twice each - bare and inside a class - with
+ * an argument supplied for the five that need one, because `\c`, `\x`, `\u`,
+ * `\p` and `\k` are refused for lacking an argument rather than for being
+ * outside the alphabet, and a probe that spells them bare cannot tell those
+ * two apart.
+ *
+ * Seven letters are the reason this exists: `\h`, `\H`, `\V`, `\K`, `\R`,
+ * `\X` and `\N` were all accepted here and are all refused there. The
+ * inventory had no row for any of them, so eleven green differentials and a
+ * coverage check reporting "0 rows asked by nothing" sat on top of the
+ * divergence - a denominator over the rows you have says nothing about the
+ * rows you should have. `\v` is *not* among them: it is the vertical tab on
+ * .NET, which is what the Perl family's vertical-space shorthand would
+ * silently widen to five code points, and it is routed around
+ * shorthand_for() for that reason a few lines below.
+ *
+ * @param c The letter after the backslash.
+ * @param in_class Whether this is inside a bracket expression.
+ * @return Non-zero when `Regex` accepts it there.
+ */
+static int dotnet_knows_escape(char c, int in_class) {
+  switch (c) {
+    // The anchors and the named backreference, which .NET refuses inside a
+    // class: `[\A]`, `[\z]` and `[\k<n>]` are all unrecognised there. `\b`
+    // is not here because it has a meaning in both places - the word
+    // boundary outside and the backspace inside - which is the Perl
+    // family's rule as well.
+    case 'A':
+    case 'B':
+    case 'G':
+    case 'Z':
+    case 'z':
+    case 'k':
+      return !in_class;
+    // Characters, shorthands, the properties and the two escapes with an
+    // argument. `\e` is the escape character, `\c` the control escape,
+    // `\u` four hex digits and `\x` exactly two.
+    case 'a': case 'b': case 'c': case 'd': case 'e': case 'f':
+    case 'n': case 'p': case 'r': case 's': case 't': case 'u':
+    case 'v': case 'w': case 'x':
+    case 'D': case 'P': case 'S': case 'W':
       return 1;
     default:
       return 0;
@@ -1454,17 +1514,26 @@ static GRX_Result read_escape(GRX_Parser * parser, int in_class, Escape * out) {
 
   char c = byte_at(parser, 0);
 
-  // Python's alphabet is closed, so the refusal comes before every table
-  // below rather than after them. A letter `re` has no meaning for is an
-  // error there and a *literal* in neither dialect, so falling through to
-  // the identity-escape tail would accept `\q` as "q" - which is what the
-  // ECMAScript front end does in its own dialect and what `re` does not do
-  // in this one.
+  // Python's and .NET's alphabets are closed, so the refusal comes before
+  // every table below rather than after them. A letter the reference has no
+  // meaning for is an error there and a *literal* in neither dialect, so
+  // falling through to the identity-escape tail would accept `\q` as "q" -
+  // which is what the ECMAScript front end does in its own dialect and what
+  // `re` and `Regex` do not do in theirs.
+  //
+  // Java's arm is a list of what it refuses and the other two are lists of
+  // what they accept, which is the asymmetry worth noticing: a refusal list
+  // is open at the end, so a letter nobody thought about is accepted by
+  // default. .NET's was found that way - seven letters this family reads and
+  // .NET refuses, none of which the inventory had a row for.
   if ((flavour(parser) == FLAVOUR_PYTHON
-          || flavour(parser) == FLAVOUR_JAVA)
+          || flavour(parser) == FLAVOUR_JAVA
+          || flavour(parser) == FLAVOUR_DOTNET)
       && ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))
       && (flavour(parser) == FLAVOUR_PYTHON
           ? !python_knows_escape(c, in_class)
+          : flavour(parser) == FLAVOUR_DOTNET
+              ? !dotnet_knows_escape(c, in_class)
           : c == 'g' || c == 'K' || c == 'C' || c == 'o'
               || c == 'U' || c == 'l' || c == 'L' || c == 'F'
               || (c == 'E'
@@ -1475,11 +1544,20 @@ static GRX_Result read_escape(GRX_Parser * parser, int in_class, Escape * out) {
         start, 2);
   }
 
-  // `\v` is the vertical tab here and the vertical-space shorthand in the
-  // Perl family - one character against five. Taken before shorthand_for()
-  // rather than inside it, because the shared table is the Perl family's
-  // and this is not a value it has.
-  if (flavour(parser) == FLAVOUR_PYTHON && c == 'v') {
+  // `\v` is the vertical tab in Python and .NET and the vertical-space
+  // shorthand in the Perl family - one character against five. Taken before
+  // shorthand_for() rather than inside it, because the shared table is the
+  // Perl family's and this is not a value it has.
+  //
+  // .NET joined this line after the escape-alphabet sweep: that sweep asked
+  // accept-or-reject and `\v` compiles in both readings, so it reported
+  // agreement while `\v` here matched U+000A and on .NET 10.0.13 it does
+  // not. A letter both sides accept can still mean two different things, and
+  // a compile-only differential is structurally unable to say so - which is
+  // why the offline test asserts the *match* for this one and not just the
+  // compile.
+  if ((flavour(parser) == FLAVOUR_PYTHON || flavour(parser) == FLAVOUR_DOTNET)
+      && c == 'v') {
     parser->position++;
     out->codepoint = 0x0B;
     out->length = parser->position - start;
@@ -4963,7 +5041,18 @@ static GRX_Result pcre_group_open(GRX_Parser * parser, GRX_GroupOpen * out) {
     if (flavour(parser) == FLAVOUR_JAVA) {
       return grx_parse_fail(parser, GRX_DIAG_INVALID_GROUP_SYNTAX, start, 2);
     }
-    return read_star_construct(parser, start, out);
+    // .NET has no `(*...)` construct of any kind, and the way it has none is
+    // worth reproducing rather than refusing outright the way Java's arm
+    // above does. `(` opens an ordinary group there and the `*` is then a
+    // quantifier with nothing to repeat, so .NET 10.0.13 answers
+    // "Quantifier {x,y} following nothing" for `(*FAIL)`, `(*SKIP)`,
+    // `(*ACCEPT)` and `(*:n)` alike - not an invalid-group message. Falling
+    // through gives exactly that, from the rule that is already here,
+    // instead of a second refusal that agrees on accept-or-reject and
+    // disagrees on everything a reader would see.
+    if (flavour(parser) != FLAVOUR_DOTNET) {
+      return read_star_construct(parser, start, out);
+    }
   }
 
   if (!grx_parse_eat(parser, '?')) {

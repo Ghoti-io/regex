@@ -765,3 +765,94 @@ int main(int argc, char ** argv) {
   testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
+
+// --------------------------------------------------------------------------
+// The closed escape alphabet
+// --------------------------------------------------------------------------
+
+// **.NET's escape alphabet is closed, and seven letters were wrong.**
+//
+// A letter `Regex` has no meaning for is "Unrecognized escape sequence \X"
+// there, where the Perl family reads the identity escape. `\X` reached this
+// library's parser through a `case 'K': case 'R': case 'X':` arm with no
+// flavour guard at all, and `\h`, `\H`, `\V`, `\K`, `\R`, `\X` and `\N` were
+// all accepted here and all refused on .NET 10.0.13.
+//
+// The inventory had no row for any of them, which is the part worth
+// remembering: eleven green differentials and a coverage check reporting
+// "0 rows asked by nothing" coexisted with the divergence, because that
+// check scores the rows that exist and cannot speak about the rows that
+// should. `tests/data/probe/dotnet.json`'s `escape-alphabet` area is now the
+// whole alphabet in both contexts, 122 rows, so this is a gate rather than a
+// reading - these tests are the offline half of it.
+TEST(DotNetEscapes, TheSevenLettersThisFamilyReadsAndDotNetRefuses) {
+  GRX_Error error;
+  EXPECT_EQ(compile_dotnet("\\X", &error), GRX_ERR_SYNTAX);
+  EXPECT_EQ(error.diag, GRX_DIAG_INVALID_ESCAPE);
+  EXPECT_EQ(compile_dotnet("\\K"), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_dotnet("\\R"), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_dotnet("\\h"), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_dotnet("\\H"), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_dotnet("\\V"), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_dotnet("\\N"), GRX_ERR_SYNTAX);
+  // The named code point and the relative backreference go with them, and
+  // `\o` has no .NET spelling at all.
+  EXPECT_EQ(compile_dotnet("\\N{U+0041}"), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_dotnet("(a)\\g1"), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_dotnet("\\o{101}"), GRX_ERR_SYNTAX);
+  // `\v` is *not* one of them, and routing it through the shared shorthand
+  // table is what the refusal above must not do: it is the vertical tab on
+  // .NET, one code point, where the Perl family's vertical-space shorthand
+  // is five.
+  EXPECT_EQ(compile_dotnet("\\v"), GRX_OK);
+  EXPECT_TRUE(matches_dotnet("\\v", "\v"));
+  EXPECT_FALSE(matches_dotnet("\\v", "\n"));
+}
+
+// Inside a class the alphabet is smaller: the anchors and the named
+// backreference drop out, and `\b` does not, being the backspace there and
+// the word boundary outside - which is the Perl family's rule too.
+TEST(DotNetEscapes, TheClassAlphabetDropsTheAnchorsAndTheNamedBackreference) {
+  EXPECT_EQ(compile_dotnet("[\\b]"), GRX_OK);
+  EXPECT_EQ(compile_dotnet("[\\d]"), GRX_OK);
+  EXPECT_EQ(compile_dotnet("[\\p{L}]"), GRX_OK);
+  GRX_Error error;
+  EXPECT_EQ(compile_dotnet("[\\h]", &error), GRX_ERR_SYNTAX);
+  EXPECT_EQ(error.diag, GRX_DIAG_INVALID_CLASS_ITEM);
+  EXPECT_EQ(compile_dotnet("[\\H]"), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_dotnet("[\\V]"), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_dotnet("[\\g]"), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_dotnet("(?<n>a)[\\k<n>]"), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_dotnet("(?<n>a)\\k<n>"), GRX_OK);
+}
+
+// `\x` takes *exactly* two hex digits, which is Python's rule and not the
+// Perl family's. The letter itself is in .NET's alphabet, so the closed
+// table cannot carry this - what differs is the argument.
+TEST(DotNetEscapes, HexTakesExactlyTwoDigitsAndHasNoBracedForm) {
+  EXPECT_EQ(compile_dotnet("\\x41"), GRX_OK);
+  // `\x41` then the two literal characters "42", which is why this compiles
+  // and is not a four-digit escape.
+  EXPECT_TRUE(matches_dotnet("\\x4142", "A42"));
+  EXPECT_EQ(compile_dotnet("\\x4"), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_dotnet("\\x{41}"), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_dotnet("\\x"), GRX_ERR_SYNTAX);
+  // `\u` is four digits and is .NET's, where `\U` is not.
+  EXPECT_EQ(compile_dotnet("\\u0041"), GRX_OK);
+  EXPECT_EQ(compile_dotnet("\\u41"), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_dotnet("\\U0001F600"), GRX_ERR_SYNTAX);
+}
+
+// .NET has no `(*...)` construct, and *how* it has none is the point. `(`
+// opens an ordinary group there and the `*` is then a quantifier with
+// nothing to repeat, so the refusal is a quantifier diagnostic rather than
+// an invalid-group one. Java's arm refuses `(*` outright; reproducing
+// .NET's route costs nothing and keeps the diagnostic a reader sees honest.
+TEST(DotNetEscapes, ThereAreNoVerbsAndTheRefusalIsAQuantifierError) {
+  GRX_Error error;
+  EXPECT_EQ(compile_dotnet("(*FAIL)", &error), GRX_ERR_SYNTAX);
+  EXPECT_EQ(error.diag, GRX_DIAG_NOTHING_TO_REPEAT);
+  EXPECT_EQ(compile_dotnet("(*SKIP)"), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_dotnet("(*ACCEPT)"), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_dotnet("(*:n)"), GRX_ERR_SYNTAX);
+}

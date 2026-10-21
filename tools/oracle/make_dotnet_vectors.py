@@ -47,7 +47,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 # by design, and `template`/`generated-split` have no representable mode.
 AREAS = {"control", "classes", "captures", "anchors", "lookbehind", "flags",
          "features", "profile", "profile-audit", "ecmascript", "iteration",
-         "generated-syntax", "generated-match"}
+         "generated-syntax", "generated-match", "escape-alphabet",
+         "escape-semantics"}
 
 # .NET's own alphabet, minus the letters a vector cannot carry. `E` becomes
 # `options:` below; `R` and `C` exclude their rows.

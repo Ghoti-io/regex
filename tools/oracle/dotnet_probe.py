@@ -339,7 +339,105 @@ CASES += [case("features", pattern, "", flags, "compile")
 # there and this library cannot name a position inside a character - so the
 # differentials would be scoring a difference already recorded. The astral
 # rows live in the `unit` area, which is WP-49's inventory and not a gate.
-DOTNET_INVENTORY_REVISION = "2026-10-21t"
+DOTNET_INVENTORY_REVISION = "2026-10-21v"
+
+# The escape alphabet, every letter of it, bare and inside a class.
+#
+# This area exists because the inventory had no `\X`, `\K` or `\R` row at all
+# and this library accepted all three where .NET answers "Unrecognized escape
+# sequence". Eleven green differentials and a coverage check reporting "0 rows
+# asked by nothing" sat on top of that, because a coverage figure over the
+# rows that exist says nothing about the rows that should exist. Seven letters
+# were wrong: `\h`, `\H`, `\V`, `\K`, `\R`, `\X` and `\N`.
+#
+# Swept rather than sampled, for the reason the profile sweep is: a letter
+# nobody thought to ask about is exactly the one that is wrong. 52 letters in
+# both contexts is 104 rows, and the five letters that take an argument get
+# one - `\c`, `\x`, `\u`, `\p` and `\k` are refused for *lacking* an argument,
+# which a bare probe cannot tell apart from being outside the alphabet. `\k`
+# needs its group to exist as well, so its rows carry a `(?<n>a)` prefix.
+ESCAPE_ARGUMENT = {"c": "A", "x": "41", "u": "0041", "p": "{L}", "P": "{L}",
+                   "k": "<n>"}
+ESCAPE_LETTERS = ("abcdefghijklmnopqrstuvwxyz"
+                  "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+
+def _escape_case(letter, in_class):
+    body = "\\" + letter + ESCAPE_ARGUMENT.get(letter, "")
+    prefix = "(?<n>a)" if letter == "k" else ""
+    return "%s[%s]" % (prefix, body) if in_class else prefix + body
+
+
+CASES += [case("escape-alphabet", _escape_case(letter, in_class),
+               mode="compile")
+          for in_class in (0, 1)
+          for letter in ESCAPE_LETTERS]
+
+# The two rules a letter table cannot carry, and the construct that is not an
+# escape at all.
+#
+# `\x` *is* in .NET's alphabet, so it cannot be closed out the way `\o` and
+# `\g` are - what differs is the argument, and .NET's is exactly two hex
+# digits like Python's. `(*...)` is here because .NET has no verb of any kind
+# and reaches its refusal by a different route: `(` opens an ordinary group
+# and the `*` is then a quantifier with nothing to repeat.
+CASES += [case("escape-alphabet", pattern, mode="compile") for pattern in (
+    r"\x41", r"\x4", r"\xg", r"\x{41}", r"\x", r"\x4142",
+    r"A", r"\u41", r"\cA", r"\c",
+    r"\o{101}", r"(a)\g1", r"\N{U+0041}", r"a\Xb",
+    "(*FAIL)", "(*SKIP)", "(*ACCEPT)", "(*:n)",
+)]
+
+# What the letters both sides *accept* actually mean.
+#
+# The escape-alphabet sweep above asks accept-or-reject, and that is
+# structurally unable to catch a letter the two read differently: `\v`
+# compiles in both readings, and it was the Perl family's vertical-space
+# shorthand here - five code points, U+000A among them - against .NET's
+# vertical tab. The compile sweep reported agreement and the escape was
+# wrong. So the letters that survive the alphabet get their semantics asked
+# too, against the subjects that divide one reading from another.
+ESCAPE_SEMANTICS = (
+    # The single-code-point escapes, each against its own character and the
+    # one a wider reading would also take.
+    (r"\a", "\a"), (r"\a", "\n"),
+    (r"\e", "\x1b"), (r"\e", "e"),
+    (r"\f", "\f"), (r"\f", "\n"),
+    (r"\n", "\n"), (r"\n", "\r"),
+    (r"\r", "\r"), (r"\r", "\n"),
+    (r"\t", "\t"), (r"\t", " "),
+    # The one that was wrong: U+000B against U+000A, U+0085, U+2028 and
+    # U+2029, which the Perl family's `\v` takes and .NET's does not.
+    (r"\v", "\x0b"), (r"\v", "\n"), (r"\v", "\r"),
+    (r"\v", "\u0085"), (r"\v", " "), (r"\v", " "),
+    # The shorthands against the code points that divide ASCII from Unicode
+    # and one word-set reading from another.
+    (r"\d", "0"), (r"\d", "١"), (r"\d", "a"),
+    (r"\D", "0"), (r"\D", "١"),
+    (r"\s", " "), (r"\s", "\x0b"), (r"\s", " "),
+    (r"\s", "\u0085"), (r"\s", " "), (r"\s", " "),
+    (r"\S", " "), (r"\S", " "),
+    (r"\w", "a"), (r"\w", "_"), (r"\w", "é"), (r"\w", "ͅ"),
+    (r"\W", "a"), (r"\W", "é"),
+    # The boundaries and the anchors, where a trailing newline is what
+    # divides `\Z` from `\z`.
+    (r"a\b", "a "), (r"a\b", "ab"), (r"a\B", "ab"), (r"a\B", "a "),
+    (r"\Aa", "a"), (r"\Aa", "ba"),
+    (r"a\Z", "a"), (r"a\Z", "a\n"), (r"a\Z", "a\nb"),
+    (r"a\z", "a"), (r"a\z", "a\n"),
+    (r"\Ga", "a"), (r"\Ga", "ba"),
+    # The escapes with an argument.
+    (r"\cA", "\x01"), (r"\cA", "A"),
+    (r"\x41", "A"), (r"\x41", "a"),
+    (r"A", "A"), (r"A", "a"),
+    (r"\p{L}", "a"), (r"\p{L}", "0"), (r"\P{L}", "a"), (r"\P{L}", "0"),
+    (r"(?<n>a)\k<n>", "aa"), (r"(?<n>a)\k<n>", "ab"),
+    # The backspace, which `\b` is inside a class and the boundary outside.
+    (r"[\b]", "\b"), (r"[\b]", "b"),
+)
+
+CASES += [case("escape-semantics", pattern, subject)
+          for pattern, subject in ESCAPE_SEMANTICS]
 
 CASES += [case("generated-syntax", pattern, mode="compile") for pattern in (
     "a", "(a|b)+", "(?:a)", "(?<n>a)", "(?'n'a)", r"(?<n>a)\k<n>",

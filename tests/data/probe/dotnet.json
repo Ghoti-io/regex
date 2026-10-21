@@ -1297,6 +1297,1494 @@
       "argument": ""
     },
     {
+      "area": "escape-alphabet",
+      "pattern": "\\a",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\b",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\cA",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\d",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\e",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\f",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\g",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\h",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\i",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\j",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "(?<n>a)\\k<n>",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\l",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\m",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\n",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\o",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\p{L}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\q",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\r",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\s",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\t",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\u0041",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\v",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\w",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\x41",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\y",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\z",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\A",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\B",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\C",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\D",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\E",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\F",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\G",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\H",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\I",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\J",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\K",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\L",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\M",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\N",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\O",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\P{L}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\Q",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\R",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\S",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\T",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\U",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\V",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\W",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\X",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\Y",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\Z",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\a]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\b]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\cA]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\d]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\e]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\f]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\g]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\h]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\i]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\j]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "(?<n>a)[\\k<n>]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\l]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\m]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\n]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\o]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\p{L}]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\q]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\r]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\s]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\t]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\u0041]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\v]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\w]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\x41]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\y]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\z]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\A]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\B]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\C]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\D]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\E]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\F]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\G]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\H]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\I]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\J]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\K]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\L]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\M]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\N]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\O]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\P{L}]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\Q]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\R]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\S]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\T]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\U]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\V]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\W]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\X]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\Y]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\Z]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\x41",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\x4",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\xg",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\x{41}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\x",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\x4142",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "A",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\u41",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\cA",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\c",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\o{101}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "(a)\\g1",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\N{U+0041}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "a\\Xb",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "(*FAIL)",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "(*SKIP)",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "(*ACCEPT)",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "(*:n)",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\a",
+      "subject": "\u0007",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\a",
+      "subject": "\n",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\e",
+      "subject": "\u001b",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\e",
+      "subject": "e",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\f",
+      "subject": "\f",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\f",
+      "subject": "\n",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\n",
+      "subject": "\n",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\n",
+      "subject": "\r",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\r",
+      "subject": "\r",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\r",
+      "subject": "\n",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\t",
+      "subject": "\t",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\t",
+      "subject": " ",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\v",
+      "subject": "\u000b",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\v",
+      "subject": "\n",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\v",
+      "subject": "\r",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\v",
+      "subject": "\u0085",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\v",
+      "subject": "\u2028",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\v",
+      "subject": "\u2029",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\d",
+      "subject": "0",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\d",
+      "subject": "\u0661",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\d",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\D",
+      "subject": "0",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\D",
+      "subject": "\u0661",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\s",
+      "subject": " ",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\s",
+      "subject": "\u000b",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\s",
+      "subject": "\u00a0",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\s",
+      "subject": "\u0085",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\s",
+      "subject": "\u2028",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\s",
+      "subject": "\u1680",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\S",
+      "subject": " ",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\S",
+      "subject": "\u00a0",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\w",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\w",
+      "subject": "_",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\w",
+      "subject": "\u00e9",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\w",
+      "subject": "\u0345",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\W",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\W",
+      "subject": "\u00e9",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "a\\b",
+      "subject": "a ",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "a\\b",
+      "subject": "ab",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "a\\B",
+      "subject": "ab",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "a\\B",
+      "subject": "a ",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\Aa",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\Aa",
+      "subject": "ba",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "a\\Z",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "a\\Z",
+      "subject": "a\n",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "a\\Z",
+      "subject": "a\nb",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "a\\z",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "a\\z",
+      "subject": "a\n",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\Ga",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\Ga",
+      "subject": "ba",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\cA",
+      "subject": "\u0001",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\cA",
+      "subject": "A",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\x41",
+      "subject": "A",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\x41",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "A",
+      "subject": "A",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "A",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\p{L}",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\p{L}",
+      "subject": "0",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\P{L}",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\P{L}",
+      "subject": "0",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "(?<n>a)\\k<n>",
+      "subject": "aa",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "(?<n>a)\\k<n>",
+      "subject": "ab",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "[\\b]",
+      "subject": "\b",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "[\\b]",
+      "subject": "b",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
       "area": "generated-syntax",
       "pattern": "a",
       "subject": "",
@@ -5050,6 +6538,988 @@
     },
     {
       "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '\\g' at offset 2. Unrecognized escape sequence \\g."
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '\\h' at offset 2. Unrecognized escape sequence \\h."
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '\\i' at offset 2. Unrecognized escape sequence \\i."
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '\\j' at offset 2. Unrecognized escape sequence \\j."
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '\\l' at offset 2. Unrecognized escape sequence \\l."
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '\\m' at offset 2. Unrecognized escape sequence \\m."
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '\\o' at offset 2. Unrecognized escape sequence \\o."
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '\\q' at offset 2. Unrecognized escape sequence \\q."
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '\\y' at offset 2. Unrecognized escape sequence \\y."
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '\\C' at offset 2. Unrecognized escape sequence \\C."
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '\\E' at offset 2. Unrecognized escape sequence \\E."
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '\\F' at offset 2. Unrecognized escape sequence \\F."
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '\\H' at offset 2. Unrecognized escape sequence \\H."
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '\\I' at offset 2. Unrecognized escape sequence \\I."
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '\\J' at offset 2. Unrecognized escape sequence \\J."
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '\\K' at offset 2. Unrecognized escape sequence \\K."
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '\\L' at offset 2. Unrecognized escape sequence \\L."
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '\\M' at offset 2. Unrecognized escape sequence \\M."
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '\\N' at offset 2. Unrecognized escape sequence \\N."
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '\\O' at offset 2. Unrecognized escape sequence \\O."
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '\\Q' at offset 2. Unrecognized escape sequence \\Q."
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '\\R' at offset 2. Unrecognized escape sequence \\R."
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '\\T' at offset 2. Unrecognized escape sequence \\T."
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '\\U' at offset 2. Unrecognized escape sequence \\U."
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '\\V' at offset 2. Unrecognized escape sequence \\V."
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '\\X' at offset 2. Unrecognized escape sequence \\X."
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '\\Y' at offset 2. Unrecognized escape sequence \\Y."
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 3,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '[\\g]' at offset 3. Unrecognized escape sequence \\g."
+    },
+    {
+      "kind": "syntax",
+      "index": 3,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '[\\h]' at offset 3. Unrecognized escape sequence \\h."
+    },
+    {
+      "kind": "syntax",
+      "index": 3,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '[\\i]' at offset 3. Unrecognized escape sequence \\i."
+    },
+    {
+      "kind": "syntax",
+      "index": 3,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '[\\j]' at offset 3. Unrecognized escape sequence \\j."
+    },
+    {
+      "kind": "syntax",
+      "index": 10,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '(?<n>a)[\\k<n>]' at offset 10. Unrecognized escape sequence \\k."
+    },
+    {
+      "kind": "syntax",
+      "index": 3,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '[\\l]' at offset 3. Unrecognized escape sequence \\l."
+    },
+    {
+      "kind": "syntax",
+      "index": 3,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '[\\m]' at offset 3. Unrecognized escape sequence \\m."
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 3,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '[\\o]' at offset 3. Unrecognized escape sequence \\o."
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 3,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '[\\q]' at offset 3. Unrecognized escape sequence \\q."
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 3,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '[\\y]' at offset 3. Unrecognized escape sequence \\y."
+    },
+    {
+      "kind": "syntax",
+      "index": 3,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '[\\z]' at offset 3. Unrecognized escape sequence \\z."
+    },
+    {
+      "kind": "syntax",
+      "index": 3,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '[\\A]' at offset 3. Unrecognized escape sequence \\A."
+    },
+    {
+      "kind": "syntax",
+      "index": 3,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '[\\B]' at offset 3. Unrecognized escape sequence \\B."
+    },
+    {
+      "kind": "syntax",
+      "index": 3,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '[\\C]' at offset 3. Unrecognized escape sequence \\C."
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 3,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '[\\E]' at offset 3. Unrecognized escape sequence \\E."
+    },
+    {
+      "kind": "syntax",
+      "index": 3,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '[\\F]' at offset 3. Unrecognized escape sequence \\F."
+    },
+    {
+      "kind": "syntax",
+      "index": 3,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '[\\G]' at offset 3. Unrecognized escape sequence \\G."
+    },
+    {
+      "kind": "syntax",
+      "index": 3,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '[\\H]' at offset 3. Unrecognized escape sequence \\H."
+    },
+    {
+      "kind": "syntax",
+      "index": 3,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '[\\I]' at offset 3. Unrecognized escape sequence \\I."
+    },
+    {
+      "kind": "syntax",
+      "index": 3,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '[\\J]' at offset 3. Unrecognized escape sequence \\J."
+    },
+    {
+      "kind": "syntax",
+      "index": 3,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '[\\K]' at offset 3. Unrecognized escape sequence \\K."
+    },
+    {
+      "kind": "syntax",
+      "index": 3,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '[\\L]' at offset 3. Unrecognized escape sequence \\L."
+    },
+    {
+      "kind": "syntax",
+      "index": 3,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '[\\M]' at offset 3. Unrecognized escape sequence \\M."
+    },
+    {
+      "kind": "syntax",
+      "index": 3,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '[\\N]' at offset 3. Unrecognized escape sequence \\N."
+    },
+    {
+      "kind": "syntax",
+      "index": 3,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '[\\O]' at offset 3. Unrecognized escape sequence \\O."
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 3,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '[\\Q]' at offset 3. Unrecognized escape sequence \\Q."
+    },
+    {
+      "kind": "syntax",
+      "index": 3,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '[\\R]' at offset 3. Unrecognized escape sequence \\R."
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 3,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '[\\T]' at offset 3. Unrecognized escape sequence \\T."
+    },
+    {
+      "kind": "syntax",
+      "index": 3,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '[\\U]' at offset 3. Unrecognized escape sequence \\U."
+    },
+    {
+      "kind": "syntax",
+      "index": 3,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '[\\V]' at offset 3. Unrecognized escape sequence \\V."
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 3,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '[\\X]' at offset 3. Unrecognized escape sequence \\X."
+    },
+    {
+      "kind": "syntax",
+      "index": 3,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '[\\Y]' at offset 3. Unrecognized escape sequence \\Y."
+    },
+    {
+      "kind": "syntax",
+      "index": 3,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '[\\Z]' at offset 3. Unrecognized escape sequence \\Z."
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "InsufficientOrInvalidHexDigits",
+      "description": "Invalid pattern '\\x4' at offset 2. Insufficient or invalid hexadecimal digits."
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "InsufficientOrInvalidHexDigits",
+      "description": "Invalid pattern '\\xg' at offset 2. Insufficient or invalid hexadecimal digits."
+    },
+    {
+      "kind": "syntax",
+      "index": 3,
+      "error": "InsufficientOrInvalidHexDigits",
+      "description": "Invalid pattern '\\x{41}' at offset 3. Insufficient or invalid hexadecimal digits."
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "InsufficientOrInvalidHexDigits",
+      "description": "Invalid pattern '\\x' at offset 2. Insufficient or invalid hexadecimal digits."
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "InsufficientOrInvalidHexDigits",
+      "description": "Invalid pattern '\\u41' at offset 2. Insufficient or invalid hexadecimal digits."
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "MissingControlCharacter",
+      "description": "Invalid pattern '\\c' at offset 2. Missing control character."
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '\\o{101}' at offset 2. Unrecognized escape sequence \\o."
+    },
+    {
+      "kind": "syntax",
+      "index": 5,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '(a)\\g1' at offset 5. Unrecognized escape sequence \\g."
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern '\\N{U+0041}' at offset 2. Unrecognized escape sequence \\N."
+    },
+    {
+      "kind": "syntax",
+      "index": 3,
+      "error": "UnrecognizedEscape",
+      "description": "Invalid pattern 'a\\Xb' at offset 3. Unrecognized escape sequence \\X."
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "QuantifierAfterNothing",
+      "description": "Invalid pattern '(*FAIL)' at offset 2. Quantifier '*' following nothing."
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "QuantifierAfterNothing",
+      "description": "Invalid pattern '(*SKIP)' at offset 2. Quantifier '*' following nothing."
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "QuantifierAfterNothing",
+      "description": "Invalid pattern '(*ACCEPT)' at offset 2. Quantifier '*' following nothing."
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "QuantifierAfterNothing",
+      "description": "Invalid pattern '(*:n)' at offset 2. Quantifier '*' following nothing."
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ],
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
     },
     {
       "kind": "compile"
