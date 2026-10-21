@@ -76,10 +76,10 @@ static void fuzz_read_forced(void) {
   }
   // `GRX_FUZZ_SYNTAX=?` prints the list above and exits, so that a campaign
   // can schedule the dialects this harness really fuzzes instead of carrying a
-  // copy of the list. The copy is what went wrong: the campaign driver in
-  // `.local-regex-soak/campaign/run.sh` named nine dialects for a day after
-  // I-Regexp became the tenth, and nothing said so, because a campaign cannot
-  // notice a dialect it was never told to ask for. `kBuiltSyntaxes` going
+  // copy of the list. The copy is what went wrong: the soak campaign's own
+  // driver named nine dialects for a day after I-Regexp became the tenth, and
+  // nothing said so, because a campaign cannot notice a dialect it was never
+  // told to ask for. `kBuiltSyntaxes` going
   // stale is a gate - `Parse.TheFuzzCampaignAsksAboutEveryBuiltDialect` - and
   // a second list going stale was silence.
   if (name[0] == '?' && !name[1]) {

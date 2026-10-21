@@ -699,9 +699,9 @@ TEST(Parse, TheFuzzCampaignAsksAboutEveryBuiltDialect) {
   // its own docstring says so without anything checking it. This checks it.
   //
   // It is not hypothetical. I-Regexp landed on 2026-09-26 and `kBuiltSyntaxes`
-  // got it in the same commit, but the campaign driver in
-  // `.local-regex-soak/campaign/` carried a second copy of the list and did
-  // not: a relaunch would have run nine legs, called them clean, and left the
+  // got it in the same commit, but the soak campaign's driver carried a second
+  // copy of the list and did not: a relaunch would have run nine legs, called
+  // them clean, and left the
   // tenth dialect unasked with nothing anywhere saying so. The driver now
   // reads the list from the harness itself, which removes that copy; this
   // test is what keeps the remaining one true.

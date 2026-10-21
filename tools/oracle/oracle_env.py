@@ -439,13 +439,14 @@ def check_pin(name):
 # through `ensure()` instead, which runs before any of this.
 #
 # **And the reference names its script by absolute path.** perl's warnings
-# carry `$0`, so the committed header read
-# `/home/corey/Documents/ghoti.io/regex/tools/corpus/perl_match.pl line 54` -
-# a directory this repository has not been in since it moved under `libs/`,
-# and a line number `perl_match.pl` passed fifty lines ago. Neither had gone
-# red, because nothing regenerates the corpus on a schedule. A header that can
-# only be reproduced from one checkout on one machine is the thing this
-# directory exists to stop, one layer out from the version it was watching.
+# carry `$0`, so the committed header held the generating checkout's full
+# path to `tools/corpus/perl_match.pl` and a line number - naming a directory
+# this repository has not been in since it moved under `libs/`, and a line
+# `perl_match.pl` passed fifty lines ago. Neither had gone red, because
+# nothing regenerates the corpus on a schedule. A header that can only be
+# reproduced from one checkout on one machine is the thing this directory
+# exists to stop, one layer out from the version it was watching - which is
+# also why the path itself is described here rather than quoted.
 ENGINE_NOISE = (
     "Emulate Docker CLI using podman.",
 )

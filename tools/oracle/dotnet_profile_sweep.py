@@ -7,8 +7,26 @@ succeeded or not.
 """
 import os, re, subprocess, sys
 
-ROOT = "/home/corey/Documents/ghoti.io/libs/regex"
-PREFIX = "/home/corey/Documents/ghoti.io/.local"
+# The repository root is this file's own location, three directories up, so the
+# sweep runs from any checkout rather than from one. The install prefix is the
+# caller's: $PREFIX, or --prefix. There is no default for it, because a wrong
+# guess here does not fail - it builds against somebody else's headers and
+# reports a clean sweep over the wrong library.
+ROOT = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+PREFIX = os.environ.get("PREFIX", "")
+for _index, _argument in enumerate(sys.argv[1:]):
+    if _argument.startswith("--prefix="):
+        PREFIX = _argument.split("=", 1)[1]
+if not PREFIX:
+    sys.stderr.write(
+        "dotnet_profile_sweep: no install prefix.\n"
+        "  PREFIX=<prefix> %s\n"
+        "  %s --prefix=<prefix>\n"
+        "The prefix holds the built dependencies this sweep compiles\n"
+        "against; guessing it would measure whatever was installed.\n"
+        % (sys.argv[0], sys.argv[0]))
+    raise SystemExit(2)
 SRC = os.path.join(ROOT, "src", "syntax", "syntax.c")
 HDR = os.path.join(ROOT, "src", "syntax", "syntax_internal.h")
 APP = os.path.join(ROOT, "build", "linux", "release", "apps")
