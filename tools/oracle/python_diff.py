@@ -30,8 +30,10 @@ Copyright 2026 by Corey Pennycuff
 
 import argparse
 import binascii
+import io
 import os
 import random
+import re
 import subprocess
 import sys
 
@@ -47,16 +49,36 @@ ROOT = os.path.dirname(os.path.dirname(HERE))
 # WP-24, and a vocabulary whose branches are all the same length cannot spell
 # the question.
 ATOMS = [
-    # Literals, the dot, and the escapes `re` takes in a pattern.
+    # Literals, the dot, and the escapes `re` takes in a pattern. **Every
+    # letter `python_knows_escape` accepts is spelled here or below**, with a
+    # subject, not only in the syntax half: an accept/refuse sweep cannot see
+    # a letter both sides compile and give different meanings to. `\v` is the
+    # case that makes the point - it is the vertical tab here and in .NET, and
+    # five code points of vertical space in perl - and it passed .NET's
+    # alphabet sweep while meaning the wrong thing.
     "a", "b", ".", "\\.", "\\n", "\\t", "\\x41", "\\u0041", "\\101",
     "\\N{LATIN SMALL LETTER A}",
+    "\\a", "\\f", "\\r", "\\v", "\\U00000041",
     # Classes. `[]a]` is NOT here: CPython reads `[]` as an unterminated
     # class, unlike PCRE2, and that is a syntax question the syntax half asks.
     "[ab]", "[^ab]", "[a-c]", "[\\d]", "[\\w-]", "[]", "[^]",
+    # One class form per letter the accept list takes inside a class, for the
+    # same reason: `[\b]` is the backspace here, as in perl and .NET, and is
+    # refused outright by the JDK, so "both compile it" says nothing about
+    # what it means. Measured against the pinned 3.14.7, all sixteen agree.
+    "[\\a]", "[\\f]", "[\\r]", "[\\v]", "[\\b]", "[a\\b]",
+    "[\\n]", "[\\t]", "[\\s]", "[\\S]", "[\\D]", "[\\W]",
+    "[\\x41]", "[\\u0041]", "[\\U00000041]",
+    "[\\N{LATIN SMALL LETTER A}]",
     # Shorthands, which are Unicode by default here and ASCII under `(?a)`.
     "\\d", "\\D", "\\w", "\\W", "\\s", "\\S",
-    # Anchors and boundaries. No `\G`, no `\z`: `re` has neither.
-    "^", "$", "\\A", "\\Z", "\\b", "\\B",
+    # Anchors and boundaries. No `\G`: `re` has never had it. `\z` it gained
+    # in 3.14 as the preferred spelling of `\Z`, and the two are the same
+    # anchor: measured on the pinned 3.14.7, `a\Z` and `a\z` both decline
+    # "a\n", unlike perl's `\Z`, which tolerates the trailing newline. Both
+    # are generated, and the subject list carries the newline that separates
+    # this reading from perl's.
+    "^", "$", "\\A", "\\Z", "\\z", "\\b", "\\B",
     # Groups, in every spelling `re` accepts.
     "(a)", "(?:a)", "(?P<n>a)", "(?P=n)", "(?#c)", "(?i:a)", "(?-i:a)",
     "(?>a)", "(?>a|ab)",
@@ -97,7 +119,7 @@ ATOMS = [
 REFUSED = [
     # Escapes outside Python's closed alphabet.
     "\\p{L}", "\\P{L}", "\\G", "\\K", "\\R", "\\X", "\\h", "\\H", "\\V",
-    "\\Q", "\\E", "\\e", "\\cA", "\\z", "\\o{101}", "\\g1", "\\g{1}",
+    "\\Q", "\\E", "\\e", "\\cA", "\\o{101}", "\\g1", "\\g{1}",
     "\\k<n>", "\\C", "\\l", "\\y",
     # `\x` and `\N` in the Perl family's spellings.
     "\\x{41}", "\\x4", "\\xg", "\\N", "\\N{U+0041}", "\\u41", "\\U0041",
@@ -117,6 +139,9 @@ REFUSED = [
     "(?P<n>a)(?P<n>b)",
     # A class `re` reads differently from PCRE2.
     "[\\d-z]", "[a-\\d]", "[]", "[^]",
+    # `[\z]` but not `\z`: the anchor is 3.14's and is generated above, while
+    # inside a class it stays "bad escape \z" there, exactly as `[\A]` does.
+    "[\\z]",
 ]
 
 # Subjects short enough that a disagreement is readable and varied enough to
@@ -152,6 +177,98 @@ SUBJECTS = [
 # whitespace rules of verbose mode in mind. `a` is left out until the front
 # end has a bit for it.
 FLAGSETS = ["", "i", "m", "s", "im", "is", "ms", "ims"]
+
+
+def accepted_escape_letters():
+    """The letters `python_knows_escape` accepts, read from the C source.
+
+    The vocabulary above is hand-written, so it falls behind the front end
+    silently: a letter added to the accept list is compiled from that moment
+    and asked about by nothing. That is the shape of defect this whole family
+    keeps producing - a gate scores the rows that exist, not the rows that
+    should - so the list is read rather than remembered, and `check_atoms`
+    turns a letter nobody spelled into a failure instead of a clean run.
+
+    Returns the pair (both contexts, outside a class only). A `case` with no
+    `return` of its own falls through to the next, as C does.
+    """
+    src = io.open(os.path.join(ROOT, "src", "syntax", "perl.c"),
+                  encoding="utf-8").read()
+    # Fail with the reason rather than an IndexError traceback: the function
+    # being renamed or moved is the likeliest way this floor goes blind, and
+    # a reader who sees `substring not found` learns nothing about why.
+    start = src.find("static int python_knows_escape(")
+    end = src.find("\n}\n", start) if start >= 0 else -1
+    if start < 0 or end < 0:
+        raise SystemExit("python_diff: no python_knows_escape() in "
+                         "src/syntax/perl.c, so this floor cannot read the "
+                         "accept list. Point it at the function's new home "
+                         "rather than deleting the check.")
+    body = src[start:end]
+    pending, anywhere, outside = [], set(), set()
+    for line in body.splitlines():
+        line = line.split("//")[0]
+        for letter in re.findall(r"case '(.)':", line):
+            pending.append(letter)
+        if "return !in_class" in line:
+            outside.update(pending)
+            pending = []
+        elif "return 1" in line:
+            anywhere.update(pending)
+            pending = []
+        elif "return 0" in line:
+            pending = []
+    if not anywhere or not outside:
+        raise SystemExit("python_diff: could not read python_knows_escape; "
+                         "the accept list moved and this floor is blind")
+    return anywhere, outside
+
+
+def check_atoms():
+    """Fail unless every accepted letter is generated with a subject.
+
+    Being in `REFUSED` does not count: that list is spliced in to be
+    *declined*, and a letter the front end accepts has to be asked what it
+    *matches*. `\v` and `\b{3}` both passed .NET's accept/refuse sweep and
+    meant the wrong thing, which is why this floor looks at `ATOMS` alone.
+    """
+    anywhere, outside = accepted_escape_letters()
+    # Bare spellings only. The class atoms below are stripped first, because
+    # a `[\v]` satisfying the top-level question is the whole defect this
+    # floor exists to catch: the two contexts are separate branches of the
+    # front end, and `\b` is a boundary in one and a backspace in the other.
+    # Written the other way round, removing `\v` from the bare list left the
+    # check green, which is how this was found.
+    spelled = set()
+    for atom in ATOMS:
+        bare = re.sub(r"\[[^]]*\]", "", atom)
+        for letter in re.findall(r"\\(.)", bare):
+            spelled.add(letter)
+    missing = sorted((anywhere | outside) - spelled)
+    if missing:
+        raise SystemExit(
+            "python_diff: ATOMS spells no subject-bearing case for %s, which "
+            "python_knows_escape accepts. Add each one (and its `[\\x]` form "
+            "where the accept list takes it in a class) rather than relaxing "
+            "this check: an escape nobody matches against a subject is an "
+            "escape whose meaning is ungated."
+            % " ".join("\\" + c for c in missing))
+    # The same question one level in. A letter the accept list takes inside a
+    # class and that no class atom spells is ungated in exactly the way the
+    # top-level letters were: `[\b]` is the case, the backspace here and a
+    # refusal in the JDK.
+    classed = set()
+    for atom in ATOMS:
+        for letter in re.findall(r"\[[^]]*\\(.)", atom):
+            classed.add(letter)
+    bare = sorted(anywhere - classed)
+    if bare:
+        raise SystemExit(
+            "python_diff: ATOMS spells no class form for %s, which "
+            "python_knows_escape accepts inside a class. Add a `[\\x]` atom "
+            "for each rather than relaxing this check."
+            % " ".join("\\" + c for c in bare))
+    return len(spelled), len(classed)
 
 
 def find(name):
@@ -293,6 +410,10 @@ def main():
     parser.add_argument("--strict", action="store_true",
         help="exit 1 if the two disagree anywhere")
     args = parser.parse_args()
+
+    atoms, classed = check_atoms()
+    print("vocabulary: %d escape letters with a subject, %d inside a class"
+          % (atoms, classed))
 
     ours = find("grx_match")
     if not ours:
