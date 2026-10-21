@@ -21,9 +21,11 @@ Copyright 2026 by Corey Pennycuff
 """
 
 import argparse
+import io
 import json
 import os
 import random
+import re
 import subprocess
 import sys
 import node_runner
@@ -62,6 +64,15 @@ ATOMS = [
     # that one *is* a deviation (section 6, the pattern source is code
     # units in ECMAScript) and would bury this gate in excluded rows.
     "\\u{2}", "\\u{1F41F}",
+    # The ControlEscape production and the two escapes beside it, each with
+    # a subject. The vocabulary had none of them: an accept-or-reject sweep
+    # agrees on a letter both sides compile and read differently, and `\v`
+    # is the letter that proves it - the single vertical tab in ECMA-262 and
+    # in .NET, five code points of vertical space in perl, and .NET's was
+    # wrong while its alphabet sweep reported agreement. Measured against
+    # node here: all seven, and their class forms, agree.
+    "\\n", "\\r", "\\t", "\\v", "\\f", "\\0", "\\cA",
+    "[\\n]", "[\\r]", "[\\t]", "[\\v]", "[\\f]", "[\\0]", "[\\cA]",
     "(a)", "(b|c)", "(?:ab)", "(a|)", "()", "(?<n>a)", "(a)(b)",
     "(a*)", "(a|b)*", "((a)|b)", "(?:(a)|b)", "(a?)", "(?:a|)",
     "(?=a)", "(?!a)", "(?<=a)", "(?<!a)", "(a)\\1", "(a|b)\\1",
@@ -86,7 +97,13 @@ ANCHORS = ["", "", "", "^", "$", "\\b", "\\B"]
 
 SUBJECT_PIECES = ["a", "b", "c", "x", "ab", "abc", "aab", "", " ", "\t", "\n",
                   "0", "9", "_", "A", "B", E_ACUTE, E_ACUTE_UPPER, LONG_S, "S",
-                  ALPHA, "\r", LINE_SEPARATOR]
+                  ALPHA, "\r", LINE_SEPARATOR,
+                  # The characters the ControlEscape atoms above denote.
+                  # Without these the escapes could only ever be asked what
+                  # they *decline*, which is half a question: `\v` declining
+                  # "\n" and `\v` taking U+000B are two different claims and
+                  # the wide reading fails only the second.
+                  "\x0b", "\x0c", "\x00", "\x01", "\u0085"]
 
 # Astral characters go only into subjects matched with the `u` flag. Without
 # it, ECMAScript matches UTF-16 code units and this library matches code
@@ -141,6 +158,54 @@ SETS_ATOMS = [
     # The three V8 13.6 fixed, which had never been asked.
     "[a&&[a]]", "[a&&a]", "[a--b]", "[[a]&&a]",
 ]
+
+
+def control_escape_letters():
+    """The letters `control_letter()` denotes a code point for, from the C.
+
+    Read rather than remembered, for the reason `python_diff.py`'s floor
+    gives: the vocabulary here is hand-written and falls behind the front end
+    silently, and a letter added to that table is compiled from that moment
+    and asked about by nothing.
+    """
+    path = os.path.join(ROOT, "src", "syntax", "ecmascript.c")
+    src = io.open(path, encoding="utf-8").read()
+    start = src.find("static uint32_t control_letter(")
+    end = src.find("\n}\n", start) if start >= 0 else -1
+    if start < 0 or end < 0:
+        raise SystemExit("match_diff: no control_letter() in "
+                         "src/syntax/ecmascript.c, so this floor cannot read "
+                         "the table. Point it at the function's new home "
+                         "rather than deleting the check.")
+    letters = re.findall(r"case '(.)': return 0x", src[start:end])
+    if not letters:
+        raise SystemExit("match_diff: control_letter() parsed to no letters")
+    return set(letters)
+
+
+def check_atoms():
+    """Fail unless every ControlEscape letter is generated with a subject.
+
+    Bare and inside a class counted separately: those are different branches
+    of the front end, and agreeing on one says nothing about the other.
+    """
+    wanted = control_escape_letters()
+    bare, classed = set(), set()
+    for atom in ATOMS:
+        for letter in re.findall(r"\\(.)", re.sub(r"\[[^]]*\]", "", atom)):
+            bare.add(letter)
+        for letter in re.findall(r"\[[^]]*\\(.)", atom):
+            classed.add(letter)
+    for where, have in (("", bare), (" inside a class", classed)):
+        missing = sorted(wanted - have)
+        if missing:
+            raise SystemExit(
+                "match_diff: ATOMS spells no subject-bearing case%s for %s, "
+                "which control_letter() denotes. Add each one rather than "
+                "relaxing this check: an escape nobody matches against a "
+                "subject is an escape whose meaning is ungated."
+                % (where, " ".join("\\" + c for c in missing)))
+    return len(bare), len(classed)
 
 
 def make_pattern(rng, unicode_sets=False):
@@ -254,6 +319,10 @@ def main(argv):
     parser.add_argument("--driver", default=None)
     parser.add_argument("--examples", type=int, default=6)
     args = parser.parse_args(argv[1:])
+
+    bare, classed = check_atoms()
+    print("vocabulary: %d escape letters with a subject, %d inside a class"
+          % (bare, classed))
 
     driver = args.driver
     if not driver:
