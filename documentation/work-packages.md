@@ -544,8 +544,9 @@ half anyway, because `re` is *importable* by the tool that writes the cases -
 fork per batch.
 
 **What it found, and where.** The profile row and the spec row had both been
-written from reading, years of sessions ago, and the probe contradicted them
-at once: `empty_loop` was silently taking ECMAScript's answer, exactly the
+written from reading rather than from measurement, long before the probe
+existed, and it contradicted them at once: `empty_loop` was silently taking
+ECMAScript's answer, exactly the
 defect WP-21 had found and fixed on Perl's row; the template grammar was
 absent; and the split rule was neither of the two values the enum had.
 
@@ -1332,11 +1333,13 @@ what moved the syntax gate from 86 asked to 208 and the span gate from 143 to
 - Every invariant in [design.md](design.md) §9 has a named test or check.
 - Limits measured (WP-14) and their measurements published.
 - The three fuzzers soaked 24 hours before the tag.
-- `README.md` status table, the parent `README.md` row, and
-  `CONVENTIONS.md`'s known-departures section updated.
-- The public headers reviewed against `CONVENTIONS.md` §5 one last time,
-  because the namespace token moves with the major version and a review
-  after that is a review too late.
+- `README.md`'s status table updated, along with the suite's own library row
+  and the list of known departures the suite publishes.
+- The public headers reviewed one last time against the suite's API
+  conventions - C17 under `src/`, the namespace token, the `GRX_` prefix and
+  the result-code contract this library's own headers document - because the
+  namespace token moves with the major version and a review after that is a
+  review too late.
 
 The version *number* is deliberately not named here. The ghoti.io libraries
 are versioned together rather than one at a time, so this library being ready
