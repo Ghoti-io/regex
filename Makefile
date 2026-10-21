@@ -880,7 +880,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 
 # General commands
 .PHONY: check-oracle-soak
-.PHONY: check-oracle-dotnet check-oracle-dotnet-driver check-oracle-dotnet-probe check-dotnet-syntax-diff
+.PHONY: check-oracle-dotnet check-oracle-dotnet-driver check-oracle-dotnet-probe check-dotnet-syntax-diff check-dotnet-match-diff
 .PHONY: check-oracle-java check-java-jdk-corpus check-java-syntax-diff check-java-match-diff check-java-search-diff check-java-replace-diff check-java-split-diff check-oracle-java-properties
 .PHONY: clean cloc docs docs-pdf examples tools coverage check-layout-page check-work-packages check-citations check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-unicode-agreement check-dump-names check-readme-example check-tables check-status-line check-corpus-seeds check-makefile-hash check-generated-header-deps check-oracle-env check-oracle-syntax check-oracle-match check-oracle-soak check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-linear check-oracle-perl-syntax check-oracle-script-runs check-doc-claims check-wide-classes check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
 	check-programs \
@@ -1523,7 +1523,7 @@ check-oracle-dotnet: ## Compare the .NET driver against the pinned .NET
 # passed against a broken driver, which is why the ECMAScript control is a
 # *pair* of rows and why the mid-character refusal is checked at both of its
 # two sites.
-check-oracle-dotnet: check-oracle-dotnet-driver check-oracle-dotnet-probe check-dotnet-syntax-diff
+check-oracle-dotnet: check-oracle-dotnet-driver check-oracle-dotnet-probe check-dotnet-syntax-diff check-dotnet-match-diff
 
 check-oracle-dotnet-driver:
 	$(call run-oracle,dotnet,python3 tools/oracle/check_dotnet_driver.py)
@@ -1541,6 +1541,16 @@ check-oracle-dotnet-probe:
 check-dotnet-syntax-diff: $(APP_DIR)/tools/grx_syntax$(EXE_EXTENSION)
 	@$(REQUIRE_PYTHON3)
 	python3 tools/oracle/dotnet_syntax_diff.py --driver $(APP_DIR)/tools/grx_syntax$(EXE_EXTENSION)
+
+# Spans, on every engine. Eligibility is read from the answer rather than
+# declared in a table: `grx_match` says `unsupported` for a pattern the named
+# engine cannot run, so a pattern becoming runnable on one more engine
+# changes the counts and not this file. The floor in the driver is what
+# replaces the table - `auto` must run every case, and no engine but the DFA
+# may run none.
+check-dotnet-match-diff: $(APP_DIR)/tools/grx_match$(EXE_EXTENSION)
+	@$(REQUIRE_PYTHON3)
+	python3 tools/oracle/dotnet_match_diff.py --driver $(APP_DIR)/tools/grx_match$(EXE_EXTENSION)
 
 check-oracle-java: check-java-syntax-diff check-java-match-diff check-java-search-diff check-java-replace-diff check-java-split-diff check-oracle-java-properties check-java-jdk-corpus ## Compare the Java driver and operations against JDK pins
 	$(call run-oracle,java25,python3 tools/oracle/java_probe.py --pin java25)

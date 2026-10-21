@@ -1013,6 +1013,13 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     .fold = GRX_FOLD_SIMPLE,
     .fold_utf = GRX_FOLD_SIMPLE,
     .split = GRX_SPLIT_DOTNET,
+    // ECMAScript's answer rather than PCRE2's, and the probe is why this is
+    // set at all: `(?m)^$` over "a\n" is 2-2 on .NET 10.0.13 and was no
+    // match here, because the field had been left at zero - "whichever of
+    // the two nobody has had to check yet", as its own comment says. The
+    // span differential found it; the unit tests did not, having been
+    // written from what was implemented.
+    .caret_after_final_newline = 1,
     // The replacement grammar, every feature of it a measured answer from
     // the pinned .NET 10.0.13 (probe `template` area).
     //
