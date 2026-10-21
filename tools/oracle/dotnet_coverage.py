@@ -42,7 +42,8 @@ REPLACE_FIRST_REASON = (
 
 MATCH_AREAS = ("control", "generated-match", "classes", "flags", "captures",
                "anchors", "lookbehind", "profile", "profile-audit",
-               "ecmascript", "iteration", "escape-semantics")
+               "ecmascript", "iteration", "escape-semantics",
+               "quantified-anchor")
 REPLACE_AREAS = ("template", "generated-replacement")
 
 

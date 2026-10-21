@@ -48,7 +48,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 AREAS = {"control", "classes", "captures", "anchors", "lookbehind", "flags",
          "features", "profile", "profile-audit", "ecmascript", "iteration",
          "generated-syntax", "generated-match", "escape-alphabet",
-         "escape-semantics"}
+         "escape-semantics", "quantified-anchor"}
 
 # .NET's own alphabet, minus the letters a vector cannot carry. `E` becomes
 # `options:` below; `R` and `C` exclude their rows.

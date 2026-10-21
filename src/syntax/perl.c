@@ -5953,8 +5953,16 @@ static GRX_Result pcre_check_quantifier_target(
       // `a$*`, `\b*`, `^{3}`, `a${3}`, `\b{3}`, `\B{3}` and `\A{3}` all
       // compile on JDK 25. Repeating a zero-width assertion changes
       // nothing, which is why neither reference minds.
+      //
+      // .NET is on that side too, and was simply never asked: `\b{3}`,
+      // `\B{3}`, `^{3}`, `${3}`, `\A{3}`, `\Z{3}`, `\z{3}`, `\G{3}`,
+      // `\b*`, `\b+`, `\b?`, `^*` and `\b{2,}` all compile on .NET
+      // 10.0.13 and all were refused here. The quantifier really is a
+      // quantifier there rather than a literal brace: `\b{3}` over "ab" is
+      // 0-0, which a literal `{3}` could not match.
       if (flavour(parser) == FLAVOUR_PERL
-          || flavour(parser) == FLAVOUR_JAVA) {
+          || flavour(parser) == FLAVOUR_JAVA
+          || flavour(parser) == FLAVOUR_DOTNET) {
         return GRX_OK;
       }
       return grx_parse_fail(

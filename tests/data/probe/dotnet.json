@@ -2785,6 +2785,222 @@
       "argument": ""
     },
     {
+      "area": "quantified-anchor",
+      "pattern": "\\b{3}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "quantified-anchor",
+      "pattern": "\\B{3}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "quantified-anchor",
+      "pattern": "^{3}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "quantified-anchor",
+      "pattern": "${3}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "quantified-anchor",
+      "pattern": "\\A{3}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "quantified-anchor",
+      "pattern": "\\Z{3}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "quantified-anchor",
+      "pattern": "\\z{3}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "quantified-anchor",
+      "pattern": "\\G{3}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "quantified-anchor",
+      "pattern": "\\b*",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "quantified-anchor",
+      "pattern": "\\b+",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "quantified-anchor",
+      "pattern": "\\b?",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "quantified-anchor",
+      "pattern": "^*",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "quantified-anchor",
+      "pattern": "a$?",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "quantified-anchor",
+      "pattern": "\\b{2,}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "quantified-anchor",
+      "pattern": "(?=a){3}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "quantified-anchor",
+      "pattern": "(?!a){3}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "quantified-anchor",
+      "pattern": "(?<=a){3}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "quantified-anchor",
+      "pattern": "(?=a)*",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "quantified-anchor",
+      "pattern": "{3}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "quantified-anchor",
+      "pattern": "a{3}{3}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "quantified-anchor",
+      "pattern": "\\b{3}",
+      "subject": "ab",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "quantified-anchor",
+      "pattern": "\\b{3}",
+      "subject": "a{3}",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "quantified-anchor",
+      "pattern": "a\\b{3}",
+      "subject": "a{3}",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "quantified-anchor",
+      "pattern": "\\b*",
+      "subject": "ab",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "quantified-anchor",
+      "pattern": "^{3}",
+      "subject": "ab",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "quantified-anchor",
+      "pattern": "a$?",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "quantified-anchor",
+      "pattern": "\\B{3}",
+      "subject": "ab",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
       "area": "generated-syntax",
       "pattern": "a",
       "subject": "",
@@ -7520,6 +7736,135 @@
     },
     {
       "kind": "nomatch"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 1,
+      "error": "QuantifierAfterNothing",
+      "description": "Invalid pattern '{3}' at offset 1. Quantifier '{' following nothing."
+    },
+    {
+      "kind": "syntax",
+      "index": 5,
+      "error": "NestedQuantifiersNotParenthesized",
+      "description": "Invalid pattern 'a{3}{3}' at offset 5. Nested quantifier '{'."
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          1,
+          1
+        ]
+      ]
     },
     {
       "kind": "compile"

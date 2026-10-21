@@ -856,3 +856,36 @@ TEST(DotNetEscapes, ThereAreNoVerbsAndTheRefusalIsAQuantifierError) {
   EXPECT_EQ(compile_dotnet("(*ACCEPT)"), GRX_ERR_SYNTAX);
   EXPECT_EQ(compile_dotnet("(*:n)"), GRX_ERR_SYNTAX);
 }
+
+// **.NET lets a quantifier follow a zero-width assertion, and this library
+// refused every spelling of it.**
+//
+// Chased from one row - `\b{3}`, which .NET compiles and this library called
+// "nothing to repeat" - and the rule turned out to cover every anchor and
+// every quantifier: `\b`, `\B`, `^`, `$`, `\A`, `\Z`, `\z` and `\G`, with
+// `*`, `+`, `?`, `{3}` and `{2,}`. Thirteen spellings, one arm.
+//
+// The brace is a *quantifier* there and not a literal, which the compile
+// rows alone could not have settled: `\b{3}` over "ab" is 0-0, and a literal
+// `{3}` cannot match "ab" at all. Repeating a zero-width assertion changes
+// nothing, which is why perl and the JDK accept it too - that arm already
+// named both, measured, and .NET had simply never been asked.
+TEST(DotNetQuantifiers, AnAnchorMayCarryAQuantifier) {
+  EXPECT_EQ(compile_dotnet("\\b{3}"), GRX_OK);
+  EXPECT_EQ(compile_dotnet("\\B{3}"), GRX_OK);
+  EXPECT_EQ(compile_dotnet("^{3}"), GRX_OK);
+  EXPECT_EQ(compile_dotnet("${3}"), GRX_OK);
+  EXPECT_EQ(compile_dotnet("\\A{3}"), GRX_OK);
+  EXPECT_EQ(compile_dotnet("\\G{3}"), GRX_OK);
+  EXPECT_EQ(compile_dotnet("\\b*"), GRX_OK);
+  EXPECT_EQ(compile_dotnet("\\b?"), GRX_OK);
+  EXPECT_EQ(compile_dotnet("\\b{2,}"), GRX_OK);
+  // The brace quantifies the assertion rather than standing for itself:
+  // a literal `{3}` would decline "ab" and take "a{3}".
+  EXPECT_TRUE(matches_dotnet("\\b{3}", "ab"));
+  EXPECT_TRUE(matches_dotnet("\\b*", "ab"));
+  // And the rule is bounded: a quantifier with nothing at all before it is
+  // still an error, as it is on .NET.
+  EXPECT_EQ(compile_dotnet("{3}"), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_dotnet("a{3}{3}"), GRX_ERR_SYNTAX);
+}

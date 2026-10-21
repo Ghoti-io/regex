@@ -38,7 +38,7 @@ DATA = os.path.join(ROOT, "tests", "data", "probe")
 # deviation and WP-49's inventory, not a disagreement a gate should score.
 AREAS = ("control", "generated-match", "classes", "flags", "captures",
          "anchors", "lookbehind", "profile", "profile-audit", "ecmascript",
-         "iteration", "escape-semantics")
+         "iteration", "escape-semantics", "quantified-anchor")
 ENGINES = ("auto", "pike", "backtrack", "bitstate", "dfa")
 
 # Rows whose disagreement is recorded elsewhere, keyed by (pattern, subject)

@@ -339,7 +339,7 @@ CASES += [case("features", pattern, "", flags, "compile")
 # there and this library cannot name a position inside a character - so the
 # differentials would be scoring a difference already recorded. The astral
 # rows live in the `unit` area, which is WP-49's inventory and not a gate.
-DOTNET_INVENTORY_REVISION = "2026-10-21v"
+DOTNET_INVENTORY_REVISION = "2026-10-21w"
 
 # The escape alphabet, every letter of it, bare and inside a class.
 #
@@ -438,6 +438,32 @@ ESCAPE_SEMANTICS = (
 
 CASES += [case("escape-semantics", pattern, subject)
           for pattern, subject in ESCAPE_SEMANTICS]
+
+# A quantifier on a zero-width assertion, which .NET allows and this library
+# refused.
+#
+# Found by chasing one row - `\b{3}`, where .NET compiles and this library
+# answered "nothing to repeat" - and the rule turned out to cover every
+# anchor and every quantifier spelling. The brace really is a quantifier
+# there and not a literal: `\b{3}` over "ab" is 0-0, which a literal `{3}`
+# could not match, so the compile rows alone would not have settled it and
+# the match rows below are the half that does.
+#
+# `{3}` with nothing before it and `a{3}{3}` are refused by .NET as well,
+# and are here so the rule is bounded from both sides.
+CASES += [case("quantified-anchor", pattern, mode="compile") for pattern in (
+    r"\b{3}", r"\B{3}", r"^{3}", r"${3}", r"\A{3}", r"\Z{3}", r"\z{3}",
+    r"\G{3}", r"\b*", r"\b+", r"\b?", r"^*", r"a$?", r"\b{2,}",
+    r"(?=a){3}", r"(?!a){3}", r"(?<=a){3}", r"(?=a)*",
+    r"{3}", r"a{3}{3}",
+)]
+
+CASES += [case("quantified-anchor", pattern, subject)
+          for pattern, subject in (
+    (r"\b{3}", "ab"), (r"\b{3}", "a{3}"), (r"a\b{3}", "a{3}"),
+    (r"\b*", "ab"), (r"^{3}", "ab"), (r"a$?", "a"), (r"\B{3}", "ab"),
+)]
+
 
 CASES += [case("generated-syntax", pattern, mode="compile") for pattern in (
     "a", "(a|b)+", "(?:a)", "(?<n>a)", "(?'n'a)", r"(?<n>a)\k<n>",
