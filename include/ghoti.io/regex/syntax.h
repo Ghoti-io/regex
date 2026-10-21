@@ -304,7 +304,43 @@ typedef enum {
    * GRX_OPT_UTF: the two are separate axes and the combination without it
    * means nothing, so it is `GRX_ERR_INVALID` rather than a guess.
    */
-  GRX_OPT_WTF8 = GRX_BIT(23)
+  GRX_OPT_WTF8 = GRX_BIT(23),
+  /**
+   * @brief A numeric escape is the longest digit prefix that names a group.
+   *
+   * Half of `RegexOptions.ECMAScript`; the other half is the three ASCII
+   * bits above. Without it a numeric escape reads its whole number and the
+   * number decides: `\10` in a pattern with one group is octal U+0008, and
+   * `\1` in a pattern with none is `GRX_DIAG_INVALID_BACKREFERENCE`. With
+   * it the digits are taken one at a time for as long as the number so far
+   * names a group that is already open, the digits after that are literal
+   * text, and a number that names no such group is a character rather than
+   * a refusal: octal from its first digit when that digit is octal, and the
+   * digit itself when it is `8` or `9`.
+   *
+   * Measured on .NET 10.0.13: `(a)\10` matches "aa0" under
+   * `RegexOptions.ECMAScript` and "a\b" without it, `\1` is U+0001 where it
+   * is otherwise an error, and `\8` is the letter 8 where it is otherwise
+   * an error.
+   *
+   * **The ceiling is the groups opened so far, not the pattern's count**, so
+   * this takes forward references away: `\1(a)` matches "\001a" with the
+   * option and fails without it, where the group exists and has not
+   * participated. That is the one place the option removes something rather
+   * than adding it, and it is the reason this is not simply a fallback.
+   *
+   * **It is not ECMAScript's rule either**, which is worth saying because
+   * the option .NET names for ECMAScript is where it came from. Annex B
+   * reads the whole number and falls back to a legacy octal escape when it
+   * exceeds the group count, so `\10` with one group is U+0008 in a browser
+   * and under GRX_SYNTAX_ECMASCRIPT - .NET's default answer, not its
+   * ECMAScript one. The option is .NET's own reading, and this bit is
+   * named for what it does instead of for the dialect that asks for it.
+   *
+   * It reaches a reference only. Inside a bracket expression there is no
+   * reference for a prefix to be part of, so `[\1]` is U+0001 either way.
+   */
+  GRX_OPT_PREFIX_BACKREFERENCE = GRX_BIT(24)
 } GRX_Option;
 
 /**

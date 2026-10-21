@@ -742,7 +742,7 @@ a differential put a duplicate name and a conditional in one pattern.
 | ECMAScript `u`/`v` | backreference; error if no such group | same | NUL; error if followed by a digit | error | `\xHH` (exactly 2) or error; `\u{...}` |
 | Python | backreference | backreference if the group exists, else error | NUL | exactly three digits `\0oo` or `\ooo` starting `0`; `\1oo` as octal only with three digits | `\xHH` exactly |
 | Java | backreference; longest prefix that is a valid group number | same | `\0` + 1-3 octal digits | `\0` prefix only | `\xHH`, `\x{...}` |
-| .NET | backreference | backreference if group exists, else octal, else error | octal | `\0oo`, and `\1oo` when no such group | `\xHH` exactly |
+| .NET | backreference | backreference if group exists, else octal, else error; under `ECMAScript` the **longest prefix** that names an *open* group, Java's rule, and a character rather than an error when none does - so `(a)\10` is U+0008 by default and group one with a literal zero under the option, `\1` is an error by default and U+0001 under it, `\8` is an error by default and the letter 8 under it, and `\1(a)` loses its forward reference because the ceiling becomes the groups opened so far. Not ECMAScript's rule, which reads the whole number against the total count - the default's answer | octal | `\0oo`, and `\1oo` when no such group | `\xHH` exactly |
 | Ruby | backreference | backreference if group exists, else octal | NUL | `\ooo` | `\xHH`, `\x{...}` |
 | RE2, Rust | error | error | NUL (RE2: `\0` is octal `\000`) | `\123` RE2 yes; Rust no | `\xHH`, `\x{...}` |
 
@@ -754,7 +754,34 @@ a differential put a duplicate name and a conditional in one pattern.
 | `FULL_FOLD` | full folding, including length-changing (`ß` ~ `ss`) | Perl. Built; [design.md](design.md) §5.2 |
 | `ES_LEGACY` | ECMA-262 Canonicalize without `u`: simple uppercase mapping, rejected if it is multi-unit or maps non-ASCII to ASCII | ECMAScript without `u` |
 | `ASCII_ONLY` | A-Z only | Java without `UNICODE_CASE`; PCRE2 without UTF; POSIX and GNU (deviation: the locale is treated as C); Emacs (**probe**) |
-| `CULTURE` | .NET's culture-sensitive `ToLower`. **Deviation:** implemented as `SIMPLE_FOLD`, i.e. `CultureInvariant` | .NET |
+| `LOWERCASE_MAP` | Equality under .NET's invariant simple *lowercase mapping*, not a fold orbit. **Deviation:** implemented as `SIMPLE_FOLD`; see §6 and WP-50 | .NET |
+
+**.NET's `IgnoreCase` is a mapping, not a folding, and `CultureInvariant`
+does not change that.** This row used to say the deviation was the
+culture-sensitivity and that the implementation was `CultureInvariant`'s
+answer, which promised a caller who asked for `CultureInvariant` an exact
+result. Measured on 10.0.13 with that option set, eight pairs chosen to
+separate the two rules in both directions:
+
+| Pair | Simple fold | Lowercase map | .NET |
+| --- | --- | --- | --- |
+| U+017F, `s` | together | apart | no |
+| U+0345, U+03B9 | together | apart | no |
+| U+212A, `k` | together | together | yes |
+| U+1E9E, U+00DF | together | together | yes |
+| U+13A0, U+AB70 | together | together | yes |
+| U+0131, `I` | apart | apart | no |
+| U+00DF, "ss" | full folding only | apart | no |
+| U+0130, `i` | apart | together in UnicodeData | no |
+
+Every row follows the mapping and not the orbit. The last stops it being
+`Simple_Lowercase_Mapping` outright: .NET's invariant casing leaves the
+dotted and dotless I alone deliberately, so the rule is that mapping with
+those two excluded. **The rule needs no locale**, so the missing locale the
+old row blamed is not what blocks it - which is why this is a work package
+and not a permanent deviation. Only the two "together, apart" pairs
+disagree with this library today; `dotnet_flags_diff.py` excludes exactly
+those and fails if a third joins them.
 
 **Full folding is a property of a run, not of a character.** `ß` folds to
 "ss" and the `ﬀ` ligature folds to "ff", so under Perl's `/i` one pattern
@@ -837,7 +864,7 @@ reads bytes until `PCRE2_UTF` says otherwise.
 | ECMAScript | `[A-Za-z0-9_]`; plus U+017F, U+212A under `iu` (22.2.2.9.3 WordCharacters) | `[0-9]` | WhiteSpace ∪ LineTerminator: `\t \v \f \r \n`, U+0020, U+00A0, U+1680, U+2000-200A, U+2028, U+2029, U+202F, U+205F, U+3000, U+FEFF (`\p{Zs}` plus the named ones) | strict, case-sensitive, canonical names and aliases only; `gc`, `sc`, `scx` and the listed binaries |
 | Python | Unicode (`str` patterns): alphanumeric per `str.isalnum()` plus `_`; ASCII under `re.ASCII` | Unicode `Nd`; ASCII under `re.ASCII` | Unicode whitespace per `str.isspace()`; ASCII `[ \t\n\r\f\v]` under `re.ASCII` | none |
 | Java | ASCII; Unicode under `UNICODE_CHARACTER_CLASS` | ASCII; `Nd` under the flag | `[ \t\n\x0B\f\r]`; `White_Space` under the flag | loose-ish: `\p{IsAlphabetic}`, `\p{Lu}`, `\p{IsGreek}`, `\p{InGreek}` blocks, `\p{javaLowerCase}` (JDK 25 `Character.isLowerCase`, including U+0295; JDK 27 omits U+0295) |
-| .NET | Unicode: `L`, `Mn`, `Nd`, `Pc`; ASCII under `ECMAScript` option | `Nd`; ASCII under `ECMAScript` | Unicode; `[ \f\n\r\t\v\x85\p{Z}]` | `\p{Lu}` categories and named blocks `\p{IsGreek}` only |
+| .NET | Unicode: `L`, `Mn`, `Nd`, `Pc`; ASCII under `ECMAScript` option | `Nd`; `[0-9]` under `ECMAScript` | Unicode; `[ \f\n\r\t\v\x85\p{Z}]`; `[ \t\n\v\f\r]` under `ECMAScript` - **ASCII's set and not ECMAScript's**, which admits U+00A0, U+2028 and U+FEFF and .NET declines all three | `\p{Lu}` categories and named blocks `\p{IsGreek}` only |
 | Ruby | ASCII `[a-zA-Z0-9_]` | ASCII | ASCII `[ \t\r\n\f\v]` | `\p{Word}`, `\p{Alpha}`, scripts, categories; loose case |
 | RE2 | ASCII | ASCII | `[\t\n\f\r ]` | `\pL`, `\p{Greek}`: categories and scripts, exact case |
 | Rust | Unicode (UTS #18); ASCII under `(?-u)` | `Nd` | `White_Space` | loose (UAX #44) |
@@ -1480,7 +1507,7 @@ are error 111 there and an unknown flag here, which is the same answer.
 | ECMAScript | `dgimsuvy` | `u` and `v` exclusive; `g`/`y` rejected here |
 | Python | `aimsux` | `a` and `u` are one choice written two ways and share an exclusion group; `a` narrows the shorthands *and* the folding (§5.9, §5.8), which perl's `/a` does not; `L` (locale) rejected as unsupported; **no `n`**, and an unscoped `(?i)` may stand only in a run at the very start of the pattern |
 | Java | `idmsuxU` (embedded) | `U` is `UNICODE_CHARACTER_CLASS` |
-| .NET | `imnsx` | `n` explicit capture |
+| .NET | `imnsx` | `n` explicit capture. **`RegexOptions.ECMAScript` has no letter**: it is a constructor argument with no `(?E)` spelling, so a caller asks for it here as `GRX_OPT_ASCII_DIGIT | GRX_OPT_ASCII_SPACE | GRX_OPT_ASCII_WORD | GRX_OPT_PREFIX_BACKREFERENCE` - the three shorthands and `\b` narrowing to ASCII, and a numeric escape becoming the longest digit prefix that names an open group. It narrows nothing else: `\p{...}`, the `[a-z-[aeiou]]` subtraction, `\k<n>` and the group *numbering* all answer the same with it and without. .NET's own constructor refuses the option beside `Singleline`, `IgnorePatternWhitespace`, `ExplicitCapture` and `RightToLeft`; this library does not, because .NET accepts the same combinations written inline - `(?s).` matches a newline under the option there - so the refusal is an argument check and not a rule of the language |
 | Ruby | `imx` | `m` is dot-all |
 | RE2, Rust | `imsU` (Rust adds `u`, `x`, `R`) | `U` ungreedy |
 | Tcl | `bceimnpqstwx` | `b` (BRE) and `e` (ERE) switch dialect: rejected here, since the dialect is the caller's choice |
@@ -1981,7 +2008,7 @@ answer.
 | POSIX, GNU | `(\<)*` reports the group as having matched empty where glibc reports it unset | the references disagree, so there is no rule to follow: glibc says a zero-width iteration did not happen, musl says it did, and this library says it did. Left where musl is, because the alternative is to special-case an iteration that consumed nothing *and* wrote nothing, which neither reference describes and only glibc does | - |
 | Python | `\N{NAME}` resolves against UCD 17.0.0 rather than against CPython's own table | this library has one Unicode version and names come from it ([unicode.md](unicode.md) §2). A name added or renamed between CPython's table and UCD 17.0.0 would resolve differently; no such case has been found, and the differential would report one as a disagreement | - |
 | Python | `bytes` patterns are not modelled: a `str` pattern is the whole of this dialect | `re` has two subjects, `str` and `bytes`, selected by the *type of the pattern object* rather than by a flag - a distinction a C API taking a byte string cannot make. The `str` half is the one with rules of its own; the `bytes` half is a narrower ASCII mode of it. `(?L)` is refused for the same reason it is refused in `re` for a `str` pattern | `GRX_ERR_UNSUPPORTED` for `L` |
-| .NET | Culture-sensitive folding is invariant; balancing groups deferred | §5.8; [design.md](design.md) §2 | `GRX_ERR_UNSUPPORTED` for balancing groups |
+| .NET | `IgnoreCase` folds where .NET maps; balancing groups deferred | §5.8 - and the row there used to blame the culture, which measurement refuted: `CultureInvariant` does not make .NET agree, because the rule is the invariant simple lowercase mapping and not a fold orbit. Two pairs disagree today, U+017F against `s` and U+0345 against U+03B9, both of them "folds together, maps apart"; `dotnet_flags_diff.py` excludes exactly those and fails if a third joins them. WP-50, because the rule needs no locale; [design.md](design.md) §2 for the balancing groups | `GRX_ERR_UNSUPPORTED` for balancing groups |
 | Emacs | Syntax classes (`\s-`, `\w`) use fixed Unicode definitions, not a syntax table | no syntax table | - |
 | Vim | The subject is a string, not a buffer | vim's help describes matching against a *buffer*, where `.` refuses the line break. `matchstrpos()` over a string is what this library can be, and what its differential asks: there `a.b` matches "a\nb", `[^x]` matches the break, and `^`, `$`, `\_^` and `\_$` hold at the two ends only. The `\_` forms are still distinct, because `\s` refuses a break and `\_s` accepts one | - |
 | Vim | A composing character that **begins an atom** is refused | vim reads a character out of a pattern with its marks, so a mark written after a *literal* belongs to that literal and is built here. A mark written after `.`, after `\w`, after a group, or with nothing before it is a second rule: the atom then matches any cluster carrying that mark with its base ignored, so `\w` U+0301 against "a" U+0301 "a" U+0301 is the **whole** string in both of vim's engines - two clusters for what reads as one atom and one mark. And the collection is worse than unbuilt: `[ab]` U+0301 against "ab" is a match under `re=2` and no match under `re=1`, the mark being ignored by one engine and required by the other. Refused rather than answered either way | `GRX_ERR_UNSUPPORTED` |

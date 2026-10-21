@@ -339,7 +339,7 @@ CASES += [case("features", pattern, "", flags, "compile")
 # there and this library cannot name a position inside a character - so the
 # differentials would be scoring a difference already recorded. The astral
 # rows live in the `unit` area, which is WP-49's inventory and not a gate.
-DOTNET_INVENTORY_REVISION = "2026-10-21a"
+DOTNET_INVENTORY_REVISION = "2026-10-21k"
 
 CASES += [case("generated-syntax", pattern, mode="compile") for pattern in (
     "a", "(a|b)+", "(?:a)", "(?<n>a)", "(?'n'a)", r"(?<n>a)\k<n>",
@@ -406,6 +406,151 @@ CASES += [case("profile", pattern, subject) for pattern, subject in (
     (".", "\r"), (".", " "), ("a$", "a "),
     # mongolian_separator_is_space.
     (r"\s", "᠎"), (r"\s", "​"),
+)]
+
+
+# `RegexOptions.ECMAScript`, which is a constructor option and has no inline
+# spelling: there is no `(?E)`, so a caller is the only thing that can ask for
+# it. Phase 4 of the plan implements it, and this is what it is implemented
+# against. Three questions, and the third is the one worth asking:
+#
+#   * which characters the three shorthands take, inside a class and out,
+#     and whether `\b` moves with `\w`. The documentation says ECMAScript's
+#     definitions; ECMAScript's own `\s` includes U+00A0, U+2028 and U+FEFF,
+#     so "ECMAScript's" and "ASCII" are two different claims and the rows
+#     below separate them.
+#   * whether it narrows anything it is not documented to narrow -
+#     `\p{L}`, the `[a-z-[aeiou]]` subtraction, the named-group syntax.
+#   * **whether it renumbers groups.** ECMAScript numbers named and unnamed
+#     groups together in order of appearance; .NET's default numbers every
+#     unnamed group first and the named ones after. If this option moves
+#     .NET onto ECMAScript's rule, it is not a class-narrowing option at all
+#     and the dialect cannot implement it as one.
+#
+# The refusals are their own question: .NET rejects some option combinations
+# with this one rather than ignoring them, so each letter is asked in
+# `compile` mode beside it.
+CASES += [case("ecmascript", pattern, subject, flags, mode) for
+          pattern, subject, flags, mode in (
+    # `\d`: the documented narrowing, with the control beside it.
+    (r"\d", "0", "E", "first"), (r"\d", "١", "E", "first"),
+    (r"\d", "١", "", "first"),
+    (r"\D", "١", "E", "first"),
+    (r"\d", "\U0001D7CE", "E", "first"),
+    # `\w`: four subjects that each separate a candidate set. U+00B2 is `No`,
+    # U+0345 is `Mn`, U+24B6 is `So`, U+0065 is plain.
+    (r"\w", "e", "E", "first"), (r"\w", "é", "E", "first"),
+    (r"\w", "²", "E", "first"), (r"\w", "ͅ", "E", "first"),
+    (r"\w", "Ⓐ", "E", "first"), (r"\w", "_", "E", "first"),
+    (r"\W", "é", "E", "first"),
+    # `\s`: the rows that separate ECMAScript's set from ASCII's. U+00A0,
+    # U+2028 and U+FEFF are whitespace to ECMAScript and not to ASCII.
+    (r"\s", " ", "E", "first"), (r"\s", "\t", "E", "first"),
+    (r"\s", "\v", "E", "first"), (r"\s", "\f", "E", "first"),
+    (r"\s", "\u00a0", "E", "first"), (r"\s", "\u2028", "E", "first"),
+    (r"\s", "\ufeff", "E", "first"), (r"\s", "\u1680", "E", "first"),
+    (r"\S", "\u00a0", "E", "first"),
+    # Inside a class, and negated: a narrowing that does not reach the class
+    # is a different option from one that does.
+    (r"[\d]", "١", "E", "first"), (r"[\w]", "é", "E", "first"),
+    (r"[\s]", " ", "E", "first"), (r"[^\w]", "é", "E", "first"),
+    # `\b` is defined from `\w`, so it either moves with it or it does not.
+    (r"\bx", "éx", "E", "first"), (r"\bx", "éx", "", "first"),
+    (r"\Bx", "éx", "E", "first"),
+    # Things it is not documented to narrow.
+    (r"\p{L}", "é", "E", "first"), (r"\p{Nd}", "١", "E", "first"),
+    ("[a-z-[aeiou]]", "b", "E", "first"),
+    ("[a-z-[aeiou]]", "a", "E", "first"),
+    (r"(?<n>a)\k<n>", "aa", "E", "first"),
+    # **Group numbering.** If this moves to ECMAScript's rule the answer is
+    # ECMAScript-shaped and the dialect's renumbering is wrong
+    # under the option; if it keeps .NET's, the named group is group 2.
+    ("(?<a>x)(y)", "xy", "E", "first"),
+    ("(?<a>x)(y)", "xy", "", "first"),
+    ("(?<a>x)(y)", "xy", "E", "names"),
+    ("(?<a>x)(y)", "xy", "", "names"),
+    # Backreferences and octal, where ECMAScript's reading of `\1` with no
+    # group one is a literal and .NET's default is an error.
+    (r"\1", "1", "E", "compile"), (r"\1", "1", "", "compile"),
+    (r"(a)\1", "aa", "E", "first"),
+    (r"\12", "\n2", "E", "compile"), (r"\12", "\n2", "", "compile"),
+    # Folding under the option, with and without the culture letter.
+    ("ſ", "s", "iE", "first"), ("ſ", "s", "i", "first"),
+    ("ſ", "s", "iEC", "first"),
+    # Which *rule* `IgnoreCase` is, which the rows above turned up as a
+    # question rather than answering: U+017F declines `s` here and shares a
+    # simple-fold orbit with it, so this is not simple case folding - and it
+    # declines it under `CultureInvariant` too, so it is not culture either.
+    # The candidate is equality under the simple *lowercase mapping*, and
+    # these pairs separate the two rules in both directions: U+212A and
+    # U+0130 lowercase into ASCII where folding leaves one of them alone,
+    # and U+0131 is the reverse.
+    ("\u212a", "k", "iC", "first"), ("\u0130", "i", "iC", "first"),
+    ("\u0131", "I", "iC", "first"), ("\u00df", "ss", "iC", "first"),
+    ("\u1e9e", "\u00df", "iC", "first"),
+    ("\u13a0", "\uab70", "iC", "first"),
+    ("\u0345", "\u03b9", "iC", "first"),
+    # Which letters may be combined with it at all.
+    # The combinations .NET accepts are asked as matches rather than as
+    # compiles, so that the flags differential compares them instead of
+    # having to name them as covered by nothing.
+    ("a", "a", "E", "first"), ("a", "a", "iE", "first"),
+    ("a", "a", "mE", "first"), ("a", "a", "CE", "first"),
+    ("a", "a", "sE", "compile"), ("a", "a", "xE", "compile"),
+    ("a", "a", "nE", "compile"), ("a", "a", "RE", "compile"),
+    # The rest of ASCII whitespace, because the four rows above establish
+    # that the set is ASCII's and not ECMAScript's and a set is not pinned
+    # by four of its members.
+    (r"\s", "\n", "E", "first"), (r"\s", "\r", "E", "first"),
+    # What the escapes that only ECMAScript reads actually match. `\1` with
+    # no group one compiles under the option and is a refusal without it, so
+    # the option changes how the pattern is *parsed* and not only which
+    # characters a shorthand takes - which is the finding that decides how it
+    # can be implemented.
+    (r"\1", "1", "E", "first"), (r"\1", "\x01", "E", "first"),
+    (r"\12", "\n2", "E", "first"), (r"\12", "\n2", "", "first"),
+    (r"\12", "12", "E", "first"),
+    (r"\8", "8", "E", "compile"), (r"\8", "8", "", "compile"),
+    (r"\08", "\x008", "E", "compile"),
+    (r"[\b]", "\x08", "E", "first"), (r"[\b]", "\x08", "", "first"),
+    # An inline group that spells an option the constructor refuses beside
+    # this one: the refusal is the constructor's, or it is the dialect's.
+    ("(?s).", "\n", "E", "first"), ("(?x)a b", "ab", "E", "first"),
+    ("(?n)(a)", "a", "E", "names"),
+    # `\8` compiles under the option and `\1` reads as octal, so what the
+    # non-octal digits mean is the remaining half of the rule: ECMAScript's
+    # Annex B makes `\8` an identity escape, and a compile alone does not
+    # say that.
+    (r"\8", "8", "E", "first"), (r"\9", "9", "E", "first"),
+    (r"\08", "\x008", "E", "first"), (r"\08", "08", "E", "first"),
+    (r"\81", "81", "E", "first"),
+    # A number above the group count with a group present, which is the
+    # branch the default rule already reads as octal: this says the option
+    # does not move it.
+    (r"(a)\10", "a\x08", "E", "first"), (r"(a)\10", "a\x08", "", "first"),
+    # `(a)\10` is octal U+0008 by default and is *not* under the option, so
+    # the option does not merely add a fallback: it changes how many digits
+    # a reference takes. ECMAScript's own Annex B reads the whole number and
+    # falls back to octal when it exceeds the group count, which is the
+    # default's answer - so whatever this is, it is not Annex B either. The
+    # candidate is a longest-valid-prefix scan: group one, then a literal
+    # zero.
+    (r"(a)\10", "aa0", "E", "first"),
+    (r"(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)\10", "abcdefghijj", "E", "first"),
+    (r"(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)\10", "abcdefghijj", "", "first"),
+    (r"(a)\11", "aa1", "E", "first"), (r"(a)\11", "a\t", "", "first"),
+    # The ceiling the prefix scan is measured against: a group that exists
+    # but has not been opened yet. If it is the whole pattern's count, a
+    # forward reference is a reference and matches the empty string an unset
+    # group gives; if it is the count so far, `\1` here is U+0001.
+    # - and the subject has to separate them, because a reference to a group
+    # that has not participated *fails* in .NET rather than matching empty,
+    # so "a" is a nomatch under both readings and pins nothing.
+    (r"\1(a)", "\x01a", "E", "first"), (r"\1(a)", "\x01a", "", "first"),
+    (r"\2(a)", "\x02a", "E", "first"), (r"\2(a)", "\x02a", "", "first"),
+    # Inside a class there is no reference to be a prefix of, so the option
+    # has nothing to change.
+    (r"[\1]", "\x01", "E", "first"), (r"[\1]", "\x01", "", "first"),
 )]
 
 

@@ -233,6 +233,53 @@ int main(int argc, char ** argv) {
   int matches = argc > 3 && strcmp(argv[3], "matches") == 0;
   int tracing = (argc > 2 && strcmp(argv[2], "callout") == 0)
       || (argc > 3 && strcmp(argv[3], "callout") == 0);
+  // Caller-set options, by name, applied to every row. A flag *letter* is
+  // the wrong place for these: the letters in a row are a dialect's own
+  // alphabet, and GRX_OPT_ASCII_DIGIT and GRX_OPT_PREFIX_BACKREFERENCE have
+  // no spelling in any dialect because no pattern can ask for them -
+  // `RegexOptions.ECMAScript` is a constructor argument and there is no
+  // `(?E)`. Naming them here keeps the letter space alone and says in the
+  // command line which caller the comparison is about.
+  uint32_t extra_options = 0;
+  for (int i = 1; i < argc; i++) {
+    if (strncmp(argv[i], "--options=", 10) != 0) {
+      continue;
+    }
+    const char * scan = argv[i] + 10;
+    while (*scan) {
+      size_t span = strcspn(scan, ",");
+      static const struct { const char * name; uint32_t bit; } kNamed[] = {
+        { "ascii-classes", GRX_OPT_ASCII_CLASSES },
+        { "ascii-digit", GRX_OPT_ASCII_DIGIT },
+        { "ascii-space", GRX_OPT_ASCII_SPACE },
+        { "ascii-word", GRX_OPT_ASCII_WORD },
+        { "ascii-posix", GRX_OPT_ASCII_POSIX },
+        { "ascii-posix-digit", GRX_OPT_ASCII_POSIX_DIGIT },
+        { "ascii-fold-separate", GRX_OPT_ASCII_FOLD_SEPARATE },
+        { "prefix-backreference", GRX_OPT_PREFIX_BACKREFERENCE },
+        { "no-capture", GRX_OPT_NO_CAPTURE },
+      };
+      size_t found = sizeof kNamed / sizeof kNamed[0];
+      for (size_t k = 0; k < sizeof kNamed / sizeof kNamed[0]; k++) {
+        if (strlen(kNamed[k].name) == span
+            && strncmp(scan, kNamed[k].name, span) == 0) {
+          found = k;
+          break;
+        }
+      }
+      if (found == sizeof kNamed / sizeof kNamed[0]) {
+        fprintf(stderr, "grx_match: unknown option name '%.*s'\n",
+            (int)span, scan);
+        return 2;
+      }
+      extra_options |= kNamed[found].bit;
+      scan += span;
+      if (*scan == ',') {
+        scan++;
+      }
+    }
+  }
+
   GRX_Engine engine = GRX_ENGINE_AUTO;
   if (argc > 2) {
     if (strcmp(argv[2], "pike") == 0) {
@@ -298,7 +345,7 @@ int main(int argc, char ** argv) {
       *third = '\0';
     }
 
-    uint32_t options = 0;
+    uint32_t options = extra_options;
     // `W` is GRX_OPT_WTF8 in every dialect this driver speaks, and no
     // dialect's own alphabet has it - Java's is `idmsuxU` - so it comes out
     // before the rest is handed to the dialect. The lift is in a header
@@ -309,7 +356,12 @@ int main(int argc, char ** argv) {
       fprintf(stderr, "grx_match: too many flag letters\n");
       return 2;
     }
-    if (syntax == GRX_SYNTAX_JAVA) {
+    // The dialects whose own alphabet a generator sends. .NET's is `imnsx`,
+    // and `n` is the letter that makes this a correctness question rather
+    // than a tidiness one: in the table below `n` is POSIX's REG_NEWLINE,
+    // and in .NET's alphabet it is ExplicitCapture. One of those answers a
+    // different question from the reference.
+    if (syntax == GRX_SYNTAX_JAVA || syntax == GRX_SYNTAX_DOTNET) {
       GRX_Error flag_error;
       uint32_t parsed = 0;
       if (grx_options_parse(syntax, letters, &parsed, &flag_error) != GRX_OK) {

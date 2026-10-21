@@ -39,8 +39,25 @@ static int unhex(int c) {
   return -1;
 }
 
-/** Map a flag string in a dialect's own alphabet onto option bits. */
-static uint32_t options_from_flags(const char * flags, GRX_Syntax syntax) {
+/**
+ * Map a flag string in a dialect's own alphabet onto option bits.
+ *
+ * **An unknown letter fails the row rather than being ignored.** The old
+ * `default: break;` here was the same defect grx_match.c's flag table has
+ * two comments about: a letter nothing honours makes this tool answer a
+ * different question from the reference, and the comparison then scores
+ * agreement and disagreement as though they meant something. It cost
+ * nothing while every generated syntax row had an empty flag string, and
+ * the .NET inventory is the first to send flagged ones.
+ *
+ * Letters a dialect has and this table does not are not silently dropped
+ * either: .NET's `n` is ExplicitCapture and the same letter is POSIX's
+ * REG_NEWLINE in grx_match.c, so a shared table cannot hold it without
+ * choosing one dialect's meaning for every dialect. The caller excludes
+ * those rows and names them.
+ */
+static int options_from_flags(const char * flags, GRX_Syntax syntax,
+    uint32_t * out_options) {
   (void)syntax;
   uint32_t options = 0;
   for (const char * f = flags; *f; f++) {
@@ -51,10 +68,13 @@ static uint32_t options_from_flags(const char * flags, GRX_Syntax syntax) {
       case 'x': options |= GRX_OPT_EXTENDED; break;
       case 'u': options |= GRX_OPT_UTF; break;
       case 'v': options |= GRX_OPT_UNICODE_SETS | GRX_OPT_UTF; break;
-      default: break;
+      default:
+        fprintf(stderr, "grx_syntax: unknown flag letter '%c'\n", *f);
+        return 0;
     }
   }
-  return options;
+  *out_options = options;
+  return 1;
 }
 
 int main(int argc, char ** argv) {
@@ -102,7 +122,10 @@ int main(int argc, char ** argv) {
     }
     *tab = '\0';
 
-    uint32_t options = options_from_flags(line, syntax);
+    uint32_t options = 0;
+    if (!options_from_flags(line, syntax, &options)) {
+      return 2;
+    }
     const char * hex = tab + 1;
     size_t length = 0;
     int too_long = 0;

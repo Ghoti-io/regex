@@ -997,8 +997,12 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
   // `fold_utf` stays SIMPLE and that is a **deviation rather than a
   // measurement**: `(?i)` on .NET is `ToLower`, not case folding, so
   // `(?i)\u017F` does not match "s" there and does here.
-  // documentation/dialects.md section 5.8 carries the row - .NET's CULTURE
-  // implemented as SIMPLE_FOLD, i.e. CultureInvariant.
+  // documentation/dialects.md section 5.8 carries the row and the eight
+  // measured pairs. **`CultureInvariant` does not close the gap**: U+017F
+  // declines "s" on .NET with that option set, because the rule is equality
+  // under the invariant simple lowercase mapping rather than under a fold
+  // orbit. It needs no locale, so it is WP-50 rather than a permanent
+  // deviation.
   //
   // Not measured, and so not set: `search_start`. `\G.` over "abc" gives
   // three adjacent matches, which PREVIOUS_END and ATTEMPT both produce, so

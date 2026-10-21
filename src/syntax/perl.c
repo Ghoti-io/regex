@@ -1255,8 +1255,63 @@ static GRX_Result read_k_reference(GRX_Parser * parser, size_t start,
  * decides, not the first digit, which is why `\10` in a pattern with twelve
  * groups is group 10 and in a pattern with two is a tab.
  */
+/**
+ * Read a numeric escape under GRX_OPT_PREFIX_BACKREFERENCE.
+ *
+ * The digits are taken one at a time for as long as the number so far names
+ * a group that is already open, which is .NET's reading under
+ * `RegexOptions.ECMAScript`: `(a)\10` is group one and a literal zero, and
+ * `(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)\10` is group ten. The ceiling is
+ * `groups_opened` and not `group_count`, so there is no forward reference
+ * here - `\1(a)` is U+0001 - which is the one thing the option takes away.
+ *
+ * A number that names no open group is a character and not a refusal: octal
+ * from the first digit where that digit is octal, and the digit itself where
+ * it is `8` or `9`. Annex B's identity escape, except that ECMAScript reads
+ * the whole number first; see GRX_OPT_PREFIX_BACKREFERENCE for why the two
+ * are not the same rule.
+ */
+static GRX_Result read_prefix_numeric_escape(GRX_Parser * parser,
+    Escape * out) {
+  size_t digits = 0;
+  size_t taken = 0;
+  uint64_t value = 0;
+  uint32_t group = 0;
+  while (is_decimal(byte_at(parser, digits)) && value < 0x7FFFFFFFu) {
+    value = value * 10 + (uint64_t)(byte_at(parser, digits) - '0');
+    digits++;
+    if (value >= 1 && value <= parser->groups_opened) {
+      taken = digits;
+      group = (uint32_t)value;
+    }
+  }
+
+  if (taken > 0) {
+    parser->position += taken;
+    out->kind = ESC_BACKREF;
+    out->group = group;
+    out->name = GRX_INDEX_NONE;
+    out->relative = 0;
+    return GRX_OK;
+  }
+
+  out->kind = ESC_LITERAL;
+  if (is_octal(byte_at(parser, 0))) {
+    out->codepoint = read_octal_digits(parser, 3);
+    return GRX_OK;
+  }
+  // `\8` and `\9`, which are neither a reference nor octal.
+  out->codepoint = (uint32_t)byte_at(parser, 0);
+  parser->position += 1;
+  return GRX_OK;
+}
+
 static GRX_Result read_numeric_escape(GRX_Parser * parser, size_t start,
     Escape * out) {
+  if (parser->options & GRX_OPT_PREFIX_BACKREFERENCE) {
+    return read_prefix_numeric_escape(parser, out);
+  }
+
   size_t digits = 0;
   uint64_t value = 0;
   while (is_decimal(byte_at(parser, digits)) && value < 0x7FFFFFFFu) {

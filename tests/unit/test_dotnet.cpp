@@ -459,6 +459,121 @@ TEST(DotNetSplit, TheLimitCountsPiecesAndLeavesTheRemainderWhole) {
   EXPECT_EQ(split_dotnet(",", "a,b,c", 0), "a|b|c");
 }
 
+// --------------------------------------------------------------------------
+// RegexOptions.ECMAScript
+// --------------------------------------------------------------------------
+
+// The option has no inline spelling - there is no `(?E)` - so these are
+// caller-set bits, and that is the whole reason it is four option bits
+// rather than a flag letter. Measured on .NET 10.0.13; the probe's
+// `ecmascript` area holds the readings and dotnet_flags_diff.py compares
+// every one of them.
+namespace {
+// `RegexOptions.ECMAScript`, as this library spells it.
+const uint32_t kEcmaScript = GRX_OPT_ASCII_DIGIT | GRX_OPT_ASCII_SPACE
+    | GRX_OPT_ASCII_WORD | GRX_OPT_PREFIX_BACKREFERENCE;
+}  // namespace
+
+// The three shorthands narrow to ASCII, inside a class and out. U+0661 is
+// `Nd`, U+00E9 is `Ll` and U+00A0 is `Zs`, so each is in the default set and
+// out of the ASCII one - which is what makes the pair of rows a measurement
+// rather than a restatement.
+TEST(DotNetEcmaScript, TheShorthandsNarrowToAscii) {
+  EXPECT_TRUE(matches_dotnet("\\d", "١"));
+  EXPECT_FALSE(matches_dotnet("\\d", "١", kEcmaScript));
+  EXPECT_TRUE(matches_dotnet("\\w", "é"));
+  EXPECT_FALSE(matches_dotnet("\\w", "é", kEcmaScript));
+  EXPECT_TRUE(matches_dotnet("\\s", " "));
+  EXPECT_FALSE(matches_dotnet("\\s", " ", kEcmaScript));
+  EXPECT_FALSE(matches_dotnet("[\\w]", "é", kEcmaScript));
+  EXPECT_TRUE(matches_dotnet("[^\\w]", "é", kEcmaScript));
+}
+
+// `\s` is **ASCII's** whitespace and not ECMAScript's, which is the one
+// place the option's name is misleading: U+00A0, U+2028 and U+FEFF are
+// whitespace to ECMAScript and none of them matches here.
+TEST(DotNetEcmaScript, TheSpaceSetIsAsciisAndNotEcmaScripts) {
+  for (const char * one : { " ", "\t", "\n", "\v", "\f", "\r" }) {
+    EXPECT_TRUE(matches_dotnet("\\s", one, kEcmaScript)) << one;
+  }
+  for (const char * one : { " ", " ", "﻿", " " }) {
+    EXPECT_FALSE(matches_dotnet("\\s", one, kEcmaScript)) << one;
+  }
+}
+
+// `\b` is defined from `\w`, so it moves with it: there is no word boundary
+// between U+00E9 and `x` by default and there is one under the option.
+TEST(DotNetEcmaScript, TheWordBoundaryMovesWithTheWordSet) {
+  EXPECT_FALSE(matches_dotnet("\\bx", "éx"));
+  EXPECT_TRUE(matches_dotnet("\\bx", "éx", kEcmaScript));
+  EXPECT_FALSE(matches_dotnet("\\Bx", "éx", kEcmaScript));
+}
+
+// What it does *not* narrow. `\p{...}` keeps its Unicode reading, the
+// subtraction still subtracts, and a named backreference still refers - so
+// the option is the three shorthands and the escape rule, and nothing else.
+TEST(DotNetEcmaScript, ItNarrowsNothingElse) {
+  EXPECT_TRUE(matches_dotnet("\\p{L}", "é", kEcmaScript));
+  EXPECT_TRUE(matches_dotnet("\\p{Nd}", "١", kEcmaScript));
+  EXPECT_TRUE(matches_dotnet("[a-z-[aeiou]]", "b", kEcmaScript));
+  EXPECT_FALSE(matches_dotnet("[a-z-[aeiou]]", "a", kEcmaScript));
+  EXPECT_TRUE(matches_dotnet("(?<n>a)\\k<n>", "aa", kEcmaScript));
+}
+
+// A numeric escape becomes the longest digit prefix that names an open
+// group. `(a)\10` is group one and a literal zero under the option and octal
+// U+0008 without it, and ten groups make the same text group ten.
+TEST(DotNetEcmaScript, ANumericEscapeIsTheLongestPrefixThatNamesAGroup) {
+  EXPECT_TRUE(matches_dotnet("(a)\\10", "a\b"));
+  EXPECT_FALSE(matches_dotnet("(a)\\10", "aa0"));
+  EXPECT_TRUE(matches_dotnet("(a)\\10", "aa0", kEcmaScript));
+  EXPECT_FALSE(matches_dotnet("(a)\\10", "a\b", kEcmaScript));
+  EXPECT_TRUE(matches_dotnet("(a)\\11", "aa1", kEcmaScript));
+  const char * ten = "(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)\\10";
+  EXPECT_TRUE(matches_dotnet(ten, "abcdefghijj"));
+  EXPECT_TRUE(matches_dotnet(ten, "abcdefghijj", kEcmaScript));
+}
+
+// A number that names no open group is a character rather than a refusal:
+// octal where the first digit is octal, and the digit itself where it is 8
+// or 9. Without the option both are GRX_DIAG_INVALID_BACKREFERENCE, which
+// is the diagnostic the assertions name so that a change of refusal shows
+// up as one.
+TEST(DotNetEcmaScript, AnUndefinedNumberIsACharacterRatherThanARefusal) {
+  GRX_Error error;
+  EXPECT_EQ(compile_dotnet("\\1", &error), GRX_ERR_SYNTAX);
+  EXPECT_EQ(error.diag, GRX_DIAG_INVALID_BACKREFERENCE);
+  EXPECT_EQ(compile_dotnet("\\8", &error), GRX_ERR_SYNTAX);
+  EXPECT_EQ(error.diag, GRX_DIAG_INVALID_BACKREFERENCE);
+
+  EXPECT_TRUE(matches_dotnet("\\1", "\x01", kEcmaScript));
+  EXPECT_TRUE(matches_dotnet("\\12", "\n", kEcmaScript));
+  EXPECT_TRUE(matches_dotnet("\\8", "8", kEcmaScript));
+  EXPECT_TRUE(matches_dotnet("\\9", "9", kEcmaScript));
+  EXPECT_TRUE(matches_dotnet("\\81", "81", kEcmaScript));
+}
+
+// **The ceiling is the groups opened so far**, so the option takes forward
+// references away: `\1(a)` is U+0001 with it and a reference that cannot
+// participate - and so fails - without it. This is the one thing the option
+// removes, and it is also where .NET parts company with ECMAScript: Annex B
+// reads the whole number against the pattern's total count, which is why
+// GRX_SYNTAX_ECMASCRIPT answers `\1(a)` differently from this.
+TEST(DotNetEcmaScript, TheCeilingIsTheGroupsOpenedSoFar) {
+  EXPECT_FALSE(matches_dotnet("\\1(a)", "\x01" "a"));
+  EXPECT_TRUE(matches_dotnet("\\1(a)", "\x01" "a", kEcmaScript));
+  GRX_Error error;
+  EXPECT_EQ(compile_dotnet("\\2(a)", &error), GRX_ERR_SYNTAX);
+  EXPECT_TRUE(matches_dotnet("\\2(a)", "\x02" "a", kEcmaScript));
+}
+
+// Inside a bracket expression there is no reference for a prefix to be part
+// of, so the option has nothing to change and `[\1]` is U+0001 either way.
+TEST(DotNetEcmaScript, AClassDigitEscapeIsOctalEitherWay) {
+  EXPECT_TRUE(matches_dotnet("[\\1]", "\x01"));
+  EXPECT_TRUE(matches_dotnet("[\\1]", "\x01", kEcmaScript));
+}
+
 int main(int argc, char ** argv) {
   testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

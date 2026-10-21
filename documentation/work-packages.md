@@ -1110,6 +1110,32 @@ GNU BRE/ERE, RE2 and Rust all answer through the same spans. *Depends on:*
 nothing built; the measurements it needs are in
 `tests/data/probe/dotnet.json`'s `unit` rows and the exclusions named above.
 
+**WP-50 Caseless matching by lowercase mapping.** *unicode, M.* **Not
+built**; named 2026-10-21. A `GRX_FoldKind` whose orbits come from
+`Simple_Lowercase_Mapping` rather than from `CaseFolding.txt`, for .NET's
+`RegexOptions.IgnoreCase`.
+
+It exists because §5.8's `CULTURE` row was wrong about its own cause. The
+row said the deviation was .NET's culture-sensitive `ToLower` and that the
+implementation was `CultureInvariant`'s answer - so a caller who asked for
+`CultureInvariant` was promised exactness. Measured on 10.0.13 with that
+option set, `(?i)ſ` declines "s" there and matches here: the rule is
+equality under the invariant simple *lowercase mapping*, which joins and
+separates different pairs from a fold orbit. §5.8 carries the eight pairs.
+
+**The rule needs no locale**, which is what moves this from a permanent
+deviation to a package: the mapping is in `UnicodeData.txt`, and the one
+place .NET departs from it - the dotted and dotless I, which invariant
+casing leaves alone - is measured rather than guessed.
+
+**Done** is `dotnet_flags_diff.py`'s `EXCLUDED_PAIRS` empty, and a sweep in
+place of eight pairs: the generator computes every pair the two rules
+disagree about from the UCD data it already reads, and the reference is
+asked about all of them. Eight pairs chosen by hand to separate two
+hypotheses are enough to *identify* the rule and not enough to accept an
+implementation of it. *Depends on:* nothing built; `.NET 10.0.13`'s oracle
+and the `ecmascript` area's `iC` rows are the measurements it starts from.
+
 ## 2. What "done" means for a dialect
 
 A dialect is claimed in `README.md`'s status table only when all of these

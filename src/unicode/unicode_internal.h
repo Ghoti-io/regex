@@ -417,8 +417,14 @@ int grx_unicode_codepoint_from_name(
  *
  * documentation/dialects.md section 5.8. One of the five values there is
  * absent because it is implemented as SIMPLE and recorded as a deviation:
- * .NET's culture-sensitive folding, which would need a locale this library
- * does not have.
+ * .NET's `LOWERCASE_MAP`, which is equality under the invariant simple
+ * lowercase mapping rather than under a fold orbit.
+ *
+ * This said "culture-sensitive folding, which would need a locale this
+ * library does not have", and the locale was the wrong reason: the rule is
+ * locale-free, `CultureInvariant` does not make .NET agree with simple
+ * folding, and the orbit table this value wants is `Simple_Lowercase_Mapping`
+ * with the dotted and dotless I excluded. WP-50.
  */
 typedef enum {
   GRX_FOLD_NONE = 0,   ///< Not caseless; nothing folds.

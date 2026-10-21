@@ -2647,6 +2647,750 @@
       "flags": "",
       "mode": "first",
       "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\d",
+      "subject": "0",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\d",
+      "subject": "\u0661",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\d",
+      "subject": "\u0661",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\D",
+      "subject": "\u0661",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\d",
+      "subject": "\ud835\udfce",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\w",
+      "subject": "e",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\w",
+      "subject": "\u00e9",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\w",
+      "subject": "\u00b2",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\w",
+      "subject": "\u0345",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\w",
+      "subject": "\u24b6",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\w",
+      "subject": "_",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\W",
+      "subject": "\u00e9",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\s",
+      "subject": " ",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\s",
+      "subject": "\t",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\s",
+      "subject": "\u000b",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\s",
+      "subject": "\f",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\s",
+      "subject": "\u00a0",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\s",
+      "subject": "\u2028",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\s",
+      "subject": "\ufeff",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\s",
+      "subject": "\u1680",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\S",
+      "subject": "\u00a0",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "[\\d]",
+      "subject": "\u0661",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "[\\w]",
+      "subject": "\u00e9",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "[\\s]",
+      "subject": "\u00a0",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "[^\\w]",
+      "subject": "\u00e9",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\bx",
+      "subject": "\u00e9x",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\bx",
+      "subject": "\u00e9x",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\Bx",
+      "subject": "\u00e9x",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\p{L}",
+      "subject": "\u00e9",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\p{Nd}",
+      "subject": "\u0661",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "[a-z-[aeiou]]",
+      "subject": "b",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "[a-z-[aeiou]]",
+      "subject": "a",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "(?<n>a)\\k<n>",
+      "subject": "aa",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "(?<a>x)(y)",
+      "subject": "xy",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "(?<a>x)(y)",
+      "subject": "xy",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "(?<a>x)(y)",
+      "subject": "xy",
+      "flags": "E",
+      "mode": "names",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "(?<a>x)(y)",
+      "subject": "xy",
+      "flags": "",
+      "mode": "names",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\1",
+      "subject": "1",
+      "flags": "E",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\1",
+      "subject": "1",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "(a)\\1",
+      "subject": "aa",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\12",
+      "subject": "\n2",
+      "flags": "E",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\12",
+      "subject": "\n2",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\u017f",
+      "subject": "s",
+      "flags": "iE",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\u017f",
+      "subject": "s",
+      "flags": "i",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\u017f",
+      "subject": "s",
+      "flags": "iEC",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\u212a",
+      "subject": "k",
+      "flags": "iC",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\u0130",
+      "subject": "i",
+      "flags": "iC",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\u0131",
+      "subject": "I",
+      "flags": "iC",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\u00df",
+      "subject": "ss",
+      "flags": "iC",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\u1e9e",
+      "subject": "\u00df",
+      "flags": "iC",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\u13a0",
+      "subject": "\uab70",
+      "flags": "iC",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\u0345",
+      "subject": "\u03b9",
+      "flags": "iC",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "a",
+      "subject": "a",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "a",
+      "subject": "a",
+      "flags": "iE",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "a",
+      "subject": "a",
+      "flags": "mE",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "a",
+      "subject": "a",
+      "flags": "CE",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "a",
+      "subject": "a",
+      "flags": "sE",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "a",
+      "subject": "a",
+      "flags": "xE",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "a",
+      "subject": "a",
+      "flags": "nE",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "a",
+      "subject": "a",
+      "flags": "RE",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\s",
+      "subject": "\n",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\s",
+      "subject": "\r",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\1",
+      "subject": "1",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\1",
+      "subject": "\u0001",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\12",
+      "subject": "\n2",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\12",
+      "subject": "\n2",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\12",
+      "subject": "12",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\8",
+      "subject": "8",
+      "flags": "E",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\8",
+      "subject": "8",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\08",
+      "subject": "\u00008",
+      "flags": "E",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "[\\b]",
+      "subject": "\b",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "[\\b]",
+      "subject": "\b",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "(?s).",
+      "subject": "\n",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "(?x)a b",
+      "subject": "ab",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "(?n)(a)",
+      "subject": "a",
+      "flags": "E",
+      "mode": "names",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\8",
+      "subject": "8",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\9",
+      "subject": "9",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\08",
+      "subject": "\u00008",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\08",
+      "subject": "08",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\81",
+      "subject": "81",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "(a)\\10",
+      "subject": "a\b",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "(a)\\10",
+      "subject": "a\b",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "(a)\\10",
+      "subject": "aa0",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)\\10",
+      "subject": "abcdefghijj",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)\\10",
+      "subject": "abcdefghijj",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "(a)\\11",
+      "subject": "aa1",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "(a)\\11",
+      "subject": "a\t",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\1(a)",
+      "subject": "\u0001a",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\1(a)",
+      "subject": "\u0001a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\2(a)",
+      "subject": "\u0002a",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "\\2(a)",
+      "subject": "\u0002a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "[\\1]",
+      "subject": "\u0001",
+      "flags": "E",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "ecmascript",
+      "pattern": "[\\1]",
+      "subject": "\u0001",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
     }
   ],
   "answers": [
@@ -4953,6 +5697,781 @@
     },
     {
       "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          2,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ],
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "names",
+      "names": [
+        [
+          0,
+          "0"
+        ],
+        [
+          1,
+          "1"
+        ],
+        [
+          2,
+          "a"
+        ]
+      ],
+      "numbers": [
+        0,
+        1,
+        2
+      ]
+    },
+    {
+      "kind": "names",
+      "names": [
+        [
+          0,
+          "0"
+        ],
+        [
+          1,
+          "1"
+        ],
+        [
+          2,
+          "a"
+        ]
+      ],
+      "numbers": [
+        0,
+        1,
+        2
+      ]
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "UndefinedNumberedReference",
+      "description": "Invalid pattern '\\1' at offset 2. Reference to undefined group number 1."
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ],
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "runtime",
+      "class": "ArgumentOutOfRangeException",
+      "message": "Specified argument was out of the range of valid values. (Parameter 'options')",
+      "driver_error": true
+    },
+    {
+      "kind": "runtime",
+      "class": "ArgumentOutOfRangeException",
+      "message": "Specified argument was out of the range of valid values. (Parameter 'options')",
+      "driver_error": true
+    },
+    {
+      "kind": "runtime",
+      "class": "ArgumentOutOfRangeException",
+      "message": "Specified argument was out of the range of valid values. (Parameter 'options')",
+      "driver_error": true
+    },
+    {
+      "kind": "runtime",
+      "class": "ArgumentOutOfRangeException",
+      "message": "Specified argument was out of the range of valid values. (Parameter 'options')",
+      "driver_error": true
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "UndefinedNumberedReference",
+      "description": "Invalid pattern '\\8' at offset 2. Reference to undefined group number 8."
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "names",
+      "names": [
+        [
+          0,
+          "0"
+        ]
+      ],
+      "numbers": [
+        0
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ],
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          11
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          4,
+          5
+        ],
+        [
+          5,
+          6
+        ],
+        [
+          6,
+          7
+        ],
+        [
+          7,
+          8
+        ],
+        [
+          8,
+          9
+        ],
+        [
+          9,
+          10
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          11
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          4,
+          5
+        ],
+        [
+          5,
+          6
+        ],
+        [
+          6,
+          7
+        ],
+        [
+          7,
+          8
+        ],
+        [
+          8,
+          9
+        ],
+        [
+          9,
+          10
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ],
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ],
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "error": "UndefinedNumberedReference",
+      "description": "Invalid pattern '\\2(a)' at offset 2. Reference to undefined group number 2."
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
     }
   ]
 }
