@@ -328,6 +328,66 @@ CASES += [case("features", pattern, "", flags, "compile")
     (r"(?<a>x)(?<-a>y)(?(a)z)", ""),
 )]
 
+# Generated interaction inventory, which the differentials read. Append only:
+# a case's index is cited by `dialects.md` and by the diff drivers' own
+# output, so inserting one in the middle renumbers answers somebody has
+# quoted. Each cross product stays small enough that a failing case prints as
+# a reproducer rather than as a row number.
+#
+# The subjects are BMP throughout. A subject holding a character above U+FFFF
+# is the §6 deviation rather than a comparison - .NET matches over code units
+# there and this library cannot name a position inside a character - so the
+# differentials would be scoring a difference already recorded. The astral
+# rows live in the `unit` area, which is WP-49's inventory and not a gate.
+DOTNET_INVENTORY_REVISION = "2026-10-21a"
+
+CASES += [case("generated-syntax", pattern, mode="compile") for pattern in (
+    "a", "(a|b)+", "(?:a)", "(?<n>a)", "(?'n'a)", r"(?<n>a)\k<n>",
+    "[a-z-[aeiou]]", "[a-z-[b-d-[c]]]", r"[\w-[\d]]", "[[a]",
+    # Each of these the reference refuses, and for its own reason: a
+    # subtraction that is not last, a possessive quantifier, a subroutine
+    # call, recursion, and `\Q`. A differential with no refusals in it
+    # measures only the half of a parser that says yes.
+    "[a-z-[aeiou]x]", "a*+", "(a)(?1)", "a(?R)?b", r"\Qa.b\E",
+    "(?#c)a", "(?i:a)", "(?n:(a))", "(a)(?(1)b|c)", "(?(?=a)b|c)",
+    r"\p{IsGreek}", r"\p{L}", r"\cA", r"\x41", r"\u0041", r"\052",
+    # Balancing groups: the reference compiles them and this library refuses
+    # them, which is the one row here whose disagreement is expected and
+    # recorded. It is in the inventory so the deferral stays visible.
+    "(?<n>a)(?<-n>b)",
+)]
+
+CASES += [case("generated-match", pattern, subject)
+          for pattern in ("(a|b)+", "(?i:a)b", r"\d+", "[a-z-[aeiou]]",
+                          "(?<=a)b", "(?=(a))a", "(?<n>x)(y)", r"\w+")
+          for subject in ("ab", "aab", "b", "1", "\u00e9", "xy")]
+
+CASES += [case("generated-search", pattern, subject, mode="all")
+          for pattern in ("a*", r"\G.", "(?=a)", "(a)?b", "")
+          for subject in ("ab", "baa", "")]
+
+CASES += [case("generated-replacement", pattern, subject,
+               mode="replace-all", argument=template)
+          for pattern, template in (("(a)", "<$1>"),
+                                    ("(?<n>a)", "<${n}>"),
+                                    ("(a)(b)", "<$+>"),
+                                    ("a", "<$_>"),
+                                    ("a", "<$&>"),
+                                    ("a", "<$$>"),
+                                    ("a", "<$9>"),
+                                    ("a", "<${nope}>"))
+          for subject in ("a", "ab", "ba", "")]
+
+CASES += [case("generated-split", pattern, subject, mode=mode,
+               argument=argument)
+          for pattern in (",", "(,)", "x*", "", r"(\d)")
+          for subject, mode, argument in (("a,b,c", "split", ""),
+                                          (",a,", "split", ""),
+                                          ("", "split", ""),
+                                          ("a1b2c", "split", ""),
+                                          ("a,b,c", "split-count", "2"),
+                                          ("a,b,c", "split-count", "1"))]
+
 # The GRX_Profile axes. Each row names the field it separates, and the rule
 # from the Java audit applies: a case that answers the same under both values
 # of a field pins nothing, so several come as pairs.

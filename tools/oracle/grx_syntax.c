@@ -138,13 +138,29 @@ int main(int argc, char ** argv) {
     else if (result == GRX_ERR_LIMIT) {
       printf("limit %d\n", (int)error.diag);
     }
-    else if (syntax == GRX_SYNTAX_JAVA && result == GRX_ERR_SYNTAX) {
+    //
+    // **The three lines below name a dialect and are about a caller.** A
+    // differential that compares refusals needs to tell GRX_ERR_SYNTAX from
+    // GRX_ERR_UNSUPPORTED - "the reference refuses this too" and "this
+    // library has not built it" are different findings - where the older
+    // `err <diag>` line collapses both. Java's differential wanted that and
+    // got it behind a test on the dialect, which reads as a property of Java
+    // and is a property of the harness asking.
+    //
+    // .NET joins it rather than the condition being generalised, because
+    // `tools/oracle/syntax_diff.py` parses the older line for the other
+    // eleven dialects and widening this would change what it reads. The
+    // honest fix is a flag on the command line, which is worth doing the
+    // next time a dialect needs this and not in the middle of adding one.
+    else if ((syntax == GRX_SYNTAX_JAVA || syntax == GRX_SYNTAX_DOTNET)
+        && result == GRX_ERR_SYNTAX) {
       printf("syntax %d\n", (int)error.diag);
     }
-    else if (syntax == GRX_SYNTAX_JAVA && result == GRX_ERR_UNSUPPORTED) {
+    else if ((syntax == GRX_SYNTAX_JAVA || syntax == GRX_SYNTAX_DOTNET)
+        && result == GRX_ERR_UNSUPPORTED) {
       printf("unsupported %d\n", (int)error.diag);
     }
-    else if (syntax == GRX_SYNTAX_JAVA) {
+    else if (syntax == GRX_SYNTAX_JAVA || syntax == GRX_SYNTAX_DOTNET) {
       printf("result %d %d\n", (int)result, (int)error.diag);
     }
     else {

@@ -1494,8 +1494,13 @@ static GRX_Result read_escape(GRX_Parser * parser, int in_class, Escape * out) {
       // a mode this library does not offer, and perl answers the same.
       // python_knows_escape() is what stops the other two dialects reaching
       // this case, so the guard here is only for a reader.
+      // .NET has `\uHHHH` and not `\U`: `\u0041` compiles on .NET 10.0.13
+      // and is the dialect's four-hex-digit escape, the same spelling Java
+      // has. `\U` there is an unrecognised escape, so it falls through with
+      // Perl's and PCRE2's.
       if (flavour(parser) != FLAVOUR_PYTHON
-          && !(flavour(parser) == FLAVOUR_JAVA && c == 'u')) {
+          && !(flavour(parser) == FLAVOUR_JAVA && c == 'u')
+          && !(flavour(parser) == FLAVOUR_DOTNET && c == 'u')) {
         break;
       }
       int width = c == 'u' ? 4 : 8;
@@ -4869,6 +4874,26 @@ static GRX_Result pcre_group_open(GRX_Parser * parser, GRX_GroupOpen * out) {
           || c == '+' || (c == '-' && is_decimal(byte_at(parser, 1)))
           || is_decimal(c) || c == '\''
           || c == 'P' || c == 'C' || c == '{')) {
+    return grx_parse_fail(parser, GRX_DIAG_INVALID_GROUP_SYNTAX, start, 2);
+  }
+  // .NET's list is Java's less two. `(?(1)a|b)` is a conditional there, so
+  // `(` stays; `(?'n'a)` is the quote spelling of a named group, so `'`
+  // stays. Everything else PCRE2 offers after `(?` is refused, and the
+  // refusals are measured rather than inferred: `(a)(?1)` and `a(?R)?b` are
+  // both "Unrecognized grouping construct" on .NET 10.0.13
+  // (`dotnet_probe.py`, `features` area), and this library accepted both
+  // until the differential asked - a pattern the reference rejects, reported
+  // to the caller as valid .NET.
+  //
+  // **GRX_FEATURE_RECURSION and GRX_FEATURE_SUBROUTINE do not gate
+  // anything.** They are in the mask for every dialect that has them and
+  // are read nowhere, so withholding them from .NET's features documented a
+  // refusal the parser did not perform. That is a wider gap than this
+  // dialect and is noted here rather than fixed here.
+  if (flavour(parser) == FLAVOUR_DOTNET
+      && (c == '[' || c == '|' || c == 'R' || c == '&'
+          || c == '+' || (c == '-' && is_decimal(byte_at(parser, 1)))
+          || is_decimal(c) || c == 'P' || c == 'C' || c == '{')) {
     return grx_parse_fail(parser, GRX_DIAG_INVALID_GROUP_SYNTAX, start, 2);
   }
   if (flavour(parser) == FLAVOUR_PYTHON
