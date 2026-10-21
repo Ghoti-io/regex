@@ -517,6 +517,36 @@ static int group_number_for_name(
 }
 
 /** Whether a capturing group with this name has already been parsed. */
+/**
+ * The group number a name already has, or 0 when the name is new.
+ *
+ * `name_already_used` below answers whether to refuse; this answers which
+ * slot to reuse, which is what .NET needs. A repeated name there is **one
+ * group**, not two groups sharing a name: measured on .NET 10.0.13,
+ * `(?<n>a)(?<n>b)` reports a single group 1 and `(x)(?<n>a)|(y)(?<n>b)`
+ * reports 0, 1, 2 and 3 with only the last named, where PCRE2's `J` would
+ * give two slots with one name.
+ */
+static uint32_t name_group_number(const GRX_Parser * parser,
+    uint32_t offset) {
+  const char * name = grx_pattern_name(parser->pattern, offset);
+  if (!name) {
+    return 0;
+  }
+  for (size_t i = 0; i < parser->pattern->nodes.count; i++) {
+    const GRX_Node * node = grx_pattern_node(parser->pattern, (uint32_t)i);
+    if (!node || node->kind != GRX_NODE_GROUP
+        || !(node->flags & GRX_NODE_NAMED) || node->b == offset) {
+      continue;
+    }
+    const char * existing = grx_pattern_name(parser->pattern, node->b);
+    if (existing && strcmp(existing, name) == 0) {
+      return node->a;
+    }
+  }
+  return 0;
+}
+
 static int name_already_used(const GRX_Parser * parser, uint32_t offset) {
   const char * name = grx_pattern_name(parser->pattern, offset);
   if (!name) {
@@ -5105,10 +5135,29 @@ static GRX_Result pcre_group_open(GRX_Parser * parser, GRX_GroupOpen * out) {
     if (result != GRX_OK) {
       return result;
     }
-    if (!(parser->options & GRX_OPT_DUPLICATE_NAMES)
+    // .NET is not in this refusal: a repeated name is its rule and not an
+    // option, and it *merges* rather than duplicating, so neither arm of
+    // this condition describes it. The merge is below.
+    if (flavour(parser) != FLAVOUR_DOTNET
+        && !(parser->options & GRX_OPT_DUPLICATE_NAMES)
         && name_already_used(parser, offset)) {
       return grx_parse_fail(parser, GRX_DIAG_DUPLICATE_GROUP_NAME, start,
           parser->position - start);
+    }
+
+    // A name .NET has already seen takes that name's slot, and opens no new
+    // one: every occurrence writes where the first one did, and the group
+    // count does not grow. `(?<n>a)(?<n>b)` over "ab" leaves group 1 holding
+    // "b" there, the last occurrence to participate, which falls out of one
+    // slot being written twice rather than needing a rule of its own.
+    if (flavour(parser) == FLAVOUR_DOTNET) {
+      uint32_t existing = name_group_number(parser, offset);
+      if (existing) {
+        out->flags = GRX_NODE_CAPTURING | GRX_NODE_NAMED;
+        out->a = existing;
+        out->b = offset;
+        return GRX_OK;
+      }
     }
 
     parser->groups_opened++;

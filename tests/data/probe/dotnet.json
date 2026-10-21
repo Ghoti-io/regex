@@ -3522,6 +3522,62 @@
     },
     {
       "area": "profile-audit",
+      "pattern": "(?<n>a)(?<n>b)",
+      "subject": "ab",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "(?<n>a)|(?<n>b)",
+      "subject": "b",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "(?<n>a)|(?<n>b)",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "(?<n>a)(?<n>b)",
+      "subject": "ab",
+      "flags": "",
+      "mode": "names",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "(?<n>a)|(?<n>b)",
+      "subject": "b",
+      "flags": "",
+      "mode": "names",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "(x)(?<n>a)|(y)(?<n>b)",
+      "subject": "yb",
+      "flags": "",
+      "mode": "names",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "(x)(?<n>a)|(y)(?<n>b)",
+      "subject": "yb",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
       "pattern": "a??",
       "subject": "aa",
       "flags": "",
@@ -6854,6 +6910,124 @@
             2,
             2
           ]
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ],
+        [
+          1,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "names",
+      "names": [
+        [
+          0,
+          "0"
+        ],
+        [
+          1,
+          "n"
+        ]
+      ],
+      "numbers": [
+        0,
+        1
+      ]
+    },
+    {
+      "kind": "names",
+      "names": [
+        [
+          0,
+          "0"
+        ],
+        [
+          1,
+          "n"
+        ]
+      ],
+      "numbers": [
+        0,
+        1
+      ]
+    },
+    {
+      "kind": "names",
+      "names": [
+        [
+          0,
+          "0"
+        ],
+        [
+          1,
+          "1"
+        ],
+        [
+          2,
+          "2"
+        ],
+        [
+          3,
+          "n"
+        ]
+      ],
+      "numbers": [
+        0,
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ],
+        null,
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
         ]
       ]
     },

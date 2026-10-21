@@ -47,15 +47,21 @@ ENGINES = ("auto", "pike", "backtrack", "bitstate", "dfa")
 # exclusion that stops being a disagreement is reported rather than passed.
 EXCLUDED = {
     # .NET's numbering is sparse and collides, and this library refuses the
-    # three spellings that need more than a partition: an explicit number
-    # (`(?<5>a)`), a number colliding with an unnamed group's
-    # (`(a)(?<1>b)`), and a repeated name. The plain
+    # two spellings that need more than a partition: an explicit number
+    # (`(?<5>a)`), which makes the numbering sparse, and a number colliding
+    # with an unnamed group's (`(a)(?<1>b)`), which .NET merges. The plain
     # unnamed-before-named case is implemented and compared.
+    #
+    # **A repeated name was a third and is not any more.** It was excluded
+    # here as "refused: a repeated group name" until the naming differential
+    # existed and asked what .NET actually does with one: it merges the
+    # occurrences into a single group, where PCRE2's `J` would give two
+    # sharing a name. That is implemented, so these rows are compared - and
+    # this gate is what said so, by reporting the exclusions as stale on the
+    # first run after the fix rather than passing them.
     ("(?<5>a)(b)", "ab"): "refused: an explicit group number",
     ("(a)(?<1>b)", "ab"): "refused: an explicit number colliding with an "
                           "unnamed group's",
-    ("(?<n>a)(?<n>b)", "ab"): "refused: a repeated group name",
-    ("(?<n>a)(?<n>b)", "b"): "refused: a repeated group name",
     # The `Is` namespace, which is .NET's own block list; the syntax
     # differential carries the measurement.
     (r"\p{IsGreek}", "\u03b1"): "refused: an `Is`-prefixed block name",

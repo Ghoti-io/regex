@@ -339,7 +339,7 @@ CASES += [case("features", pattern, "", flags, "compile")
 # there and this library cannot name a position inside a character - so the
 # differentials would be scoring a difference already recorded. The astral
 # rows live in the `unit` area, which is WP-49's inventory and not a gate.
-DOTNET_INVENTORY_REVISION = "2026-10-21p"
+DOTNET_INVENTORY_REVISION = "2026-10-21q"
 
 CASES += [case("generated-syntax", pattern, mode="compile") for pattern in (
     "a", "(a|b)+", "(?:a)", "(?<n>a)", "(?'n'a)", r"(?<n>a)\k<n>",
@@ -621,6 +621,18 @@ CASES += [case("profile-audit", pattern, subject, flags, mode) for
     # empty match at 0 of "aa", a retry forbidding the empty match takes
     # "a", where ADVANCE_ONE steps to 1 and matches empty again.
     ("a*?", "aa", "", "all"),
+    # A repeated group name, which the naming differential found this library
+    # refuses and .NET accepts. .NET *merges* the two into one group rather
+    # than letting two groups share a name the way PCRE2's `J` does, so the
+    # numbering and the match are both at stake: these rows say which slot
+    # the text lands in and what the alternation idiom does.
+    ("(?<n>a)(?<n>b)", "ab", "", "first"),
+    ("(?<n>a)|(?<n>b)", "b", "", "first"),
+    ("(?<n>a)|(?<n>b)", "a", "", "first"),
+    ("(?<n>a)(?<n>b)", "ab", "", "names"),
+    ("(?<n>a)|(?<n>b)", "b", "", "names"),
+    ("(x)(?<n>a)|(y)(?<n>b)", "yb", "", "names"),
+    ("(x)(?<n>a)|(y)(?<n>b)", "yb", "", "first"),
     ("a??", "aa", "", "all"),
     ("(?:|a)", "aa", "", "all"),
     # empty_subject_is_a_boundary: `\b` with nothing on either side.

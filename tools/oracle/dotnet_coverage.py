@@ -32,26 +32,6 @@ import dotnet_probe
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DATA = os.path.join(ROOT, "tests", "data", "probe")
 
-# **A named gap, not a covered one.** The ten `names` rows ask which group
-# numbers and names a pattern has, and .NET's numbering is the part of this
-# dialect most likely to be wrong: unnamed groups number first and named ones
-# after, the numbering is sparse, and explicit numbers collide and merge. It
-# is covered today only by `tests/unit/test_dotnet.cpp`, whose expectations
-# were written from the same reading as the implementation - so a
-# misunderstanding of the reference would be reproduced in both.
-#
-# No gate asks them because **no driver reports group names or numbers at
-# all**: grx_syntax prints only accept-or-reject, and grx_match prints spans.
-# Closing it is a new driver mode and not a widening of a predicate, which is
-# why it is named here rather than quietly added to a gate's area list. Until
-# then this is one of two places where the dialect rests on unit tests alone,
-# and saying so is the point of this file.
-NAMES_REASON = (
-    "group numbering and names: no driver reports them, so closing this "
-    "needs a new driver mode rather than a wider predicate. Covered today "
-    "by test_dotnet.cpp alone, whose expectations and the implementation "
-    "share an author - see the comment above this table")
-
 # One row, and the same shape of gap: `dotnet_replace_diff.py` asks
 # `replace-all` because every other replacement row is one, and this single
 # `replace-first` row would need the gate to drive a second driver mode.
@@ -92,6 +72,8 @@ def claimant(row, answer):
         return "split"
     if mode in ("all", "all-from", "find-from") and not flags:
         return "search"
+    if mode == "names":
+        return "names"
     return None
 
 
@@ -99,8 +81,6 @@ def claimant(row, answer):
 # whole group is unasked and by (area, mode, pattern) where it is not, so
 # that widening one is a visible edit.
 UNASKED = {
-    ("captures", "names"): NAMES_REASON,
-    ("ecmascript", "names"): NAMES_REASON,
     ("template", "replace-first"): REPLACE_FIRST_REASON,
     ("unit",):
         "WP-49's inventory, in every mode it uses. .NET matches over UTF-16 "

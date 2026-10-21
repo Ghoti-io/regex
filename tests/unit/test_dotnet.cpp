@@ -644,6 +644,65 @@ TEST(DotNetProfile, ACaretInsideAPropertyNameIsARefusal) {
   EXPECT_EQ(compile_dotnet("\\P{L}"), GRX_OK);
 }
 
+namespace {
+// The group numbers and names a pattern has, as "n:name" with `-` for an
+// unnamed group. The numbering is what no span can reveal: every group can
+// hold the right text under the wrong number and every span still match.
+std::string naming_dotnet(const char * pattern) {
+  GRX_Regex * regex = nullptr;
+  GRX_Error error;
+  if (grx_regex_compile_with_allocator(pattern, std::strlen(pattern),
+          GRX_SYNTAX_DOTNET, GRX_OPT_NONE, nullptr, nullptr, &error,
+          &regex) != GRX_OK) return "compile-error";
+  std::string out;
+  size_t count = grx_regex_capture_count(regex);
+  for (size_t i = 0; i <= count; i++) {
+    const char * name = grx_regex_capture_name(regex, i);
+    if (i) out += " ";
+    out += std::to_string(i) + ":" + (name ? name : "-");
+  }
+  grx_regex_free(regex);
+  return out;
+}
+}  // namespace
+
+// **A repeated name is one group on .NET, not two groups sharing a name.**
+// PCRE2's `J` gives two slots with one name; .NET allocates the name once,
+// at its first occurrence in the named-group ordering, and every later
+// occurrence writes to that slot. So the count does not grow and the group
+// holds whichever occurrence last participated.
+//
+// This library refused the construct until the naming differential existed
+// and asked. Nothing else could have: no driver reported group numbers, so
+// the whole of .NET's numbering rested on this file, whose expectations and
+// the implementation were written by the same hand from the same reading.
+TEST(DotNetCaptures, ARepeatedNameIsOneGroup) {
+  EXPECT_EQ(naming_dotnet("(?<n>a)(?<n>b)"), "0:- 1:n");
+  EXPECT_EQ(groups_dotnet("(?<n>a)(?<n>b)", "ab"), "0:2 1:2");
+  // Either branch of an alternation writes the same slot.
+  EXPECT_EQ(groups_dotnet("(?<n>a)|(?<n>b)", "a"), "0:1 0:1");
+  EXPECT_EQ(groups_dotnet("(?<n>a)|(?<n>b)", "b"), "0:1 0:1");
+}
+
+// The merge happens inside .NET's own ordering, so the unnamed groups still
+// number first and the one named slot comes after both of them: four groups
+// and not five, with only the last named.
+TEST(DotNetCaptures, TheMergedNameStillComesAfterEveryUnnamedGroup) {
+  EXPECT_EQ(naming_dotnet("(x)(?<n>a)|(y)(?<n>b)"), "0:- 1:- 2:- 3:n");
+  EXPECT_EQ(groups_dotnet("(x)(?<n>a)|(y)(?<n>b)", "yb"), "0:2 - 0:1 1:2");
+}
+
+// The two spellings that are still refused, and why they are different from
+// a repeated name: a partition can express one slot written twice, and
+// cannot express a numbering with a gap in it or one where an explicit
+// number merges with an unnamed group's.
+TEST(DotNetCaptures, AnExplicitGroupNumberIsStillRefused) {
+  GRX_Error error;
+  EXPECT_EQ(compile_dotnet("(?<5>a)(b)", &error), GRX_ERR_SYNTAX);
+  EXPECT_EQ(error.diag, GRX_DIAG_INVALID_GROUP_NAME);
+  EXPECT_EQ(compile_dotnet("(a)(?<1>b)"), GRX_ERR_SYNTAX);
+}
+
 int main(int argc, char ** argv) {
   testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

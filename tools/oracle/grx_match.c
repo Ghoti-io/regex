@@ -229,6 +229,17 @@ int main(int argc, char ** argv) {
     return 2;
   }
   int find_all = argc > 3 && strcmp(argv[3], "all") == 0;
+  // Group numbering and names, which nothing could report until now: this
+  // driver printed spans and grx_syntax printed accept-or-reject, so the ten
+  // `names` rows of the .NET inventory were compared by nothing and
+  // dotnet_coverage.py named them as a gap. .NET's numbering is unnamed
+  // groups first and named ones after, which is the one place a dialect can
+  // be wrong in a way no span reveals - every group holding the right text
+  // under the wrong number looks identical from here.
+  //
+  // It needs a compiled regex rather than a parse, which is why it is in
+  // this driver and not that one.
+  int naming = argc > 3 && strcmp(argv[3], "names") == 0;
   int looking_at = argc > 3 && strcmp(argv[3], "looking-at") == 0;
   int matches = argc > 3 && strcmp(argv[3], "matches") == 0;
   int tracing = (argc > 2 && strcmp(argv[2], "callout") == 0)
@@ -516,6 +527,24 @@ int main(int argc, char ** argv) {
       trace.text[0] = '\0';
       search.callout = trace_callout;
       search.callout_data = &trace;
+    }
+
+    if (naming) {
+      // `-` for an unnamed group rather than its number as a string. The
+      // reference names every group, an unnamed one by its number, and
+      // applying that convention here would bake the reference's spelling
+      // into the driver: what this library knows is that the group has no
+      // name, and the differential is where the two conventions are
+      // reconciled, in one place that says so.
+      size_t count = grx_regex_capture_count(regex);
+      printf("names %zu", count);
+      for (size_t i = 0; i <= count; i++) {
+        const char * name = grx_regex_capture_name(regex, i);
+        printf(" %zu:%s", i, name ? name : "-");
+      }
+      printf("\n");
+      fflush(stdout);
+      continue;
     }
 
     GRX_Match * match = NULL;
