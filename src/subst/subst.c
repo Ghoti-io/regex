@@ -1986,8 +1986,14 @@ static GRX_Result split_worker(const GRX_Regex * regex, const char * subject,
     // it. An empty subject with a pattern that does not match yields the one
     // empty piece the final-field step emits, and one that matches empty
     // yields two - the piece before the separator and the piece after it.
+    // .NET has no empty-subject rule of its own either, for Python's reason
+    // and not by analogy: measured on 10.0.13, `,` over "" is one empty
+    // piece and `x*` over "" is two, which is exactly what the walk below
+    // produces. Omitting it here gave zero pieces for both, and the split
+    // differential is what found it - the dialect reached `plain_walk` and
+    // then took an early return that `plain_walk` does not govern.
     if (resolved.begin == end && !python_rule && !rust_rule
-        && !java_rule) {
+        && !java_rule && !dotnet_rule) {
       if (go_rule) {
         // Go's is a test on the length of the pattern *text*: `len(re.expr) >
         // 0 && len(s) == 0` returns one empty piece, and the empty pattern
