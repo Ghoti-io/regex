@@ -339,6 +339,25 @@ bool parse_options(
     // encodable - append_utf8() allows surrogates - with no way to say that
     // the matcher should accept it.
     {"wtf8", GRX_OPT_WTF8},
+    // `RegexOptions.ECMAScript`, as the four bits it is. Named here for the
+    // reason the comment above gives: .NET's option is a constructor
+    // argument with no `(?E)` spelling, so no dialect alphabet has a letter
+    // for it and a vector has nothing to put in `flags:`.
+    //
+    // Spelled as the four rather than as one name, because each is a bit a
+    // caller may set alone and a vector that said "ecmascript" would be
+    // asserting a grouping rather than a behaviour.
+    {"ascii-digit", GRX_OPT_ASCII_DIGIT},
+    {"ascii-space", GRX_OPT_ASCII_SPACE},
+    {"ascii-word", GRX_OPT_ASCII_WORD},
+    {"prefix-backreference", GRX_OPT_PREFIX_BACKREFERENCE},
+    // The rest of the ASCII family, so the table is the option set and not
+    // the subset one dialect needed. `ascii-classes` is the five together
+    // and the others are its parts.
+    {"ascii-classes", GRX_OPT_ASCII_CLASSES},
+    {"ascii-posix", GRX_OPT_ASCII_POSIX},
+    {"ascii-posix-digit", GRX_OPT_ASCII_POSIX_DIGIT},
+    {"ascii-fold-separate", GRX_OPT_ASCII_FOLD_SEPARATE},
   };
 
   std::istringstream fields(value);

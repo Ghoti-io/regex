@@ -235,6 +235,7 @@ engine and no network.
 | `rust` | 2,817 | 100.00% | generated from the `regex` crate 1.13.1, which carries UCD 16.0.0; 1 excluded |
 | `python` | 2,177 | 100.00% | generated from CPython 3.14.7 |
 | `pcre` | 1,869 | 100.00% | PCRE2 10.46's `testinput` |
+| `dotnet` | 309 | 95.47% | generated from .NET 10.0.13; 8 of them hold an unpaired UTF-16 surrogate and carry `options: wtf8`. **The 14 known gaps are in this denominator and counted as failures**, which is why the rate is not 100%: two balancing-group spellings and two explicit group numbers are refused, `\p{Is...}` wants .NET's own block list, caseless matching follows a fold orbit where .NET follows the lowercase mapping (WP-50), and `\w` takes `So` where .NET does not. Each is named in `known-gaps.txt` and excluded by its own gate |
 | `java` | 136 | 100.00% | bounded committed syntax and match vectors from Temurin 25.0.4.1+1; live differential cases and excluded cases are outside this denominator |
 | `gnu-ere` | 270 | 100.00% | Spencer's cases, answered by glibc 2.41 |
 | `posix-ere` | 245 | 100.00% | Spencer's cases, where glibc and musl agree |
