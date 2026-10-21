@@ -703,6 +703,27 @@ TEST(DotNetCaptures, AnExplicitGroupNumberIsStillRefused) {
   EXPECT_EQ(compile_dotnet("(a)(?<1>b)"), GRX_ERR_SYNTAX);
 }
 
+// **.NET takes short General_Category names and its own `Is` prefix, and
+// nothing else.** `GRX_PROPERTY_STRICT` is not this rule: that is
+// ECMAScript's, where `\p{Letter}` is a canonical alias and so is right to
+// accept, which is why the strictest value of that enum still let two
+// spellings through here. Each expectation is a measured .NET 10.0.13
+// answer; the long name and the lower-cased one are the two this library
+// accepted before the gate existed.
+TEST(DotNetClasses, OnlyShortCategoryNamesAndTheIsPrefix) {
+  EXPECT_EQ(compile_dotnet("\\p{Lu}"), GRX_OK);
+  EXPECT_EQ(compile_dotnet("\\p{Nd}"), GRX_OK);
+  EXPECT_EQ(compile_dotnet("\\p{L}"), GRX_OK);
+  GRX_Error error;
+  EXPECT_EQ(compile_dotnet("\\p{Letter}", &error), GRX_ERR_SYNTAX);
+  EXPECT_EQ(error.diag, GRX_DIAG_UNKNOWN_PROPERTY);
+  EXPECT_EQ(compile_dotnet("\\p{lu}"), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_dotnet("\\p{Alphabetic}"), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_dotnet("\\p{Script=Greek}"), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_dotnet("\\p{InGreek}"), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_dotnet("\\p{IsL}"), GRX_ERR_SYNTAX);
+}
+
 int main(int argc, char ** argv) {
   testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

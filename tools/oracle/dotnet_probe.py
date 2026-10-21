@@ -339,7 +339,7 @@ CASES += [case("features", pattern, "", flags, "compile")
 # there and this library cannot name a position inside a character - so the
 # differentials would be scoring a difference already recorded. The astral
 # rows live in the `unit` area, which is WP-49's inventory and not a gate.
-DOTNET_INVENTORY_REVISION = "2026-10-21q"
+DOTNET_INVENTORY_REVISION = "2026-10-21s"
 
 CASES += [case("generated-syntax", pattern, mode="compile") for pattern in (
     "a", "(a|b)+", "(?:a)", "(?<n>a)", "(?'n'a)", r"(?<n>a)\k<n>",
@@ -645,6 +645,26 @@ CASES += [case("profile-audit", pattern, subject, flags, mode) for
     (r"\P{^L}", "1", "", "compile"),
     (r"[\p{^L}]", "1", "", "compile"),
     (r"\P{L}", "1", "", "first"),
+    # property_match, which the condition-2 sweep found no row divided -
+    # and the reason is worse than a missing case. `dialects.md` says .NET's
+    # `Is` prefix is block-only against .NET's own list and that the loose
+    # spellings are refused, and those measurements were taken by hand and
+    # never pinned: nothing in the inventory asked for a long category name,
+    # a lower-cased one, Perl's `In` prefix or `Is` in front of a category.
+    # Mutating the field to LOOSE makes `\p{lu}` compile here, so the axis
+    # is observable and was simply unasked.
+    (r"\p{Lu}", "A", "", "compile"),
+    (r"\p{Letter}", "a", "", "compile"),
+    (r"\p{lu}", "A", "", "compile"),
+    (r"\p{InGreek}", "\u03b1", "", "compile"),
+    (r"\p{IsL}", "a", "", "compile"),
+    (r"\p{IsGreekAndCoptic}", "\u03b1", "", "compile"),
+    # The other two families a dialect might take here, so the rule is
+    # bounded on both sides rather than inferred from the refusals above: a
+    # binary property name, and a `name=value` pair.
+    (r"\p{Alphabetic}", "a", "", "compile"),
+    (r"\p{Script=Greek}", "\u03b1", "", "compile"),
+    (r"\p{Nd}", "0", "", "compile"),
     # ascii_classes_fold_ascii: whether the dialect's own ASCII narrowing
     # takes the *folding* with it. U+00E9 and U+00C9 are one orbit and both
     # outside ASCII, so a narrowing that reached the folding would part them.

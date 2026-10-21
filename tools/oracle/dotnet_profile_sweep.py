@@ -12,9 +12,10 @@ PREFIX = "/home/corey/Documents/ghoti.io/.local"
 SRC = os.path.join(ROOT, "src", "syntax", "syntax.c")
 HDR = os.path.join(ROOT, "src", "syntax", "syntax_internal.h")
 APP = os.path.join(ROOT, "build", "linux", "release", "apps")
-DIFFS = ["syntax", "match", "replace", "split", "flags", "search"]
+DIFFS = ["syntax", "match", "replace", "split", "flags", "search", "names"]
 DRIVER = {"syntax": "grx_syntax", "match": "grx_match", "replace": "grx_replace",
-          "split": "grx_split", "flags": "grx_match", "search": "grx_match"}
+          "split": "grx_split", "flags": "grx_match", "search": "grx_match",
+          "names": "grx_match"}
 
 
 def enumerators():
@@ -66,17 +67,31 @@ def main():
         found = re.search(r"\.%s = ([A-Za-z0-9_]+)" % field, row)
         if found:
             current = found.group(1)
+        # **Every other legal value, not one of them.** The first version of
+        # this picked enumerators[1] (or [0]), and for `lookbehind` that is
+        # GRX_LOOKBEHIND_NONE against .NET's UNBOUNDED - which lower.c maps
+        # to the same GRX_NPOS, since only BOUNDED and FIXED get a number.
+        # The mutation compiled, linked and changed nothing, and the sweep
+        # recorded "nothing failed": a reading that says no test covers the
+        # field when what happened is that the value chosen was a synonym of
+        # the one already there.
+        #
+        # A field is uncaught only when *no* alternative fails anything, and
+        # the report names which values caught it, because a field caught by
+        # one of six alternatives is weaker coverage than one caught by all
+        # six.
         if type_name == "int":
-            want = "0" if current == "1" else "1"
+            wants = ["0" if current == "1" else "1"]
         elif type_name == "uint32_t":
-            want = "GRX_OPT_UTF" if current != "GRX_OPT_UTF" else "GRX_OPT_UCP"
+            wants = ["GRX_OPT_UTF", "GRX_OPT_UCP", "GRX_OPT_CASELESS"]
+            wants = [w for w in wants if w != current]
         else:
             vals = enums.get(type_name)
             if not vals or len(vals) < 2:
                 continue
             base = current or vals[0]
-            want = vals[1] if base == vals[0] else vals[0]
-        plan.append((field, current, want))
+            wants = [v for v in vals if v != base]
+        plan.append((field, current, wants))
 
     # **Pre-flight, and it is the control the first run of this did not
     # have.** That run reported "caught 0, nothing failed 40" with every
@@ -88,7 +103,22 @@ def main():
     # A mutation harness has to know that an *unmutated* build succeeds and
     # that the gates pass on it, before any result from a mutated one means
     # anything.
-    print("pre-flight: building the unmutated tree", flush=True)
+    # **`make clean` first, and that is the second correction to this
+    # control.** The first version checked nothing at all and every line
+    # read BUILD FAILED. The second built the unmutated tree and passed -
+    # and every mutated build still failed, because an unmutated tree built
+    # by the container's GCC 16 *links* on the host without recompiling
+    # anything, while touching syntax.c rebuilds one object with the host's
+    # GCC 14 and then cannot link it against the rest.
+    #
+    # So a pre-flight has to exercise the path the iterations exercise -
+    # compile and link after a source change - not merely ask whether the
+    # tree as it stands links. Cleaning first is the cheapest way to
+    # guarantee every object in the tree came from the compiler this sweep
+    # will be using.
+    print("pre-flight: cleaning, then building the unmutated tree",
+          flush=True)
+    run("make clean")
     build = run("make tools build/linux/release/apps/testDotnet "
                 "PREFIX=%s" % PREFIX)
     if build.returncode:
@@ -104,9 +134,13 @@ def main():
         return 2
     print("pre-flight clean", flush=True)
 
-    print("%d fields to sweep" % len(plan), flush=True)
+    print("%d fields to sweep, %d mutations in all"
+          % (len(plan), sum(len(w) for _, _, w in plan)), flush=True)
     caught, missed = [], []
-    for field, current, want in plan:
+    for field, current, wants in plan:
+      caught_by = []
+      build_failures = []
+      for want in wants:
         text = open(SRC, encoding="utf-8").read()
         s, e = dotnet_row(text)
         body = text[s:e]
@@ -121,8 +155,8 @@ def main():
                     "PREFIX=%s" % PREFIX)
         if build.returncode:
             run("git checkout -- src/syntax/syntax.c")
-            missed.append((field, want, "build failed"))
-            print("%-36s %-28s BUILD FAILED" % (field, want), flush=True)
+            build_failures.append(want)
+            print("%-34s %-30s BUILD FAILED" % (field, want), flush=True)
             continue
 
         failures = []
@@ -136,12 +170,21 @@ def main():
                 failures.append(diff)
         run("git checkout -- src/syntax/syntax.c")
         if failures:
-            caught.append((field, want, failures))
-            print("%-36s %-28s caught by %s"
+            caught_by.append((want, failures))
+            print("%-34s %-30s caught by %s"
                   % (field, want, ",".join(failures)), flush=True)
         else:
-            missed.append((field, want, "nothing failed"))
-            print("%-36s %-28s *** NOTHING FAILED ***" % (field, want), flush=True)
+            print("%-34s %-30s no failure" % (field, want), flush=True)
+
+      if caught_by:
+          caught.append((field, caught_by, len(wants)))
+          print("  => %s caught by %d of %d values"
+                % (field, len(caught_by), len(wants)), flush=True)
+      else:
+          why = ("every alternative failed to build" if build_failures
+                 else "no alternative value failed anything")
+          missed.append((field, wants, why))
+          print("  => %s *** %s ***" % (field, why), flush=True)
 
     # The control: with the tree restored, everything must pass again.
     run("make tools build/linux/release/apps/testDotnet PREFIX=%s" % PREFIX)
@@ -151,8 +194,14 @@ def main():
     print("\ncaught %d, nothing failed %d" % (len(caught), len(missed)))
     print("restored-tree control: %s"
           % ("CLEAN" if not clean else "STILL FAILING: " + ",".join(clean)))
-    for field, want, why in missed:
-        print("  missed %-34s %-28s %s" % (field, want, why))
+    for field, wants, why in missed:
+        print("  missed %-32s %s (tried %s)"
+              % (field, why, ",".join(wants)))
+    for field, caught_by, total in caught:
+        if len(caught_by) < total:
+            print("  partial %-31s caught by %d of %d: %s"
+                  % (field, len(caught_by), total,
+                     ",".join(w for w, _ in caught_by)))
     return 0
 
 

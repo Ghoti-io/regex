@@ -3650,6 +3650,78 @@
     },
     {
       "area": "profile-audit",
+      "pattern": "\\p{Lu}",
+      "subject": "A",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "\\p{Letter}",
+      "subject": "a",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "\\p{lu}",
+      "subject": "A",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "\\p{InGreek}",
+      "subject": "\u03b1",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "\\p{IsL}",
+      "subject": "a",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "\\p{IsGreekAndCoptic}",
+      "subject": "\u03b1",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "\\p{Alphabetic}",
+      "subject": "a",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "\\p{Script=Greek}",
+      "subject": "\u03b1",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "\\p{Nd}",
+      "subject": "0",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
       "pattern": "\u00e9",
       "subject": "\u00c9",
       "flags": "iE",
@@ -7121,6 +7193,54 @@
           1
         ]
       ]
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 10,
+      "error": "UnrecognizedUnicodeProperty",
+      "description": "Invalid pattern '\\p{Letter}' at offset 10. Unknown property 'Letter'."
+    },
+    {
+      "kind": "syntax",
+      "index": 6,
+      "error": "UnrecognizedUnicodeProperty",
+      "description": "Invalid pattern '\\p{lu}' at offset 6. Unknown property 'lu'."
+    },
+    {
+      "kind": "syntax",
+      "index": 11,
+      "error": "UnrecognizedUnicodeProperty",
+      "description": "Invalid pattern '\\p{InGreek}' at offset 11. Unknown property 'InGreek'."
+    },
+    {
+      "kind": "syntax",
+      "index": 7,
+      "error": "UnrecognizedUnicodeProperty",
+      "description": "Invalid pattern '\\p{IsL}' at offset 7. Unknown property 'IsL'."
+    },
+    {
+      "kind": "syntax",
+      "index": 20,
+      "error": "UnrecognizedUnicodeProperty",
+      "description": "Invalid pattern '\\p{IsGreekAndCoptic}' at offset 20. Unknown property 'IsGreekAndCoptic'."
+    },
+    {
+      "kind": "syntax",
+      "index": 14,
+      "error": "UnrecognizedUnicodeProperty",
+      "description": "Invalid pattern '\\p{Alphabetic}' at offset 14. Unknown property 'Alphabetic'."
+    },
+    {
+      "kind": "syntax",
+      "index": 10,
+      "error": "InvalidUnicodePropertyEscape",
+      "description": "Invalid pattern '\\p{Script=Greek}' at offset 10. Incomplete \\p{X} character escape."
+    },
+    {
+      "kind": "compile"
     },
     {
       "kind": "match",

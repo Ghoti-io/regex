@@ -760,6 +760,53 @@ static GRX_Result read_property(GRX_Parser * parser, int negated, size_t start,
     }
   }
 
+  // **.NET takes short General_Category names and its own `Is` prefix, and
+  // nothing else.** Measured on .NET 10.0.13: `\p{Lu}` and `\p{Nd}` compile,
+  // and `\p{Letter}`, `\p{lu}`, `\p{Alphabetic}`, `\p{Script=Greek}`,
+  // `\p{InGreek}` and `\p{IsL}` are each an UnrecognizedUnicodeProperty or
+  // InvalidUnicodeProperty. `GRX_PROPERTY_STRICT` is not this rule - it is
+  // ECMAScript's, where `\p{Letter}` is a canonical alias and so is right to
+  // accept - which is why the check is here rather than a fifth value of
+  // that enum resolving a table .NET does not have.
+  //
+  // The `Is` namespace itself is .NET's own list of blocks and scripts, and
+  // a list cannot be inferred from the handful of names measured:
+  // `IsGreek` and `IsBasicLatin` compile there and `IsGreekAndCoptic` does
+  // not. So an `Is` name is passed through to the resolver below, which
+  // accepts the ones it knows, and `dotnet_syntax_diff.py` excludes
+  // `\p{IsGreek}` by name for that reason. What this gate fixes is the two
+  // spellings this library *accepted* and the reference refuses, which is a
+  // wrong answer rather than a missing feature.
+  //
+  // Found because the condition-2 sweep said nothing divided
+  // `property_match`, and the reason was that the measurements behind
+  // section 5's prose had been taken by hand and never pinned.
+  if (flavour(parser) == FLAVOUR_DOTNET) {
+    static const char * const kShortCategories[] = {
+      "C", "Cc", "Cf", "Cn", "Co", "Cs",
+      "L", "Ll", "Lm", "Lo", "Lt", "Lu",
+      "M", "Mc", "Me", "Mn",
+      "N", "Nd", "Nl", "No",
+      "P", "Pc", "Pd", "Pe", "Pf", "Pi", "Po", "Ps",
+      "S", "Sc", "Sk", "Sm", "So",
+      "Z", "Zl", "Zp", "Zs",
+    };
+    const char * text = parser->text + first;
+    int accepted = length > 2 && memcmp(text, "Is", 2) == 0;
+    for (size_t i = 0;
+         !accepted && i < sizeof kShortCategories / sizeof *kShortCategories;
+         i++) {
+      if (strlen(kShortCategories[i]) == length
+          && memcmp(text, kShortCategories[i], length) == 0) {
+        accepted = 1;
+      }
+    }
+    if (!accepted) {
+      return grx_parse_fail(parser, GRX_DIAG_UNKNOWN_PROPERTY, start,
+          parser->position - start);
+    }
+  }
+
   {
     const char * text = parser->text + first;
     const char * equals = memchr(text, '=', length);
