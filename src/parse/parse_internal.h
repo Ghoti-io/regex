@@ -578,6 +578,19 @@ typedef struct GRX_Parser {
    */
   size_t unnamed_groups;
   size_t named_opened;             ///< Named groups numbered so far (.NET).
+  /**
+   * Whether a `\Q` is open at the current position.
+   *
+   * Only Java needs it, and it needs it to refuse a *dangling* `\E` - one
+   * with no `\Q` before it. `Pattern.compile("\\E")` raises on JDK 25
+   * where perl 5.44 and PCRE2 accept the same pattern, so this cannot be
+   * settled by the quoting feature bit, which all three have.
+   *
+   * A flag rather than a backward scan from each `\E`: scanning would be
+   * linear per escape and quadratic over a pattern made of them, and a
+   * pattern fuzzer finds that shape quickly.
+   */
+  int quote_open;
   size_t unnamed_opened;           ///< Unnamed groups numbered so far (.NET).
   /**
    * How many group bodies are open around the current position.

@@ -2217,6 +2217,1046 @@
       "argument": "-2147483649"
     },
     {
+      "area": "escape-alphabet",
+      "pattern": "\\a",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\b",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\cA",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\d",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\e",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\f",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\g",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\h",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\i",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\j",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "(?<n>a)\\k<n>",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\l",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\m",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\n",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\o",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\p{L}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\q",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\r",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\s",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\t",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\u0041",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\v",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\w",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\x41",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\y",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\z",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\A",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\B",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\C",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\D",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\E",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\F",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\G",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\H",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\I",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\J",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\K",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\L",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\M",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\N{BULLET}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\O",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\P{L}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\Qa\\E",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\R",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\S",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\T",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\U",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\V",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\W",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\X",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\Y",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\Z",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\a]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\b]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\cA]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\d]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\e]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\f]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\g]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\h]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\i]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\j]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "(?<n>a)[\\k<n>]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\l]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\m]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\n]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\o]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\p{L}]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\q]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\r]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\s]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\t]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\u0041]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\v]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\w]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\x41]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\y]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\z]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\A]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\B]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\C]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\D]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\E]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\F]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\G]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\H]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\I]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\J]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\K]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\L]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\M]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\N{BULLET}]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\O]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\P{L}]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\Qa\\E]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\R]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\S]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\T]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\U]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\V]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\W]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\X]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\Y]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\Z]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\E",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "a\\E",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\Qa\\E",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\Qa.b\\E",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\Q\\E",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\Q\\E\\E",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "a\\Qb\\Ec",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\Qa\\E]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "(?i)\\Qa\\E",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\Q[a]\\E",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[\\b]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "[a\\b]",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "x[\\b]y",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\b",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "a\\bb",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\x{41}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\x4",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\o{101}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\0101",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\b{g}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "\\b{3}",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "(a)\\g1",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "(*FAIL)",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "a*+",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "(?R)",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "escape-alphabet",
+      "pattern": "(a)(?1)",
+      "subject": "",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
       "area": "generated-syntax",
       "pattern": "a",
       "subject": "",
@@ -6107,6 +7147,518 @@
       "class": "NumberFormatException",
       "message": "For input string: \"-2147483649\"",
       "driver_error": true
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 1,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 1,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "syntax",
+      "index": 1,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 1,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "syntax",
+      "index": 1,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 1,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 1,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 1,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 1,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 1,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "syntax",
+      "index": 1,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 1,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "syntax",
+      "index": 1,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "syntax",
+      "index": 1,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "syntax",
+      "index": 1,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "syntax",
+      "index": 1,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 1,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 1,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "syntax",
+      "index": 1,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 1,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "syntax",
+      "index": 9,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "syntax",
+      "index": 1,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 1,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "syntax",
+      "index": 3,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "syntax",
+      "index": 3,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 3,
+      "description": "Illegal hexadecimal escape sequence"
+    },
+    {
+      "kind": "syntax",
+      "index": 1,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 4,
+      "description": "Illegal/unsupported escape sequence"
+    },
+    {
+      "kind": "syntax",
+      "index": 1,
+      "description": "Dangling meta character '*'"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "syntax",
+      "index": 2,
+      "description": "Unknown inline modifier"
+    },
+    {
+      "kind": "syntax",
+      "index": 5,
+      "description": "Unknown inline modifier"
     },
     {
       "kind": "compile"

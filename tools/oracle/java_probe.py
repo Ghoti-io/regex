@@ -283,6 +283,52 @@ CASES = [case("shared", p, s, f) for p, f, s, _ in SHARED] + [
 # are cited by the semantic ledger and must remain stable. Keep each cross
 # product small enough that a failing case prints as a useful reproducer.
 GENERATED_INVENTORY_REVISION = "2026-10-20d"
+# The escape alphabet, every letter of it, bare and inside a class.
+#
+# Added after the same sweep against .NET found thirteen constructs this
+# library accepted and the reference refused, none of which the .NET
+# inventory had a row for. Java's gate in `read_escape` is a list of the
+# letters it *refuses*, and a refusal list is open at the end: a letter
+# nobody pictured is accepted by default. Two were.
+#
+# `[\b]` is the backspace in perl 5.44 and in .NET and is refused outright by
+# the JDK, where `\b` is the word boundary and nothing else. And a *dangling*
+# `\E` - one with no `\Q` open - raises on the JDK where perl compiles it
+# with a "Useless use of \E" warning; the code here had a comment calling it
+# "harmless in both references", which was true of the two it had asked.
+#
+# The five letters that take an argument are probed with one, because `\c`,
+# `\x`, `\u`, `\p` and `\k` are refused for *lacking* an argument, which a
+# bare probe cannot tell apart from being outside the alphabet.
+JAVA_ESCAPE_ARGUMENT = {"c": "A", "x": "41", "u": "0041", "p": "{L}",
+                        "P": "{L}", "k": "<n>", "N": "{BULLET}",
+                        "Q": "a\\E"}
+JAVA_ESCAPE_LETTERS = ("abcdefghijklmnopqrstuvwxyz"
+                       "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+
+def _java_escape_case(letter, in_class):
+    body = "\\" + letter + JAVA_ESCAPE_ARGUMENT.get(letter, "")
+    prefix = "(?<n>a)" if letter == "k" else ""
+    return "%s[%s]" % (prefix, body) if in_class else prefix + body
+
+
+CASES += [case("escape-alphabet", _java_escape_case(letter, in_class),
+               mode="compile")
+          for in_class in (0, 1)
+          for letter in JAVA_ESCAPE_LETTERS]
+
+# The quoting rule a letter table cannot carry, and the spellings that pin it
+# from both sides: a run that is open, a run that is closed, an empty run,
+# and the second `\E` of `\Q\E\E`, which closes nothing.
+CASES += [case("escape-alphabet", pattern, mode="compile") for pattern in (
+    r"\E", r"a\E", r"\Qa\E", r"\Qa.b\E", r"\Q\E", r"\Q\E\E", r"a\Qb\Ec",
+    r"[\Qa\E]", r"(?i)\Qa\E", r"\Q[a]\E",
+    r"[\b]", r"[a\b]", r"x[\b]y", r"\b", r"a\bb",
+    r"\x{41}", r"\x4", r"\o{101}", r"\0101", r"\b{g}", r"\b{3}",
+    r"(a)\g1", "(*FAIL)", r"a*+", r"(?R)", r"(a)(?1)",
+)]
+
 CASES += [case("generated-syntax", pattern, mode="compile") for pattern in (
     "a", "(a|b)+", "[a&&[a-z]]", "\\Q[a]+\\E", "(?<n>a)",
     "(?R)", "(?P<n>a)", "[a-\\d]", "\\g{1}")]

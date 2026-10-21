@@ -1536,6 +1536,11 @@ static GRX_Result read_escape(GRX_Parser * parser, int in_class, Escape * out) {
               ? !dotnet_knows_escape(c, in_class)
           : c == 'g' || c == 'K' || c == 'C' || c == 'o'
               || c == 'U' || c == 'l' || c == 'L' || c == 'F'
+              // `[\b]` is the backspace in perl 5.44 and in .NET and is
+              // refused outright by the JDK, where `\b` is the word
+              // boundary and nothing else. Measured on JDK 25: `[\b]`,
+              // `[a\b]` and `x[\b]y` all raise.
+              || (c == 'b' && in_class)
               || (c == 'E'
                   && !(parser->spec.features & GRX_FEATURE_QUOTING)))) {
     parser->position++;
@@ -2513,13 +2518,25 @@ static GRX_Result read_class_atom(GRX_Parser * parser, GRX_ClassItem * out,
             start, end - start);
       }
       *quote_end = end;
+      parser->quote_open = 1;
       *out_is_item = 0;
       return GRX_OK;
     }
     if ((parser->spec.features & GRX_FEATURE_QUOTING)
         && byte_at(parser, 0) == 'E') {
+      // **A dangling `\E` is Java's error and nobody else's.** All three
+      // dialects with GRX_FEATURE_QUOTING reach this branch, so the feature
+      // bit cannot decide it: perl 5.44 compiles `\E` and `a\E` happily,
+      // and `Pattern.compile("\\E")` raises on JDK 25. `\Qa\E`, `\Qa.b\E`
+      // and `\Q\E` compile on both, which is what says the rule is about
+      // the *dangling* one and not about `\E` as such.
+      if (flavour(parser) == FLAVOUR_JAVA && !parser->quote_open) {
+        parser->position++;
+        return grx_parse_fail(parser, GRX_DIAG_INVALID_ESCAPE, start, 2);
+      }
       parser->position++;
       *quote_end = 0;
+      parser->quote_open = 0;
       end_case_run(parser);
       *out_is_item = 0;
       return GRX_OK;
@@ -5810,6 +5827,7 @@ static GRX_Result pcre_skip_ignorable(GRX_Parser * parser) {
       size_t opener = parser->position;
       parser->position += 2;
       parser->quote_end = quote_run_end(parser);
+      parser->quote_open = 1;
       if (case_operator_within(parser, parser->position, parser->quote_end)) {
         parser->quote_end = GRX_NPOS;
         return grx_parse_fail(parser, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED,
@@ -5823,9 +5841,22 @@ static GRX_Result pcre_skip_ignorable(GRX_Parser * parser) {
     }
     if ((parser->spec.features & GRX_FEATURE_QUOTING)
         && byte_at(parser, 0) == '\\' && byte_at(parser, 1) == 'E') {
-      // A `\E` with no run open. Harmless in both references - perl warns
-      // "Useless use of \E" and compiles it.
+      // **A `\E` with no run open is Java's error and nobody else's.** This
+      // comment used to say "harmless in both references - perl warns
+      // 'Useless use of \E' and compiles it", and that was true of the two
+      // references it had been asked about. Every dialect with
+      // GRX_FEATURE_QUOTING reaches here, and the JDK is a third:
+      // `Pattern.compile("\\E")` and `a\E` both raise on JDK 25, while
+      // `\Qa\E`, `\Qa.b\E` and `\Q\E` compile there and here. So the rule is
+      // about the dangling one, and the feature bit cannot express it
+      // because all three dialects have the bit.
+      if (flavour(parser) == FLAVOUR_JAVA && !parser->quote_open) {
+        size_t start = parser->position;
+        parser->position += 2;
+        return grx_parse_fail(parser, GRX_DIAG_INVALID_ESCAPE, start, 2);
+      }
       parser->position += 2;
+      parser->quote_open = 0;
       end_case_run(parser);
       continue;
     }

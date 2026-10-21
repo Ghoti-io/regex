@@ -1196,3 +1196,64 @@ int main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
+
+// --------------------------------------------------------------------------
+// The two rules an open-ended refusal list let through
+// --------------------------------------------------------------------------
+
+// **`[\b]` is the backspace almost everywhere and an error on the JDK.**
+//
+// `read_escape` gates Java with a list of the letters it *refuses*, and a
+// refusal list is open at the end: a letter nobody pictured is accepted by
+// default. `b` was one. perl 5.44 reads `[\b]` as U+0008 and so does .NET,
+// which is why the shared table has it - but on the JDK `\b` is the word
+// boundary and nothing else, and `[\b]`, `[a\b]` and `x[\b]y` all raise.
+//
+// Found by sweeping the whole escape alphabet in both contexts against the
+// pinned JDK, after the same sweep against .NET found thirteen divergences
+// that its inventory had no row for. The `escape-alphabet` area in
+// `tests/data/probe/java25.json` is that sweep, 130 rows, and the syntax
+// differential now asks every unflagged compile row rather than the nine of
+// one area it used to ask.
+TEST(JavaEscapes, TheWordBoundaryIsNotTheBackspaceInsideAClass) {
+  GRX_Error error;
+  EXPECT_EQ(compile_java("[\\b]", &error), GRX_ERR_SYNTAX);
+  EXPECT_EQ(error.diag, GRX_DIAG_INVALID_CLASS_ITEM);
+  EXPECT_EQ(compile_java("[a\\b]"), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_java("x[\\b]y"), GRX_ERR_SYNTAX);
+  // Outside a class it is the boundary and compiles, which is the half that
+  // must not move.
+  EXPECT_EQ(compile_java("\\b"), GRX_OK);
+  EXPECT_EQ(compile_java("a\\bb"), GRX_OK);
+  EXPECT_TRUE(matches_java("a\\b", "a "));
+  EXPECT_FALSE(matches_java("a\\b", "ab"));
+}
+
+// **A dangling `\E` is the JDK's error and nobody else's.**
+//
+// Every dialect with `GRX_FEATURE_QUOTING` reaches the same branch, so the
+// feature bit cannot decide this: perl 5.44 compiles `\E` and `a\E` with a
+// "Useless use of \E" warning, and `Pattern.compile("\\E")` raises. The
+// comment at that branch used to call it "harmless in both references",
+// which was true of the two references it had been asked about.
+//
+// The rule is about the *dangling* one, so the closed forms are pinned here
+// too - including the second `\E` of `\Q\E\E`, which closes nothing, and
+// `a\Qb\Ec`, where a run opens and closes mid-pattern.
+TEST(JavaEscapes, AQuotationTerminatorThatClosesNothingIsRefused) {
+  GRX_Error error;
+  EXPECT_EQ(compile_java("\\E", &error), GRX_ERR_SYNTAX);
+  EXPECT_EQ(error.diag, GRX_DIAG_INVALID_ESCAPE);
+  EXPECT_EQ(compile_java("a\\E"), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_java("\\Q\\E\\E"), GRX_ERR_SYNTAX);
+  // A run that is open, closed, empty, or closed and reopened: all legal.
+  EXPECT_EQ(compile_java("\\Qa\\E"), GRX_OK);
+  EXPECT_EQ(compile_java("\\Qa.b\\E"), GRX_OK);
+  EXPECT_EQ(compile_java("\\Q\\E"), GRX_OK);
+  EXPECT_EQ(compile_java("a\\Qb\\Ec"), GRX_OK);
+  EXPECT_EQ(compile_java("[\\Qa\\E]"), GRX_OK);
+  // And the quoted text is still literal, so the rule did not cost the
+  // feature it guards.
+  EXPECT_TRUE(matches_java("\\Qa.b\\E", "a.b"));
+  EXPECT_FALSE(matches_java("\\Qa.b\\E", "axb"));
+}
