@@ -1516,13 +1516,17 @@ check-oracle-env:
 	fi
 
 check-oracle-dotnet: ## Compare the .NET driver against the pinned .NET
-# Only the driver's own controls so far: the differentials that will use it
-# are not written yet, and an oracle nothing runs is a file that compiles
-# rather than a reference. The controls are in check_dotnet_driver.py and
-# each was seen to fail by mutating the driver - including two that first
-# passed against a broken driver, which is why the ECMAScript control is a
-# *pair* of rows and why the mid-character refusal is checked at both of its
-# two sites.
+# The driver's own controls are in check_dotnet_driver.py and each was seen to
+# fail by mutating the driver - including two that first passed against a
+# broken driver, which is why the ECMAScript control is a *pair* of rows and
+# why the mid-character refusal is checked at both of its two sites. Ten
+# differentials run on top of them, and check-dotnet-coverage is the one that
+# keeps the other nine honest: it fails unless every row of the pinned
+# inventory is claimed by the gate whose predicate matches it, or named with a
+# reason. Its first run said 107 of 445 rows were asked by nothing, which five
+# gates had been reporting clean scores against. What it still cannot see is
+# an axis the inventory never exercises at all - a denominator over the rows
+# you have says nothing about the rows you should have.
 check-oracle-dotnet: check-oracle-dotnet-driver check-oracle-dotnet-probe check-dotnet-syntax-diff check-dotnet-match-diff \
 	check-dotnet-replace-diff check-dotnet-split-diff check-dotnet-flags-diff \
 	check-dotnet-search-diff check-dotnet-coverage check-dotnet-names-diff check-dotnet-wtf8-diff

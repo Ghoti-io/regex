@@ -1153,7 +1153,7 @@ hold:
 4. The pattern fuzzer has run eight hours clean with the dialect selected.
 5. `grx_options_parse()` accepts its alphabet and its replacement template
    grammar is implemented.
-6. `examples/` has one example in the dialect. Ten of them:
+6. `examples/` has one example in the dialect. Eleven of them:
    `regex_info` and the two JSON Schema programs are ECMAScript's,
    `posix_stream` is a grep and a sed across the four POSIX and GNU rows,
    `perl_extract` is PCRE2's and Perl's - the same pattern under both,
@@ -1167,7 +1167,14 @@ hold:
    both for the same reason `perl_extract` pairs its two, since these part on
    the template and the split rule and agree on every row of the matching
    battery; `java_named` checks Java's `U` option, named captures,
-   `${name}` replacement and signed split limit.
+   `${name}` replacement and signed split limit; and `dotnet_ecmascript` is
+   .NET's, checking the `[a-z-[aeiou]]` subtraction, a repeated group name
+   merging into one group, and the four option bits that are
+   `RegexOptions.ECMAScript` - which is a constructor argument on .NET with
+   no inline spelling, so a caller sets them and `grx_options_parse()` is not
+   the way in. Every expected answer in it is a row measured against the
+   pinned oracle and committed in `tests/data/probe/dotnet.json`, so the
+   example cannot drift into scoring this library against itself.
 
 ### Java readiness evidence
 

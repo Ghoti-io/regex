@@ -98,7 +98,8 @@ Corey
 program per family; the last is the two linear dialects, where a construct
 being refused at compile time is what buys the linear-time bound.
 `examples/json_schema_provider.c` is this engine behind `text`'s JSON Schema
-`pattern` keyword. `examples/java_named.c` is Java's.
+`pattern` keyword. `examples/java_named.c` is Java's and
+`examples/dotnet_ecmascript.c` is .NET's.
 
 To build and run one, install `cutil` and `unicode` into a private prefix,
 then from this directory:
@@ -113,6 +114,13 @@ byte spans, `${name}` replacement, and a negative-limit `Pattern.split`
 result. A failed operation or an unexpected value exits nonzero, so it is a
 check rather than a demonstration; `tools/check_programs.sh` runs it under
 the sanitizers for the same reason.
+
+`dotnet_ecmascript` is the same shape for .NET: it checks the class
+subtraction `[a-z-[aeiou]]`, a repeated group name merging into one group,
+and the four option bits that are `RegexOptions.ECMAScript` - which has no
+inline spelling on .NET, so a caller sets them and `grx_options_parse()`
+cannot reach them. Each expected answer in it is a row measured against the
+pinned .NET oracle and committed in `tests/data/probe/dotnet.json`.
 
 ## Compile and link
 
