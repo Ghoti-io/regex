@@ -930,6 +930,25 @@ plus `_`, which takes `No` with PCRE2 and refuses every mark and every
 connector but the underscore. It was Annex C's set here until 2026-09-24,
 wrong by 3,506 code points.
 
+**.NET is a fourth**, measured 2026-10-21: `L` ∪ `Mn` ∪ `Nd` ∪ `Pc`. Asked
+by general category rather than sampled - 29 categories, one or two code
+points each, and not one came back mixed, so the set is a union of whole
+categories. Against Annex C it drops Alphabetic-but-not-`L` (U+24B6), all of
+`Mc` and `Me`, and the two join controls; against PCRE2's it keeps only `Nd`
+of `N`, so U+00B2 and U+16EE leave; against Python's it adds `Mn` and the
+whole of `Pc`. No two of the four stand in a subset relation, which is why
+`GRX_WordSet` is an enum of sets rather than a set with narrowing bits. This
+was Annex C's set here by omission until the measurement, which is what made
+`\w` take U+24B6 where .NET declines it.
+
+One caution, because the measurement is confounded without it: .NET's `\w`
+also declines U+1D400, which is `Lu`. That is not the word set - `\w` there
+matches one UTF-16 code unit and an astral letter is a surrogate pair, the
+same rule section 6 records for `\p{...}`. The word set is defined over the
+whole code space and the restriction belongs to the code-unit deviation; a
+non-BMP row that agreed because the set stopped at U+FFFF would agree for
+the wrong reason.
+
 The comparisons are restricted to the code points perl, pcre2test 10.46 and
 UCD 17.0.0 all call assigned, and that restriction is what makes the figures
 mean anything: unrestricted, a sweep measures the Unicode release rather than

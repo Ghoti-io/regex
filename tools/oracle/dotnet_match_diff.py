@@ -66,17 +66,6 @@ EXCLUDED = {
     # differential carries the measurement.
     (r"\p{IsGreek}", "\u03b1"): "refused: an `Is`-prefixed block name",
     (r"\p{IsBasicLatin}", "a"): "refused: an `Is`-prefixed block name",
-    # `\w` over U+24B6, CIRCLED LATIN CAPITAL LETTER A, category So. .NET's
-    # `\w` is `[\p{L}\p{Mn}\p{Nd}\p{Pc}]` and this library's is UTS #18
-    # Annex C, which takes So. Neither of the other two GRX_WordSet values
-    # fits either: CATEGORIES would newly disagree on U+00B2, a No that .NET
-    # also declines. So this wants a fourth value, and four measured code
-    # points do not define a set - pinning it needs the code-point sweep the
-    # other three values were measured with, through the driver's `ranges`
-    # mode. That is the profile audit's work.
-    (r"\w", "\u24b6"): r"`\w` takes So here and not on .NET; GRX_WordSet "
-                        r"needs a fourth value and a code-point sweep to "
-                        r"justify it",
     # Case folding. `(?i)` on .NET is ToLower, not case folding, so U+017F
     # does not fold to "s" there and does here. A deviation already
     # recorded, not a defect: dialects.md section 5.8.

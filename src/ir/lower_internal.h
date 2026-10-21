@@ -81,6 +81,8 @@ typedef enum {
   GRX_SET_CATEGORIES_WORD,
   /** `\p{L}\p{N}` and `_`: GRX_WORD_ALNUM, which is CPython `re`'s. */
   GRX_SET_ALNUM_WORD,
+  /** `\p{L}\p{Mn}\p{Nd}\p{Pc}`: GRX_WORD_LETTER_MARK_DIGIT, .NET's. */
+  GRX_SET_LETTER_MARK_DIGIT_WORD,
   /**
    * Every code point with a simple uppercase mapping, plus U+00DF.
    *

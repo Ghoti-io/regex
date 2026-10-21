@@ -201,6 +201,38 @@ GRX_Result grx_named_set(
       }
       return result;
     }
+    case GRX_SET_LETTER_MARK_DIGIT_WORD: {
+      // .NET's `\w`, measured by general category against .NET 10.0.13:
+      // `\p{L}`, `\p{Mn}`, `\p{Nd}` and `\p{Pc}`. 29 categories asked, one
+      // or two code points each, and not one came back mixed - so the set
+      // is a union of whole categories rather than a predicate.
+      //
+      // It is a fourth set and not one of the three narrowed, and each has
+      // a witness: against UTS #18 it drops Alphabetic-but-not-`L` (U+24B6),
+      // all of `Mc` (U+0903) and `Me` (U+0488), and the two join controls;
+      // against PCRE2's it keeps only `Nd` of `N`, so U+00B2 (`No`) and
+      // U+16EE (`Nl`) leave; against CPython's it adds `Mn` (U+0300) and
+      // the whole of `Pc` (U+203F).
+      //
+      // **The BMP is not part of this set.** U+1D400 is `Lu` and .NET's
+      // `\w` declines it, because `\w` matches one UTF-16 code unit and an
+      // astral letter is a surrogate pair - the same reason
+      // documentation/dialects.md section 6 records that .NET's `\p{...}`
+      // cannot match above U+FFFF. Writing that restriction in here would
+      // put a UTF-16 artifact inside a Unicode set, and every non-BMP row
+      // would then agree with the reference for the wrong reason.
+      GRX_Result result = add_property(cls, "L", limits);
+      if (result == GRX_OK) {
+        result = add_property(cls, "Mn", limits);
+      }
+      if (result == GRX_OK) {
+        result = add_property(cls, "Nd", limits);
+      }
+      if (result == GRX_OK) {
+        result = add_property(cls, "Pc", limits);
+      }
+      return result;
+    }
     case GRX_SET_ALNUM_WORD: {
       // CPython `re`'s `\w` for a `str` pattern: `SRE_UNI_IS_WORD` is
       // `Py_UNICODE_ISALNUM(ch) || ch == '_'`, and `isalnum` is `L*` plus
@@ -291,6 +323,8 @@ static GRX_NamedSet unicode_word_set(GRX_WordSet word_set) {
       return GRX_SET_CATEGORIES_WORD;
     case GRX_WORD_ALNUM:
       return GRX_SET_ALNUM_WORD;
+    case GRX_WORD_LETTER_MARK_DIGIT:
+      return GRX_SET_LETTER_MARK_DIGIT_WORD;
     case GRX_WORD_UTS18:
     case GRX_WORD_COUNT:
       break;

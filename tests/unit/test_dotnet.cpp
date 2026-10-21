@@ -889,3 +889,36 @@ TEST(DotNetQuantifiers, AnAnchorMayCarryAQuantifier) {
   EXPECT_EQ(compile_dotnet("{3}"), GRX_ERR_SYNTAX);
   EXPECT_EQ(compile_dotnet("a{3}{3}"), GRX_ERR_SYNTAX);
 }
+
+// **.NET's `\w` is a fourth word set, measured by category.**
+//
+// This dialect was on `GRX_WORD_UTS18` by omission, which takes the
+// alphabetic `So`, so `\w` matched U+24B6 CIRCLED LATIN CAPITAL LETTER A
+// here and declines it on .NET. That was the one row in `known-gaps.txt`
+// naming a missing enum value rather than a deferred construct, and it is
+// retired with this test.
+//
+// The set is `\p{L}`, `\p{Mn}`, `\p{Nd}`, `\p{Pc}`: 29 general categories
+// asked of .NET 10.0.13, one or two code points each, none mixed. Each
+// expectation below is the witness that separates .NET's set from one of the
+// three this library already had, so a later change to the wrong value fails
+// here rather than somewhere a reader has to go looking.
+TEST(DotNetClasses, TheWordSetIsLetterMarkDigitAndConnector) {
+  // In: the four categories.
+  EXPECT_TRUE(matches_dotnet("\\w", "a"));          // Ll
+  EXPECT_TRUE(matches_dotnet("\\w", "é"));     // Ll, non-ASCII
+  EXPECT_TRUE(matches_dotnet("\\w", "0"));          // Nd
+  EXPECT_TRUE(matches_dotnet("\\w", "̀"));     // Mn - not in ALNUM
+  EXPECT_TRUE(matches_dotnet("\\w", "‿"));     // Pc - not in ALNUM
+  EXPECT_TRUE(matches_dotnet("\\w", "ʰ"));     // Lm
+  // Out, and each one is a witness against a different word set.
+  EXPECT_FALSE(matches_dotnet("\\w", "Ⓐ"));    // So: UTS18 takes it
+  EXPECT_FALSE(matches_dotnet("\\w", "‌"));    // join control: UTS18
+  EXPECT_FALSE(matches_dotnet("\\w", "ः"));    // Mc: UTS18 takes all M
+  EXPECT_FALSE(matches_dotnet("\\w", "҈"));    // Me: UTS18
+  EXPECT_FALSE(matches_dotnet("\\w", "²"));    // No: CATEGORIES, ALNUM
+  EXPECT_FALSE(matches_dotnet("\\w", "ᛮ"));    // Nl: CATEGORIES, ALNUM
+  // And `\W` is its complement rather than a set of its own.
+  EXPECT_FALSE(matches_dotnet("\\W", "a"));
+  EXPECT_TRUE(matches_dotnet("\\W", "Ⓐ"));
+}

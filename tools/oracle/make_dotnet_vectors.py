@@ -64,22 +64,24 @@ EXCLUDED = {
 }
 
 # Rows dropped because `known-gaps.txt` cannot tell them from a row that is
-# a gap. **Its key is (dialect, flags, pattern, subject) and does not
-# include `options:`**, so the ECMAScript reading of `\w` over U+24B6 - which
-# this library and .NET agree on, both nomatch - shares a key with the plain
-# reading, which is the GRX_WordSet gap. One entry then covers both, and the
-# file fails a listed row that passes, with "remove the entry".
+# a gap. **Its key is (dialect, flags, pattern, subject) and does not include
+# `options:`**, so an options-bearing row shares a key with the plain reading
+# of the same pattern and subject. Where the plain reading is a listed gap,
+# one entry then covers both and the file fails a listed row that passes,
+# with "remove the entry".
 #
-# Dropped here rather than fixing the key, because adding `options:` to it
-# would make every existing entry more specific at once and strand any that
-# matches an options-bearing record. The flags differential asks this row
-# against the reference already, so nothing goes unmeasured - what is lost
-# is one offline copy of it.
-OPTION_KEY_COLLISIONS = {
-    (r"\w", "\u24b6"):
-        "shares a known-gaps key with the unnarrowed row, which is the "
-        "GRX_WordSet gap; `dotnet_flags_diff.py` asks this one",
-}
+# **Empty, because the collision that found this had one cause and it is
+# fixed.** `\w` over U+24B6 was the GRX_WordSet gap, so the ECMAScript
+# reading of it - which both sides decline - collided with a gap entry. The
+# fourth word set retired the gap, the entry went with it, and the row this
+# set used to drop is back in the corpus.
+#
+# The limitation is still real and is left written down: the next
+# options-bearing row whose plain reading is a gap will collide the same way.
+# Fixing the key is not free - adding `options:` would make every existing
+# entry more specific at once and strand any that matches an options-bearing
+# record - so the decision is deferred rather than taken.
+OPTION_KEY_COLLISIONS = {}
 
 
 def representable(row, answer):

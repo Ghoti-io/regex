@@ -1870,6 +1870,12 @@ options: ascii-digit ascii-space ascii-word prefix-backreference
 subject: \u0345
 expect: nomatch
 
+# case: 553
+pattern: \\w
+options: ascii-digit ascii-space ascii-word prefix-backreference
+subject: \u24B6
+expect: nomatch
+
 # case: 554
 pattern: \\w
 options: ascii-digit ascii-space ascii-word prefix-backreference

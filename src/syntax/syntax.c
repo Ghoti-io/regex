@@ -1025,6 +1025,12 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     .fold = GRX_FOLD_SIMPLE,
     .fold_utf = GRX_FOLD_SIMPLE,
     .split = GRX_SPLIT_DOTNET,
+    // Measured by general category against .NET 10.0.13: `\p{L}`, `\p{Mn}`,
+    // `\p{Nd}` and `\p{Pc}`, no category mixed. This was UTS #18 by
+    // omission, which took the alphabetic `So` - so `\w` matched U+24B6
+    // here and not there, which was the one row in known-gaps.txt that
+    // named a missing enum value rather than a deferred construct.
+    .word_set = GRX_WORD_LETTER_MARK_DIGIT,
     // ECMAScript's answer rather than PCRE2's, and the probe is why this is
     // set at all: `(?m)^$` over "a\n" is 2-2 on .NET 10.0.13 and was no
     // match here, because the field had been left at zero - "whichever of

@@ -289,10 +289,11 @@ typedef enum {
    * join controls. Perl's `\w`, exactly, over all 286,719.
    *
    * The default, so a dialect that has not been measured keeps the answer it
-   * had before this enum existed. Java, .NET, Rust, Tcl and Emacs are all in
-   * that position - their references are not on this machine, which is open
-   * item 4 - and none of them changed when the two that *were* measured moved
-   * off it.
+   * had before this enum existed. Java, Rust, Tcl and Emacs are still in
+   * that position, and none of them changed when the dialects that *were*
+   * measured moved off it. .NET has left it: its reference is on this
+   * machine now, and GRX_WORD_LETTER_MARK_DIGIT is what the measurement
+   * found.
    */
   GRX_WORD_UTS18 = 0,
   /**
@@ -317,6 +318,28 @@ typedef enum {
    * character in the other two and not here.
    */
   GRX_WORD_ALNUM,
+  /**
+   * `\p{L}`, `\p{Mn}`, `\p{Nd}` and `\p{Pc}`. .NET's `\w`, exactly.
+   *
+   * Measured by general category against .NET 10.0.13 rather than read off
+   * its documentation: 29 categories, one or two code points each, and no
+   * category came back mixed - so the set is a union of whole categories.
+   *
+   * A fourth set rather than one of the three narrowed, and each pair has a
+   * witness. Against Annex C it drops Alphabetic-but-not-`L` (U+24B6 CIRCLED
+   * LATIN CAPITAL LETTER A), all of `Mc` (U+0903) and `Me` (U+0488), and the
+   * two join controls. Against PCRE2's it keeps only `Nd` of `N`, so U+00B2
+   * and U+16EE leave. Against CPython's it adds `Mn` and the whole of `Pc`,
+   * so U+0300 and U+203F arrive.
+   *
+   * **The BMP restriction is not in here.** .NET's `\w` declines U+1D400,
+   * which is `Lu`, because `\w` matches one UTF-16 code unit and an astral
+   * letter is a surrogate pair. That is the code-unit deviation
+   * documentation/dialects.md section 6 already records, and it governs
+   * `\p{...}` the same way; a non-BMP row that agreed because this set
+   * stopped at U+FFFF would be agreeing for the wrong reason.
+   */
+  GRX_WORD_LETTER_MARK_DIGIT,
   GRX_WORD_COUNT             ///< Closes the enum; not a definition.
 } GRX_WordSet;
 
