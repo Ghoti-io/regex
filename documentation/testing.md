@@ -12,7 +12,7 @@ and built by the conformance lane ([work-packages.md](work-packages.md) §1).
   or a manual page implied. When the reference document and the
   implementation disagree, the vector records the implementation's answer
   and the disagreement is noted in [dialects.md](dialects.md) §6.
-- **Tests state requirements, not observations** (`CONVENTIONS.md` §7). A
+- **Tests state requirements, not observations.** A
   vector generated from an oracle is a requirement by construction. A unit
   test that pins what a function returned is the defect this suite has met
   before and is not written here.
@@ -2302,8 +2302,9 @@ Run by `make test` alongside `check-symbols`:
   before a package number must be that page, so a surviving `plan.md WP-18` <!-- not-a-citation -->
   fails rather than pointing at a file that is gone. The number was never
   the part that broke. That arm started far too wide - it accepted a section
-  number as well, and so flagged every `design.md section 3` and
-  `CONVENTIONS.md section 4` in the tree, about four hundred lines - which
+  number as well, and so flagged every `design.md section 3` and every
+  citation of a suite convention by section number in the tree, about four
+  hundred lines - which
   took longer to notice than a silent arm would have, because it did fire.
 
   **The page is in the gate's own population whether or not it is tracked.**
@@ -2318,8 +2319,9 @@ Run by `make test` alongside `check-symbols`:
   page must fail rather than pass every citation vacuously.
 - **A published file does not cite a private workspace path.**
   `tools/check_citations.py`, the `check-citations` gate, fails on a tracked
-  file that references one of the workspace's private trees: the development
-  notes, the planning tree, the story artifacts or a fetched job directory.
+  file that points at a path no published checkout contains - the
+  maintainers' development notes, planning material, story artifacts or
+  fetched job output.
   `PRIVATE` in that file is the list, and it is deliberately the only copy -
   a second roster in prose is a roster that goes stale. **Built.** 316 files
   read.

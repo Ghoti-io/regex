@@ -44,9 +44,9 @@ TEST(Parse, UnknownDialectIsInvalid) {
 static const GRX_Syntax kUnbuiltDialect = GRX_SYNTAX_RUBY;
 
 TEST(Parse, OutputIsNullOnFailure) {
-  // Nothing is allocated for the caller to free on a failing call
-  // (CONVENTIONS.md section 5), so the output pointer has to be cleared even
-  // when it arrived holding something.
+  // The suite's contract is that a failing call allocates nothing for the
+  // caller to free, so the output pointer has to be cleared even when it
+  // arrived holding something.
   GRX_Pattern * pattern = (GRX_Pattern *)0x1;
   EXPECT_NE(grx_pattern_parse("a", kUnbuiltDialect, GRX_OPT_NONE, &pattern),
       GRX_OK);

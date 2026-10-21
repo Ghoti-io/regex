@@ -164,8 +164,9 @@ public:
     };
     vtable_.calloc_fn = [](void * ctx, size_t nitems, size_t size) -> void * {
       auto * self = static_cast<CountingAllocator *>(ctx);
-      // Overflow is an allocation failure, not a truncated block; the suite's
-      // allocator contract requires it (CONVENTIONS.md section 5).
+      // Overflow is an allocation failure, not a truncated block: the
+      // suite's allocator contract is that a request it cannot satisfy
+      // exactly returns NULL, never a smaller block.
       if (nitems && size && nitems > (size_t)-1 / size) {
         return nullptr;
       }

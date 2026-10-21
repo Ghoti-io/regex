@@ -13,7 +13,8 @@
 TEST(Result, EveryCodeHasItsOwnString) {
   // The string table is complete and has no duplicates, so a new result code
   // cannot be added without a description - which is what RESULT_COUNT
-  // closing the enum is for (CONVENTIONS.md section 5).
+  // closing the enum is for. The result vocabulary is shared across the
+  // suite, so a code with no string is a code no caller can report.
   for (int i = 0; i < GRX_RESULT_COUNT; i++) {
     const char * text = grx_result_string((GRX_Result)i);
     ASSERT_NE(text, nullptr);

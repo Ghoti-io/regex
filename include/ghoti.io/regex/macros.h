@@ -129,7 +129,8 @@ extern "C" {
  * declaration cannot carry a redundant linkage specification - `extern "C"
  * extern int x;` is ill-formed in C++ - so a declaration that needs both
  * `extern` and export uses this and sits inside the header's `extern "C"`
- * block like every other declaration.  See CONVENTIONS.md section 4.
+ * block like every other declaration, so that the version token reaches it
+ * the same way it reaches a function.  See @ref libver.h.
  */
 #if defined(_WIN32) || defined(__CYGWIN__)
 #ifdef GRX_BUILD

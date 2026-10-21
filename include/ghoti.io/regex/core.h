@@ -40,7 +40,9 @@ extern "C" {
 /**
  * @brief Result code for regex library operations.
  *
- * The first nine are the suite's fixed vocabulary (CONVENTIONS.md section 5).
+ * The first nine are a fixed vocabulary every library in this suite shares,
+ * so a caller who learns them once can read any of them: `OK` is zero and
+ * every other value is a failure.
  * GRX_ERR_SYNTAX is this library's one addition, and it is there because a
  * malformed pattern is the failure a regex library exists to report: folding
  * it into GRX_ERR_FORMAT would make "this is not a pattern I can parse" and

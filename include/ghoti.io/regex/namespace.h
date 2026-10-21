@@ -33,7 +33,10 @@
  * only the DWARF in a debug build records one. So the rule for types is kept
  * by hand: every name in a typedef or struct tag here, public or internal.
  *
- * See CONVENTIONS.md section 4.
+ * Why every name and not just the functions: the guarantee being bought is
+ * that two versions of this library can sit in one process at once, so a
+ * struct whose layout changed between versions must not be reachable under
+ * the same name as the other version's.  See @ref libver.h.
  */
 
 #ifndef GHOTI_IO_GRX_NAMESPACE_H

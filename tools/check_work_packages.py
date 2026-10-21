@@ -56,7 +56,8 @@ MARKER = "not-a-citation"
 # The separator class is narrow on purpose, and the first version of this arm
 # was not. It allowed any fourteen characters and accepted a section number
 # as well as a package number, so it flagged every `design.md section 3` and
-# `CONVENTIONS.md section 4` in the tree - some four hundred lines - because
+# every citation of a suite convention by section number in the tree - some
+# four hundred lines - because
 # a section number belongs to whatever page the sentence names and only a
 # *package* number belongs to this one. An arm that fires on every line says
 # no more than one that never fires, and this took longer to see because it

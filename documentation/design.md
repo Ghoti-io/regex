@@ -24,7 +24,7 @@ check against the code.
 | Property | Mechanism |
 | --- | --- |
 | **Correct** | Semantics are written down per dialect *before* they are coded ([dialects.md](dialects.md)), every dialect is checked against the real implementation it names ([testing.md](testing.md) §2), and every pattern both engines can run is checked to produce identical captures from both (§3.5). |
-| **Stable** | `GRX_Regex` is immutable and carries no match state. Dialect behaviour is data (§4), so correcting one dialect cannot change another. Symbols are versioned per `CONVENTIONS.md` §4. |
+| **Stable** | `GRX_Regex` is immutable and carries no match state. Dialect behaviour is data (§4), so correcting one dialect cannot change another. Every exported symbol and type carries a per-version token, so two majors can be loaded into one process at once; see `include/ghoti.io/regex/libver.h`. |
 | **Full-featured** | Named groups, lookbehind of any length, Unicode properties, class set operations, atomic groups, conditionals, recursion, backtracking verbs, substitution with per-dialect templates. Feature bits per dialect say which of these a syntax *has*; the library implements the union. |
 | **Safe** | Time and memory are bounded by default (§6). No engine recurses on the C stack in proportion to the subject or the program. Every allocation goes through the caller's allocator. Both the pattern and the subject are fuzzed, because both are untrusted (§1.2). |
 | **Robust** | A limit is a promise: exceeding one is `GRX_ERR_LIMIT`, never a truncated result and never a hang. Invalid input at any layer is an error with a position, not undefined behaviour. |
@@ -948,7 +948,9 @@ target that regenerates and diffs when the UCD is present
 ### 6.1 Allocation
 
 Every byte comes from the `GRX_Allocator` the caller passed (`NULL` is the
-default), per `CONVENTIONS.md` §5. Three ownership units:
+default), which is the suite's allocator contract: a library allocates
+through its caller's allocator or not at all, so a caller can account for
+every byte and replace the allocator wholesale. Three ownership units:
 
 - **`GRX_Pattern`**: the node array, the side tables. One growable arena.
 - **`GRX_Regex`**: the program, the class table, the facts, the names. Built

@@ -25,9 +25,11 @@
  *
  * Every exported symbol carries a per-version token so that two versions of
  * this library can be loaded into one process without the dynamic linker
- * binding one caller to the other version's implementation.
- *
- * See CONVENTIONS.md section 4.
+ * binding one caller to the other version's implementation. The same goal
+ * puts the branch in the installed header directory
+ * (`<prefix>/include/ghoti.io/regex-<branch>/`), in the library file name
+ * and in its soname, so a program may link one object built against one
+ * branch and another built against a different one and have both work.
  */
 
 #ifndef GHOTI_IO_GRX_LIBVER_H
