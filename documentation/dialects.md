@@ -451,6 +451,23 @@ each measured rather than derived:
   `[\x09-\x0f]` does not, and `\s` contains both CR and LF and names
   neither.
 
+**`\R` is atomic in two of the three dialects that have it**, which is the
+`linebreak_is_atomic` axis. perlrebackslash spells perl's as
+`(?>\x0D\x0A|\v)`, and the atomic group is the substance rather than the
+notation: once `\R` has taken a CR LF it will not hand the LF back to let the
+rest of the pattern match, so `^(\R)(\R)b` cannot match "\r\nb". pcre2test
+10.46 agrees. **The JDK does not**, and its javadoc gives the reason without
+meaning to - it defines the construct as
+`\u000D\u000A|[\u000A\u000B\u000C\u000D\u0085  ]`, a plain
+alternation, and a plain alternation backtracks. Measured on both pins:
+`^(\R)(\R)b` against "\r\nb" captures 0-1 and 1-2 in JDK 25 and 27, the first
+`\R` having taken the CR alone. Both readings are followed, and a dialect
+that gains `\R` without anybody measuring it gets the backtracking one, which
+is what a bare alternation would give. `tools/oracle/java_probe.py`'s
+`escape-semantics` rows carry the Java half and `tests/unit/test_perl.cpp`
+the other, because one unconditional atomic node used to serve all three and
+the Java reading was the wrong one of the two.
+
 ### 5.3 `^` and `$`
 
 | Dialect | `$` without multiline | `^`/`$` multiline by default | `\Z`, `\z` |

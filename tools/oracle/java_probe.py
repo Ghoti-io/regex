@@ -282,7 +282,7 @@ CASES = [case("shared", p, s, f) for p, f, s, _ in SHARED] + [
 # Generated interaction inventory. Append only: the preceding pinned case IDs
 # are cited by the semantic ledger and must remain stable. Keep each cross
 # product small enough that a failing case prints as a useful reproducer.
-GENERATED_INVENTORY_REVISION = "2026-10-20d"
+GENERATED_INVENTORY_REVISION = "2026-10-21a"
 # The escape alphabet, every letter of it, bare and inside a class.
 #
 # Added after the same sweep against .NET found thirteen constructs this
@@ -522,8 +522,115 @@ CASES += [case("profile", pattern, subject) for pattern, subject in (
     # caseless_widens_shorthands and caseless_leaves_boundary_narrow.
     ("(?i)\\w", "\u017f"), ("(?iu)\\w", "\u017f"), ("(?i)\\bs", "\u017fs"),
     # posix_classes_fold.
-    ("(?i)\\p{Alpha}", "\u017f"), ("(?i)\\p{Lower}", "S"),
+    ("(?i)\\p{Alpha}", "ſ"), ("(?i)\\p{Lower}", "S"),
 )]
+
+# What the letters both sides *accept* actually mean.
+#
+# Appended last, like everything else here, because the preceding case IDs
+# are cited by the semantic ledger and must not move.
+#
+# The escape-alphabet sweep above asks accept-or-reject, and that is
+# structurally unable to catch a letter the two read differently. `\v` is the
+# case that proved it in .NET: it compiles under both readings, and it was the
+# Perl family's vertical-space shorthand there against .NET's vertical tab.
+# The compile sweep reported agreement and the escape was wrong. So the
+# letters that survive the alphabet get their meanings asked too.
+#
+# **Java's divergences run the other way from .NET's**, which is why this is
+# not a copy of that list. Java's `\v` is the wide class and .NET's is the
+# single vertical tab; Java's `\d`, `\s` and `\w` are ASCII by default where
+# .NET's are Unicode. So the subjects that divide the readings here are a
+# non-ASCII digit, U+0085 and U+00A0, and a non-ASCII letter - and `\h`, `\H`,
+# `\V` and `\R` exist at all here and not there. Each row is one escape
+# against a character its reading takes and one that a different reading
+# would take instead.
+JAVA_ESCAPE_SEMANTICS = (
+    # The single-code-point escapes, each against its own character and the
+    # one a wider reading would also take.
+    (r"\a", "\a"), (r"\a", "\n"),
+    (r"\e", "\x1b"), (r"\e", "e"),
+    (r"\f", "\f"), (r"\f", "\n"),
+    (r"\n", "\n"), (r"\n", "\r"),
+    (r"\r", "\r"), (r"\r", "\n"),
+    (r"\t", "\t"), (r"\t", " "),
+    # `\v`, where Java is the wide reading: the javadoc gives
+    # [\n\x0B\f\r\x85  ], so U+000B *and* the four a vertical tab
+    # alone would decline. `\V` is asked on the same subjects, because a
+    # complement built from the wrong set is wrong in the mirror.
+    (r"\v", "\x0b"), (r"\v", "\n"), (r"\v", "\r"), (r"\v", "\f"),
+    (r"\v", "\u0085"), (r"\v", " "), (r"\v", " "),
+    (r"\v", " "), (r"\v", "\t"), (r"\v", "a"),
+    (r"\V", "\x0b"), (r"\V", "\u0085"), (r"\V", " "), (r"\V", "a"),
+    # `\h`, horizontal whitespace, which the Perl family has and .NET does
+    # not: [ \t\xA0 ᠎ -   　].
+    (r"\h", " "), (r"\h", "\t"), (r"\h", " "), (r"\h", " "),
+    (r"\h", "　"), (r"\h", "\n"), (r"\h", "a"),
+    (r"\H", " "), (r"\H", " "), (r"\H", "\n"), (r"\H", "a"),
+    # The shorthands, ASCII here by default. The non-ASCII subjects separate
+    # this reading from .NET's and perl's.
+    (r"\d", "0"), (r"\d", "١"), (r"\d", "a"),
+    (r"\D", "0"), (r"\D", "١"),
+    (r"\s", " "), (r"\s", "\t"), (r"\s", "\x0b"), (r"\s", "\f"),
+    (r"\s", "\u0085"), (r"\s", " "), (r"\s", " "), (r"\s", "a"),
+    (r"\S", " "), (r"\S", "\u0085"), (r"\S", " "),
+    (r"\w", "a"), (r"\w", "_"), (r"\w", "0"), (r"\w", "é"),
+    (r"\w", "ͅ"), (r"\w", "-"),
+    (r"\W", "a"), (r"\W", "é"), (r"\W", "_"),
+    # `\R`, any linebreak, whose whole point is that CR LF is one unit and
+    # not two - a row no single-character subject can ask.
+    (r"\R", "\n"), (r"\R", "\r"), (r"\R", "\r\n"), (r"\R", "\u0085"),
+    (r"\R", " "), (r"\R", " "),
+    (r"^\Rb", "\r\nb"), (r"^\R\Rb", "\r\nb"),
+    # `\X`, one extended grapheme cluster: a base plus a combining mark is
+    # one of them, which is the row that separates it from `.`.
+    (r"\X", "a"), (r"\X", "é"), (r"^\Xb", "éb"),
+    (r"\X", "\r\n"), (r"\X", "\u0001"),
+    # The boundaries and the anchors, where a trailing newline is what
+    # divides `\Z` from `\z`.
+    (r"a\b", "a "), (r"a\b", "ab"), (r"a\B", "ab"), (r"a\B", "a "),
+    (r"\Aa", "a"), (r"\Aa", "ba"),
+    (r"a\Z", "a"), (r"a\Z", "a\n"), (r"a\Z", "a\r\n"), (r"a\Z", "a\nb"),
+    (r"a\z", "a"), (r"a\z", "a\n"),
+    (r"\Ga", "a"), (r"\Ga", "ba"),
+    # The escapes with an argument. `\0101` is Java's octal spelling, where
+    # the Perl family writes `\101` and .NET writes neither.
+    (r"\cA", "\x01"), (r"\cA", "A"),
+    (r"\x41", "A"), (r"\x41", "a"),
+    (r"\x{41}", "A"), (r"A", "A"), (r"A", "a"),
+    (r"\0101", "A"), (r"\0101", "A1"),
+    (r"\p{L}", "a"), (r"\p{L}", "0"), (r"\P{L}", "a"), (r"\P{L}", "0"),
+    (r"\p{L}", "é"), (r"\P{L}", "é"),
+    (r"\N{BULLET}", "•"), (r"\N{BULLET}", "a"),
+    (r"(?<n>a)\k<n>", "aa"), (r"(?<n>a)\k<n>", "ab"),
+    # Quoting, whose meaning a compile row cannot reach: the run's contents
+    # are literal, so the `.` inside one declines the character it would
+    # otherwise take.
+    (r"\Qa.b\E", "a.b"), (r"\Qa.b\E", "axb"),
+    (r"\Q.\E", "."), (r"\Q.\E", "a"),
+    (r"a\Qb\Ec", "abc"),
+    # The class forms of the letters the alphabet takes inside one. `[\b]` is
+    # absent on purpose: Java refuses it, and the compile sweep carries that.
+    (r"[\v]", "\x0b"), (r"[\v]", "\n"), (r"[\v]", "a"),
+    (r"[\h]", " "), (r"[\h]", " "), (r"[\h]", "a"),
+    (r"[\d]", "0"), (r"[\d]", "١"),
+    (r"[\s]", " "), (r"[\s]", " "),
+    (r"[\w]", "a"), (r"[\w]", "é"),
+    (r"[\a]", "\a"), (r"[\e]", "\x1b"), (r"[\f]", "\f"),
+    (r"[\n]", "\n"), (r"[\r]", "\r"), (r"[\t]", "\t"),
+    (r"[\x41]", "A"), (r"[A]", "A"), (r"[\cA]", "\x01"),
+    (r"[\p{L}]", "a"), (r"[\p{L}]", "0"),
+    (r"[\P{L}]", "a"), (r"[\N{BULLET}]", "•"),
+    (r"[\Qa\E]", "a"), (r"[\Qa\E]", "b"),
+    (r"[\V]", "a"), (r"[\V]", "\n"),
+    (r"[\H]", "a"), (r"[\H]", " "),
+    (r"[\S]", "a"), (r"[\S]", " "),
+    (r"[\D]", "a"), (r"[\D]", "0"),
+    (r"[\W]", "-"), (r"[\W]", "a"),
+)
+
+CASES += [case("escape-semantics", pattern, subject)
+          for pattern, subject in JAVA_ESCAPE_SEMANTICS]
 
 
 def run(pin, rows):

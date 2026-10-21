@@ -625,6 +625,11 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
   // The Perl family. Full folding is implemented as simple folding and
   // recorded as a deviation (design.md section 10).
   [GRX_SYNTAX_PERL] = {
+    // `\R` is `(?>\x0D\x0A|\v)`, atomic group and all: perlrebackslash gives
+    // it that way, and `^(\R)(\R)b` against "\r\nb" declines here and in
+    // pcre2test because the first `\R` will not hand the LF back. The JDK's
+    // is a plain alternation and does split, so its row leaves this zero.
+    .linebreak_is_atomic = 1,
     // An iteration that consumed nothing succeeds and stops the loop, which
     // is section 5.5's BREAK_ON_EMPTY. `(a*)*` against "b" reports group 1
     // as the empty string in perl and in pcre2test, and as unset in
@@ -708,6 +713,7 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     },
   },
   [GRX_SYNTAX_PCRE] = {
+    .linebreak_is_atomic = 1,     // pcre2test agrees with perl; see that row.
     .empty_loop = GRX_EMPTY_LOOP_BREAK,
     .lookbehind = GRX_LOOKBEHIND_BOUNDED,
     .dollar = GRX_DOLLAR_BEFORE_FINAL_NEWLINE,

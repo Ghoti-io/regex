@@ -17,7 +17,15 @@ import oracle_env
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 PIN = "java25"
 AREAS = {"shared", "control", "classes", "captures", "escapes",
-         "refusal", "flags", "lines", "unicode", "unicode-sensitive"}
+         "refusal", "flags", "lines", "unicode", "unicode-sensitive",
+         # The escape alphabet and what the letters in it mean. Both are
+         # here for the reason the file exists: a fresh clone with no
+         # container runs the `.rxt` corpus and nothing else, so an escape
+         # whose only gate is the differential is ungated for that reader.
+         # The semantics half is the one that found a defect - the JDK's
+         # `\R` splits a CR LF pair and perl's does not - and a compile-only
+         # corpus could not have carried it.
+         "escape-alphabet", "escape-semantics"}
 
 
 def selected():

@@ -16,7 +16,21 @@ import java_probe
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DATA = os.path.join(ROOT, "tests", "data", "probe")
-AREAS = {"flags", "lines", "unicode", "unicode-sensitive", "generated-match"}
+# Every first-search area, with a floor below it rather than a hand-written
+# list. A named list scores the rows that exist in it, not the rows that
+# should: `java_syntax_diff.py` read one area and asked 9 of 624 rows, and
+# `escape-semantics` would have been invisible here the moment it was added
+# for exactly that reason. The floor is what makes a silent narrowing fail.
+# **Every first-search row, not a named list of areas.** A named list scores
+# the rows that exist in it, not the rows that should: `java_syntax_diff.py`
+# read one area and so asked 9 of 624 rows, and the five areas named here
+# reached 109 of the 370 first-search rows the inventory holds. Worse, the
+# list is silent about its own omissions - `escape-semantics` would have been
+# invisible the moment it was added, which is how the gap it exists to close
+# was created in the first place.
+# Rows the corpus must keep reaching, so that a later edit to the predicate or the
+# exclusions cannot quietly shrink it back.
+MIN_ROWS = 250
 ENGINES = ("auto", "pike", "backtrack", "bitstate", "dfa")
 EXCLUDED = {("a", "A", "l"), ("é", "e\u0301", "c"), ("a+", "a+", "l")}
 GENERATED_PATTERNS = ("(a|b)+", "(?i:a)b", "\\d+", "[a&&[a-z]]",
@@ -74,7 +88,7 @@ def main():
         raise SystemExit("JDK 25 and 27 case inventories differ")
 
     indices = [i for i, row in enumerate(baseline["cases"])
-               if row["mode"] == "first" and row["area"] in AREAS]
+               if row["mode"] == "first"]
     excluded_indices = [i for i in indices if excluded(baseline["cases"][i])]
     if Counter(exclusion_identity(baseline["cases"][i]) for i in excluded_indices) != Counter(EXCLUDED):
         raise SystemExit("stale Java LITERAL/CANON_EQ exclusion")
@@ -83,8 +97,12 @@ def main():
     if Counter(generated) != Counter(GENERATED):
         raise SystemExit("generated Java match inventory changed; update eligibility")
     indices = [i for i in indices if i not in excluded_indices]
-    if not indices:
-        raise SystemExit("focused Java match/capture corpus is empty")
+    if len(indices) < MIN_ROWS:
+        raise SystemExit(
+            "Java match corpus is %d rows, below the floor of %d. A gate "
+            "scores the rows it asks, so raise the floor when the inventory "
+            "grows and never lower it to make a narrowing pass."
+            % (len(indices), MIN_ROWS))
     changed = [i for i in indices
                if baseline["answers"][i] != forward["answers"][i]]
     payload = "".join("%s\t%s\t%s\n" % (

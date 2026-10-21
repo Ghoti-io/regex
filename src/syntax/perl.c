@@ -2153,7 +2153,14 @@ static GRX_Result newline_set_node(GRX_Parser * parser, size_t start,
   GRX_Node * node = grx_pattern_node(parser->pattern, *out_node);
   node->a = first;
   node->b = 1 + (uint32_t)single_count;
-  node->flags |= GRX_NODE_ATOMIC;
+  // Atomic only where the dialect's `\R` is. perl spells it
+  // `(?>\x0D\x0A|\v)` and pcre2 agrees, so a CR LF once taken is never
+  // split; the JDK's is a bare alternation, and `^(\R)(\R)b` against
+  // "\r\nb" captures 0-1 and 1-2 there. Asking the profile rather than the
+  // flavour keeps the fact in the table with the dialects' other splits.
+  if (parser->profile.linebreak_is_atomic) {
+    node->flags |= GRX_NODE_ATOMIC;
+  }
   return GRX_OK;
 }
 

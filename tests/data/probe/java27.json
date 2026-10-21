@@ -4991,6 +4991,1206 @@
       "flags": "",
       "mode": "first",
       "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\a",
+      "subject": "\u0007",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\a",
+      "subject": "\n",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\e",
+      "subject": "\u001b",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\e",
+      "subject": "e",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\f",
+      "subject": "\f",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\f",
+      "subject": "\n",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\n",
+      "subject": "\n",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\n",
+      "subject": "\r",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\r",
+      "subject": "\r",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\r",
+      "subject": "\n",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\t",
+      "subject": "\t",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\t",
+      "subject": " ",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\v",
+      "subject": "\u000b",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\v",
+      "subject": "\n",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\v",
+      "subject": "\r",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\v",
+      "subject": "\f",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\v",
+      "subject": "\u0085",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\v",
+      "subject": "\u2028",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\v",
+      "subject": "\u2029",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\v",
+      "subject": " ",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\v",
+      "subject": "\t",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\v",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\V",
+      "subject": "\u000b",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\V",
+      "subject": "\u0085",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\V",
+      "subject": " ",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\V",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\h",
+      "subject": " ",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\h",
+      "subject": "\t",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\h",
+      "subject": "\u00a0",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\h",
+      "subject": "\u2000",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\h",
+      "subject": "\u3000",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\h",
+      "subject": "\n",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\h",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\H",
+      "subject": " ",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\H",
+      "subject": "\u00a0",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\H",
+      "subject": "\n",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\H",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\d",
+      "subject": "0",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\d",
+      "subject": "\u0661",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\d",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\D",
+      "subject": "0",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\D",
+      "subject": "\u0661",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\s",
+      "subject": " ",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\s",
+      "subject": "\t",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\s",
+      "subject": "\u000b",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\s",
+      "subject": "\f",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\s",
+      "subject": "\u0085",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\s",
+      "subject": "\u00a0",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\s",
+      "subject": "\u2028",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\s",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\S",
+      "subject": " ",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\S",
+      "subject": "\u0085",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\S",
+      "subject": "\u00a0",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\w",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\w",
+      "subject": "_",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\w",
+      "subject": "0",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\w",
+      "subject": "\u00e9",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\w",
+      "subject": "\u0345",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\w",
+      "subject": "-",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\W",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\W",
+      "subject": "\u00e9",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\W",
+      "subject": "_",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\R",
+      "subject": "\n",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\R",
+      "subject": "\r",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\R",
+      "subject": "\r\n",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\R",
+      "subject": "\u0085",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\R",
+      "subject": "\u2028",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\R",
+      "subject": " ",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "^\\Rb",
+      "subject": "\r\nb",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "^\\R\\Rb",
+      "subject": "\r\nb",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\X",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\X",
+      "subject": "e\u0301",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "^\\Xb",
+      "subject": "e\u0301b",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\X",
+      "subject": "\r\n",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\X",
+      "subject": "\u0001",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "a\\b",
+      "subject": "a ",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "a\\b",
+      "subject": "ab",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "a\\B",
+      "subject": "ab",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "a\\B",
+      "subject": "a ",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\Aa",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\Aa",
+      "subject": "ba",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "a\\Z",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "a\\Z",
+      "subject": "a\n",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "a\\Z",
+      "subject": "a\r\n",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "a\\Z",
+      "subject": "a\nb",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "a\\z",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "a\\z",
+      "subject": "a\n",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\Ga",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\Ga",
+      "subject": "ba",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\cA",
+      "subject": "\u0001",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\cA",
+      "subject": "A",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\x41",
+      "subject": "A",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\x41",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\x{41}",
+      "subject": "A",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "A",
+      "subject": "A",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "A",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\0101",
+      "subject": "A",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\0101",
+      "subject": "A1",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\p{L}",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\p{L}",
+      "subject": "0",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\P{L}",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\P{L}",
+      "subject": "0",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\p{L}",
+      "subject": "\u00e9",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\P{L}",
+      "subject": "\u00e9",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\N{BULLET}",
+      "subject": "\u2022",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\N{BULLET}",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "(?<n>a)\\k<n>",
+      "subject": "aa",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "(?<n>a)\\k<n>",
+      "subject": "ab",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\Qa.b\\E",
+      "subject": "a.b",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\Qa.b\\E",
+      "subject": "axb",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\Q.\\E",
+      "subject": ".",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "\\Q.\\E",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "a\\Qb\\Ec",
+      "subject": "abc",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "[\\v]",
+      "subject": "\u000b",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "[\\v]",
+      "subject": "\n",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "[\\v]",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "[\\h]",
+      "subject": " ",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "[\\h]",
+      "subject": "\u00a0",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "[\\h]",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "[\\d]",
+      "subject": "0",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "[\\d]",
+      "subject": "\u0661",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "[\\s]",
+      "subject": " ",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "[\\s]",
+      "subject": "\u00a0",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "[\\w]",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "[\\w]",
+      "subject": "\u00e9",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "[\\a]",
+      "subject": "\u0007",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "[\\e]",
+      "subject": "\u001b",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "[\\f]",
+      "subject": "\f",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "[\\n]",
+      "subject": "\n",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "[\\r]",
+      "subject": "\r",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "[\\t]",
+      "subject": "\t",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "[\\x41]",
+      "subject": "A",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "[A]",
+      "subject": "A",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "[\\cA]",
+      "subject": "\u0001",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "[\\p{L}]",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "[\\p{L}]",
+      "subject": "0",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "[\\P{L}]",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "[\\N{BULLET}]",
+      "subject": "\u2022",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "[\\Qa\\E]",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "[\\Qa\\E]",
+      "subject": "b",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "[\\V]",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "[\\V]",
+      "subject": "\n",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "[\\H]",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "[\\H]",
+      "subject": " ",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "[\\S]",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "[\\S]",
+      "subject": " ",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "[\\D]",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "[\\D]",
+      "subject": "0",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "[\\W]",
+      "subject": "-",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "escape-semantics",
+      "pattern": "[\\W]",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
     }
   ],
   "answers": [
@@ -9165,6 +10365,1012 @@
           1
         ]
       ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          4
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ],
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
     }
   ]
 }

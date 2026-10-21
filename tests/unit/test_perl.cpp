@@ -226,6 +226,33 @@ TEST(Perl, ANamedLookupTakesTheFirstDuplicateThatTookPart) {
   EXPECT_EQ(named_of("(?<a>x)", "x", "b", GRX_SYNTAX_PERL), "unknown");
 }
 
+// **`\R` is atomic here, and that is what makes it perl's `\R`.**
+//
+// perlrebackslash gives the construct as `(?>\x0D\x0A|\v)`. The atomic group
+// is not decoration: it is why `^(\R)(\R)b` cannot match "\r\nb" - the first
+// `\R` takes the CR LF and will not give the LF back for the second to use.
+// perl 5.44 and pcre2test 10.46 both decline it.
+//
+// The JDK's is a plain alternation and does split, so this behaviour became
+// a profile field rather than a property of the node. This test is the half
+// that must not move when that field is read: both dialects reached one
+// unconditional `GRX_NODE_ATOMIC` before, and the Java reading was the wrong
+// one of the two.
+TEST(Perl, TheLineBreakEscapeIsAtomicAndKeepsACarriageReturnLinefeedPair) {
+  for (GRX_Syntax syntax : {GRX_SYNTAX_PERL, GRX_SYNTAX_PCRE}) {
+    EXPECT_FALSE(search("^(\\R)(\\R)b", "\r\nb", syntax).matched);
+    EXPECT_FALSE(search("^\\R\\Rb", "\r\nb", syntax).matched);
+    EXPECT_FALSE(search("^\\R\\R$", "\r\n", syntax).matched);
+    // The pair itself still matches, as one unit of two bytes.
+    EXPECT_TRUE(search("\\R", "\r\n", syntax).matched);
+    EXPECT_EQ(search("\\R", "\r\n", syntax).end, 2u);
+    // Two pairs give the two `\R` one each, so the refusals above are about
+    // splitting a pair and not about `\R\R` being unmatchable.
+    EXPECT_TRUE(search("^\\R\\Rx", "\r\n\r\nx", syntax).matched);
+    EXPECT_EQ(search("^\\R\\Rx", "\r\n\r\nx", syntax).end, 5u);
+  }
+}
+
 TEST(Perl, AQuotedRunIsLiteralAndNotAnAtom) {
   // `\Q...\E` suspends every operator meaning, which is the easy half. The
   // half that decides where the code lives is that an *empty* run is not an

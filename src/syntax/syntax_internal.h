@@ -1024,6 +1024,27 @@ typedef struct GRX_Profile {
    */
   int caret_after_final_newline;
   /**
+   * `\R` is atomic, so it never splits a CR LF pair.
+   *
+   * perlrebackslash spells perl's as `(?>\x0D\x0A|\v)`, and the group is the
+   * whole point: once `\R` has taken a CR LF it will not give the LF back to
+   * let the rest of the pattern match. PCRE2 agrees. **The JDK does not**,
+   * and its javadoc says why without meaning to - it gives the construct as
+   * `\u000D\u000A|[\u000A\u000B\u000C\u000D\u0085  ]`, a plain
+   * alternation with no atomic group around it, and a plain alternation
+   * backtracks.
+   *
+   * Measured on both pins rather than read off the javadoc: `^(\R)(\R)b`
+   * against "\r\nb" captures 0-1 and 1-2 in JDK 25 and 27, so the first `\R`
+   * took the CR alone and the second took the LF. perl declines the same
+   * pattern, and so does PCRE2.
+   *
+   * A zero here is the backtracking reading, which is the one a plain
+   * alternation gives, so a dialect that gains `\R` without anybody
+   * measuring it gets the weaker claim rather than perl's.
+   */
+  int linebreak_is_atomic;
+  /**
    * The dialect's subject is text, not bytes, whatever the options say.
    *
    * PCRE2 without `PCRE2_UTF` matches bytes, and that is the right thing for

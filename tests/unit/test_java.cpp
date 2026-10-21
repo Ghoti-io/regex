@@ -1240,6 +1240,35 @@ TEST(JavaEscapes, TheWordBoundaryIsNotTheBackspaceInsideAClass) {
 // The rule is about the *dangling* one, so the closed forms are pinned here
 // too - including the second `\E` of `\Q\E\E`, which closes nothing, and
 // `a\Qb\Ec`, where a run opens and closes mid-pattern.
+// **The JDK's `\R` is not atomic, and perl's is.**
+//
+// perlrebackslash spells perl's as `(?>\x0D\x0A|\v)`, and the atomic group is
+// the substance: once `\R` has taken a CR LF it will not hand the LF back to
+// let the rest of the pattern match. The JDK's javadoc gives the construct as
+// `\u000D\u000A|[\u000A\u000B\u000C\u000D\u0085  ]` - a plain
+// alternation, which backtracks.
+//
+// Measured, not read off the javadoc: `^(\R)(\R)b` against "\r\nb" captures
+// 0-1 and 1-2 on both pinned JDKs, so the first `\R` took the CR alone. perl
+// and pcre2test both decline the same pattern. This library applied perl's
+// atomicity to all three, so the Java reading was wrong; the profile now
+// carries the difference, and the perl half of this is the part that must not
+// move, which is why it is asserted here beside it.
+TEST(JavaEscapes, TheLineBreakEscapeSplitsACarriageReturnLinefeedPair) {
+  EXPECT_TRUE(matches_java("^(\\R)(\\R)b", "\r\nb"));
+  EXPECT_TRUE(matches_java("^\\R\\Rb", "\r\nb"));
+  EXPECT_TRUE(matches_java("^\\R\\R$", "\r\n"));
+  // The pair is still preferred when nothing forces the split, so `\R` is
+  // one character of progress here and two there.
+  EXPECT_TRUE(matches_java("^\\Rb", "\r\nb"));
+  EXPECT_TRUE(matches_java("\\R", "\r\n"));
+  EXPECT_TRUE(matches_java("^\\R\\Rx", "\r\n\r\nx"));
+  // And the set itself is unchanged by the atomicity: a vertical tab is a
+  // linebreak and a space is not.
+  EXPECT_TRUE(matches_java("\\R", "\v"));
+  EXPECT_FALSE(matches_java("\\R", " "));
+}
+
 TEST(JavaEscapes, AQuotationTerminatorThatClosesNothingIsRefused) {
   GRX_Error error;
   EXPECT_EQ(compile_java("\\E", &error), GRX_ERR_SYNTAX);
