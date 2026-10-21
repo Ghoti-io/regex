@@ -123,6 +123,12 @@ ATOMS = [
     # case that separates the spelling from the bounds: `\\zs\\{0,1}` is
     # E888 and asks for the same repeat.
     "\\zs", "\\ze", "\\zs\\=", "\\ze\\?", "\\v\\zs=",
+    # `\z` is a prefix and never an atom, which this list did not ask until a
+    # sweep of the whole alphabet under every magic level found a bare `\z`
+    # and `\zx` compiling here and refused by vim. `\z(` and `\z1` have
+    # their own refusal - they are syntax-file only - so `\zs` and `\ze`
+    # above are the whole of what `\z` may be followed by.
+    "\\z", "\\zx", "\\v\\z", "\\V\\z", "\\m\\z", "\\M\\z",
     # The last-substitute spellings, which both sides refuse and read alike.
     "~", "\\~", "\\M~",
     "\\v", "\\m", "\\M", "\\V", "\\c", "\\C",

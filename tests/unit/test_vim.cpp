@@ -1169,3 +1169,36 @@ int main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
+
+// **`\z` is a prefix and never an atom of its own.**
+//
+// vim has exactly four things after `\z`: `\zs` and `\ze`, which move the
+// reported match, and `\z(` and `\z1`-`\z9`, which are syntax-file only and
+// have their own refusal. Anything else - a bare `\z`, or `\z` before some
+// other letter - is an error there, and this library read it as the literal
+// `z` by falling through.
+//
+// Found by sweeping every `\<letter>` under every magic level against the
+// pinned vim 9.2: `\z`, `\v\z`, `\V\z`, `\m\z` and `\M\z` all compiled here
+// and all fail there. The magic prefixes are in the test because `\z` is
+// the same construct under all of them, so a fix that only covered the
+// default level would leave four spellings wrong.
+TEST(VimEscapes, TheMatchMarkPrefixIsNotAnAtom) {
+  EXPECT_EQ(accepts("\\z"), "refused");
+  EXPECT_EQ(why("\\z"), GRX_DIAG_INVALID_ESCAPE);
+  EXPECT_EQ(accepts("\\zx"), "refused");
+  EXPECT_EQ(accepts("\\v\\z"), "refused");
+  EXPECT_EQ(accepts("\\V\\z"), "refused");
+  EXPECT_EQ(accepts("\\m\\z"), "refused");
+  EXPECT_EQ(accepts("\\M\\z"), "refused");
+  // The two that are atoms still are, and still move the match, which is the
+  // half a refusal must not take with it.
+  EXPECT_EQ(accepts("\\zs"), "ok");
+  EXPECT_EQ(accepts("\\ze"), "ok");
+  EXPECT_EQ(span("a\\zsb", "ab"), "1-2");
+  EXPECT_EQ(span("a\\zeb", "ab"), "0-1");
+  // And the syntax-file constructs keep their own answer rather than
+  // collapsing into this one.
+  EXPECT_EQ(why("\\z("), GRX_DIAG_NOT_IN_DIALECT);
+  EXPECT_EQ(why("\\z1"), GRX_DIAG_NOT_IN_DIALECT);
+}

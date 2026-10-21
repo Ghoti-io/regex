@@ -1742,9 +1742,15 @@ static GRX_Result vim_atom_escape(GRX_Parser * parser, uint32_t * out_node) {
       // own answer rather than a gap.
       return grx_parse_fail(parser, GRX_DIAG_NOT_IN_DIALECT, start, 3);
     }
-    parser->position++;
-    return grx_parse_literal_node(
-        parser, (uint32_t)'z', start, parser->position - start, out_node);
+    // **`\z` is a prefix and never an atom of its own.** Falling through to
+    // the literal `z` accepted a bare `\z`, and `\zx` for any other letter,
+    // where vim 9.2 refuses both: measured under every magic level, `\z`,
+    // `\v\z`, `\V\z`, `\m\z` and `\M\z` all fail to compile there and all
+    // compiled here. Only `\zs` and `\ze` are atoms, and `\z(` and `\z1`
+    // to `\z9` have their own refusal above, so there is nothing left for
+    // this arm to accept.
+    return grx_parse_fail(parser, GRX_DIAG_INVALID_ESCAPE, start,
+        kind ? 3 : 2);
   }
 
   if (c >= '1' && c <= '9') {
