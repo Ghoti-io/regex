@@ -339,7 +339,7 @@ CASES += [case("features", pattern, "", flags, "compile")
 # there and this library cannot name a position inside a character - so the
 # differentials would be scoring a difference already recorded. The astral
 # rows live in the `unit` area, which is WP-49's inventory and not a gate.
-DOTNET_INVENTORY_REVISION = "2026-10-21s"
+DOTNET_INVENTORY_REVISION = "2026-10-21t"
 
 CASES += [case("generated-syntax", pattern, mode="compile") for pattern in (
     "a", "(a|b)+", "(?:a)", "(?<n>a)", "(?'n'a)", r"(?<n>a)\k<n>",
@@ -665,6 +665,33 @@ CASES += [case("profile-audit", pattern, subject, flags, mode) for
     (r"\p{Alphabetic}", "a", "", "compile"),
     (r"\p{Script=Greek}", "\u03b1", "", "compile"),
     (r"\p{Nd}", "0", "", "compile"),
+    # dollar, which the exhaustive sweep caught with only one of its two
+    # alternatives: END_ONLY fails something and ALWAYS_LINE does not, so
+    # nothing divided .NET's BEFORE_FINAL_NEWLINE from "`$` is always a line
+    # anchor". A newline in the *middle* of the subject divides them - a
+    # final one does not, which is why every row the inventory held was
+    # blind to it.
+    ("a$", "a\nb", "", "first"),
+    ("b$", "a\nb", "", "first"),
+    # **The WTF-8 axis, which the inventory did not ask at all.** The driver
+    # has had a `w:` mode since it was written and nothing used it, so .NET
+    # treating an unpaired surrogate as ordinary text was measured nowhere -
+    # and that is why the sweep could not catch `subject_is_text` or
+    # `subject_is_utf16`: both govern exactly this, and there were no rows
+    # for them to govern. Unasked, not unobservable.
+    #
+    # A .NET string is UTF-16 and a lone surrogate is a legal char, so these
+    # answer rather than erroring. The offsets are WTF-8 bytes, three per
+    # surrogate.
+    (".", "\ud800", "", "w:first"),
+    (".", "\ud800a", "", "w:first"),
+    ("a", "\ud800a", "", "w:first"),
+    (r"\p{Cs}", "\ud800", "", "w:first"),
+    (r"\p{L}", "\ud800", "", "w:first"),
+    (r"[\s\S]", "\ud800", "", "w:first"),
+    ("^.$", "\udfff", "", "w:first"),
+    (r"\ud800", "\ud800", "", "w:first"),
+    ("..", "𐀀x", "", "w:first"),
     # ascii_classes_fold_ascii: whether the dialect's own ASCII narrowing
     # takes the *folding* with it. U+00E9 and U+00C9 are one orbit and both
     # outside ASCII, so a narrowing that reached the folding would part them.

@@ -74,6 +74,8 @@ def claimant(row, answer):
         return "search"
     if mode == "names":
         return "names"
+    if mode == "w:first":
+        return "wtf8"
     return None
 
 

@@ -724,6 +724,43 @@ TEST(DotNetClasses, OnlyShortCategoryNamesAndTheIsPrefix) {
   EXPECT_EQ(compile_dotnet("\\p{IsL}"), GRX_ERR_SYNTAX);
 }
 
+// --------------------------------------------------------------------------
+// The two axes the exhaustive sweep found unasked
+// --------------------------------------------------------------------------
+
+// `$` without multiline holds before a *final* newline and nowhere else, so
+// a newline in the middle of the subject is what divides .NET's rule from
+// "`$` is always a line anchor". Every row the inventory held used a final
+// newline, which both readings answer alike - the sweep caught this field
+// with one of its two alternative values and that is what said so.
+TEST(DotNetAnchors, DollarHoldsOnlyBeforeAFinalNewline) {
+  EXPECT_FALSE(matches_dotnet("a$", "a\nb"));
+  EXPECT_TRUE(matches_dotnet("b$", "a\nb"));
+  EXPECT_TRUE(matches_dotnet("a$", "a\n"));
+}
+
+// An unpaired surrogate is a legal `char` in a .NET string, so the engine
+// matches over one without complaint - and this library reads such a
+// subject as WTF-8 under GRX_OPT_WTF8, reporting three bytes for it. The
+// `\p{Cs}` and `\p{L}` pair is the whole reason .NET's properties cannot
+// see a character above U+FFFF: the engine is looking at two surrogates,
+// and a surrogate's category is `Cs`.
+//
+// The inventory asked none of this until 2026-10-21: the driver had a `w:`
+// mode nothing used, which is why mutating `subject_is_text` and
+// `subject_is_utf16` failed nothing.
+TEST(DotNetUnicode, AnUnpairedSurrogateIsText) {
+  const uint32_t wtf8 = GRX_OPT_WTF8 | GRX_OPT_UTF;
+  // "\xED\xA0\x80" is U+D800 in WTF-8.
+  EXPECT_TRUE(matches_dotnet(".", "\xED\xA0\x80", wtf8));
+  EXPECT_TRUE(matches_dotnet("\\p{Cs}", "\xED\xA0\x80", wtf8));
+  EXPECT_FALSE(matches_dotnet("\\p{L}", "\xED\xA0\x80", wtf8));
+  EXPECT_TRUE(matches_dotnet("[\\s\\S]", "\xED\xA0\x80", wtf8));
+  // Without the option the subject is not well-formed UTF-8 and is refused
+  // rather than answered, which is the bit doing something.
+  EXPECT_FALSE(matches_dotnet(".", "\xED\xA0\x80"));
+}
+
 int main(int argc, char ** argv) {
   testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

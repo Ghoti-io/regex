@@ -3722,6 +3722,94 @@
     },
     {
       "area": "profile-audit",
+      "pattern": "a$",
+      "subject": "a\nb",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "b$",
+      "subject": "a\nb",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": ".",
+      "subject": "\ud800",
+      "flags": "",
+      "mode": "w:first",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": ".",
+      "subject": "\ud800a",
+      "flags": "",
+      "mode": "w:first",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "a",
+      "subject": "\ud800a",
+      "flags": "",
+      "mode": "w:first",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "\\p{Cs}",
+      "subject": "\ud800",
+      "flags": "",
+      "mode": "w:first",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "\\p{L}",
+      "subject": "\ud800",
+      "flags": "",
+      "mode": "w:first",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "[\\s\\S]",
+      "subject": "\ud800",
+      "flags": "",
+      "mode": "w:first",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "^.$",
+      "subject": "\udfff",
+      "flags": "",
+      "mode": "w:first",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "\\ud800",
+      "subject": "\ud800",
+      "flags": "",
+      "mode": "w:first",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "..",
+      "subject": "\ud800\udc00x",
+      "flags": "",
+      "mode": "w:first",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
       "pattern": "\u00e9",
       "subject": "\u00c9",
       "flags": "iE",
@@ -7241,6 +7329,93 @@
     },
     {
       "kind": "compile"
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          2,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          3,
+          4
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          4
+        ]
+      ]
     },
     {
       "kind": "match",
