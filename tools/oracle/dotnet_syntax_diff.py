@@ -35,6 +35,12 @@ DATA = os.path.join(ROOT, "tests", "data", "probe")
 # Patterns whose disagreement is recorded elsewhere. Keyed by the pattern so
 # that a renumbered inventory cannot silently widen it.
 EXCLUDED = {
+    "(?<a>x)(?<-a>y)(?(a)z)":
+        "a balancing group with its conditional, the second spelling of the "
+        "construct below. Excluded for that one's reason and listed "
+        "separately because the exclusion is keyed by pattern: the first "
+        "entry did not quietly cover this, which is the point of keying it "
+        "that way",
     "(?<n>a)(?<-n>b)":
         "a balancing group: the reference compiles it, this library refuses "
         "it, and it is deferred to its own work package (dialects.md section 6)",
@@ -62,9 +68,25 @@ def main():
         pinned = json.load(source)
     if pinned["cases"] != dotnet_probe.CASES:
         raise SystemExit("the inventory has changed; re-record the probe")
+    # Every unflagged row that asks an accept-or-reject question, not only
+    # the generated ones. `dotnet_coverage.py` is why: the `features` area's
+    # 39 compile rows, the `ecmascript` area's and the profile audit's were
+    # recorded and asked by nothing, which looks exactly like coverage in
+    # the inventory and is not. A `first`-mode row whose answer is `syntax`
+    # belongs here too - the reference refused the pattern, so there is no
+    # match to compare and the refusal is the datum.
+    #
+    # Flagged rows stay out: grx_syntax's flag table is a shared one and
+    # cannot hold .NET's `n` (see its own comment), so those are
+    # dotnet_flags_diff.py's.
     indices = [i for i, row in enumerate(pinned["cases"])
-               if row["area"] == "generated-syntax"]
-    if not indices:
+               if not row["flags"]
+               and (row["mode"] == "compile"
+                    or (row["mode"] == "first"
+                        and pinned["answers"][i].get("kind") == "syntax"))]
+    generated = sum(1 for i in indices
+                    if pinned["cases"][i]["area"] == "generated-syntax")
+    if not generated:
         raise SystemExit("the generated .NET syntax inventory is empty")
 
     payload = "".join(
@@ -117,7 +139,7 @@ def main():
         print("case %d %r: %s, the reference says %s%s"
               % (index, pinned["cases"][index]["pattern"], actual, wanted,
                  "; " + note if note else ""), file=sys.stderr)
-    print("inventory %s; .NET generated syntax: %d asked, %d agree, "
+    print("inventory %s; .NET syntax: %d asked, %d agree, "
           "%d excluded and named, %d stale exclusion, %d disagreement"
           % (dotnet_probe.DOTNET_INVENTORY_REVISION, len(indices), passed,
              excluded, stale, len(failures)))

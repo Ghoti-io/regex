@@ -37,7 +37,8 @@ DATA = os.path.join(ROOT, "tests", "data", "probe")
 # this library cannot name a position inside a character. They are §6's
 # deviation and WP-49's inventory, not a disagreement a gate should score.
 AREAS = ("control", "generated-match", "classes", "flags", "captures",
-         "anchors", "lookbehind", "profile")
+         "anchors", "lookbehind", "profile", "profile-audit", "ecmascript",
+         "iteration")
 ENGINES = ("auto", "pike", "backtrack", "bitstate", "dfa")
 
 # Rows whose disagreement is recorded elsewhere, keyed by (pattern, subject)

@@ -3391,6 +3391,222 @@
       "flags": "",
       "mode": "first",
       "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "[[:alpha:]]",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "[[:alpha:]]",
+      "subject": "a]",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "[[:alpha:]]",
+      "subject": "x]",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "\\<a",
+      "subject": "a",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "\\<a",
+      "subject": "<a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "\\<a",
+      "subject": "a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "\\>a",
+      "subject": ">a",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "(?:(a)|(b))+",
+      "subject": "ab",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "(?:(a)|b)\\1",
+      "subject": "b",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "(?!(a)c)ab",
+      "subject": "ab",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "\\Gb",
+      "subject": "cb",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "\\Gb",
+      "subject": "cb",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "\\Ga*",
+      "subject": "baac",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "\\Gb*",
+      "subject": "baac",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "\\Ga",
+      "subject": "aab",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "\\b",
+      "subject": "",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "\\B",
+      "subject": "",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "\\p{^L}",
+      "subject": "1",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "\\p{^L}",
+      "subject": "1",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "\\P{^L}",
+      "subject": "1",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "[\\p{^L}]",
+      "subject": "1",
+      "flags": "",
+      "mode": "compile",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "\\P{L}",
+      "subject": "1",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "\u00e9",
+      "subject": "\u00c9",
+      "flags": "iE",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "\u00e9",
+      "subject": "\u00c9",
+      "flags": "i",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "\\bx",
+      "subject": "\u00e9x",
+      "flags": "iE",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": ".",
+      "subject": "\r",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": ".",
+      "subject": "\n",
+      "flags": "",
+      "mode": "first",
+      "argument": ""
     }
   ],
   "answers": [
@@ -6472,6 +6688,211 @@
           1
         ]
       ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "compile"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ],
+        null
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "all",
+      "matches": []
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            0
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            1,
+            1
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            1
+          ]
+        ],
+        [
+          [
+            1,
+            2
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "kind": "syntax",
+      "index": 4,
+      "error": "InvalidUnicodePropertyEscape",
+      "description": "Invalid pattern '\\p{^L}' at offset 4. Incomplete \\p{X} character escape."
+    },
+    {
+      "kind": "syntax",
+      "index": 4,
+      "error": "InvalidUnicodePropertyEscape",
+      "description": "Invalid pattern '\\p{^L}' at offset 4. Incomplete \\p{X} character escape."
+    },
+    {
+      "kind": "syntax",
+      "index": 4,
+      "error": "InvalidUnicodePropertyEscape",
+      "description": "Invalid pattern '\\P{^L}' at offset 4. Incomplete \\p{X} character escape."
+    },
+    {
+      "kind": "syntax",
+      "index": 5,
+      "error": "InvalidUnicodePropertyEscape",
+      "description": "Invalid pattern '[\\p{^L}]' at offset 5. Incomplete \\p{X} character escape."
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          2,
+          3
+        ]
+      ]
+    },
+    {
+      "kind": "match",
+      "groups": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "kind": "nomatch"
     }
   ]
 }

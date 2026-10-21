@@ -1004,9 +1004,17 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
   // orbit. It needs no locale, so it is WP-50 rather than a permanent
   // deviation.
   //
-  // Not measured, and so not set: `search_start`. `\G.` over "abc" gives
-  // three adjacent matches, which PREVIOUS_END and ATTEMPT both produce, so
-  // the probe has no case that divides them yet.
+  // `search_start` was in this comment as the field nothing divided: `\G.`
+  // over "abc" gives three adjacent matches under PREVIOUS_END and under
+  // ATTEMPT both. That was true of the case the probe held and not of the
+  // axis - section 5.10 says the two differ only after a *failure* forces
+  // the loop to advance, and no row did that. `\Ga*` over "baac" does:
+  // .NET 10.0.13 reports **one** match, the empty one at 0, where this
+  // library reported four. It is set below.
+  //
+  // The lesson is the one `caret_after_final_newline` left two commits
+  // earlier, and it recurred because "no case divides them" was recorded as
+  // a property of the dialect rather than as a gap in the inventory.
   [GRX_SYNTAX_DOTNET] = {
     .lookbehind = GRX_LOOKBEHIND_UNBOUNDED,
     .empty_loop = GRX_EMPTY_LOOP_BREAK,
@@ -1048,6 +1056,24 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     // and is not this field's business.
     .subject_is_text = 1,
     .subject_is_utf16 = 1,
+    // `\p{^L}` is Java's answer and not Perl's: .NET 10.0.13 raises
+    // "Invalid Unicode property escape" for it, for `\P{^L}` and for the
+    // in-class spelling, and `\P{L}` is how the negation is written. All
+    // three compiled here until this was set, and the syntax differential
+    // is what asked - the field had been left at zero, which this axis
+    // documents as the Perl reading that every dialect but one already had.
+    //
+    // **It was asked only because the differential grew a denominator.**
+    // dotnet_coverage.py found 107 of 445 pinned rows asked by nothing,
+    // the `features` area's 39 compile rows among them, and widening the
+    // syntax gate to every unflagged accept-or-reject row turned this up.
+    .property_caret_is_error = 1,
+    // Perl's rule and not PCRE2's: `\G` holds where the previous match
+    // ended, so a failed attempt does not move it and the loop stops.
+    // `\Ga*` over "baac" is one match on .NET 10.0.13 and `\Gb*` is two;
+    // ATTEMPT gives four and five. Measured through the probe's
+    // `profile-audit` area and compared by dotnet_search_diff.py.
+    .search_start = GRX_SEARCH_START_PREVIOUS_END,
   },
   [GRX_SYNTAX_RUBY] = {
     .lookbehind = GRX_LOOKBEHIND_FIXED_PER_BRANCH,

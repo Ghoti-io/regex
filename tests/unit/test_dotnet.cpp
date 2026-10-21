@@ -15,6 +15,7 @@
  */
 #include <cstdint>
 #include <cstring>
+#include <string>
 
 #include "test_helpers.h"
 
@@ -572,6 +573,75 @@ TEST(DotNetEcmaScript, TheCeilingIsTheGroupsOpenedSoFar) {
 TEST(DotNetEcmaScript, AClassDigitEscapeIsOctalEitherWay) {
   EXPECT_TRUE(matches_dotnet("[\\1]", "\x01"));
   EXPECT_TRUE(matches_dotnet("[\\1]", "\x01", kEcmaScript));
+}
+
+// --------------------------------------------------------------------------
+// The two profile fields the audit's discriminators turned up
+// --------------------------------------------------------------------------
+
+namespace {
+// Every match's span, as "s:e s:e", through the documented search loop.
+std::string all_dotnet(const char * pattern, const char * subject) {
+  GRX_Regex * regex = nullptr;
+  GRX_Error error;
+  if (grx_regex_compile_with_allocator(pattern, std::strlen(pattern),
+          GRX_SYNTAX_DOTNET, GRX_OPT_NONE, nullptr, nullptr, &error,
+          &regex) != GRX_OK) return "compile-error";
+  GRX_Match * match = nullptr;
+  if (grx_match_create(regex, nullptr, &match) != GRX_OK) {
+    grx_regex_free(regex);
+    return "match-error";
+  }
+  GRX_SearchOptions options;
+  grx_search_options_default(&options);
+  int matched = 0;
+  std::string out;
+  size_t length = std::strlen(subject);
+  GRX_Result result = grx_regex_search_ex(regex, subject, length, &options,
+      match, &matched);
+  // A guard rather than a bare loop: the field under test is the one that
+  // decides whether this loop terminates, so a wrong value must fail the
+  // assertion and not hang the suite.
+  for (int guard = 0; result == GRX_OK && matched && guard < 32; guard++) {
+    GRX_Capture capture;
+    grx_match_group(match, 0, &capture);
+    if (!out.empty()) out += " ";
+    out += std::to_string(capture.start) + ":" + std::to_string(capture.end);
+    result = grx_regex_search_next(regex, subject, length, &options, match,
+        &matched);
+  }
+  grx_match_destroy(match);
+  grx_regex_free(regex);
+  return out;
+}
+}  // namespace
+
+// `\G` holds where the previous match *ended*, so a failed attempt does not
+// move it and the loop stops - perl's rule, not PCRE2's. This field was left
+// unset on the stated ground that no case divided the two values, which was
+// true of the cases the probe held: section 5.10 says they differ only after
+// a failure forces the loop to advance, and `\G.` over "abc" never fails.
+// `\Ga*` over "baac" does, and .NET answers it with one match where ATTEMPT
+// gives four.
+TEST(DotNetProfile, TheContiguousAnchorHoldsAtThePreviousMatchEnd) {
+  EXPECT_EQ(all_dotnet("\\Ga*", "baac"), "0:0");
+  EXPECT_EQ(all_dotnet("\\Gb*", "baac"), "0:1 1:1");
+  // The control: a row where both rules agree, so that the two above are
+  // seen to be about the field and not about `\G` in general.
+  EXPECT_EQ(all_dotnet("\\Ga", "aab"), "0:1 1:2");
+}
+
+// `\p{^L}` is Java's answer and not Perl's: .NET refuses the caret inside
+// the braces and wants `\P{L}`. All three spellings compiled here until the
+// field was set, and the diagnostic is asserted so that a change of refusal
+// shows up as one rather than as a still-passing test.
+TEST(DotNetProfile, ACaretInsideAPropertyNameIsARefusal) {
+  GRX_Error error;
+  EXPECT_EQ(compile_dotnet("\\p{^L}", &error), GRX_ERR_SYNTAX);
+  EXPECT_EQ(error.diag, GRX_DIAG_INVALID_PROPERTY_SYNTAX);
+  EXPECT_EQ(compile_dotnet("\\P{^L}"), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_dotnet("[\\p{^L}]"), GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile_dotnet("\\P{L}"), GRX_OK);
 }
 
 int main(int argc, char ** argv) {

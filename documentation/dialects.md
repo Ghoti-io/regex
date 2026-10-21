@@ -1187,7 +1187,7 @@ Perl and PCRE2 share the first row and differ on this one:
 | Value | Rule | Dialects |
 | --- | --- | --- |
 | `SEARCH_START_ATTEMPT` | where the current attempt began | PCRE2 |
-| `SEARCH_START_PREVIOUS_END` | where the previous match ended - `pos()`, which a failed attempt does not move | Perl |
+| `SEARCH_START_PREVIOUS_END` | where the previous match ended - `pos()`, which a failed attempt does not move | Perl, .NET |
 
 It shows only after a *failure* forces the loop to advance. `\Ga*` against
 `"baac"`: both find the empty match at 0, both fail to find a non-empty one
@@ -1198,6 +1198,16 @@ and `while ("baac" =~ /\Ga*/g)` reports one.
 Neither is a quirk of its implementation. PCRE2 does not provide the loop -
 its caller writes it and bumps the start offset - so `\G` can only mean the
 attempt. Perl does provide it, and `pos()` is a property of the string.
+
+.NET is perl's side, measured on 10.0.13: `\Ga*` over `"baac"` is one match
+and `\Gb*` is two, where ATTEMPT gives four and five. `Regex.Matches`
+provides the loop, like perl's `/g`, which is the same reason. **This field
+was left unset until 2026-10-21**, on the ground that no case divided the two
+values - and `\G.` over `"abc"`, the case the probe held, does not, because
+nothing in it fails. That was recorded as a property of the dialect when it
+was a gap in the inventory, and `tools/oracle/dotnet_search_diff.py` is the
+gate that now asks: the whole of iteration - 24 `all`, `all-from` and
+`find-from` rows - had been compared by nothing.
 `grx_regex_search_next()` provides it too, which is why this library has to
 choose per dialect rather than inherit one answer. Found by
 `tools/oracle/iterate_diff.py`, the first thing here to ask either reference

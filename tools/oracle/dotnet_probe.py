@@ -339,7 +339,7 @@ CASES += [case("features", pattern, "", flags, "compile")
 # there and this library cannot name a position inside a character - so the
 # differentials would be scoring a difference already recorded. The astral
 # rows live in the `unit` area, which is WP-49's inventory and not a gate.
-DOTNET_INVENTORY_REVISION = "2026-10-21k"
+DOTNET_INVENTORY_REVISION = "2026-10-21o"
 
 CASES += [case("generated-syntax", pattern, mode="compile") for pattern in (
     "a", "(a|b)+", "(?:a)", "(?<n>a)", "(?'n'a)", r"(?<n>a)\k<n>",
@@ -551,6 +551,89 @@ CASES += [case("ecmascript", pattern, subject, flags, mode) for
     # Inside a class there is no reference to be a prefix of, so the option
     # has nothing to change.
     (r"[\1]", "\x01", "E", "first"), (r"[\1]", "\x01", "", "first"),
+)]
+
+
+# The profile audit's condition 1, the Java audit's instrument applied here:
+# `GRX_Profile` has 41 fields, .NET's entry assigns 13 and the rest take the
+# zero value, and a value that is right and a value nobody checked look
+# identical in the table. So for each unassigned field, a pattern and subject
+# whose *answer changes* if the value were different.
+#
+# The `profile` area above already covers eight of them - preference,
+# submatch, composing, word_set, fold_utf, caseless_widens_shorthands,
+# newlines and mongolian_separator_is_space - and the `flags` area covers
+# multiline_by_default. These are the rest, each row named with its field.
+CASES += [case("profile-audit", pattern, subject, flags, mode) for
+          pattern, subject, flags, mode in (
+    # posix_* (eight fields). .NET has no POSIX class at all, so none of them
+    # is reachable - and that is a measurement, not an assumption: the
+    # bracket reads as the literal set `[[:alph` with a `]` after it, which
+    # these three rows pin. `[[:alpha:]]` declines "a" alone, takes "a]",
+    # and declines "x]" because `x` is not one of the letters inside.
+    ("[[:alpha:]]", "a", "", "first"),
+    ("[[:alpha:]]", "a]", "", "first"),
+    ("[[:alpha:]]", "x]", "", "first"),
+    # word_boundary. `\<` and `\>` are not constructs .NET has, so the field
+    # has nothing to compare; an unknown escape says so.
+    # - and it compiles, which was not the expected answer, so what it
+    # *matches* is the question. A literal `<` means the field is still
+    # unreachable and `\<` is an identity escape; anything else would mean
+    # .NET has a boundary construct nothing had recorded.
+    (r"\<a", "a", "", "compile"),
+    (r"\<a", "<a", "", "first"), (r"\<a", "a", "", "first"),
+    (r"\>a", ">a", "", "first"),
+    # capture_reset: what an outer iteration does to a group the previous
+    # iteration set. Over "ab" the first iteration sets group 1 and the
+    # second sets group 2, so a rule that resets leaves group 1 unset and a
+    # rule that keeps leaves it holding "a".
+    ("(?:(a)|(b))+", "ab", "", "first"),
+    # backref_unset: a reference to a group that exists and has not
+    # participated. Matching empty gives a match here, failing gives none.
+    (r"(?:(a)|b)\1", "b", "", "first"),
+    # negative_look: whether a failed negative body's captures survive. The
+    # body `(a)c` captures "a" and then fails, so group 1 holds "a" if they
+    # are kept and nothing if they are discarded.
+    ("(?!(a)c)ab", "ab", "", "first"),
+    # search_start: what `\G` asserts while iterating, where the comment in
+    # syntax.c says no case divides PREVIOUS_END from ATTEMPT. This is the
+    # attempt to find one: with no previous match, PREVIOUS_END holds
+    # position 0 and `\Gb` cannot reach the "b" at 1, while ATTEMPT moves
+    # with the scan and can.
+    # - and the `first` row divides nothing, which is the mistake worth
+    # keeping visible: one search has `\G` at the start offset under both
+    # rules. The field only speaks after a *failure* forces the loop to
+    # advance, so the discriminator has to be a search-all. Section 5.10's
+    # own example: `\Ga*` over "baac" is four matches under ATTEMPT, where
+    # `\G` moves with the scan, and one under PREVIOUS_END, where it stays
+    # at the end of the empty match at 0.
+    (r"\Gb", "cb", "", "first"),
+    (r"\Gb", "cb", "", "all"),
+    (r"\Ga*", "baac", "", "all"),
+    (r"\Gb*", "baac", "", "all"),
+    (r"\Ga", "aab", "", "all"),
+    # empty_subject_is_a_boundary: `\b` with nothing on either side.
+    (r"\b", "", "", "first"),
+    (r"\B", "", "", "first"),
+    # property_caret_is_error: `\p{^L}` is Perl's negation and may be a
+    # refusal instead.
+    (r"\p{^L}", "1", "", "compile"),
+    (r"\p{^L}", "1", "", "first"),
+    (r"\P{^L}", "1", "", "compile"),
+    (r"[\p{^L}]", "1", "", "compile"),
+    (r"\P{L}", "1", "", "first"),
+    # ascii_classes_fold_ascii: whether the dialect's own ASCII narrowing
+    # takes the *folding* with it. U+00E9 and U+00C9 are one orbit and both
+    # outside ASCII, so a narrowing that reached the folding would part them.
+    ("é", "É", "iE", "first"), ("é", "É", "i", "first"),
+    # caseless_leaves_boundary_narrow: whether a caseless mode re-widens the
+    # `\b` that the narrowing made ASCII.
+    (r"\bx", "éx", "iE", "first"),
+    # newline_lf_option: whether any option narrows the terminator set to LF
+    # alone. .NET's `.` declines only `\n`, so the set is LF already and
+    # there is nothing for an option to narrow - these two rows are the
+    # bound.
+    (".", "\r", "", "first"), (".", "\n", "", "first"),
 )]
 
 
