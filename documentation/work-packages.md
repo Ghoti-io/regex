@@ -787,9 +787,10 @@ default was false rather than merely unprobed.
 
 **The first task is an oracle, and it is most of the package.** Every other
 dialect here is pinned to something this project installs. RE/flex is not
-installed, and the `ugrep` that answered the probes behind its row is the
-copy inside the Claude Code CLI - [dialects.md](dialects.md) §2 says why
-that is evidence and not an oracle. So: RE/flex 6.5.0 in
+installed, and the `ugrep` that answered the probes behind its row was a
+copy bundled inside a developer tool rather than an installed or pinned
+build - [dialects.md](dialects.md) §2 says why that is evidence and not an
+oracle. So: RE/flex 6.5.0 in
 `tools/oracle/containers/`, driven through a small program against
 `reflex::Matcher`, **not** through ugrep. The pin names the library and
 ugrep is not it: ugrep gates capturing groups and lookaround behind `-P`,

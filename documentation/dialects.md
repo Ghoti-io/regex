@@ -65,8 +65,9 @@ this design was written on; a CI job installs the rest
 
 **RE/flex has no oracle here, and what looks like one is not.** `ugrep` is
 RE/flex's main consumer and would be the obvious thing to ask, but the only
-`ugrep` on this machine is the copy built into the Claude Code CLI, reached
-through a shell function that rewrites `grep`. It answers `--version` with
+`ugrep` reachable when this row was written was a copy bundled inside a
+developer tool rather than an installed or pinned build, reached through a
+shell function that rewrites `grep`. It answers `--version` with
 "ugrep 7.8.4" and `--help regex` with what reads as ugrep's own help, and
 the probes recorded in §3 and in `src/syntax/syntax.c` were taken from it.
 That is worth exactly what it is: evidence from a binary this project does
