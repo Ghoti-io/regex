@@ -3514,6 +3514,30 @@
     },
     {
       "area": "profile-audit",
+      "pattern": "a*?",
+      "subject": "aa",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "a??",
+      "subject": "aa",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
+      "pattern": "(?:|a)",
+      "subject": "aa",
+      "flags": "",
+      "mode": "all",
+      "argument": ""
+    },
+    {
+      "area": "profile-audit",
       "pattern": "\\b",
       "subject": "",
       "flags": "",
@@ -6805,6 +6829,75 @@
         [
           [
             1,
+            2
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            1
+          ]
+        ],
+        [
+          [
+            2,
+            2
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            1
+          ]
+        ],
+        [
+          [
+            2,
+            2
+          ]
+        ]
+      ]
+    },
+    {
+      "kind": "all",
+      "matches": [
+        [
+          [
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            1,
+            1
+          ]
+        ],
+        [
+          [
+            2,
             2
           ]
         ]

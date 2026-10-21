@@ -339,7 +339,7 @@ CASES += [case("features", pattern, "", flags, "compile")
 # there and this library cannot name a position inside a character - so the
 # differentials would be scoring a difference already recorded. The astral
 # rows live in the `unit` area, which is WP-49's inventory and not a gate.
-DOTNET_INVENTORY_REVISION = "2026-10-21o"
+DOTNET_INVENTORY_REVISION = "2026-10-21p"
 
 CASES += [case("generated-syntax", pattern, mode="compile") for pattern in (
     "a", "(a|b)+", "(?:a)", "(?<n>a)", "(?'n'a)", r"(?<n>a)\k<n>",
@@ -612,6 +612,17 @@ CASES += [case("profile-audit", pattern, subject, flags, mode) for
     (r"\Ga*", "baac", "", "all"),
     (r"\Gb*", "baac", "", "all"),
     (r"\Ga", "aab", "", "all"),
+    # iteration, which the condition-2 sweep found *no* row divided -
+    # including `a*` over "ba", the row section 5.10's .NET cell cites. A
+    # pattern that can match non-empty where it just matched empty is what
+    # separates the two rules, and `a*` is not one: after the empty match at
+    # 0 of "ba" a retry still cannot match, so RETRY_THEN_ADVANCE and
+    # ADVANCE_ONE both step to 1. A *lazy* quantifier is one: after the
+    # empty match at 0 of "aa", a retry forbidding the empty match takes
+    # "a", where ADVANCE_ONE steps to 1 and matches empty again.
+    ("a*?", "aa", "", "all"),
+    ("a??", "aa", "", "all"),
+    ("(?:|a)", "aa", "", "all"),
     # empty_subject_is_a_boundary: `\b` with nothing on either side.
     (r"\b", "", "", "first"),
     (r"\B", "", "", "first"),
