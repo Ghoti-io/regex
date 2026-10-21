@@ -54,6 +54,7 @@ import re
 import subprocess
 import sys
 
+import escape_floor
 import posix_runner
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -435,6 +436,16 @@ def main(argv):
     parser.add_argument("--patterns", type=int, default=400)
     parser.add_argument("--examples", type=int, default=12)
     args = parser.parse_args(argv[1:])
+
+    # One floor per dialect, because the four have four vocabularies. The
+    # two strict-POSIX rows honestly have no letter escape at all, and the
+    # floor is written to accept that rather than needing an exception for
+    # them: `\w` there is the letter, `\<` and `\>` are GNU's, and the
+    # backreferences are digits.
+    for dialect in sorted(ATOMS):
+        bare, classed = escape_floor.check(dialect, ATOMS[dialect])
+        print("%s vocabulary: %d bare and %d in-class constructs, all spelled"
+              % (dialect, bare, classed))
 
     total = 0
     for index, dialect in enumerate(sorted(ATOMS)):

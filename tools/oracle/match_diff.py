@@ -28,6 +28,7 @@ import random
 import re
 import subprocess
 import sys
+import escape_floor
 import node_runner
 import wtf8 as wtf8_codec
 
@@ -72,6 +73,13 @@ ATOMS = [
     # wrong while its alphabet sweep reported agreement. Measured against
     # node here: all seven, and their class forms, agree.
     "\\n", "\\r", "\\t", "\\v", "\\f", "\\0", "\\cA",
+    # And one class form for every construct the front end has inside
+    # a class. `[\\b]` is the case worth naming: `\\b` is the boundary
+    # outside a class and the backspace inside one, so the two contexts
+    # are different constructs and agreeing on one says nothing about
+    # the other. Measured against node: all of these agree.
+    "[\\D]", "[\\S]", "[\\s]", "[\\w]", "[\\b]", "[a\\b]",
+    "[\\u0041]", "[\\x41]",
     "[\\n]", "[\\r]", "[\\t]", "[\\v]", "[\\f]", "[\\0]", "[\\cA]",
     "(a)", "(b|c)", "(?:ab)", "(a|)", "()", "(?<n>a)", "(a)(b)",
     "(a*)", "(a|b)*", "((a)|b)", "(?:(a)|b)", "(a?)", "(?:a|)",
@@ -321,8 +329,13 @@ def main(argv):
     args = parser.parse_args(argv[1:])
 
     bare, classed = check_atoms()
-    print("vocabulary: %d escape letters with a subject, %d inside a class"
-          % (bare, classed))
+    # And the floor that does not need a table to parse: every letter this
+    # front end gives a meaning other than itself, measured by running it.
+    want_bare, want_class = escape_floor.check(
+        "ecmascript", ATOMS, ANCHORS)
+    print("vocabulary: %d escape letters with a subject, %d inside a class; "
+          "%d bare and %d in-class constructs, all spelled"
+          % (bare, classed, want_bare, want_class))
 
     driver = args.driver
     if not driver:

@@ -37,6 +37,7 @@ import re
 import subprocess
 import sys
 
+import escape_floor
 import oracle_env
 import python_match
 
@@ -412,8 +413,14 @@ def main():
     args = parser.parse_args()
 
     atoms, classed = check_atoms()
-    print("vocabulary: %d escape letters with a subject, %d inside a class"
-          % (atoms, classed))
+    # The accept list read from the C, and beside it the construct list
+    # measured by running the dialect. The two ask different questions: the
+    # first is every letter the front end takes, the second every letter it
+    # gives a meaning other than itself, and a vocabulary has to cover both.
+    want_bare, want_class = escape_floor.check("python", ATOMS)
+    print("vocabulary: %d escape letters with a subject, %d inside a class; "
+          "%d bare and %d in-class constructs, all spelled"
+          % (atoms, classed, want_bare, want_class))
 
     ours = find("grx_match")
     if not ours:
