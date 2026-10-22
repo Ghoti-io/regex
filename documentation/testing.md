@@ -908,7 +908,7 @@ its corresponding forced pinned Vim engine: `vim-backtrack` with
 `regexpengine=1`, `vim-nfa` with `regexpengine=2`. `make check-oracle-vim`
 runs both in strict mode. Each run uses one reference process for its batch,
 requires a complete answer population, and prints the profile, engine and
-named limitation counts. `--syntax` selects one profile for a focused run.
+disagreement counts. `--syntax` selects one profile for a focused run.
 
 The original engine-split rows are fixed regression cases. The missing
 `\f`, `\F`, `\I`, `\K` and collection escapes are in the generating
@@ -933,59 +933,15 @@ comparison folds ours the same way, and the unset axis is stated by
 `\(a\)\?\1` matches the empty string against "b", which a dialect that
 failed on an unset reference could not do.
 
-**Remaining limitations are named and counted per profile.** The following
-reference-artifact shapes are narrower claims than engine compatibility.
-They remain visible in the run's output and are audited against each forced
-reference. The gate fails for an unclassified mismatch; it does not ask the
-other engine to excuse it.
+**Matching fails closed.** Every complete normalized answer is compared
+against the selected forced engine, including known parser, capture and
+marker gaps. A lookbehind, backreference, postfix operator or interacting
+marker spelling never excuses a mismatch. `--failures FILE` writes every
+exact disagreement as JSON for reproduction; strict mode returns failure
+whenever that list is nonempty. The total answer population and zero excluded
+rows are printed beside the disagreement count. Other references' opinions
+do not change the target behavior of either Vim profile.
 
-- **A forward backreference with a lookbehind after it.** `\1\(a\)\@<!`
-  is accepted where `\1\(a\)`, `\(a\1\)`, `\1\(a\)\@=`,
-  `\1\(a\)\@>` and `\1\%(a\)` are all "E65: Illegal back reference" in
-  both engines. A construct that is legal only when a *later* part of the
-  pattern takes a particular shape is an artifact of how vim compiles a
-  lookbehind, not a rule a second implementation could follow.
-- **A capture that outlived its branch**, and **a capture that vanished**:
-  vim keeps what an abandoned `\@>` group wrote and loses one written
-  before a `\@=` that a repeat follows. pcre2test disagrees with vim in both
-  directions. The two are not treated alike - vim *losing* a capture is
-  excluded for any `\@` operator, because a defect of this library's would
-  be the same loss and would still be reported; vim *gaining* one is
-  excluded only where the atomic operator is written.
-- **A postfix lookbehind with a backreference after it.** Two measured
-  instances, pcre2test agreeing with this library in both:
-  `\(a\)\@<=\(a\)\1\l` against "aaab" is "aa" at 1:3 in both of vim's
-  engines - text with nothing in it for the trailing `\l` to have matched -
-  where `(?<=(a))(a)\1[a-z]` is 1:4 in pcre2test; and
-  `\v\D(a)@<=\m\(a\)\1\(a\+\)\@>` is 0:3 in both engines with a
-  third group the match has no room for, where the pcre2 equivalent is no
-  match at all. Drop the atomic group from the second and vim's two engines
-  stop agreeing with *each other* - 0:2 under `re=1`, 0:3 under `re=2`.
-  This one is excluded whatever the disagreement looks like, which is a real
-  narrowing: a regression of this library's inside that shape would not be
-  reported. It is written out in the tool for that reason.
-- **One spelling out of four that means nothing.** `\v\_^*` matches
-  nothing at all in vim, while `\m\_^*`, `\v\_$*`, `\v\_^{0,1}` and
-  `\v(\_^)*` all match the empty string there. Only the very magic level,
-  only `\_^`, only the `*` spelling, and both engines alike.
-- **A bare `*` with nothing to repeat.** It is the literal asterisk at
-  every level, which is a basic RE's rule and vim's - `*a`, `\m*`, `^*`,
-  `\(*\)`, `x\|*`, `\&*`, `\v%(*)` and `\M\%(*\)` all match one -
-  and two spellings out of that set are refused instead. `^\m*` is an
-  error where `^*` matches and `\(\m*\)` matches, so a marker between
-  the caret and the star loses the caret; and `\%(*\)` is an error where
-  the same construct spelled three other ways is not. Both engines alike.
-- **`\%23l*`.** `\%23l` names a buffer line and never matches over a
-  string, so a `*` on it should leave the empty match a zero-iteration
-  repeat always has - and vim agrees five ways: `\%23l\{}`,
-  `\%23l\{-}`, `\%23l\{0,1}`, `\(\%23l\)*` and the very magic
-  `%23l*` all match the empty string there. Only the bare `*`, only
-  outside very magic, only after an `l` form, and both engines alike.
-  Three answers come out of it and the tool looks at its own as well as
-  vim's: vim finds nothing where this matches empty, vim finds a longer
-  match because another branch won, and vim *compiles* `\%23l\v*` where
-  this refuses it - a marker between an atom and a bare `*` being "E871"
-  in vim after every atom but an `l` form.
 Engine-specific optional-group and contextual marker behavior is described
 in [dialects.md](dialects.md), rather than excused because another Vim engine
 returns a different answer. Shared Vim tests run for both profiles, and
@@ -1029,10 +985,23 @@ cases. The named corpus deliberately includes postfix operators.
 
 Vim gives whole-match byte offsets but only group text. The `groups:` field
 therefore compares each group's contents, folding unset and empty together;
-no expected capture offsets are borrowed from this library. Random-corpus
-shape exclusions remain functions of the pattern alone, so a regression in
-this library cannot silently shrink the reference corpus. See the generator
-for its explicit reference-artifact exclusions.
+no expected capture offsets are borrowed from this library. Generated positive
+and negative assertions, lookbehind and atomic groups are retained, as are
+literal `@` characters. Remaining syntax-shape omissions and composing-axis
+omissions are named and counted in the generated headers. They measure
+coverage limits and cannot establish complete compatibility.
+
+Exposed failures remain oracle-authored vectors. Exact temporary entries in
+`known-gaps.txt` name each outstanding input and reason; these count as gaps,
+never passes, and stale entries fail when a record starts passing or leaves
+the corpus. The file does not suppress the live strict differential.
+`make check-oracle-exclusions` runs without a reference and is part of normal
+`make test`: it injects wrong spans, captures and replacements through the
+actual match CLI and replacement comparison. Agreeing results and refusals,
+wrong compile results, and both forced-engine selections are checked too.
+These controls execute under optimized Python as well. Temporary emitted
+corpora must retain every complete postfix expectation, including captures
+and distinct forced-engine answers. Malformed vector answers fail loudly.
 
 Its first run failed nine records, all one defect: `a\%[b\|c]` was refused
 with `GRX_ERR_UNSUPPORTED` while the reader's own comment recorded that vim
@@ -1751,6 +1720,27 @@ table the row was written from: no `$&`, `$0` or `${0}`; no `` $` ``, ``$'`` or
 ordinary text where PCRE2 refuses it; `$12` falling back to `$1` and a "2"
 where PCRE2 takes every digit; and a reference to a group that exists and did
 not participate substituting nothing where PCRE2's default is an error.
+
+For Vim replacements, every output difference is a disagreement. This includes
+capture loss in nested positive lookbehind; no witness-based exemption remains.
+All such runtime differences remain compatibility work.
+
+Both Vim match and replacement exporters use `--failures FILE` to write a
+version-one JSON object: `schema_version: 1`, `kind` (`match` or `replacement`),
+`complete`, `completed_profiles`, `failures`, and `error`. Each failure retains
+its original pattern, subject, reference and actual answer, plus replacement
+flags and template where applicable. Vim replacement answers are tagged objects:
+`{"status": "ok", "text": ...}`, `{"status": "refused"}`, or
+`{"status": "error", "detail": ...}`. Successful text such as `syntax`,
+`error`, `template`, or `surrogate` is ordinary output, never a control status.
+Malformed Vim replacement hex or UTF-8 and invalid match replies raise errors;
+match byte spans must be ordered, in bounds, and on UTF-8 boundaries. A match
+runtime error cannot agree with a compile refusal. `complete` means all requested comparisons
+finished, including their population controls; it does not mean agreement.
+The file is reset to an incomplete report before drivers run and rewritten
+on every subsequent exit, including unavailable drivers or exceptions. A later
+unavailable dialect preserves already collected rows, lists the profiles that
+completed, and records an error with `complete: false`.
 
 Eight things are excluded, each counted in every run so that an exclusion
 which stops applying is visible rather than silent. Five of the eight are the

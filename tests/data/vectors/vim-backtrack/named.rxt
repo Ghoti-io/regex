@@ -9,6 +9,7 @@
 # contents. `-` is a group that did not participate or matched empty, which
 # vim spells the same way.
 #
+# population: 83 reference answers, 83 records, 0 duplicate refusal rows
 dialect: vim-backtrack
 
 pattern: \\(a\\)\\@!\\|a\\%[\\_s]

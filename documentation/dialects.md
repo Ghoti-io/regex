@@ -134,9 +134,11 @@ Vim's corpus is the weaker of the two and says so in its own header, because
 **vim has no API that gives a submatch a position**: `matchstrpos()` answers
 for the whole match and `matchlist()` answers in strings. So a vim record
 pins the whole match exactly and each group by its text - the `groups:` field
-in [testing.md](testing.md) §3 - and it declines to record any pattern
-containing a `@`, which is where five of vim's seven measured artifacts live.
-`check-oracle-vim` still covers those.
+in [testing.md](testing.md) §3. Generated postfix assertions and atomic groups
+are retained with their forced engine's answers. Exact outstanding vector
+failures are listed in `known-gaps.txt`; a listed input that starts passing
+fails the stale-entry check. Named syntax and composing omissions remain
+explicit coverage limits.
 
 ## 3. Features: which constructs exist
 
@@ -596,7 +598,9 @@ Composing-character behavior and interacting marker writes require particular
 care: the reference engines themselves produce different answers, and an
 engine disagreement alone is never a reason to exclude a differential row.
 Each run compares one complete result with the corresponding forced engine;
-remaining exclusions must name a specific limitation and count its rows.
+matching and replacement have no Vim result exclusions. Every difference,
+including nested positive-lookbehind capture loss, fails the live gate. A
+filtered pass never establishes full compatibility.
 
 ### 5.5 Empty iterations and captures in loops
 
@@ -2161,10 +2165,10 @@ answer.
 | Both Vim profiles | Lookbehind candidates inside composing clusters | Candidate scans can begin at a composing mark rather than the beginning of its cluster. `\(.\+\)\@2<=x` on `a` U+0301 `x` can capture only the mark here; the backtracking reference refuses the match, and NFA captures the full cluster. The ordinary multibyte-scalar threshold is profiled; this remaining limitation concerns composing clusters. | - |
 | Both Vim profiles | Underscore collections on LF with composing suffix | The added-LF branch of `\_[ab]` and `\_[^x]` does not reproduce all reference cluster and continuation behavior. On LF U+0301 `b`, backtracking Vim reports 0:3 for either; NFA reports 3:4 for the positive collection and 1:3 for the negative one. Plain collections and subjects without composing suffixes remain covered independently. | - |
 | Vim NFA | Added LF in named underscore classes at match end | `\_s`, `\_w` and `\_d` on LF U+0301 `b` report 0:1 in NFA Vim, while this library carries the mark and reports 0:3. With a following `b` both report 0:4. This narrow terminal-offset difference remains distinct from newline membership inside optional sequences. | - |
-| Both Vim profiles | Remaining parser and postfix limitations | Forward backreferences that Vim accepts only before lookbehind are refused. NFA captures or markers committed by a successful postfix operator and then abandoned by later failure can be rolled back where the reference preserves them. Backtracking preserves committed assertion captures through rollback at the same search start; each fresh subject search start resets captures. This is distinct from capture retention when a negative lookahead itself fails. A capture around a postfix assertion followed by a repeat can differ from Vim, as can a backreference following a postfix lookbehind. Three parser artifacts remain: `\v\_^*`, a bare `*` after a line-number assertion, and the exceptional leading-star spellings `^\m*` and `\%(*\)`. Each family is separately counted by the oracle. | - |
+| Both Vim profiles | Remaining parser and postfix limitations | Forward backreferences that Vim accepts only before lookbehind are refused. NFA captures or markers committed by a successful postfix operator and then abandoned by later failure can be rolled back where the reference preserves them. Backtracking preserves committed assertion captures through rollback at the same search start; each fresh subject search start resets captures. This is distinct from capture retention when a negative lookahead itself fails. A capture around a postfix assertion followed by a repeat can differ from Vim, as can a backreference following a postfix lookbehind. Three parser artifacts remain: `\v\_^*`, a bare `*` after a line-number assertion, and the exceptional leading-star spellings `^\m*` and `\%(*\)`. The live matching differential reports all such differences without suppression. | - |
 | Vim NFA | Quantified/atomic consumption and successive assertions can retain different markers or captures | `\(a\ze\)\@=a*` on `aab` and `\(a\ze\)\@=\%(ab\)\@>` on `ab` report 0:1 in forced NFA; this library reports 0:2. Thus those constructs do not follow the plain scalar controls' provisional-end behavior. `\(a\ze\)\@=\(a\ze\)\@=a\+` on `ab` returns an empty group 1 and group 2 `a` in forced NFA; this library retains `a` in both groups. These are measured marker/capture limitations, not a rule extrapolated to other constructs. | - |
 | Both Vim profiles | Groups and nested sequences inside `\%[...]` are refused | Backtracking Vim refuses these with E54; NFA Vim accepts them. The shared grammar keeps the refusal explicit instead of interpreting their contents as ordinary atoms. Classes, collections, numeric atoms, markers and backreferences remain supported members. | `GRX_ERR_SYNTAX` |
-| Both Vim profiles | Interacting markers in and after a positive lookbehind | A marker in a positive lookbehind followed by another marker in a postfix operator can preserve the earlier marker in Vim. This library's marker register uses the last successful write. This narrow family is counted separately; a general engine disagreement is not an exclusion. | - |
+| Both Vim profiles | Interacting markers in and after a positive lookbehind | A marker in a positive lookbehind followed by another marker in a postfix operator can preserve the earlier marker in Vim. This library's marker register uses the last successful write. This family remains a compatibility gap and every difference fails the live matching differential. | - |
 
 ### 6.1 ECMAScript and the unit of a subject
 

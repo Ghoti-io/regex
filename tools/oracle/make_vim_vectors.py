@@ -18,30 +18,11 @@ vector must never do. `-` in that field is a group that did not participate
 **or** matched empty, because vim answers `''` for both and cannot be asked
 which.
 
-**What this corpus deliberately does not cover, and why it is decided from
-the pattern text alone.** `vim_diff.py` excludes a row from its disagreement
-count when the row's shape is one of seven measured vim artifacts, and each
-of its predicates looks at *both* answers - vim's and this library's. A
-generator cannot use those: a corpus whose contents depend on what this
-library answered at generation time is one that quietly shrinks after a
-regression, so the row that would have reported the regression is the row that
-stops being written. The exclusion here is therefore a function of the pattern
-only, and it is coarser on purpose:
-
-  - **any pattern with a `@` in it.** That is every postfix operator vim has,
-    and it is where five of the seven artifacts live: a forward backreference
-    in front of an unbounded postfix lookbehind, captures an abandoned branch
-    left behind, marks kept from a lookbehind, a lookbehind mis-accounted when
-    a backreference follows. Those are real and measured against pcre2test,
-    and none of them can be told from a defect here by looking at the pattern.
-    It removes random lookaround and atomic-group coverage from the
-    generated half; selected named postfix regressions below remain.
-    `check-oracle-vim` covers the broader population.
-  - `\%23l*` and its spellings, which mean nothing at all in vim.
-  - `\v\_^*`, which matches nothing where three other spellings of it match
-    the empty string.
-  - a bare `*` after `\%(` or after `^` with markers between, the two
-    spellings vim refuses where six others accept.
+Every generated postfix assertion and atomic group is retained. Expectations
+are obtained only from the corresponding forced reference engine, including
+known compatibility gaps. Literal `@` characters are retained too. The few
+remaining syntax-shape omissions are named and counted in each output header;
+they are coverage omissions, not proof of compatibility.
 
 Each named profile is answered by its corresponding forced Vim engine.
 Engine disagreements are retained as independent expectations in two corpora.
@@ -76,8 +57,7 @@ import vim_runner
 # accident. `(level, pattern, [subjects])`, the level written as the marker
 # that selects it so that a reader sees the pattern vim was given.
 #
-# Named cases include independent postfix regressions with `@`. The
-# pattern-shape exclusions described above apply only to the generated half.
+# Named cases supplement generated postfix coverage with independent examples.
 NAMED_CASES = [
     ("", "\\(a\\)\\@!\\|a\\%[\\_s]", ["a\nb"]),
     ("", "[^ab]\\(\\w\\+\\)\\@2<=\\(a\\zsb\\)\\@>", ["abcabc"]),
@@ -159,8 +139,7 @@ NAMED_CASES = [
 
 # A bare multi after `\%(`, or after a `^` with only level and case markers
 # between. The two spellings vim refuses where six others accept one - see
-# `vim_diff.is_leading_star_artifact()`, of which this is the half that reads
-# the pattern and not the answers.
+# the reference-only syntax-shape omission used for generated coverage.
 MARKERS = ("\\v", "\\m", "\\M", "\\V", "\\c", "\\C")
 
 
@@ -184,8 +163,6 @@ def artifact_shape(pattern):
     Named rather than counted, so that a regeneration whose distribution
     moved says which bucket moved.
     """
-    if "@" in pattern:
-        return "postfix operator"
     if vim_diff.LINE_NUMBER_STAR.search(pattern):
         return "line number with a multi"
     if "\\_^*" in pattern:
@@ -196,7 +173,9 @@ def artifact_shape(pattern):
 
 
 def record_for(pattern, subject, answer):
-    """One `.rxt` record from one of vim's answers, or None."""
+    """One `.rxt` record from one complete Vim answer; fail on unknown output."""
+    if not isinstance(answer, str):
+        raise ValueError("Vim answer must be text")
     lines = ["pattern: " + make_vectors.escape(pattern)]
 
     if answer == "compile":
@@ -206,15 +185,36 @@ def record_for(pattern, subject, answer):
         lines.append("expect: refused")
         return "\n".join(lines) + "\n"
     if not answer.startswith("match ") and answer != "nomatch":
-        return None
+        raise ValueError("unrecordable Vim answer: %r" % answer)
 
-    lines.append("subject: " + make_vectors.escape(subject))
+    lines.append("subject:" + (" " + make_vectors.escape(subject) if subject else ""))
     if answer == "nomatch":
         lines.append("expect: nomatch")
         return "\n".join(lines) + "\n"
 
-    fields = json.loads(answer[len("match "):])
-    start, end = fields[0].split(":")
+    try:
+        fields = json.loads(answer[len("match "):])
+    except (ValueError, TypeError) as error:
+        raise ValueError("malformed Vim match answer") from error
+    if (not isinstance(fields, list) or not 1 <= len(fields) <= 10
+            or any(not isinstance(field, str) for field in fields)
+            or re.fullmatch(r"[0-9]+:[0-9]+", fields[0]) is None):
+        raise ValueError("malformed Vim match fields: %r" % fields)
+    try:
+        for capture in fields[1:]:
+            capture.encode("utf-8")
+    except UnicodeEncodeError as error:
+        raise ValueError("Vim capture is not valid UTF-8 text") from error
+    start, end = map(int, fields[0].split(":"))
+    raw = subject.encode("utf-8")
+    if not 0 <= start <= end <= len(raw):
+        raise ValueError("Vim match span outside subject: %r" % fields[0])
+    # Byte offsets must also lie at complete UTF-8 boundaries.
+    try:
+        raw[:start].decode("utf-8")
+        raw[:end].decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise ValueError("Vim match span splits a UTF-8 character") from error
     lines.append("expect: %s-%s" % (start, end))
 
     groups = list(fields[1:])
@@ -230,14 +230,18 @@ def record_for(pattern, subject, answer):
 
 
 def write_file(path, rows, answers, version, dropped, syntax):
+    if len(rows) != len(answers):
+        raise ValueError("vector answer population is incomplete")
     body = []
     refused = set()
+    duplicate_refusals = 0
     for (pattern, subject), answer in zip(rows, answers):
         if answer == "compile":
             # A refusal has no subject in it, so the other subjects of one
             # refused pattern would be exact duplicates - and a duplicate
             # counts one fact many times in the rate the suite publishes.
             if pattern in refused:
+                duplicate_refusals += 1
                 continue
             refused.add(pattern)
         record = record_for(pattern, subject, answer)
@@ -262,10 +266,15 @@ def write_file(path, rows, answers, version, dropped, syntax):
         out.write("#\n")
         for reason, count in sorted(dropped.items()):
             out.write("# not written: %d %s\n" % (count, reason))
+        out.write("# population: %d reference answers, %d records, "
+            "%d duplicate refusal rows\n"
+            % (len(answers), len(body), duplicate_refusals))
         out.write("dialect: %s\n\n" % syntax)
         out.write("\n".join(body))
 
-    sys.stderr.write("%s: %d records\n" % (path, len(body)))
+    sys.stderr.write("%s: %d/%d reference answers, %d records, "
+        "%d duplicate refusal rows\n"
+        % (path, len(answers), len(rows), len(body), duplicate_refusals))
     return len(body)
 
 

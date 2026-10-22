@@ -23,6 +23,11 @@ rather than only in a soak.
 """
 
 import sys
+import contextlib
+import io
+import json
+import tempfile
+from unittest.mock import patch
 import os
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -37,6 +42,7 @@ import replace_diff
 import script_run_diff
 import syntax_diff
 import vim_diff
+import make_vim_vectors
 import window_diff
 
 
@@ -142,141 +148,6 @@ block("posix_diff.stacked_quantifier",
     ("a bound stacked on a star", ("a*{1,2}",), True),
     ("one on its own", ("(a|)+",), False),
     ("two with an atom between them", ("a+b*",), False),
-])
-
-
-# --------------------------------------------------------------------
-# vim: the forward backreference an unbounded lookbehind makes legal.
-# --------------------------------------------------------------------
-block("vim_diff.is_forward_reference_artifact",
-    lambda pattern, them, us:
-        vim_diff.is_forward_reference_artifact(pattern, them, us),
-    [
-    ("the positive lookbehind vim compiles it in front of",
-     (r"\1\(a\)\@<=", "match 1:1 \"a\"", "compile"), True),
-    ("the negative one",
-     (r"\1\(a\)\@<!", "match 0:0", "compile"), True),
-    ("the byte-bounded lookbehind, which vim refuses too",
-     (r"\1\(a\)\@2<=", "compile", "compile"), False),
-    ("a lookahead, which vim refuses",
-     (r"\1\(a\)\@=", "compile", "compile"), False),
-    ("an atomic group, which vim refuses",
-     (r"\1\(a\)\@>", "compile", "compile"), False),
-    ("a plain group, which vim refuses",
-     (r"\1\(a\)", "compile", "compile"), False),
-    ("a lookbehind with no reference in front of it",
-     (r"\(a\)\@<=a", "match 1:2 \"a\"", "match 1:2 \"a\""), False),
-    ("this library compiled it too, so there is nothing to excuse",
-     (r"\1\(a\)\@<=", "match 1:1 \"a\"", "match 1:1 \"a\""), False),
-])
-
-block("vim_diff.marks_in_a_lookbehind_and_after_it",
-    lambda pattern: vim_diff.marks_in_a_lookbehind_and_after_it(pattern),
-    [
-    ("a mark in the lookbehind and one in the operator after it",
-     (r"\(a\zeb\)\@<=\(a\zeb\)\@>",), True),
-    ("the `\\zs` spelling of the same shape",
-     (r"\(a\zsb\)\@<=\(a\zsb\)\@>",), True),
-    ("only the lookbehind's mark, which every engine agrees about",
-     (r"\(a\zeb\)\@<=\(ab\)\@>",), False),
-    ("only the operator's mark, which is item 9's ordinary case",
-     (r"\(ab\)\@<=\(a\zeb\)\@>",), False),
-    ("the second mark not inside an operator, where the engines differ "
-     "and the gate settles it by asking",
-     (r"\(a\zeb\)\@<=a\zeb",), False),
-    ("a negative lookbehind, where all three agree",
-     (r"\(a\zeb\)\@<!a\zeb",), False),
-    ("a lookahead rather than a lookbehind",
-     (r"\(a\zeb\)\@=\(a\zeb\)\@>",), False),
-    ("no mark at all", (r"\(ab\)\@<=\(ab\)\@>",), False),
-])
-
-block("vim_diff.lookbehind_with_backreference",
-    lambda pattern: vim_diff.lookbehind_with_backreference(pattern),
-    [
-    ("the span row, an unbounded lookbehind",
-     (r"\(a\)\@<=\(a\)\1\l",), True),
-    ("the byte-bounded spelling, which a substring test misses",
-     (r"\(a\)\@2<=\(a\)\1",), True),
-    ("the negative lookbehind",
-     (r"\(a\)\@<!\1",), True),
-    ("the replacement row, where the gate next door meets it",
-     (r"\Ma\%[\d\w]\(\(a\)\@=a\)\@<=\(a\)\1",), True),
-    ("a lookahead rather than a lookbehind",
-     (r"\(a\)\@=\1",), False),
-    ("a lookbehind with nothing referring back",
-     (r"\(a\)\@<=x",), False),
-    ("neither",
-     (r"\(a\)x",), False),
-])
-
-
-# --------------------------------------------------------------------
-# vim: two constructs that mean nothing there and the obvious thing in
-# every neighbouring spelling.
-# --------------------------------------------------------------------
-block("vim_diff.is_very_magic_line_start_repeat",
-    lambda pattern, them, us:
-        vim_diff.is_very_magic_line_start_repeat(pattern, them, us),
-    [
-    ("the one spelling vim finds nothing in",
-     (r"\v\_^*", "nomatch", "match 0:0"), True),
-    ("the magic level, where vim matches the empty string",
-     (r"\m\_^*", "match 0:0", "match 0:0"), False),
-    ("the end-of-line form, where vim matches it",
-     (r"\v\_$*", "match 0:0", "match 0:0"), False),
-    ("the bound spelling, where vim matches it",
-     (r"\v\_^\{0,1}", "match 0:0", "match 0:0"), False),
-    ("a group around it, where vim matches it",
-     (r"\v(\_^)*", "match 0:0", "match 0:0"), False),
-    ("vim found something, so it is not the empty-repeat question",
-     (r"\v\_^*", "match 0:1", "match 0:0"), False),
-])
-
-block("vim_diff.is_line_number_star",
-    lambda pattern, them, us:
-        vim_diff.is_line_number_star(pattern, them, us),
-    [
-    ("the bare star vim finds nothing in",
-     (r"\%23l*", "nomatch", "match 0:0"), True),
-    ("another branch winning because this one offers nothing",
-     (r"\%23l*\|\x", "match 0:1", "match 0:0"), True),
-    ("a marker between, which vim compiles and this library refuses",
-     (r"\%23l\v*", "nomatch", "compile"), True),
-    ("the `\\{}` spelling, where vim matches the empty string",
-     (r"\%23l\{}", "match 0:0", "match 0:0"), False),
-    ("the lazy bound",
-     (r"\%23l\{-}", "match 0:0", "match 0:0"), False),
-    ("a group around it",
-     (r"\(\%23l\)*", "match 0:0", "match 0:0"), False),
-    ("the very magic spelling, which has no `\\%`",
-     (r"\v%23l*", "match 0:0", "match 0:0"), False),
-    ("a column marker rather than a line one",
-     (r"\%23c*", "nomatch", "match 0:0"), False),
-    ("vim found nothing and the rest of the pattern matched around it",
-     (r"\%23l*a", "nomatch", "match 0:1"), True),
-    ("vim matched and ours is a span of its own, not the empty repeat",
-     (r"\%23l*", "match 0:1", "match 0:1"), False),
-    ("neither side matched, so there is nothing to excuse",
-     (r"\%23l*", "nomatch", "nomatch"), False),
-])
-
-block("vim_diff.is_leading_star_artifact",
-    lambda pattern, them, us:
-        vim_diff.is_leading_star_artifact(pattern, them, us),
-    [
-    ("a marker between the caret and the star, which vim refuses",
-     (r"^\m*", "compile", "match 0:1"), True),
-    ("the `\\%(` spelling, which vim refuses",
-     (r"\%(*\)", "compile", "match 0:1"), True),
-    ("the caret without the marker, which vim matches",
-     (r"^*", "match 0:1", "match 0:1"), False),
-    ("the capturing spelling, which vim matches",
-     (r"\(*\)", "match 0:1", "match 0:1"), False),
-    ("a star with no caret and no group",
-     (r"*a", "match 0:2", "match 0:2"), False),
-    ("this library refused it too, so there is nothing to excuse",
-     (r"^\m*", "compile", "compile"), False),
 ])
 
 
@@ -424,44 +295,7 @@ block("posix_diff.quantifier_bounds",
 # --------------------------------------------------------------------
 # vim: the captures and the marks an abandoned path wrote.
 # --------------------------------------------------------------------
-block("vim_diff.is_abandoned_mark_artifact",
-    lambda pattern, them, us:
-        vim_diff.is_abandoned_mark_artifact(pattern, them, us),
-    [
-    ("the empty match wearing the end a dead branch left",
-     (r"\(a\zeb\)\@>\d\|\&", "match 0:2", "match 0:0"), True),
-    ("the `\\zs` spelling from the other side",
-     (r"\(a\zsb\)\@=\d\|\&", "match 1:1", "match 0:0"), True),
-    ("without the mark, which is the row above this one",
-     (r"\(ab\)\@>\d\|\&", "match 0:0", "match 0:0"), False),
-    ("without the postfix operator, where the mark alone does nothing",
-     (r"a\zeb\d\|\&", "match 0:0", "match 0:0"), False),
-    ("without the alternation, where neither engine matches",
-     (r"\(a\zeb\)\@>\d", "match 0:2", "match 0:0"), False),
-    ("this library reported a span of its own",
-     (r"\(a\zeb\)\@>\d\|\&", "match 0:2", "match 0:1"), False),
-])
 
-block("vim_diff.is_postfix_capture_artifact",
-    lambda pattern, them, us:
-        vim_diff.is_postfix_capture_artifact(pattern, them, us),
-    [
-    ("vim lost a capture, which is allowed for any `\\@` operator",
-     (r"\(a\)\(a\)\@=a\{2,}", 'match 0:3 "" "a"', 'match 0:3 "a" "a"'),
-     True),
-    ("vim kept one an atomic group had written",
-     (r"\(a\)\@>x\|\A", 'match 0:1 "a"', "match 0:1"), True),
-    ("vim kept one an abandoned branch had written",
-     (r"\(a\)\@=a$\|b", 'match 0:2 "a"', "match 0:2"), True),
-    ("vim kept one where the branch died at a character",
-     (r"\(a\)\@=ax", 'match 0:2 "a"', "match 0:2"), False),
-    ("no postfix operator at all",
-     (r"\(a\)x\|b", 'match 0:1 "a"', "match 0:1"), False),
-    ("the whole match differs, which is not a capture question",
-     (r"\(a\)\@>x\|\A", 'match 0:2 "a"', "match 0:1"), False),
-    ("two groups that differ and neither is empty",
-     (r"\(a\)\@>x\|\A", 'match 0:1 "a"', 'match 0:1 "b"'), False),
-])
 
 block("vim_diff.holds_composing",
     lambda subject: vim_diff.holds_composing(subject),
@@ -471,73 +305,6 @@ block("vim_diff.holds_composing",
     ("a mark that begins the subject, which starts no cluster",
      ("́a",), False),
     ("no mark at all", ("ab",), False),
-])
-
-
-# --------------------------------------------------------------------
-# vim, through a substitution: the same writes seen as text.
-# --------------------------------------------------------------------
-block("replace_diff.is_abandoned_path_artifact",
-    lambda pattern, template:
-        replace_diff.is_abandoned_path_artifact(pattern, template),
-    [
-    ("the negative-lookbehind row this was written for",
-     (r"\%>2v\(a\(b\)\@=\)\@<!\(a\zsb\)\@=\V\m", r"\n\2\U\&"), True),
-    ("an alternation and a template that names a group",
-     (r"\(a\)\@>x\|\A", r"\1"), True),
-    ("an alternation and a mark, where the span is what differs",
-     (r"\(a\zeb\)\@>\d\|\&", "X"), True),
-    ("no postfix operator",
-     (r"\(a\)x\|b", r"\1"), False),
-    ("no path that can be abandoned",
-     (r"\(a\)\@>x", r"\1"), False),
-    ("neither a group in the template nor a mark in the pattern",
-     (r"\(a\)\@>x\|\A", "X"), False),
-])
-
-
-# A capture-loss limitation needs structural and independently observable
-# witnesses. Every near miss here must remain a disagreement.
-block("replace_diff.nested_positive_lookbehind",
-    replace_diff.nested_positive_lookbehind, [
-    ("nested positive lookahead in group one's positive lookbehind",
-     (r"\(\(a\)\@=a\)\@<=",), True),
-    ("bounded positive lookbehind", (r"\(\(a\)\@=a\)\@2<=",), True),
-    ("negative lookahead", (r"\(\(a\)\@!a\)\@<=",), False),
-    ("negative lookbehind", (r"\(\(a\)\@=a\)\@<!",), False),
-    ("unnested lookahead", (r"\(a\)\@=\(a\)\@<=",), False),
-    ("the affected group is not group one",
-     (r"\(b\)\(\(a\)\@=a\)\@<=",), False),
-    ("very-magic groups are conservatively unclassified",
-     (r"\v((a)@=a)@<=",), False),
-])
-
-block("replace_diff.omit_vim_group_one", replace_diff.omit_vim_group_one, [
-    ("case operator remains", (r"\u\1\1",), r"\u"),
-    ("escaped slash is not a group token", (r"\\1",), r"\\1"),
-    ("other groups remain", (r"\1\2\0",), r"\2\0"),
-    ("literal and trailing slash remain", ("X\\1Y\\",), "XY\\"),
-])
-
-_CAPTURE_WITNESS = (r"\(\(a\)\@=a\)\@<=",
-    'match 1:1 "" "a"', 'match 1:1 "a" "a"',
-    "aBEb", "aBEb", "aBEb", "aBaEb", "aXb", "aXb", "B", "E")
-
-def changed_capture_witness(index, value):
-    row = list(_CAPTURE_WITNESS)
-    row[index] = value
-    return tuple(row)
-
-block("replace_diff.capture_loss_evidence", replace_diff.capture_loss_evidence, [
-    ("all independent witnesses agree", _CAPTURE_WITNESS, True),
-    ("different global span boundaries", changed_capture_witness(4, "aBbE"), False),
-    ("different first match span", changed_capture_witness(2,
-        'match 1:2 "a" "a"'), False),
-    ("reference capture is nonempty", changed_capture_witness(5, "aBaEb"), False),
-    ("our capture is empty too", changed_capture_witness(6, "aBEb"), False),
-    ("different actual capture count", changed_capture_witness(6, "aBaEBaEb"), False),
-    ("removing group one does not explain output", changed_capture_witness(7, "aYb"), False),
-    ("no substitution happened", changed_capture_witness(3, "ab"), False),
 ])
 
 
@@ -818,9 +585,313 @@ block("iregexp_diff.table_skew",
 ])
 
 
+def require(condition, context):
+    """Unlike assert, controls and their calls execute under optimized Python."""
+    if not condition:
+        raise AssertionError(context)
+
+
+def protocol_controls(work, report_path):
+    """Decode actual Vim transports before exercising CLI comparison/reporting."""
+    checked = 0
+    for syntax, engine in vim_diff.PROFILES.items():
+        match_cases = [
+            ('match ["0:2", "é"]', "match backtrack 0:2 0:2", True),
+            ('match ["2:3"]', "match backtrack 2:3 -", True),
+            ('match ["2:3"]', "match backtrack 2:3 2:2", True),
+            ('match ["2:3", "é"]', "match backtrack 2:3 0:2", True),
+        ] + [("compile", reply, False) for reply in (
+            "error 5", "match", "match backtrack", "match backtrack -",
+            "match backtrack 2:1", "match backtrack 0:4", "match backtrack 0:1",
+            "match backtrack 2:3 1:2", "match backtrack 2:3 0:9",
+            "match backtrack 2:3 2:1", "match backtrack 2:3 0:2 garbage",
+            "match invalid-engine 2:3", "nomatch extra", "compile bogus")]
+        for reference, own, valid in match_cases:
+            with contextlib.ExitStack() as stack:
+                stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
+                stack.enter_context(contextlib.redirect_stderr(io.StringIO()))
+                stack.enter_context(patch.object(sys, "argv", ["vim_diff",
+                    "--syntax", syntax, "--patterns", "1", "--subjects", "1",
+                    "--strict", "--failures", report_path]))
+                for name, value in {"vim_encoding": "utf-8", "vim_version": "test",
+                        "find": "test", "make_pattern": "a", "composing_cases": [],
+                        "ask_vim": [reference], "ask_ours": [own]}.items():
+                    stack.enter_context(patch.object(vim_diff, name, return_value=value))
+                stack.enter_context(patch.object(vim_diff, "SUBJECTS", ["éa"]))
+                stack.enter_context(patch.object(vim_diff.escape_floor, "check", return_value=(1, 1)))
+                try:
+                    result = vim_diff.main()
+                except ValueError:
+                    require(not valid, (syntax, reference, own))
+                else:
+                    require(valid and result == 0, (syntax, reference, own, result))
+            with open(report_path, encoding="utf-8") as source:
+                report = json.load(source)
+            require(report["complete"] == valid and report["failures"] == [], report)
+            require((report["error"] is None) == valid, report)
+            checked += 1
+
+        ref_dir = os.path.join(work, "replacement-reference")
+        os.makedirs(ref_dir, exist_ok=True)
+        transport_cases = [("syntax", "compile 1", 0), ("syntax", "error 5", 1),
+            ("ok ", "ok ", 0), ("ok c3a9", "ok c3a9", 0),
+            ("error 5", "ok 61", None)]
+        for text in ("syntax", "error", "template", "surrogate", "ok "):
+            encoded = "ok " + text.encode("utf-8").hex()
+            transport_cases.extend([(encoded, encoded, 0), ("syntax", encoded, 1),
+                (encoded, "compile 1", 1), (encoded, "error 5", 1)])
+        transport_cases.extend([(malformed, "ok 61", None)
+            for malformed in ("ok zz", "ok 6", "ok ff", "ok eda080", "unknown")])
+        transport_cases.extend([("ok 61", malformed, None)
+            for malformed in ("ok zz", "ok 6", "ok ff", "ok eda080", "unknown")])
+        for reference_line, own_line, wanted in transport_cases:
+            def command(extra, scratch):
+                require("set re=%d" % engine in extra, (syntax, extra))
+                return ["vim-test"]
+            def run(argv, **kwargs):
+                if argv == ["vim-test"]:
+                    with open(os.path.join(ref_dir, "answers.txt"), "w", encoding="utf-8") as output:
+                        output.write(reference_line + "\nsyntax\n")
+                    return type("Result", (), {"returncode": 0})()
+                require(argv == ["library-test", syntax], argv)
+                return type("Result", (), {"stdout": own_line + "\ncompile 1\n"})()
+            with contextlib.ExitStack() as stack:
+                stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
+                stack.enter_context(contextlib.redirect_stderr(io.StringIO()))
+                stack.enter_context(patch.object(replace_diff, "find", return_value="library-test"))
+                stack.enter_context(patch.object(replace_diff.vim_runner, "version", return_value="test"))
+                stack.enter_context(patch.object(replace_diff.vim_runner, "command", side_effect=command))
+                stack.enter_context(patch.object(replace_diff.tempfile, "mkdtemp", return_value=ref_dir))
+                stack.enter_context(patch.object(replace_diff.subprocess, "run", side_effect=run))
+                stack.enter_context(patch.object(replace_diff, "VIM_NAMED_PATTERNS", ["a"]))
+                stack.enter_context(patch.object(replace_diff, "make_pattern", return_value="["))
+                stack.enter_context(patch.object(replace_diff, "make_template", return_value="X"))
+                stack.enter_context(patch.object(replace_diff.match_diff, "make_subject", return_value="aaa"))
+                try:
+                    result = replace_diff.main(["replace_diff", "--dialect", syntax,
+                        "--patterns", "2", "--templates", "1", "--subjects", "1",
+                        "--examples", "0", "--failures", report_path])
+                except (ValueError, RuntimeError):
+                    require(wanted is None, (syntax, reference_line, own_line))
+                else:
+                    require(wanted is not None and result == wanted,
+                        (syntax, reference_line, own_line, result))
+            with open(report_path, encoding="utf-8") as source:
+                report = json.load(source)
+            require(report["complete"] == (wanted is not None), report)
+            if wanted is None:
+                require(report["error"] and not report["completed_profiles"], report)
+            else:
+                require(len(report["failures"]) == wanted, report)
+                if wanted:
+                    row = report["failures"][0]
+                    require(row["reference"] == replace_diff.parse_vim_reply(reference_line, reference=True)
+                        and row["actual"] == replace_diff.parse_vim_reply(own_line), row)
+            checked += 1
+    return checked
+
+
+def injected_answer_controls():
+    """Exercise actual compare paths, reports and corpus emission independently."""
+    checked = 0
+    shapes = [r"\(a\)\@<=\(a\)\1", r"\(a\zeb\)\@<=\(a\zeb\)\@>",
+        r"\(a\)\@=a\{2,}", r"\(a\)\@>x\|a", r"\1\(a\)\@<!",
+        r"\v\_^*", r"\%23l*", r"^\m*", r"\(\(a\)\@=a\)\@<="]
+    match_answers = [
+        ('match ["0:1"]', "match backtrack 0:1", 0),
+        ('match ["0:1", "a"]', "match backtrack 0:1 0:1", 0),
+        ("nomatch", "nomatch", 0), ("compile", "compile 1", 0),
+        ('match ["0:1"]', "compile 1", 1),
+        ('match ["0:1"]', "match backtrack 0:2", 1),
+        ('match ["0:1", "a"]', "match backtrack 0:1 0:2", 1),
+        ('match ["0:1"]', "nomatch", 1),
+    ]
+    with tempfile.TemporaryDirectory() as work:
+        report_path = os.path.join(work, "failures.json")
+        checked += protocol_controls(work, report_path)
+        for syntax, engine in vim_diff.PROFILES.items():
+            for pattern in shapes:
+                for reference_answer, own_answer, wanted in match_answers:
+                    with contextlib.ExitStack() as stack:
+                        stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
+                        stack.enter_context(patch.object(sys, "argv", ["vim_diff",
+                            "--syntax", syntax, "--patterns", "1", "--subjects", "1",
+                            "--strict", "--failures", report_path]))
+                        for name, value in {"vim_encoding": "utf-8", "vim_version": "test",
+                                "find": "test", "make_pattern": pattern, "composing_cases": []}.items():
+                            stack.enter_context(patch.object(vim_diff, name, return_value=value))
+                        stack.enter_context(patch.object(vim_diff, "SUBJECTS", ["aaa"]))
+                        reference = stack.enter_context(patch.object(vim_diff, "ask_vim", return_value=[reference_answer]))
+                        stack.enter_context(patch.object(vim_diff, "ask_ours", return_value=[own_answer]))
+                        stack.enter_context(patch.object(vim_diff.escape_floor, "check", return_value=(1, 1)))
+                        require(vim_diff.main() == wanted, (syntax, pattern, own_answer))
+                        reference.assert_called_once_with([(pattern, "aaa")], engine=engine)
+                        with open(report_path, encoding="utf-8") as source:
+                            report = json.load(source)
+                        require(report["schema_version"] == 1 and report["complete"]
+                            and len(report["failures"]) == wanted, report)
+                    checked += 1
+                for ref, own, raw, wanted in [("expected", "expected", "ok", 0),
+                        ("syntax", "syntax", "compile 1", 0),
+                        ("expected", "syntax", "compile 1", 1),
+                        ("expected", "syntax", "compile 999", 1),
+                        ("expected", "changed", "ok", 1)]:
+                    with contextlib.ExitStack() as stack:
+                        stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
+                        stack.enter_context(patch.object(replace_diff.vim_runner, "version", return_value="test"))
+                        stack.enter_context(patch.object(replace_diff.perl_diff, "construct_not_implemented", return_value=999))
+                        stack.enter_context(patch.object(replace_diff, "VIM_NAMED_PATTERNS", [pattern]))
+                        stack.enter_context(patch.object(replace_diff, "make_pattern", return_value="["))
+                        stack.enter_context(patch.object(replace_diff, "make_template", return_value=r"\1X"))
+                        stack.enter_context(patch.object(replace_diff.match_diff, "make_subject", return_value="aaa"))
+                        reference = stack.enter_context(patch.object(replace_diff, "ask_vim", return_value=[dict(status="refused") if ref == "syntax" else dict(status="ok", text=ref), dict(status="refused")]))
+                        stack.enter_context(patch.object(replace_diff, "ask_library",
+                            return_value=([dict(status="refused") if raw.startswith("compile ") else dict(status="ok", text=own), dict(status="refused")], [raw, "compile 1"])))
+                        require(replace_diff.compare(syntax, "test", 1, 2, 1, 1, 0) == wanted,
+                            (syntax, pattern, ref, own))
+                        require(reference.call_count == 1 and reference.call_args.kwargs == {"engine": engine},
+                            reference.call_args)
+                    checked += 1
+
+        for syntax in vim_diff.PROFILES:
+            # Neither a short reference nor a short library match population
+            # may reach result comparison or be reported as a complete run.
+            for short_reference in (True, False):
+                with contextlib.ExitStack() as stack:
+                    stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
+                    stack.enter_context(contextlib.redirect_stderr(io.StringIO()))
+                    stack.enter_context(patch.object(sys, "argv", ["vim_diff",
+                        "--syntax", syntax, "--patterns", "1", "--subjects", "1",
+                        "--strict", "--failures", report_path]))
+                    for name, value in {"vim_encoding": "utf-8", "vim_version": "test",
+                            "find": "test", "make_pattern": "a", "composing_cases": [],
+                            "ask_vim": [] if short_reference else ['match ["0:1"]'],
+                            "ask_ours": ["match backtrack 0:1"] if short_reference else []}.items():
+                        stack.enter_context(patch.object(vim_diff, name, return_value=value))
+                    stack.enter_context(patch.object(vim_diff, "SUBJECTS", ["aaa"]))
+                    stack.enter_context(patch.object(vim_diff.escape_floor, "check", return_value=(1, 1)))
+                    require(vim_diff.main() == 2, (syntax, "short match population", short_reference))
+                with open(report_path, encoding="utf-8") as source:
+                    report = json.load(source)
+                require(report == dict(schema_version=1, kind="match", complete=False,
+                    completed_profiles=[], failures=[], error="comparison incomplete"), report)
+                checked += 1
+
+            # Replacement has separate reference, decoded-library and raw
+            # library populations. Test each through compare and the real CLI.
+            for short_index in range(3):
+                populations = [[dict(status="ok", text="expected"), dict(status="refused")],
+                    [dict(status="ok", text="expected"), dict(status="refused")], ["ok", "compile 1"]]
+                populations[short_index] = populations[short_index][:1]
+                with contextlib.ExitStack() as stack:
+                    stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
+                    stack.enter_context(contextlib.redirect_stderr(io.StringIO()))
+                    stack.enter_context(patch.object(replace_diff, "find", return_value="test"))
+                    stack.enter_context(patch.object(replace_diff.vim_runner, "version", return_value="test"))
+                    stack.enter_context(patch.object(replace_diff, "VIM_NAMED_PATTERNS", ["a"]))
+                    stack.enter_context(patch.object(replace_diff, "make_pattern", return_value="["))
+                    stack.enter_context(patch.object(replace_diff, "make_template", return_value="X"))
+                    stack.enter_context(patch.object(replace_diff.match_diff, "make_subject", return_value="aaa"))
+                    stack.enter_context(patch.object(replace_diff, "ask_vim", return_value=populations[0]))
+                    stack.enter_context(patch.object(replace_diff, "ask_library", return_value=tuple(populations[1:])))
+                    require(replace_diff.compare(syntax, "test", 1, 2, 1, 1, 0) is None,
+                        (syntax, "short replacement population", short_index))
+                    require(replace_diff.main(["replace_diff", "--dialect", syntax,
+                        "--patterns", "2", "--templates", "1", "--subjects", "1",
+                        "--failures", report_path]) == 2, (syntax, short_index))
+                with open(report_path, encoding="utf-8") as source:
+                    report = json.load(source)
+                require(report == dict(schema_version=1, kind="replacement", complete=False,
+                    completed_profiles=[], failures=[], error="comparison incomplete"), report)
+                checked += 2
+
+        # Start with a stale successful report. Failure after one completed
+        # dialect must replace it with the rows already collected, marked incomplete.
+        for unavailable in (None, RuntimeError("reference unavailable")):
+            with open(report_path, "w", encoding="utf-8") as output:
+                output.write('{"complete": true, "failures": ["stale"]}')
+            row = dict(syntax="ecmascript", pattern="a", subject="a",
+                template="X", reference="X", actual="Y", flags="")
+            def partial(dialect, driver, seed, patterns, templates, subjects, examples, failures):
+                if dialect == "ecmascript":
+                    failures.append(row)
+                    return 1
+                if isinstance(unavailable, Exception):
+                    raise unavailable
+                return unavailable
+            with patch.object(replace_diff, "find", return_value="test"), \
+                    patch.object(replace_diff, "compare", side_effect=partial):
+                try:
+                    result = replace_diff.main(["replace_diff", "--failures", report_path])
+                except RuntimeError:
+                    require(isinstance(unavailable, RuntimeError), "unexpected exception")
+                else:
+                    require(result == 2 and unavailable is None, result)
+            with open(report_path, encoding="utf-8") as source:
+                report = json.load(source)
+            require(report == dict(schema_version=1, kind="replacement", complete=False,
+                completed_profiles=["ecmascript"], failures=[row],
+                error="reference unavailable" if unavailable else "comparison incomplete"), report)
+            checked += 1
+        with patch.object(sys, "argv", ["vim_diff", "--failures", report_path]), \
+                patch.object(vim_diff, "vim_encoding", return_value="utf-8"), \
+                patch.object(vim_diff, "vim_version", return_value="test"), \
+                patch.object(vim_diff, "find", return_value=None), \
+                contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            require(vim_diff.main() == 2, "unavailable match driver")
+        with open(report_path, encoding="utf-8") as source:
+            report = json.load(source)
+        require(not report["complete"] and report["failures"] == [] and report["error"], report)
+        checked += 1
+
+        postfix = [r"\(a\)\@=", r"\(a\)\@!", r"\(a\)\@<=",
+            r"\(a\)\@<!", r"\(a\)\@>", "literal@"]
+        for syntax, engine in vim_diff.PROFILES.items():
+            cases = [(pattern, "a") for pattern in postfix]
+            span = "0:1" if engine == 1 else "1:1"
+            answers = ['match ["%s", "a"]' % span] * len(cases)
+            with patch.object(vim_diff, "ask_vim", return_value=answers) as reference:
+                retained, expected = make_vim_vectors.collect(cases, {}, syntax)
+                reference.assert_called_once_with(cases, engine=engine)
+            path = os.path.join(work, syntax + ".rxt")
+            with contextlib.redirect_stderr(io.StringIO()):
+                count = make_vim_vectors.write_file(path, retained, expected, "test", {}, syntax)
+            with open(path, encoding="utf-8") as source:
+                written = source.read()
+            require(count == len(cases), (syntax, count))
+            for pattern in postfix:
+                require(make_vim_vectors.artifact_shape(pattern) is None, pattern)
+                # Independent expected records, including capture text and each
+                # forced engine's distinct answer, must survive actual emission.
+                record = "pattern: %s\nsubject: a\nexpect: %s\ngroups: a\n" % (
+                    pattern.replace("\\", "\\\\"), span.replace(":", "-"))
+                require(record in written, (syntax, record, written))
+                checked += 1
+
+    malformed = [None, 1, {}, "error", 'match ["99:1"]', 'match ["0:2"]',
+        'match ["-1:1"]', 'match []', 'match {}', 'match [1]',
+        'match ["0:1", 1]', 'match ["0:1", null]', 'match ["0:1", []]',
+        'match ["0:1", "\\ud800"]', 'match ["0:1"] garbage',
+        'match ["0:1", "a", "a", "a", "a", "a", "a", "a", "a", "a", "a"]']
+    for answer in malformed:
+        try:
+            make_vim_vectors.record_for("a", "a", answer)
+        except ValueError:
+            checked += 1
+        else:
+            raise AssertionError("malformed oracle answer accepted: %r" % answer)
+    try:
+        make_vim_vectors.record_for("é", "é", 'match ["0:1"]')
+    except ValueError:
+        checked += 1
+    else:
+        raise AssertionError("mid-character byte bound accepted")
+    return checked
+
+
 def main():
     failures = 0
-    checked = 0
+    checked = injected_answer_controls()
     for label, call, rows in BLOCKS:
         for reason, args, want in rows:
             checked += 1

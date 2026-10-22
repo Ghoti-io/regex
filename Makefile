@@ -466,7 +466,7 @@ TESTFLAGS := `PKG_CONFIG_PATH=$(PKG_CONFIG_LOOKUP_PATH) pkg-config --libs --cfla
 # and re-deriving a count beside a timing is cheaper than wondering).
 # The ratio was the reason to leave it out and the absolute figure is why
 # that reason does not hold.
-ALL_TEST_GATES := check-symbols check-layering check-aliasing \
+ALL_TEST_GATES := check-symbols check-layering check-aliasing check-oracle-exclusions \
 	check-unicode-tables check-dump-names check-readme-example \
 	check-diagnostics check-engine-equivalence check-json-schema-suite \
 	check-tables check-status-line check-corpus-seeds check-makefile-hash \
@@ -891,7 +891,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 .PHONY: check-oracle-soak
 .PHONY: check-oracle-dotnet check-oracle-dotnet-driver check-oracle-dotnet-probe check-dotnet-syntax-diff check-dotnet-match-diff check-dotnet-replace-diff check-dotnet-split-diff check-dotnet-flags-diff check-dotnet-search-diff check-dotnet-coverage check-dotnet-names-diff check-dotnet-wtf8-diff
 .PHONY: check-oracle-java check-java-jdk-corpus check-java-syntax-diff check-java-match-diff check-java-search-diff check-java-replace-diff check-java-split-diff check-oracle-java-properties
-.PHONY: clean cloc docs docs-pdf examples tools coverage check-layout-page check-work-packages check-citations check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-unicode-agreement check-dump-names check-readme-example check-tables check-status-line check-corpus-seeds check-makefile-hash check-generated-header-deps check-oracle-env check-oracle-syntax check-oracle-match check-oracle-soak check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-linear check-oracle-perl-syntax check-oracle-script-runs check-doc-claims check-wide-classes check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
+.PHONY: check-oracle-exclusions clean cloc docs docs-pdf examples tools coverage check-layout-page check-work-packages check-citations check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-unicode-agreement check-dump-names check-readme-example check-tables check-status-line check-corpus-seeds check-makefile-hash check-generated-header-deps check-oracle-env check-oracle-syntax check-oracle-match check-oracle-soak check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-linear check-oracle-perl-syntax check-oracle-script-runs check-doc-claims check-wide-classes check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
 	check-programs \
 	check-oracle-properties check-oracle-numeric-properties \
 	check-oracle-folds \
@@ -1662,7 +1662,7 @@ check-oracle-java-properties: $(APP_DIR)/tools/grx_properties$(EXE_EXTENSION)
 	$(call run-oracle,java25$(comma)java27,python3 tools/oracle/java_property_diff.py \
 		--driver $(APP_DIR)/tools/grx_properties$(EXE_EXTENSION))
 
-check-oracle-exclusions: ## Put each differential's exclusions their own controls
+check-oracle-exclusions: ## Check exclusions and injected Vim comparison answers
 # Every exclusion in this directory narrows a gate, and a gate narrowed too
 # far is green for the same reason a working one is. The generators cannot
 # tell the two apart: they only produce rows the exclusions were written

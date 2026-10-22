@@ -209,7 +209,7 @@ def composing_cases():
 # what both sides accept never tests a rejection - `differential-needs-
 # invalid-input`, and the reason `python_diff.py` injects one row in eight.
 # `\%23l` and its comparisons, any level or case markers, then a bare
-# multi. See is_line_number_star().
+# multi. The vector generator counts these syntax-shape omissions.
 LINE_NUMBER_STAR = re.compile(r"\\%[<>]?[0-9]+l(?:\\[vmMVcCZ])*(?:\*|\\\{1\})")
 
 REFUSED = [
@@ -497,23 +497,35 @@ def normalise_ours(line, subject):
     the spans are cut out of the subject here. The whole match keeps its
     span, which is the half vim states exactly.
     """
-    if line.startswith("compile") or line.startswith("error"):
+    if re.fullmatch(r"compile [0-9]+", line):
         return "compile"
-    if not line.startswith("match "):
+    if line == "nomatch":
         return line
-    fields = line.split()[2:]
-    raw = subject.encode()
-    whole = fields[0] if fields else "0:0"
-    groups = []
-    for field in fields[1:]:
-        if field == "-":
-            groups.append("")
+    fields = line.split()
+    if (len(fields) < 3 or len(fields) > 12 or fields[0] != "match"
+            or fields[1] not in ("pike", "backtrack", "bitstate", "dfa")):
+        raise ValueError("invalid grx_match response: %r" % line)
+    raw = subject.encode("utf-8")
+    spans = []
+    for index, field in enumerate(fields[2:]):
+        if field == "-" and index > 0:
+            spans.append("")
             continue
-        start, end = field.split(":")
-        groups.append(raw[int(start):int(end)].decode("utf-8", "replace"))
+        if re.fullmatch(r"[0-9]+:[0-9]+", field) is None:
+            raise ValueError("invalid grx_match span: %r" % field)
+        start, end = map(int, field.split(":"))
+        if not 0 <= start <= end <= len(raw):
+            raise ValueError("grx_match span outside subject: %r" % field)
+        try:
+            raw[:start].decode("utf-8")
+            raw[:end].decode("utf-8")
+            spans.append(raw[start:end].decode("utf-8"))
+        except UnicodeDecodeError as error:
+            raise ValueError("grx_match span splits UTF-8: %r" % field) from error
+    groups = spans[1:]
     while groups and groups[-1] == "":
         groups.pop()
-    return "match %s %s" % (whole, " ".join(json.dumps(g) for g in groups))
+    return "match %s %s" % (fields[2], " ".join(json.dumps(g) for g in groups))
 
 
 def _pinned_ccc(cp):
@@ -617,326 +629,9 @@ def holds_composing(subject):
     return any(_combining(c) for c in subject[1:])
 
 
-def is_forward_reference_artifact(pattern, them, us):
-    """vim accepts a forward backreference when a lookbehind follows it.
-
-    Every other spelling is "E65: Illegal back reference", in both of vim's
-    engines: `\\1\\(a\\)`, `\\(a\\1\\)`, `\\1\\(a\\)\\@=`,
-    `\\1\\(a\\)\\@>` and `\\1\\%(a\\)` are all refused, and
-    `\\1\\(a\\)\\@<!` and `\\1\\(a\\)\\@<=` are accepted with the
-    reference matching empty. The rule vim documents is the first one, and a
-    construct that is legal only when a *later* part of the pattern takes a
-    particular shape is an artifact of how vim compiles a lookbehind rather
-    than a rule a second implementation could follow - the same category as
-    the two `reference-defect` records in tests/data/vectors/known-gaps.txt.
-
-    The bound acquits, which is the opposite of what the byte-bounded
-    lookbehind did to lookbehind_with_backreference() below and so was
-    measured rather than assumed: `\\1\\(a\\)\\@1<=`,
-    `\\1\\(a\\)\\@2<=`, `\\1\\(a\\)\\@2<!` and
-    `\\1\\(a\\)\\@10<=` are all "E65" in both of vim's engines, as
-    here. So the substring test below is the whole class: it is the
-    *unbounded* postfix lookbehind and nothing else that vim compiles a
-    forward reference in front of.
-
-    Counted and reported rather than dropped silently, so that the number
-    moving is visible.
-    """
-    if not us.startswith("compile") or them.startswith("compile"):
-        return False
-    return "@<" in pattern and any(
-        "\\%d" % n in pattern for n in range(1, 10))
-
-
-def is_abandoned_mark_artifact(pattern, them, us):
-    r"""vim keeps the *marks* an abandoned branch wrote, not only its captures.
-
-    The row above is about groups and checks that the whole match agrees.
-    The same commit that writes a group inside a postfix operator writes
-    `\zs` and `\ze` there too, and then the span disagrees as well:
-    `\(a\zeb\)\@>\d\|\&` against "ab" is 0-2 under `re=2` and 0-1 under
-    `re=1`, with group one holding "ab" in both, where the branch that set
-    them **cannot match** - `\(a\zeb\)\@>\d` alone is no match in both
-    engines, and putting a branch that fails on the other side of the `\|`
-    makes the whole pattern no match. The match vim reports is the empty
-    one from the second branch, wearing the end the first branch left
-    behind. `\zs` does it from the other side: `\(a\zsb\)\@=\d\|\&` is
-    1-1 under `re=1`.
-
-    The minimal pair says which part matters. Without the mark,
-    `\(ab\)\@>\d\|\&` is 0-0 with group one still kept - the row above.
-    Without the postfix operator, `a\zeb\d\|\&` is 0-0 with nothing kept,
-    so the mark alone does not do it.
-
-    Narrow in both dimensions: the pattern needs a postfix operator, a
-    mark, and an alternation, **and** this library's answer has to be the
-    empty match - a row where this library reports a span of its own is a
-    disagreement whatever vim says.
-    """
-    if not (them.startswith("match ") and us.startswith("match ")):
-        return False
-    if "@" not in pattern or "|" not in pattern:
-        return False
-    if "\\zs" not in pattern and "\\ze" not in pattern:
-        return False
-    start, end = us.split()[1].split(":")
-    return start == end
-
-
-def is_postfix_capture_artifact(pattern, them, us):
-    """vim mislays a capture around one of its postfix assertions.
-
-    Two shapes, both of them vim disagreeing with pcre2test as well as with
-    this library, and both of them only about *groups* - the whole match is
-    the same either way, which is the first thing this checks:
-
-    - **A capture that outlived its branch.** `\\(a\\)\\@>x\\|\\A`
-      against "a b" reports group one as "a" in vim, where the branch that
-      set it failed and the match came from the other one. Without the
-      `\\@>` vim reports it unset, so it is the atomic group committing its
-      writes; pcre2test answers `(?>(a))x|[^[:alpha:]]` with group one unset.
-
-      The atomic operator is not the only way in, which is what a
-      thirty-seed run found: `\\(a\\)\\@=a$\\|b` against "ab" keeps
-      group one as "a" too, and `\\(a\\)\\@=ax\\|b` does not. The
-      difference is whether the abandoned branch died at an *assertion* or
-      at a character, which is not a rule anyone could follow - and both
-      pcre2test and node report the group unset for
-      `(?=(a))a$|b`. So the shape allowed below is "vim kept one, and the
-      pattern has both a postfix operator and an alternation".
-    - **A capture that vanished.** `\\(a\\)\\(a\\)\\@=a\\{2,}`
-      against "aaab" reports group one as empty in vim and "a" in pcre2test;
-      drop the trailing repeat and vim reports "a" too.
-
-    The two directions are not treated alike. vim *losing* a capture is
-    allowed for any of the `\\@` operators, because a defect of this
-    library's would be the same loss and would still be reported - the
-    comparison only stops seeing vim's. vim *gaining* one is allowed where
-    the atomic operator is written, and where a postfix operator meets an
-    alternation - the two shapes it has been measured in, both of them
-    against pcre2test as well.
-
-    That second clause is a real narrowing and worth saying out loud: a
-    defect of this library's that *lost* a capture inside a `\\@` operator
-    on one side of a `\\|` would not be reported. Nothing narrower will
-    do, because what separates vim's two answers is where in the abandoned
-    branch the failure happened, which the pattern text cannot say.
-    """
-    if not (them.startswith("match ") and us.startswith("match ")):
-        return False
-    if "@" not in pattern:
-        return False
-    their_fields = them.split()
-    our_fields = us.split()
-    if their_fields[1] != our_fields[1]:
-        return False
-    theirs = their_fields[2:]
-    ours = our_fields[2:]
-    while len(theirs) < len(ours):
-        theirs.append('""')
-    while len(ours) < len(theirs):
-        ours.append('""')
-    for their_group, our_group in zip(theirs, ours):
-        if their_group == our_group:
-            continue
-        if their_group == '""':
-            continue        # vim lost one: allowed for any `\@` operator.
-        if our_group == '""' and "@>" in pattern:
-            continue        # vim kept one an atomic group had written.
-        if our_group == '""' and "@" in pattern and "|" in pattern:
-            continue        # vim kept one an abandoned branch had written.
-        return False
-    return True
-
-
 def ask_old_engine(cases):
     """The forced backtracking reference, retained for deterministic probes."""
     return ask_vim(cases, engine=1)
-
-
-def is_very_magic_line_start_repeat(pattern, them, us):
-    """`\\v\\_^*` matches nothing at all in vim, and there is no rule in it.
-
-    `\\m\\_^*` matches the empty string, `\\v\\_$*` does,
-    `\\v\\_^{0,1}` does and `\\v(\\_^)*` does - it is only the very
-    magic level, only `\\_^`, and only the `*` spelling, and both of vim's
-    engines answer alike. A construct that means nothing when written one
-    way and the obvious thing when written three others is an accident of
-    vim's parser rather than a rule a second implementation could follow.
-    """
-    if not them.startswith("nomatch") or not us.startswith("match "):
-        return False
-    where = pattern.find("\\_^*")
-    return where > 0 and "\\v" in pattern[:where]
-
-
-def is_line_number_star(pattern, them, us):
-    """`\\%23l*` means nothing at all in vim, and there is no rule in it.
-
-    `\\%23l` names a buffer line and never matches over a string, so a `*`
-    on it should leave the empty match a zero-iteration repeat always has -
-    and vim agrees five ways: `\\%23l\\{}`, `\\%23l\\{-}`,
-    `\\%23l\\{0,1}`, `\\(\\%23l\\)*` and the very magic `%23l*` all
-    match the empty string there. Only the bare `*`, only outside very
-    magic, only after an `l` form, and both engines alike.
-
-    Three answers come out of it, which is why this looks at ours as well:
-
-      - vim finds nothing where this library matches. That is the empty
-        string the repeat gives when the construct is the whole pattern,
-        and whatever the rest of the pattern matches around it otherwise:
-        `\\%23l*a` over "a" is no match there and 0-1 here. So a span
-        of ours is not required to be empty on this arm, and the check
-        for an empty one below is on the arm where vim *did* match;
-      - vim finds a *longer* match, another branch having won because the
-        first offers nothing - `\\%23l*\\|\\x` over "a" is 0-1 there and
-        0-0 here;
-      - and vim *compiles* a spelling this library refuses. A marker
-        between the `l` and the `*` is "E871: Can't have a multi follow a
-        multi" after every other atom - `\\%23c\\v*` and `a\\v*` are
-        both refused in vim too - and after an `l` form vim takes it.
-
-    The same shape as is_very_magic_line_start_repeat() below, and excluded
-    for the same reason.
-    """
-    # The `l` form, any markers, then the bare multi. A marker between is
-    # what `\%23l\v*` is, and a plain substring test misses it.
-    if not LINE_NUMBER_STAR.search(pattern):
-        return False
-    if us.startswith("compile"):
-        # vim compiled it; this library did not.
-        return them.startswith("nomatch") or them.startswith("match ")
-    if not us.startswith("match "):
-        return False
-    if them.startswith("nomatch"):
-        return True
-    # Ours is the empty match the repeat gives and vim's is not.
-    fields = us.split()
-    if len(fields) < 2 or ":" not in fields[1]:
-        return False
-    low, high = fields[1].split(":")
-    return low == high
-
-
-def is_leading_star_artifact(pattern, them, us):
-    """A bare `*` with no atom before it, where vim's answer is the spelling.
-
-    A `*` that has nothing to repeat is the literal asterisk at every level,
-    which is a POSIX basic RE's rule and vim's: `*a`, `\\m*`, `^*`,
-    `\\(*\\)`, `x\\|*`, `\\&*`, `\\v%(*)` and `\\M\\%(*\\)` all
-    match one. Two spellings out of that set are refused instead, and
-    neither difference is a rule:
-
-      - `^\\m*` is "E866" where `^*` matches and `\\(\\m*\\)` matches,
-        so a level or case marker between the caret and the star loses the
-        caret - and `^\\m\\+` is refused here too, which is the same
-        answer, so it is only the star that parts company.
-      - `\\%(*\\)` is refused where `\\(*\\)` matches, and where the
-        very magic `\\v%(*)` and the nomagic `\\M\\%(*\\)` both match:
-        the same construct in three spellings, refused in one.
-
-    Both engines answer alike, which is what says it is the parser rather
-    than either engine.
-    """
-    if not them.startswith("compile") or us.startswith("compile"):
-        return False
-    for i, c in enumerate(pattern):
-        if c != "*" or i == 0:
-            continue
-        head = pattern[:i]
-        # `\%(` immediately before, at a level that spells it that way.
-        if head.endswith("\\%("):
-            return True
-        # A caret with markers between, and nothing else.
-        while head[-2:] in ("\\v", "\\m", "\\M", "\\V", "\\c",
-                "\\C"):
-            head = head[:-2]
-            if head.endswith("^"):
-                return True
-    return False
-
-
-def is_lookbehind_backreference_artifact(pattern, them, us):
-    """vim mis-accounts a postfix lookbehind when a backreference follows.
-
-    Two measured instances, and pcre2test answers this library's way in
-    both:
-
-    - `\\(a\\)\\@<=\\(a\\)\\1\\l` against "aaab" is "aa" at 1:3
-      in both of vim's engines - text with nothing in it for the trailing
-      `\\l` to have matched. `(?<=(a))(a)\\1[a-z]` is 1:4 in pcre2test,
-      as here.
-    - `\\v\\D(a)@<=\\m\\(a\\)\\1\\(a\\+\\)\\@>` against
-      "aaab" is 0:3 in both engines with a third group that consumed nothing
-      the match has room for; `[^0-9](?<=(a))(a)\\1(?>(a+))` is "No match"
-      in pcre2test, as here. Drop the atomic group and vim's two engines
-      stop agreeing with each other: 0:2 under `re=1` and 0:3 under `re=2`.
-
-    So the class is "a postfix lookbehind with a backreference after it",
-    and it is excluded whatever the disagreement looks like - which is a
-    real narrowing of this gate and is the reason it is written out here
-    rather than folded into one of the others. A regression of this
-    library's inside that shape would not be reported.
-    """
-    return lookbehind_with_backreference(pattern)
-
-
-MARK = re.compile(r"\\z[se]")
-
-
-def marks_in_a_lookbehind_and_after_it(pattern):
-    r"""Two marks, one inside a positive lookbehind, and vim keeps the first.
-
-    Section 6's item 9 is about where a `\zs` or a `\ze` inside an
-    assertion or an atomic group counts, and this is the one shape in that
-    family where vim's two engines *agree* and this library still differs.
-    `\(a\zeb\)\@<=\(a\zeb\)\@>` over "ababS" is 2-2 under `re=1` and under
-    `re=2`; here it is 2-3. This library's rule is that the last write
-    wins, which is what both engines do for plain marks -
-    `a\zeb\zec` over "abc" is 0-2 in all three - and vim keeps the
-    lookbehind's instead once a postfix operator holds the second one.
-
-    Both halves are required, and the neighbours say why:
-
-      - `\(a\zeb\)\@<=\(ab\)\@>` has only the lookbehind's mark and is 2-2
-        everywhere, so it is not that the mark is ignored;
-      - `\(ab\)\@<=\(a\zeb\)\@>` has only the operator's and is 2-3 here
-        and under `re=1`, which is item 9's ordinary case;
-      - `\(a\zeb\)\@<=a\zeb`, with the second mark *not* inside an
-        operator, is 2-3 here and under `re=2` and 2-2 under `re=1` - the
-        engines disagree, so the gate settles it by asking and this
-        predicate must not cover it;
-      - `\(a\zeb\)\@<!a\zeb` and `\(a\zeb\)\@=\(a\zeb\)\@>` agree in all
-        three, so it is the *positive* lookbehind and nothing else.
-
-    Counted and printed rather than dropped, like the rest of item 9.
-    """
-    where = pattern.find("\\@<=")
-    if where < 0:
-        return False
-    if MARK.search(pattern[:where]) is None:
-        return False
-    rest = pattern[where + 4:]
-    found = MARK.search(rest)
-    return found is not None and "\\@" in rest[found.end():]
-
-
-def lookbehind_with_backreference(pattern):
-    """The shape the row above is about, so that two gates ask one question.
-
-    `tools/oracle/replace_diff.py` meets the same deviation through a
-    substitution rather than through a span - `\\Ma\\%[\\d\\w]\\(\\(a\\)\\@=a\\)\\@<=\\(a\\)\\1`
-    over "aab" is 0:2 in both of vim's engines, with the group its
-    *successful* lookbehind wrote reported empty so that the `\\1` matches
-    nothing, and 0:3 here and in pcre2test - so the test lives here and is
-    called from there.
-    """
-    # `\@<=` and `\@<!`, and the byte-bounded `\@123<=` forms too - the
-    # count sits between the `@` and the `<`, so a plain substring test
-    # misses them, which a thirty-seed run found once the bound was built.
-    if not re.search(r"@[0-9]*<", pattern):
-        return False
-    return any("\\%d" % n in pattern for n in range(1, 10))
 
 
 def find(name):
@@ -968,6 +663,32 @@ def vim_version():
     return vim_runner.version()
 
 
+def failure_report(kind):
+    """Version one: exact rows plus explicit coverage status, even on failure."""
+    return dict(schema_version=1, kind=kind, complete=False,
+        completed_profiles=[], failures=[], error=None)
+
+
+def run_reporting(path, report, run):
+    def save():
+        if path:
+            with open(path, "w", encoding="utf-8") as output:
+                json.dump(report, output, ensure_ascii=False, indent=2)
+                output.write("\n")
+    # Invalidate a previous result before invoking any driver.
+    save()
+    try:
+        result = run()
+        if not report["complete"]:
+            report["error"] = "comparison incomplete"
+        return result
+    except BaseException as error:
+        report["error"] = str(error) or type(error).__name__
+        raise
+    finally:
+        save()
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--syntax", choices=tuple(PROFILES),
@@ -977,10 +698,16 @@ def main():
     parser.add_argument("--subjects", type=int, default=0,
         help="subjects per pattern; 0 means all of them")
     parser.add_argument("--examples", type=int, default=12)
+    parser.add_argument("--failures", help="write all exact differences as JSON")
     parser.add_argument("--strict", action="store_true",
         help="exit 1 if the two disagree anywhere")
     args = parser.parse_args()
 
+    report = failure_report("match")
+    return run_reporting(args.failures, report, lambda: run_comparison(args, report))
+
+
+def run_comparison(args, report):
     encoding = vim_encoding()
     if encoding is None:
         print("vim_diff: skipped (vim is not installed)")
@@ -1036,28 +763,10 @@ def main():
     mine = [normalise_ours(line, case[1])
         for line, case in zip(mine_raw, cases)]
 
-    disagreements = []
-    limitations = {}
-    checks = (
-        ("forward backreference before lookbehind", is_forward_reference_artifact),
-        ("postfix capture retention", is_postfix_capture_artifact),
-        ("abandoned match marker", is_abandoned_mark_artifact),
-        ("lookbehind followed by backreference", is_lookbehind_backreference_artifact),
-        ("very magic line-start repeat", is_very_magic_line_start_repeat),
-        ("line number with a repeat", is_line_number_star),
-        ("leading star spelling", is_leading_star_artifact),
-    )
-    for case, them, us in zip(cases, theirs, mine):
-        if them == us:
-            continue
-        reason = next((name for name, check in checks
-            if check(case[0], them, us)), None)
-        if reason is None and marks_in_a_lookbehind_and_after_it(case[0]):
-            reason = "markers in and after a lookbehind"
-        if reason is not None:
-            limitations[reason] = limitations.get(reason, 0) + 1
-        else:
-            disagreements.append((case, them, us))
+    # A pattern resembling a known gap cannot justify a different answer.
+    # Keep every complete normalized result against this profile's engine.
+    disagreements = [(case, them, us)
+        for case, them, us in zip(cases, theirs, mine) if them != us]
 
     # What the reference actually answered, because "0 disagreements" over
     # rows the oracle refused outright would be a gate agreeing about
@@ -1067,11 +776,15 @@ def main():
         head = line.split()[0] if line else "empty"
         kinds[head] = kinds.get(head, 0) + 1
     shape = ", ".join("%d %s" % (kinds[k], k) for k in sorted(kinds))
-    notes = ["%d excluded (%s)" % (count, reason)
-        for reason, count in sorted(limitations.items())]
-    print("%s: forced regexpengine=%d, %d/%d answers (%s), %d disagreements%s"
+    print("%s: forced regexpengine=%d, %d/%d answers (%s), "
+        "%d disagreements, 0 excluded"
         % (args.syntax, PROFILES[args.syntax], len(theirs_raw), len(cases),
-            shape, len(disagreements), "".join(", " + note for note in notes)))
+            shape, len(disagreements)))
+    report["failures"] = [dict(syntax=args.syntax, pattern=case[0],
+        subject=case[1], reference=them, actual=us)
+        for case, them, us in disagreements]
+    report["completed_profiles"].append(args.syntax)
+    report["complete"] = True
     for (pattern, subject), them, us in disagreements[:args.examples]:
         print("  /%s/ on %r" % (pattern, subject))
         print("     vim: %s" % them)
