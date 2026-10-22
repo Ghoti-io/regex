@@ -129,12 +129,15 @@ int grx_byte_ranges_from_set(
  * | JMP | continuation | - | - |
  * | SAVE | capture slot | - | - |
  * | ASSERT | class index for the line or word set, else GRX_INDEX_NONE | - | GRX_AssertKind |
+ * | COUNT_INIT | count metadata offset | - | - |
+ * | COUNT_STEP | count metadata offset | exit continuation | GRX_RepeatMode |
+ * | COUNT_BACK | count metadata offset | COUNT_STEP instruction | - |
  * | PROGRESS_SET | register | - | - |
  * | RESET | first capture slot | one past the last | - |
  * | RESET_STALE | the register holding this iteration's start | one group's first slot | - |
  * | PROGRESS_CHECK | register | continuation when the loop must exit | GRX_EmptyLoopMode |
  * | BACKREF | group number | - | GRX_BackrefUnsetMode |
- * | LOOK | length-span offset, or GRX_INDEX_NONE | continuation after the body; with GRX_INST_COND_ELSE, the first of two jumps | GRX_LookKind |
+ * | LOOK | operand selected by mode and policy | continuation after the body; with GRX_INST_COND_ELSE, the first of two jumps | GRX_LookKind |
  * | ATOMIC_BEGIN | matching ATOMIC_END | - | - |
  * | ATOMIC_END | - | - | - |
  * | COND | group number | continuation for the false branch | GRX_CondKind |
@@ -142,6 +145,9 @@ int grx_byte_ranges_from_set(
  * | RET | - | - | - |
  * | KEEP | - | - | - |
  * | VERB | - | - | GRX_VerbKind |
+ *
+ * LOOK selects a behind length-span offset, repeated-context offset, frontier
+ * register, or GRX_INDEX_NONE according to its mode and policy.
  *
  * A SAVE's slot is twice the group number for a start and twice plus one for
  * an end, so group 0's start is slot 0 and the whole match is slots 0 and 1.
@@ -268,6 +274,12 @@ typedef enum {
    * over, and with one it runs on the backtracker alone.
    */
   GRX_OP_CALLOUT,
+  /** Count metadata is three look_spans words: minimum, maximum, register
+   * base. Five registers hold magnitude, negative sign, last BODY end,
+   * invocation progress, and the current BODY start. */
+  GRX_OP_COUNT_INIT, ///< Reset this invocation, retaining counted backedge history.
+  GRX_OP_COUNT_STEP, ///< Enter a counted BODY or its prioritized exit.
+  GRX_OP_COUNT_BACK, ///< Check BODY progress and revisit its count.
   GRX_OP_COUNT         ///< Closes the enum; not an opcode.
 } GRX_Opcode;
 
@@ -279,13 +291,69 @@ typedef enum {
  * whole of what makes lookbehind of arbitrary length work: the body is an
  * ordinary sub-program that happens to run backwards.
  */
+/** LOOK: evaluate the body against this run's inherited capture base. */
+#define GRX_POLICY_LOOK_FRESH GRX_BIT(0)
+/** LOOK: a transferred end is replaced at the selected continuation frontier.
+ */
+#define GRX_POLICY_LOOK_REPLACE_END GRX_BIT(1)
+/** LOOK: test the body against accepting continuations, allowing backtracking.
+ */
+#define GRX_POLICY_LOOK_DELAYED GRX_BIT(2)
+/** LOOK: postpone until a consuming frontier or a demanded capture is reached.
+ */
+#define GRX_POLICY_LOOK_FRONTIER GRX_BIT(3)
+/** SPLIT: an alternative can bypass its own consuming atoms. */
+#define GRX_POLICY_NULLABLE_BRANCH GRX_BIT(4)
+/** LOOK: the body observes incoming captures through references. */
+#define GRX_POLICY_LOOK_READS_CAPTURES GRX_BIT(4)
+/** LOOK: the body can write numbered captures, independently of its references.
+ */
+#define GRX_POLICY_LOOK_HAS_CAPTURES GRX_BIT(5)
+/** ATOMIC_BEGIN: every successful body path consumes. */
+#define GRX_POLICY_ATOMIC_REQUIRED GRX_BIT(6)
+/** ATOMIC_BEGIN: accepting exits displace competing entries at their frontier.
+ */
+#define GRX_POLICY_ATOMIC_FRONTIER GRX_BIT(0)
+/** KEEP_END: only the body result context owns this marker. */
+#define GRX_POLICY_END_CONTEXT_ONLY GRX_BIT(0)
+/** ATOMIC_BEGIN: a body end marker claims the inherited result end. */
+#define GRX_POLICY_ATOMIC_END_OWNER GRX_BIT(1)
+/** ATOMIC_BEGIN: the body writes numbered captures. */
+#define GRX_POLICY_ATOMIC_HAS_CAPTURES GRX_BIT(2)
+/** ATOMIC_BEGIN: the continuation observes incoming capture context. */
+#define GRX_POLICY_ATOMIC_CONTEXT_CONTINUATION GRX_BIT(3)
+/** ATOMIC_BEGIN: the body observes incoming capture values. */
+#define GRX_POLICY_ATOMIC_READS_CAPTURES GRX_BIT(7)
+/** LOOK: repeat scope owns provisional results beyond one iteration. */
+#define GRX_POLICY_LOOK_REPEATED GRX_BIT(6)
+/** Compiled context appended to repeated LOOK span metadata. */
+#define GRX_LOOK_REPEAT_BOUNDED GRX_BIT(0)
+#define GRX_LOOK_REPEAT_FIRST GRX_BIT(1)
+#define GRX_LOOK_REPEAT_LAST GRX_BIT(2)
+#define GRX_LOOK_REPEAT_NULLABLE GRX_BIT(3)
+#define GRX_LOOK_REPEAT_EXIT_NULLABLE GRX_BIT(4)
+#define GRX_LOOK_REPEAT_LITERAL_FRONTIER GRX_BIT(5)
+#define GRX_LOOK_REPEAT_EXIT_REPEAT GRX_BIT(6)
+/** Expanded ancestry determines this copy's marker exit ownership. */
+#define GRX_LOOK_REPEAT_COPY_POLICY GRX_BIT(7)
+/** This copy retains its body marker through the continuation frontier. */
+#define GRX_LOOK_REPEAT_COPY_KEEP_END GRX_BIT(8)
+/** A required inner loop retains markers after its first dynamic activation. */
+#define GRX_LOOK_REPEAT_COPY_DYNAMIC GRX_BIT(9)
+/** A mandatory expanded copy can arrive through a shorter earlier copy. */
+#define GRX_LOOK_REPEAT_COPY_COMPARE GRX_BIT(10)
+/** LOOK: the first continuation atom precedes the postponed body evaluation. */
+#define GRX_POLICY_LOOK_AFTER_ATOM GRX_BIT(7)
+
 #define GRX_INST_REVERSE GRX_BIT(0)
 #define GRX_INST_LOOK_NEAREST GRX_BIT(7)
+/** LOOK: its continuation cannot accept without consuming a scalar. */
+#define GRX_INST_LOOK_REQUIRED GRX_BIT(1)
 /** LOOK: extend the byte threshold to the preceding UTF-8 boundary. */
 #define GRX_INST_LOOK_ROUND_BOUND GRX_BIT(5)
 /** LOOK/ATOMIC_END: successful assertion-body captures can survive rollback. */
 #define GRX_INST_LOOK_PERSIST_CAPTURES GRX_BIT(4)
-/** LOOK: an end marker is provisional until another outer atom consumes. */
+/** LOOK: the assertion's end marker has continuation-dependent ownership. */
 #define GRX_INST_LOOK_PROVISIONAL_END GRX_BIT(3)
 
 /**
@@ -396,7 +464,7 @@ typedef struct GRX_Inst {
   uint8_t op;       ///< A @ref GRX_Opcode.
   uint8_t mode;     ///< The opcode's small enum; see the table above.
   uint8_t flags;    ///< GRX_INST_* bits.
-  uint8_t reserved; ///< Padding; zero. Keeps the struct's layout explicit.
+  uint8_t policy;   ///< GRX_POLICY_* semantic instruction policies.
   uint32_t x;       ///< First operand; see the table above.
   uint32_t y;       ///< Second operand; see the table above.
 } GRX_Inst;
@@ -434,6 +502,8 @@ typedef struct GRX_Program {
   GRX_Arena scan_lists;
   /**
    * The body lengths `GRX_OP_LOOK` names, as minimum-then-maximum pairs.
+   * A LOOK with GRX_POLICY_LOOK_AFTER_ATOM adds a third size_t naming its
+   * deferred-state register.
    *
    * A lookbehind the engine runs forwards has to know which starts to try,
    * and those are exactly the positions its body's length allows. Copied out
@@ -633,6 +703,14 @@ const char * grx_opcode_name(GRX_Opcode op);
  */
 int grx_program_look_span(const GRX_Program * program, uint32_t offset,
     size_t * out_min, size_t * out_max);
+
+/** Repeated LOOK: local state, lexical context, shared history and copy index.
+ * The last two outputs may be NULL. Global history owns a count followed by
+ * the provisional marker; local state belongs to one enclosing emission.
+ */
+int grx_program_look_repeat(const GRX_Program * program, const GRX_Inst * inst,
+    size_t * out_state, size_t * out_context,
+    size_t * out_global, size_t * out_copy);
 
 const uint32_t * grx_program_scan_list(
     const GRX_Program * program, uint32_t offset, size_t * out_count);

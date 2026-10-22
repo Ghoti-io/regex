@@ -278,6 +278,37 @@ run_case grx_match 0 "$MATCH_ROWS" ecmascript bitstate
 run_case grx_match 0 "$MATCH_ROWS" ecmascript auto all
 run_case grx_match 0 "$MATCH_ROWS" re2
 
+# The explicit scratch-work budget reaches every search mode, including the
+# search-next calls in an all-matches request. Malformed caps fail before input.
+run_case grx_match 0 "$MATCH_ROWS" ecmascript --max-steps=1
+if ! grep -q '^error Limit exceeded$' "$WORK/out"; then fail_case grx_match; fi
+run_case grx_match 0 "$MATCH_ROWS" ecmascript --max-steps=20000000
+if grep -q '^error' "$WORK/out"; then fail_case grx_match; fi
+run_case grx_match 0 "$MATCH_ROWS" ecmascript auto all --max-steps=1
+if ! grep -q '^error Limit exceeded$' "$WORK/out"; then fail_case grx_match; fi
+# First search succeeds within the cap; only search-next reaches the expensive
+# failing branch. Clearing limits only before search-next must fail this test.
+NEXT_LIMIT_ROWS=$(stdin_file next-limit <<'EOF'
+	617c28622b292b63	61626262626262626262626262626262
+EOF
+)
+run_case grx_match 0 "$NEXT_LIMIT_ROWS" ecmascript backtrack --max-steps=15
+if ! grep -qx 'match backtrack 0:1 -' "$WORK/out"; then fail_case grx_match; fi
+run_case grx_match 0 "$NEXT_LIMIT_ROWS" ecmascript backtrack all --max-steps=15
+if ! grep -qx 'error Limit exceeded' "$WORK/out"; then fail_case grx_match; fi
+run_case grx_match 0 "$NEXT_LIMIT_ROWS" ecmascript backtrack --max-steps=15 all
+if ! grep -qx 'error Limit exceeded' "$WORK/out"; then fail_case grx_match; fi
+run_case grx_match 0 "$NEXT_LIMIT_ROWS" ecmascript --max-steps=15 backtrack all
+if ! grep -qx 'error Limit exceeded' "$WORK/out"; then fail_case grx_match; fi
+for bad in '' 0 -1 +1 ' 1' 1x 1.0 99999999999999999999999999999999999999; do
+  run_case grx_match 2 "$MATCH_ROWS" ecmascript "--max-steps=$bad"
+  run_case grx_match 2 "$MATCH_ROWS" ecmascript backtrack "--max-steps=$bad" all
+  run_case grx_match 2 "$MATCH_ROWS" ecmascript backtrack all "--max-steps=$bad"
+done
+run_case grx_match 2 "$MATCH_ROWS" ecmascript --max-steps
+run_case grx_match 2 "$MATCH_ROWS" ecmascript --max-steps=1 --max-steps=2
+run_case grx_match 2 "$MATCH_ROWS" ecmascript backtrack --max-steps=1 all --max-steps=2
+
 REPLACE_ROWS=$(stdin_file replace <<'EOF'
 	28612b29	616161	2431
 	28612b29	616161	245b315d

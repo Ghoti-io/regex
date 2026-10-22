@@ -63,20 +63,3 @@ dotnet		\\p{IsGreek}		gap	an `Is`-prefixed block name. .NET's `Is` namespace is 
 dotnet		\\p{IsGreek}	α	gap	an `Is`-prefixed block name. .NET's `Is` namespace is its own list of blocks and scripts, not Unicode's, and it cannot be inferred from the names measured: `IsGreek` and `IsBasicLatin` compile on .NET 10.0.13 and `IsGreekAndCoptic` does not, where Java accepts all three. Refused here rather than implemented from a guess at the list. documentation/dialects.md section 5
 dotnet	i	ſ	S	gap	caseless matching by lowercase *mapping* rather than by fold orbit; see the `(?i)` row. WP-50
 dotnet	i	ſ	s	gap	caseless matching by lowercase *mapping* rather than by fold orbit; see the `(?i)` row. WP-50
-
-# Oracle-authored postfix vectors retain these exact open NFA gaps.
-vim-nfa		\\(\\(a\\)\\@=a\\)\\@<=	a\ńb	gap	Pinned Vim NFA capture retention remains open: backtrack: expected groups - 'a', got 'a' 'a'
-vim-nfa		\\(\\(a\\)\\@=a\\)\\@<=	a ́b	gap	Pinned Vim NFA capture retention remains open: backtrack: expected groups - 'a', got 'a' 'a'
-vim-nfa		\\(\\(a\\)\\@=a\\)\\@<=	́a	gap	Pinned Vim NFA capture retention remains open: backtrack: expected groups - 'a', got 'a' 'a'
-vim-nfa		\\(\\(a\\)\\@=a\\)\\@<=	́̂a	gap	Pinned Vim NFA capture retention remains open: backtrack: expected groups - 'a', got 'a' 'a'
-vim-nfa		\\(a\\|b\\)\\%[abc]*\\(\\(a\\)\\@=a\\)\\@<=\\|a*	aaab	gap	Pinned Vim NFA capture retention remains open: backtrack: expected groups 'a' - 'a', got 'a' 'a' 'a'
-vim-nfa		\\(a\\|b\\)\\%[abc]*\\(\\(a\\)\\@=a\\)\\@<=\\|a*	aéb	gap	Pinned Vim NFA capture retention remains open: backtrack: expected groups 'a' - 'a', got 'a' 'a' 'a'
-vim-nfa		\\Z\\(\\(a\\)\\@=a\\)\\@<=	a\ńb	gap	Pinned Vim NFA capture retention remains open: backtrack: expected groups - 'a', got 'a' 'a'
-vim-nfa		\\Z\\(\\(a\\)\\@=a\\)\\@<=	a ́b	gap	Pinned Vim NFA capture retention remains open: backtrack: expected groups - 'a', got 'a' 'a'
-vim-nfa		\\Z\\(\\(a\\)\\@=a\\)\\@<=	á	gap	Pinned Vim NFA capture retention remains open: backtrack: expected groups - 'á', got 'á' 'á'
-vim-nfa		\\Z\\(\\(a\\)\\@=a\\)\\@<=	áá	gap	Pinned Vim NFA capture retention remains open: backtrack: expected groups - 'á', got 'á' 'á'
-vim-nfa		\\Z\\(\\(a\\)\\@=a\\)\\@<=	áb	gap	Pinned Vim NFA capture retention remains open: backtrack: expected groups - 'á', got 'á' 'á'
-vim-nfa		\\Z\\(\\(a\\)\\@=a\\)\\@<=	á̂b	gap	Pinned Vim NFA capture retention remains open: backtrack: expected groups - 'á̂', got 'á̂' 'á̂'
-vim-nfa		\\Z\\(\\(a\\)\\@=a\\)\\@<=	xá	gap	Pinned Vim NFA capture retention remains open: backtrack: expected groups - 'á', got 'á' 'á'
-vim-nfa		\\Z\\(\\(a\\)\\@=a\\)\\@<=	́a	gap	Pinned Vim NFA capture retention remains open: backtrack: expected groups - 'a', got 'a' 'a'
-vim-nfa		\\Z\\(\\(a\\)\\@=a\\)\\@<=	́̂a	gap	Pinned Vim NFA capture retention remains open: backtrack: expected groups - 'a', got 'a' 'a'

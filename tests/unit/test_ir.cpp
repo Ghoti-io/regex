@@ -11,6 +11,7 @@
 #include "test_helpers.h"
 
 #include "../../src/ir/ir_internal.h"
+#include "../../src/ir/lower_internal.h"
 
 namespace {
 
@@ -55,6 +56,34 @@ TEST(Ir, NewNodesCarryTheConservativeSemanticDefaults) {
   EXPECT_EQ(node->next_sibling, GRX_INDEX_NONE);
 
   grx_ir_free(ir);
+}
+
+TEST(Ir, KeepMarkersDoNotAcquireAcceptVerbConsumingSpanSemantics) {
+  for (GRX_IRKind kind : {GRX_IR_KEEP, GRX_IR_KEEP_END, GRX_IR_VERB}) {
+    SCOPED_TRACE(kind);
+    GRX_IR * ir = make_ir();
+    ASSERT_NE(ir, nullptr);
+    uint32_t sequence = 0, first = 0, marker = 0, second = 0;
+    ASSERT_EQ(grx_ir_add_node(ir, GRX_IR_CONCAT, 0, 3, &sequence), GRX_OK);
+    ASSERT_EQ(grx_ir_add_node(ir, GRX_IR_CHAR, 0, 1, &first), GRX_OK);
+    ASSERT_EQ(grx_ir_add_node(ir, kind, 1, 1, &marker), GRX_OK);
+    ASSERT_EQ(grx_ir_add_node(ir, GRX_IR_CHAR, 2, 1, &second), GRX_OK);
+    grx_ir_node(ir, first)->a = 'a';
+    grx_ir_node(ir, second)->a = 'b';
+    if (kind == GRX_IR_VERB) {
+      grx_ir_node(ir, marker)->mode = GRX_VERB_ACCEPT;
+    }
+    ASSERT_EQ(grx_ir_add_child(ir, sequence, first), GRX_OK);
+    ASSERT_EQ(grx_ir_add_child(ir, sequence, marker), GRX_OK);
+    ASSERT_EQ(grx_ir_add_child(ir, sequence, second), GRX_OK);
+    ir->root = sequence;
+    size_t min = GRX_NPOS, max = GRX_NPOS;
+    ASSERT_TRUE(grx_ir_span(ir, sequence, &min, &max));
+    EXPECT_EQ(min, kind == GRX_IR_VERB ? 0u : 2u);
+    EXPECT_EQ(max, 2u);
+    EXPECT_EQ(grx_ir_can_match_empty(ir, sequence), kind == GRX_IR_VERB);
+    grx_ir_free(ir);
+  }
 }
 
 TEST(Ir, ChildrenComeBackInTheOrderTheyWereAdded) {

@@ -471,20 +471,20 @@ TEST(BitState, RefusesABitmapThatWillNotFit) {
 }
 
 TEST(BitState, TheBudgetBoundsEveryEnginesScratch) {
-  // max_match_memory is a cap on what a match costs, not a bit-state
-  // setting: the Pike VM's live thread states are scratch too and are
-  // bounded by the same number. The backtracker's stack is bounded by
-  // max_backtrack instead, so it is the one engine the budget does not
-  // reach - and that is a fact worth pinning, because it is the reason a
-  // caller cannot bound the backtracker with this field alone.
+  // Both engines need capture storage even for a pattern without explicit
+  // groups. Refuse a budget too small for that, then permit a useful run.
+  // Backtrack frames have their separate max_backtrack bound.
   Regex regex("a+b");
   ASSERT_TRUE(regex.ok());
 
   GRX_Limits limits;
   grx_limits_default(&limits);
-  limits.max_match_memory = 1;
-  EXPECT_EQ(search_on(regex, "aab", GRX_ENGINE_PIKE, &limits), kLimit);
-  EXPECT_EQ(search_on(regex, "aab", GRX_ENGINE_BACKTRACK, &limits), "0..3");
+  for (GRX_Engine engine : {GRX_ENGINE_PIKE, GRX_ENGINE_BACKTRACK}) {
+    limits.max_match_memory = 1;
+    EXPECT_EQ(search_on(regex, "aab", engine, &limits), kLimit);
+    limits.max_match_memory = 4096;
+    EXPECT_EQ(search_on(regex, "aab", engine, &limits), "0..3");
+  }
 }
 
 int main(int argc, char ** argv) {

@@ -442,6 +442,148 @@ TEST(OutOfMemory, ARefusedPatternLeavesNothingAllocated) {
   }
 }
 
+TEST(OutOfMemory, DeferredVimAssertionSnapshotsUnwindEveryAllocationFailure) {
+  struct Case {
+    GRX_Syntax syntax;
+    const char * pattern;
+    const char * subject;
+    size_t pressure = 0;
+    int expected_match = 1;
+  };
+  const Case cases[] = {
+      {GRX_SYNTAX_VIM_BACKTRACK, R"(\%(aa\|a\)\{2}aab)", "aaab"},
+      {GRX_SYNTAX_VIM_BACKTRACK, R"(\%(\%(a\)\{1,2}\)\{2}b)", "aab", 0, 0},
+      {GRX_SYNTAX_VIM_BACKTRACK, R"(\%(\%(a\)\+\)\{2}b)", "aab"},
+      {GRX_SYNTAX_VIM_BACKTRACK, R"(a\%(a\)\@<=\%(a\|aa\)b)", "aaab"},
+      {GRX_SYNTAX_VIM_NFA, R"(\(a\)\@=\(\1b\)\@=..)", "ab"},
+      {GRX_SYNTAX_VIM_NFA, R"(\(\(a\ze\)\@=a\)\@=\(a\)\@=ab)", "ab"},
+      {GRX_SYNTAX_VIM_NFA, R"(\(a\)\@<=\(a\)\1\l)", "aaab"},
+      {GRX_SYNTAX_VIM_NFA, R"(\(a\)\@>a\(a\1\)\@<=.)", "aab", 1024},
+      {GRX_SYNTAX_VIM_NFA, R"(\(\(a\)\@=a\)\@<=\(a\)\@<=\%(a\)\@>)", "aab",
+          1024},
+      {GRX_SYNTAX_VIM_NFA, R"(\(a\)\%(z\)\@>x\|\%(ab\)\@>)", "aab", 512},
+      {GRX_SYNTAX_VIM_NFA, R"(\(\(a\)\%(z\)\@>x\)\|\%(ab\)\@>)", "aab", 640},
+      {GRX_SYNTAX_VIM_NFA, R"(\%(\(a\)\@=a\)*ab)", "aaab", 1024},
+      {GRX_SYNTAX_VIM_NFA, R"(a\+\(a\)\@>\(a\)\@<=)", "aaab", 1024},
+      {GRX_SYNTAX_VIM_NFA, R"(a\+\(a*\)\@>\(a\(b\)\@=\)\@<=)", "aaab", 1024},
+      {GRX_SYNTAX_VIM_NFA, R"(\%(aa\|a\)\(a\)\@>b)", "aaaab", 1024},
+      {GRX_SYNTAX_VIM_NFA, R"(\(a\)\?\%(\1a\)\@>b)", "aaab", 1024},
+      {GRX_SYNTAX_VIM_NFA, R"(\(a\)\@=\%(\(a\)\@=a\)\@>b)", "ab", 1024},
+      {GRX_SYNTAX_VIM_NFA, R"(\%(a\@<=a\)\@>b)", "aab", 1024},
+      {GRX_SYNTAX_VIM_NFA, R"(\%(a\|aa\)\%(a\ze\)\@>b)", "aaaaaab", 1024},
+      {GRX_SYNTAX_VIM_NFA, R"(\(a\)\?\%(a\ze\)\@>\%(a\)\@>b)", "aaaab", 1024},
+      {GRX_SYNTAX_VIM_NFA, R"(\(a\|b\)\%(a\1\)\@>\(ab\)\@<=X)", "babX", 1024},
+      {GRX_SYNTAX_VIM_NFA, R"(\(a\|b\)\%(a\1\)\@>\%(a\1\)\@<!X)", "babX", 1024},
+      {GRX_SYNTAX_VIM_BACKTRACK, R"(a\%(a\)\@<=\%(a\|aa\)x)", "aaab", 0, 0},
+      {GRX_SYNTAX_VIM_NFA, R"(\(a\)\@=\(\1b\)\@=ab)", "ab", 0, 0},
+      {GRX_SYNTAX_VIM_NFA, R"(a\+\(a\)\@>\(a\)\@<=x)", "aaab", 0, 0},
+      {GRX_SYNTAX_VIM_NFA, R"(\%(\%(a\(a\ze\)\@<=\)\{0,2}\)\{0,3}b)",
+          "aaab", 1024},
+      {GRX_SYNTAX_VIM_NFA, R"(\(a*\)\zs\(a\)\%(\1a\)\@>\%(a\)\@<=b)",
+          "aaaab", 1024},
+  };
+  size_t fault_runs = 0;
+  size_t successful_fallbacks = 0;
+  size_t recovered_searches = 0;
+  size_t compared_spans = 0;
+  for (const Case & row : cases) {
+    SCOPED_TRACE(row.pattern);
+    std::vector<GRX_Capture> baseline;
+    auto run = [&](const GRX_Allocator * allocator, size_t budget = 0,
+                   bool establish_baseline = false) {
+      GRX_Regex * regex = nullptr;
+      GRX_Result result = grx_regex_compile_with_allocator(row.pattern,
+          std::strlen(row.pattern), row.syntax, 0, nullptr, allocator, nullptr,
+          &regex);
+      if (result != GRX_OK) {
+        return result;
+      }
+      GRX_Match * match = nullptr;
+      result = grx_match_create(regex, allocator, &match);
+      if (result == GRX_OK) {
+        int matched = 0;
+        GRX_Limits limits;
+        grx_limits_default(&limits);
+        if (budget) {
+          limits.max_match_memory = budget;
+        }
+        result = grx_regex_search(regex, row.subject, std::strlen(row.subject),
+            0, GRX_ENGINE_BACKTRACK, &limits, match, &matched);
+        if (result == GRX_ERR_LIMIT && budget) {
+          EXPECT_EQ(grx_match_error(match)->diag, GRX_DIAG_LIMIT_MATCH_MEMORY);
+        }
+        const GRX_Result first_result = result;
+        if (result == GRX_ERR_OOM) {
+          // The one-shot refusal has been consumed. Recovery must reuse the
+          // exact regex and Match whose search just failed.
+          EXPECT_EQ(matched, 0);
+          EXPECT_EQ(grx_match_error(match)->code, GRX_ERR_OOM);
+          result = grx_regex_search(regex, row.subject, std::strlen(row.subject),
+              0, GRX_ENGINE_BACKTRACK, &limits, match, &matched);
+          EXPECT_EQ(result, GRX_OK);
+          recovered_searches++;
+          EXPECT_EQ(grx_match_error(match)->code, GRX_OK);
+          EXPECT_EQ(grx_match_error(match)->diag, GRX_DIAG_NONE);
+        }
+        if (result == GRX_OK) {
+          EXPECT_EQ(matched, row.expected_match) << row.pattern;
+          size_t count = matched ? grx_regex_capture_count(regex) + 1 : 0;
+          if (!establish_baseline) {
+            EXPECT_EQ(count, baseline.size());
+          }
+          for (size_t i = 0; i < count; i++) {
+            GRX_Capture group;
+            EXPECT_EQ(grx_match_group(match, i, &group), GRX_OK);
+            if (establish_baseline) {
+              baseline.push_back(group);
+            }
+            else if (i < baseline.size()) {
+              EXPECT_EQ(group.start, baseline[i].start) << "group " << i;
+              EXPECT_EQ(group.end, baseline[i].end) << "group " << i;
+              compared_spans++;
+            }
+            if (group.start != GRX_NPOS) {
+              EXPECT_LE(group.start, group.end);
+              EXPECT_LE(group.end, std::strlen(row.subject));
+            }
+          }
+        }
+        grx_match_destroy(match);
+        if (first_result == GRX_ERR_OOM) {
+          result = first_result;
+        }
+      }
+      grx_regex_free(regex);
+      return result;
+    };
+    grxtest::FailingAllocator counter(0);
+    ASSERT_EQ(run(counter.get(), 0, true), GRX_OK) << row.pattern;
+    ASSERT_EQ(counter.live(), 0);
+    if (row.pressure) {
+      grxtest::FailingAllocator limited(0);
+      EXPECT_EQ(run(limited.get(), row.pressure), GRX_ERR_LIMIT);
+      EXPECT_EQ(limited.live(), 0);
+    }
+    for (long n = 1; n <= counter.requested(); n++) {
+      SCOPED_TRACE("allocation " + std::to_string(n));
+      grxtest::FailingAllocator allocator(n);
+      fault_runs++;
+      GRX_Result result = run(allocator.get());
+      if (result == GRX_OK && allocator.failed()) {
+        successful_fallbacks++;
+      }
+      EXPECT_TRUE(result == GRX_OK || result == GRX_ERR_OOM)
+          << row.pattern << " allocation " << n << ": "
+          << grx_result_string(result);
+      EXPECT_EQ(allocator.live(), 0) << row.pattern << " allocation " << n;
+    }
+  }
+  std::fprintf(stderr,
+      "Vim assertion OOM invariance: %zu fault runs, "
+      "%zu successful fallbacks, %zu recovered searches, %zu capture spans compared\n",
+      fault_runs, successful_fallbacks, recovered_searches, compared_spans);
+}
+
 TEST(OutOfMemory, TheHarnessItselfFailsWhatItSaysItFails) {
   // A sweep that never actually refused anything would pass forever. This
   // states that the injected failure happens and that the library notices.

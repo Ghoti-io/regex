@@ -161,6 +161,9 @@ typedef enum {
   GRX_IR_COUNT       ///< Closes the enum; not a node kind.
 } GRX_IRKind;
 
+/** A counted loop has lexical count and backedge-position history. */
+#define GRX_IR_REPEAT_LEXICAL_COUNTER GRX_BIT(18)
+
 /** @brief BACKREF: compare case-insensitively, using the folded code points. */
 #define GRX_IR_CASELESS GRX_BIT(0)
 /** @brief COND: an else branch is present. */
@@ -218,6 +221,12 @@ typedef enum {
 #define GRX_IR_LOOK_ROUND_BOUND GRX_BIT(12)
 #define GRX_IR_LOOK_PERSIST_CAPTURES GRX_BIT(13)
 #define GRX_IR_LOOK_PROVISIONAL_END GRX_BIT(14)
+#define GRX_IR_LOOK_DELAYED GRX_BIT(15)
+/** EMPTY: an explicit group preserves an observable epsilon frontier. */
+#define GRX_IR_EMPTY_FRONTIER GRX_BIT(16)
+/** End-marker presence claims the caller end without writing inside this body.
+ */
+#define GRX_IR_END_CONTEXT_ONLY GRX_BIT(17)
 
 /**
  * @brief LOOK: a negative one keeps what its body captured before failing.

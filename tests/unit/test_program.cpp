@@ -24,7 +24,7 @@ GRX_Inst inst(GRX_Opcode op, uint32_t x = 0, uint32_t y = 0,
   result.op = (uint8_t)op;
   result.mode = mode;
   result.flags = flags;
-  result.reserved = 0;
+  result.policy = 0;
   result.x = x;
   result.y = y;
   return result;
@@ -243,6 +243,46 @@ TEST(Program, DisassemblyRendersEveryOpcode) {
   grx_program_clear(&program);
 }
 
+TEST(Program, MixedForwardAndBackwardAssertionsDumpTheirOwnOperandKinds) {
+  GRX_Regex * regex = nullptr;
+  ASSERT_EQ(grx_regex_compile(
+                R"(\(a\)\@=a\(a\)\@<=[a-c])", GRX_SYNTAX_VIM_NFA, 0, &regex),
+      GRX_OK);
+  std::string dump = grxtest::capture_dump(
+      [&](FILE * out) { EXPECT_EQ(grx_regex_dump(regex, out), GRX_OK); });
+  size_t ahead = dump.find("ahead next=");
+  size_t behind = dump.find("behind next=");
+  ASSERT_NE(ahead, std::string::npos) << dump;
+  ASSERT_NE(behind, std::string::npos) << dump;
+  std::string ahead_line = dump.substr(ahead, dump.find('\n', ahead) - ahead);
+  std::string behind_line =
+      dump.substr(behind, dump.find('\n', behind) - behind);
+  EXPECT_EQ(ahead_line.find("forward="), std::string::npos) << dump;
+  EXPECT_NE(ahead_line.find("state=r"), std::string::npos) << dump;
+  EXPECT_NE(ahead_line.find("fresh"), std::string::npos) << dump;
+  EXPECT_NE(behind_line.find("forward=1..1"), std::string::npos) << dump;
+  EXPECT_NE(behind_line.find("state=r"), std::string::npos) << dump;
+  EXPECT_NE(behind_line.find("after-atom"), std::string::npos) << dump;
+  EXPECT_NE(behind_line.find("required-tail"), std::string::npos) << dump;
+  grx_regex_free(regex);
+}
+
+TEST(Program, RepeatedAssertionDumpExposesSharedStateAndMarkerRegisters) {
+  GRX_Regex * regex = nullptr;
+  ASSERT_EQ(grx_regex_compile(R"(\%(a\(a\ze\)\@<=\)\{0,3}a*b)",
+                GRX_SYNTAX_VIM_NFA, 0, &regex),
+      GRX_OK);
+  std::string dump = grxtest::capture_dump(
+      [&](FILE * out) { EXPECT_EQ(grx_regex_dump(regex, out), GRX_OK); });
+  EXPECT_NE(dump.find("repeat=r"), std::string::npos) << dump;
+  EXPECT_NE(dump.find(" marker=r"), std::string::npos) << dump;
+  EXPECT_NE(dump.find(" global=r"), std::string::npos) << dump;
+  EXPECT_NE(dump.find(" copy="), std::string::npos) << dump;
+  // KEEP_END consumes nothing; the mandatory literal still consumes one byte.
+  EXPECT_NE(dump.find("forward=1..1"), std::string::npos) << dump;
+  grx_regex_free(regex);
+}
+
 TEST(Program, DumpRejectsNullArguments) {
   GRX_Limits limits;
   grx_limits_default(&limits);
@@ -335,6 +375,64 @@ TEST(Facts, ReadingThemFromARegexRejectsNull) {
   EXPECT_EQ(grx_regex_facts(nullptr, &facts), GRX_ERR_INVALID);
   EXPECT_EQ(grx_regex_facts(&regex, nullptr), GRX_ERR_INVALID);
   EXPECT_EQ(grx_regex_facts(&regex, &facts), GRX_OK);
+}
+
+TEST(Program, AtomicFrontierOwnershipIsExplicitAndKeepsEngineEligibility) {
+  for (GRX_Syntax syntax : {GRX_SYNTAX_VIM_BACKTRACK, GRX_SYNTAX_VIM_NFA}) {
+    GRX_Regex * regex = nullptr;
+    ASSERT_EQ(grx_regex_compile(R"(a\+\(a\)\@>\(a\)\@<=)", syntax, 0, &regex),
+        GRX_OK);
+    bool nfa = syntax == GRX_SYNTAX_VIM_NFA;
+    EXPECT_EQ((regex->program.flags & GRX_PROGRAM_ATOMIC_FRONTIER) != 0, nfa);
+    size_t owners = 0;
+    for (size_t i = 0; i < regex->program.insts.count; i++) {
+      const GRX_Inst * instruction =
+          grx_program_at(&regex->program, (uint32_t)i);
+      if (instruction->op == GRX_OP_ATOMIC_BEGIN &&
+          (instruction->policy & GRX_POLICY_ATOMIC_FRONTIER)) {
+        owners++;
+        EXPECT_LT(instruction->x, regex->program.insts.count);
+        EXPECT_EQ(grx_program_at(&regex->program, instruction->x)->op,
+            GRX_OP_ATOMIC_END);
+      }
+    }
+    EXPECT_EQ(owners, nfa ? 1u : 0u);
+    std::string dump = grxtest::capture_dump(
+        [&](FILE * out) { EXPECT_EQ(grx_regex_dump(regex, out), GRX_OK); });
+    EXPECT_EQ(dump.find("frontier-owner") != std::string::npos, nfa);
+    GRX_Match * match = nullptr;
+    ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+    for (GRX_Engine engine :
+        {GRX_ENGINE_PIKE, GRX_ENGINE_BITSTATE, GRX_ENGINE_DFA}) {
+      int matched = 0;
+      EXPECT_EQ(grx_regex_search(
+                    regex, "aaab", 4, 0, engine, nullptr, match, &matched),
+          GRX_ERR_UNSUPPORTED);
+      EXPECT_FALSE(matched);
+    }
+    grx_match_destroy(match);
+    grx_regex_free(regex);
+  }
+}
+
+TEST(Program, AtomicReadAndMarkerContextPoliciesAreVisibleInDumps) {
+  for (const char * pattern : {R"(\(a\|b\)\%(a\1\)\@>\(a\1\)\@<=X)",
+           R"(\(a\)\?\%(a\ze\)\@>\%(a\)\@>b)"}) {
+    GRX_Regex * regex = nullptr;
+    ASSERT_EQ(
+        grx_regex_compile(pattern, GRX_SYNTAX_VIM_NFA, 0, &regex), GRX_OK);
+    std::string dump = grxtest::capture_dump(
+        [&](FILE * out) { EXPECT_EQ(grx_regex_dump(regex, out), GRX_OK); });
+    if (std::strstr(pattern, "ze")) {
+      EXPECT_NE(dump.find("end-context-owner"), std::string::npos);
+      EXPECT_NE(dump.find("context-only"), std::string::npos);
+    }
+    else {
+      EXPECT_NE(dump.find("reads-captures"), std::string::npos);
+      EXPECT_NE(dump.find("continuation-context"), std::string::npos);
+    }
+    grx_regex_free(regex);
+  }
 }
 
 int main(int argc, char ** argv) {

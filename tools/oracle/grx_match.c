@@ -223,6 +223,40 @@ static void print_spans(const GRX_Match * match, char separator) {
 }
 
 int main(int argc, char ** argv) {
+  GRX_Limits match_limits;
+  grx_limits_default(&match_limits);
+  int custom_steps = 0;
+  int positional_argc = 1;
+  for (int i = 1; i < argc; i++) {
+    if (strncmp(argv[i], "--max-steps", 11) != 0) {
+      argv[positional_argc++] = argv[i];
+      continue;
+    }
+    const char * value = argv[i] + 11;
+    if (*value++ != '=' || !*value || custom_steps) {
+      fprintf(stderr,
+          "grx_match: --max-steps requires one positive decimal value\n");
+      return 2;
+    }
+    size_t steps = 0;
+    for (; *value; value++) {
+      if (*value < '0' || *value > '9' ||
+          steps > (SIZE_MAX - (size_t)(*value - '0')) / 10) {
+        fprintf(
+            stderr, "grx_match: invalid or overflowing --max-steps value\n");
+        return 2;
+      }
+      steps = steps * 10 + (size_t)(*value - '0');
+    }
+    if (!steps) {
+      fprintf(stderr, "grx_match: --max-steps must be positive\n");
+      return 2;
+    }
+    match_limits.max_steps = steps;
+    custom_steps = 1;
+  }
+  argc = positional_argc;
+  argv[argc] = NULL;
   GRX_Syntax syntax = GRX_SYNTAX_ECMASCRIPT;
   if (argc > 1 && grx_syntax_from_name(argv[1], &syntax) != GRX_OK) {
     fprintf(stderr, "unknown dialect: %s\n", argv[1]);
@@ -493,6 +527,9 @@ int main(int argc, char ** argv) {
     GRX_SearchOptions search;
     grx_search_options_default(&search);
     search.engine = engine;
+    if (custom_steps) {
+      search.limits = &match_limits;
+    }
     if (third) {
       char * cursor = third + 1;
       search.begin = (size_t)strtoull(cursor, &cursor, 10);

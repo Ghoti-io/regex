@@ -767,25 +767,20 @@ TEST(Compile, TheWindowFilterNeverOffersAStartInsideACharacter) {
   grx_regex_free(regex);
 }
 
-TEST(Compile, AnEmptyMatchLeavesNoFirstByteSetUnlessKeepMovedTheStart) {
-  // Two passes answer "can this match nothing" independently - the tree walk
-  // that fills GRX_Facts::can_match_empty, and the program walk that gives up
-  // the moment it can reach MATCH without consuming. They have to agree, and
-  // where they do not is worth naming rather than smoothing over.
-  //
-  // They disagree on exactly one construct. `can_match_empty` is about the
-  // span the caller is *shown*, and `\K` can empty that span while the attempt
-  // still consumed input: `ab\K` matches only where "ab" is and reports the
-  // empty span after it. The prefilter is about what the attempt consumes, so
-  // it rightly keeps its set of {a}. Vim's `\zs` is the same construct.
+TEST(Compile, EmptyInputFactsAndFirstByteSetsRespectKeepConsumption) {
+  // KEEP changes the reported start; it does not skip required consumption.
+  // Both the IR facts and the prefilter describe that consuming requirement.
+  // In particular, ab\K can report an empty span on "ab" but cannot match
+  // an empty input. Check the public search as well as the static facts.
   struct Row { const char * pattern; int empty; int known; };
   const Row rows[] = {
     {"abc", 0, 1},      // neither
     {"a*", 1, 0},       // empty without consuming: no set
     {"(?:)", 1, 0},     // and the plainest form of it
     {"a|", 1, 0},       // one branch of an alternation is enough
-    {"\\Kabc", 1, 1},   // `\K` at the front changes nothing it can see
-    {"ab\\K", 1, 1},    // and at the back empties the span, not the attempt
+    {"\\Kabc", 0, 1},   // the literal is still required
+    {"ab\\K", 0, 1},    // only the reported span becomes empty
+    {"\\K", 1, 0},      // a marker alone consumes nothing
   };
   for (const Row & row : rows) {
     GRX_Regex * regex = nullptr;
@@ -796,6 +791,22 @@ TEST(Compile, AnEmptyMatchLeavesNoFirstByteSetUnlessKeepMovedTheStart) {
     GRX_Facts facts;
     ASSERT_EQ(grx_regex_facts(regex, &facts), GRX_OK);
     EXPECT_EQ(facts.can_match_empty != 0, row.empty != 0) << row.pattern;
+    GRX_Match * match = nullptr;
+    ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+    int matched = 0;
+    EXPECT_EQ(grx_regex_search(regex, "", 0, 0, GRX_ENGINE_BACKTRACK, nullptr,
+                  match, &matched), GRX_OK);
+    EXPECT_EQ(matched != 0, row.empty != 0) << row.pattern;
+    if (std::strcmp(row.pattern, "ab\\K") == 0) {
+      EXPECT_EQ(grx_regex_search(regex, "ab", 2, 0, GRX_ENGINE_BACKTRACK,
+                    nullptr, match, &matched), GRX_OK);
+      ASSERT_TRUE(matched);
+      GRX_Capture whole;
+      ASSERT_EQ(grx_match_group(match, 0, &whole), GRX_OK);
+      EXPECT_EQ(whole.start, 2u);
+      EXPECT_EQ(whole.end, 2u);
+    }
+    grx_match_destroy(match);
     EXPECT_EQ(facts.first_bytes_known != 0, row.known != 0) << row.pattern;
     if (row.known) {
       EXPECT_TRUE(first_byte_set(facts, 'a')) << row.pattern;

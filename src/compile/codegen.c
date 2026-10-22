@@ -47,6 +47,7 @@
  */
 
 #include <ghoti.io/regex/macros.h>
+#include <string.h>
 
 #include <ghoti.io/regex/core.h>
 #include <stddef.h>
@@ -64,6 +65,11 @@ typedef struct {
   size_t min;    ///< Shortest the subtree can match.
   size_t max;    ///< Longest it can match, or GRX_NPOS.
   uint8_t state; ///< 0 not asked, 1 answered, 2 asked and there is no answer.
+  uint32_t counted_register; ///< Lexical signed count/backedge/progress/origin registers, plus one.
+  uint32_t repeat_global; ///< Shared activation count and marker channel, plus one.
+  size_t repeat_owner; ///< Emission activation owning the repeat channel.
+  uint32_t repeat_register; ///< Shared by copies of one repeated assertion;
+                            ///< plus one.
 } SpanMemo;
 
 /** What one code-generation run carries. */
@@ -73,6 +79,7 @@ typedef struct {
   const GRX_Limits * limits; ///< Caps to apply.
   GRX_Error * error;         ///< Where a failure is reported.
   uint32_t registers;        ///< Progress registers handed out so far.
+  size_t repeat_sequence;   ///< Distinguishes expanded enclosing repeat copies.
   int no_memo;               ///< An opcode the bit-state memo cannot survive.
   int simulated;             ///< A loop the walk ends rather than a guard.
   int has_keep_end;          ///< A `\ze` claimed the end; see the epilogue.
@@ -293,9 +300,11 @@ typedef struct {
       uint32_t child;
       uint32_t stub;
       uint32_t split;
+      int nullable;
     } alternate;
     /** REPEAT, by expansion and as a loop; see gen_repeat_step(). */
     struct {
+      size_t activation;
       uint32_t body;
       uint32_t i;
       uint32_t stub;
@@ -361,6 +370,9 @@ static int reversed(const Codegen * codegen, const GRX_IRNode * node) {
 static GRX_Result emit(Codegen * codegen, GRX_Opcode op, uint8_t mode,
     uint32_t x, uint32_t y, const GRX_IRNode * node, uint32_t * out_index) {
   switch (op) {
+    case GRX_OP_COUNT_INIT:
+    case GRX_OP_COUNT_STEP:
+    case GRX_OP_COUNT_BACK:
     case GRX_OP_KEEP:
     case GRX_OP_KEEP_END:
     case GRX_OP_VERB:
@@ -385,17 +397,17 @@ static GRX_Result emit(Codegen * codegen, GRX_Opcode op, uint8_t mode,
   }
 
   GRX_Inst inst = {
-    .op = (uint8_t)op,
-    .mode = mode,
-    .flags = (uint8_t)(
-        ((node && reversed(codegen, node)) ? GRX_INST_REVERSE : 0u)
-        | ((node && (node->flags & GRX_IR_LINE_ANCHOR))
-            ? GRX_INST_LINE_ANCHOR : 0u)
-        | ((node && (node->flags & GRX_IR_NEWLINE_CRLF))
-            ? GRX_INST_NEWLINE_CRLF : 0u)),
-    .reserved = 0,
-    .x = x,
-    .y = y,
+      .op = (uint8_t)op,
+      .mode = mode,
+      .flags = (uint8_t)(((node && reversed(codegen, node)) ? GRX_INST_REVERSE
+                                                            : 0u) |
+          ((node && (node->flags & GRX_IR_LINE_ANCHOR)) ? GRX_INST_LINE_ANCHOR
+                                                        : 0u) |
+          ((node && (node->flags & GRX_IR_NEWLINE_CRLF)) ? GRX_INST_NEWLINE_CRLF
+                                                         : 0u)),
+      .policy = 0,
+      .x = x,
+      .y = y,
   };
 
   GRX_Result result = grx_program_add(codegen->program, &inst, out_index);
@@ -778,6 +790,9 @@ static GRX_Result gen_length_guard(
     return GRX_OK;
   }
 
+  if (codegen->program->look_spans.count > (size_t)GRX_INDEX_NONE - 2) {
+    return fail(codegen, GRX_DIAG_LIMIT_PROGRAM_SIZE, node);
+  }
   uint32_t offset = (uint32_t)codegen->program->look_spans.count;
   if (grx_arena_append(&codegen->program->look_spans, &min, NULL) != GRX_OK
       || grx_arena_append(&codegen->program->look_spans, &max, NULL)
@@ -808,6 +823,14 @@ static GRX_Result gen_alternate_step(Codegen * codegen, GenFrame * frame,
       GRX_Result result = emit_trampoline(codegen, node, &stub);
       if (result != GRX_OK) {
         return result;
+      }
+      frame->u.alternate.nullable = 0;
+      for (uint32_t branch = node->first_child; branch != GRX_INDEX_NONE;) {
+        if (can_match_empty(codegen, branch)) {
+          frame->u.alternate.nullable = 1;
+          break;
+        }
+        branch = grx_ir_node(codegen->ir, branch)->next_sibling;
       }
       frame->u.alternate.stub = stub;
       frame->u.alternate.child = child;
@@ -843,6 +866,9 @@ static GRX_Result gen_alternate_step(Codegen * codegen, GenFrame * frame,
       GRX_Inst * marked = grx_program_at(codegen->program, split);
       if (marked) {
         marked->flags |= GRX_INST_ALTERNATION;
+        if (frame->u.alternate.nullable) {
+          marked->policy |= GRX_POLICY_NULLABLE_BRANCH;
+        }
       }
       patch_x(codegen, split, here(codegen));
 
@@ -1101,9 +1127,57 @@ static GRX_Result gen_repeat_step(Codegen * codegen, GenFrame * frame,
     const GRX_IRNode * node, GenAction * action, uint32_t * out_child) {
   switch (frame->stage) {
     case 0: {
+      if (codegen->repeat_sequence == SIZE_MAX) {
+        return fail(codegen, GRX_DIAG_LIMIT_PROGRAM_SIZE, node);
+      }
+      frame->u.repeat.activation = ++codegen->repeat_sequence;
       uint32_t body = node->first_child;
       if (body == GRX_INDEX_NONE) {
         return fail(codegen, GRX_DIAG_INTERNAL, node);
+      }
+      if (node->flags & GRX_IR_REPEAT_LEXICAL_COUNTER) {
+        SpanMemo * memo = GRX_ARENA_AT(
+            SpanMemo, &codegen->node_span, frame->node);
+        if (!memo) {
+          return fail(codegen, GRX_DIAG_OUT_OF_MEMORY, node);
+        }
+        if (codegen->registers > UINT32_MAX - 5 ||
+            codegen->program->look_spans.count > GRX_INDEX_NONE - 3u) {
+          return fail(codegen, GRX_DIAG_LIMIT_PROGRAM_SIZE, node);
+        }
+        if (!memo->counted_register) {
+          memo->counted_register = codegen->registers + 1;
+          codegen->registers += 5;
+        }
+        size_t metadata[] = {node->min, node->max, memo->counted_register - 1};
+        uint32_t span = (uint32_t)codegen->program->look_spans.count;
+        for (size_t i = 0; i < 3; ++i) {
+          GRX_Result result = grx_arena_append(
+              &codegen->program->look_spans, &metadata[i], NULL);
+          if (result != GRX_OK) {
+            return result;
+          }
+        }
+        frame->u.repeat.reg = span;
+        frame->u.repeat.body = body;
+        GRX_Result result = emit(codegen, GRX_OP_COUNT_INIT, 0, span, 0, node, NULL);
+        if (result == GRX_OK) {
+          result = emit(codegen, GRX_OP_COUNT_STEP, node->mode, span, 0,
+              node, &frame->u.repeat.top);
+        }
+        if (result == GRX_OK) {
+          result = emit(codegen, GRX_OP_PROGRESS_SET, 0,
+              memo->counted_register + 3, 0, node, NULL);
+        }
+        if (result != GRX_OK) {
+          return result;
+        }
+        codegen->forward_tail = node->min == 1 && node->max == 1
+            ? codegen->forward_tail : 0;
+        frame->stage = 20;
+        *action = GEN_DESCEND;
+        *out_child = body;
+        return GRX_OK;
       }
       frame->u.repeat.body = body;
       frame->u.repeat.lazy = (node->mode == GRX_REPEAT_LAZY) ? 1u : 0u;
@@ -1166,6 +1240,15 @@ static GRX_Result gen_repeat_step(Codegen * codegen, GenFrame * frame,
             frame->u.repeat.pair_reg - 1, 0, node, NULL);
       }
       return GRX_OK;
+    }
+
+    case 20: {
+      GRX_Result result = emit(codegen, GRX_OP_COUNT_BACK, 0,
+          frame->u.repeat.reg, frame->u.repeat.top, node, NULL);
+      if (result == GRX_OK) {
+        patch_y(codegen, frame->u.repeat.top, here(codegen));
+      }
+      return result;
     }
 
     // One mandatory copy per iteration of this stage pair.
@@ -1796,6 +1879,156 @@ static GRX_Result gen_look_step(Codegen * codegen, GenFrame * frame,
       if (result != GRX_OK) {
         return result;
       }
+      for (size_t depth = codegen->frames.count - 1; depth > 0; depth--) {
+        const GenFrame * parent =
+            GRX_ARENA_AT(const GenFrame, &codegen->frames, depth - 1);
+        const GRX_IRNode * enclosing = grx_ir_node(codegen->ir, parent->node);
+        if (enclosing->kind == GRX_IR_LOOK) {
+          break;
+        }
+        if (enclosing->kind == GRX_IR_REPEAT) {
+          if (!(codegen->ir->flags & GRX_PROGRAM_LOOK_CONTEXT)) {
+            break;
+          }
+          if (enclosing->min == 1 && enclosing->max == 1 &&
+              node->mode != GRX_LOOK_BEHIND_POSITIVE &&
+              node->mode != GRX_LOOK_BEHIND_NEGATIVE) {
+            continue;
+          }
+          GRX_Inst * repeated = grx_program_at(codegen->program, look);
+          repeated->policy |= GRX_POLICY_LOOK_REPEATED;
+          SpanMemo * memo =
+              GRX_ARENA_AT(SpanMemo, &codegen->node_span, frame->node);
+          // Ahead copies share their activation channel. A backward BODY
+          // also needs the enclosing emission identity: a nullable inner
+          // repeat expanded again by its outer repeat is a fresh activation.
+          // This metadata is required even when span caching is optional.
+          if (!memo) {
+            return fail(codegen, GRX_DIAG_OUT_OF_MEMORY, node);
+          }
+          int behind = node->mode == GRX_LOOK_BEHIND_POSITIVE ||
+              node->mode == GRX_LOOK_BEHIND_NEGATIVE;
+          size_t context = 0;
+          size_t copy_ordinal = 0;
+          if (!memo->repeat_register || (behind &&
+              memo->repeat_owner != parent->u.repeat.activation)) {
+            memo->repeat_owner = parent->u.repeat.activation;
+            context |= GRX_LOOK_REPEAT_FIRST;
+            if (codegen->registers > UINT32_MAX - 3) {
+              return fail(codegen, GRX_DIAG_LIMIT_PROGRAM_SIZE, node);
+            }
+            memo->repeat_register = codegen->registers + 1;
+            codegen->registers++;
+            if (!memo->repeat_global) {
+              memo->repeat_global = codegen->registers + 1;
+              codegen->registers += 2;
+            }
+          }
+          if (enclosing->max != GRX_REPEAT_INF) {
+            context |= GRX_LOOK_REPEAT_BOUNDED;
+            size_t copy =
+                parent->u.repeat.i + (parent->stage == 5 ? enclosing->min : 0);
+            if (copy + 1 == enclosing->max) {
+              context |= GRX_LOOK_REPEAT_LAST;
+            }
+          }
+          if (behind) {
+            // Marker exits belong to the expanded continuation, not merely
+            // to the nearest IR node. Compose the static copy coordinates
+            // through every ancestor. Exact-one copies preserve the count
+            // while retaining their explicit exit boundary; an unbounded
+            // inner loop has its own dynamic activation within each copy.
+            size_t copies = 1;
+            size_t ordinal = 0;
+            int optional_pair = 0;
+            size_t owners = 0;
+            int exact_ancestors = 1;
+            int wrapped = enclosing->min == 1 && enclosing->max == 1;
+            int loop = enclosing->max == GRX_REPEAT_INF;
+            for (size_t owner_depth = depth; owner_depth > 0; owner_depth--) {
+              const GenFrame * owner_frame = GRX_ARENA_AT(
+                  const GenFrame, &codegen->frames, owner_depth - 1);
+              const GRX_IRNode * owner =
+                  grx_ir_node(codegen->ir, owner_frame->node);
+              if (owner->kind == GRX_IR_LOOK) {
+                break;
+              }
+              if (owner->kind != GRX_IR_REPEAT) {
+                continue;
+              }
+              if (owners && owner->min != owner->max) {
+                exact_ancestors = 0;
+              }
+              owners++;
+              size_t count = owner->max == GRX_REPEAT_INF
+                  ? (size_t)owner->min + 1 : owner->max;
+              if (!count) {
+                return fail(codegen, GRX_DIAG_LIMIT_PROGRAM_SIZE, node);
+              }
+              size_t copy = owner_frame->u.repeat.i +
+                  (owner_frame->stage == 5 ? owner->min : 0);
+              if (copies > SIZE_MAX / (count ? count : 1) ||
+                  copy > (SIZE_MAX - ordinal) / copies) {
+                return fail(codegen, GRX_DIAG_LIMIT_PROGRAM_SIZE, node);
+              }
+              ordinal += copy * copies;
+              copies *= count;
+              if (owner->max != GRX_REPEAT_INF &&
+                  owner->max - owner->min >= 2) {
+                optional_pair = 1;
+              }
+            }
+            copy_ordinal = ordinal;
+            if (!loop && exact_ancestors && enclosing->max &&
+                copies / enclosing->max * (enclosing->max - enclosing->min) >= 2) {
+              optional_pair = 1;
+            }
+            if ((!loop && copies > 1) || wrapped || (loop && owners > 1)) {
+              context |= GRX_LOOK_REPEAT_COPY_POLICY;
+              if (!loop && exact_ancestors && enclosing->min &&
+                  parent->stage == 2) {
+                context |= GRX_LOOK_REPEAT_COPY_COMPARE;
+              }
+              size_t expiration = copies - (wrapped ? 1 : 2);
+              if (loop && enclosing->min && exact_ancestors) {
+                context |= GRX_LOOK_REPEAT_COPY_DYNAMIC;
+              }
+              else if (loop || !optional_pair || ordinal != expiration) {
+                context |= GRX_LOOK_REPEAT_COPY_KEEP_END;
+              }
+            }
+          }
+          if (can_match_empty(codegen, enclosing->first_child)) {
+            context |= GRX_LOOK_REPEAT_NULLABLE;
+          }
+          const GRX_IRNode * after =
+              grx_ir_node(codegen->ir, enclosing->next_sibling);
+          if (after && after->kind == GRX_IR_REPEAT &&
+              can_match_empty(codegen, enclosing->next_sibling)) {
+            context |= GRX_LOOK_REPEAT_EXIT_REPEAT;
+          }
+          size_t state = memo->repeat_register - 1;
+          size_t global = memo->repeat_global - 1;
+          if (codegen->program->look_spans.count > (size_t)GRX_INDEX_NONE - 4) {
+            return fail(codegen, GRX_DIAG_LIMIT_PROGRAM_SIZE, node);
+          }
+          if (node->mode != GRX_LOOK_BEHIND_POSITIVE &&
+              node->mode != GRX_LOOK_BEHIND_NEGATIVE) {
+            repeated->x = (uint32_t)codegen->program->look_spans.count;
+          }
+          if (grx_arena_append(&codegen->program->look_spans, &state, NULL) !=
+                  GRX_OK ||
+              grx_arena_append(&codegen->program->look_spans, &context, NULL) !=
+                  GRX_OK ||
+              grx_arena_append(&codegen->program->look_spans, &global, NULL) !=
+                  GRX_OK ||
+              grx_arena_append(&codegen->program->look_spans, &copy_ordinal, NULL) !=
+                  GRX_OK) {
+            return fail(codegen, GRX_DIAG_OUT_OF_MEMORY, node);
+          }
+          break;
+        }
+      }
       if (node->flags & (GRX_IR_LOOK_KEEP_CAPTURES | GRX_IR_LOOK_CONDITION)) {
         GRX_Inst * marked = grx_program_at(codegen->program, look);
         if (marked) {
@@ -1816,6 +2049,21 @@ static GRX_Result gen_look_step(Codegen * codegen, GenFrame * frame,
       }
       if (node->flags & GRX_IR_LOOK_PROVISIONAL_END) {
         grx_program_at(codegen->program, look)->flags |= GRX_INST_LOOK_PROVISIONAL_END;
+      }
+      if (node->flags & GRX_IR_LOOK_DELAYED) {
+        grx_program_at(codegen->program, look)->policy |=
+            GRX_POLICY_LOOK_DELAYED;
+      }
+      uint32_t capture_low = GRX_INDEX_NONE;
+      uint32_t capture_high = 0;
+      result =
+          capture_span(codegen, node->first_child, &capture_low, &capture_high);
+      if (result != GRX_OK) {
+        return result;
+      }
+      if (capture_high) {
+        grx_program_at(codegen->program, look)->policy |=
+            GRX_POLICY_LOOK_HAS_CAPTURES;
       }
       frame->u.look.mark = look;
 
@@ -2062,7 +2310,9 @@ static GRX_Result gen_step(Codegen * codegen, GenFrame * frame,
     const GRX_IRNode * node, GenAction * action, uint32_t * out_child) {
   switch (node->kind) {
     case GRX_IR_EMPTY:
-      return GRX_OK;
+      return node->flags & GRX_IR_EMPTY_FRONTIER
+          ? emit(codegen, GRX_OP_JMP, 0, here(codegen) + 1, 0, node, NULL)
+          : GRX_OK;
 
     case GRX_IR_CHAR:
       return emit(codegen, GRX_OP_CHAR, 0, node->a, 0, node, NULL);
@@ -2128,6 +2378,10 @@ static GRX_Result gen_step(Codegen * codegen, GenFrame * frame,
         if (result != GRX_OK) {
           return result;
         }
+        if (!can_match_empty(codegen, node->first_child)) {
+          grx_program_at(codegen->program, begin)->policy |=
+              GRX_POLICY_ATOMIC_REQUIRED;
+        }
         frame->u.one.slot = begin;
         frame->stage = 1;
         *action = GEN_DESCEND;
@@ -2152,9 +2406,17 @@ static GRX_Result gen_step(Codegen * codegen, GenFrame * frame,
     case GRX_IR_KEEP:
       return emit(codegen, GRX_OP_KEEP, 0, 0, 0, node, NULL);
 
-    case GRX_IR_KEEP_END:
+    case GRX_IR_KEEP_END: {
       codegen->has_keep_end = 1;
-      return emit(codegen, GRX_OP_KEEP_END, 0, 0, 0, node, NULL);
+      uint32_t marker = GRX_INDEX_NONE;
+      GRX_Result result =
+          emit(codegen, GRX_OP_KEEP_END, 0, 0, 0, node, &marker);
+      if (result == GRX_OK && (node->flags & GRX_IR_END_CONTEXT_ONLY)) {
+        grx_program_at(codegen->program, marker)->policy |=
+            GRX_POLICY_END_CONTEXT_ONLY;
+      }
+      return result;
+    }
 
     case GRX_IR_VERB:
       return emit(codegen, GRX_OP_VERB, node->mode, node->a, 0, node, NULL);
@@ -2432,6 +2694,456 @@ static GRX_Result gen_subroutines(Codegen * codegen) {
   return GRX_OK;
 }
 
+/** Assertion scheduling order derived from paired consuming frontiers. */
+enum {
+  LOOK_COST_EXIT = 0,
+  LOOK_COST_ASSERTION = 4,
+  LOOK_COST_ANY = 3,
+  LOOK_COST_BEHIND = 5,
+  LOOK_COST_CLASS = 5,
+  LOOK_COST_REFERENCE = 6,
+  LOOK_COST_LITERAL = 7,
+};
+
+/** Does an epsilon arm enter another atomic body before consuming? */
+static int epsilon_atomic(Codegen * codegen, uint32_t start, uint32_t * queue,
+    unsigned char * visited) {
+  size_t count = codegen->program->insts.count;
+  memset(visited, 0, count);
+  size_t read = 0, write = 0;
+  if (start < count) {
+    queue[write++] = start;
+    visited[start] = 1;
+  }
+  while (read < write) {
+    uint32_t pc = queue[read++];
+    const GRX_Inst * inst = grx_program_at(codegen->program, pc);
+    if (inst->op == GRX_OP_ATOMIC_BEGIN) {
+      return 1;
+    }
+    uint32_t targets[2] = {GRX_INDEX_NONE, GRX_INDEX_NONE};
+    if (inst->op == GRX_OP_JMP || inst->op == GRX_OP_SPLIT) {
+      targets[0] = inst->x;
+      if (inst->op == GRX_OP_SPLIT) {
+        targets[1] = inst->y;
+      }
+    }
+    else if (inst->op == GRX_OP_SAVE || inst->op == GRX_OP_ASSERT ||
+        inst->op == GRX_OP_PROGRESS_SET || inst->op == GRX_OP_PROGRESS_CHECK) {
+      targets[0] = pc + 1;
+    }
+    else if (inst->op == GRX_OP_LOOK) {
+      targets[0] = inst->y;
+    }
+    for (size_t i = 0; i < 2; i++) {
+      if (targets[i] < count && !visited[targets[i]]) {
+        visited[targets[i]] = 1;
+        queue[write++] = targets[i];
+      }
+    }
+  }
+  return 0;
+}
+
+/** Resolve scheduling over compiled control flow, without native recursion. */
+static GRX_Result resolve_look_context(Codegen * codegen) {
+  if (!(codegen->ir->flags & GRX_PROGRAM_LOOK_CONTEXT)) {
+    return GRX_OK;
+  }
+  size_t count = codegen->program->insts.count;
+  if (count > SIZE_MAX / 4) {
+    return fail(codegen, GRX_DIAG_LIMIT_PROGRAM_SIZE, NULL);
+  }
+  unsigned char * cost =
+      gcu_allocator_malloc(codegen->program->insts.allocator, count * 4);
+  if (!cost) {
+    return fail(codegen, GRX_DIAG_OUT_OF_MEMORY, NULL);
+  }
+  for (size_t i = 0; i < count * 4; i++) {
+    cost[i] = 0;
+  }
+  unsigned char * base = cost;
+  // Reverse dependencies turn this finite monotone analysis into a worklist
+  // walk. Each value rises at most seven times; long flat jumps and loops do
+  // not require rescanning the entire program after each changed node.
+  typedef struct {
+    uint32_t source;
+    uint32_t next;
+  } Dependency;
+  const GRX_Allocator * allocator = codegen->program->insts.allocator;
+  if (count > UINT32_MAX / 2 || count > SIZE_MAX / (2 * sizeof(Dependency))) {
+    gcu_allocator_free(allocator, base);
+    return fail(codegen, GRX_DIAG_LIMIT_PROGRAM_SIZE, NULL);
+  }
+  uint32_t * heads = gcu_allocator_malloc(allocator, count * sizeof(*heads));
+  Dependency * edges =
+      gcu_allocator_malloc(allocator, count * 2 * sizeof(*edges));
+  uint32_t * queue = gcu_allocator_malloc(allocator, count * sizeof(*queue));
+  unsigned char * queued = gcu_allocator_malloc(allocator, count);
+  if (!heads || !edges || !queue || !queued) {
+    gcu_allocator_free(allocator, heads);
+    gcu_allocator_free(allocator, edges);
+    gcu_allocator_free(allocator, queue);
+    gcu_allocator_free(allocator, queued);
+    gcu_allocator_free(allocator, base);
+    return fail(codegen, GRX_DIAG_OUT_OF_MEMORY, NULL);
+  }
+  for (size_t i = 0; i < count; i++) {
+    heads[i] = GRX_INDEX_NONE;
+  }
+  uint32_t edge_count = 0;
+  for (size_t i = 0; i < count; i++) {
+    const GRX_Inst * inst = grx_program_at(codegen->program, (uint32_t)i);
+    uint32_t targets[2] = {(uint32_t)(i + 1), GRX_INDEX_NONE};
+    if (inst->op == GRX_OP_JMP || inst->op == GRX_OP_SPLIT) {
+      targets[0] = inst->x;
+      targets[1] = inst->op == GRX_OP_SPLIT ? inst->y : GRX_INDEX_NONE;
+    }
+    else if (inst->op == GRX_OP_LOOK) {
+      targets[0] = inst->y;
+    }
+    for (size_t j = 0; j < 2; j++) {
+      if (targets[j] < count) {
+        edges[edge_count] = (Dependency){(uint32_t)i, heads[targets[j]]};
+        heads[targets[j]] = edge_count++;
+      }
+    }
+  }
+  for (size_t pass = 0; pass < 4; pass++) {
+    cost = base + pass * count;
+    for (size_t i = 0; i < count; i++) {
+      queue[i] = (uint32_t)(count - i - 1);
+      queued[i] = 1;
+    }
+    size_t read = 0;
+    size_t write = 0;
+    size_t pending = count;
+    while (pending) {
+      size_t i = queue[read];
+      read = (read + 1) % count;
+      pending--;
+      queued[i] = 0;
+      const GRX_Inst * inst = grx_program_at(codegen->program, (uint32_t)i);
+      unsigned char value = 0;
+      if (pass == 2) {
+        switch ((GRX_Opcode)inst->op) {
+        case GRX_OP_MATCH:
+          value = 1;
+          break;
+        case GRX_OP_CHAR:
+        case GRX_OP_CLASS:
+        case GRX_OP_ANY:
+        case GRX_OP_ANY_NL:
+          break;
+        case GRX_OP_LOOK:
+          value = inst->y < count ? cost[inst->y] : 0;
+          break;
+        case GRX_OP_JMP:
+          value = inst->x < count ? cost[inst->x] : 0;
+          break;
+        case GRX_OP_SPLIT:
+          value = inst->x < count && inst->y < count
+              ? (unsigned char)(cost[inst->x] || cost[inst->y])
+              : 0;
+          break;
+        default:
+          value = i + 1 < count ? cost[i + 1] : 0;
+          break;
+        }
+      }
+      else {
+        switch ((GRX_Opcode)inst->op) {
+        case GRX_OP_MATCH:
+          value = pass == 1 ? LOOK_COST_CLASS : 0;
+          break;
+        case GRX_OP_CHAR:
+          value = LOOK_COST_LITERAL;
+          break;
+        case GRX_OP_CLASS:
+          value = LOOK_COST_CLASS;
+          break;
+        case GRX_OP_ANY:
+        case GRX_OP_ANY_NL:
+          value = LOOK_COST_ANY;
+          break;
+        case GRX_OP_BACKREF:
+          value = pass == 1 || (i + 1 < count && cost[i + 1])
+              ? LOOK_COST_REFERENCE
+              : 0;
+          break;
+        case GRX_OP_LOOK:
+          value = LOOK_COST_ASSERTION;
+          break;
+        case GRX_OP_JMP:
+          value = inst->x < count ? cost[inst->x] : 0;
+          break;
+        case GRX_OP_SPLIT:
+          if (inst->x < count && inst->y < count &&
+              (pass != 0 || !(inst->policy & GRX_POLICY_NULLABLE_BRANCH))) {
+            value =
+                cost[inst->x] < cost[inst->y] ? cost[inst->x] : cost[inst->y];
+          }
+          break;
+        case GRX_OP_SAVE:
+        case GRX_OP_ASSERT:
+        case GRX_OP_PROGRESS_SET:
+        case GRX_OP_PROGRESS_CHECK:
+        case GRX_OP_RESET:
+          value = i + 1 < count ? cost[i + 1] : 0;
+          break;
+        default:
+          break;
+        }
+      }
+      if (value != cost[i]) {
+        cost[i] = value;
+        for (uint32_t edge = heads[i]; edge != GRX_INDEX_NONE;
+            edge = edges[edge].next) {
+          uint32_t source = edges[edge].source;
+          if (!queued[source]) {
+            queued[source] = 1;
+            queue[write] = source;
+            write = (write + 1) % count;
+            pending++;
+          }
+        }
+      }
+    }
+  }
+  // An immediate accepting exit and a reference transition complete directly.
+  // Other continuations reserve the atomic result's accepting frontier.
+  for (size_t i = 0; i < count; i++) {
+    GRX_Inst * atomic = grx_program_at(codegen->program, (uint32_t)i);
+    if (atomic->op != GRX_OP_ATOMIC_BEGIN) {
+      continue;
+    }
+    codegen->program->flags |= GRX_PROGRAM_ATOMIC_FRONTIER;
+    for (size_t body = i + 1; body < atomic->x; body++) {
+      const GRX_Inst * part = grx_program_at(codegen->program, (uint32_t)body);
+      if (part->op == GRX_OP_BACKREF) {
+        atomic->policy |= GRX_POLICY_ATOMIC_READS_CAPTURES;
+      }
+      if (part->op == GRX_OP_KEEP_END &&
+          (part->policy & GRX_POLICY_END_CONTEXT_ONLY)) {
+        atomic->policy |= GRX_POLICY_ATOMIC_END_OWNER;
+      }
+      if (part->op == GRX_OP_SAVE && part->x >= 2) {
+        atomic->policy |= GRX_POLICY_ATOMIC_HAS_CAPTURES;
+      }
+    }
+    size_t next = (size_t)atomic->x + 1;
+    int explicit_end_frontier = 0;
+    while (next < count) {
+      const GRX_Inst * tail = grx_program_at(codegen->program, (uint32_t)next);
+      if (tail->op == GRX_OP_JMP && tail->x != next + 1 && tail->x > next) {
+        next = tail->x;
+        continue;
+      }
+      if (tail->op == GRX_OP_KEEP_END ||
+          (tail->op == GRX_OP_SAVE && tail->x == 1) ||
+          (tail->op == GRX_OP_ASSERT &&
+              tail->mode == GRX_ASSERT_CLUSTER_BOUNDARY)) {
+        if (tail->op == GRX_OP_KEEP_END &&
+            !(tail->policy & GRX_POLICY_END_CONTEXT_ONLY)) {
+          explicit_end_frontier = 1;
+        }
+        next++;
+        continue;
+      }
+      int nullable_atomic = tail->op == GRX_OP_SPLIT &&
+          (epsilon_atomic(codegen, tail->x, queue, queued) ||
+              epsilon_atomic(codegen, tail->y, queue, queued));
+      int capture_dependent = 0;
+      if (tail->op == GRX_OP_LOOK) {
+        for (size_t body = next + 1; body < tail->y; body++) {
+          if (grx_program_at(codegen->program, (uint32_t)body)->op ==
+              GRX_OP_BACKREF) {
+            capture_dependent = 1;
+          }
+        }
+      }
+      if (tail->op == GRX_OP_LOOK &&
+          (tail->mode == GRX_LOOK_BEHIND_POSITIVE ||
+              tail->mode == GRX_LOOK_BEHIND_NEGATIVE)) {
+        atomic->policy |= GRX_POLICY_ATOMIC_CONTEXT_CONTINUATION;
+      }
+      if ((!explicit_end_frontier &&
+              tail->op != GRX_OP_MATCH && tail->op != GRX_OP_BACKREF &&
+              !capture_dependent && !nullable_atomic) ||
+          (explicit_end_frontier && tail->op == GRX_OP_MATCH &&
+              !(atomic->policy & (GRX_POLICY_ATOMIC_REQUIRED |
+                  GRX_POLICY_ATOMIC_HAS_CAPTURES)))) {
+        atomic->policy |= GRX_POLICY_ATOMIC_FRONTIER;
+        codegen->program->flags |= GRX_PROGRAM_ATOMIC_FRONTIER;
+      }
+      break;
+    }
+  }
+  uint32_t references = 0;
+  for (size_t i = 0; i < count; i++) {
+    heads[i] = references;
+    if (grx_program_at(codegen->program, (uint32_t)i)->op == GRX_OP_BACKREF) {
+      references++;
+    }
+  }
+  gcu_allocator_free(allocator, edges);
+  gcu_allocator_free(allocator, queue);
+  gcu_allocator_free(allocator, queued);
+  cost = base;
+  for (size_t i = 0; i < count; i++) {
+    GRX_Inst * inst = grx_program_at(codegen->program, (uint32_t)i);
+    if (inst->op != GRX_OP_LOOK || inst->y >= count || i + 1 >= count) {
+      continue;
+    }
+    unsigned char body = cost[count + i + 1];
+    if (inst->policy & GRX_POLICY_LOOK_REPEATED) {
+      int behind = inst->mode == GRX_LOOK_BEHIND_POSITIVE ||
+          inst->mode == GRX_LOOK_BEHIND_NEGATIVE;
+      size_t offset = (size_t)inst->x + (behind ? 3 : 1);
+      size_t * context =
+          GRX_ARENA_AT(size_t, &codegen->program->look_spans, offset);
+      const GRX_Inst * first = grx_program_at(codegen->program, inst->y);
+      if (first->op == GRX_OP_CHAR && inst->y + 1 < count &&
+          cost[2 * count + inst->y + 1]) {
+        *context |= GRX_LOOK_REPEAT_EXIT_NULLABLE;
+      }
+      if (cost[inst->y] >= LOOK_COST_LITERAL) {
+        *context |= GRX_LOOK_REPEAT_LITERAL_FRONTIER;
+      }
+    }
+
+    if (heads[inst->y] != heads[i + 1]) {
+      inst->policy |= GRX_POLICY_LOOK_READS_CAPTURES;
+    }
+    if (!cost[2 * count + inst->y]) {
+      inst->flags |= GRX_INST_LOOK_REQUIRED;
+    }
+    if (inst->mode == GRX_LOOK_BEHIND_POSITIVE ||
+        inst->mode == GRX_LOOK_BEHIND_NEGATIVE) {
+      // Backward candidate evaluation is postponed one frontier level
+      // beyond its forward body: class/dot/nullable bodies can remain pending
+      // across another assertion, while mandatory literal bodies resolve.
+      if (body) {
+        body--;
+      }
+      if (body > LOOK_COST_BEHIND) {
+        body = LOOK_COST_BEHIND;
+      }
+      size_t behind_min = 0;
+      size_t behind_max = 0;
+      if (grx_program_look_span(
+              codegen->program, inst->x, &behind_min, &behind_max) &&
+          behind_max == GRX_NPOS && body > LOOK_COST_ASSERTION) {
+        body = LOOK_COST_ASSERTION;
+      }
+      // Capture-dependent candidate bodies require a fresh base even when
+      // their consuming frontier would otherwise run eagerly.
+      if (heads[inst->y] != heads[i + 1] && cost[inst->y] &&
+          !cost[2 * count + inst->y]) {
+        inst->policy |= GRX_POLICY_LOOK_FRESH;
+      }
+    }
+    if ((inst->mode == GRX_LOOK_BEHIND_POSITIVE ||
+            inst->mode == GRX_LOOK_BEHIND_NEGATIVE) &&
+        cost[3 * count + inst->y] >= LOOK_COST_CLASS) {
+      inst->policy |= GRX_POLICY_LOOK_REPLACE_END;
+    }
+    const GRX_Inst * continuation = grx_program_at(codegen->program, inst->y);
+    if ((inst->mode == GRX_LOOK_BEHIND_POSITIVE ||
+            inst->mode == GRX_LOOK_BEHIND_NEGATIVE) &&
+        continuation->op == GRX_OP_KEEP && inst->y + 1 < count &&
+        !cost[2 * count + inst->y + 1]) {
+      inst->policy |= GRX_POLICY_LOOK_REPLACE_END;
+    }
+    if (cost[inst->y] && body <= cost[inst->y]) {
+      inst->policy |= GRX_POLICY_LOOK_FRONTIER;
+      // Ahead assertions have no length span, so x names their state register.
+      if (inst->mode == GRX_LOOK_AHEAD_POSITIVE ||
+          inst->mode == GRX_LOOK_AHEAD_NEGATIVE) {
+        inst->policy |= GRX_POLICY_LOOK_FRESH;
+        if (!(inst->policy & GRX_POLICY_LOOK_REPEATED)) {
+          if (codegen->registers == UINT32_MAX) {
+            gcu_allocator_free(allocator, heads);
+            gcu_allocator_free(codegen->program->insts.allocator, cost);
+            return fail(codegen, GRX_DIAG_LIMIT_PROGRAM_SIZE, NULL);
+          }
+          inst->x = codegen->registers++;
+        }
+      }
+      else {
+        if (!cost[2 * count + inst->y]) {
+          inst->policy |= GRX_POLICY_LOOK_FRESH;
+        }
+        size_t min = 0;
+        size_t max = 0;
+        if (!grx_program_look_span(codegen->program, inst->x, &min, &max)) {
+          gcu_allocator_free(allocator, heads);
+          gcu_allocator_free(codegen->program->insts.allocator, cost);
+          return fail(codegen, GRX_DIAG_INTERNAL, NULL);
+        }
+        size_t repeat_state = 0;
+        size_t repeat_context = 0;
+        size_t repeat_global = 0;
+        size_t repeat_copy = 0;
+        if (inst->policy & GRX_POLICY_LOOK_REPEATED) {
+          repeat_state = *GRX_ARENA_AT(
+              const size_t, &codegen->program->look_spans, (size_t)inst->x + 2);
+          repeat_context = *GRX_ARENA_AT(
+              const size_t, &codegen->program->look_spans, (size_t)inst->x + 3);
+          repeat_global = *GRX_ARENA_AT(
+              const size_t, &codegen->program->look_spans, (size_t)inst->x + 4);
+          repeat_copy = *GRX_ARENA_AT(
+              const size_t, &codegen->program->look_spans, (size_t)inst->x + 5);
+        }
+        size_t metadata_count =
+            (inst->policy & GRX_POLICY_LOOK_REPEATED) ? 7 : 3;
+        if (codegen->registers == UINT32_MAX ||
+            codegen->program->look_spans.count >
+                (size_t)GRX_INDEX_NONE - metadata_count) {
+          gcu_allocator_free(allocator, heads);
+          gcu_allocator_free(codegen->program->insts.allocator, cost);
+          return fail(codegen, GRX_DIAG_LIMIT_PROGRAM_SIZE, NULL);
+        }
+        uint32_t span = (uint32_t)codegen->program->look_spans.count;
+        size_t state = codegen->registers++;
+        GRX_Result stored =
+            grx_arena_append(&codegen->program->look_spans, &min, NULL);
+        if (stored == GRX_OK) {
+          stored = grx_arena_append(&codegen->program->look_spans, &max, NULL);
+        }
+        if (stored == GRX_OK) {
+          stored =
+              grx_arena_append(&codegen->program->look_spans, &state, NULL);
+        }
+        if (stored != GRX_OK) {
+          gcu_allocator_free(allocator, heads);
+          gcu_allocator_free(codegen->program->insts.allocator, cost);
+          return fail(codegen, GRX_DIAG_OUT_OF_MEMORY, NULL);
+        }
+        if ((inst->policy & GRX_POLICY_LOOK_REPEATED) &&
+            (grx_arena_append(&codegen->program->look_spans, &repeat_state,
+                 NULL) != GRX_OK ||
+                grx_arena_append(&codegen->program->look_spans, &repeat_context,
+                    NULL) != GRX_OK ||
+                grx_arena_append(&codegen->program->look_spans, &repeat_global,
+                    NULL) != GRX_OK ||
+                grx_arena_append(&codegen->program->look_spans, &repeat_copy,
+                    NULL) != GRX_OK)) {
+          gcu_allocator_free(allocator, heads);
+          gcu_allocator_free(codegen->program->insts.allocator, cost);
+          return fail(codegen, GRX_DIAG_OUT_OF_MEMORY, NULL);
+        }
+        inst->x = span;
+        inst->policy |= GRX_POLICY_LOOK_AFTER_ATOM;
+      }
+      inst->policy |= GRX_POLICY_LOOK_REPLACE_END;
+    }
+  }
+  gcu_allocator_free(allocator, heads);
+  gcu_allocator_free(codegen->program->insts.allocator, cost);
+  return GRX_OK;
+}
+
 GRX_Result grx_codegen_program(const GRX_IR * ir, const GRX_Limits * limits,
     GRX_Error * out_error, GRX_Program * out_program) {
   if (!ir || !limits || !out_program) {
@@ -2545,6 +3257,10 @@ GRX_Result grx_codegen_program(const GRX_IR * ir, const GRX_Limits * limits,
     result = gen_subroutines(&codegen);
   }
 
+  if (result == GRX_OK) {
+    result = resolve_look_context(&codegen);
+  }
+
   // The fixups are scaffolding: every one of them has been spent patching a
   // CALL by now, and the program keeps nothing that points into them.
   grx_arena_clear(&codegen.fixups);
@@ -2557,7 +3273,8 @@ GRX_Result grx_codegen_program(const GRX_IR * ir, const GRX_Limits * limits,
     return result;
   }
 
-  out_program->flags = ir->flags;
+  out_program->flags =
+      ir->flags | (out_program->flags & GRX_PROGRAM_ATOMIC_FRONTIER);
   if (has_backref) {
     // A reference can name a group that is still open, and then it wants the
     // span that group last closed with rather than the half-written one.

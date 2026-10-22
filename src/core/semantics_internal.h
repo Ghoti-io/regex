@@ -71,8 +71,12 @@ extern "C" {
  * guarantees by refusing GRX_OPT_WTF8 without GRX_OPT_UTF.
  */
 #define GRX_PROGRAM_WTF8 GRX_BIT(12)
-/** Assertion end markers expire when the caller consumes another atom. */
+/** Assertions select a capture context from their continuation frontier. */
+#define GRX_PROGRAM_LOOK_CONTEXT GRX_BIT(9)
+/** Assertion end markers carry undoable continuation and subrun ownership. */
 #define GRX_PROGRAM_PROVISIONAL_LOOK_END GRX_BIT(10)
+/** Atomic accepting frontiers can be owned by earlier search attempts. */
+#define GRX_PROGRAM_ATOMIC_FRONTIER GRX_BIT(11)
 
 /**
  * @brief An empty subject has a segmentation boundary at offset 0.

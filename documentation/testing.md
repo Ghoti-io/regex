@@ -1721,6 +1721,26 @@ ordinary text where PCRE2 refuses it; `$12` falling back to `$1` and a "2"
 where PCRE2 takes every digit; and a reference to a group that exists and did
 not participate substituting nothing where PCRE2's default is an error.
 
+Vim assertion behavior is checked by `tests/unit/test_vim_profiles.cpp` and
+the committed oracle-authored conformance vectors. Run `make test tools` for
+the ordinary and sanitizer gates, and the Vim differential targets for fresh
+paired comparisons without result exclusions.
+
+Public regressions cover atomic BODY completion,
+read/report ownership, capture-free true/false/true cases, and same-object search
+reuse at offsets 0,1,2,0. Allocation-failure sweeps compare exact successful
+fallback capture spans, including the chained-marker zero-span case. IR tests
+separate KEEP/KEEP_END zero-width span analysis from actual VERB_ACCEPT behavior.
+The driver accepts `grx_match DIALECT [ENGINE] [MODE] [--max-steps=N]`;
+`MODE` can be `all`, and the step control may precede or follow the positional
+engine/mode arguments. `N` must be one positive decimal integer fitting `size_t`;
+empty, zero, signed, nondecimal, overflowing and duplicate values are rejected.
+In `all` mode the same cap applies separately to every public search: step usage
+resets for each search-next call, while the configured cap remains in force.
+The CLI `--max-steps` control is exercised through `all`: the first match fits,
+the next search exceeds the cap, and the final output must remain a limit error.
+Clearing limits only before search-next is rejected by that regression.
+
 For Vim replacements, every output difference is a disagreement. This includes
 capture loss in nested positive lookbehind; no witness-based exemption remains.
 All such runtime differences remain compatibility work.

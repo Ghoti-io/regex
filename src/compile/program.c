@@ -42,6 +42,7 @@ const char * grx_opcode_name(GRX_Opcode op) {
     "backref", "look",
     "scan", "rewind", "atomic-begin", "atomic-end", "cond", "call", "ret",
     "keep", "keep-end", "verb", "script-run", "callout",
+    "count-init", "count-step", "count-back",
   };
   // NULL-checked for the reason ir_kind_name() is: an opcode added without
   // a mnemonic is a zeroed slot, and a disassembler that crashes hides the
@@ -242,6 +243,17 @@ static void dump_operands(
         fprintf(out, " set=#%u", inst->x);
       }
       break;
+    case GRX_OP_COUNT_INIT:
+    case GRX_OP_COUNT_STEP:
+    case GRX_OP_COUNT_BACK:
+      fprintf(out, "count=#%u, %u", inst->x, inst->y);
+      if (inst->x < program->look_spans.count &&
+          program->look_spans.count - inst->x >= 3) {
+        const size_t * count = GRX_ARENA_AT(
+            const size_t, &program->look_spans, inst->x);
+        fprintf(out, " (r%zu, %zu..%zu)", count[2], count[0], count[1]);
+      }
+      break;
     case GRX_OP_PROGRESS_SET:
       fprintf(out, "r%u", inst->x);
       break;
@@ -264,22 +276,115 @@ static void dump_operands(
       fprintf(out, "  (unset %s)", backref_unset_name(inst->mode));
       break;
     case GRX_OP_LOOK: {
-      // The body is the next instruction, always, so what is worth printing
-      // is the thing that is not derivable: whether this one runs forwards
-      // from a candidate start, and between which lengths.
       size_t min = 0;
       size_t max = 0;
+      int behind = inst->mode == GRX_LOOK_BEHIND_POSITIVE ||
+          inst->mode == GRX_LOOK_BEHIND_NEGATIVE;
       fprintf(out, "%s next=%u", look_name(inst->mode), inst->y);
-      if (grx_program_look_span(program, inst->x, &min, &max)) {
+      if (behind && grx_program_look_span(program, inst->x, &min, &max)) {
         fprintf(out, " forward=%zu..%zu", min, max);
         if (inst->flags & GRX_INST_LOOK_NEAREST) {
           fputs(" nearest", out);
+        }
+      }
+      size_t repeat_state = 0;
+      size_t repeat_context = 0;
+      int repeated = grx_program_look_repeat(
+          program, inst, &repeat_state, &repeat_context, NULL, NULL);
+      if (inst->policy & GRX_POLICY_LOOK_FRONTIER) {
+        if (inst->policy & GRX_POLICY_LOOK_AFTER_ATOM) {
+          const size_t * state = GRX_ARENA_AT(
+              const size_t, &program->look_spans, (size_t)inst->x + 2);
+          if (state) {
+            fprintf(out, " state=r%zu after-atom", *state);
+          }
+        }
+        else {
+          fprintf(
+              out, " state=r%zu", repeated ? repeat_state : (size_t)inst->x);
+        }
+        fputs(" frontier", out);
+      }
+      if (inst->policy & GRX_POLICY_LOOK_FRESH) {
+        fputs(" fresh", out);
+      }
+      if (inst->policy & GRX_POLICY_LOOK_REPLACE_END) {
+        fputs(" replace-end", out);
+      }
+      if (inst->policy & GRX_POLICY_LOOK_DELAYED) {
+        fputs(" delayed", out);
+      }
+      if (inst->policy & GRX_POLICY_LOOK_HAS_CAPTURES) {
+        fputs(" captures", out);
+      }
+      if (inst->policy & GRX_POLICY_LOOK_READS_CAPTURES) {
+        fputs(" reads-captures", out);
+      }
+      if (inst->flags & GRX_INST_LOOK_REQUIRED) {
+        fputs(" required-tail", out);
+      }
+      if (repeated) {
+        size_t global = 0;
+        size_t copy = 0;
+        grx_program_look_repeat(program, inst, &repeat_state, &repeat_context,
+            &global, &copy);
+        fprintf(out, " repeat=r%zu global=r%zu marker=r%zu copy=%zu",
+            repeat_state, global, global + 1, copy);
+        if (repeat_context & GRX_LOOK_REPEAT_BOUNDED) {
+          fputs(" bounded", out);
+        }
+        if (repeat_context & GRX_LOOK_REPEAT_FIRST) {
+          fputs(" first", out);
+        }
+        if (repeat_context & GRX_LOOK_REPEAT_LAST) {
+          fputs(" last", out);
+        }
+        if (repeat_context & GRX_LOOK_REPEAT_NULLABLE) {
+          fputs(" nullable-body", out);
+        }
+        if (repeat_context & GRX_LOOK_REPEAT_EXIT_NULLABLE) {
+          fputs(" nullable-exit", out);
+        }
+        if (repeat_context & GRX_LOOK_REPEAT_LITERAL_FRONTIER) {
+          fputs(" literal-frontier", out);
+        }
+        if (repeat_context & GRX_LOOK_REPEAT_COPY_POLICY) {
+          fputs((repeat_context & GRX_LOOK_REPEAT_COPY_DYNAMIC)
+              ? " copy-activation-end"
+              : (repeat_context & GRX_LOOK_REPEAT_COPY_KEEP_END)
+              ? " copy-keeps-end" : " copy-expires-end", out);
+        }
+        if (repeat_context & GRX_LOOK_REPEAT_EXIT_REPEAT) {
+          fputs(" following-repeat", out);
         }
       }
       break;
     }
     case GRX_OP_ATOMIC_BEGIN:
       fprintf(out, "end=%u", inst->x);
+      if (inst->policy & GRX_POLICY_ATOMIC_REQUIRED) {
+        fputs(" required", out);
+      }
+      if (inst->policy & GRX_POLICY_ATOMIC_FRONTIER) {
+        fputs(" frontier-owner", out);
+      }
+      if (inst->policy & GRX_POLICY_ATOMIC_HAS_CAPTURES) {
+        fputs(" captures", out);
+      }
+      if (inst->policy & GRX_POLICY_ATOMIC_READS_CAPTURES) {
+        fputs(" reads-captures", out);
+      }
+      if (inst->policy & GRX_POLICY_ATOMIC_CONTEXT_CONTINUATION) {
+        fputs(" continuation-context", out);
+      }
+      if (inst->policy & GRX_POLICY_ATOMIC_END_OWNER) {
+        fputs(" end-context-owner", out);
+      }
+      break;
+    case GRX_OP_KEEP_END:
+      if (inst->policy & GRX_POLICY_END_CONTEXT_ONLY) {
+        fputs("context-only", out);
+      }
       break;
     case GRX_OP_COND:
       fprintf(out, "%s ", cond_name(inst->mode));
@@ -356,6 +461,10 @@ GRX_Result grx_program_dump(const GRX_Program * program, FILE * out) {
 
     fprintf(out, "  %4zu  %-14s ", i, grx_opcode_name((GRX_Opcode)inst->op));
     dump_operands(out, program, inst);
+    if (inst->op == GRX_OP_SPLIT &&
+        (inst->policy & GRX_POLICY_NULLABLE_BRANCH)) {
+      fputs(" nullable", out);
+    }
     if (inst->flags & GRX_INST_REVERSE) {
       fputs("  reverse", out);
     }
@@ -385,6 +494,35 @@ int grx_program_look_span(const GRX_Program * program, uint32_t offset,
   }
   *out_min = pair[0];
   *out_max = pair[1];
+  return 1;
+}
+
+int grx_program_look_repeat(const GRX_Program * program, const GRX_Inst * inst,
+    size_t * out_state, size_t * out_context,
+    size_t * out_global, size_t * out_copy) {
+  if (!program || !inst || !out_state || !out_context ||
+      inst->op != GRX_OP_LOOK || !(inst->policy & GRX_POLICY_LOOK_REPEATED)) {
+    return 0;
+  }
+  size_t offset = inst->x;
+  if (inst->mode == GRX_LOOK_BEHIND_POSITIVE ||
+      inst->mode == GRX_LOOK_BEHIND_NEGATIVE) {
+    offset += (inst->policy & GRX_POLICY_LOOK_AFTER_ATOM) ? 3 : 2;
+  }
+  if (offset >= program->look_spans.count ||
+      program->look_spans.count - offset < 4) {
+    return 0;
+  }
+  const size_t * pair =
+      GRX_ARENA_AT(const size_t, &program->look_spans, offset);
+  *out_state = pair[0];
+  *out_context = pair[1];
+  if (out_global) {
+    *out_global = pair[2];
+  }
+  if (out_copy) {
+    *out_copy = pair[3];
+  }
   return 1;
 }
 

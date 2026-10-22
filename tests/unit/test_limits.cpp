@@ -27,8 +27,86 @@
 #include "test_helpers.h"
 
 #include "../conformance/rxt.h"
+#include "../../src/exec/exec_internal.h"
 
 namespace {
+
+/** Physical allocation sizes calibrate the discovery budget on each ABI. */
+class ScratchAllocationMeter {
+  union Header {
+    size_t size;
+    std::max_align_t alignment;
+  };
+  GRX_Allocator allocator_{};
+  size_t live_ = 0;
+  size_t baseline_ = 0;
+  size_t peak_ = 0;
+  size_t first_stack_ = 0;
+  bool measuring_ = false;
+
+  void * resize(void * ptr, size_t size, bool stack_candidate) {
+    if (size > static_cast<size_t>(-1) - sizeof(Header)) {
+      return nullptr;
+    }
+    Header * old = ptr ? static_cast<Header *>(ptr) - 1 : nullptr;
+    const size_t prior = old ? old->size : 0;
+    Header * block = static_cast<Header *>(
+        std::realloc(old, sizeof(Header) + (size ? size : 1)));
+    if (!block) {
+      return nullptr;
+    }
+    block->size = size;
+    live_ = live_ - prior + size;
+    if (measuring_) {
+      if (stack_candidate && !ptr && !first_stack_) {
+        first_stack_ = size;
+      }
+      if (live_ > peak_) {
+        peak_ = live_;
+      }
+    }
+    return block + 1;
+  }
+
+public:
+  ScratchAllocationMeter() {
+    allocator_.ctx = this;
+    allocator_.malloc_fn = [](void * ctx, size_t size) -> void * {
+      return static_cast<ScratchAllocationMeter *>(ctx)->resize(nullptr, size, false);
+    };
+    allocator_.calloc_fn = [](void * ctx, size_t count, size_t size) -> void * {
+      if (count && size > static_cast<size_t>(-1) / count) {
+        return nullptr;
+      }
+      void * ptr = static_cast<ScratchAllocationMeter *>(ctx)->resize(
+          nullptr, count * size, false);
+      if (ptr) {
+        std::memset(ptr, 0, count * size);
+      }
+      return ptr;
+    };
+    allocator_.realloc_fn = [](void * ctx, void * ptr, size_t size) -> void * {
+      return static_cast<ScratchAllocationMeter *>(ctx)->resize(ptr, size, true);
+    };
+    allocator_.free_fn = [](void * ctx, void * ptr) {
+      if (ptr) {
+        auto * self = static_cast<ScratchAllocationMeter *>(ctx);
+        Header * block = static_cast<Header *>(ptr) - 1;
+        self->live_ -= block->size;
+        std::free(block);
+      }
+    };
+  }
+  const GRX_Allocator * get() const { return &allocator_; }
+  void begin() {
+    baseline_ = peak_ = live_;
+    first_stack_ = 0;
+    measuring_ = true;
+  }
+  size_t peak() const { return peak_ - baseline_; }
+  size_t root_stack() const { return first_stack_; }
+  size_t live() const { return live_; }
+};
 
 struct Row {
   std::string flags;
@@ -711,4 +789,370 @@ TEST(Limits, ALimitDirectiveTooLargeToHoldIsMalformedRatherThanClamped) {
   // A value this library *can* hold is accepted, so the row above is a
   // ceiling and not a refusal of every large number.
   EXPECT_EQ(ask("(*LIMIT_MATCH=4294967296)abc", "abc").matched, 1);
+}
+
+
+TEST(Limits, SequentialVimAssertionsDoNotSpendNativeRecursionDepth) {
+  for (GRX_Syntax syntax : {GRX_SYNTAX_VIM_BACKTRACK, GRX_SYNTAX_VIM_NFA}) {
+    std::string pattern = syntax == GRX_SYNTAX_VIM_BACKTRACK ? "a" : "";
+    for (size_t i = 0; i < 200; i++) {
+      pattern += syntax == GRX_SYNTAX_VIM_BACKTRACK ? R"(\%(a\)\@<=)"
+                                                    : R"(\%(\%(a\)\@=a\)\@=)";
+    }
+    pattern += "a";
+    GRX_Regex * regex = nullptr;
+    ASSERT_EQ(grx_regex_compile(pattern.c_str(), syntax, 0, &regex), GRX_OK);
+    GRX_Match * match = nullptr;
+    ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+    int matched = 0;
+    EXPECT_EQ(grx_regex_search(regex, "aa", 2, 0, GRX_ENGINE_BACKTRACK, nullptr,
+                  match, &matched),
+        GRX_OK);
+    EXPECT_EQ(matched, 1);
+    grx_match_destroy(match);
+    grx_regex_free(regex);
+  }
+}
+
+TEST(Limits, NestedVimAssertionBodiesRetainTheNativeStackSafetyBound) {
+  for (GRX_Syntax syntax : {GRX_SYNTAX_VIM_BACKTRACK, GRX_SYNTAX_VIM_NFA}) {
+    std::string pattern = "a";
+    for (size_t i = 0; i < 200; i++) {
+      pattern = R"(\%()" + pattern + R"(\)\@=)";
+    }
+    pattern += "a";
+    GRX_Limits limits;
+    grx_limits_default(&limits);
+    limits.max_nesting_depth = 480;
+    GRX_Regex * regex = nullptr;
+    ASSERT_EQ(grx_regex_compile_with_allocator(pattern.data(), pattern.size(),
+                  syntax, 0, &limits, nullptr, nullptr, &regex),
+        GRX_OK);
+    GRX_Match * match = nullptr;
+    ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+    int matched = 1;
+    EXPECT_EQ(grx_regex_search(regex, "aa", 2, 0, GRX_ENGINE_BACKTRACK, &limits,
+                  match, &matched),
+        GRX_ERR_LIMIT);
+    EXPECT_EQ(matched, 0);
+    EXPECT_EQ(grx_match_error(match)->diag, GRX_DIAG_LIMIT_RECURSION_DEPTH);
+    grx_match_destroy(match);
+    grx_regex_free(regex);
+  }
+}
+
+TEST(Limits, DefaultAcceptedNestedAssertionsCanDiscoverAtomicBodies) {
+  for (bool outside : {false, true}) {
+    std::string pattern = outside ? "a" : R"(\%(a\)\@>)";
+    for (size_t depth = 0; depth < 127; depth++) {
+      pattern = R"(\%()" + pattern + R"(\)\@=)";
+    }
+    if (outside) {
+      pattern = R"(\%()" + pattern + R"(\)\@>)";
+    }
+    GRX_Regex * regex = nullptr;
+    ASSERT_EQ(grx_regex_compile(pattern.c_str(), GRX_SYNTAX_VIM_NFA, 0,
+                  &regex), GRX_OK);
+    GRX_Match * match = nullptr;
+    ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+    int matched = 0;
+    EXPECT_EQ(grx_regex_search(regex, "a", 1, 0, GRX_ENGINE_BACKTRACK,
+                  nullptr, match, &matched), GRX_OK);
+    ASSERT_TRUE(matched);
+    GRX_Capture whole;
+    ASSERT_EQ(grx_match_group(match, 0, &whole), GRX_OK);
+    EXPECT_EQ(whole.start, 0u);
+    EXPECT_EQ(whole.end, 0u);
+    grx_match_destroy(match);
+    grx_regex_free(regex);
+  }
+}
+
+TEST(Limits, FlatVimAssertionLoopsMatchWithinThePublicBudgets) {
+  for (GRX_Syntax syntax : {GRX_SYNTAX_VIM_BACKTRACK, GRX_SYNTAX_VIM_NFA}) {
+    for (const char * pattern : {R"(\%(\(a\)\@=a\)*)", R"(\%(a\(a\)\@<=\)*)"}) {
+      GRX_Regex * regex = nullptr;
+      ASSERT_EQ(grx_regex_compile(pattern, syntax, 0, &regex), GRX_OK);
+      GRX_Match * match = nullptr;
+      ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+      for (size_t length : {300u, 2000u}) {
+        std::string subject(length, 'a');
+        int matched = 0;
+        EXPECT_EQ(grx_regex_search(regex, subject.data(), subject.size(), 0,
+                      GRX_ENGINE_BACKTRACK, nullptr, match, &matched),
+            GRX_OK)
+            << grx_syntax_name(syntax) << " " << pattern << " length "
+            << length;
+        ASSERT_EQ(matched, 1);
+        GRX_Capture whole;
+        ASSERT_EQ(grx_match_group(match, 0, &whole), GRX_OK);
+        EXPECT_EQ(whole.start, 0u);
+        EXPECT_EQ(whole.end, subject.size());
+      }
+      grx_match_destroy(match);
+      grx_regex_free(regex);
+    }
+  }
+}
+
+TEST(Limits, DeferredVimAssertionsHonorBudgetsAcrossLongFlatContinuations) {
+  for (GRX_Syntax syntax : {GRX_SYNTAX_VIM_BACKTRACK, GRX_SYNTAX_VIM_NFA}) {
+    std::string pattern = syntax == GRX_SYNTAX_VIM_BACKTRACK
+        ? R"(a\%(a\)\@<=)"
+        : R"(\%(\%(a\)\@=a\)\@=)";
+    pattern += std::string(4000, 'a');
+    GRX_Regex * regex = nullptr;
+    ASSERT_EQ(grx_regex_compile(pattern.c_str(), syntax, 0, &regex), GRX_OK);
+    GRX_Match * match = nullptr;
+    ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+    GRX_Limits limits;
+    grx_limits_default(&limits);
+    limits.max_steps = 32;
+    std::string subject(4001, 'a');
+    int matched = 1;
+    EXPECT_EQ(grx_regex_search(regex, subject.data(), subject.size(), 0,
+                  GRX_ENGINE_BACKTRACK, &limits, match, &matched),
+        GRX_ERR_LIMIT);
+    EXPECT_EQ(matched, 0);
+    EXPECT_EQ(grx_match_error(match)->diag, GRX_DIAG_LIMIT_STEPS);
+    grx_match_destroy(match);
+    grx_regex_free(regex);
+  }
+}
+
+TEST(Limits, VimAssertionCaptureSnapshotsShareTheMatchMemoryBudget) {
+  for (const char * pattern : {
+           R"(\(a\)\@>a\(a\1\)\@<=.)",
+           R"(\(a\)\%(z\)\@>x\|\%(ab\)\@>)",
+           R"(\(\(a\)\@=a\)\@<=\(a\)\@<=\%(a\)\@>)",
+       }) {
+    GRX_Regex * regex = nullptr;
+    ASSERT_EQ(
+        grx_regex_compile(pattern, GRX_SYNTAX_VIM_NFA, 0, &regex), GRX_OK);
+    GRX_Match * match = nullptr;
+    ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+    GRX_Limits limits;
+    grx_limits_default(&limits);
+    limits.max_match_memory = std::strstr(pattern, "z") ? 512 : 1024;
+    int matched = 1;
+    EXPECT_EQ(grx_regex_search(regex, "aab", 3, 0, GRX_ENGINE_BACKTRACK,
+                  &limits, match, &matched),
+        GRX_ERR_LIMIT)
+        << pattern;
+    EXPECT_EQ(matched, 0);
+    EXPECT_EQ(grx_match_error(match)->diag, GRX_DIAG_LIMIT_MATCH_MEMORY);
+    limits.max_match_memory = 1024 * 1024;
+    EXPECT_EQ(grx_regex_search(regex, "aab", 3, 0, GRX_ENGINE_BACKTRACK,
+                  &limits, match, &matched),
+        GRX_OK)
+        << pattern;
+    EXPECT_EQ(matched, 1);
+    grx_match_destroy(match);
+    grx_regex_free(regex);
+  }
+}
+
+TEST(Limits, AtomicCandidateFrontiersHonorBudgetsAndFlatSubjectLengths) {
+  GRX_Regex * regex = nullptr;
+  ASSERT_EQ(grx_regex_compile(
+                R"(a\+\(a\)\@>\(a\)\@<=)", GRX_SYNTAX_VIM_NFA, 0, &regex),
+      GRX_OK);
+  GRX_Match * match = nullptr;
+  ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+  GRX_Limits limits;
+  grx_limits_default(&limits);
+  int matched = 1;
+  limits.max_steps = 16;
+  EXPECT_EQ(grx_regex_search(regex, "aaab", 4, 0, GRX_ENGINE_BACKTRACK, &limits,
+                match, &matched),
+      GRX_ERR_LIMIT);
+  EXPECT_FALSE(matched);
+  EXPECT_EQ(grx_match_error(match)->diag, GRX_DIAG_LIMIT_STEPS);
+  grx_limits_default(&limits);
+  limits.max_match_memory = 1024;
+  EXPECT_EQ(grx_regex_search(regex, "aaab", 4, 0, GRX_ENGINE_BACKTRACK, &limits,
+                match, &matched),
+      GRX_ERR_LIMIT);
+  EXPECT_FALSE(matched);
+  EXPECT_EQ(grx_match_error(match)->diag, GRX_DIAG_LIMIT_MATCH_MEMORY);
+  for (size_t length : {300u, 2000u}) {
+    std::string subject(length, 'a');
+    subject += 'b';
+    EXPECT_EQ(grx_regex_search(regex, subject.data(), subject.size(), 0,
+                  GRX_ENGINE_BACKTRACK, nullptr, match, &matched),
+        GRX_OK);
+    ASSERT_TRUE(matched);
+    GRX_Capture whole;
+    ASSERT_EQ(grx_match_group(match, 0, &whole), GRX_OK);
+    EXPECT_EQ(whole.start, 0u);
+    EXPECT_EQ(whole.end, length);
+  }
+  grx_match_destroy(match);
+  grx_regex_free(regex);
+}
+
+TEST(Limits, AtomicDiscoveryStackChargeUsesAnAbiSizedBudget) {
+  ScratchAllocationMeter meter;
+  const char * pattern = R"(a\+\(a\)\@>\(a\)\@<=)";
+  GRX_Regex * regex = nullptr;
+  ASSERT_EQ(grx_regex_compile_with_allocator(pattern, std::strlen(pattern),
+                GRX_SYNTAX_VIM_NFA, 0, nullptr, meter.get(), nullptr, &regex),
+      GRX_OK);
+  GRX_Match * match = nullptr;
+  ASSERT_EQ(grx_match_create(regex, meter.get(), &match), GRX_OK);
+  const size_t baseline = meter.live();
+  meter.begin();
+  int matched = 0;
+  ASSERT_EQ(grx_regex_search(regex, "aaab", 4, 0, GRX_ENGINE_BACKTRACK, nullptr,
+                match, &matched), GRX_OK);
+  ASSERT_TRUE(matched);
+  ASSERT_EQ(meter.live(), baseline);
+  ASSERT_GT(meter.root_stack(), 0u);
+  ASSERT_GT(meter.peak(), meter.root_stack() + 1);
+  // The first realloc is the ordinary backtracking stack, whose legacy
+  // allocation is outside aggregate scratch accounting. All remaining live
+  // runtime buffers on this input belong to the charged assertion search.
+  // Derive the cap from physical allocations, independently of the charge:
+  // dropping discovery's stack charge must still make this search succeed.
+  const size_t charged_peak = meter.peak() - meter.root_stack();
+  std::fprintf(stderr, "Discovery physical peak %zu, root stack %zu, cap %zu\n",
+      meter.peak(), meter.root_stack(), charged_peak - 1);
+  GRX_Limits limits;
+  grx_limits_default(&limits);
+  limits.max_match_memory = charged_peak - 1;
+  EXPECT_EQ(grx_regex_search(regex, "aaab", 4, 0, GRX_ENGINE_BACKTRACK, &limits,
+                match, &matched), GRX_ERR_LIMIT);
+  EXPECT_FALSE(matched);
+  EXPECT_EQ(grx_match_error(match)->diag, GRX_DIAG_LIMIT_MATCH_MEMORY);
+  EXPECT_EQ(meter.live(), baseline);
+  limits.max_match_memory = charged_peak;
+  EXPECT_EQ(grx_regex_search(regex, "aaab", 4, 0, GRX_ENGINE_BACKTRACK, &limits,
+                match, &matched), GRX_OK);
+  EXPECT_TRUE(matched);
+  EXPECT_EQ(meter.live(), baseline);
+  grx_match_destroy(match);
+  grx_regex_free(regex);
+  EXPECT_EQ(meter.live(), 0u);
+}
+
+TEST(Limits, AtomicDiscoveryIncludesCallerFramesInBacktrackLimit) {
+  GRX_Regex * regex = nullptr;
+  ASSERT_EQ(grx_regex_compile(R"(a\+\(a\)\@>\(a\)\@<=)",
+                GRX_SYNTAX_VIM_NFA, 0, &regex), GRX_OK);
+  GRX_Match * match = nullptr;
+  ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+  GRX_Limits limits;
+  grx_limits_default(&limits);
+  const std::string subject = std::string(100, 'a') + "b";
+  // Each interpreter fits 200 frames independently; simultaneous caller and
+  // discovery frames require 224. Zeroing the probe's caller-depth base makes
+  // the 200-frame search incorrectly succeed (its independent peak is 151).
+  for (size_t cap : {256u, 200u, 256u}) {
+    limits.max_backtrack = cap;
+    int matched = 1;
+    GRX_Result result = grx_regex_search(regex, subject.data(), subject.size(), 0,
+        GRX_ENGINE_BACKTRACK, &limits, match, &matched);
+    EXPECT_EQ(result, cap == 200 ? GRX_ERR_LIMIT : GRX_OK);
+    EXPECT_EQ(matched, cap == 200 ? 0 : 1);
+    EXPECT_EQ(grx_match_error(match)->diag,
+        cap == 200 ? GRX_DIAG_LIMIT_BACKTRACK : GRX_DIAG_NONE);
+  }
+  grx_match_destroy(match);
+  grx_regex_free(regex);
+}
+
+TEST(Limits, AtomicCandidateLateFailureKeepsTheDefaultStepCeiling) {
+  GRX_Regex * regex = nullptr;
+  ASSERT_EQ(grx_regex_compile(
+                R"(\%(\%(\(a\)\@=a\)\@>\)*ab)", GRX_SYNTAX_VIM_NFA, 0, &regex),
+      GRX_OK);
+  GRX_Match * match = nullptr;
+  ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+  for (const char * tail : {"", "x"}) {
+    std::string subject(600, 'a');
+    subject += tail;
+    int matched = 1;
+    EXPECT_EQ(grx_regex_search(regex, subject.data(), subject.size(), 0,
+                  GRX_ENGINE_BACKTRACK, nullptr, match, &matched),
+        GRX_ERR_LIMIT);
+    EXPECT_FALSE(matched);
+    EXPECT_EQ(grx_match_error(match)->diag, GRX_DIAG_LIMIT_STEPS);
+    size_t default_steps = grx_match_steps(match);
+    GRX_Limits limits;
+    grx_limits_default(&limits);
+    limits.max_steps = 30000000;
+    EXPECT_EQ(grx_regex_search(regex, subject.data(), subject.size(), 0,
+                  GRX_ENGINE_BACKTRACK, &limits, match, &matched),
+        GRX_OK);
+    EXPECT_FALSE(matched);
+    EXPECT_GT(grx_match_steps(match), default_steps);
+    std::fprintf(stderr,
+        "Atomic candidate failed-search pressure length %zu: "
+        "default %zu steps, explicit 30000000 cap %zu steps\n",
+        subject.size(), default_steps, grx_match_steps(match));
+  }
+  grx_match_destroy(match);
+  grx_regex_free(regex);
+}
+
+TEST(Limits,
+    DeferredAssertionLateFailureReportsStepsAndAcceptsAnExplicitBudget) {
+  GRX_Regex * regex = nullptr;
+  ASSERT_EQ(
+      grx_regex_compile(R"(\%(a\(a\)\@<=\)*ab)", GRX_SYNTAX_VIM_NFA, 0, &regex),
+      GRX_OK);
+  GRX_Match * match = nullptr;
+  ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+  std::string subject(600, 'a');
+  int matched = 1;
+  EXPECT_EQ(grx_regex_search(regex, subject.data(), subject.size(), 0,
+                GRX_ENGINE_BACKTRACK, nullptr, match, &matched),
+      GRX_ERR_LIMIT);
+  EXPECT_FALSE(matched);
+  EXPECT_EQ(grx_match_error(match)->diag, GRX_DIAG_LIMIT_STEPS);
+  GRX_Limits limits;
+  grx_limits_default(&limits);
+  limits.max_steps = 20000000;
+  EXPECT_EQ(grx_regex_search(regex, subject.data(), subject.size(), 0,
+                GRX_ENGINE_BACKTRACK, &limits, match, &matched),
+      GRX_OK);
+  EXPECT_FALSE(matched);
+  grx_match_destroy(match);
+  grx_regex_free(regex);
+}
+
+TEST(Limits,
+    BacktrackLayoutRejectsUnrepresentableExpandedRangesBeforeAllocation) {
+  grxtest::FailingAllocator allocator(0);
+  GRX_Regex regex = {};
+  regex.allocator = allocator.get();
+  regex.program.insts.count = 1;
+  GRX_Limits limits;
+  grx_limits_unlimited(&limits);
+  GRX_ExecRequest request = {};
+  request.regex = &regex;
+  request.limits = &limits;
+  GRX_Diag diag = GRX_DIAG_NONE;
+  size_t steps = 1;
+  request.out_diag = &diag;
+  request.out_steps = &steps;
+  size_t max_words = SIZE_MAX / sizeof(size_t);
+  size_t slot_limit = max_words < GRX_INDEX_NONE ? max_words : GRX_INDEX_NONE;
+  for (int shape : {0, 1, 2}) {
+    SCOPED_TRACE(shape);
+    regex.capture_count = shape == 0 ? SIZE_MAX
+        : shape == 2                 ? slot_limit / 20
+                                     : 0;
+    regex.program.register_count = shape == 1 ? UINT32_MAX : 0;
+    regex.program.flags = shape == 2 ? GRX_PROGRAM_SHADOW_CAPTURES |
+            GRX_PROGRAM_PROVISIONAL_LOOK_END | GRX_PROGRAM_ATOMIC_FRONTIER
+                                     : 0;
+    int matched = 1;
+    EXPECT_EQ(grx_exec_backtrack(&request, &matched), GRX_ERR_LIMIT);
+    EXPECT_EQ(matched, 0);
+    EXPECT_EQ(diag, GRX_DIAG_LIMIT_MATCH_MEMORY);
+    EXPECT_EQ(steps, 0u);
+    EXPECT_EQ(allocator.requested(), 0);
+    EXPECT_EQ(allocator.live(), 0);
+  }
 }

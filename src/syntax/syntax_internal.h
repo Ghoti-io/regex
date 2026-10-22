@@ -745,10 +745,16 @@ typedef struct GRX_Profile {
   int literal_cluster_guard; ///< Every literal atom must finish its cluster.
   int match_end_cluster_boundary; ///< A match cannot end inside a cluster.
   int empty_loop_after_mandatory; ///< Mandatory repeats retain trailing empties.
+  int complex_repeat_counter; ///< Complex repeats carry explicit count/progress lifetimes.
   int direct_repeat_scalar; ///< A direct non-optional literal repeat is scalar.
   int ignore_combining_literal_run; ///< Adjacent literals may skip intervening marks.
   int lookbehind_round_bound; ///< Admit a character crossing a byte bound.
-  int provisional_assertion_end; ///< Assertion end markers expire on consumption.
+  int lookbehind_after_continuation; ///< Check lookbehind against successful
+                                     ///< continuations.
+  int assertion_context_from_continuation; ///< Assertion bodies select contexts
+                                           ///< from continuation frontiers.
+  int provisional_assertion_end; ///< Assertion end markers track continuation
+                                 ///< ownership.
   int atomic_ignores_markers; ///< Markers inside atomic bodies are inert.
   int optional_tail_omits_newline; ///< Final optional class loses added LF.
   GRX_SplitRule split;              ///< How grx_regex_split() divides.

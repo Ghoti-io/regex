@@ -559,11 +559,36 @@ The independently measured profile axes are:
 | Lookbehind byte threshold | Candidate must fit within the byte bound | A character crossing the lower byte threshold can be admitted; the bound is not a count of characters |
 | Negative lookahead fails because its body matched | Its captures survive into alternatives and subsequent backreferences | Its captures are rolled back |
 | Negative lookahead body fails partway | Roll back captures | Roll back captures |
-| Successful positive assertion abandoned by later failure | Captures can survive rollback at the same search start | Captures roll back; retained-reference cases remain a named limitation |
+| Successful positive assertion abandoned by later failure | Captures can survive rollback at the same search start | Rollback and inherited BODY/continuation contexts follow the independently measured owner order |
 | Zero-minimum repeat after consuming iterations | Discard the trailing empty iteration (`BREAK_IF_UNMOVED`) | Keep the trailing empty iteration (`BREAK_ON_EMPTY`) |
 | Nonzero-minimum repeat after consuming iterations | Keep the trailing empty iteration (`BREAK_ON_EMPTY`) | Keep the trailing empty iteration (`BREAK_ON_EMPTY`) |
-| Match markers in atomic groups | Honor `\zs` and `\ze` | Ignore the markers in the measured atomic-group cases |
+| Match markers in atomic groups | Honor `\zs` and `\ze` | Suppress direct marker writes; a completed BODY end context can remain visible through a later atomic continuation |
 | Added newline in the final atom of an optional sequence | Retain the newline member | Drop the added newline member in the measured final-atom cases |
+
+Complex counted repeats also retain count and loop-progress history under the
+backtracking profile. For `\%(aa\|a\)\{2}aab` on `aaab`, it reports 0:4;
+NFA reports no match. Reentering `\%(a\)\{1,2}` inside an outer counted
+repeat preserves its last BODY-end position within that search origin, whereas
+the direct scalar form `a\{1,2}` uses width backtracking. These policies apply
+to ordinary repetition, including patterns with no assertions. Programs carrying
+this history require BACKTRACK; AUTO selects it and explicitly requested Pike,
+bit-state and DFA engines return UNSUPPORTED. The NFA profile retains ordinary
+repeat lowering and its existing engine eligibility.
+
+Assertion and atomic capture ownership is context-sensitive. An atomic BODY can
+read an incoming capture while a following lookbehind reads a later closed
+context. A numbered BODY write can publish a complete result that clears an
+unrelated incoming field; a capture-free assertion does not imply that write.
+Candidate discovery completes pending assertions owned by the BODY before an
+accepting exit may suppress another caller. Successful caller ownership remains
+independent of shared BODY-read input, including across search origins.
+
+NFA atomic end contexts can survive a following marker-free atomic BODY. For
+`\(a\)\?\%(a\ze\)\@>\%(a\)\@>b` on `aaaab`, backtracking reports
+1:3 and NFA reports 1:1, with group 1 `a` in both. This does not make atomic
+markers ordinary direct writes. A later explicit end marker still commits its
+own reporting context. Each public search starts fresh even when the caller
+reuses the compiled regex and Match object.
 
 The original independent regressions make the target observable in both span
 and captures. `\(a\)\@!\|a\%[\_s]` on `a` LF `b` reports 0:2 and group
@@ -2165,10 +2190,8 @@ answer.
 | Both Vim profiles | Lookbehind candidates inside composing clusters | Candidate scans can begin at a composing mark rather than the beginning of its cluster. `\(.\+\)\@2<=x` on `a` U+0301 `x` can capture only the mark here; the backtracking reference refuses the match, and NFA captures the full cluster. The ordinary multibyte-scalar threshold is profiled; this remaining limitation concerns composing clusters. | - |
 | Both Vim profiles | Underscore collections on LF with composing suffix | The added-LF branch of `\_[ab]` and `\_[^x]` does not reproduce all reference cluster and continuation behavior. On LF U+0301 `b`, backtracking Vim reports 0:3 for either; NFA reports 3:4 for the positive collection and 1:3 for the negative one. Plain collections and subjects without composing suffixes remain covered independently. | - |
 | Vim NFA | Added LF in named underscore classes at match end | `\_s`, `\_w` and `\_d` on LF U+0301 `b` report 0:1 in NFA Vim, while this library carries the mark and reports 0:3. With a following `b` both report 0:4. This narrow terminal-offset difference remains distinct from newline membership inside optional sequences. | - |
-| Both Vim profiles | Remaining parser and postfix limitations | Forward backreferences that Vim accepts only before lookbehind are refused. NFA captures or markers committed by a successful postfix operator and then abandoned by later failure can be rolled back where the reference preserves them. Backtracking preserves committed assertion captures through rollback at the same search start; each fresh subject search start resets captures. This is distinct from capture retention when a negative lookahead itself fails. A capture around a postfix assertion followed by a repeat can differ from Vim, as can a backreference following a postfix lookbehind. Three parser artifacts remain: `\v\_^*`, a bare `*` after a line-number assertion, and the exceptional leading-star spellings `^\m*` and `\%(*\)`. The live matching differential reports all such differences without suppression. | - |
-| Vim NFA | Quantified/atomic consumption and successive assertions can retain different markers or captures | `\(a\ze\)\@=a*` on `aab` and `\(a\ze\)\@=\%(ab\)\@>` on `ab` report 0:1 in forced NFA; this library reports 0:2. Thus those constructs do not follow the plain scalar controls' provisional-end behavior. `\(a\ze\)\@=\(a\ze\)\@=a\+` on `ab` returns an empty group 1 and group 2 `a` in forced NFA; this library retains `a` in both groups. These are measured marker/capture limitations, not a rule extrapolated to other constructs. | - |
+| Both Vim profiles | Remaining parser limitations | Forward backreferences that Vim accepts only before lookbehind are refused. Parser artifacts include `\v\_^*`, a bare `*` after a line-number assertion, and the exceptional leading-star spellings `^\m*` and `\%(*\)`. Every grammar disagreement remains visible in the matching differential. | - |
 | Both Vim profiles | Groups and nested sequences inside `\%[...]` are refused | Backtracking Vim refuses these with E54; NFA Vim accepts them. The shared grammar keeps the refusal explicit instead of interpreting their contents as ordinary atoms. Classes, collections, numeric atoms, markers and backreferences remain supported members. | `GRX_ERR_SYNTAX` |
-| Both Vim profiles | Interacting markers in and after a positive lookbehind | A marker in a positive lookbehind followed by another marker in a postfix operator can preserve the earlier marker in Vim. This library's marker register uses the last successful write. This family remains a compatibility gap and every difference fails the live matching differential. | - |
 
 ### 6.1 ECMAScript and the unit of a subject
 

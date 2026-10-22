@@ -825,7 +825,11 @@ static WalkAction walk_step(
     case WALK_REPEAT_BODY: {
       Span body = analysis->result;
       Span span = {0, GRX_NPOS, 0, 0, 0, 0};
-      span.min_length = scale_length(body.min_length, node->min);
+      span.min_length = (node->flags & GRX_IR_REPEAT_LEXICAL_COUNTER)
+          ? 0 : scale_length(body.min_length, node->min);
+      if (node->flags & GRX_IR_REPEAT_LEXICAL_COUNTER) {
+        analysis->is_regular = 0;
+      }
       span.max_length = node->max == GRX_REPEAT_INF
           ? (body.max_length ? GRX_NPOS : 0)
           : scale_length(body.max_length, node->max);
@@ -1199,7 +1203,8 @@ static WalkAction walk_step(
     case GRX_IR_VERB:
       analysis->is_regular = 0;
       frame->span = (Span) {0, 0, 0, 0, 0, 0};
-      frame->span.accepts = node->mode == GRX_VERB_ACCEPT;
+      frame->span.accepts =
+          node->kind == GRX_IR_VERB && node->mode == GRX_VERB_ACCEPT;
       return WALK_POP;
 
     case GRX_IR_SCAN:

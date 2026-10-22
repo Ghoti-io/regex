@@ -1860,6 +1860,10 @@ static GRX_Result lower_group(
     if (result != GRX_OK) {
       return result;
     }
+    if (low->profile.assertion_context_from_continuation) {
+      low->ir->flags |=
+          GRX_PROGRAM_LOOK_CONTEXT | GRX_PROGRAM_PROVISIONAL_LOOK_END;
+    }
     if (low->profile.assertion_captures_persist) {
       grx_ir_node(low->ir, atomic)->flags |= GRX_IR_LOOK_PERSIST_CAPTURES;
     }
@@ -1887,6 +1891,10 @@ static GRX_Result lower_group(
   }
 
   if (!(node->flags & GRX_NODE_CAPTURING)) {
+    if (low->profile.assertion_context_from_continuation &&
+        grx_ir_node(low->ir, body)->kind == GRX_IR_EMPTY) {
+      grx_ir_node(low->ir, body)->flags |= GRX_IR_EMPTY_FRONTIER;
+    }
     // A non-capturing group has no representation: it grouped the text, and
     // the tree already says how the text grouped.
     *out_node = body;
@@ -2654,6 +2662,9 @@ static GRX_Result lower_repeat(
 
   uint32_t body = GRX_INDEX_NONE;
   const GRX_Node * atom = grx_pattern_node(low->pattern, node->first_child);
+  int simple_counter_atom = atom &&
+      ((atom->kind == GRX_NODE_LITERAL && atom->b == 1) ||
+          atom->kind == GRX_NODE_CLASS || atom->kind == GRX_NODE_ANY);
   int outer_scalar = low->scalar_direct;
   low->scalar_direct = low->profile.direct_repeat_scalar
       && atom && atom->kind == GRX_NODE_LITERAL && atom->b == 1
@@ -2670,6 +2681,11 @@ static GRX_Result lower_repeat(
   }
 
   GRX_IRNode * repeat = grx_ir_node(low->ir, *out_node);
+  if (low->profile.complex_repeat_counter && !simple_counter_atom &&
+      node->max != 0 &&
+      !(node->min == 0 && node->max == 1)) {
+    repeat->flags |= GRX_IR_REPEAT_LEXICAL_COUNTER;
+  }
   repeat->min = node->min;
   repeat->max = node->max;
   // A possessive repeat is a greedy one that cannot be backtracked into,
@@ -2754,12 +2770,18 @@ static GRX_Result lower_look(
       && low->profile.negative_look == GRX_NEGATIVE_LOOK_KEEP) {
     look->flags |= GRX_IR_LOOK_KEEP_CAPTURES;
   }
+  if (low->profile.assertion_context_from_continuation) {
+    low->ir->flags |= GRX_PROGRAM_LOOK_CONTEXT;
+  }
   if (low->profile.provisional_assertion_end) {
     low->ir->flags |= GRX_PROGRAM_PROVISIONAL_LOOK_END;
     look->flags |= GRX_IR_LOOK_PROVISIONAL_END;
   }
   if (low->profile.assertion_captures_persist) {
     look->flags |= GRX_IR_LOOK_PERSIST_CAPTURES;
+  }
+  if (behind && low->profile.lookbehind_after_continuation) {
+    look->flags |= GRX_IR_LOOK_DELAYED;
   }
   if (forward) {
     if (bound && low->profile.lookbehind_round_bound) {
@@ -3993,9 +4015,13 @@ static GRX_Result lower_node(
       return add(low, low->atomic_depth ? GRX_IR_EMPTY : GRX_IR_KEEP,
           node, out_node);
 
-    case GRX_NODE_KEEP_END:
-      return add(low, low->atomic_end_depth ? GRX_IR_EMPTY : GRX_IR_KEEP_END,
-          node, out_node);
+    case GRX_NODE_KEEP_END: {
+      GRX_Result result = add(low, GRX_IR_KEEP_END, node, out_node);
+      if (result == GRX_OK && low->atomic_end_depth) {
+        grx_ir_node(low->ir, *out_node)->flags |= GRX_IR_END_CONTEXT_ONLY;
+      }
+      return result;
+    }
 
     case GRX_NODE_CALLOUT:
       return lower_callout(low, node, out_node);

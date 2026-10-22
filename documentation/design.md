@@ -877,6 +877,50 @@ identifier. These choices cover assertion captures, lookbehind starts and
 UTF-8 thresholds, match markers, optional sequences, and empty iterations.
 The exact measured rules and limitations are in [dialects.md](dialects.md).
 
+Complex repetition in the backtracking profile carries an explicit IR policy.
+`COUNT_INIT`, `COUNT_STEP` and `COUNT_BACK` implement it in the existing
+interpreter. Count entry, optional exit and unwind have separate lifetimes:
+mandatory and greedy BODY entries decrement on unwind; maximum exits and lazy
+optional exits retain their visit. Counts can temporarily become negative when
+an inner loop is reentered, so the stored magnitude and sign are independent of
+pointer width. A counted loop's last BODY end persists across reentry within one
+search origin; an unbounded loop scopes that progress cache to its invocation.
+Only a BODY backedge checks it. Empty BODY handling separately preserves the
+profile's minimum and trailing-empty rules. Direct scalar/class/any repeats keep
+their simpler lowering. The stateful policy is not regular or memoizable; AUTO
+selects BACKTRACK and explicit automata reject it. Minimum width is conservative
+because continuation backtracking can satisfy the old profile with fewer BODY
+iterations than the written minimum.
+
+Deferred look activations own heap snapshots and undo frames. Their continuations
+stay in the interpreter loop; flat sequences and repeats do not add native
+recursion. Actual nested assertion bodies retain the non-liftable native-depth
+ceiling. Pending work entered inside an atomic barrier must complete before that
+BODY records an accepting exit.
+
+Repeated assertions carry both local activation state and an assertion-wide
+marker/history channel. Lowering composes expanded copy coordinates through the
+full repeat ancestry. Exact-one wrappers preserve the effective repeat count
+and their explicit exit boundary; a nullable inner repeat expanded by an outer
+repeat receives a fresh local activation. Dynamic visits and static copies are
+therefore distinct instruction metadata.
+
+A moved report start also tags captures already closed before that marker.
+Their BODY input and reported context can have different owners. Atomic caller
+overlap is summarized from validated accepting exits, separately from the marker
+merge policy, and restored through the ordinary capture undo frames.
+
+Atomic BODY-read identity projects only captures read by BACKREF instructions.
+Caller closure, reporting spans, executed numbered-write provenance and inherited
+reference spans have separate lifetimes. A later caller does not acquire a prior
+caller's result merely because its BODY reads the same input. Per-group write
+generations are undoable; implicit inherited-context installation does not count
+as an executed SAVE or RESET. Marker-owning BODY completion tags its outgoing end
+context so a later marker-free BODY cannot overwrite it with a consuming exit.
+All discovery state is search-local, allocator charged and metered against the
+caller's limits. Isolated discovery uses this interpreter with independently
+owned mutable buffers and read-only borrowed program/context data.
+
 ## 5. Unicode and encodings
 
 Details are in [unicode.md](unicode.md); the decisions that shape the rest
@@ -1142,7 +1186,14 @@ The things the tests exist to hold. Each is checked somewhere named in
    "Reviewed". Measuring it found the half that was not true: the
    backtracker's `run()` calls itself for an assertion body, a lookbehind's
    forward pass and a sub-match condition, so a nested assertion is a C
-   frame and the cost is linear in the nesting - about 600 bytes a level.
+   frame and the cost is linear in the nesting. The assertion-context machinery
+   measures about 864 bytes per run in the pinned GCC 16 build. Forward
+   lookbehind adds a candidate-search frame, so its non-liftable native budget
+   charges seven units per run and one per active forward-behind frame against
+   148 * 7 units. The default 128 nested bodies plus the top-level run still
+   fit. Measured peaks are 130,655 bytes for forward behind, 130,623 for mixed
+   ahead/behind and 129,567 for ahead alone, below the stack test's
+   128 KB budget; the previous 160-run ceiling peaked at 134,815 bytes.
    `max_nesting_depth` held it down at the defaults by accident, being 128;
    raised to the 480 the *parser* takes, the matcher wanted 241 KB and a
    256 KB stack gave a segmentation fault instead of a diagnostic.

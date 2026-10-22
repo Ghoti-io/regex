@@ -761,6 +761,8 @@ TEST(Stack, NestingBeyondWhatTheStackHoldsIsALimitAndNotACrash) {
   if (!stack_measurable()) {
     return;
   }
+  std::fprintf(stderr, "Nested assertion native-stack ceiling: %zu bytes\n",
+      reference);
   EXPECT_LT(reference, 128u * 1024u)
       << "the engine's own recursion peaks at " << reference
       << " bytes, which is over half the 256 KB stack the harnesses run "
@@ -796,6 +798,86 @@ TEST(Stack, TheDeepestAssertionTheDefaultsCompileStillMatches) {
       << "a pattern nested to max_nesting_depth compiled and then would not "
          "run: GRX_BACKTRACK_MAX_C_DEPTH is below what the defaults allow";
   EXPECT_EQ(m.matched, 1);
+}
+
+/** Forward Vim lookbehind adds a candidate-search frame at every level. */
+TEST(Stack, VimBehindAndMixedAssertionsRespectTheNativeStackBound) {
+  GRX_Limits limits = deep_limits();
+  GRX_Limits defaults;
+  grx_limits_default(&defaults);
+  for (GRX_Syntax syntax : {GRX_SYNTAX_VIM_BACKTRACK, GRX_SYNTAX_VIM_NFA}) {
+    for (bool mixed : {false, true}) {
+      size_t reference = 0;
+      for (size_t depth : std::vector<size_t>{defaults.max_nesting_depth, 480, 960}) {
+        std::string pattern = "^";
+        for (size_t level = 0; level < depth; ++level) {
+          pattern = "\\%(" + pattern
+              + (mixed && level % 2 ? "\\)\\@=" : "\\)\\@<=");
+        }
+        pattern += 'a';
+        const bool boundary = depth == defaults.max_nesting_depth;
+        GRX_Regex * regex = compile_or_fail(pattern, syntax,
+            boundary ? nullptr : &limits);
+        ASSERT_NE(regex, nullptr) << "depth " << depth << ", mixed " << mixed;
+        Measurement m = measure(regex, "a", GRX_ENGINE_BACKTRACK,
+            boundary ? nullptr : &limits);
+        grx_regex_free(regex);
+        EXPECT_EQ(m.result, boundary ? GRX_OK : GRX_ERR_LIMIT)
+            << "depth " << depth << ", mixed " << mixed << ", syntax " << syntax;
+        EXPECT_EQ(m.matched, boundary ? 1 : 0);
+        ASSERT_FALSE(m.saturated);
+        if (!m.measured) {
+          continue;
+        }
+        std::fprintf(stderr,
+            "Vim assertion native stack syntax %d mixed %d depth %zu: %zu bytes\n",
+            syntax, mixed, depth, m.bytes);
+        EXPECT_LT(m.bytes, kHarnessBudget);
+        if (!boundary) {
+          if (reference) {
+            const size_t difference = m.bytes > reference
+                ? m.bytes - reference : reference - m.bytes;
+            EXPECT_LT(difference, kFrameJitter);
+          }
+          reference = m.bytes;
+        }
+      }
+    }
+  }
+}
+
+TEST(Stack, AtomicDiscoveryInsideNestedAssertionsFitsTheNativeStackBound) {
+  GRX_Limits limits = deep_limits();
+  limits.max_steps = 30000000;
+  for (bool behind : {false, true}) {
+    size_t ceiling = 0;
+    for (size_t depth : {32u, 127u, 160u, 240u}) {
+      std::string pattern = R"(a\+\(a\)\@>\(a\)\@<=)";
+      for (size_t i = 0; i < depth; ++i) {
+        pattern = "\\%(" + pattern + (behind ? "\\)\\@<=" : "\\)\\@=");
+      }
+      GRX_Regex * regex = compile_or_fail(pattern, GRX_SYNTAX_VIM_NFA, depth <= 127 ? nullptr : &limits);
+      ASSERT_NE(regex, nullptr);
+      Measurement m = measure(regex, "aaab", GRX_ENGINE_BACKTRACK, depth <= 127 ? nullptr : &limits);
+      grx_regex_free(regex);
+      EXPECT_EQ(m.result, depth <= 127 ? GRX_OK : GRX_ERR_LIMIT);
+      EXPECT_EQ(m.matched, depth <= 127 ? 1 : 0);
+      ASSERT_FALSE(m.saturated);
+      if (!m.measured) {
+        continue;
+      }
+      EXPECT_LT(m.bytes, kHarnessBudget);
+      if (depth > 127) {
+        if (ceiling) {
+          size_t difference = m.bytes > ceiling ? m.bytes - ceiling : ceiling - m.bytes;
+          EXPECT_LT(difference, kFrameJitter);
+        }
+        ceiling = m.bytes;
+      }
+      std::fprintf(stderr, "Atomic discovery native stack behind %d depth %zu: %zu bytes\n",
+          behind, depth, m.bytes);
+    }
+  }
 }
 
 /**
