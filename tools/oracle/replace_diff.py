@@ -177,7 +177,7 @@ DIALECT_FORMS = {
     # and the six case markers are the half of this grammar that Perl's row
     # also has and no other does - with four of the rules different, which is
     # what GRX_TMPL_CASE_ESCAPES documents.
-    "vim": ["&", "\\&", "\\0", "\\1", "\\2", "\\9", "~", "\\~",
+    "vim-backtrack": ["&", "\\&", "\\0", "\\1", "\\2", "\\9", "~", "\\~",
             "\\n", "\\r", "\\t", "\\b", "\\\\", "\\q",
             "\\u", "\\l", "\\U", "\\L", "\\E", "\\e",
             "\\u\\1", "\\U\\1\\E\\2", "\\Uab\\lcd", "\\u&"],
@@ -217,10 +217,13 @@ FLAG_SETS = {
     "perl": ("", "i", "m", "s", "x", "im"),
     # Vim has no flag string at all: `\c`, `\v` and the rest are pattern
     # syntax, so the alphabet is empty and the only valid value is "".
-    "vim": ("",),
+    "vim-backtrack": ("",),
     "re2": ("", "i", "m", "s", "im", "U"),
     "rust": ("", "i", "m", "s", "im", "U"),
 }
+
+DIALECT_FORMS["vim-nfa"] = DIALECT_FORMS["vim-backtrack"]
+FLAG_SETS["vim-nfa"] = FLAG_SETS["vim-backtrack"]
 
 # The runner each linear dialect's reference is reached through.
 LINEAR = {"re2": go_runner, "rust": rust_runner}
@@ -271,7 +274,7 @@ def make_template(dialect, rng):
     if dialect == "python":
         pieces = PYTHON_WELL_FORMED + DIALECT_FORMS[dialect]
         malformed = PYTHON_MALFORMED
-    elif dialect == "vim":
+    elif dialect in vim_diff.PROFILES:
         # No malformed list: vim's template alphabet is open the way sed's
         # is - every escape it does not know is the bare character - so
         # there is no spelling to refuse and nothing for one to measure.
@@ -322,7 +325,7 @@ def make_pattern(dialect, rng):
         return linear_diff.make_pattern(rng, dialect)
     if dialect == "ecmascript":
         return match_diff.make_pattern(rng)
-    if dialect == "vim":
+    if dialect in vim_diff.PROFILES:
         # vim_diff's own generator, refused constructs and all: this run has
         # to ask the accept-or-refuse question too, and vim's template
         # alphabet has no ill-formed spelling to ask it with.
@@ -458,7 +461,7 @@ qa!
 """
 
 
-def ask_vim(rows, engine=0):
+def ask_vim(rows, engine=2):
     """vim's answers: one process for the whole run, as vim_diff.py does.
 
     `substitute()` and not `:s`, for the reason vim_diff.py drives
@@ -486,10 +489,7 @@ def ask_vim(rows, engine=0):
     extra = ["--cmd", "let g:in=%s" % json.dumps(in_path),
              "--cmd", "let g:o=%s" % json.dumps(out_path)]
     if engine:
-        # The old engine, for the reason vim_diff.py asks it: vim ships two
-        # and they disagree, and a row where `set re=1` gives this
-        # library's answer is one where this library picked one of vim's
-        # answers rather than one where it is wrong.
+        # Match the engine named by the selected compatibility profile.
         extra += ["--cmd", "set re=%d" % engine]
     subprocess.run(
         vim_runner.command(extra + ["-c", "source " + script_path],
@@ -776,16 +776,147 @@ def is_abandoned_path_artifact(pattern, template):
 
 
 
+
+def nested_positive_lookbehind(pattern):
+    r"""Whether capture 1 is a positive lookbehind with nested lookahead.
+
+    This structural recognizer handles escaped Vim groups. Very-magic groups
+    are deliberately left to the differential rather than guessed at.
+    """
+    if "\\v" in pattern:
+        return False
+    stack = []
+    captures = 0
+    in_class = False
+    i = 0
+    while i < len(pattern):
+        if pattern[i] == "[" and not in_class:
+            in_class = True
+            i += 1
+            continue
+        if pattern[i] == "]" and in_class:
+            in_class = False
+            i += 1
+            continue
+        if in_class or pattern[i] != "\\":
+            i += 1
+            continue
+        if pattern.startswith("\\%(", i):
+            stack.append([0, False])
+            i += 3
+        elif pattern.startswith("\\(", i):
+            captures += 1
+            stack.append([captures, False])
+            i += 2
+        elif pattern.startswith("\\)", i):
+            if not stack:
+                return False
+            number, nested = stack.pop()
+            suffix = pattern[i + 2:]
+            if number == 1 and nested and re.match(r"\\@\d*<=", suffix):
+                return True
+            if suffix.startswith("\\@="):
+                for group in stack:
+                    group[1] = True
+            i += 2
+        else:
+            i += 2
+    return False
+
+
+def omit_vim_group_one(template):
+    r"""Remove only \1 tokens; keep every case operator and literal escape."""
+    out = []
+    i = 0
+    while i < len(template):
+        if template[i] == "\\" and i + 1 < len(template):
+            if template[i + 1] != "1":
+                out.append(template[i:i + 2])
+            i += 2
+        else:
+            out.append(template[i])
+            i += 1
+    return "".join(out)
+
+
+def capture_loss_evidence(pattern, them, us, ref_whole, own_whole,
+        ref_group, own_group, own_omitted, reference_output, prefix, suffix):
+    """Check the independently obtained match and substitution witnesses."""
+    fields = re.compile(re.escape(prefix) + "(.*?)" + re.escape(suffix), re.S)
+    reference_fields = fields.findall(ref_group)
+    our_fields = fields.findall(own_group)
+    count = len(fields.findall(ref_whole))
+    return (nested_positive_lookbehind(pattern)
+        and vim_diff.is_postfix_capture_artifact(pattern, them, us)
+        and count > 0
+        and ref_whole == own_whole
+        and len(reference_fields) == count == len(our_fields)
+        and all(group == "" for group in reference_fields)
+        and all(group != "" for group in our_fields)
+        and own_omitted == reference_output)
+
+
+def capture_loss_witnesses(driver, rows):
+    r"""Prove the narrowly measured NFA capture loss for each candidate row.
+
+    Wrapping every whole match in unique literal markers gives an independent
+    global span/count witness: equal output means equal match boundaries,
+    including empty matches. A second marked substitution exposes capture 1
+    for every actual substitute() match. Finally, the original reference
+    output must equal ours with only \1 tokens removed from its template.
+    """
+    if not rows:
+        return []
+    match_driver = find("grx_match")
+    if not match_driver:
+        return [False] * len(rows)
+    cases = [(row[1], row[2]) for row in rows]
+    reference_matches = vim_diff.ask_vim(cases, engine=2)
+    our_matches = vim_diff.ask_ours([match_driver, "vim-nfa"], cases)
+    if len(reference_matches) != len(rows) or len(our_matches) != len(rows):
+        raise RuntimeError("capture-loss match witness returned a short population")
+
+    # Markers are absent from every subject, so a capture cannot counterfeit
+    # a boundary. They contain no replacement metacharacters.
+    prefix, suffix = "GRXCaptureWitnessBegin", "GRXCaptureWitnessEnd"
+    while any(prefix in row[2] or suffix in row[2] for row in rows):
+        prefix += "X"
+        suffix += "X"
+    marked_whole = [(f, p, subject, prefix + "&" + suffix)
+        for f, p, subject, _t, _them, _us in rows]
+    marked_group = [(f, p, subject, prefix + "\\1" + suffix)
+        for f, p, subject, _t, _them, _us in rows]
+    omitted = [(f, p, subject, omit_vim_group_one(t))
+        for f, p, subject, t, _them, _us in rows]
+    ref_whole = ask_vim(marked_whole, engine=2)
+    own_whole, _ = ask_library(driver, "vim-nfa", marked_whole)
+    ref_group = ask_vim(marked_group, engine=2)
+    own_group, _ = ask_library(driver, "vim-nfa", marked_group)
+    own_omitted, _ = ask_library(driver, "vim-nfa", omitted)
+    populations = (ref_whole, own_whole, ref_group, own_group, own_omitted)
+    if any(len(population) != len(rows) for population in populations):
+        raise RuntimeError("capture-loss substitution witness returned a short population")
+    result = []
+    for i, row in enumerate(rows):
+        them = vim_diff.normalise_theirs(reference_matches[i], row[2])
+        us = vim_diff.normalise_ours(our_matches[i], row[2])
+        result.append(capture_loss_evidence(row[1], them, us,
+            ref_whole[i], own_whole[i], ref_group[i], own_group[i],
+            own_omitted[i], row[4], prefix, suffix))
+    return result
+
+
 def compare(dialect, driver, seed, patterns, templates, subjects, examples):
     """One dialect against its reference. None means the run was not made."""
     reference = None
-    if dialect == "vim":
+    if dialect in vim_diff.PROFILES:
         # No `which vim` and no skip. The reference is resolved and versioned
         # by oracle_run.py before this runs, and vim_runner raises rather than
         # falling back if it cannot be reached. `which vim` answered whether
         # something of that name was on PATH, which is not what this arm
         # needs to know - see vim_runner.py's docstring for what it cost.
-        print("vim: %s" % vim_runner.version())
+        print("%s: %s; forced regexpengine=%d"
+            % (dialect, vim_runner.version(), vim_diff.PROFILES[dialect]))
     if dialect == "pcre":
         # Compiled inside the pinned image and run there, so there is no
         # driver for `make tools` to have failed to build and no skip.
@@ -793,6 +924,8 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
 
     rng = random.Random(seed)
     rows = []
+    nul_redraws = 0
+    subject_draws = 0
     for i in range(patterns):
         # Half from the generator, half from the named list, so that the
         # named and high-numbered forms have something to refer to and the
@@ -801,7 +934,7 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
             pattern = make_pattern(dialect, rng)
         elif dialect == "python":
             pattern = rng.choice(PYTHON_NAMED_PATTERNS)
-        elif dialect == "vim":
+        elif dialect in vim_diff.PROFILES:
             pattern = rng.choice(VIM_NAMED_PATTERNS)
         elif dialect in LINEAR:
             pattern = rng.choice(LINEAR_NAMED_PATTERNS)
@@ -811,9 +944,23 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
         for _ in range(templates):
             template = make_template(dialect, rng)
             for _ in range(subjects):
-                subject = match_diff.make_subject(rng, "u" in flags,
-                    surrogates=wants_wtf8(dialect, flags))
+                while True:
+                    subject = match_diff.make_subject(rng, "u" in flags,
+                        surrogates=wants_wtf8(dialect, flags))
+                    subject_draws += 1
+                    # Vim strings cannot represent U+0000: json_decode()
+                    # drops it before substitute() sees the question. Draw
+                    # another subject so this is a comparison of equal inputs.
+                    if dialect in vim_diff.PROFILES and "\0" in subject:
+                        nul_redraws += 1
+                        continue
+                    break
                 rows.append((flags, pattern, subject, template))
+
+    if dialect in vim_diff.PROFILES:
+        print("%s: %d subject draws, %d unrepresentable NUL subjects "
+            "redrawn, %d subject-bearing rows"
+            % (dialect, subject_draws, nul_redraws, len(rows)))
 
     if dialect == "ecmascript":
         # node never substitutes nothing and then reports a template error,
@@ -822,8 +969,9 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
         theirs = [(answer, 1) for answer in ask_node(rows)]
     elif dialect == "python":
         theirs = [(answer, 1) for answer in ask_python(rows)]
-    elif dialect == "vim":
-        theirs = [(answer, 1) for answer in ask_vim(rows)]
+    elif dialect in vim_diff.PROFILES:
+        theirs = [(answer, 1) for answer in ask_vim(rows,
+            engine=vim_diff.PROFILES[dialect])]
     elif dialect == "perl":
         theirs = ask_perl(rows)
     elif dialect in LINEAR:
@@ -908,7 +1056,7 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
                 and raw == "compile %d" % not_implemented):
             unimplemented += 1
             continue
-        if dialect == "vim" and us == "syntax" \
+        if dialect in vim_diff.PROFILES and us == "syntax" \
                 and vim_diff.is_forward_reference_artifact(
                     pattern, "match", "compile"):
             # vim accepts a forward backreference when a lookbehind follows
@@ -1041,70 +1189,33 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
             else:
                 tokenizer += 1
 
-    split = 0
-    both_axes = []
-    if dialect == "vim" and disagreements:
-        # Every row left, put to vim's other engine. The two disagree about
-        # where a `\zs` or a `\ze` inside an assertion counts, and this
-        # library follows the one whose answers can be stated as a rule -
-        # so a replacement built on those spans differs from the default
-        # engine's and agrees with the old one's. Only the rows that came
-        # back different are asked.
-        older = ask_vim([(f, p, s, t) for f, p, s, t, _, _ in disagreements],
-            engine=1)
-        kept = []
-        for row, old_answer in zip(disagreements, older):
-            if old_answer == row[5]:
-                split += 1
-                compared -= 1
-                continue
-            if vim_diff.lookbehind_with_backreference(row[1]):
-                # vim loses the capture a *successful* postfix lookbehind
-                # made, so a `\\1` after it matches nothing there and the
-                # substitution covers a shorter span. Section 6, item 4,
-                # and the predicate is vim_diff.py's so that the two gates
-                # ask one question.
-                defect += 1
-                compared -= 1
-                continue
-            if is_abandoned_path_artifact(row[1], row[3]):
-                # vim keeps the captures and the marks a path it abandoned
-                # wrote, and this library does not, so the group a template
-                # names or the span it covers differs. Section 6, item 2.
-                defect += 1
-                compared -= 1
-                continue
-            if vim_diff.marks_in_a_lookbehind_and_after_it(row[1]):
-                # Section 6, item 9's one shape where vim's two engines
-                # agree and this library still differs: a mark inside a
-                # positive lookbehind and another inside a postfix operator
-                # after it. vim keeps the first and this library's rule is
-                # that the last write wins. vim_diff.py's predicate rather
-                # than a second copy of it.
-                defect += 1
-                compared -= 1
-                continue
-            if old_answer != row[4]:
-                # Two axes at once, which is the third category vim_diff.py
-                # keeps and this gate did not. Most split rows turn on one
-                # axis and `set re=1` gives exactly this library's answer;
-                # a pattern touching two of them agrees with neither
-                # engine, because this library follows the old one where a
-                # mark sits inside an assertion or an atomic group and the
-                # new one elsewhere - each because that engine's answer is
-                # the one that can be stated as a rule.
-                # `\(\w\+\)\@2<=\(a\zsb\)\@>\v` over "BbBab0A" is
-                # both: the `\zs` inside `\@>` counts here and under
-                # `re=1` and is inert under `re=2`, and the bounded
-                # lookbehind reaches two characters back here and under
-                # `re=2` and one under `re=1`. Printed rather than
-                # swallowed - a defect of this library's could hide among
-                # them, and the only defence is that a person can see them.
-                both_axes.append(row + (old_answer,))
-                compared -= 1
-                continue
+    # Named, independently measured limitations remain applicable to the
+    # selected reference. Engine disagreements are never an exclusion.
+    kept = []
+    for row in disagreements:
+        if dialect in vim_diff.PROFILES and (
+                vim_diff.lookbehind_with_backreference(row[1])
+                or is_abandoned_path_artifact(row[1], row[3])
+                or vim_diff.marks_in_a_lookbehind_and_after_it(row[1])):
+            defect += 1
+            compared -= 1
+        else:
             kept.append(row)
-        disagreements = kept
+    disagreements = kept
+
+    capture_loss = 0
+    if dialect == "vim-nfa":
+        candidates = [row for row in disagreements
+            if nested_positive_lookbehind(row[1])
+            and omit_vim_group_one(row[3]) != row[3]]
+        witnessed = capture_loss_witnesses(driver, candidates)
+        proven = {id(row) for row, yes in zip(candidates, witnessed) if yes}
+        capture_loss = len(proven)
+        disagreements = [row for row in disagreements if id(row) not in proven]
+        compared -= capture_loss
+        print("%s: %d excluded (nested positive-lookbehind capture loss, "
+            "equal global spans/counts and group-one omission witnessed)"
+            % (dialect, capture_loss))
 
     for flags, pattern, subject, template, them, us in \
             disagreements[:examples]:
@@ -1112,14 +1223,6 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
             json.dumps(subject)))
         print("      reference: %s" % json.dumps(them))
         print("      ours:      %s" % json.dumps(us))
-    for flags, pattern, subject, template, them, us, older in \
-            both_axes[:examples]:
-        print("  [both axes] /%s/%s  %s on %s"
-            % (pattern, flags, json.dumps(template), json.dumps(subject)))
-        print("      re=2: %s" % json.dumps(them))
-        print("      re=1: %s" % json.dumps(older))
-        print("      ours: %s" % json.dumps(us))
-
     print("%-11s %d rows, %d compared, %d the pattern was rejected, "
           "%d the reference declined, %d the surrogate-pair deviation, "
           "%d the template parsed up front, %d a known reference defect, "
@@ -1128,14 +1231,11 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
           "%d perl's quoting in the pattern, "
           "%d a double-quotish escape this library does not decode, "
           "%d this library does not implement, "
-          "%d vim's two engines disagree, "
-          "%d vim's two engines disagree and neither gives ours, "
           "%d disagreements"
           % (dialect + ":", len(rows), compared, rejected, declined,
              deviation, lazy, defect, tokenizer, quotemeta, nested,
              quoting, quotish,
-             unimplemented, split,
-             len(both_axes),
+             unimplemented,
              len(disagreements)))
     if surrogate_rows:
         print("%-11s %d rows hold an unpaired surrogate, %d of them this "
@@ -1154,27 +1254,7 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples):
             "%s: no generated pattern was rejected, so the accept/reject "
             "half was never asked\n" % dialect)
         return None
-    if both_axes:
-        # Siding with neither reference is a third answer to a two-sided
-        # question, and it belongs in the exit status. `vim_diff.py` asserts
-        # its own copy of this bucket empty and says why: a category with no
-        # expected size is where a defect goes to be quiet, and the comment
-        # above promising these are "printed rather than swallowed" so a
-        # person can see them is the promise that failed when four rows
-        # arrived under a wrong locale and nobody did.
-        #
-        # This file had the print and not the assertion, which makes four
-        # differentials with this bucket and, until now, two behaviours:
-        # `script_run_diff.py` and `vim_diff.py` fail on it,
-        # `submatch_diff.py` and this one printed it and exited 0. One rule,
-        # one family.
-        sys.stderr.write(
-            "%s: %d rows where vim's two engines disagree and neither gives "
-            "this library's answer. That bucket is empty on a healthy run, "
-            "so these are either a defect here or a vim behaviour nothing "
-            "has classified yet - decide which, rather than letting the "
-            "count carry them.\n" % (dialect, len(both_axes)))
-    return len(disagreements) + len(both_axes)
+    return len(disagreements)
 
 
 def main(argv):
@@ -1185,7 +1265,9 @@ def main(argv):
     parser.add_argument("--subjects", type=int, default=4)
     parser.add_argument("--examples", type=int, default=10)
     parser.add_argument("--dialect", default="all",
-        help="ecmascript, pcre, perl, python, vim, re2, rust, or all")
+        choices=("ecmascript", "pcre", "perl", "python",
+            "vim-backtrack", "vim-nfa", "re2", "rust", "all"),
+        help="ecmascript, pcre, perl, python, vim-backtrack, vim-nfa, re2, rust, or all")
     args = parser.parse_args(argv[1:])
 
     driver = find("grx_replace")
@@ -1193,7 +1275,7 @@ def main(argv):
         sys.stderr.write("run `make tools` first\n")
         return 2
 
-    dialects = ("ecmascript", "pcre", "perl", "python", "vim", "re2", "rust") \
+    dialects = ("ecmascript", "pcre", "perl", "python", "vim-backtrack", "vim-nfa", "re2", "rust") \
         if args.dialect == "all" else (args.dialect,)
     total = 0
     for dialect in dialects:

@@ -1059,6 +1059,7 @@ static GRX_Result read_collection(GRX_Parser * parser, size_t start,
   if (result != GRX_OK) {
     return result;
   }
+  grx_pattern_node(parser->pattern, *out_node)->flags |= GRX_NODE_COLLECTION;
   if (negated) {
     grx_pattern_node(parser->pattern, *out_node)->flags |= GRX_NODE_NEGATED;
   }
@@ -1123,10 +1124,14 @@ static GRX_Result read_collection(GRX_Parser * parser, size_t start,
         return grx_parse_fail(parser, GRX_DIAG_OUT_OF_MEMORY, item_start, 0);
       }
       parser->position += end + 2;
+      int fold_case_class = parser->profile.posix_case_classes_latin1
+          && ((name_length == 5 && memcmp(name, "lower", 5) == 0)
+              || (name_length == 5 && memcmp(name, "upper", 5) == 0));
       item = (GRX_ClassItem) {
         // Not folded, for the reason range_class() gives: `\c[[:lower:]]`
         // does not match "A" in vim and `\c[a-z]` does.
-        .kind = GRX_CLASS_ITEM_POSIX, .flags = GRX_CLASS_ITEM_NO_FOLD,
+        .kind = GRX_CLASS_ITEM_POSIX,
+        .flags = fold_case_class ? 0u : GRX_CLASS_ITEM_NO_FOLD,
         .lo = 0, .hi = 0,
         .a = offset, .offset = item_start,
         .length = parser->position - item_start,
@@ -1172,6 +1177,12 @@ static GRX_Result read_collection(GRX_Parser * parser, size_t start,
     if (added != GRX_OK) {
       return added;
     }
+  }
+
+  if (parser->profile.optional_tail_omits_newline
+      && parser->dialect_state == VIM_IN_OPTIONAL
+      && byte_at(parser, 0) == ']') {
+    with_newline = 0;
   }
 
   if (with_newline && !negated) {
@@ -1635,6 +1646,17 @@ static GRX_Result read_percent(
     return grx_parse_fail(parser, GRX_DIAG_INVALID_ESCAPE, start, 3);
   }
 
+  if (c == '#' && byte_at(parser, 2) == '=') {
+    // Compatibility is chosen by the named profile. Pattern-local engine
+    // requests cannot silently change that identity or select auto mode.
+    size_t length = parser->position - start + 4;
+    size_t remaining = parser->length - start;
+    if (length > remaining) {
+      length = remaining;
+    }
+    return grx_parse_fail(
+        parser, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, start, length);
+  }
   if (c == 'V' || c == '#') {
     // The Visual area and the cursor. A subject has neither, and vim's own
     // answer over a string is that they never match - so that is what is
@@ -1676,10 +1698,13 @@ static GRX_Result read_underscore(
   const VimRange * ranges = vim_named_set(c, &count, &negated, &no_digits);
   if (ranges) {
     parser->position += 2;
+    int newline = !(parser->profile.optional_tail_omits_newline
+        && parser->dialect_state == VIM_IN_OPTIONAL
+        && byte_at(parser, 0) == ']');
     if (no_digits) {
-      return range_class_no_digits(parser, ranges, count, 1, start, out_node);
+      return range_class_no_digits(parser, ranges, count, newline, start, out_node);
     }
-    return range_class(parser, ranges, count, negated, 1, start, out_node);
+    return range_class(parser, ranges, count, negated, newline, start, out_node);
   }
   return grx_parse_fail(parser, GRX_DIAG_INVALID_ESCAPE, start, 2);
 }

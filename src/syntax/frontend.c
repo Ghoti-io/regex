@@ -58,7 +58,8 @@ const GRX_Frontend * grx_frontend_for(GRX_Syntax syntax) {
       return &grx_frontend_java;
     case GRX_SYNTAX_DOTNET:
       return &grx_frontend_dotnet;
-    case GRX_SYNTAX_VIM:
+    case GRX_SYNTAX_VIM_BACKTRACK:
+    case GRX_SYNTAX_VIM_NFA:
       return &grx_frontend_vim;
     case GRX_SYNTAX_POSIX_BRE:
       return &grx_frontend_posix_bre;

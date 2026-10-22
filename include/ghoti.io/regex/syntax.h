@@ -69,7 +69,8 @@ typedef enum {
   GRX_SYNTAX_RE2,           ///< RE2, and so Go's `regexp`.
   GRX_SYNTAX_RUST,          ///< The Rust `regex` crate.
   GRX_SYNTAX_TCL,           ///< Tcl's advanced REs (Spencer).
-  GRX_SYNTAX_VIM,           ///< Vim's "magic" syntax.
+  GRX_SYNTAX_VIM_BACKTRACK, ///< Vim string matching, backtracking profile.
+  GRX_SYNTAX_VIM_NFA,       ///< Vim string matching, NFA profile.
   GRX_SYNTAX_EMACS,         ///< Emacs Lisp regexps.
   /**
    * I-Regexp, RFC 9485: the interoperable subset JSONPath requires.

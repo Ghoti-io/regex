@@ -888,8 +888,12 @@ static WalkAction walk_step(
           // inside the bound is one the assertion can never satisfy -
           // `\(ab\)\@1<=c` does not match "abc" in vim - and a minimum
           // above the maximum is not a span at all.
-          size_t low_end = body.min_length;
-          size_t high_end = body.max_length;
+          // Persistent assertion captures are observable even when the body
+          // cannot end here: do not prune those candidate side effects.
+          size_t low_end = (node->flags & GRX_IR_LOOK_PERSIST_CAPTURES)
+              ? 0 : body.min_length;
+          size_t high_end = (node->flags & GRX_IR_LOOK_PERSIST_CAPTURES)
+              ? GRX_NPOS : body.max_length;
           if (node->b) {
             high_end = high_end > node->b ? node->b : high_end;
             low_end = low_end > high_end ? high_end : low_end;

@@ -86,15 +86,19 @@ typedef enum {
   /**
    * Every code point with a simple uppercase mapping, plus U+00DF.
    *
-   * Vim's `[[:lower:]]`, which is not `\p{Lowercase}` and not `\p{Ll}` but
+   * NFA Vim's `[[:lower:]]`, not `\p{Lowercase}` and not `\p{Ll}` but
    * "has a case counterpart" - see
    * GRX_Profile::posix_case_classes_case_mapped. U+00DF is the one member
    * that is not in the map: its *full* uppercase is "SS" so it has no
    * simple one, and vim counts it lowercase anyway.
    */
   GRX_SET_CASE_MAPPED_LOWER,
-  /** Every code point with a simple lowercase mapping: vim's `[[:upper:]]`. */
+  /** Simple lowercase-map domain: NFA Vim's `[[:upper:]]`. */
   GRX_SET_CASE_MAPPED_UPPER,
+  /** The 59 members of backtracking Vim's `[[:lower:]]`. */
+  GRX_SET_LATIN1_CASE_LOWER,
+  /** The 56 members of backtracking Vim's `[[:upper:]]`. */
+  GRX_SET_LATIN1_CASE_UPPER,
   GRX_SET_UNICODE_SPACE,    ///< `\p{White_Space}`.
   /**
    * The Perl family's `\h` and `\v`, in every mode it has.

@@ -113,6 +113,8 @@ typedef enum {
   GRX_LOOKBEHIND_BOUNDED,           ///< Finite maximum. PCRE2, Perl.
   GRX_LOOKBEHIND_UNBOUNDED,         ///< Any length. ECMAScript, .NET.
   GRX_LOOKBEHIND_JAVA,              ///< Unbounded, nearest candidate first.
+  GRX_LOOKBEHIND_FORWARD_NEAREST, ///< Unbounded forward, nearest start.
+  GRX_LOOKBEHIND_FORWARD_FURTHEST, ///< Unbounded forward, furthest start.
   GRX_LOOKBEHIND_LIMIT_COUNT        ///< Closes the enum; not a constraint.
 } GRX_LookbehindLimit;
 
@@ -737,6 +739,18 @@ typedef struct GRX_Profile {
   GRX_BackrefUnsetMode backref_unset; ///< A reference to an unset group.
   GRX_LookbehindLimit lookbehind;   ///< How long a lookbehind may be.
   GRX_NegativeLookCaptures negative_look; ///< Captures a failed body made.
+  int assertion_captures_persist; ///< Captures survive abandoned successful assertions.
+  int posix_case_classes_latin1; ///< Case predicates are Latin-1 sets.
+  int scalar_collections; ///< Bracket atoms consume one scalar.
+  int literal_cluster_guard; ///< Every literal atom must finish its cluster.
+  int match_end_cluster_boundary; ///< A match cannot end inside a cluster.
+  int empty_loop_after_mandatory; ///< Mandatory repeats retain trailing empties.
+  int direct_repeat_scalar; ///< A direct non-optional literal repeat is scalar.
+  int ignore_combining_literal_run; ///< Adjacent literals may skip intervening marks.
+  int lookbehind_round_bound; ///< Admit a character crossing a byte bound.
+  int provisional_assertion_end; ///< Assertion end markers expire on consumption.
+  int atomic_ignores_markers; ///< Markers inside atomic bodies are inert.
+  int optional_tail_omits_newline; ///< Final optional class loses added LF.
   GRX_SplitRule split;              ///< How grx_regex_split() divides.
   GRX_IterationRule iteration;      ///< Search-all after an empty match.
   GRX_SearchStartRule search_start; ///< What `\G` asserts while iterating.

@@ -90,6 +90,14 @@
 // be reordered without breaking and a row that is simply missing is zero
 // rather than someone else's - which no compiler can catch, and which
 // EveryDialectHasASpec in tests/unit/test_syntax.cpp exists to catch instead.
+// The four magic levels are shared grammar, selected by Vim's front end.
+#define VIM_SYNTAX_COMMON \
+  .features = ALT | REP | LAZY | NCAP | BREF | LAH | LBH | ATOM | PCLS \
+      | WORD | ANCH | HEX | OCT, \
+  .default_options = GRX_OPT_UTF, \
+  .escaped_specials = 1, \
+  .branch_and_operator = 1
+
 static const GRX_SyntaxSpec spec_table[GRX_SYNTAX_COUNT] = {
   // `.` matches a newline in all four: POSIX has no "dot-all" option because
   // dot-all is what it does, and `.` against "\n" matches in glibc with no
@@ -336,26 +344,11 @@ static const GRX_SyntaxSpec spec_table[GRX_SYNTAX_COUNT] = {
     .features = ALT | REP | LAZY | NCAP | BREF | LAH | LBH | FLAG | PCLS
         | WORD | ANCH | HEX | OCT,
   },
-  [GRX_SYNTAX_VIM] = {
-    // No FLAG: vim has no `(?i)`. Its `\c` is not an inline flag either -
-    // it decides caseless matching for the whole pattern from wherever it
-    // stands, which GRX_Frontend::initial_options is what reads. No CMNT,
-    // no NAME, no COND, no RECU, no QUOT, no UPRP, no CSET, no POSS. OCT
-    // and HEX are `\%o40` and `\%x2a`, which are spelled inside the `\%`
-    // family rather than as `\x` - `\x` alone is the hex-digit *class*.
-    .features = ALT | REP | LAZY | NCAP | BREF | LAH | LBH | ATOM | PCLS
-        | WORD | ANCH | HEX | OCT,
-    // The subject is text: `\%u00e9` matches the two bytes of "é", and `.`
-    // takes a whole character rather than one of them.
-    .default_options = GRX_OPT_UTF,
-    // Read only by the prescan here, the operator spellings being the front
-    // end's own per-position answer: four magic levels cannot be a flag.
-    // It is still the right value for the prescan, whose one job is to
-    // count `\(`.
-    .escaped_specials = 1,
-    // `\\&`, the only dialect here with a second joining operator: it is a
-    // grammar level between `\\|` and concatenation, not a construct.
-    .branch_and_operator = 1,
+  [GRX_SYNTAX_VIM_BACKTRACK] = {
+    VIM_SYNTAX_COMMON,
+  },
+  [GRX_SYNTAX_VIM_NFA] = {
+    VIM_SYNTAX_COMMON,
   },
   [GRX_SYNTAX_EMACS] = {
     .features = ALT | REP | LAZY | NCAP | BREF | PCLS | WORD | ANCH,
@@ -408,7 +401,8 @@ static const char * const spec_names[GRX_SYNTAX_COUNT] = {
   [GRX_SYNTAX_RE2] = "re2",
   [GRX_SYNTAX_RUST] = "rust",
   [GRX_SYNTAX_TCL] = "tcl",
-  [GRX_SYNTAX_VIM] = "vim",
+  [GRX_SYNTAX_VIM_BACKTRACK] = "vim-backtrack",
+  [GRX_SYNTAX_VIM_NFA] = "vim-nfa",
   [GRX_SYNTAX_EMACS] = "emacs",
   // The RFC's own spelling. Its title calls the format "I-Regexp", its
   // grammar's start rule is `i-regexp`, and it registers no media type and no
@@ -458,6 +452,29 @@ static const char * const spec_names[GRX_SYNTAX_COUNT] = {
  * be wrong, because a template grammar nothing can reach is a grammar
  * nothing can check.
  */
+// Shared string-matching contract; the differing policies stay explicit below.
+#define VIM_PROFILE_COMMON \
+  .capture_reset = GRX_CAPTURE_KEEP_LAST_SET, \
+  .backref_unset = GRX_BACKREF_UNSET_EMPTY, \
+  .dollar = GRX_DOLLAR_END_ONLY, \
+  .newlines = GRX_NEWLINES_NONE, \
+  .iteration = GRX_ITERATE_ADVANCE_ONE_STOP_AT_END, \
+  .shorthands = GRX_SHORTHANDS_ASCII, \
+  .shorthands_wide = GRX_SHORTHANDS_ASCII, \
+  .word_boundary = GRX_WORD_BOUNDARY_VIM_CLASS, \
+  .composing = GRX_COMPOSING_CLUSTER, \
+  .fold = GRX_FOLD_SIMPLE, \
+  .fold_utf = GRX_FOLD_SIMPLE, \
+  .subject_is_text = 1, \
+  .posix_case_classes_wide = 1, \
+  .template_spec = { \
+    .sigil = '\\', \
+    .features = GRX_TMPL_NUMBER_SINGLE | GRX_TMPL_WHOLE_ZERO \
+        | GRX_TMPL_WHOLE_BARE | GRX_TMPL_VIM_ESCAPES \
+        | GRX_TMPL_ESCAPE_ANY, \
+    .missing = GRX_TMPL_MISSING_EMPTY, \
+  }
+
 static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
   // POSIX and GNU: leftmost-longest, no lookbehind, the C locale treated as
   // ASCII (a deviation, recorded in dialects.md section 6).
@@ -1252,98 +1269,28 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     .fold = GRX_FOLD_SIMPLE,
     .fold_utf = GRX_FOLD_SIMPLE,
   },
-  [GRX_SYNTAX_VIM] = {
-    // KEEP_LAST_SET, measured: `\v(a|b)*` against "ab" reports group 1 as
-    // "b", so an iteration that does not write does not clear either.
-    .capture_reset = GRX_CAPTURE_KEEP_LAST_SET,
-    // MATCH_EMPTY, measured: `\(a\)\?\1` matches the empty string
-    // against "b", where a dialect that fails on an unset reference would
-    // report no match. documentation/dialects.md section 5.6 had this cell
-    // marked **probe**; this is the probe.
-    .backref_unset = GRX_BACKREF_UNSET_EMPTY,
-    .lookbehind = GRX_LOOKBEHIND_UNBOUNDED,
-    // END_ONLY and no lines, where this row said ALWAYS_LINE and multiline.
-    // Both were written from vim's help, which describes matching against a
-    // *buffer*. The subject this library has is a string, and over a string
-    // vim answers differently and consistently: `a.b` matches "a\nb",
-    // `[^x]` matches the newline, `^b` does not match "a\nb" and neither
-    // does `\_^b`. So the line break is an ordinary character at both ends
-    // of the question, which is GRX_NEWLINES_NONE and GRX_DOLLAR_END_ONLY.
-    // The `\_x` forms still differ from their plain spellings, because
-    // `\s` refuses a newline and `\_s` accepts one.
-    .dollar = GRX_DOLLAR_END_ONLY,
-    .newlines = GRX_NEWLINES_NONE,
-    // Measured, where this cell had never been probed either. An empty
-    // iteration that is the loop's *first* runs in vim and its writes
-    // stick: `a\%(\zs\)*b` over "ab" is 1-2 there, in both engines, and
-    // would be 0-2 under ECMA-262's rule - which is what a zeroed cell
-    // gave. A trailing one, after an iteration has consumed, is where
-    // vim's two engines part: `\%(a\|\zs\)*` over "aa" is 2-2 under
-    // `re=2` and 0-2 under `re=1`, and the old engine is the one whose
-    // answer BREAK_FIRST is.
+  [GRX_SYNTAX_VIM_BACKTRACK] = {
+    VIM_PROFILE_COMMON,
+    .lookbehind = GRX_LOOKBEHIND_FORWARD_NEAREST,
+    .assertion_captures_persist = 1,
+    .posix_case_classes_latin1 = 1,
+    .scalar_collections = 1,
+    .literal_cluster_guard = 1,
+    .empty_loop_after_mandatory = 1,
+    .direct_repeat_scalar = 1,
+    .ignore_combining_literal_run = 1,
     .empty_loop = GRX_EMPTY_LOOP_BREAK_FIRST,
-    // Measured, where this cell had never been probed and so read Perl's.
-    // Two clauses, and vim differs from every other reference here on both:
-    // after an empty match it *advances* rather than retrying without one -
-    // `substitute("aab", '\\|a', "<>", "g")` is "<>a<>a<>b<>" there and
-    // would be "<><><><><>b<>" under Perl's rule - and a match that reaches
-    // the end of the subject ends the loop, so `b*` over "ab" is "<>a<>"
-    // and not node's, perl's and `re`'s "<>a<><>".
-    .iteration = GRX_ITERATE_ADVANCE_ONE_STOP_AT_END,
-    // Read by the POSIX classes alone, and only for whether they widen:
-    // vim's eleven named classes are built out as explicit sets by the
-    // front end, because three of them have a counterpart here and all
-    // three differ - vim's `\s` is space and tab alone. This row named a
-    // word set of its own while `\<` and `\>` were the word set's two
-    // halves; they are GRX_WORD_BOUNDARY_VIM_CLASS now and read no set at
-    // all, so what is left for this field to say is "not Unicode".
-    .shorthands = GRX_SHORTHANDS_ASCII,
-    .shorthands_wide = GRX_SHORTHANDS_ASCII,
-    // `\<` and `\>` hold where vim's character *class* changes, and it has
-    // nine of them: `\>` holds between U+65E5 and "x" there, where both are
-    // keyword characters. Measured with `charclass()` over every code
-    // point; src/unicode/vim_class.c is the table and the rule.
-    .word_boundary = GRX_WORD_BOUNDARY_VIM_CLASS,
-    // A base character and the composing characters after it are one
-    // character to vim: `.` over "a" U+0301 is 0-3 there, a literal `a`
-    // matches none of it, and no match begins or ends inside the cluster.
-    // `\Z` is the same model with the marks made optional, and sets
-    // GRX_OPT_IGNORE_COMBINING from wherever it stands.
-    .composing = GRX_COMPOSING_CLUSTER,
-    // SIMPLE, where this row said ASCII. Measured: `\cÉ` matches "é" in
-    // vim 9.1, so the folding is Unicode and the page that said otherwise
-    // was describing a version of vim without multibyte support.
-    .fold = GRX_FOLD_SIMPLE,
-    .fold_utf = GRX_FOLD_SIMPLE,
-    .subject_is_text = 1,
-    // `[[:lower:]]` matches "é" and `[[:upper:]]` matches "É", where
-    // `[[:alpha:]]` matches neither. Measured; see the field.
-    .posix_case_classes_wide = 1,
-    // ...and they are the case-mapped pair, not the Unicode properties:
-    // 1,478 and 1,460 code points against `\p{Lowercase}`'s 2,595 and
-    // `\p{Uppercase}`'s 2,006. See the field.
+  },
+  [GRX_SYNTAX_VIM_NFA] = {
+    VIM_PROFILE_COMMON,
+    .lookbehind = GRX_LOOKBEHIND_FORWARD_FURTHEST,
+    .lookbehind_round_bound = 1,
+    .atomic_ignores_markers = 1,
+    .provisional_assertion_end = 1,
+    .match_end_cluster_boundary = 1,
+    .optional_tail_omits_newline = 1,
     .posix_case_classes_case_mapped = 1,
-    // Probed against vim 9.1's `substitute()`, which is the string form of
-    // `:s` and so the one this library can be: `&` is the whole match,
-    // `\&` a literal one, `\0` the whole match again, `\1` to `\9` name
-    // groups one digit at a time, and a reference to a group the pattern
-    // has not got substitutes nothing rather than failing. `~` is a literal
-    // tilde, there having been no previous substitution.
-    //
-    // The two rules nothing else here has are both real and neither is what
-    // this row used to say they were. Over a *buffer* `\r` writes a line
-    // break and `\n` a NUL; over a string they are U+000D and U+000A, and
-    // `\t` and `\b` join them - four decoded escapes, GRX_TMPL_VIM_ESCAPES.
-    // And `\u`, `\l`, `\U`, `\L`, `\E` and `\e` change the case of what
-    // follows, which is the same feature bit and the only construct in
-    // section 5.11 that emits nothing and still changes the answer.
-    .template_spec = {
-      .sigil = '\\',
-      .features = GRX_TMPL_NUMBER_SINGLE | GRX_TMPL_WHOLE_ZERO
-          | GRX_TMPL_WHOLE_BARE | GRX_TMPL_VIM_ESCAPES
-          | GRX_TMPL_ESCAPE_ANY,
-      .missing = GRX_TMPL_MISSING_EMPTY,
-    },
+    .empty_loop = GRX_EMPTY_LOOP_BREAK,
   },
   [GRX_SYNTAX_EMACS] = {
     .lookbehind = GRX_LOOKBEHIND_NONE,

@@ -40,10 +40,27 @@ WORDS = {
 
 
 def built_dialects():
-    """How many arms grx_frontend_for() answers with a front end."""
+    """Count selector labels whose switch arm returns a built front end."""
     text = (ROOT / "src/syntax/frontend.c").read_text()
     body = text.split("grx_frontend_for", 1)[1]
-    return len(re.findall(r"return\s+&grx_frontend_\w+;", body))
+    # Profiles can share one grammar and therefore one return. Count all
+    # labels that reach that return, rather than counting implementation
+    # pointers and silently dropping the second profile.
+    pending = 0
+    built = 0
+    for token in re.finditer(
+            r"case\s+GRX_SYNTAX_\w+\s*:|default\s*:|return\s+([^;]+);",
+            body):
+        item = token.group(0)
+        if item.startswith("case"):
+            pending += 1
+        elif item.startswith("default"):
+            pending = 0
+        else:
+            if re.fullmatch(r"&grx_frontend_\w+", token.group(1).strip()):
+                built += pending
+            pending = 0
+    return built
 
 
 def total_dialects():

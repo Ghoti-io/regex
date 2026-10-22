@@ -71,7 +71,7 @@ LONGEST_DIALECTS = ("posix-ere", "posix-bre", "gnu-ere", "gnu-bre")
 # pairs, and nothing here compared them until this list existed. Perl and
 # PCRE2 bring the recursion, the verbs and the callouts; Python brings its own
 # empty-loop rule.
-OTHER_DIALECTS = ("vim", "perl", "pcre", "python")
+OTHER_DIALECTS = ("vim-backtrack", "vim-nfa", "perl", "pcre", "python")
 
 # Every engine that can be asked for by name. GRX_ENGINE_AUTO is deliberately
 # not among them: the invariant is about engines agreeing, and AUTO is
@@ -102,7 +102,7 @@ def rows_for(syntax, rng, patterns, subjects):
                         surrogates="u" in flags or "v" in flags)))
         return out
 
-    if syntax == "vim":
+    if syntax in vim_diff.PROFILES:
         # The composing block as well as the generated patterns: a cluster
         # is where this dialect's two new assertions and its possessive mark
         # run meet, and both engines have their own copy of each.

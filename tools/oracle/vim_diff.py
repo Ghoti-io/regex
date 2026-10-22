@@ -52,6 +52,9 @@ import tempfile
 import unicodedata
 
 import vim_runner
+import escape_floor
+
+PROFILES = {"vim-backtrack": 1, "vim-nfa": 2}
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
@@ -68,6 +71,7 @@ ATOMS = [
     # the line break.
     "\\s", "\\S", "\\d", "\\D", "\\w", "\\W", "\\h", "\\H", "\\a", "\\A",
     "\\l", "\\L", "\\u", "\\U", "\\x", "\\X", "\\o", "\\O", "\\i", "\\k",
+    "\\f", "\\F", "\\I", "\\K",
     "\\_s", "\\_d", "\\_w", "\\_.", "\\_[ab]", "\\_^", "\\_$",
     # The negated underscore forms, which are not the positive ones with a
     # member added: a negated class carries its negation over the items, so
@@ -78,15 +82,13 @@ ATOMS = [
     # opens nothing as the character.
     "[ab]", "[^ab]", "[a-c]", "[]a]", "[a-]", "[", "[]", "[\\]]", "[\\\\]",
     "[[:alpha:]]", "[[:digit:]]", "[[:lower:]]", "[[:upper:]]", "[\\d65]",
-    "[\\x41]", "[\\e]",
+    "[\\x41]", "[\\e]", "[\\b]", "[\\r]", "[\\t]",
+    "[\\u0041]", "[a\\b]",
     # Groups and alternation, in both spellings.
     "\\(a\\)", "\\(a\\|b\\)", "\\%(ab\\)", "\\(a\\)\\1",
     "(a)", "(a|b)", "%(ab)", "(a)\\1",
-    # The postfix assertions. The four that carry a mark are here because a
-    # marker inside an assertion or an atomic group is inert, and a
-    # vocabulary whose group bodies were all plain atoms could not spell the
-    # question: `\\(a\\zsb\\)\\@>c` was answered 1-3 here and 0-3 by vim
-    # for as long as this file had no way to generate it.
+    # Postfix assertions, including markers whose behavior differs between
+    # the forced profiles. Both profiles receive the same vocabulary.
     "\\(a\\)\\@=", "\\(a\\)\\@!", "\\(a\\)\\@<=", "\\(a\\)\\@<!",
     "\\(a\\+\\)\\@>", "(a)@=", "(a)@!", "(a)@<=", "(a)@<!", "(a+)@>",
     # A postfix assertion inside another one: vim's spelling of the shape
@@ -245,6 +247,7 @@ NOT_IMPLEMENTED = [
 LEVELS = ["", "\\v", "\\m", "\\M", "\\V"]
 
 SUBJECTS = [
+    "\b", "\r", "\t", "\x1b", "/", "-", "9", "a/b",
     "", "a", "ab", "aaab", "abc", "ABC", "a b", "a\tb", "a\nb", "\n",
     # A tab run, so that `\%23v` can be told from `\%23c`: it counts
     # display cells, and a subject of one-cell characters answers both the
@@ -426,9 +429,11 @@ qa!
 VIM_COMMAND = vim_runner.BASE + vim_runner.PINS
 
 
-def ask_vim(cases):
-    """The reference: one process for every case in the run."""
-    return _ask(cases, VIM_SCRIPT)
+def ask_vim(cases, engine=2):
+    """One forced pinned reference engine, with one answer per input row."""
+    if engine not in (1, 2):
+        raise ValueError("a forced Vim engine (1 or 2) is required")
+    return _ask(cases, "set regexpengine=%d\n" % engine + VIM_SCRIPT)
 
 
 def _ask(cases, script):
@@ -744,45 +749,9 @@ def is_postfix_capture_artifact(pattern, them, us):
     return True
 
 
-ENGINE_SCRIPT = """
-let lines = readfile(g:vimdiff_in)
-let out = []
-set re=1
-for l in lines
-  let c = json_decode(l)
-  try
-    let p = matchstrpos(c[1], c[0])
-    if p[1] < 0
-      call add(out, 'nomatch')
-    else
-      let g = matchlist(c[1], c[0])
-      let fields = [printf('%d:%d', p[1], p[2])]
-      for i in range(1, 9)
-        call add(fields, g[i])
-      endfor
-      call add(out, 'match ' . json_encode(fields))
-    endif
-  catch
-    call add(out, 'compile')
-  endtry
-endfor
-call writefile(out, g:vimdiff_out)
-qa!
-"""
-
-
 def ask_old_engine(cases):
-    """The same questions, put to vim's *other* regexp engine.
-
-    vim ships two, chosen by 'regexpengine', and they do not always agree:
-    `\\%^\\|a\\?` against "a" is the empty match at 0 under `set re=1`
-    and "a" under the default `re=2`. Where they disagree, one of them is
-    wrong and the dialect is whichever this library can also justify from
-    somewhere else - which so far has been the old engine every time.
-    ask_vim() drives the default, so this is the second opinion, asked only
-    about the rows that came back different.
-    """
-    return _ask(cases, ENGINE_SCRIPT)
+    """The forced backtracking reference, retained for deterministic probes."""
+    return ask_vim(cases, engine=1)
 
 
 def is_very_magic_line_start_repeat(pattern, them, us):
@@ -1001,6 +970,8 @@ def vim_version():
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--syntax", choices=tuple(PROFILES),
+        default="vim-backtrack")
     parser.add_argument("--seed", type=int, default=20260923)
     parser.add_argument("--patterns", type=int, default=1200)
     parser.add_argument("--subjects", type=int, default=0,
@@ -1038,14 +1009,23 @@ def main():
             else rng.sample(SUBJECTS, min(args.subjects, len(SUBJECTS))))
         for subject in subjects:
             cases.append((pattern, subject))
-    cases.extend(composing_cases())
+    composing = composing_cases()
+    composing_population = len(ATOMS) * len(COMPOSING_SUBJECTS) * 2
+    print("%s composing population: %d candidate rows, %d generated, "
+        "%d omitted by named COMPOSING_SKIP limitations"
+        % (args.syntax, composing_population, len(composing),
+            composing_population - len(composing)))
+    cases.extend(composing)
 
-    theirs_raw = ask_vim(cases)
+    bare, classed = escape_floor.check(args.syntax, ATOMS, driver=ours)
+    print("%s vocabulary: %d bare and %d in-class constructs, all spelled"
+        % (args.syntax, bare, classed))
+    theirs_raw = ask_vim(cases, engine=PROFILES[args.syntax])
     if len(theirs_raw) != len(cases):
         sys.stderr.write("vim answered %d of %d rows\n"
             % (len(theirs_raw), len(cases)))
         return 2
-    mine_raw = ask_ours([ours, "vim"], cases)
+    mine_raw = ask_ours([ours, args.syntax], cases)
     if len(mine_raw) != len(cases):
         sys.stderr.write("grx_match answered %d of %d rows\n"
             % (len(mine_raw), len(cases)))
@@ -1057,65 +1037,26 @@ def main():
         for line, case in zip(mine_raw, cases)]
 
     disagreements = []
-    artifacts = 0
-    candidates = []
+    limitations = {}
+    checks = (
+        ("forward backreference before lookbehind", is_forward_reference_artifact),
+        ("postfix capture retention", is_postfix_capture_artifact),
+        ("abandoned match marker", is_abandoned_mark_artifact),
+        ("lookbehind followed by backreference", is_lookbehind_backreference_artifact),
+        ("very magic line-start repeat", is_very_magic_line_start_repeat),
+        ("line number with a repeat", is_line_number_star),
+        ("leading star spelling", is_leading_star_artifact),
+    )
     for case, them, us in zip(cases, theirs, mine):
         if them == us:
             continue
-        if (is_forward_reference_artifact(case[0], them, us)
-                or is_postfix_capture_artifact(case[0], them, us)
-                or is_abandoned_mark_artifact(case[0], them, us)
-                or is_lookbehind_backreference_artifact(case[0], them, us)
-                or is_very_magic_line_start_repeat(case[0], them, us)
-                or is_line_number_star(case[0], them, us)
-                or is_leading_star_artifact(case[0], them, us)
-                or marks_in_a_lookbehind_and_after_it(case[0])):
-            artifacts += 1
-            continue
-        if holds_composing(case[1]):
-            # Not asked of `set re=1` below, where every other disagreement
-            # is: the old engine has no composing-cluster model at all -
-            # `x\?[ab]` over "a" U+0301 is 0-1 there, a match that ends in
-            # the middle of a character - so its answer on such a row is
-            # not a second opinion but a third. A row here is this
-            # library's to explain.
-            disagreements.append((case, them, us))
-            continue
-        candidates.append((case, them, us))
-
-    # Ask vim's other engine about what is left, rather than guessing from
-    # the shape of the pattern which disagreements are vim arguing with
-    # itself. A row where the two engines disagree is a row vim has no one
-    # answer for; a row where they agree with each other and not with us is
-    # ours to fix. Only the rows that came back different are asked, so the
-    # second process costs nothing on a clean run.
-    #
-    # Two counts, because they are not equally informative. Most split rows
-    # turn on one axis and `set re=1` gives exactly this library's answer.
-    # The rest turn on *two*: this library follows the old engine where a
-    # mark sits inside an assertion and the new one where `\c` meets
-    # `[[:lower:]]` or an abandoned `\@>` group's captures are read, each
-    # because that engine is the one whose answer can be stated as a rule,
-    # so a pattern touching two of them agrees with neither.
-    # Those are printed rather than swallowed - a defect of this library's
-    # could hide among them, and the only defence is that a person can see
-    # them.
-    engine_split = 0
-    both_axes = []
-    if candidates:
-        second = ask_old_engine([case for case, _, _ in candidates])
-        if len(second) != len(candidates):
-            sys.stderr.write("vim's old engine answered %d of %d rows\n"
-                % (len(second), len(candidates)))
-            return 2
-        for (case, them, us), old in zip(candidates, second):
-            older = normalise_theirs(old, case[1])
-            if older == us:
-                engine_split += 1
-                continue
-            if older != them:
-                both_axes.append((case, them, us, older))
-                continue
+        reason = next((name for name, check in checks
+            if check(case[0], them, us)), None)
+        if reason is None and marks_in_a_lookbehind_and_after_it(case[0]):
+            reason = "markers in and after a lookbehind"
+        if reason is not None:
+            limitations[reason] = limitations.get(reason, 0) + 1
+        else:
             disagreements.append((case, them, us))
 
     # What the reference actually answered, because "0 disagreements" over
@@ -1126,56 +1067,18 @@ def main():
         head = line.split()[0] if line else "empty"
         kinds[head] = kinds.get(head, 0) + 1
     shape = ", ".join("%d %s" % (kinds[k], k) for k in sorted(kinds))
-    notes = []
-    if artifacts:
-        notes.append("%d excluded (known vim artifacts)" % artifacts)
-    if engine_split:
-        notes.append("%d excluded (vim's two engines disagree; `set re=1` "
-            "gives this library's answer)" % engine_split)
-    if both_axes:
-        notes.append("%d excluded (vim's two engines disagree and neither "
-            "gives it; listed below)" % len(both_axes))
-    print("vim_diff: %d rows (%s), %d disagreements%s"
-        % (len(cases), shape, len(disagreements),
-            "".join(", " + note for note in notes)))
+    notes = ["%d excluded (%s)" % (count, reason)
+        for reason, count in sorted(limitations.items())]
+    print("%s: forced regexpengine=%d, %d/%d answers (%s), %d disagreements%s"
+        % (args.syntax, PROFILES[args.syntax], len(theirs_raw), len(cases),
+            shape, len(disagreements), "".join(", " + note for note in notes)))
     for (pattern, subject), them, us in disagreements[:args.examples]:
         print("  /%s/ on %r" % (pattern, subject))
         print("     vim: %s" % them)
         print("    ours: %s" % us)
     if len(disagreements) > args.examples:
         print("  ... and %d more" % (len(disagreements) - args.examples))
-    for (pattern, subject), them, us, older in both_axes[:args.examples]:
-        print("  [both axes] /%s/ on %r" % (pattern, subject))
-        print("     re=2: %s" % them)
-        print("     re=1: %s" % older)
-        print("     ours: %s" % us)
-    if len(both_axes) > args.examples:
-        print("  ... and %d more two-axis rows"
-            % (len(both_axes) - args.examples))
     if args.strict and disagreements:
-        return 1
-    # The two-axis bucket is empty on a healthy run and is the one exclusion
-    # category here whose size can be asserted: the other two are
-    # seed-dependent (known artifacts range 113 to 214 over four seeds,
-    # engine splits 24 to 42) and a number that moves with the seed cannot
-    # be pinned. This one was 0 at every seed tried and held 4 rows when the
-    # encoding was wrong.
-    #
-    # It is asserted because leaving it to be read is what failed. The
-    # comment above says these are "printed rather than swallowed" so that a
-    # person can see them - and when latin1 put four rows in here, nobody
-    # did. A category with no expected size is where a defect goes to be
-    # quiet, and that is not a property of static lists: these rows are
-    # classified by predicates over the pattern and the answers, and it is
-    # precisely a predicate's willingness to accept a new arrival that lets
-    # one in. Deriving a category dynamically is not a defence; it is the
-    # mechanism.
-    if args.strict and both_axes:
-        sys.stderr.write("%d rows where vim's two engines disagree and "
-            "neither gives this library's answer. That bucket is empty on a "
-            "healthy run, so these are either a defect here or a vim "
-            "behaviour nothing has classified yet - decide which, rather "
-            "than letting the count carry them.\n" % len(both_axes))
         return 1
     return 0
 

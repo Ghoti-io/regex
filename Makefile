@@ -1185,13 +1185,22 @@ check-oracle-soak: $(TOOLS)
 	out=$$(mktemp); \
 	last=$$(( $(SOAK_FROM) + $(SOAK_SEEDS) - 1 )); \
 	for seed in $$(seq $(SOAK_FROM) $$last); do \
-		for tool in match_diff perl_diff python_diff vim_diff posix_diff \
+		for tool in match_diff perl_diff python_diff posix_diff \
 				iterate_diff replace_diff split_diff window_diff \
 				engine_diff; do \
 			if ! python3 tools/oracle/$$tool.py --seed $$seed \
 					--patterns $(ORACLE_PATTERNS) > $$out 2>&1; then \
 				printf "\033[0;31m### %s disagreed at seed %d ###\033[0m\n" \
 					"$$tool" "$$seed" >&2; \
+				cat $$out >&2; \
+				status=1; \
+			fi; \
+		done; \
+		for syntax in vim-backtrack vim-nfa; do \
+			if ! python3 tools/oracle/vim_diff.py --syntax $$syntax --strict \
+					--seed $$seed --patterns $(ORACLE_PATTERNS) > $$out 2>&1; then \
+				printf "\033[0;31m### %s disagreed at seed %d ###\033[0m\n" \
+					"$$syntax" "$$seed" >&2; \
 				cat $$out >&2; \
 				status=1; \
 			fi; \
@@ -1396,7 +1405,8 @@ check-oracle-vim: ## Compare the Vim front end against vim itself
 # matched "aa" here and "a" in node, and pcre2test refused it outright.
 check-oracle-vim: $(TOOLS)
 	@$(REQUIRE_PYTHON3)
-	$(call run-oracle,vim,python3 tools/oracle/vim_diff.py --strict)
+	$(call run-oracle,vim,python3 tools/oracle/vim_diff.py --syntax vim-backtrack --strict)
+	$(call run-oracle,vim,python3 tools/oracle/vim_diff.py --syntax vim-nfa --strict)
 
 check-oracle-replace: ## Compare every built template grammar against its reference
 # WP-16 and WP-22's missing generator. sed_diff.py did this for the POSIX and
@@ -1422,8 +1432,8 @@ check-oracle-replace: ## Compare every built template grammar against its refere
 # after an empty match and stops at a match reaching the end.
 #
 # It drives `substitute()` rather than `:s`, for the reason vim_diff.py
-# drives `matchstrpos()`: the subject here is a string. Rows where vim's two
-# engines disagree are put to `set re=1`, as that tool does.
+# drives `matchstrpos()`: the subject here is a string. Each Vim profile
+# uses its corresponding forced reference engine throughout the comparison.
 check-oracle-replace: $(TOOLS)
 	@$(REQUIRE_PYTHON3)
 	$(call run-oracle,node$(comma)pcre2$(comma)perl$(comma)python$(comma)vim,\
@@ -1756,11 +1766,8 @@ vectors-linear:
 	$(call run-oracle,go,python3 tools/oracle/make_linear_vectors.py)
 
 vectors-vim: ## Regenerate the Vim vectors from the pinned vim
-# Two vim processes per file, not one: the second asks `set re=1`, because a
-# row vim's two engines answer differently is a row vim has no single answer
-# for and there is nothing to write down. See the generator's own note for
-# what else it declines to record, and why that is decided from the pattern
-# text rather than from what this library said.
+# Each profile is generated against its forced pinned reference engine.
+# Divergent reference answers are retained in independent profile corpora.
 vectors-vim:
 	@$(REQUIRE_PYTHON3)
 	$(call run-oracle,vim,python3 tools/oracle/make_vim_vectors.py)

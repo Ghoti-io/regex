@@ -58,7 +58,8 @@ this design was written on; a CI job installs the rest
 | RE2 | `re2` | Go 1.25.14 `regexp` | Go `regexp/syntax` documentation, which states that it is RE2's syntax; the RE2 "Syntax" wiki | `go` (pinned, stock image by digest). **The pin names Go and not RE2**: what answers here is Go's implementation of RE2's syntax, not the C++ library, and the two are not identical - `\C` is RE2's and Go has not got it. A second reference would be the way to tell them apart and there is not one here. Carries Unicode 15.0.0, two releases behind this library's; see `containers/IMAGES` |
 | Rust | `rust` | `regex` 1.13.1 | the crate's own syntax documentation | the crate (pinned, **built here**: it is not in any image, and `=1.13.1` fixes one crate of five, so `containers/rust/Cargo.lock` is committed and `--locked` refuses to resolve anything else). Carries UCD 16.0.0 |
 | Tcl | `tcl` | Tcl 8.6 | `re_syntax(n)` | `tclsh` (install) |
-| Vim | `vim` | Vim 9.2, patches 1-1129 | `:help pattern` | `vim -es` with `matchlist()` (pinned); no corpus to import, a generated one |
+| Vim backtracking | `vim-backtrack` | Vim 9.2, patches 1-1129 | `:help pattern` | Forced `regexpengine=1`, string matching, generated corpus |
+| Vim NFA | `vim-nfa` | Vim 9.2, patches 1-1129 | `:help pattern` | Forced `regexpengine=2`, string matching, generated corpus |
 | Emacs | `emacs` | GNU Emacs 29 | Elisp Reference Manual, "Regular Expressions" | `emacs --batch` (install) |
 | I-Regexp | `i-regexp` | RFC 9485 (October 2023), with its two errata | Figure 1's ABNF; §3 for what it removes from XSD; §4 for the semantics it borrows | **two, neither an implementation of I-Regexp:** iregexp-check 0.1.4 (pinned) reads Figure 1 a second time; libxml2 2.14.6 through lxml 6.1.3 (pinned) runs XSD's semantics, which §5.2 makes the identity mapping. §10.4 |
 | RE/flex | `reflex` | RE/flex 6.5.0 | the RE/flex manual's pattern sections; `ugrep --help regex`, whose `(-P)` marker is the line between RE/flex's own matcher and PCRE2 | **none yet, and this row is the one to read before trusting the others.** See below |
@@ -489,8 +490,10 @@ the Java reading was the wrong one of the two.
 | `FIXED` | every alternative the same fixed length | Python |
 | `FIXED_PER_ALTERNATIVE` | each alternative fixed, alternatives may differ | Perl before 5.30; Ruby; Tcl (**probe**) |
 | `BOUNDED` | finite maximum length | Perl 5.30+ (experimental, 255), PCRE2 10.43+ (`max_varlookbehind`, default 255) |
-| `UNBOUNDED` | any length; matched right to left | ECMAScript, .NET, Vim |
+| `UNBOUNDED` | any length; matched right to left | ECMAScript, .NET |
 | `JAVA` | unbounded length; forward matching from candidate starts, nearest first | Java |
+| `FORWARD_NEAREST` | unbounded length; forward matching from candidate starts, nearest first | Vim backtracking |
+| `FORWARD_FURTHEST` | unbounded length; forward matching from candidate starts, furthest permitted first | Vim NFA |
 
 This axis does two things, and the second was added when the first turned out
 not to be enough. It is still the *parse-time* restriction that makes the
@@ -504,8 +507,10 @@ lookbehind models** runs the body ([design.md](design.md) §3.5.2):
   furthest back first, and requires it to arrive exactly where the assertion
   stands. Perl, PCRE2. Affordable *because* the dialect bounds the variation:
   the candidate starts number `max - min + 1`, which that bound caps at 256.
-- `JAVA` also runs the body forwards, but tries the nearest start first and
-  accepts unbounded length. The normal execution step limit bounds the scan.
+- `JAVA` and `FORWARD_NEAREST` run the body forwards, try the nearest
+  candidate first and accept unbounded length. `FORWARD_FURTHEST` instead
+  tries the furthest permitted candidate first. The normal execution step
+  limit bounds each scan.
 
 The two are not interchangeable. Which candidate wins, what a capture inside
 a variable-length body holds, and whether `(*ACCEPT)` has anywhere to stop
@@ -519,16 +524,79 @@ inlined rather than run as a sub-match — that is what makes it non-atomic —
 and a candidate-start loop has nowhere to put the backtrack points it has to
 leave live.
 
-**Vim bounds a lookbehind one assertion at a time**, which is the one case
-where the axis is not the whole answer. `\@123<=` says the match may start
-at most 123 *bytes* back — `\(ab\)\@1<=c` does not match "abc" there and
-`\(ab\)\@2<=c` does, and `\(é\)\@1<=x` does not match "éx", which is
-what says bytes rather than characters. So the dialect is `UNBOUNDED` and an
-assertion carrying a number runs *forwards* all the same, over the span its
-own bound allows: a variable-length body becomes finite for that assertion
-alone. Zero is vim's "no bound" and is what an unwritten number leaves.
-Where the bound is smaller than the body's shortest match the assertion can
-never hold, and that is a pattern vim compiles rather than refuses.
+**Both Vim profiles bound a lookbehind one assertion at a time.**
+`\@123<=` supplies a byte threshold; zero or an absent number means no
+explicit bound. Both run the body forwards, including unbounded bodies.
+Backtracking tries the nearest successful start; NFA tries the furthest
+permitted successful start. A UTF-8 scalar crossing the lower threshold is
+admitted by the NFA reference but refused by the backtracking reference:
+`\(é\)\@1<=x` on `éx` matches only in NFA, while bound 2 matches in
+both. Consequently a byte-bound analysis must respect the profile's crossing
+policy instead of pruning solely from a body's minimum byte length. Candidate
+scans retain the ordinary execution resource limits.
+
+### Vim compatibility profiles
+
+`GRX_SYNTAX_VIM_BACKTRACK` (`vim-backtrack`) targets forced
+`regexpengine=1`; `GRX_SYNTAX_VIM_NFA` (`vim-nfa`) targets forced
+`regexpengine=2`. They share Vim's grammar. The reference is Vim 9.2,
+patches 1–1129, matching strings through `matchstrpos()` and `matchlist()`,
+with UTF-8, magic enabled and `iskeyword=@,48-57,_,192-255`. The invocation
+keeps Vi-compatible `cpoptions`. Buffer matching, automatic engine selection,
+and other option settings are outside these contracts. A pattern-local
+`\%#=N` selects a reference engine in Vim. Both named profiles refuse
+pattern-local engine selectors with `GRX_ERR_UNSUPPORTED`; compatibility is
+selected by the caller's syntax identity, and automatic selection is not
+modeled.
+
+The independently measured profile axes are:
+
+| Behavior | `vim-backtrack` | `vim-nfa` |
+| --- | --- | --- |
+| Positive variable lookbehind | Forward body, nearest successful candidate start | Forward body, furthest permitted successful candidate start |
+| Lookbehind byte threshold | Candidate must fit within the byte bound | A character crossing the lower byte threshold can be admitted; the bound is not a count of characters |
+| Negative lookahead fails because its body matched | Its captures survive into alternatives and subsequent backreferences | Its captures are rolled back |
+| Negative lookahead body fails partway | Roll back captures | Roll back captures |
+| Successful positive assertion abandoned by later failure | Captures can survive rollback at the same search start | Captures roll back; retained-reference cases remain a named limitation |
+| Zero-minimum repeat after consuming iterations | Discard the trailing empty iteration (`BREAK_IF_UNMOVED`) | Keep the trailing empty iteration (`BREAK_ON_EMPTY`) |
+| Nonzero-minimum repeat after consuming iterations | Keep the trailing empty iteration (`BREAK_ON_EMPTY`) | Keep the trailing empty iteration (`BREAK_ON_EMPTY`) |
+| Match markers in atomic groups | Honor `\zs` and `\ze` | Ignore the markers in the measured atomic-group cases |
+| Added newline in the final atom of an optional sequence | Retain the newline member | Drop the added newline member in the measured final-atom cases |
+
+The original independent regressions make the target observable in both span
+and captures. `\(a\)\@!\|a\%[\_s]` on `a` LF `b` reports 0:2 and group
+`a` under backtracking, and 0:1 with an empty group result under NFA.
+`[^ab]\(\w\+\)\@2<=\(a\zsb\)\@>` on `abcabc` reports 4:5 with
+`c`,`ab` under backtracking, and 2:5 with `bc`,`ab` under NFA. All offsets
+are half-open byte offsets. Vim's empty group strings do not distinguish
+unset captures from participating empty captures.
+
+In the measured assertion cases, NFA ignores `\zs` and a `\ze` from
+positive lookahead or lookbehind can be provisional. Plain, unquantified
+literal, class and dot controls can replace that provisional end; the measured
+zero-width assertion and backreference controls preserve it. These controls
+do not establish a general rule for every consuming construct. Atomic-group
+bodies ignore their own markers in the measured cases. For example,
+`\(a\)\(ab\zec\)\@=\1` on `aabc` reports 0:3 in both forced engines;
+replacing the final backreference with literal `a` reports 0:2 in NFA and
+0:3 in backtracking. An explicit outer `\ze` supersedes the provisional end:
+`\(a\zeb\)\@=\zeab` on `ab` reports 0:0 in both engines. Remaining
+marker and postfix-capture limitations are listed in section 6.
+
+Each fresh subject search start resets captures in both profiles. Capture
+retention during rollback at one search start does not create a cache across
+starts: `\(a\)\@=x\|b` on `ab` reports 1:2 with an empty group result in
+both references. Candidate attempts inside a single lookbehind can still
+have observable capture side effects, so width analysis must not prune those
+attempts merely because their bodies cannot finish at the assertion endpoint.
+
+These are measured compatibility targets, not a claim that every reference
+artifact is modeled. Section 6 records the remaining narrow limitations.
+Composing-character behavior and interacting marker writes require particular
+care: the reference engines themselves produce different answers, and an
+engine disagreement alone is never a reason to exclude a differential row.
+Each run compares one complete result with the corresponding forced engine;
+remaining exclusions must name a specific limitation and count its rows.
 
 ### 5.5 Empty iterations and captures in loops
 
@@ -537,8 +605,8 @@ The two rules that make `(a*)*` against `b` report different things:
 | Axis | Value | Dialects |
 | --- | --- | --- |
 | Empty iteration | `FAIL_IF_EMPTY_AFTER_MIN`: an iteration that consumes nothing, once `min` is satisfied, fails (22.2.2.3.1 RepeatMatcher step 2.b) | ECMAScript |
-| | `BREAK_ON_EMPTY`: the iteration succeeds and the loop stops | Perl, PCRE2, Python, Java (JDK 25 probe cases 0–3), .NET (.NET 10 probe cases 35–37), Ruby (**probe**) |
-| | `BREAK_IF_UNMOVED`: the iteration succeeds and the loop stops, but only while the *repeat* has consumed nothing; once it has, the empty iteration does not run at all | POSIX, GNU, Vim |
+| | `BREAK_ON_EMPTY`: the iteration succeeds and the loop stops | Perl, PCRE2, Python, Java (JDK 25 probe cases 0–3), .NET (.NET 10 probe cases 35–37), Ruby (**probe**), Vim NFA; Vim backtracking when the repeat minimum is nonzero |
+| | `BREAK_IF_UNMOVED`: the iteration succeeds and the loop stops, but only while the *repeat* has consumed nothing; once it has, the empty iteration does not run at all | POSIX, GNU; Vim backtracking when the repeat minimum is zero |
 | | `ALREADY_THERE`: there is no iteration rule, because the loop is not a loop the engine can enter twice at one position; it ends where the simulation has already been | RE2, Rust |
 | | `LONGEST`: irrelevant; the match is the longest, and an empty iteration adds nothing | Tcl |
 | Capture reset | `RESET_EACH_ITERATION`: captures inside the group are cleared at the **start** of every iteration (RepeatMatcher step 4) | ECMAScript |
@@ -570,8 +638,10 @@ the text of a group and "" for one that did not take part. `a\%(\zs\)*b`
 against "ab" is 1-2 in both of vim's engines and would be 0-2 under
 `FAIL_IF_EMPTY_AFTER_MIN`, so the empty first iteration runs and its mark
 sticks. The trailing case is where vim's two engines part - `\%(a\|\zs\)*`
-against "aa" is 2-2 under `re=2` and 0-2 under `re=1` - and the old engine's
-answer is this row's.
+against "aa" is 2-2 under `re=2` and 0-2 under `re=1`. This split applies
+to the zero-minimum repeat. A mandatory repeat keeps the trailing empty
+iteration in both: `\%(a\|\zs\)\+` against "aa" reports 2-2 in
+both engines. Each named profile follows these measured choices.
 
 The RE2 and Rust capture-reset cells were `probe` until they were asked, and
 the answer is the zero they already held: `((a)|b)+` over "ab" reports group 2
@@ -1029,14 +1099,21 @@ left behind.
 
 POSIX bracket classes (`[:alpha:]` and the other eleven) are ASCII in POSIX
 and GNU (C locale), Unicode in Perl, PCRE2 under `UCP`, Ruby, Tcl and Rust;
-RE2 is ASCII. **Vim is neither**: `[[:lower:]]` matches "é" and
+RE2 is ASCII. **The Vim profiles differ**: `[[:lower:]]` matches "é" and
 `[[:upper:]]` matches "É" while `[[:alpha:]]`, `[[:alnum:]]`, `[[:punct:]]`,
 `[[:graph:]]` and `[[:word:]]` refuse them, because vim answers the case
 classes from its own Unicode tables and the rest from the C library's ASCII
-predicates. That is GRX_Profile::posix_case_classes_wide, a flag beside the
-width rather than a third value of it.
+predicates. NFA Vim uses case-counterpart predicates, described below.
+Backtracking Vim instead has exactly 59 lower members (`a-z`, U+00B5,
+U+00DF–U+00F6, U+00F8–U+00FF) and 56 upper members (`A-Z`, U+00C0–U+00D6,
+U+00D8–U+00DE). These sets were enumerated independently under forced
+`regexpengine=1` over every non-NUL scalar; they are explicit measured sets,
+not a host locale or Unicode category. Both Vim profiles enable
+`GRX_Profile::posix_case_classes_wide`; NFA's counterpart predicates are
+selected by `GRX_Profile::posix_case_classes_case_mapped`, while
+backtracking uses `GRX_Profile::posix_case_classes_latin1`.
 
-**And the wide pair is a case *counterpart*, not a property** - a second
+**The NFA wide pair is a case *counterpart*, not a property** - a second
 flag, GRX_Profile::posix_case_classes_case_mapped, because "wide" does not
 say which wide set. `[[:upper:]]` is exactly the domain of the simple
 lowercase map there and `[[:lower:]]` exactly that of the simple uppercase
@@ -1045,10 +1122,10 @@ simple one. So the three answers these two names have here are
 `\p{Lowercase}` (perl), `\p{Ll}` (PCRE2) and this, at 2,595, 2,233 and 1,478
 code points - none of them a rounding of another. A modifier letter and a
 small Roman numeral are Other_Lowercase with nothing to map to and a
-titlecase letter maps both ways, so vim calls `ǅ` both upper and lower and
-`ʰ` neither.
+titlecase letter maps both ways, so NFA Vim calls `ǅ` both upper and lower
+and `ʰ` neither. Backtracking Vim calls both characters neither.
 
-This was `\p{Lowercase}` and `\p{Uppercase}` until 2026-09-24, wrong by
+The NFA set was `\p{Lowercase}` and `\p{Uppercase}` until 2026-09-24, wrong by
 1,125 and 608 code points. The paragraph above is why: `[[:lower:]]` matches
 "é" and `[[:upper:]]` matches "É" is true of all three readings, so the two
 examples that established the flag could not choose between them.
@@ -1066,10 +1143,14 @@ both references, and glibc and musl answer the same under `REG_ICASE`.
 own reference: perl collapses them there as well, so `/i` takes "A",
 U+017F, U+212A and U+00C9; pcre2 stops, and `(*UCP)(?i)[[:lower:]]`
 refuses "A" while still matching U+017F, which is `Ll` on its own account.
-That is GRX_Profile::posix_case_classes_collapse_wide. Vim makes no
-collapse at either width - `\c[a-z]` matches "A" and `\c[[:lower:]]` does
-not, a collection being a set of code points there and a named class a
-predicate - which `GRX_CLASS_ITEM_NO_FOLD` already says per item. Measure perl for this with the subject upgraded:
+That is GRX_Profile::posix_case_classes_collapse_wide. Vim NFA makes no
+collapse at either width: `\c[a-z]` matches "A" while `\c[[:lower:]]`
+does not. Vim backtracking folds the named case class too:
+`\c[[:lower:]]` matches "A" and "É", and `\c[[:upper:]]` matches "a"
+and "é". The two sets fold separately: under `\c`, the lower class
+accepts ß and ẞ while the upper class rejects both. This is another
+independently measured profile distinction.
+Measure perl for this with the subject upgraded:
 below U+0100 an unupgraded string gets ASCII semantics, which is perl's
 documented Unicode bug, and it read U+00C9 as "no match" here until the
 strings were upgraded - a measurement that nearly became a wrong rule. Measured; this paragraph listed Vim
@@ -1735,7 +1816,7 @@ spellings above agree with perl.
 
 | Value | Meaning | Dialects |
 | --- | --- | --- |
-| `CLEAR` | the writes the body made before failing are discarded | ECMAScript (22.2.2.4), PCRE2 |
+| `CLEAR` | the writes the body made before failing are discarded | ECMAScript (22.2.2.4), PCRE2, both Vim profiles |
 | `KEEP` | they stand | Perl |
 
 A negative lookaround succeeds by having its body fail, and the body may have
@@ -1743,6 +1824,14 @@ captured something on its way to failing. `a(?!(b)c)` against `abd` is the
 whole of it: the body matches the `b`, fails on the `c`, and perl 5.44
 reports group 1 as `"b"` where pcre2test 10.46 and Node report it unset.
 Probed three ways rather than read from one.
+
+**Failure of the negative assertion is a separate question.** If its body
+succeeds, the assertion fails, and backtracking Vim preserves the body's
+captures into later alternatives while NFA Vim rolls them back. For example,
+`\(a\)\@!\|a\1` on `aa` reports 0:2 with group `a` under
+`vim-backtrack`, and 0:1 with an empty group result under `vim-nfa`.
+This policy must not be inferred from the failed-*body* `CLEAR`/`KEEP` axis
+above. Failed negative lookbehind controls do not show this capture leak.
 
 A *positive* lookaround needs no axis. One that succeeded keeps what its body
 captured in every dialect, and one that failed takes the whole construct with
@@ -1894,46 +1983,50 @@ while `\k` had not.
 
 ### 5.20 What a composing character is
 
-| Dialect | Rule |
-| --- | --- |
-| Everything but Vim | a character: `.` matches one, a literal beside it is two atoms, and a match may begin or end between a base and its mark |
-| Vim | part of the character before it: a base and the composing characters after it are **one** character, and `\Z` is that rule with the marks carried rather than matched |
+The Vim profiles use Vim's composing set: the zero-cell column of
+`src/unicode/display.c`, 2,033 code points, independently measured with
+`strchars(s, 1)` over every code point. Other dialects match one code point
+at a time and can begin or end between a base and a mark.
 
-Vim's rule reaches every atom that consumes anything and both ends of the
-match, which is why it is a matching model rather than a construct:
+The measured Vim engines have different atom policies:
 
-- **A literal matches its own code point and stops.** `a` does not match
-  "a" U+0301 at all, and `a.` does - the `.` takes the mark the literal
-  left.
-- **Everything else takes the composing characters after what it matched.**
-  `.`, a collection, a named class and a POSIX class over "a" U+0301 are
-  all 0-3. The run of marks is *possessive*: `.\{2}` over "a" U+0301 finds
-  nothing, because the first `.` cannot give the mark back for the second.
-- **A base with marks written after it in the pattern is one atom**, and
-  every mark it names must be among the ones the text carries - order does
-  not matter and the text may carry more, so `a` U+0301 matches a cluster
-  holding U+0301 and U+0302 and consumes both.
-- **A match begins and ends only where a cluster does.** `\%2c` holds
-  nowhere inside one, `[^a]` over "a" U+0301 "b" is 3-4 rather than the
-  mark, and a literal that would leave the match ending between a base and
-  its mark simply does not match. A composing character with *nothing*
-  before it is a character of its own, so `a*` still matches the empty
-  string at offset 0 of U+0301 "a".
+| Atom on `a` U+0301 | Backtracking reference | NFA reference |
+| --- | --- | --- |
+| Plain literal `a` alone | No match | No match |
+| Collection `[ab]`, range `[a-z]`, POSIX `[[:alpha:]]` | Base only, 0:1 | Whole cluster, 0:3 |
+| Ordinary named class `\w`, dot `.` | Whole cluster, 0:3 | Whole cluster, 0:3 |
+| Literal under `\Z`, such as `\Za` | Base only, 0:1 | Whole cluster, 0:3 |
 
-Any character can be a base: a line break, a space and a wide character all
-carry marks, so `[^a]` over "a" LF U+0301 "b" is 1-4.
+The backtracking literal rejects an unmatched composing suffix even when a
+later atom could consume it: `a.` on `a` U+0301 `b` fails there, while the
+NFA reference reports 0:3. A backtracking collection steps over the base and
+can leave its marks for the next atom: `[ab].` reports 0:3, while NFA reports
+0:4. These are independent of lookbehind candidate selection.
 
-`\Z` anywhere in the pattern turns the rule off for all of it, as `\c` does
-for case, and sets `GRX_OPT_IGNORE_COMBINING`. Then every atom takes the
-marks - the literal included, which is the only difference - and a
-composing character written beside a base is dropped. It is a marker and not
-an atom, so a multi may not follow it: `a\Z*` is an error exactly as
-`a\c*` is.
+For underscore classes, the newline supplied by `\_` is another profile
+choice. On LF U+0301, `\_d` reports 0:3 in backtracking and 0:1 in NFA.
+A plain class that already includes LF, such as `\W`, carries the marks
+in both. Composing marks inside collections and marks beginning an atom
+remain explicitly unsupported (section 6).
 
-The set of composing characters is vim's, not Unicode's: the zero-cell
-column of `src/unicode/display.c`, 2,033 code points, which `strchars(s, 1)`
-over every code point returns identically - so the width table and the
-matching model read one table rather than two that agree today.
+Multiple simultaneous NFA branches can also affect the measured composing
+step. On `a` U+0301 `b`, `[ab]` alone reports 0:3, but `a\|[ab]` reports
+3:4; `b\|[ab]` again reports 0:3. This interaction remains a named
+limitation; no general engine-disagreement exemption follows from it.
+
+Backtracking `\Z` carries composing marks between adjacent literals in a
+literal run: `\Za` on `a` U+0301 `b` reports 0:1, while `\Zab` reports
+0:4. Direct simple literal repeats `a*`, `a\+`, `a\{1}` and
+`a\{1,2}` can consume the base alone in backtracking. The optional `a\?`
+and a repeated capturing or noncapturing group retain atom validation.
+These choices are selected during lowering rather than by testing the
+dialect identity in execution.
+
+A base with marks written beside it in the pattern forms one atom. The
+cluster must carry the named marks, in any order, and may carry additional
+marks. `\Z` drops marks written beside a base from that requirement and
+sets `GRX_OPT_IGNORE_COMBINING`; it is a whole-pattern directive like `\c`,
+not an atom, so `a\Z*` is a syntax error.
 
 ### 5.21 What a subroutine call gives back
 
@@ -2062,12 +2155,16 @@ answer.
 | Vim | The subject is a string, not a buffer | vim's help describes matching against a *buffer*, where `.` refuses the line break. `matchstrpos()` over a string is what this library can be, and what its differential asks: there `a.b` matches "a\nb", `[^x]` matches the break, and `^`, `$`, `\_^` and `\_$` hold at the two ends only. The `\_` forms are still distinct, because `\s` refuses a break and `\_s` accepts one | - |
 | Vim | A composing character that **begins an atom** is refused | vim reads a character out of a pattern with its marks, so a mark written after a *literal* belongs to that literal and is built here. A mark written after `.`, after `\w`, after a group, or with nothing before it is a second rule: the atom then matches any cluster carrying that mark with its base ignored, so `\w` U+0301 against "a" U+0301 "a" U+0301 is the **whole** string in both of vim's engines - two clusters for what reads as one atom and one mark. And the collection is worse than unbuilt: `[ab]` U+0301 against "ab" is a match under `re=2` and no match under `re=1`, the mark being ignored by one engine and required by the other. Refused rather than answered either way | `GRX_ERR_UNSUPPORTED` |
 | Vim | A composing character **inside a collection** is refused | vim fuses it onto the member before it, so `[a` U+0301 `]` holds one member - the cluster - and not two; `[a` U+0301 `]` against "ab" is no match there. This library's collection is a set of code points, and the member that is a cluster has nowhere to live in it | `GRX_ERR_UNSUPPORTED` |
-| Vim | The line break `\_` adds takes the composing characters after it here, and does not there | `\_d` over "a" LF U+0301 "b" is 1-2 in vim and 1-4 here. Vim's own classes *do* take them - `\_W` over the same text is 1-4 in both, the `\W` matching the break as a non-word character - so following it would make the break a whole character when `\W` matches it and half of one when `\_` does. One rule for every atom that matches a character is the coherent half, and this is the price | - |
-| Vim | **Vim's default engine shares one step length between its threads**, and this library does not | `clen` there is the length of a character *with* its composing characters, and a thread that matches a plain literal sets it to the base alone - for the whole step, and so for every other thread in it. The effect is that an atom which cannot match takes the marks away from one that can: `a\|` beside a cluster branch finds nothing over "a" U+0301 U+0302 "b" where that branch alone finds 0-5, `b\|` beside it finds 0-5, and branch order has nothing to do with it. `\%[abc][ab]` loses the cluster that `[ab]` alone matches; `\(a\+\)\@>a\=` is 0-1 under `re=1`, ending inside the cluster, and 0-3 under `re=2`, ending past marks no atom in the pattern matched. A rule cannot depend on what a failed alternative begins with, so this library answers the coherent thing. `tools/oracle/vim_diff.py` puts composing subjects only to one-atom patterns for this reason, which is where vim's answer is a rule | - |
-| Vim | A lookbehind's byte bound counts bytes here and stretches to a cluster there | `\(\w\+\)\@2<=` over "a" U+0301 "b" is 3-3 in vim with group one holding "a" U+0301 - three bytes back, where the bound says two - and 4-4 here with group one holding "b". The bound is applied as written; a count that a cluster can overrun is vim's own arithmetic, and the row above says why its answers over a cluster are not one rule | - |
+| Vim NFA | Composing marks with competing branches | A literal in an alternative can affect another branch's composing-character step. `[ab]` over `a` U+0301 `b` reports 0:3 in the reference, but `a\|[ab]` reports 3:4. The differential uses composing subjects with isolated atoms and counts any explicitly selected interacting cases separately. This is a named limitation of NFA compatibility, not an exemption for arbitrary engine disagreements. | - |
 | Vim | `\i`, `\k`, `\f` and `\p` are vim's *defaults* | those four are the options 'isident', 'iskeyword', 'isfname' and 'isprint', and a user who has changed one has a dialect this library does not read. Measured at the defaults, and measured by enumeration: every one of the 1,114,112 code points put to vim for each of the 52 class spellings, which is what a set whose members are decided one at a time needs. They had been *sampled* instead, and three of the four were wrong - `\i` and `\k` both missed U+00B5, and `\k` took in 5,463 code points vim excludes. **That correction went two code points too far**, fixed 2026-09-24: U+00D7 and U+00F7 are the only members of 192-255 that vim's `@` does not cover, so the explicit range is the whole reason they are keyword characters, and vim matches both with `\k`. The enumeration ran `vim -u NONE`, which leaves vim *Vi-compatible*, and 'iskeyword' is one of exactly two regex-visible options whose default differs between the two modes - `@,48-57,_` there against the `@,48-57,_,192-255` vim's help calls the Vim default. 'isident' does not differ, which is why `\i` had `{0xC0, 0xFF}` whole while `\k` had a hole in the same range: one numeric range, measured twice, under two different defaults. `tools/oracle/vim_diff.py` pins the option now, beside the encoding pin, rather than the mode - the mode would also flip 'cpoptions', which is the other difference and not the one in question | - |
 | Vim | An unknown `[:name:]` is refused | vim compiles a collection holding one into a pattern that can never match anything at all - `[[:foo:]]*a` does not match "a" - which is a degenerate answer rather than a rule | `GRX_ERR_SYNTAX` |
-| Vim | Nine answers of vim's are not followed, each measured against a second reference | (1) a forward backreference is refused, where vim accepts one *if a lookbehind follows it* - every other spelling is "E65: Illegal back reference" in both of its engines; (2) the captures an abandoned path wrote are discarded, where vim keeps them and pcre2test does not - `\(a\)\@>x\|\A` and `\(a\)\@=a$\|b` both report group one as "a" there, and `\(a\)\@=ax\|b` does not, so what decides is whether the abandoned branch died at an assertion or at a character; node and pcre2test both report it unset - and it is not only captures, since the same commit writes `\zs` and `\ze`: `\(a\zeb\)\@>\d\|\&` against \"ab\" is 0-2 under `re=2` and 0-1 under `re=1` with group one holding \"ab\" in both, the empty match from the second branch wearing the end the first one left, although `\(a\zeb\)\@>\d` alone matches nothing in either engine. The minimal pair says which part matters: `\(ab\)\@>\d\|\&` without the mark is 0-0 with the group still kept, and `a\zeb\d\|\&` without the postfix operator keeps nothing; (3) a capture around a postfix assertion followed by a repeat is kept, where vim loses it and pcre2test does not; (4) a postfix lookbehind with a backreference after it follows pcre2test: `\(a\)\@<=\(a\)\1\l` reports 1:4 where vim reports 1:3 in both engines and names text that does not satisfy its own pattern, and `\v\D(a)@<=\m\(a\)\1\(a\+\)\@>` reports no match where vim reports 0:3 with a group the match has no room for; (5) `\v\_^*` matches the empty string, where vim matches nothing at all in either engine - and `\m\_^*`, `\v\_$*`, `\v\_^{0,1}` and `\v(\_^)*` all match it there, so the one spelling that fails is an accident of its parser and not a rule; (6) **a group inside `\%[...]` is refused**, where the default engine takes one - `a\%[\(bc\)]`, `a\%[\%(bc\)]` and a nested `a\%[b\%[cd]]` are all "E54" under `set re=1` and all compile under `re=2`. Every other member is built: a class, a collection, `\%d98`, `\zs`, `\<`, `\_s` and a backreference are atoms and vim's help says so, and the seven escapes that are the bare letter only in there (`\v`, `\m`, `\M`, `\V`, `\c`, `\C`, `\Z` - enumerated one letter at a time over all fifty-two) are read that way; (7) **`\%23l*` matches the empty string**, where vim matches nothing at all in either engine - the same shape as (5), since `\%23l\{}`, `\%23l\{-}`, `\%23l\{0,1}`, `\(\%23l\)*` and the very magic `%23l*` all match it there, so it is the bare `*` outside very magic after an `l` form and nothing else. A marker between the two is the same artifact seen from the other side: `\%23l\v*` compiles in vim and is refused here, where `\%23c\v*` and `a\v*` are "E871" in vim too; (8) **a bare `*` with nothing to repeat is the literal asterisk wherever it stands**, where vim refuses two spellings out of the set: `^\m*` is an error and `^*` matches, `\(\m*\)` matches and `^\m\+` is an error here too - so the marker loses the caret for the `*` alone; and `\%(*\)` is an error where `\(*\)`, `\v%(*)` and `\M\%(*\)` all match, the same construct in four spellings refused in one. Both engines alike; (9) **`\zs` and `\ze` inside an assertion or an atomic group still count**, which is `set re=1`, where vim's default engine mostly makes them inert. Measured over 140 patterns putting each of four marker bodies inside each of `\@=`, `\@!`, `\@<=`, `\@<!`, `\@>` and `\&` with five tails: the old engine answers all 140 the way one mark register does, the new one agrees with it on 110, and the 30 left have no rule behind them - `\(ab\zec\)\@=a` against "abc" is 0-2 old and 0-1 new, while `x\(ab\zec\)\@=` against "xabc" is 0-3 in *both*, so the same character consumed outside the same assertion decides differently by which side of it it was written; `a\zeb` is 0-1 everywhere, so later text does not overwrite a mark either; and the new engine drops a `\zs` where it keeps a `\ze`. One shape in this family is the other way round, with vim's two engines *agreeing* and this library still differing: a mark inside a **positive** lookbehind and a second inside a postfix operator after it. `\(a\zeb\)\@<=\(a\zeb\)\@>` over "ababS" is 2-2 under both `re=1` and `re=2` and 2-3 here, vim keeping the lookbehind's mark where this library's rule is that the last write wins - which is what all three do for plain marks, `a\zeb\zec` over "abc" being 0-2 everywhere. The neighbours narrow it to that shape alone: with only the lookbehind's mark (`\(a\zeb\)\@<=\(ab\)\@>`) all three say 2-2, with only the operator's (`\(ab\)\@<=\(a\zeb\)\@>`) this library is `re=1`'s 2-3, with the second mark outside an operator (`\(a\zeb\)\@<=a\zeb`) the two engines part company, and both the negative lookbehind and the lookahead spellings agree in all three. `tools/oracle/vim_diff.py` counts each of these rather than dropping it, and a tenth class - where vim's two engines simply disagree without either being incoherent - is settled by *asking* `set re=1` rather than by guessing. A pattern that turns on *two* of these axes at once agrees with neither engine, because this library follows the old one for a mark inside an assertion or an atomic group and the new one elsewhere: `\(\w\+\)\@2<=\(a\zsb\)\@>\v` over "BbBab0A" has the `\zs` counting here and under `re=1` and inert under `re=2`, and the bounded lookbehind reaching two characters back here and under `re=2` and one under `re=1`. Both `vim_diff.py` and `tools/oracle/replace_diff.py` print those rather than swallowing them | - |
+| Both Vim profiles | Lookbehind candidates inside composing clusters | Candidate scans can begin at a composing mark rather than the beginning of its cluster. `\(.\+\)\@2<=x` on `a` U+0301 `x` can capture only the mark here; the backtracking reference refuses the match, and NFA captures the full cluster. The ordinary multibyte-scalar threshold is profiled; this remaining limitation concerns composing clusters. | - |
+| Both Vim profiles | Underscore collections on LF with composing suffix | The added-LF branch of `\_[ab]` and `\_[^x]` does not reproduce all reference cluster and continuation behavior. On LF U+0301 `b`, backtracking Vim reports 0:3 for either; NFA reports 3:4 for the positive collection and 1:3 for the negative one. Plain collections and subjects without composing suffixes remain covered independently. | - |
+| Vim NFA | Added LF in named underscore classes at match end | `\_s`, `\_w` and `\_d` on LF U+0301 `b` report 0:1 in NFA Vim, while this library carries the mark and reports 0:3. With a following `b` both report 0:4. This narrow terminal-offset difference remains distinct from newline membership inside optional sequences. | - |
+| Both Vim profiles | Remaining parser and postfix limitations | Forward backreferences that Vim accepts only before lookbehind are refused. NFA captures or markers committed by a successful postfix operator and then abandoned by later failure can be rolled back where the reference preserves them. Backtracking preserves committed assertion captures through rollback at the same search start; each fresh subject search start resets captures. This is distinct from capture retention when a negative lookahead itself fails. A capture around a postfix assertion followed by a repeat can differ from Vim, as can a backreference following a postfix lookbehind. Three parser artifacts remain: `\v\_^*`, a bare `*` after a line-number assertion, and the exceptional leading-star spellings `^\m*` and `\%(*\)`. Each family is separately counted by the oracle. | - |
+| Vim NFA | Quantified/atomic consumption and successive assertions can retain different markers or captures | `\(a\ze\)\@=a*` on `aab` and `\(a\ze\)\@=\%(ab\)\@>` on `ab` report 0:1 in forced NFA; this library reports 0:2. Thus those constructs do not follow the plain scalar controls' provisional-end behavior. `\(a\ze\)\@=\(a\ze\)\@=a\+` on `ab` returns an empty group 1 and group 2 `a` in forced NFA; this library retains `a` in both groups. These are measured marker/capture limitations, not a rule extrapolated to other constructs. | - |
+| Both Vim profiles | Groups and nested sequences inside `\%[...]` are refused | Backtracking Vim refuses these with E54; NFA Vim accepts them. The shared grammar keeps the refusal explicit instead of interpreting their contents as ordinary atoms. Classes, collections, numeric atoms, markers and backreferences remain supported members. | `GRX_ERR_SYNTAX` |
+| Both Vim profiles | Interacting markers in and after a positive lookbehind | A marker in a positive lookbehind followed by another marker in a postfix operator can preserve the earlier marker in Vim. This library's marker register uses the last successful write. This narrow family is counted separately; a general engine disagreement is not an exclusion. | - |
 
 ### 6.1 ECMAScript and the unit of a subject
 

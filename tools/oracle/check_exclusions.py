@@ -496,6 +496,51 @@ block("replace_diff.is_abandoned_path_artifact",
 ])
 
 
+# A capture-loss limitation needs structural and independently observable
+# witnesses. Every near miss here must remain a disagreement.
+block("replace_diff.nested_positive_lookbehind",
+    replace_diff.nested_positive_lookbehind, [
+    ("nested positive lookahead in group one's positive lookbehind",
+     (r"\(\(a\)\@=a\)\@<=",), True),
+    ("bounded positive lookbehind", (r"\(\(a\)\@=a\)\@2<=",), True),
+    ("negative lookahead", (r"\(\(a\)\@!a\)\@<=",), False),
+    ("negative lookbehind", (r"\(\(a\)\@=a\)\@<!",), False),
+    ("unnested lookahead", (r"\(a\)\@=\(a\)\@<=",), False),
+    ("the affected group is not group one",
+     (r"\(b\)\(\(a\)\@=a\)\@<=",), False),
+    ("very-magic groups are conservatively unclassified",
+     (r"\v((a)@=a)@<=",), False),
+])
+
+block("replace_diff.omit_vim_group_one", replace_diff.omit_vim_group_one, [
+    ("case operator remains", (r"\u\1\1",), r"\u"),
+    ("escaped slash is not a group token", (r"\\1",), r"\\1"),
+    ("other groups remain", (r"\1\2\0",), r"\2\0"),
+    ("literal and trailing slash remain", ("X\\1Y\\",), "XY\\"),
+])
+
+_CAPTURE_WITNESS = (r"\(\(a\)\@=a\)\@<=",
+    'match 1:1 "" "a"', 'match 1:1 "a" "a"',
+    "aBEb", "aBEb", "aBEb", "aBaEb", "aXb", "aXb", "B", "E")
+
+def changed_capture_witness(index, value):
+    row = list(_CAPTURE_WITNESS)
+    row[index] = value
+    return tuple(row)
+
+block("replace_diff.capture_loss_evidence", replace_diff.capture_loss_evidence, [
+    ("all independent witnesses agree", _CAPTURE_WITNESS, True),
+    ("different global span boundaries", changed_capture_witness(4, "aBbE"), False),
+    ("different first match span", changed_capture_witness(2,
+        'match 1:2 "a" "a"'), False),
+    ("reference capture is nonempty", changed_capture_witness(5, "aBaEb"), False),
+    ("our capture is empty too", changed_capture_witness(6, "aBEb"), False),
+    ("different actual capture count", changed_capture_witness(6, "aBaEBaEb"), False),
+    ("removing group one does not explain output", changed_capture_witness(7, "aYb"), False),
+    ("no substitution happened", changed_capture_witness(3, "ab"), False),
+])
+
+
 # --------------------------------------------------------------------
 # The two references, where each is the one that is wrong - and the one
 # construct this library refuses on purpose beside the one it has not built.

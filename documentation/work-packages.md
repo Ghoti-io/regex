@@ -736,6 +736,10 @@ produced rows that mean nothing.
 
 ### Phase 7: Tcl, Vim and Emacs
 
+The later Vim compatibility split replaces the single mixed profile with `vim-backtrack` and `vim-nfa`, sharing this grammar
+and using independent forced reference engines. Current contracts are in
+[dialects.md](dialects.md); the account below records the initial frontend.
+
 **WP-36 Vim**: built 2026-09-23. The magic-level hook was indeed the work,
 and it needed four new front-end hooks rather than one, because the four
 levels move the line between operator and literal one character at a time
@@ -875,6 +879,11 @@ does not implement" had been an answer about rows it never had.
 forms, and its exclusion for them is gone rather than left standing over a
 closed gap - a bucket that keeps accepting rows after its reason is gone is
 how a later defect gets reported as known.
+
+The later Vim compatibility split measures composing behavior separately
+for each profile. The following WP-44 account describes the initial shared
+cluster model; [dialects.md](dialects.md) records current engine-specific
+settings and remaining limitations.
 
 **WP-44 Vim's composing clusters**: **built 2026-09-23**, `\Z` with it. A
 base and the composing characters after it are one character to vim, and

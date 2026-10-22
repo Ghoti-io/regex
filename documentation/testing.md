@@ -53,7 +53,7 @@ observation of this machine - see §2.1.
 | musl v1.2.6 `regcomp` | POSIX BRE/ERE, with glibc | `tools/oracle/musl_match.c`: musl's own regex sources, fetched by `tools/corpus/fetch.sh musl`, compiled into the driver **against the image's glibc** - so it declines a NUL (musl has no `REG_STARTEND`) and any byte >= 0x80 (that glibc's `mbtowc`). Never decides alone - see below |
 | GNU sed 4.9 | the POSIX and GNU replacement templates | `tools/oracle/sed_match.py`, which runs sed's per-case loop *inside* the image: sed's `s` command takes one script and one subject, so it is the one reference here with no batch protocol of its own |
 | GNU grep 3.11 | the `gnu-ere` probe column | `tools/oracle/probe.py`. Only "did a line match", which is all `grep -c` can answer |
-| vim 9.2, patches 1-1129 | Vim | `tools/oracle/vim_diff.py`: **one** `vim -es` for a whole run, reading a file of cases and writing a file of answers, through `matchstrpos()` and `matchlist()`. It asks vim's *other* engine (`set re=1`) about the rows that came back different, because vim ships two and they do not always agree. `vim_runner.py` is the one place its command line is spelled |
+| vim 9.2, patches 1-1129 | Vim | `tools/oracle/vim_diff.py`: **one** `vim -es` for a whole run, reading a file of cases and writing a file of answers, through `matchstrpos()` and `matchlist()`. Each run forces the engine named by the selected profile: `regexpengine=1` for `vim-backtrack`, `regexpengine=2` for `vim-nfa`. It compares complete answers against that engine. `vim_runner.py` is the one place its command line is spelled |
 | .NET 10.0.13 (SDK 10.0.402) | .NET | `tools/oracle/DotNetOracle.cs`, compiled **inside** the image at run time by Roslyn - `csc.dll` directly, against the reference assemblies already there, because `dotnet run DotNetOracle.cs` synthesises a project and restores from api.nuget.org, which a container with no network cannot do. Speaks JavaOracle.java's protocol byte for byte, `w:` WTF-8 mode included, since both are UTF-16 engines. `dotnet_runner.py` is the one place its command line is spelled |
 | Temurin JDK 25.0.4.1+1, and JDK 27+35 beside it | Java | `tools/oracle/JavaOracle.java`, run from source by `java tools/oracle/JavaOracle.java` - the JDK launches a single file without a build step, which is what .NET's row above tried and could not have. **Two pins, and only one of them gates**: `java25` is the baseline every vector was taken against and `java27` is the forward check, the `python-next` mechanism under a different name. Its `w:` mode reads WTF-8 so that an unpaired surrogate can be asked about at all, a `Matcher` answering 62 of the JDK corpus's 101 such cases with a match; `check_java_driver.py` holds the controls and `java_probe.py` the 494 pinned cases |
 | go1.25.14 (Unicode 15.0.0) | RE2 | `tools/oracle/go_match.go`, built inside the image by `go_runner.py`. **`regexp` is in the standard library**, so unlike the Rust row there is no crate to vendor and no lock file: the digest pins the compiler and the compiler carries the implementation, which is why this is a stock image where `rust`'s is built here. Three environment variables point the build cache, the module cache and GOPATH at `/tmp`, because `go build` wants all three writable and the tree is mounted read-only. **The largest Unicode skew of any pin here**: two releases behind `tools/unicode/UCD_VERSION`, so a `\p{...}` or case-fold disagreement about a code point that moved between 15.0.0 and 17.0.0 is a fact about the two versions and not a defect, and has to be excluded by name |
@@ -896,28 +896,25 @@ mechanism rather than a counter.
 **To check the gate itself:** delete the `unset-where-both-empty` arm from
 `explain_split()` and 157 rows move to "no mechanism" and the gate fails.
 
-**And the sweep found a fourth member of the family.**
-`tools/oracle/replace_diff.py` prints `vim's two engines disagree and neither
-gives ours` - the same bucket, under vim's two engines rather than glibc and
-musl - and returned only its disagreement count. `vim_diff.py` asserts its
-copy empty and explains why: a category with no expected size is where a
-defect goes to be quiet, and the promise that these are "printed rather than
-swallowed so a person can see them" is the promise that failed when four rows
-arrived under a wrong locale and nobody looked. Four differentials, one rule
-now. It is 0 in all four dialects there; forcing vim's engine splits into it
-makes it 10 and the gate fails.
+**Vim now has a separate reference for each compatibility profile.** The
+replacement and matching differentials force the selected engine rather than
+accepting a mixture of answers from two engines. An engine disagreement is
+not an exclusion category for either profile.
 
 ### The Vim differential
 
-`tools/oracle/vim_diff.py`, WP-36's gate. vim cannot be imported, so the
-saving is one fork for a *run* rather than one per case: vim reads a file of
-cases and writes a file of answers, which is what makes tens of thousands of
-rows possible against a reference `probe.py` starts a process per case for
-(22 cases, so it can afford to). `make check-oracle-vim` runs it with `--strict`. Current standing:
-**1,080,000 rows over thirty seeds, no disagreements** - with 801 rows
-excluded as vim artifacts, 1,407 where its two engines disagree and `set
-re=1` gives this library's answer, and 21 where they disagree and neither
-does, which are printed.
+`tools/oracle/vim_diff.py` compares each named compatibility profile with
+its corresponding forced pinned Vim engine: `vim-backtrack` with
+`regexpengine=1`, `vim-nfa` with `regexpengine=2`. `make check-oracle-vim`
+runs both in strict mode. Each run uses one reference process for its batch,
+requires a complete answer population, and prints the profile, engine and
+named limitation counts. `--syntax` selects one profile for a focused run.
+
+The original engine-split rows are fixed regression cases. The missing
+`\f`, `\F`, `\I`, `\K` and collection escapes are in the generating
+vocabulary, with bare and collection contexts checked separately by the
+escape floor. Historical totals from the former mixed-profile gate do not
+measure either new compatibility profile.
 
 **The subject is a string, not a buffer**, and that is a decision the tool
 makes rather than a detail of it. vim's help describes matching against a
@@ -936,27 +933,12 @@ comparison folds ours the same way, and the unset axis is stated by
 `\(a\)\?\1` matches the empty string against "b", which a dialect that
 failed on an unset reference could not do.
 
-**Nine classes of disagreement are vim disagreeing with something**, and the
-tool counts each rather than dropping it, so that the number moving is
-visible:
+**Remaining limitations are named and counted per profile.** The following
+reference-artifact shapes are narrower claims than engine compatibility.
+They remain visible in the run's output and are audited against each forced
+reference. The gate fails for an unclassified mismatch; it does not ask the
+other engine to excuse it.
 
-- **vim's two engines.** `\%^\|a\?` against "a" is the empty match at 0
-  under `set re=1` and "a" under the default `re=2`. This is not recognised
-  from the shape of the pattern - it is *asked*: every row that came back
-  different is put to the old engine. A row where both of vim's engines
-  agree with each other and not with this library is a defect here.
-
-  The count is split in two, because the rows are not equally informative.
-  Most turn on a single axis and `set re=1` gives exactly this library's
-  answer. A few turn on *two*, and then neither engine gives it: this
-  library follows the old engine where a mark sits inside an assertion and
-  the new one where `\c` meets `[[:lower:]]` or an abandoned `\@>` group's
-  captures are read, each time because that engine is the one whose answer
-  can be stated as a rule, so a pattern touching two of them agrees with
-  neither. 29 rows in 1,044,885 - `\c[[:lower:]]\|\(a\zsb\)\@=`
-  against "ABC" is the shape - and the tool *prints* each of them with both
-  engines' answers beside its own, because a defect of this library's could
-  hide in that set and a person looking at it is the only defence there is.
 - **A forward backreference with a lookbehind after it.** `\1\(a\)\@<!`
   is accepted where `\1\(a\)`, `\(a\1\)`, `\1\(a\)\@=`,
   `\1\(a\)\@>` and `\1\%(a\)` are all "E65: Illegal back reference" in
@@ -1004,25 +986,11 @@ visible:
   match because another branch won, and vim *compiles* `\%23l\v*` where
   this refuses it - a marker between an atom and a bare `*` being "E871"
   in vim after every atom but an `l` form.
-- **A group inside `\%[...]`.** `a\%[\(bc\)]`, `a\%[\%(bc\)]` and a
-  nested `a\%[b\%[cd]]` are "E54: Unmatched \(" under `set re=1` and
-  compile under `re=2`. Every other member vim's help calls an atom is
-  built - a class, a collection, `\%d98`, `\zs`, `\<`, `\_s`, a
-  backreference - so the refusal is this one shape and not the member
-  grammar.
-- **A `\zs` or a `\ze` inside an assertion**, where the default engine's
-  answers cannot be stated as a rule. 140 patterns put each of four marker
-  bodies inside each of `\@=`, `\@!`, `\@<=`, `\@<!`, `\@>` and `\&`
-  with five tails: `set re=1` answers every one of them the way a single
-  mark register does, and `re=2` agrees with it on 110. The 30 left are not
-  a second rule. `\(ab\zec\)\@=a` against "abc" is 0-2 old and 0-1 new,
-  while `x\(ab\zec\)\@=` against "xabc" is 0-3 in *both* - one character
-  consumed outside the same assertion, and the answer turning on which side
-  of it the character was written. `a\zeb` is 0-1 everywhere, so it is not
-  that later text overwrites a mark. And `re=2` drops a `\zs` where it
-  keeps a `\ze`. This library follows the engine that can be written down,
-  and every such row reaches the engine-split count above rather than being
-  recognised from the pattern's shape.
+Engine-specific optional-group and contextual marker behavior is described
+in [dialects.md](dialects.md), rather than excused because another Vim engine
+returns a different answer. Shared Vim tests run for both profiles, and
+`tests/unit/test_vim_profiles.cpp` pins divergent behavior, capture rollback,
+UTF-8 bounds, public selection, and bounded execution separately.
 
 **Both of the rules its subjects used to leave out are built**, and the
 subjects say so in two different ways. Characters outside Latin's word class
@@ -1052,33 +1020,19 @@ as often as not, and vim compiles a collection with a corrupted
 `[[:foo:]]*a` does not match "a". Thousands of those would put a floor under
 the disagreement count and hide the next real one under it.
 
-**It is no longer the only gate for this dialect either.**
-`tools/oracle/make_vim_vectors.py` writes vim's answers into
-`tests/data/vectors/vim/` - 74 named records and 6,243 generated ones. Two
-things make it weaker than the other corpora and both are stated in its own
-header rather than left to be discovered.
+**Committed vectors require no live reference.**
+`tools/oracle/make_vim_vectors.py` writes independent expectations under
+`tests/data/vectors/vim-backtrack/` and `tests/data/vectors/vim-nfa/`.
+Each is generated from its corresponding forced pinned engine. Engine
+splits are retained as distinct expectations, including the original two
+cases. The named corpus deliberately includes postfix operators.
 
-vim has **no API that gives a submatch a position**, so a record pins the
-whole match exactly and each group by its text; §3's `groups:` field is that,
-and the alternative would have been taking the spans from this library, which
-is a vector recording today's behaviour as the rule.
-
-And its exclusions are decided from the **pattern text alone**, where the
-differential's are decided by comparing both answers. That is deliberate: a
-corpus whose contents depend on what this library answered at generation time
-is one that quietly shrinks after a regression, so the row that would have
-reported the regression is the row that stops being written. The cost is that
-it declines every pattern containing a `@` - which is every postfix operator
-vim has, and where five of the seven measured artifacts live - along with
-`\%23l*`, `\v\_^*` and the two spellings of a bare multi vim refuses.
-`check-oracle-vim` covers all of those and this corpus says it does not.
-
-The one exclusion that is a measurement rather than a shape is asked of vim:
-a row its two engines answer differently is dropped, because vim has no
-single answer to write down. Four of the named cases go that way, and they
-are named in the generator rather than left to the header's count -
-`[[:lower:]]` and `[[:upper:]]` over U+2170, U+01C5 and U+24B6, where `set
-re=2` matches and `set re=1` does not.
+Vim gives whole-match byte offsets but only group text. The `groups:` field
+therefore compares each group's contents, folding unset and empty together;
+no expected capture offsets are borrowed from this library. Random-corpus
+shape exclusions remain functions of the pattern alone, so a regression in
+this library cannot silently shrink the reference corpus. See the generator
+for its explicit reference-artifact exclusions.
 
 Its first run failed nine records, all one defect: `a\%[b\|c]` was refused
 with `GRX_ERR_UNSUPPORTED` while the reader's own comment recorded that vim

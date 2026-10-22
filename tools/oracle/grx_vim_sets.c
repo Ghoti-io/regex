@@ -75,7 +75,7 @@ static size_t encode(uint32_t codepoint, char * out) {
 int main(void) {
   for (size_t index = 0; index < sizeof(SETS) / sizeof(SETS[0]); index++) {
     GRX_Regex * regex = NULL;
-    if (grx_regex_compile(SETS[index].pattern, GRX_SYNTAX_VIM, GRX_OPT_NONE,
+    if (grx_regex_compile(SETS[index].pattern, GRX_SYNTAX_VIM_BACKTRACK, GRX_OPT_NONE,
             &regex) != GRX_OK) {
       fprintf(stderr, "could not compile %s in the vim dialect\n",
           SETS[index].pattern);

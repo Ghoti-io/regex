@@ -97,7 +97,7 @@ int main(int argc, char ** argv) {
   GRX_Error error;
   grx_error_clear(&error);
   if (grx_regex_compile_with_allocator(argv[first], strlen(argv[first]),
-          GRX_SYNTAX_VIM, 0, NULL, NULL, &error, &regex)
+          GRX_SYNTAX_VIM_BACKTRACK, 0, NULL, NULL, &error, &regex)
       != GRX_OK) {
     // The diagnostic names the construct and the offset. For this dialect
     // that is usually "the level in force here spells that operator the

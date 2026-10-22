@@ -71,6 +71,8 @@ extern "C" {
  * guarantees by refusing GRX_OPT_WTF8 without GRX_OPT_UTF.
  */
 #define GRX_PROGRAM_WTF8 GRX_BIT(12)
+/** Assertion end markers expire when the caller consumes another atom. */
+#define GRX_PROGRAM_PROVISIONAL_LOOK_END GRX_BIT(10)
 
 /**
  * @brief An empty subject has a segmentation boundary at offset 0.

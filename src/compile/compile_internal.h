@@ -281,6 +281,12 @@ typedef enum {
  */
 #define GRX_INST_REVERSE GRX_BIT(0)
 #define GRX_INST_LOOK_NEAREST GRX_BIT(7)
+/** LOOK: extend the byte threshold to the preceding UTF-8 boundary. */
+#define GRX_INST_LOOK_ROUND_BOUND GRX_BIT(5)
+/** LOOK/ATOMIC_END: successful assertion-body captures can survive rollback. */
+#define GRX_INST_LOOK_PERSIST_CAPTURES GRX_BIT(4)
+/** LOOK: an end marker is provisional until another outer atom consumes. */
+#define GRX_INST_LOOK_PROVISIONAL_END GRX_BIT(3)
 
 /**
  * @brief This SPLIT is one arm of an alternation, not a quantifier's.

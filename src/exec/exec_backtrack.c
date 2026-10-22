@@ -162,6 +162,7 @@ typedef struct {
    * at `shadow + N * 2`.
    */
   size_t shadow;
+  size_t pending_end_slot; ///< Extra undoable state for provisional end markers.
   size_t slot_count;     ///< Captures, registers and shadows together.
   size_t * slots;        ///< Captures, then registers.
   Frame * stack;
@@ -1223,6 +1224,9 @@ static void snapshot_spans(const Backtrack * bt, size_t * out) {
 /** Put back what snapshot_spans() took. */
 static void restore_spans(Backtrack * bt, const size_t * before) {
   memcpy(bt->slots, before, bt->captures * sizeof(size_t));
+  if (bt->pending_end_slot) {
+    bt->slots[bt->pending_end_slot] = before[bt->pending_end_slot];
+  }
   if (bt->shadow) {
     memcpy(bt->slots + bt->shadow, before + bt->shadow,
         (bt->slot_count - bt->shadow) * sizeof(size_t));
@@ -1487,10 +1491,16 @@ static int return_from_call(
  * @return Non-zero when some start matched.
  */
 static int look_behind_forward(Backtrack * bt, uint32_t body, size_t position,
-    size_t min, size_t max, int nearest, const size_t * before,
+    size_t min, size_t max, int nearest, int round_bound, int persist, const size_t * before,
     size_t * out_end) {
   size_t available = position - bt->window_start;
   size_t reach = max < available ? max : available;
+  if (round_bound && (bt->program->flags & GRX_PROGRAM_UTF)) {
+    while (reach < available
+        && (bt->request->subject[position - reach] & 0xc0u) == 0x80u) {
+      reach++;
+    }
+  }
   if (reach < min) {
     // Not enough subject behind this position for the shortest body.
     return 0;
@@ -1512,7 +1522,12 @@ static int look_behind_forward(Backtrack * bt, uint32_t body, size_t position,
   int matched = 0;
   for (size_t back = nearest ? min : reach;;
       back = nearest ? back + 1 : back - 1) {
-    restore_spans(bt, before);
+    if (!persist) {
+      restore_spans(bt, before);
+    }
+    if (bt->pending_end_slot) {
+      bt->slots[bt->pending_end_slot] = GRX_NPOS;
+    }
     bt->depth = floor;
     matched = run(bt, body, position - back, floor, 0, out_end);
     bt->depth = floor;
@@ -1534,7 +1549,7 @@ static int look_behind_forward(Backtrack * bt, uint32_t body, size_t position,
   bt->visited = outer_visited;
   bt->memo_after = outer_memo_after;
   bt->look_end = outer_look_end;
-  if (!matched) {
+  if (!matched && !persist) {
     restore_spans(bt, before);
   }
   return matched;
@@ -1826,6 +1841,10 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
           // `(*THEN)` can name, and for one revision this line kept them -
           // which left `\R` able to give back the LF of a CR LF pair, the
           // one thing pcre2pattern says its `(?>` is there to prevent.
+          if ((inst->flags & GRX_INST_LOOK_PERSIST_CAPTURES)
+              && bt->stack[read].kind == FRAME_CAPTURE) {
+            continue;
+          }
           if (bt->stack[read].kind != FRAME_RESUME
               && bt->stack[read].kind != FRAME_ALTERNATIVE) {
             bt->stack[write++] = bt->stack[read];
@@ -1856,6 +1875,11 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
           return 0;
         }
         snapshot_spans(bt, before);
+        size_t outer_pending = bt->pending_end_slot
+            ? bt->slots[bt->pending_end_slot] : GRX_NPOS;
+        if (bt->pending_end_slot) {
+          bt->slots[bt->pending_end_slot] = GRX_NPOS;
+        }
 
         size_t body_floor = bt->depth;
         size_t end = 0;
@@ -1884,7 +1908,9 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
         if (grx_program_look_span(bt->program, inst->x, &min, &max)) {
           body_matched = look_behind_forward(
               bt, pc + 1, position, min, max,
-              (inst->flags & GRX_INST_LOOK_NEAREST) != 0, before, &end);
+              (inst->flags & GRX_INST_LOOK_NEAREST) != 0,
+              (inst->flags & GRX_INST_LOOK_ROUND_BOUND) != 0,
+              (inst->flags & GRX_INST_LOOK_PERSIST_CAPTURES) != 0, before, &end);
         }
         else {
           size_t outer_look_end = bt->look_end;
@@ -1894,6 +1920,9 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
         }
         bt->keep_last = outer_keep_last;
         bt->depth = body_floor;
+        if (bt->pending_end_slot) {
+          bt->slots[bt->pending_end_slot] = outer_pending;
+        }
         if (bt->failure != GRX_OK) {
           gcu_allocator_free(bt->allocator, keep_last);
           gcu_allocator_free(bt->allocator, before);
@@ -1910,7 +1939,10 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
           // A positive lookaround whose body failed, or a negative one whose
           // body succeeded. Either way the construct fails and the captures
           // go back to what they were.
-          restore_spans(bt, before);
+          if (!(inst->flags & GRX_INST_LOOK_PERSIST_CAPTURES)
+              || inst->mode == GRX_LOOK_BEHIND_NEGATIVE) {
+            restore_spans(bt, before);
+          }
           gcu_allocator_free(bt->allocator, keep_last);
           gcu_allocator_free(bt->allocator, before);
           ok = 0;
@@ -1926,7 +1958,8 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
         // `^(?(?=(a)b)x|a)` against "ay" reports group one as "a" in perl
         // 5.40.1 and unset in pcre2test, which is section 5.17's split
         // arriving by another route.
-        if (!body_matched && !(inst->flags & GRX_INST_KEEP_CAPTURES)) {
+        if (!body_matched && !(inst->flags
+                & (GRX_INST_KEEP_CAPTURES | GRX_INST_LOOK_PERSIST_CAPTURES))) {
           // ECMA-262 22.2.2.4: a negative lookaround leaves the captures as
           // they were, whatever its body touched on the way to failing.
           // Perl does not - see GRX_INST_KEEP_CAPTURES - and there the
@@ -1969,6 +2002,10 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
             size_t first = pass == 0 ? 0 : bt->shadow;
             size_t last = pass == 0 ? bt->captures : bt->slot_count;
             for (size_t i = first; i < last; i++) {
+              if ((inst->flags & GRX_INST_LOOK_PERSIST_CAPTURES)
+                  && ((pass == 0 && i >= 2) || pass == 1)) {
+                continue;
+              }
               if (bt->slots[i] == before[i]) {
                 continue;
               }
@@ -1983,6 +2020,16 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
               bt->slots[i] = current;
             }
           }
+        }
+        if ((inst->flags & GRX_INST_LOOK_PROVISIONAL_END)
+            && bt->pending_end_slot && body_matched && !negative
+            && bt->slots[1] != before[1]) {
+          if (!save_slot(bt, bt->pending_end_slot)) {
+            gcu_allocator_free(bt->allocator, keep_last);
+            gcu_allocator_free(bt->allocator, before);
+            return 0;
+          }
+          bt->slots[bt->pending_end_slot] = 1;
         }
         gcu_allocator_free(bt->allocator, keep_last);
         gcu_allocator_free(bt->allocator, before);
@@ -2179,6 +2226,15 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
             return 0;
           }
           bt->slots[1] = position;
+          // An explicit end supersedes an assertion's provisional end.
+          // Undo both writes when this path is abandoned.
+          if (bt->pending_end_slot
+              && bt->slots[bt->pending_end_slot] != GRX_NPOS) {
+            if (!save_slot(bt, bt->pending_end_slot)) {
+              return 0;
+            }
+            bt->slots[bt->pending_end_slot] = GRX_NPOS;
+          }
         }
         pc++;
         continue;
@@ -2390,6 +2446,14 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
 
     if (ok) {
       if (consumed) {
+        if (bt->pending_end_slot
+            && bt->slots[bt->pending_end_slot] != GRX_NPOS) {
+          if (!save_slot(bt, 1) || !save_slot(bt, bt->pending_end_slot)) {
+            return 0;
+          }
+          bt->slots[1] = GRX_NPOS;
+          bt->slots[bt->pending_end_slot] = GRX_NPOS;
+        }
         position = reverse ? position - width : position + width;
       }
       pc++;
@@ -2421,6 +2485,7 @@ GRX_Result grx_exec_backtrack(
     .captures = 2 * (request->regex->capture_count + 1),
     .registers = program->register_count,
     .shadow = 0,
+    .pending_end_slot = 0,
     .slot_count = 0,
     .slots = NULL,
     .stack = NULL,
@@ -2471,6 +2536,10 @@ GRX_Result grx_exec_backtrack(
   if (program->flags & GRX_PROGRAM_SHADOW_CAPTURES) {
     bt.shadow = bt.slot_count;
     bt.slot_count += bt.captures;
+  }
+
+  if (program->flags & GRX_PROGRAM_PROVISIONAL_LOOK_END) {
+    bt.pending_end_slot = bt.slot_count++;
   }
 
   bt.slots = gcu_allocator_malloc(

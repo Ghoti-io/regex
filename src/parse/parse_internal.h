@@ -263,6 +263,8 @@ typedef struct GRX_ClassItem {
  * atomic group outside instead would not stop backtracking into the run.
  */
 #define GRX_NODE_SCRIPT_RUN GRX_BIT(7)
+/** CLASS: a collection written with brackets, rather than a named atom. */
+#define GRX_NODE_COLLECTION GRX_BIT(8)
 
 /**
  * @brief One node of a parsed pattern.

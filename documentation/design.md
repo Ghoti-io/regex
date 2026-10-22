@@ -459,8 +459,8 @@ pay. `GRX_LookbehindLimit` ([dialects.md](dialects.md) §5.4) is the axis.
 *Reverse* — run the body's reverse-direction instructions from the current
 position backwards. This is what ECMA-262 describes (22.2.2.4, direction -1)
 and what lets a lookbehind of **any** length cost what its body costs,
-however far back the body reaches. It is the model for the dialects whose
-lookbehind is unbounded: ECMAScript and .NET. A body may contain anything the
+however far back the body reaches. It is the model for ECMAScript and .NET
+lookbehind, which may be unbounded. A body may contain anything the
 backtracker runs, captures included.
 
 *Forward from a candidate start* — try each start the body's length allows,
@@ -469,15 +469,18 @@ assertion stands. This is Perl's and PCRE2's, and it is affordable only
 because those dialects also bound the body's *variation* at 255 bytes: the
 number of candidate starts is `max - min + 1`, so a body of one fixed length
 has one candidate however long it is, and the worst case is a bounded
-constant rather than a second factor of the subject. A dialect that did not
-bound the variation could not have this model, which is why the axis is the
-limit and not a preference.
+constant rather than a second factor of the subject. Java and the two Vim
+profiles also use forward bodies with unbounded spans. Java and Vim
+backtracking try the nearest successful start first; Vim NFA
+tries the furthest allowed start first. Their scans are charged to the normal
+execution step limit, so the bound is a resource policy rather than a
+requirement that every forward body have finite variation.
 
 The two are observably different in three places, all of them in the corpus:
 
 | | reverse | forward |
 | --- | --- | --- |
-| which of several candidates | whichever the *body* prefers | the longest |
+| which of several candidates | whichever the *body* prefers | nearest or furthest, by profile |
 | `(?=foo)(?<=(a??))` on `afoo` | `1-1 1-1` | `1-1 0-1` ← Perl |
 | `(*ACCEPT)` in the body | nowhere to stop | ends the assertion where it fires |
 
@@ -863,6 +866,16 @@ reference is a dialect the library cannot claim.
 `grx_options_parse(syntax, "imsu", &bits)` for a flag string in the
 dialect's own alphabet, because every consumer has one of those strings and
 should not have to know that `s` is dot-all in PCRE and multiline in Ruby.
+
+### Vim compatibility profiles
+
+`GRX_SYNTAX_VIM_BACKTRACK` and `GRX_SYNTAX_VIM_NFA` share the Vim frontend
+and syntax specification. Each semantic profile states the behavior measured
+against its corresponding forced reference engine. Profile settings select
+lowering and instruction policies; the execution engine sees no Vim dialect
+identifier. These choices cover assertion captures, lookbehind starts and
+UTF-8 thresholds, match markers, optional sequences, and empty iterations.
+The exact measured rules and limitations are in [dialects.md](dialects.md).
 
 ## 5. Unicode and encodings
 

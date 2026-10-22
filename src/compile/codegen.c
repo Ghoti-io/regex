@@ -1743,10 +1743,9 @@ static GRX_Result gen_call(Codegen * codegen, const GRX_IRNode * node) {
 /**
  * Copy a forward lookbehind's body length into the program.
  *
- * Bounded dialects cap candidate-start variation at 256. Java permits an
- * unbounded span and enumerates nearest starts under the execution step
- * limit. Other unbounded spans here are refused because they have not
- * selected that model.
+ * Finite and unbounded spans use the same enumeration. The instruction
+ * chooses nearest or furthest starts; both scans retain the ordinary
+ * execution step limit.
  */
 static GRX_Result gen_look_span(
     Codegen * codegen, const GRX_IRNode * node, uint32_t * out_offset) {
@@ -1755,8 +1754,7 @@ static GRX_Result gen_look_span(
   if (!grx_ir_look_span(codegen->ir, node->a, &min, &max)) {
     return fail(codegen, GRX_DIAG_INTERNAL, node);
   }
-  if ((max == GRX_NPOS && !(node->flags & GRX_IR_LOOK_NEAREST))
-      || (max != GRX_NPOS && min > max)) {
+  if (max != GRX_NPOS && min > max) {
     return fail(codegen, GRX_DIAG_VARIABLE_LOOKBEHIND, node);
   }
 
@@ -1810,6 +1808,15 @@ static GRX_Result gen_look_step(Codegen * codegen, GenFrame * frame,
       if (node->flags & GRX_IR_LOOK_NEAREST) {
         grx_program_at(codegen->program, look)->flags |= GRX_INST_LOOK_NEAREST;
       }
+      if (node->flags & GRX_IR_LOOK_ROUND_BOUND) {
+        grx_program_at(codegen->program, look)->flags |= GRX_INST_LOOK_ROUND_BOUND;
+      }
+      if (node->flags & GRX_IR_LOOK_PERSIST_CAPTURES) {
+        grx_program_at(codegen->program, look)->flags |= GRX_INST_LOOK_PERSIST_CAPTURES;
+      }
+      if (node->flags & GRX_IR_LOOK_PROVISIONAL_END) {
+        grx_program_at(codegen->program, look)->flags |= GRX_INST_LOOK_PROVISIONAL_END;
+      }
       frame->u.look.mark = look;
 
       // Set rather than raised: the distance a guard measures is *this*
@@ -1817,7 +1824,8 @@ static GRX_Result gen_look_step(Codegen * codegen, GenFrame * frame,
       // at all. Everything that is not a forward lookbehind - a lookahead, a
       // reverse lookbehind, a scan - clears it, and the engine clears the
       // matching runtime field in the same places.
-      codegen->forward_tail = (node->flags & GRX_IR_LOOK_FORWARD) ? 1 : 0;
+      codegen->forward_tail = (node->flags & GRX_IR_LOOK_FORWARD)
+          && !(node->flags & GRX_IR_LOOK_PERSIST_CAPTURES);
       // A lookaround sets its body's direction absolutely, so a subroutine
       // block being laid out the other way round turns over everything except
       // this. See the `flip` field.
@@ -2130,6 +2138,9 @@ static GRX_Result gen_step(Codegen * codegen, GenFrame * frame,
       GRX_Result result
           = emit(codegen, GRX_OP_ATOMIC_END, 0, 0, 0, node, &end);
       if (result == GRX_OK) {
+        if (node->flags & GRX_IR_LOOK_PERSIST_CAPTURES) {
+          grx_program_at(codegen->program, end)->flags |= GRX_INST_LOOK_PERSIST_CAPTURES;
+        }
         patch_x(codegen, frame->u.one.slot, end);
       }
       return result;

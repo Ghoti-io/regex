@@ -895,9 +895,21 @@ TEST(Split, PerlTreatsABareCaretAsMultiline) {
  * Four of these rules separate Perl's operators from Vim's, which share the
  * spelling and the applier and agree on none of them.
  */
+TEST(Subst, BothVimProfilesShareStringReplacementRules) {
+  for (GRX_Syntax syntax : {GRX_SYNTAX_VIM_BACKTRACK, GRX_SYNTAX_VIM_NFA}) {
+    SCOPED_TRACE(grx_syntax_name(syntax));
+    EXPECT_EQ(replaced("\\(x\\)", "x", "\\Uab\\lcd", GRX_REPLACE_GLOBAL,
+                  GRX_ENGINE_AUTO, syntax), "ABcD");
+    EXPECT_EQ(replaced("\\(.\\)", "abc", "[&-\\1]", GRX_REPLACE_GLOBAL,
+                  GRX_ENGINE_AUTO, syntax), "[a-a][b-b][c-c]");
+    EXPECT_EQ(replaced("b*", "ab", "<>", GRX_REPLACE_GLOBAL,
+                  GRX_ENGINE_AUTO, syntax), "<>a<>");
+  }
+}
+
 TEST(Subst, PerlsReplacementCaseOperators) {
   const GRX_Syntax perl = GRX_SYNTAX_PERL;
-  const GRX_Syntax vim = GRX_SYNTAX_VIM;
+  const GRX_Syntax vim = GRX_SYNTAX_VIM_BACKTRACK;
 
   // The five, over a group and over plain text.
   EXPECT_EQ(replaced("(.)", "abc", "\\U$1", GRX_REPLACE_GLOBAL,

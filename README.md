@@ -1,7 +1,7 @@
 # Ghoti.io Regex
 
-Regular expressions in C, across eighteen dialects and one parser. Four
-engines run the result: a Pike VM that is linear in the subject length, a
+Regular expressions in C, across nineteen dialect profiles and one parser.
+Four engines run the result: a Pike VM that is linear in the subject length, a
 backtracking engine for the constructs no lockstep simulation can express, a
 bit-state engine that is the backtracker with a memo and the linear bound
 restored, and a lazy DFA that says where a match is without saying which path
@@ -11,9 +11,10 @@ found it.
 
 This is what the library implements.
 
-Twelve dialects compile and match: ECMAScript (legacy, `u` and `v`), PCRE2,
-Perl, POSIX BRE and ERE, GNU BRE and ERE, Python, Vim, I-Regexp (RFC 9485,
-the interoperable subset JSONPath is specified over), RE2 and Rust.
+Thirteen dialect profiles compile and match: ECMAScript (legacy, `u` and `v`),
+PCRE2, Perl, POSIX BRE and ERE, GNU BRE and ERE, Python, Vim backtracking and
+NFA, I-Regexp (RFC 9485, the interoperable subset JSONPath is specified over),
+RE2 and Rust.
 
 Java has a JDK 25 syntax, match, iteration, replacement and split
 implementation. Its bounded committed corpus passes, but the wider
@@ -24,10 +25,16 @@ Ruby, Tcl, Emacs and RE/flex are named and report `GRX_ERR_UNSUPPORTED`.
 
 | Dialect | What it means here |
 | --- | --- |
-| ECMAScript, PCRE2, Perl, POSIX BRE, POSIX ERE, GNU BRE, GNU ERE, Python, Vim, I-Regexp, RE2, Rust | Compiles and matches, on whichever engine can run the pattern. |
+| ECMAScript, PCRE2, Perl, POSIX BRE, POSIX ERE, GNU BRE, GNU ERE, Python, Vim backtracking, Vim NFA, I-Regexp, RE2, Rust | Compiles and matches, on whichever engine can run the pattern. |
 | Java | JDK 25.0.4.1+1 baseline: syntax and operations implemented; dialect completion awaits the six evidence conditions below. JDK 27+35 is a separate forward comparison. |
 | .NET | .NET 10.0.13 baseline: syntax, class subtraction, matching, replacement templates and splitting implemented, each measured against the pinned reference. Balancing groups are refused and deferred. A bounded result rather than .NET conformance: no differential and no imported corpus yet. |
 | Ruby, Tcl, Emacs, RE/flex | Named. A pattern reports `GRX_ERR_UNSUPPORTED`. |
+
+The Vim profiles share a grammar and select compatibility with forced Vim
+engine 1 (`GRX_SYNTAX_VIM_BACKTRACK`, `vim-backtrack`) or engine 2
+(`GRX_SYNTAX_VIM_NFA`, `vim-nfa`). These are semantic choices, independent
+of which library execution engine runs the compiled pattern. Matching uses
+string subjects and the pinned options; see [the compatibility contracts](documentation/dialects.md).
 
 RE2 and Rust are the two where a *refusal* is the point. Neither has
 backreferences or lookaround, because neither can be run in linear time, so
@@ -221,13 +228,13 @@ JSON Schema `pattern` and `patternProperties`.
 
 ## Status
 
-Fourteen dialects have parsers. The twelve completed dialects above compile
+Fifteen dialects have parsers. The thirteen profiles above compile
 and match on whichever of the four engines can run the pattern. Java and
 .NET are in progress. The other four report `GRX_ERR_UNSUPPORTED`.
 
 ### Conformance
 
-`make test` runs 87,848 checked-in conformance vectors and prints this table.
+`make test` runs the checked-in conformance vectors and prints this table.
 Every expectation in them is a reference implementation's, taken from the
 pinned oracle in `tools/oracle/containers/IMAGES`; none is this library's own
 output. The corpora are committed, so the run needs no oracle, no container
@@ -238,7 +245,8 @@ engine and no network.
 | `i-regexp` | 30,015 | 100.00% | generated from two references, RFC 9485 naming none: iregexp-check 0.1.4 for the syntax, libxml2 2.14.6 for XSD's semantics |
 | `ecmascript` | 29,056 | 100.00% | test262, plus generated from node 24.21; 497 of them hold an unpaired UTF-16 surrogate and carry `options: wtf8` |
 | `perl` | 11,705 | 100.00% | perl 5.44's `re_tests`, plus generated: full folds, `\N{}` names, boundaries, and property names with more than one reading; 8 excluded |
-| `vim` | 6,317 | 100.00% | generated from vim 9.2.1129 |
+| `vim-backtrack` | 6,084 | 100.00% | forced Vim 9.2.1129 engine 1 |
+| `vim-nfa` | 6,084 | 100.00% | forced Vim 9.2.1129 engine 2 |
 | `re2` | 2,947 | 100.00% | generated from Go 1.25.14's `regexp`, which carries Unicode 15.0.0 |
 | `rust` | 2,817 | 100.00% | generated from the `regex` crate 1.13.1, which carries UCD 16.0.0; 1 excluded |
 | `python` | 2,177 | 100.00% | generated from CPython 3.14.7 |
@@ -253,8 +261,8 @@ engine and no network.
 Read the denominators with the rates: they differ by two orders of magnitude,
 and 100% of 135 vectors is a smaller claim than 100% of 29,056.
 
-There are no known gaps. The one there was arrived with the `rust` dialect
-and turned out not to be one row: `(a*)+b` under `U` reported group 1 as 1-2
+The earlier `rust` gap is closed. It turned out not to be one row: `(a*)+b`
+under `U` reported group 1 as 1-2
 where both references report 0-2, and enumerating the shape rather than
 sampling it found 62 such rows in 5,040 - a whole cell rather than an
 oddity. Neither reference backtracks, so a loop over a body that can match

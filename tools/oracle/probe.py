@@ -234,7 +234,7 @@ def probe_grep(cases):
     return answers
 
 
-def probe_vim(cases):
+def probe_vim(cases, engine):
     answers = []
     for pattern, flags, subject, _ in cases:
         script = (
@@ -249,7 +249,8 @@ def probe_vim(cases):
         # to the same value the pin does, so the two agree rather than
         # fighting.
         text, code = run(vim_runner.command(
-            ["--cmd", "set nocompatible", "-c", "source /dev/stdin"]), script)
+            ["--cmd", "set regexpengine=%d" % engine,
+             "-c", "source /dev/stdin"]), script)
         if code != 0:
             answers.append("error")
         else:
@@ -265,7 +266,8 @@ DRIVERS = [
     ("python", "python", probe_python),
     ("pcre2", "pcre2", probe_pcre2),
     ("gnu-ere", "grep", probe_grep),
-    ("vim", "vim", probe_vim),
+    ("vim-backtrack", "vim", lambda cases: probe_vim(cases, 1)),
+    ("vim-nfa", "vim", lambda cases: probe_vim(cases, 2)),
 ]
 
 

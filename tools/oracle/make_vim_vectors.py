@@ -34,24 +34,24 @@ only, and it is coarser on purpose:
     left behind, marks kept from a lookbehind, a lookbehind mis-accounted when
     a backreference follows. Those are real and measured against pcre2test,
     and none of them can be told from a defect here by looking at the pattern.
-    It costs the corpus vim's lookaround and atomic groups entirely;
-    `check-oracle-vim` still covers them, and this file says so rather than
-    recording answers nobody could follow.
+    It removes random lookaround and atomic-group coverage from the
+    generated half; selected named postfix regressions below remain.
+    `check-oracle-vim` covers the broader population.
   - `\%23l*` and its spellings, which mean nothing at all in vim.
   - `\v\_^*`, which matches nothing where three other spellings of it match
     the empty string.
   - a bare `*` after `\%(` or after `^` with markers between, the two
     spellings vim refuses where six others accept.
 
-And, separately from shape: **a row where vim's two engines disagree is
-dropped**, because vim has no one answer for it. That is asked of vim rather
-than inferred, and it is `vim_diff.py`'s own rule. The exception is a subject
-carrying a composing character, where `set re=1` has no cluster model at all
-and its answer is a third opinion rather than a second - those rows are the
-default engine's, which is the reference.
+Each named profile is answered by its corresponding forced Vim engine.
+Engine disagreements are retained as independent expectations in two corpora.
 
 Usage:
-    tools/oracle/make_vim_vectors.py [--out DIR] [--seed N] [--patterns N]
+    tools/oracle/make_vim_vectors.py [--out VECTOR_ROOT] [--seed N] [--patterns N]
+
+`--out` names the parent of the profile directories: output is written under
+`VECTOR_ROOT/vim-backtrack/` and `VECTOR_ROOT/vim-nfa/` (or only the selected
+`--syntax` profile). The default parent is `tests/data/vectors/`.
 
 Copyright 2026 by Corey Pennycuff
 """
@@ -76,10 +76,14 @@ import vim_runner
 # accident. `(level, pattern, [subjects])`, the level written as the marker
 # that selects it so that a reader sees the pattern vim was given.
 #
-# Every one of them is free of a `@`, because the generated half cannot carry
-# those and a named case that the exclusion above then dropped would be a case
-# nobody notices is missing.
+# Named cases include independent postfix regressions with `@`. The
+# pattern-shape exclusions described above apply only to the generated half.
 NAMED_CASES = [
+    ("", "\\(a\\)\\@!\\|a\\%[\\_s]", ["a\nb"]),
+    ("", "[^ab]\\(\\w\\+\\)\\@2<=\\(a\\zsb\\)\\@>", ["abcabc"]),
+    ("", "\\(é\\)\\@1<=x", ["éx"]),
+    ("", "\\(a\\)\\@!\\|a\\1", ["aa"]),
+    ("", "[^ab]\\(\\w\\+\\)\\@<=", ["abcabc"]),
     # The four magic levels, section 5.16: the same text means different
     # things at each, which is the construct this dialect is about.
     ("", "a\\+", ["aaa", "a+"]),
@@ -112,13 +116,6 @@ NAMED_CASES = [
     # for a Unicode property: these six code points are where the two
     # readings part company.
     #
-    # **Four of these nine rows are not in the corpus**, and they are worth
-    # naming rather than letting the header's count carry them: vim's two
-    # engines disagree about U+2170, U+01C5 and U+24B6 - `set re=2` matches
-    # and `set re=1` does not - so vim has no one answer to write down.
-    # `check-oracle-vim` owns them, where they land in its engine-split
-    # bucket with `set re=1` giving this library's answer. They stay here so
-    # that a regeneration after vim settles the question picks them up.
     ("", "[[:lower:]]", ["\u02b0", "\u2170", "\u01c5", "\u00df", "\u0149"]),
     ("", "[[:upper:]]", ["\u24b6", "\u01c5", "\u0149", "A"]),
     # `\c` and `\C` are pattern syntax rather than flags, and `\c` folds
@@ -232,7 +229,7 @@ def record_for(pattern, subject, answer):
     return "\n".join(lines) + "\n"
 
 
-def write_file(path, rows, answers, version, dropped):
+def write_file(path, rows, answers, version, dropped, syntax):
     body = []
     refused = set()
     for (pattern, subject), answer in zip(rows, answers):
@@ -265,71 +262,36 @@ def write_file(path, rows, answers, version, dropped):
         out.write("#\n")
         for reason, count in sorted(dropped.items()):
             out.write("# not written: %d %s\n" % (count, reason))
-        out.write("dialect: vim\n\n")
+        out.write("dialect: %s\n\n" % syntax)
         out.write("\n".join(body))
 
     sys.stderr.write("%s: %d records\n" % (path, len(body)))
     return len(body)
 
 
-def collect(cases, dropped):
-    """Ask vim, and keep the rows vim has one answer for.
-
-    Two passes rather than one, because "vim's two engines disagree" cannot
-    be read off a pattern - it is the one exclusion here that is a
-    measurement. Only the rows that came back different are asked twice.
-    """
-    raw = vim_diff.ask_vim(cases)
+def collect(cases, dropped, syntax):
+    """Ask precisely the engine named by this profile, retaining every split."""
+    raw = vim_diff.ask_vim(cases, engine=vim_diff.PROFILES[syntax])
     if len(raw) != len(cases):
-        sys.stderr.write("vim answered %d of %d rows\n" % (len(raw), len(cases)))
+        sys.stderr.write("%s answered %d of %d rows\n"
+            % (syntax, len(raw), len(cases)))
         return None, None
-    # Two readings of one answer, and the records are written from the raw
-    # one. `normalise_theirs()` renders the groups for a *comparison* - it
-    # json-encodes each and joins them with spaces, which a group containing a
-    # space cannot be taken back out of. It is exactly right for asking
-    # whether vim's two engines said the same thing and wrong for writing a
-    # field down.
-    answers = [vim_diff.normalise_theirs(line, case[1])
-        for line, case in zip(raw, cases)]
-
-    # The composing rows are the default engine's outright; `set re=1` has no
-    # cluster model, so asking it there would drop rows over a difference
-    # that is not vim disagreeing with itself.
-    asked = [index for index, case in enumerate(cases)
-        if not vim_diff.holds_composing(case[1])]
-    second = vim_diff.ask_old_engine([cases[i] for i in asked])
-    if len(second) != len(asked):
-        sys.stderr.write("vim's old engine answered %d of %d rows\n"
-            % (len(second), len(asked)))
-        return None, None
-
-    split = set()
-    for index, line in zip(asked, second):
-        if vim_diff.normalise_theirs(line, cases[index][1]) != answers[index]:
-            split.add(index)
-
-    kept_cases = []
-    kept_answers = []
-    for index, (case, answer) in enumerate(zip(cases, raw)):
-        if index in split:
-            dropped["rows where vim's two engines disagree"] = dropped.get(
-                "rows where vim's two engines disagree", 0) + 1
-            continue
-        kept_cases.append(case)
-        kept_answers.append(answer)
-    return kept_cases, kept_answers
+    return cases, raw
 
 
 def main(argv):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--out", default=None)
+    parser.add_argument("--out", default=None, metavar="VECTOR_ROOT",
+        help="parent of vim-backtrack/ and vim-nfa/ output directories "
+             "(default: tests/data/vectors)")
+    parser.add_argument("--syntax", choices=tuple(vim_diff.PROFILES) + ("all",),
+        default="all")
     parser.add_argument("--seed", type=int, default=20260926)
     parser.add_argument("--patterns", type=int, default=400)
     parser.add_argument("--subjects", type=int, default=10)
     args = parser.parse_args(argv[1:])
 
-    out_dir = args.out or os.path.join(ROOT, "tests", "data", "vectors", "vim")
-    os.makedirs(out_dir, exist_ok=True)
+    vector_root = args.out or os.path.join(ROOT, "tests", "data", "vectors")
 
     encoding = vim_diff.vim_encoding()
     if encoding != "utf-8":
@@ -370,15 +332,23 @@ def main(argv):
     # is in rows, and each line says which.
     shape_counts = {"patterns not generated: %s" % reason: count
         for reason, count in shapes.items()}
+    shape_counts["composing rows omitted by named COMPOSING_SKIP limitations"] = (
+        len(vim_diff.ATOMS) * len(vim_diff.COMPOSING_SUBJECTS) * 2
+        - len(vim_diff.composing_cases()))
 
-    for name, cases, dropped in (
-            ("named.rxt", named, {}),
-            ("generated.rxt", rows, dict(shape_counts))):
-        kept_cases, kept_answers = collect(cases, dropped)
-        if kept_cases is None:
-            return 2
-        write_file(os.path.join(out_dir, name), kept_cases, kept_answers,
-            version, dropped)
+    profiles = vim_diff.PROFILES if args.syntax == "all" else (args.syntax,)
+    for syntax in profiles:
+        out_dir = os.path.join(vector_root, syntax)
+        os.makedirs(out_dir, exist_ok=True)
+        for name, cases, dropped in (
+                ("named.rxt", named, {}),
+                ("generated.rxt", rows, dict(shape_counts))):
+            kept_cases, kept_answers = collect(cases, dropped, syntax)
+            if kept_cases is None:
+                return 2
+            write_file(os.path.join(out_dir, name), kept_cases, kept_answers,
+                "%s; regexpengine=%d" % (version, vim_diff.PROFILES[syntax]),
+                dropped, syntax)
 
     return 0
 

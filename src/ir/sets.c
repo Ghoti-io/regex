@@ -54,6 +54,19 @@ static const GRX_CharRange ascii_word[]
     = {{'0', '9'}, {'A', 'Z'}, {'_', '_'}, {'a', 'z'}};
 static const GRX_CharRange ascii_space[] = {{0x09, 0x0D}, {0x20, 0x20}};
 
+// Forced regexpengine=1 in Vim 9.2, patches 1-1129: every non-NUL Unicode
+// scalar was queried independently. Lower has exactly 59 members and upper
+// 56; these are neither Unicode categories nor the NFA engine's case-map
+// predicates. U+00B5 belongs to the lower set despite its uppercase lying
+// outside Latin-1. Keep the measured sets explicit rather than inheriting a
+// locale's ctype predicates.
+static const GRX_CharRange latin1_case_lower[] = {
+  {'a', 'z'}, {0x00B5, 0x00B5}, {0x00DF, 0x00F6}, {0x00F8, 0x00FF},
+};
+static const GRX_CharRange latin1_case_upper[] = {
+  {'A', 'Z'}, {0x00C0, 0x00D6}, {0x00D8, 0x00DE},
+};
+
 // pcre2pattern's own lists. `\h` is the horizontal whitespace, which is the
 // space separators together with the tab and the no-break space; `\v` is the
 // vertical, which adds U+0085 to the line and paragraph separators.
@@ -120,6 +133,10 @@ GRX_Result grx_named_set(
     [GRX_SET_ASCII_DIGIT] = {ascii_digit, sizeof(ascii_digit) / sizeof(*ascii_digit)},
     [GRX_SET_ASCII_WORD] = {ascii_word, sizeof(ascii_word) / sizeof(*ascii_word)},
     [GRX_SET_ASCII_SPACE] = {ascii_space, sizeof(ascii_space) / sizeof(*ascii_space)},
+    [GRX_SET_LATIN1_CASE_LOWER] = {latin1_case_lower,
+        sizeof(latin1_case_lower) / sizeof(*latin1_case_lower)},
+    [GRX_SET_LATIN1_CASE_UPPER] = {latin1_case_upper,
+        sizeof(latin1_case_upper) / sizeof(*latin1_case_upper)},
     [GRX_SET_ES_SPACE] = {es_space, sizeof(es_space) / sizeof(*es_space)},
     [GRX_SET_UNICODE_HSPACE]
         = {unicode_hspace, sizeof(unicode_hspace) / sizeof(*unicode_hspace)},
@@ -252,7 +269,7 @@ GRX_Result grx_named_set(
     }
     case GRX_SET_CASE_MAPPED_LOWER:
     case GRX_SET_CASE_MAPPED_UPPER: {
-      // Vim asks whether a code point *has a case counterpart*, not whether
+      // NFA Vim asks whether a code point has a case counterpart, not whether
       // Unicode calls it cased. The three answers are genuinely three sets:
       // `\p{Lowercase}` is 2,595 code points, `\p{Ll}` is 2,233 and this is
       // 1,478, because Other_Lowercase carries the modifier letters and the

@@ -62,6 +62,11 @@ typedef struct {
   GRX_FoldKind fold;           ///< The folding a caseless match uses, or NONE.
   GRX_ShorthandSet shorthands; ///< The width UCP and the profile choose.
   uint32_t ascii;              ///< Which of those a modifier narrows back.
+  int adjacent_literal;       ///< This literal continues a concatenated run.
+  int scalar_direct;          ///< Direct literal quantifier consumes scalars.
+  int skip_composing_prefix;  ///< Adjacent literals may skip intervening marks.
+  unsigned atomic_end_depth;   ///< End markers suppressed by atomic bodies.
+  unsigned atomic_depth;       ///< Marker-suppressing atomic nesting.
   int reverse;                 ///< Non-zero inside a lookbehind body.
   uint32_t newline_class;      ///< The line-terminator set, or GRX_INDEX_NONE.
   uint32_t word_class;         ///< The word set for `\b`, or GRX_INDEX_NONE.
@@ -373,6 +378,12 @@ static GRX_Result posix_class_named_set(Lowering * low, const char * name,
     return GRX_OK;
   }
 
+  if (wide && low->profile.posix_case_classes_latin1
+      && (strcmp(name, "lower") == 0 || strcmp(name, "upper") == 0)) {
+    return grx_named_set(out, strcmp(name, "lower") == 0
+            ? GRX_SET_LATIN1_CASE_LOWER : GRX_SET_LATIN1_CASE_UPPER, low->limits);
+  }
+
   if (wide && low->profile.posix_case_classes_case_mapped
       && (strcmp(name, "lower") == 0 || strcmp(name, "upper") == 0)) {
     // Before the general-category substitution above would matter, and
@@ -572,6 +583,10 @@ static GRX_Result posix_class_set(Lowering * low, const GRX_ClassItem * item,
     return fail(low, GRX_DIAG_INTERNAL, node);
   }
   GRX_Result result = posix_class_named_set(low, name, node, out);
+  if (result == GRX_OK && low->profile.posix_case_classes_latin1
+      && !(item->flags & GRX_CLASS_ITEM_NO_FOLD)) {
+    return grx_charclass_fold_closure(out, low->fold, low->limits);
+  }
   if (result != GRX_OK || low->fold == GRX_FOLD_NONE
       || (item->flags & GRX_CLASS_ITEM_NO_FOLD)
       || (posix_class_is_wide(low, name)
@@ -1191,7 +1206,7 @@ static GRX_Result cluster_wrap(Lowering * low, const GRX_Node * node,
 
   uint32_t sequence = GRX_INDEX_NONE;
   GRX_Result result = add(low, GRX_IR_CONCAT, node, &sequence);
-  if (result == GRX_OK) {
+  if (result == GRX_OK && !low->skip_composing_prefix) {
     result = attach(low, sequence, atom);
   }
   if (result != GRX_OK) {
@@ -1212,7 +1227,7 @@ static GRX_Result cluster_wrap(Lowering * low, const GRX_Node * node,
   GRX_IRNode * loop = grx_ir_node(low->ir, repeat);
   loop->min = 0;
   loop->max = GRX_REPEAT_INF;
-  loop->mode = GRX_REPEAT_GREEDY;
+  loop->mode = low->skip_composing_prefix ? GRX_REPEAT_LAZY : GRX_REPEAT_GREEDY;
   loop->empty_loop = (uint8_t)low->profile.empty_loop;
   loop->capture_reset = (uint8_t)low->profile.capture_reset;
 
@@ -1226,7 +1241,10 @@ static GRX_Result cluster_wrap(Lowering * low, const GRX_Node * node,
   if (result == GRX_OK) {
     result = attach(low, sequence, repeat);
   }
-  if (result == GRX_OK) {
+  if (result == GRX_OK && low->skip_composing_prefix) {
+    result = attach(low, sequence, atom);
+  }
+  if (result == GRX_OK && !low->skip_composing_prefix) {
     result = attach_composing_assert(
         low, node, sequence, GRX_ASSERT_NOT_COMPOSING);
   }
@@ -1820,12 +1838,18 @@ static GRX_Result lower_group(
   uint32_t body = GRX_INDEX_NONE;
   GRX_Result result = GRX_OK;
 
+  int suppress_markers = (node->flags & GRX_NODE_ATOMIC)
+      && low->profile.atomic_ignores_markers;
+  low->atomic_depth += suppress_markers ? 1u : 0u;
+  low->atomic_end_depth += suppress_markers ? 1u : 0u;
   if (node->first_child != GRX_INDEX_NONE) {
     result = lower_node(low, node->first_child, &body);
   }
   else {
     result = add(low, GRX_IR_EMPTY, node, &body);
   }
+  low->atomic_depth -= suppress_markers ? 1u : 0u;
+  low->atomic_end_depth -= suppress_markers ? 1u : 0u;
   if (result != GRX_OK) {
     return result;
   }
@@ -1835,6 +1859,9 @@ static GRX_Result lower_group(
     result = add(low, GRX_IR_ATOMIC, node, &atomic);
     if (result != GRX_OK) {
       return result;
+    }
+    if (low->profile.assertion_captures_persist) {
+      grx_ir_node(low->ir, atomic)->flags |= GRX_IR_LOOK_PERSIST_CAPTURES;
     }
     result = attach(low, atomic, body);
     if (result != GRX_OK) {
@@ -2626,7 +2653,13 @@ static GRX_Result lower_repeat(
   }
 
   uint32_t body = GRX_INDEX_NONE;
+  const GRX_Node * atom = grx_pattern_node(low->pattern, node->first_child);
+  int outer_scalar = low->scalar_direct;
+  low->scalar_direct = low->profile.direct_repeat_scalar
+      && atom && atom->kind == GRX_NODE_LITERAL && atom->b == 1
+      && !(node->min == 0 && node->max == 1);
   GRX_Result result = lower_node(low, node->first_child, &body);
+  low->scalar_direct = outer_scalar;
   if (result != GRX_OK) {
     return result;
   }
@@ -2646,7 +2679,8 @@ static GRX_Result lower_repeat(
   // says `a*+` is "equivalent to (?>a*)" in those words.
   int possessive = node->a == (uint32_t)GRX_REPEAT_POSSESSIVE;
   repeat->mode = possessive ? (uint8_t)GRX_REPEAT_GREEDY : (uint8_t)node->a;
-  repeat->empty_loop = (uint8_t)low->profile.empty_loop;
+  repeat->empty_loop = (uint8_t)(low->profile.empty_loop_after_mandatory && node->min
+      ? GRX_EMPTY_LOOP_BREAK : low->profile.empty_loop);
   repeat->capture_reset = (uint8_t)low->profile.capture_reset;
   result = attach(low, *out_node, body);
   if (result != GRX_OK || !possessive) {
@@ -2685,7 +2719,9 @@ static GRX_Result lower_repeat(
 static int look_runs_forward(const Lowering * low, GRX_LookKind kind) {
   return kind != GRX_LOOK_BEHIND_NON_ATOMIC
       && (low->profile.lookbehind == GRX_LOOKBEHIND_BOUNDED
-          || low->profile.lookbehind == GRX_LOOKBEHIND_JAVA);
+          || low->profile.lookbehind == GRX_LOOKBEHIND_JAVA
+          || low->profile.lookbehind == GRX_LOOKBEHIND_FORWARD_NEAREST
+          || low->profile.lookbehind == GRX_LOOKBEHIND_FORWARD_FURTHEST);
 }
 
 /** Lower a lookaround, choosing which way its body runs. */
@@ -2718,9 +2754,20 @@ static GRX_Result lower_look(
       && low->profile.negative_look == GRX_NEGATIVE_LOOK_KEEP) {
     look->flags |= GRX_IR_LOOK_KEEP_CAPTURES;
   }
+  if (low->profile.provisional_assertion_end) {
+    low->ir->flags |= GRX_PROGRAM_PROVISIONAL_LOOK_END;
+    look->flags |= GRX_IR_LOOK_PROVISIONAL_END;
+  }
+  if (low->profile.assertion_captures_persist) {
+    look->flags |= GRX_IR_LOOK_PERSIST_CAPTURES;
+  }
   if (forward) {
+    if (bound && low->profile.lookbehind_round_bound) {
+      look->flags |= GRX_IR_LOOK_ROUND_BOUND;
+    }
     look->flags |= GRX_IR_LOOK_FORWARD;
-    if (low->profile.lookbehind == GRX_LOOKBEHIND_JAVA) {
+    if (low->profile.lookbehind == GRX_LOOKBEHIND_JAVA
+        || low->profile.lookbehind == GRX_LOOKBEHIND_FORWARD_NEAREST) {
       look->flags |= GRX_IR_LOOK_NEAREST;
     }
     // The span itself is not knowable yet - measuring a subtree is the
@@ -2748,12 +2795,16 @@ static GRX_Result lower_look(
   low->reverse = (behind && !forward) ? 1 : 0;
 
   uint32_t body = GRX_INDEX_NONE;
+  low->atomic_depth += low->profile.atomic_ignores_markers ? 1u : 0u;
+
   if (node->first_child != GRX_INDEX_NONE) {
     result = lower_node(low, node->first_child, &body);
   }
   else {
     result = add(low, GRX_IR_EMPTY, node, &body);
   }
+  low->atomic_depth -= low->profile.atomic_ignores_markers ? 1u : 0u;
+
   low->reverse = outer;
   if (result != GRX_OK) {
     return result;
@@ -2866,6 +2917,7 @@ static GRX_Result lower_sequence(Lowering * low, const GRX_Node * node,
   uint32_t fold_run_cleared_to = GRX_INDEX_NONE;
   int fold_run_cleared = 0;
 
+  int previous_literal = 0;
   for (uint32_t child = node->first_child; child != GRX_INDEX_NONE;) {
     const GRX_Node * child_node = grx_pattern_node(low->pattern, child);
     if (!child_node) {
@@ -2964,7 +3016,12 @@ static GRX_Result lower_sequence(Lowering * low, const GRX_Node * node,
     }
 
     uint32_t lowered = GRX_INDEX_NONE;
+    int outer_adjacent = low->adjacent_literal;
+    low->adjacent_literal = kind == GRX_IR_CONCAT && previous_literal
+        && child_node->kind == GRX_NODE_LITERAL;
     result = lower_node(low, child, &lowered);
+    low->adjacent_literal = outer_adjacent;
+    previous_literal = child_node->kind == GRX_NODE_LITERAL;
     if (result == GRX_OK) {
       result = attach(low, *out_node, lowered);
     }
@@ -3515,15 +3572,22 @@ static GRX_Result lower_run_clusters(Lowering * low, const uint32_t * points,
     // what is left of the run absorbs whatever the text carries.
     uint32_t sequence = GRX_INDEX_NONE;
     GRX_Result result = add(low, GRX_IR_CONCAT, node, &sequence);
+    size_t bases = low->adjacent_literal ? 1u : 0u;
     for (size_t i = 0; result == GRX_OK && i < length; i++) {
       if (is_composing(points[i])) {
         continue;
       }
       uint32_t child = GRX_INDEX_NONE;
       result = lower_codepoint(low, points[i], node, &child);
-      if (result == GRX_OK) {
+      if (result == GRX_OK
+          && !(low->profile.ignore_combining_literal_run
+              && (low->scalar_direct || bases == 0))) {
+        int outer_lazy = low->skip_composing_prefix;
+        low->skip_composing_prefix = low->profile.ignore_combining_literal_run;
         result = cluster_wrap(low, node, child, &child);
+        low->skip_composing_prefix = outer_lazy;
       }
+      bases++;
       if (result == GRX_OK) {
         result = attach(low, sequence, child);
       }
@@ -3553,6 +3617,11 @@ static GRX_Result lower_run_clusters(Lowering * low, const uint32_t * points,
         : lower_cluster(low, points + i, span, node, &child);
     if (result == GRX_OK) {
       result = attach(low, sequence, child);
+    }
+    if (result == GRX_OK && low->profile.literal_cluster_guard
+        && !low->scalar_direct) {
+      result = attach_composing_assert(
+          low, node, sequence, GRX_ASSERT_NOT_COMPOSING);
     }
     i += span;
   }
@@ -3875,6 +3944,10 @@ static GRX_Result lower_node(
       if (result != GRX_OK) {
         return result;
       }
+      if (low->profile.scalar_collections
+          && (node->flags & GRX_NODE_COLLECTION)) {
+        return GRX_OK;
+      }
       // A collection takes the composing characters after what it matched,
       // where a literal does not: `[a]` over "a" U+0301 is 0-3 in Vim.
       return cluster_wrap(low, node, *out_node, out_node);
@@ -3917,10 +3990,12 @@ static GRX_Result lower_node(
     }
 
     case GRX_NODE_KEEP:
-      return add(low, GRX_IR_KEEP, node, out_node);
+      return add(low, low->atomic_depth ? GRX_IR_EMPTY : GRX_IR_KEEP,
+          node, out_node);
 
     case GRX_NODE_KEEP_END:
-      return add(low, GRX_IR_KEEP_END, node, out_node);
+      return add(low, low->atomic_end_depth ? GRX_IR_EMPTY : GRX_IR_KEEP_END,
+          node, out_node);
 
     case GRX_NODE_CALLOUT:
       return lower_callout(low, node, out_node);
@@ -4154,7 +4229,8 @@ GRX_Result grx_lower_pattern(const GRX_Pattern * pattern,
     if (result == GRX_OK) {
       result = attach(&low, guarded, root);
     }
-    if (result == GRX_OK && !ignoring_composing(&low)) {
+    if (result == GRX_OK && !ignoring_composing(&low)
+        && low.profile.match_end_cluster_boundary) {
       result = attach_composing_assert(
           &low, NULL, guarded, GRX_ASSERT_CLUSTER_BOUNDARY);
     }

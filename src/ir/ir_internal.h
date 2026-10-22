@@ -215,6 +215,9 @@ typedef enum {
 #define GRX_IR_LOOK_FORWARD GRX_BIT(4)
 /** @brief LOOK: enumerate candidate starts nearest the assertion first. */
 #define GRX_IR_LOOK_NEAREST GRX_BIT(7)
+#define GRX_IR_LOOK_ROUND_BOUND GRX_BIT(12)
+#define GRX_IR_LOOK_PERSIST_CAPTURES GRX_BIT(13)
+#define GRX_IR_LOOK_PROVISIONAL_END GRX_BIT(14)
 
 /**
  * @brief LOOK: a negative one keeps what its body captured before failing.

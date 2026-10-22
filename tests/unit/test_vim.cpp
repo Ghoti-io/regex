@@ -31,6 +31,21 @@
 
 namespace {
 
+GRX_Syntax current_vim = GRX_SYNTAX_VIM_NFA;
+
+class Vim : public ::testing::TestWithParam<GRX_Syntax> {
+ protected:
+  void SetUp() override { current_vim = GetParam(); }
+};
+
+class VimNfa : public ::testing::Test {
+ protected:
+  void SetUp() override { current_vim = GRX_SYNTAX_VIM_NFA; }
+};
+
+INSTANTIATE_TEST_SUITE_P(Profiles, Vim, ::testing::Values(
+    GRX_SYNTAX_VIM_BACKTRACK, GRX_SYNTAX_VIM_NFA));
+
 struct Attempt {
   GRX_Result result;
   GRX_Diag diag;
@@ -51,20 +66,20 @@ Attempt compile(const std::string & pattern, GRX_Syntax syntax,
 
 /** Whether a pattern compiles at all, as a word a failure message can print. */
 std::string accepts(const std::string & pattern) {
-  Attempt attempt = compile(pattern, GRX_SYNTAX_VIM);
+  Attempt attempt = compile(pattern, current_vim);
   grx_regex_free(attempt.regex);
   return attempt.result == GRX_OK ? "ok" : "refused";
 }
 
 GRX_Diag why(const std::string & pattern) {
-  Attempt attempt = compile(pattern, GRX_SYNTAX_VIM);
+  Attempt attempt = compile(pattern, current_vim);
   grx_regex_free(attempt.regex);
   return attempt.diag;
 }
 
 /** Where a pattern matches, as `start-end`, or "nomatch", or "error". */
 std::string span(const std::string & pattern, const std::string & subject,
-    GRX_Syntax syntax = GRX_SYNTAX_VIM) {
+    GRX_Syntax syntax = current_vim) {
   Attempt attempt = compile(pattern, syntax);
   if (attempt.result != GRX_OK) {
     grx_regex_free(attempt.regex);
@@ -88,7 +103,7 @@ std::string span(const std::string & pattern, const std::string & subject,
 
 /** One group's span, as `start-end`, or "unset"/"nomatch"/"error". */
 std::string group(const std::string & pattern, const std::string & subject,
-    size_t index, GRX_Syntax syntax = GRX_SYNTAX_VIM) {
+    size_t index, GRX_Syntax syntax = current_vim) {
   Attempt attempt = compile(pattern, syntax);
   if (attempt.result != GRX_OK) {
     grx_regex_free(attempt.regex);
@@ -142,7 +157,7 @@ std::string utf8(uint32_t codepoint) {
 // The magic levels
 // --------------------------------------------------------------------------
 
-TEST(Vim, TheMagicLevelDecidesWhichCharactersAreOperators) {
+TEST_P(Vim, TheMagicLevelDecidesWhichCharactersAreOperators) {
   // The table from `:help magic`, one column at a time. `\m` is the default
   // and needs no marker; the other three are named in the pattern and take
   // effect where they stand.
@@ -161,7 +176,7 @@ TEST(Vim, TheMagicLevelDecidesWhichCharactersAreOperators) {
   EXPECT_EQ(span("\\M\\[ab]", "a"), "0-1");        // ...and `\[` opens one
 }
 
-TEST(Vim, ALevelChangeIsNotScopedToAnything) {
+TEST_P(Vim, ALevelChangeIsNotScopedToAnything) {
   // `\v(a\m)b` is "E54: Unmatched \(" in vim: the `\m` makes the `)` an
   // ordinary character before the group it would have closed is closed. So
   // the level belongs to a position in the pattern and not to a group.
@@ -171,7 +186,7 @@ TEST(Vim, ALevelChangeIsNotScopedToAnything) {
   EXPECT_EQ(span("\\(a\\v)b", "ab"), "0-2");
 }
 
-TEST(Vim, AMarkerIsNotAnAtomAndIsTransparentToWhatFollows) {
+TEST_P(Vim, AMarkerIsNotAnAtomAndIsTransparentToWhatFollows) {
   // vim strips the markers while scanning, so what stands on either side of
   // one is adjacent. Three consequences, and no two of them would be found
   // by the same probe:
@@ -187,7 +202,7 @@ TEST(Vim, AMarkerIsNotAnAtomAndIsTransparentToWhatFollows) {
   EXPECT_EQ(span("\\v*a", "*a"), "0-2");
 }
 
-TEST(Vim, CaretAndDollarArePositionalInTheMiddleLevels) {
+TEST_P(Vim, CaretAndDollarArePositionalInTheMiddleLevels) {
   // A basic RE's rule: an anchor at the edge of a branch and an ordinary
   // character anywhere else. `a^b` matches "a^b".
   EXPECT_EQ(span("^a", "a"), "0-1");
@@ -198,7 +213,7 @@ TEST(Vim, CaretAndDollarArePositionalInTheMiddleLevels) {
   EXPECT_EQ(span("\\Ma^", "a^"), "0-2");
 }
 
-TEST(Vim, VeryMagicAnchorsAreAlwaysAssertionsAndVeryNomagicOnesAreEscaped) {
+TEST_P(Vim, VeryMagicAnchorsAreAlwaysAssertionsAndVeryNomagicOnesAreEscaped) {
   // The two ends of the table. In `\v` the bare character is an assertion
   // wherever it stands, so `\va^` can match nothing; in `\V` the bare
   // character is a literal and `\^` is the assertion - and that assertion
@@ -211,7 +226,7 @@ TEST(Vim, VeryMagicAnchorsAreAlwaysAssertionsAndVeryNomagicOnesAreEscaped) {
   EXPECT_EQ(span("\\Va\\{-}\\^", "a"), "0-0");
 }
 
-TEST(Vim, AStarAfterACaretIsALiteralAsterisk) {
+TEST_P(Vim, AStarAfterACaretIsALiteralAsterisk) {
   // POSIX's basic-RE rule, and vim has it at every level: `^*a` matches
   // "*a" and not "a". Only after `^` - `\v$*a` matches "a", where the `*`
   // really is a repeat of an assertion that holds zero times.
@@ -224,7 +239,7 @@ TEST(Vim, AStarAfterACaretIsALiteralAsterisk) {
 // Case
 // --------------------------------------------------------------------------
 
-TEST(Vim, TheCaseMarkersReachBackwards) {
+TEST_P(Vim, TheCaseMarkersReachBackwards) {
   // `\c` and `\C` are not scoped and not positional: either one anywhere in
   // the pattern decides the whole of it, so `x\ca` matches "XA" - the option
   // reaches text the reader has already passed. And the precedence is not
@@ -239,7 +254,7 @@ TEST(Vim, TheCaseMarkersReachBackwards) {
   EXPECT_EQ(span("[\\c]x", "cX"), "nomatch");
 }
 
-TEST(Vim, ANamedClassIsAPredicateAndCaselessMatchingDoesNotFoldIt) {
+TEST_P(Vim, ANamedClassIsAPredicateAndCaselessMatchingDoesNotFoldIt) {
   // The same set written two ways gets two answers: `\c[a-z]` matches "A"
   // and `\c\l` does not, because a collection is a set of code points and a
   // named class is a predicate. The POSIX bracket classes go with the named
@@ -247,11 +262,13 @@ TEST(Vim, ANamedClassIsAPredicateAndCaselessMatchingDoesNotFoldIt) {
   EXPECT_EQ(span("\\c[a-z]", "A"), "0-1");
   EXPECT_EQ(span("\\c\\l", "A"), "nomatch");
   EXPECT_EQ(span("\\c\\L", "A"), "0-1");
-  EXPECT_EQ(span("\\c[[:lower:]]", "A"), "nomatch");
-  EXPECT_EQ(span("\\c[[:upper:]]", "a"), "nomatch");
+  EXPECT_EQ(span("\\c[[:lower:]]", "A"),
+      current_vim == GRX_SYNTAX_VIM_BACKTRACK ? "0-1" : "nomatch");
+  EXPECT_EQ(span("\\c[[:upper:]]", "a"),
+      current_vim == GRX_SYNTAX_VIM_BACKTRACK ? "0-1" : "nomatch");
 }
 
-TEST(Vim, CaselessFoldingIsUnicode) {
+TEST_P(Vim, CaselessFoldingIsUnicode) {
   // `\cÉ` matches "é" in vim 9.1. The dialect table recorded ASCII-only
   // folding for this row until it was asked.
   EXPECT_EQ(span("\\c\u00c9", "\u00e9"), "0-2");
@@ -262,7 +279,7 @@ TEST(Vim, CaselessFoldingIsUnicode) {
 // Classes
 // --------------------------------------------------------------------------
 
-TEST(Vim, TheNamedClassesAreItsOwnSetsAndNotThisLibrarysShorthands) {
+TEST_P(Vim, TheNamedClassesAreItsOwnSetsAndNotThisLibrarysShorthands) {
   // vim's `\s` is space and tab alone - no newline, no vertical tab - which
   // is why the eleven named classes are written out by the front end rather
   // than mapped onto GRX_ShorthandKind.
@@ -277,7 +294,7 @@ TEST(Vim, TheNamedClassesAreItsOwnSetsAndNotThisLibrarysShorthands) {
   EXPECT_EQ(span("\\o", "8"), "nomatch");
 }
 
-TEST(Vim, TheUnderscoreFormsAddTheLineBreak) {
+TEST_P(Vim, TheUnderscoreFormsAddTheLineBreak) {
   // `\_x` is "x, or a line break", and it is not redundant even where the
   // break is an ordinary character: `\s` refuses a newline and `\_s`
   // accepts one.
@@ -288,7 +305,7 @@ TEST(Vim, TheUnderscoreFormsAddTheLineBreak) {
   EXPECT_EQ(span("\\_[^a]", "\n"), "0-1");
 }
 
-TEST(Vim, ABackslashInACollectionIsAMemberOfIt) {
+TEST_P(Vim, ABackslashInACollectionIsAMemberOfIt) {
   // POSIX's rule with four characters carved out of it: `[\w]` matches "w"
   // and it matches a backslash, because the backslash is a member in its
   // own right and the "w" is the next one. `[a-\z]` is a reverse range for
@@ -306,7 +323,7 @@ TEST(Vim, ABackslashInACollectionIsAMemberOfIt) {
   EXPECT_EQ(span("[\\x41]", "A"), "0-1");
 }
 
-TEST(Vim, ABracketThatOpensNothingIsALiteral) {
+TEST_P(Vim, ABracketThatOpensNothingIsALiteral) {
   // vim reads a `[` that does not open a well-formed collection as the
   // character, so `[` matches "[" and so does `[]`.
   EXPECT_EQ(span("[", "["), "0-1");
@@ -314,7 +331,7 @@ TEST(Vim, ABracketThatOpensNothingIsALiteral) {
   EXPECT_EQ(span("[]a]", "]"), "0-1");
 }
 
-TEST(Vim, ThePosixCaseClassesAreUnicodeAndTheRestAreNot) {
+TEST_P(Vim, ThePosixCaseClassesAreUnicodeAndTheRestAreNot) {
   // vim answers `[[:lower:]]` and `[[:upper:]]` from its own Unicode tables
   // and the other ten from the C library's ASCII predicates, which is a
   // split no single width can express.
@@ -335,7 +352,7 @@ TEST(Vim, ThePosixCaseClassesAreUnicodeAndTheRestAreNot) {
 // The field above them was measured on "é" and "É", and being *wide* is the
 // right answer for both - which wide set is a question two examples cannot
 // reach.
-TEST(Vim, TheCaseClassesAreACounterpartNotAProperty) {
+TEST_P(Vim, TheCaseClassesAreACounterpartNotAProperty) {
   struct { const char * subject; const char * name; bool lower; bool upper; }
   cases[] = {
     // The discriminating rows: `\p{Lowercase}`/`\p{Uppercase}` take these
@@ -377,9 +394,14 @@ TEST(Vim, TheCaseClassesAreACounterpartNotAProperty) {
   for (const auto & row : cases) {
     std::string subject = row.subject;
     std::string want = "0-" + std::to_string(subject.size());
-    EXPECT_EQ(span("[[:lower:]]", subject), row.lower ? want : "nomatch")
+    EXPECT_EQ(span("[[:lower:]]", subject),
+        row.lower && (current_vim == GRX_SYNTAX_VIM_NFA
+            || subject == "a" || subject == "\u00e9" || subject == "\u00df")
+            ? want : "nomatch")
         << row.name << " in [[:lower:]]";
-    EXPECT_EQ(span("[[:upper:]]", subject), row.upper ? want : "nomatch")
+    EXPECT_EQ(span("[[:upper:]]", subject),
+        row.upper && (current_vim == GRX_SYNTAX_VIM_NFA
+            || subject == "A" || subject == "\u00c9") ? want : "nomatch")
         << row.name << " in [[:upper:]]";
   }
 
@@ -401,7 +423,7 @@ TEST(Vim, TheCaseClassesAreACounterpartNotAProperty) {
 // The tell was in the same file: 'isident' does not differ between the two
 // modes, so `\i` had `{0xC0, 0xFF}` whole while `\k` had a hole in the same
 // range.
-TEST(Vim, TheKeywordSetTakesTheWholeOfTheLatinOneRange) {
+TEST_P(Vim, TheKeywordSetTakesTheWholeOfTheLatinOneRange) {
   for (const char * subject : {"\u00d7", "\u00f7"}) {
     EXPECT_EQ(span("\\k", subject), "0-2") << subject << " in \\k";
     EXPECT_EQ(span("\\i", subject), "0-2") << subject << " in \\i";
@@ -426,7 +448,7 @@ TEST(Vim, TheKeywordSetTakesTheWholeOfTheLatinOneRange) {
   EXPECT_EQ(span("\\<\u00d7", " \u00d7b"), "1-3");
 }
 
-TEST(Vim, WordBoundariesUseTheKeywordSet) {
+TEST_P(Vim, WordBoundariesUseTheKeywordSet) {
   // `\<` and `\>` are defined from 'iskeyword', whose default takes in
   // U+00C0 and everything above it - so there is no word start between "a"
   // and "é", where a boundary defined from an ASCII `\w` would find one.
@@ -440,7 +462,7 @@ TEST(Vim, WordBoundariesUseTheKeywordSet) {
 // Repeats
 // --------------------------------------------------------------------------
 
-TEST(Vim, TheLazyRepeatIsSpelledInsideTheBrace) {
+TEST_P(Vim, TheLazyRepeatIsSpelledInsideTheBrace) {
   // `\{-n,m}`, and there is no suffix form at all: `a\{1,2}\?` is "E871:
   // Can't have a multi follow a multi".
   EXPECT_EQ(span("x\\{-}", "xxx"), "0-0");
@@ -454,7 +476,7 @@ TEST(Vim, TheLazyRepeatIsSpelledInsideTheBrace) {
   EXPECT_EQ(why("x\\{2"), GRX_DIAG_UNMATCHED_OPEN_BRACE);
 }
 
-TEST(Vim, AMaximumBelowTheMinimumIsDiscardedRatherThanRefused) {
+TEST_P(Vim, AMaximumBelowTheMinimumIsDiscardedRatherThanRefused) {
   // `x\{3,1}` matches three characters of "xxxxx" and `x\{4,2}` four, so
   // the upper bound is dropped rather than the pattern refused - which is
   // what GRX_SyntaxSpec::allow_impossible_repeat would have said, and is a
@@ -463,7 +485,7 @@ TEST(Vim, AMaximumBelowTheMinimumIsDiscardedRatherThanRefused) {
   EXPECT_EQ(span("x\\{4,2}", "xxxxxx"), "0-4");
 }
 
-TEST(Vim, ARepeatOfARepeatIsRefused) {
+TEST_P(Vim, ARepeatOfARepeatIsRefused) {
   EXPECT_EQ(accepts("a**"), "refused");
   EXPECT_EQ(accepts("a\\{2}\\{3}"), "refused");
   EXPECT_EQ(accepts("a\\{1}\\+"), "refused");
@@ -473,7 +495,7 @@ TEST(Vim, ARepeatOfARepeatIsRefused) {
 // The postfix assertions
 // --------------------------------------------------------------------------
 
-TEST(Vim, TheLookaroundOperatorsArePostfix) {
+TEST_P(Vim, TheLookaroundOperatorsArePostfix) {
   // `\(foo\)\@=` is a lookahead over the group written *before* it, which
   // nothing else in this library is shaped like.
   EXPECT_EQ(span("\\(ab\\)\\@=a", "ab"), "0-1");
@@ -484,7 +506,7 @@ TEST(Vim, TheLookaroundOperatorsArePostfix) {
   EXPECT_EQ(span("\\v(a)@<=b", "ab"), "1-2");
 }
 
-TEST(Vim, OnePostfixOperatorPerAtom) {
+TEST_P(Vim, OnePostfixOperatorPerAtom) {
   // vim counts a `\@` operator as a multi, so a second one is "multi follow
   // a multi" - and so is a repeat after one.
   EXPECT_EQ(accepts("\\(a\\+\\)\\@>\\@="), "refused");
@@ -497,13 +519,13 @@ TEST(Vim, OnePostfixOperatorPerAtom) {
 // Groups and references
 // --------------------------------------------------------------------------
 
-TEST(Vim, TheNonCapturingGroupIsSpelledWithAPercent) {
+TEST_P(Vim, TheNonCapturingGroupIsSpelledWithAPercent) {
   EXPECT_EQ(span("\\%(ab\\)\\+", "abab"), "0-4");
   EXPECT_EQ(span("\\v%(ab)+", "abab"), "0-4");
   EXPECT_EQ(group("\\%(a\\)\\(b\\)", "ab", 1), "1-2");
 }
 
-TEST(Vim, AReferenceMustNameAGroupThatHasClosed) {
+TEST_P(Vim, AReferenceMustNameAGroupThatHasClosed) {
   // "E65: Illegal back reference", which vim reports for a forward
   // reference and for a reference to the group it is inside alike.
   EXPECT_EQ(span("\\(a\\)\\1", "aa"), "0-2");
@@ -512,7 +534,7 @@ TEST(Vim, AReferenceMustNameAGroupThatHasClosed) {
   EXPECT_EQ(why("\\(a\\)\\2"), GRX_DIAG_INVALID_BACKREFERENCE);
 }
 
-TEST(Vim, AReferenceToAnUnsetGroupMatchesTheEmptyString) {
+TEST_P(Vim, AReferenceToAnUnsetGroupMatchesTheEmptyString) {
   // The probe that settles GRX_BACKREF_UNSET_EMPTY, and the one a
   // differential driven by `matchlist()` cannot make: vim reports "" for an
   // unset group and for one that matched empty alike, so only the *width of
@@ -520,7 +542,7 @@ TEST(Vim, AReferenceToAnUnsetGroupMatchesTheEmptyString) {
   EXPECT_EQ(span("\\(a\\)\\?\\1", "b"), "0-0");
 }
 
-TEST(Vim, NineGroupsIsTheLimit) {
+TEST_P(Vim, NineGroupsIsTheLimit) {
   // vim's own: a tenth `\(` is "E872: Too many '('".
   EXPECT_EQ(accepts("\\(a\\)\\(a\\)\\(a\\)\\(a\\)\\(a\\)"
       "\\(a\\)\\(a\\)\\(a\\)\\(a\\)"), "ok");
@@ -528,7 +550,7 @@ TEST(Vim, NineGroupsIsTheLimit) {
       "\\(a\\)\\(a\\)\\(a\\)\\(a\\)\\(a\\)"), GRX_DIAG_LIMIT_CAPTURES);
 }
 
-TEST(Vim, TheBranchOperatorIsAnAssertionOverTheEarlierConcatenations) {
+TEST_P(Vim, TheBranchOperatorIsAnAssertionOverTheEarlierConcatenations) {
   // `A\&B` holds where both match at this position and reports B's text, so
   // it is `(?=A)B` and is built as exactly that.
   EXPECT_EQ(span("ab\\&a.", "ab"), "0-2");
@@ -540,7 +562,7 @@ TEST(Vim, TheBranchOperatorIsAnAssertionOverTheEarlierConcatenations) {
 // The `\%` family, and what a string subject makes of a buffer dialect
 // --------------------------------------------------------------------------
 
-TEST(Vim, ThePercentFamilyIsCodePointsAndTheSubjectEdges) {
+TEST_P(Vim, ThePercentFamilyIsCodePointsAndTheSubjectEdges) {
   EXPECT_EQ(span("\\%d65", "A"), "0-1");
   EXPECT_EQ(span("\\%x41", "A"), "0-1");
   EXPECT_EQ(span("\\%o101", "A"), "0-1");
@@ -553,7 +575,7 @@ TEST(Vim, ThePercentFamilyIsCodePointsAndTheSubjectEdges) {
   EXPECT_EQ(span("\\v\\%$", "a%"), "1-2");
 }
 
-TEST(Vim, TheOptionalSequenceIsOptionalAllTheWayDown) {
+TEST_P(Vim, TheOptionalSequenceIsOptionalAllTheWayDown) {
   // `\%[abc]` matches the empty string: `r\%[ead]` requires the "r" only
   // because the "r" is written outside the brackets.
   EXPECT_EQ(span("r\\%[ead]", "rea"), "0-3");
@@ -563,13 +585,14 @@ TEST(Vim, TheOptionalSequenceIsOptionalAllTheWayDown) {
   EXPECT_EQ(span("\\%[abc]*", "abc"), "0-3");
 }
 
-TEST(Vim, AnOptionalSequencesMembersAreAtoms) {
+TEST_P(Vim, AnOptionalSequencesMembersAreAtoms) {
   // vim's help calls them atoms and means it: a class, a collection, a
   // `\%` escape, a mark and the underscore forms are all members.
   EXPECT_EQ(span("a\\%[\\d\\w]", "a5x"), "0-3");
   EXPECT_EQ(span("a\\%[[bc]d]", "abd"), "0-3");
   EXPECT_EQ(span("a\\%[\\%d98]", "ab"), "0-2");
-  EXPECT_EQ(span("a\\%[\\_s]", "a\n"), "0-2");
+  EXPECT_EQ(span("a\\%[\\_s]", "a\n"),
+      current_vim == GRX_SYNTAX_VIM_BACKTRACK ? "0-2" : "0-1");
   EXPECT_EQ(span("a\\%[\\<b]", "ab"), "0-1");
   // A zero-width member still counts, which is why the expansion is an
   // alternation and not a repeat: a repeat discards an iteration that
@@ -582,7 +605,7 @@ TEST(Vim, AnOptionalSequencesMembersAreAtoms) {
   EXPECT_EQ(span("a\\%[\\Z]", "aZ"), "0-2");
 }
 
-TEST(Vim, WhatAnOptionalSequenceMemberMayNotBe) {
+TEST_P(Vim, WhatAnOptionalSequenceMemberMayNotBe) {
   // No multi, in either spelling, and vim counts its postfix operators as
   // multis for this rule too.
   EXPECT_EQ(why("a\\%[b*]"), GRX_DIAG_NOTHING_TO_REPEAT);
@@ -607,12 +630,12 @@ TEST(Vim, WhatAnOptionalSequenceMemberMayNotBe) {
   EXPECT_EQ(why("a\\%[b\\%[cd]]"), GRX_DIAG_NOT_IN_DIALECT);
   // And the result code, which is the half a caller branches on.
   EXPECT_EQ(accepts("a\\%[b\\|c]"), "refused");
-  EXPECT_EQ(compile("a\\%[b\\|c]", GRX_SYNTAX_VIM).result, GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile("a\\%[b\\|c]", GRX_SYNTAX_VIM_BACKTRACK).result, GRX_ERR_SYNTAX);
   // And not empty, where a collection's `[]` is two characters.
   EXPECT_EQ(why("a\\%[]"), GRX_DIAG_EMPTY_CLASS);
 }
 
-TEST(Vim, AStringSubjectHasNoLines) {
+TEST_P(Vim, AStringSubjectHasNoLines) {
   // vim's help is written for a buffer, where `.` refuses the line break.
   // Over a *string* - which is the subject this library has, and what
   // `matchstrpos()` is asked about - the break is an ordinary character.
@@ -623,11 +646,11 @@ TEST(Vim, AStringSubjectHasNoLines) {
   EXPECT_EQ(span("\\_^b", "a\nb"), "nomatch");
 }
 
-TEST(Vim, KeepMovesTheReportedStart) {
+TEST_P(Vim, KeepMovesTheReportedStart) {
   EXPECT_EQ(span("a\\zsb", "ab"), "1-2");
 }
 
-TEST(Vim, KeepEndMovesTheReportedEnd) {
+TEST_P(Vim, KeepEndMovesTheReportedEnd) {
   // `\ze`: the text after it still has to match and the span stops here.
   EXPECT_EQ(span("a\\zeb", "ab"), "0-1");
   EXPECT_EQ(span("a\\zeb", "a"), "nomatch");
@@ -640,25 +663,31 @@ TEST(Vim, KeepEndMovesTheReportedEnd) {
   EXPECT_EQ(span("\\(a\\zex\\|ab\\)c", "abc"), "0-3");
 }
 
-TEST(Vim, AMarkInsideAnAssertionStillCounts) {
+TEST_P(Vim, AMarkInsideAnAssertionStillCounts) {
   // A mark writes one register for the whole pattern, and an assertion or
   // an atomic group does not take it back. This follows `set re=1`: vim's
   // two engines disagree here and only the old one can be stated as a rule
   // - see documentation/dialects.md section 6, deviation (6).
-  EXPECT_EQ(span("\\(a\\zeb\\)\\@=ab", "ab"), "0-1");
-  EXPECT_EQ(span("\\(a\\zsb\\)\\@=ab", "ab"), "1-2");
-  EXPECT_EQ(span("\\(a\\zeb\\)\\@>c", "abc"), "0-1");
-  EXPECT_EQ(span("\\(a\\zsb\\)\\@>c", "abc"), "1-3");
+  EXPECT_EQ(span("\\(a\\zeb\\)\\@=ab", "ab"),
+      current_vim == GRX_SYNTAX_VIM_BACKTRACK ? "0-1" : "0-2");
+  EXPECT_EQ(span("\\(a\\zsb\\)\\@=ab", "ab"),
+      current_vim == GRX_SYNTAX_VIM_BACKTRACK ? "1-2" : "0-2");
+  EXPECT_EQ(span("\\(a\\zeb\\)\\@>c", "abc"),
+      current_vim == GRX_SYNTAX_VIM_BACKTRACK ? "0-1" : "0-3");
+  EXPECT_EQ(span("\\(a\\zsb\\)\\@>c", "abc"),
+      current_vim == GRX_SYNTAX_VIM_BACKTRACK ? "1-3" : "0-3");
   // `\&` reaches it the same way, because A\&B is built as (?=A)B.
-  EXPECT_EQ(span("a\\zeb\\&abc", "abc"), "0-1");
-  EXPECT_EQ(span("a\\zsb\\&abc", "abc"), "1-3");
+  EXPECT_EQ(span("a\\zeb\\&abc", "abc"),
+      current_vim == GRX_SYNTAX_VIM_BACKTRACK ? "0-1" : "0-3");
+  EXPECT_EQ(span("a\\zsb\\&abc", "abc"),
+      current_vim == GRX_SYNTAX_VIM_BACKTRACK ? "1-3" : "0-3");
   // An assertion at the end of the pattern is the one case the *new*
   // engine agrees about, which is what says this is not a question vim
   // leaves open: both answer 0-1 here, and only the register rule does.
   EXPECT_EQ(span("\\(a\\zeb\\)\\@=", "ab"), "0-1");
 }
 
-TEST(Vim, AnEndBeforeTheStartIsTheEmptySpanAtTheStart) {
+TEST_P(Vim, AnEndBeforeTheStartIsTheEmptySpanAtTheStart) {
   // The two marks are independent and either may come last. vim's own
   // `matchend()` answers 3 for this pattern against "abcd", so the empty
   // span is its answer and not a repair of one.
@@ -666,7 +695,7 @@ TEST(Vim, AnEndBeforeTheStartIsTheEmptySpanAtTheStart) {
   EXPECT_EQ(span("a\\zeb\\zsc", "abc"), "2-2");
 }
 
-TEST(Vim, OnlyTheOptionalMultiMayFollowAMark) {
+TEST_P(Vim, OnlyTheOptionalMultiMayFollowAMark) {
   // "E888: Can not repeat \zs or \ze" takes `*`, `\+` and every brace
   // form - `\{0,1}` included, which is what says the rule is about the
   // spelling and not about the bounds it asks for.
@@ -684,7 +713,7 @@ TEST(Vim, OnlyTheOptionalMultiMayFollowAMark) {
 // What it refuses
 // --------------------------------------------------------------------------
 
-TEST(Vim, TheConstructsItRefusesAndWhy) {
+TEST_P(Vim, TheConstructsItRefusesAndWhy) {
   // Each of these is a deviation recorded in documentation/dialects.md
   // section 6, and each is refused rather than guessed at.
   // `~` is the last `:s` replacement, and there has never been one - which
@@ -698,7 +727,7 @@ TEST(Vim, TheConstructsItRefusesAndWhy) {
   EXPECT_EQ(why("\\z1"), GRX_DIAG_NOT_IN_DIALECT);
 }
 
-TEST(Vim, ALookbehindsCountBoundsHowFarBackItMayStart) {
+TEST_P(Vim, ALookbehindsCountBoundsHowFarBackItMayStart) {
   // `\@123<=`: the match may start at most that many *bytes* back, so a
   // body that cannot fit inside the bound is one the assertion can never
   // satisfy - and zero means no bound, which is what an unwritten number
@@ -709,7 +738,8 @@ TEST(Vim, ALookbehindsCountBoundsHowFarBackItMayStart) {
   EXPECT_EQ(span("\\(ab\\)\\@1<=c", "abc"), "nomatch");
   // Bytes, not characters: U+00E9 is two of them.
   EXPECT_EQ(span("\\(\u00e9\\)\\@2<=x", "\u00e9x"), "2-3");
-  EXPECT_EQ(span("\\(\u00e9\\)\\@1<=x", "\u00e9x"), "nomatch");
+  EXPECT_EQ(span("\\(\u00e9\\)\\@1<=x", "\u00e9x"),
+      current_vim == GRX_SYNTAX_VIM_NFA ? "2-3" : "nomatch");
   // The bound makes a variable-length body finite, so a dialect whose
   // lookbehind is otherwise unbounded still runs this one forwards.
   EXPECT_EQ(span("\\(\\w\\+\\)\\@1<=c", "abc"), "2-3");
@@ -719,7 +749,7 @@ TEST(Vim, ALookbehindsCountBoundsHowFarBackItMayStart) {
   EXPECT_EQ(span("\\(ab\\)\\@2<!c", "abc"), "nomatch");
 }
 
-TEST(Vim, TheBufferPositionsAreBuiltAndThreeOfThemNeverMatch) {
+TEST_P(Vim, TheBufferPositionsAreBuiltAndThreeOfThemNeverMatch) {
   // `\%V`, `\%#` and the three `l` forms name something a subject has
   // not got. vim compiles them all and none of them matches over a
   // string, so that is what is built - a pattern that compiles and finds
@@ -753,7 +783,7 @@ TEST(Vim, TheBufferPositionsAreBuiltAndThreeOfThemNeverMatch) {
 /** Replace every match, as a string, or "error". */
 std::string replaced(const std::string & pattern, const std::string & subject,
     const std::string & templ) {
-  Attempt attempt = compile(pattern, GRX_SYNTAX_VIM);
+  Attempt attempt = compile(pattern, current_vim);
   if (attempt.result != GRX_OK) {
     grx_regex_free(attempt.regex);
     return "error";
@@ -772,7 +802,7 @@ std::string replaced(const std::string & pattern, const std::string & subject,
   return answer;
 }
 
-TEST(Vim, TheScreenColumnCountsCellsAndTheByteColumnCountsBytes) {
+TEST_P(Vim, TheScreenColumnCountsCellsAndTheByteColumnCountsBytes) {
   // `\%23v` is the *screen* column: a tab reaches the next multiple of
   // the tabstop, a wide character takes two cells and a combining one
   // takes none. Every number here was asked of vim 9.1 first.
@@ -801,7 +831,7 @@ TEST(Vim, TheScreenColumnCountsCellsAndTheByteColumnCountsBytes) {
   EXPECT_EQ(span("\\%<1v", "abc"), "nomatch");
 }
 
-TEST(Vim, TheReplacementTemplateIsVimsOwn) {
+TEST_P(Vim, TheReplacementTemplateIsVimsOwn) {
   // `&` is the whole match and `\&` a literal one; `\0` is the whole
   // match again and `\1` to `\9` name groups a digit at a time; `~` is a
   // literal tilde, there having been no previous substitution; and a
@@ -821,7 +851,7 @@ TEST(Vim, TheReplacementTemplateIsVimsOwn) {
   EXPECT_EQ(replaced("a", "a", "\\b"), "\b");
 }
 
-TEST(Vim, TheReplacementCaseMarkers) {
+TEST_P(Vim, TheReplacementCaseMarkers) {
   // `\u` and `\l` take the next character; `\U` and `\L` run until
   // `\E` or `\e`. A one-character modifier *suspends* a run for one
   // character and the run resumes: "ABcD", measured.
@@ -846,7 +876,7 @@ TEST(Vim, TheReplacementCaseMarkers) {
   EXPECT_EQ(replaced("x", "x", "\\u\u01f3"), "\u01f1");
 }
 
-TEST(Vim, ASearchLoopAdvancesAfterAnEmptyMatchAndStopsAtTheEnd) {
+TEST_P(Vim, ASearchLoopAdvancesAfterAnEmptyMatchAndStopsAtTheEnd) {
   // Two clauses, and vim differs from node, perl and `re` on both. After
   // an empty match it advances rather than retrying without one...
   EXPECT_EQ(replaced("\\|a", "aab", "<>"), "<>a<>a<>b<>");
@@ -857,7 +887,7 @@ TEST(Vim, ASearchLoopAdvancesAfterAnEmptyMatchAndStopsAtTheEnd) {
   EXPECT_EQ(replaced("b*", "abX", "<>"), "<>a<><>X<>");
 }
 
-TEST(Vim, AnEmptyFirstIterationRunsAndItsMarkSticks) {
+TEST_P(Vim, AnEmptyFirstIterationRunsAndItsMarkSticks) {
   // The empty-iteration cell had never been probed and so read
   // ECMA-262's, where an iteration that consumed nothing fails. In vim it
   // runs while the repeat still stands where it began, and what it wrote
@@ -872,7 +902,7 @@ TEST(Vim, AnEmptyFirstIterationRunsAndItsMarkSticks) {
   EXPECT_EQ(span("\\%(\\zsa\\)*", "aa"), "1-2");
 }
 
-TEST(Vim, TheSameSpanTwiceIsNotTwoMatches) {
+TEST_P(Vim, TheSameSpanTwiceIsNotTwoMatches) {
   // What decides the advance is what the *next attempt* finds, not what
   // this match did. Two patterns report the same empty span at 1 over
   // their subjects and vim treats them differently, because the attempt
@@ -898,14 +928,14 @@ TEST(Vim, TheSameSpanTwiceIsNotTwoMatches) {
   EXPECT_EQ(replaced("\\(b\\)\\@<=", "abcb", "X"), "abXcbX");
 }
 
-TEST(Vim, TheFlagAlphabetIsEmptyBecauseTheFlagsAreInThePattern) {
+TEST_P(Vim, TheFlagAlphabetIsEmptyBecauseTheFlagsAreInThePattern) {
   // `\c`, `\v` and the rest are pattern syntax, not a flag string, so the
   // alphabet is empty - an empty string is still valid and any letter is
   // unknown.
   uint32_t options = 0;
-  EXPECT_EQ(grx_options_parse(GRX_SYNTAX_VIM, "", &options, nullptr), GRX_OK);
+  EXPECT_EQ(grx_options_parse(GRX_SYNTAX_VIM_BACKTRACK, "", &options, nullptr), GRX_OK);
   EXPECT_EQ(options, 0u);
-  EXPECT_EQ(grx_options_parse(GRX_SYNTAX_VIM, "i", &options, nullptr),
+  EXPECT_EQ(grx_options_parse(GRX_SYNTAX_VIM_BACKTRACK, "i", &options, nullptr),
       GRX_ERR_SYNTAX);
 }
 
@@ -913,7 +943,7 @@ TEST(Vim, TheFlagAlphabetIsEmptyBecauseTheFlagsAreInThePattern) {
 // Not about Vim
 // --------------------------------------------------------------------------
 
-TEST(Vim, AnAssertionPutsBackTheShadowSpansItsBodyWrote) {
+TEST_P(Vim, AnAssertionPutsBackTheShadowSpansItsBodyWrote) {
   // A lookaround restored the live capture slots when its body's path was
   // abandoned and left the *shadow* spans - the ones a backreference reads
   // - where the body had written them. `(?=(a))$|(a)\1` against "aa"
@@ -930,14 +960,15 @@ TEST(Vim, AnAssertionPutsBackTheShadowSpansItsBodyWrote) {
   // PCRE2 fails on a reference to a group that did not participate, so the
   // same pattern has no match there at all.
   EXPECT_EQ(span("(?=(a))$|(a)\\1", "aa", GRX_SYNTAX_PCRE), "nomatch");
-  EXPECT_EQ(span("\\(a\\)\\@=$\\|\\(a\\)\\1", "aa"), "0-1");
+  EXPECT_EQ(span("\\(a\\)\\@=$\\|\\(a\\)\\1", "aa"),
+      current_vim == GRX_SYNTAX_VIM_BACKTRACK ? "0-2" : "0-1");
 }
 
 // --------------------------------------------------------------------------
 // The word classes
 // --------------------------------------------------------------------------
 
-TEST(Vim, WordBoundariesHoldWhereTheCharacterClassChanges) {
+TEST_P(Vim, WordBoundariesHoldWhereTheCharacterClassChanges) {
   // `\<` and `\>` are not the word set's two halves in vim: it sorts every
   // code point into one of nine classes and they hold where the *class*
   // changes. So a boundary falls between two characters that are both
@@ -974,7 +1005,7 @@ TEST(Vim, WordBoundariesHoldWhereTheCharacterClassChanges) {
   EXPECT_EQ(span("\\>", "\u00b5!"), "2-2");
 }
 
-TEST(Vim, EveryClassFromTwoUpIsAKeywordCharacterAndNothingElseIs) {
+TEST_P(Vim, EveryClassFromTwoUpIsAKeywordCharacterAndNothingElseIs) {
   // Two tables measured separately from the same vim: `\k` is 'iskeyword'
   // enumerated in the front end, and src/unicode/vim_class.c is
   // `charclass()` enumerated for the boundaries. The boundaries are only
@@ -982,7 +1013,7 @@ TEST(Vim, EveryClassFromTwoUpIsAKeywordCharacterAndNothingElseIs) {
   // where the word set used to - so this asks all 1,114,112 code points
   // rather than trusting that two enumerations of one option landed in the
   // same place.
-  Attempt attempt = compile("\\k", GRX_SYNTAX_VIM);
+  Attempt attempt = compile("\\k", GRX_SYNTAX_VIM_BACKTRACK);
   ASSERT_EQ(attempt.result, GRX_OK);
   GRX_Match * match = nullptr;
   ASSERT_EQ(grx_match_create(attempt.regex, nullptr, &match), GRX_OK);
@@ -1016,7 +1047,7 @@ TEST(Vim, EveryClassFromTwoUpIsAKeywordCharacterAndNothingElseIs) {
 // Composing clusters
 // --------------------------------------------------------------------------
 
-TEST(Vim, ABaseAndTheMarksAfterItAreOneCharacter) {
+TEST_F(VimNfa, ABaseAndTheMarksAfterItAreOneCharacter) {
   // Vim matches a *cluster*: a character and the composing characters
   // written after it are one character to every atom that consumes
   // anything. Every number here was asked of vim 9.1 first.
@@ -1050,7 +1081,7 @@ TEST(Vim, ABaseAndTheMarksAfterItAreOneCharacter) {
   EXPECT_EQ(span(".", "\u65e5\u0301b"), "0-5");
 }
 
-TEST(Vim, AMatchBeginsAndEndsWhereAClusterDoes) {
+TEST_F(VimNfa, AMatchBeginsAndEndsWhereAClusterDoes) {
   // A composing character with something before it is in the middle of a
   // character, and no match starts or ends there. `\%2c` is the position
   // one byte in, which is inside the cluster, and `[^a]` skips it for the
@@ -1069,7 +1100,7 @@ TEST(Vim, AMatchBeginsAndEndsWhereAClusterDoes) {
   EXPECT_EQ(span("\\%2v", "a\u0301b"), "3-3");
 }
 
-TEST(Vim, EveryMarkThePatternWritesMustBeInTheCluster) {
+TEST_F(VimNfa, EveryMarkThePatternWritesMustBeInTheCluster) {
   // A base with marks written after it in the *pattern* is one atom, and
   // the marks it names must all be among the ones the text carries. Order
   // does not matter and the text may carry more, so a pattern with one
@@ -1086,7 +1117,7 @@ TEST(Vim, EveryMarkThePatternWritesMustBeInTheCluster) {
   EXPECT_EQ(group("\\(a\u0301\\)", "a\u0301\u0302b", 1), "0-5");
 }
 
-TEST(Vim, IgnoreCombiningCarriesTheMarksInsteadOfMatchingThem) {
+TEST_F(VimNfa, IgnoreCombiningCarriesTheMarksInsteadOfMatchingThem) {
   // `\Z` anywhere in the pattern decides the whole of it, as `\c` does.
   // With it every atom takes the composing characters after what it
   // matched - the literal included, which is the only difference - and a
@@ -1106,7 +1137,7 @@ TEST(Vim, IgnoreCombiningCarriesTheMarksInsteadOfMatchingThem) {
   EXPECT_EQ(span("\\Z*", "aaa"), "nomatch");
 }
 
-TEST(Vim, AComposingCharacterThatBeginsAnAtomIsRefused) {
+TEST_F(VimNfa, AComposingCharacterThatBeginsAnAtomIsRefused) {
   // A mark written after `.`, after `\w`, after a group, or with nothing
   // before it at all is a second matching rule in vim - the atom then
   // matches any cluster carrying that mark, base ignored - and its own two
@@ -1126,7 +1157,7 @@ TEST(Vim, AComposingCharacterThatBeginsAnAtomIsRefused) {
   EXPECT_EQ(accepts("\\Z.\u0301"), "refused");
 }
 
-TEST(Vim, EveryRefusalIsASyntaxRefusalButTheOneConstructVimHas) {
+TEST_F(VimNfa, EveryRefusalIsASyntaxRefusalButTheOneConstructVimHas) {
   // The sibling of `Python.EveryRefusalIsASyntaxRefusal`, and the same
   // argument: `GRX_ERR_UNSUPPORTED` promises that this dialect has the
   // construct and this library has not built it, so answering it for a
@@ -1143,7 +1174,7 @@ TEST(Vim, EveryRefusalIsASyntaxRefusalButTheOneConstructVimHas) {
 
   size_t checked = 0;
   for (const std::string & pattern : refused) {
-    Attempt attempt = compile(pattern, GRX_SYNTAX_VIM);
+    Attempt attempt = compile(pattern, current_vim);
     grx_regex_free(attempt.regex);
     if (attempt.result == GRX_OK) {
       continue;
@@ -1161,7 +1192,7 @@ TEST(Vim, EveryRefusalIsASyntaxRefusalButTheOneConstructVimHas) {
   // never have, because "the last substitution" is E33 in the only state a
   // library ever has. UNSUPPORTED is the true answer there, and `\~` is the
   // literal tilde in both. It is not in `vim_diff.REFUSED` for that reason.
-  EXPECT_EQ(compile("~", GRX_SYNTAX_VIM).result, GRX_ERR_UNSUPPORTED);
+  EXPECT_EQ(compile("~", GRX_SYNTAX_VIM_BACKTRACK).result, GRX_ERR_UNSUPPORTED);
   EXPECT_EQ(accepts("\\~"), "ok");
 }
 
