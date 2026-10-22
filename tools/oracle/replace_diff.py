@@ -50,6 +50,7 @@ import pcre2_runner
 import python_match
 import rust_runner
 import vim_runner
+import vim_protocol
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
@@ -445,17 +446,15 @@ let lines = readfile(g:in)
 let out = []
 for l in lines
   let c = json_decode(l)
+  let phase = 'replacement'
   try
     let r = substitute(c[1], c[0], c[2], 'g')
     let hex = ''
     for i in range(strlen(r))
       let hex .= printf('%02x', char2nr(r[i]))
     endfor
-    call add(out, 'ok ' . hex)
-  catch
-    call add(out, 'syntax')
-  endtry
-endfor
+    let answer = {'status':'ok', 'hex':hex}
+""" + vim_protocol.catch(replacement=True) + """endfor
 call writefile(out, g:o)
 qa!
 """
@@ -463,6 +462,12 @@ qa!
 
 def parse_vim_reply(line, reference=False):
     """Strict tagged Vim transport; arbitrary successful text is never a status."""
+    if reference:
+        answer = vim_protocol.loads(line)
+        vim_protocol.validate_envelope(answer)
+        if len(answer['input']) != 3:
+            raise ValueError('replacement reference must echo three input fields')
+        return vim_protocol.replacement_answer(answer)
     if line == "ok" or line.startswith("ok "):
         body = "" if line == "ok" else line[3:]
         if re.fullmatch(r"(?:[0-9a-fA-F]{2})*", body) is None:
@@ -471,8 +476,7 @@ def parse_vim_reply(line, reference=False):
             return dict(status="ok", text=bytes.fromhex(body).decode("utf-8"))
         except UnicodeDecodeError as error:
             raise ValueError("malformed Vim replacement UTF-8") from error
-    if ((reference and line == "syntax")
-            or (not reference and re.fullmatch(r"compile [0-9]+", line))):
+    if re.fullmatch(r"compile [0-9]+", line):
         return dict(status="refused")
     if re.fullmatch(r"error .+", line) or (not reference and
             re.fullmatch(r"template(?: [0-9]+ [0-9]+ [0-9]+)?", line)):
@@ -489,6 +493,8 @@ def ask_vim(rows, engine=2):
     where in a buffer the first splits the line and the second writes a NUL
     - the same two characters seen through a different container.
     """
+    if engine not in (1, 2):
+        raise ValueError('a forced Vim engine (1 or 2) is required')
     work = tempfile.mkdtemp(prefix="replace_diff.")
     in_path = os.path.join(work, "cases.jsonl")
     out_path = os.path.join(work, "answers.txt")
@@ -510,18 +516,10 @@ def ask_vim(rows, engine=2):
     if engine:
         # Match the engine named by the selected compatibility profile.
         extra += ["--cmd", "set re=%d" % engine]
-    subprocess.run(
-        vim_runner.command(extra + ["-c", "source " + script_path],
-                           scratch=work),
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1800)
-    if not os.path.exists(out_path):
-        return []
-    answers = []
-    for line in open(out_path):
-        line = line.rstrip("\n")
-        answers.append(parse_vim_reply(line, reference=True))
-    return answers
+    inputs = [[pattern, subject, template] for _, pattern, subject, template in rows]
+    answers = vim_protocol.run(vim_runner.command(
+        extra + ['-c', 'source ' + script_path], scratch=work), out_path, inputs)
+    return vim_protocol.decode(answers, vim_protocol.replacement_answer)
 
 
 # Every one of the six, not only the two run markers: `\Q\U` alone is fine
@@ -716,8 +714,7 @@ def ask_library(driver, dialect, rows):
         match_diff.wtf8(pattern).hex(), match_diff.wtf8(subject).hex(),
         match_diff.wtf8(template).hex())
         for flags, pattern, subject, template in rows)
-    finished = subprocess.run([driver, dialect], input=lines,
-        capture_output=True, text=True, check=True)
+    finished = vim_protocol.run_driver([driver, dialect], lines)
     raw = finished.stdout.splitlines()
     parse = parse_vim_reply if dialect in vim_diff.PROFILES else parse_driver
     return [parse(line) for line in raw], raw
@@ -752,7 +749,7 @@ parse_ours = parse_driver
 # with it.
 
 def compare(dialect, driver, seed, patterns, templates, subjects, examples,
-        failures=None):
+        failures=None, reference_evidence=None):
     """One dialect against its reference. None means the run was not made."""
     reference = None
     if dialect in vim_diff.PROFILES:
@@ -816,8 +813,10 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples,
     elif dialect == "python":
         theirs = [(answer, 1) for answer in ask_python(rows)]
     elif dialect in vim_diff.PROFILES:
-        theirs = [(answer, 1) for answer in ask_vim(rows,
-            engine=vim_diff.PROFILES[dialect])]
+        reference_answers = ask_vim(rows, engine=vim_diff.PROFILES[dialect])
+        if hasattr(reference_answers, 'evidence') and reference_evidence is not None:
+            reference_evidence[dialect] = reference_answers.evidence
+        theirs = [(answer, 1) for answer in reference_answers]
     elif dialect == "perl":
         theirs = ask_perl(rows)
     elif dialect in LINEAR:
@@ -1110,9 +1109,15 @@ def run_comparisons(args, report):
     dialects = ("ecmascript", "pcre", "perl", "python", "vim-backtrack",
         "vim-nfa", "re2", "rust") if args.dialect == "all" else (args.dialect,)
     total = 0
+    reference_evidence = {}
     for dialect in dialects:
-        found = compare(dialect, driver, args.seed, args.patterns,
-            args.templates, args.subjects, args.examples, report["failures"])
+        try:
+            found = compare(dialect, driver, args.seed, args.patterns,
+                args.templates, args.subjects, args.examples, report['failures'],
+                reference_evidence)
+        finally:
+            if reference_evidence:
+                report['reference_evidence'] = reference_evidence
         if found is None:
             return 2
         report["completed_profiles"].append(dialect)

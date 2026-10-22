@@ -42,6 +42,8 @@ import replace_diff
 import script_run_diff
 import syntax_diff
 import vim_diff
+import vim_protocol
+import check_vim_protocol
 import make_vim_vectors
 import window_diff
 
@@ -644,6 +646,14 @@ def protocol_controls(work, report_path):
             for malformed in ("ok zz", "ok 6", "ok ff", "ok eda080", "unknown")])
         transport_cases.extend([("ok 61", malformed, None)
             for malformed in ("ok zz", "ok 6", "ok ff", "ok eda080", "unknown")])
+        def reference_payload(line):
+            if line == 'syntax':
+                return dict(status='exception', exception='Vim(let):E54: Unmatched \\(', throwpoint='control', phase='replacement', pattern_exception='Vim(call):E54: Unmatched \\(', pattern_throwpoint='isolation')
+            if line.startswith('ok '):
+                return dict(status='ok', hex=line[3:])
+            if line.startswith('error '):
+                return dict(status='exception', exception='Vim(let):E9999: injected unknown error', throwpoint='control', phase='replacement')
+            return dict(status='unknown')
         for reference_line, own_line, wanted in transport_cases:
             def command(extra, scratch):
                 require("set re=%d" % engine in extra, (syntax, extra))
@@ -651,10 +661,13 @@ def protocol_controls(work, report_path):
             def run(argv, **kwargs):
                 if argv == ["vim-test"]:
                     with open(os.path.join(ref_dir, "answers.txt"), "w", encoding="utf-8") as output:
-                        output.write(reference_line + "\nsyntax\n")
-                    return type("Result", (), {"returncode": 0})()
+                        for index, line in enumerate((reference_line, 'syntax')):
+                            answer = reference_payload(line)
+                            answer.update(id=index, input=['a' if index == 0 else '[', 'aaa', 'X'])
+                            output.write(json.dumps(answer) + '\n')
+                    return type('Result', (), dict(returncode=0, stdout=b'', stderr=b''))()
                 require(argv == ["library-test", syntax], argv)
-                return type("Result", (), {"stdout": own_line + "\ncompile 1\n"})()
+                return type('Result', (), dict(returncode=0, stderr='', stdout=own_line + "\ncompile 1\n"))()
             with contextlib.ExitStack() as stack:
                 stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
                 stack.enter_context(contextlib.redirect_stderr(io.StringIO()))
@@ -685,7 +698,7 @@ def protocol_controls(work, report_path):
                 require(len(report["failures"]) == wanted, report)
                 if wanted:
                     row = report["failures"][0]
-                    require(row["reference"] == replace_diff.parse_vim_reply(reference_line, reference=True)
+                    require(row["reference"] == vim_protocol.replacement_answer(reference_payload(reference_line))
                         and row["actual"] == replace_diff.parse_vim_reply(own_line), row)
             checked += 1
     return checked
@@ -709,6 +722,7 @@ def injected_answer_controls():
     with tempfile.TemporaryDirectory() as work:
         report_path = os.path.join(work, "failures.json")
         checked += protocol_controls(work, report_path)
+        checked += check_vim_protocol.check()
         for syntax, engine in vim_diff.PROFILES.items():
             for pattern in shapes:
                 for reference_answer, own_answer, wanted in match_answers:
@@ -812,7 +826,7 @@ def injected_answer_controls():
                 output.write('{"complete": true, "failures": ["stale"]}')
             row = dict(syntax="ecmascript", pattern="a", subject="a",
                 template="X", reference="X", actual="Y", flags="")
-            def partial(dialect, driver, seed, patterns, templates, subjects, examples, failures):
+            def partial(dialect, driver, seed, patterns, templates, subjects, examples, failures, evidence=None):
                 if dialect == "ecmascript":
                     failures.append(row)
                     return 1

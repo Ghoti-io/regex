@@ -45,11 +45,13 @@ modes, checked rather than assumed, which is why only 'iskeyword' is set.
 
 import json
 import os
+import re
 import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import oracle_env
+import vim_protocol
 
 # Ex mode, no vimrc, no viminfo. `-es` rather than `-Es`: the two are
 # different modes and the options above are what this tree pins, so the mode
@@ -86,18 +88,33 @@ def encoding(work):
     caller is the one that has to mount it.
     """
     out_path = os.path.join(work, "encoding.txt")
+    argv = command([
+        '-c', 'call writefile([&encoding], %s) | qa!' % json.dumps(out_path)],
+        scratch=work)
+    execution_error = None
     try:
-        subprocess.run(command(
-            ["-c", "call writefile([&encoding], %s) | qa!"
-                   % json.dumps(out_path)], scratch=work),
-            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL, timeout=120)
-    except (OSError, subprocess.TimeoutExpired):
-        return None
-    if not os.path.exists(out_path):
-        return None
-    with open(out_path) as handle:
-        return handle.read().strip()
+        finished = subprocess.run(argv, stdin=subprocess.DEVNULL,
+                                  capture_output=True, timeout=120)
+        evidence = dict(command=argv, returncode=finished.returncode,
+                        **vim_protocol.channels(finished.stdout, finished.stderr))
+    except (OSError, subprocess.TimeoutExpired) as error:
+        execution_error = error
+        evidence = dict(command=argv, returncode=None,
+            **vim_protocol.channels(getattr(error, 'stdout', ''), getattr(error, 'stderr', '')),
+            error=str(error))
+    if os.path.exists(out_path):
+        with open(out_path, 'rb') as handle:
+            raw = handle.read()
+        evidence.update(raw_answers=raw.decode('utf-8', 'replace'), raw_answers_hex=raw.hex())
+    else:
+        raw = None
+    if (execution_error or evidence['returncode'] != 0 or evidence['stdout']
+            or vim_protocol.diagnostics(evidence['stderr']) or raw is None):
+        raise vim_protocol.Failure('Vim encoding probe failed', evidence) from execution_error
+    try:
+        return raw.decode('utf-8').strip()
+    except UnicodeError as error:
+        raise vim_protocol.Failure('Invalid Vim encoding probe answer', evidence) from error
 
 
 def version():
@@ -121,9 +138,22 @@ def version():
         finished = subprocess.run(
             oracle_env.command("vim", ["vim", "--version"]),
             capture_output=True, timeout=120)
-    except (OSError, subprocess.TimeoutExpired):
-        return "unknown"
-    text = finished.stdout.decode("utf-8", "replace").splitlines()
-    first = text[0].strip() if text else "vim ?"
-    patches = [line.strip() for line in text if "Included patches" in line]
-    return "%s, %s" % (first, patches[0]) if patches else first
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise vim_protocol.Failure('Vim version probe failed', dict(
+            **vim_protocol.channels(getattr(error, 'stdout', ''), getattr(error, 'stderr', '')),
+            error=str(error))) from error
+    if finished.returncode or vim_protocol.diagnostics(finished.stderr):
+        raise vim_protocol.Failure('Vim version probe failed', dict(
+            returncode=finished.returncode, **vim_protocol.channels(finished.stdout, finished.stderr)))
+    evidence = dict(returncode=finished.returncode,
+                    **vim_protocol.channels(finished.stdout, finished.stderr))
+    try:
+        lines = finished.stdout.decode('utf-8').splitlines()
+        if (not lines or re.fullmatch(r'VIM - Vi IMproved [0-9]+\.[0-9]+ \([^\r\n]+\)', lines[0]) is None):
+            raise ValueError('missing or malformed Vim version banner')
+        patches = [line for line in lines if line.startswith('Included patches: ')]
+        if len(patches) != 1 or re.fullmatch(r'Included patches: [0-9]+(?:-[0-9]+)?(?:, [0-9]+(?:-[0-9]+)?)*', patches[0]) is None:
+            raise ValueError('missing or malformed Vim patch metadata')
+    except (UnicodeError, ValueError) as error:
+        raise vim_protocol.Failure('Invalid Vim version probe answer: ' + str(error), evidence) from error
+    return '%s, %s' % (lines[0], patches[0])

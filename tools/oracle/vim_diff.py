@@ -52,6 +52,7 @@ import tempfile
 import unicodedata
 
 import vim_runner
+import vim_protocol
 import escape_floor
 
 PROFILES = {"vim-backtrack": 1, "vim-nfa": 2}
@@ -357,22 +358,20 @@ let lines = readfile(g:vimdiff_in)
 let out = []
 for l in lines
   let c = json_decode(l)
+  let phase = 'pattern'
   try
     let p = matchstrpos(c[1], c[0])
     if p[1] < 0
-      call add(out, 'nomatch')
+      let answer = {'status':'nomatch'}
     else
       let g = matchlist(c[1], c[0])
       let fields = [printf('%d:%d', p[1], p[2])]
       for i in range(1, 9)
         call add(fields, g[i])
       endfor
-      call add(out, 'match ' . json_encode(fields))
+      let answer = {'status':'match', 'fields':fields}
     endif
-  catch
-    call add(out, 'compile')
-  endtry
-endfor
+""" + vim_protocol.CATCH + """endfor
 call writefile(out, g:vimdiff_out)
 qa!
 """
@@ -450,24 +449,20 @@ def _ask(cases, script):
         "--cmd", "let g:vimdiff_in=%s" % json.dumps(in_path),
         "--cmd", "let g:vimdiff_out=%s" % json.dumps(out_path),
         "-c", "source " + script_path], scratch=work)
-    try:
-        subprocess.run(command, stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1800)
-    except subprocess.TimeoutExpired:
-        sys.stderr.write("vim did not finish within 1800s\n")
-        return []
-    if not os.path.exists(out_path):
-        sys.stderr.write("vim wrote no answers\n")
-        return []
-    with open(out_path) as handle:
-        return [line.rstrip("\n") for line in handle]
+    inputs = [[pattern, subject] for pattern, subject in cases]
+    answers = vim_protocol.run(command, out_path, inputs)
+    return vim_protocol.decode(answers, lambda answer: vim_protocol.match_answer(
+        answer, inputs[answer['id']][1]))
 
 
 def normalise_theirs(line, subject):
     """Fold vim's answer into the shape ask_ours() is folded into."""
-    if not line.startswith("match "):
+    if line in ('compile', 'nomatch'):
         return line
+    if not isinstance(line, str) or not line.startswith('match '):
+        raise ValueError('invalid Vim match response: %r' % line)
     fields = json.loads(line[len("match "):])
+    vim_protocol.validate_match_fields(fields, subject)
     span = fields[0]
     groups = fields[1:]
     while groups and groups[-1] == "":
@@ -481,12 +476,7 @@ def ask_ours(command, cases):
         lines.append("\t%s\t%s" % (
             binascii.hexlify(pattern.encode()).decode(),
             binascii.hexlify(subject.encode()).decode()))
-    try:
-        finished = subprocess.run(command, input="\n".join(lines) + "\n",
-            capture_output=True, text=True, timeout=900)
-    except subprocess.TimeoutExpired:
-        sys.stderr.write("%s did not finish within 900s\n" % command[0])
-        return []
+    finished = vim_protocol.run_driver(command, "\n".join(lines) + "\n")
     return finished.stdout.splitlines()
 
 
@@ -679,11 +669,17 @@ def run_reporting(path, report, run):
     save()
     try:
         result = run()
-        if not report["complete"]:
-            report["error"] = "comparison incomplete"
+        if result not in (0, 1):
+            report['complete'] = False
+        if not report['complete']:
+            report['error'] = 'comparison incomplete'
+            return 2
         return result
     except BaseException as error:
+        report['complete'] = False
         report["error"] = str(error) or type(error).__name__
+        if isinstance(error, vim_protocol.Failure):
+            report['execution_evidence'] = error.evidence
         raise
     finally:
         save()
@@ -710,8 +706,8 @@ def main():
 def run_comparison(args, report):
     encoding = vim_encoding()
     if encoding is None:
-        print("vim_diff: skipped (vim is not installed)")
-        return 0
+        print("vim_diff: reference encoding probe unavailable")
+        return 2
     if encoding != "utf-8":
         sys.stderr.write("vim answers in %s, not utf-8; the subjects here are "
             "UTF-8 and every non-ASCII row would disagree for that reason "
@@ -752,6 +748,8 @@ def run_comparison(args, report):
         sys.stderr.write("vim answered %d of %d rows\n"
             % (len(theirs_raw), len(cases)))
         return 2
+    if hasattr(theirs_raw, 'evidence'):
+        report['reference_evidence'] = theirs_raw.evidence
     mine_raw = ask_ours([ours, args.syntax], cases)
     if len(mine_raw) != len(cases):
         sys.stderr.write("grx_match answered %d of %d rows\n"

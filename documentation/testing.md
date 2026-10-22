@@ -3187,3 +3187,16 @@ instead of on one.
 `-O3` objects left in the release tree are invisible to a later `make test`
 and would be linked into it silently. `CUTIL_PC`, because a non-default
 `BUILD` renames the `.pc` file the Makefile looks for.
+
+The Vim matching and replacement oracles invalidate a run on reference runtime,
+resource or unknown exceptions, a failed process, diagnostic output, or a
+missing, reordered or malformed answer. Only positively identified outer-pattern
+syntax errors (and E33, unavailable previous-substitute state in a fresh string
+oracle) count as refusals. After a replacement failure, the oracle independently
+checks the outer pattern before classifying a refusal: nested replacement
+expressions can raise the same syntax-shaped errors at runtime. Ambiguous
+expression failures invalidate the run. The reports retain exact exceptions, raw answers,
+process diagnostics and incomplete status; a failed reference execution never
+supplies a compatibility expectation. Successful replacement text is carried
+separately from status, including empty text and literal `syntax`, `compile`
+or `error`.
