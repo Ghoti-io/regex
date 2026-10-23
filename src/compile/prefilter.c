@@ -212,6 +212,10 @@ int grx_program_first_bytes(
         break;
 
       case GRX_OP_CLASS: {
+        if (inst->policy & GRX_POLICY_CLASS_TAIL) {
+          known = 0;
+          break;
+        }
         size_t ranges = 0;
         const GRX_CharRange * range
             = grx_class_table_get(&program->classes, inst->x, &ranges);
@@ -265,6 +269,11 @@ int grx_program_first_bytes(
       case GRX_OP_KEEP:
       case GRX_OP_KEEP_END:
       case GRX_OP_CALLOUT:
+        if (inst->op == GRX_OP_ATOMIC_END &&
+            (inst->policy & GRX_POLICY_COMPLETE_COMPOSING)) {
+          known = 0;
+          break;
+        }
         if (!push_pc(stack, &depth, count, seen, pc + 1, count)) {
           known = 0;
         }
@@ -414,6 +423,10 @@ size_t grx_program_literal_prefix(
       pc++;
       continue;
     }
+
+    if (inst->op == GRX_OP_ATOMIC_END &&
+        (inst->policy & GRX_POLICY_COMPLETE_COMPOSING))
+      break;
 
     switch (inst->op) {
       // Zero-width and one way onwards. An assertion is stepped over rather
@@ -577,6 +590,12 @@ static uint32_t dom_intersect(
  */
 static void inst_width(const GRX_Inst * inst, int utf, int wtf8,
     size_t * out_min, size_t * out_max) {
+  if ((inst->op == GRX_OP_ATOMIC_END || inst->op == GRX_OP_BACKREF) &&
+      (inst->policy & GRX_POLICY_COMPLETE_COMPOSING)) {
+    *out_min = 0;
+    *out_max = GRX_NPOS;
+    return;
+  }
   switch (inst->op) {
     case GRX_OP_CHAR: {
       if (!utf) {
@@ -955,13 +974,15 @@ size_t grx_program_required_literal(const GRX_Program * program, char * out,
         // Only a zero-width instruction may be stepped over. Anything that
         // consumes puts text between the two characters, and anything not
         // listed here is not known to do neither.
-        if (landed->op != GRX_OP_SAVE && landed->op != GRX_OP_ASSERT
-            && landed->op != GRX_OP_PROGRESS_SET
-            && landed->op != GRX_OP_RESET
-            && landed->op != GRX_OP_RESET_STALE
-            && landed->op != GRX_OP_ATOMIC_BEGIN
-            && landed->op != GRX_OP_ATOMIC_END
-            && landed->op != GRX_OP_CALLOUT) {
+        if ((landed->op == GRX_OP_ATOMIC_END &&
+                (landed->policy & GRX_POLICY_COMPLETE_COMPOSING)) ||
+            (landed->op != GRX_OP_SAVE && landed->op != GRX_OP_ASSERT &&
+                landed->op != GRX_OP_PROGRESS_SET &&
+                landed->op != GRX_OP_RESET &&
+                landed->op != GRX_OP_RESET_STALE &&
+                landed->op != GRX_OP_ATOMIC_BEGIN &&
+                landed->op != GRX_OP_ATOMIC_END &&
+                landed->op != GRX_OP_CALLOUT)) {
           chained = 0;
           break;
         }

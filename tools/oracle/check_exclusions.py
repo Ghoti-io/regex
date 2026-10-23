@@ -595,6 +595,34 @@ def require(condition, context):
 
 def protocol_controls(work, report_path):
     """Decode actual Vim transports before exercising CLI comparison/reporting."""
+    restored = [r"\_s", r"\_d", r"\_w", r"\_[ab]", r"\_[^ab]", r"\_[^\n]",
+        r"a\%[\_s]", r"\(a\)\@1<=", r"\(ab\)\@1<=", r"\(ab\)\@2<=",
+        r"\(\w\+\)\@2<=", r"\(ab\)\@1<!", "(a|ab)@2<=",
+        r"\(a\zsb\)\@>", r"\(a\zeb\)\@>", r"\(a\zsb\)\@=",
+        r"\(a\zeb\)\@=", r"\(a\zeb\)\@<=", r"\(a\+\)\@>"]
+    expected_restored = {(prefix + atom, subject) for atom in restored
+        for prefix in ("", r"\Z") for subject in vim_diff.COMPOSING_SUBJECTS}
+    require(len(expected_restored) == 380, "restored composing population")
+    for syntax in vim_diff.PROFILES:
+        emitted = []
+        def reference(cases, engine):
+            emitted.extend(cases)
+            return ["nomatch"] * len(cases)
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
+            stack.enter_context(contextlib.redirect_stderr(io.StringIO()))
+            stack.enter_context(patch.object(sys, "argv", ["vim_diff", "--syntax", syntax,
+                "--patterns", "1", "--subjects", "1", "--strict", "--failures", report_path]))
+            for name, value in {"vim_encoding": "utf-8", "vim_version": "test",
+                    "find": "test", "make_pattern": "a"}.items():
+                stack.enter_context(patch.object(vim_diff, name, return_value=value))
+            stack.enter_context(patch.object(vim_diff, "ask_vim", side_effect=reference))
+            stack.enter_context(patch.object(vim_diff, "ask_ours", side_effect=lambda driver, cases: ["nomatch"] * len(cases)))
+            stack.enter_context(patch.object(vim_diff.escape_floor, "check", return_value=(1, 1)))
+            require(vim_diff.main() == 0, "emitted composing CLI population")
+        require(expected_restored <= set(emitted), "a restored composing row was not emitted")
+        grammar = vim_diff.combining_grammar_cases()
+        require(grammar and set(grammar) <= set(emitted), "combining grammar rows were not emitted")
     checked = 0
     for syntax, engine in vim_diff.PROFILES.items():
         match_cases = [
@@ -616,7 +644,7 @@ def protocol_controls(work, report_path):
                     "--syntax", syntax, "--patterns", "1", "--subjects", "1",
                     "--strict", "--failures", report_path]))
                 for name, value in {"vim_encoding": "utf-8", "vim_version": "test",
-                        "find": "test", "make_pattern": "a", "composing_cases": [],
+                        "find": "test", "make_pattern": "a", "composing_cases": [], "combining_grammar_cases": [],
                         "ask_vim": [reference], "ask_ours": [own]}.items():
                     stack.enter_context(patch.object(vim_diff, name, return_value=value))
                 stack.enter_context(patch.object(vim_diff, "SUBJECTS", ["éa"]))
@@ -674,6 +702,7 @@ def protocol_controls(work, report_path):
                 stack.enter_context(patch.object(replace_diff, "find", return_value="library-test"))
                 stack.enter_context(patch.object(replace_diff.vim_runner, "version", return_value="test"))
                 stack.enter_context(patch.object(replace_diff.vim_runner, "command", side_effect=command))
+                stack.enter_context(patch.object(replace_diff, "ask_vim", side_effect=replace_diff.ask_vim_batch_diagnostic))
                 stack.enter_context(patch.object(replace_diff.tempfile, "mkdtemp", return_value=ref_dir))
                 stack.enter_context(patch.object(replace_diff.subprocess, "run", side_effect=run))
                 stack.enter_context(patch.object(replace_diff, "VIM_NAMED_PATTERNS", ["a"]))
@@ -732,7 +761,7 @@ def injected_answer_controls():
                             "--syntax", syntax, "--patterns", "1", "--subjects", "1",
                             "--strict", "--failures", report_path]))
                         for name, value in {"vim_encoding": "utf-8", "vim_version": "test",
-                                "find": "test", "make_pattern": pattern, "composing_cases": []}.items():
+                                "find": "test", "make_pattern": pattern, "composing_cases": [], "combining_grammar_cases": []}.items():
                             stack.enter_context(patch.object(vim_diff, name, return_value=value))
                         stack.enter_context(patch.object(vim_diff, "SUBJECTS", ["aaa"]))
                         reference = stack.enter_context(patch.object(vim_diff, "ask_vim", return_value=[reference_answer]))
@@ -778,7 +807,7 @@ def injected_answer_controls():
                         "--syntax", syntax, "--patterns", "1", "--subjects", "1",
                         "--strict", "--failures", report_path]))
                     for name, value in {"vim_encoding": "utf-8", "vim_version": "test",
-                            "find": "test", "make_pattern": "a", "composing_cases": [],
+                            "find": "test", "make_pattern": "a", "composing_cases": [], "combining_grammar_cases": [],
                             "ask_vim": [] if short_reference else ['match ["0:1"]'],
                             "ask_ours": ["match backtrack 0:1"] if short_reference else []}.items():
                         stack.enter_context(patch.object(vim_diff, name, return_value=value))
@@ -881,6 +910,15 @@ def injected_answer_controls():
                     pattern.replace("\\", "\\\\"), span.replace(":", "-"))
                 require(record in written, (syntax, record, written))
                 checked += 1
+
+    for fields in (["0:0"] + [""] * 9, ["0:1", "a"] + [""] * 8):
+        record = make_vim_vectors.record_for("a?", "a", "match " + json.dumps(fields))
+        groups = next((line for line in record.splitlines()
+                       if line.startswith("groups: ")), None)
+        require(groups is not None, ("missing explicit TEXT mode", fields, record))
+        require(groups.split()[1:] == ["-" if not text else text for text in fields[1:]],
+                ("capture texts changed", fields, record))
+        checked += 1
 
     malformed = [None, 1, {}, "error", 'match ["99:1"]', 'match ["0:2"]',
         'match ["-1:1"]', 'match []', 'match {}', 'match [1]',

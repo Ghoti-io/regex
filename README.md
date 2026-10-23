@@ -250,8 +250,8 @@ engine and no network.
 | `i-regexp` | 30,015 | 100.00% | generated from two references, RFC 9485 naming none: iregexp-check 0.1.4 for the syntax, libxml2 2.14.6 for XSD's semantics |
 | `ecmascript` | 29,056 | 100.00% | test262, plus generated from node 24.21; 497 of them hold an unpaired UTF-16 surrogate and carry `options: wtf8` |
 | `perl` | 11,705 | 100.00% | perl 5.44's `re_tests`, plus generated: full folds, `\N{}` names, boundaries, and property names with more than one reading; 8 excluded |
-| `vim-backtrack` | 6,398 | 100.00% | forced Vim 9.2.1129 engine 1 |
-| `vim-nfa` | 6,398 | 100.00% | forced Vim 9.2.1129 engine 2 |
+| `vim-backtrack` | 9,198 | 100.00% | forced Vim 9.2.1129 engine 1 |
+| `vim-nfa` | 9,198 | 100.00% | forced Vim 9.2.1129 engine 2 |
 | `re2` | 2,947 | 100.00% | generated from Go 1.25.14's `regexp`, which carries Unicode 15.0.0 |
 | `rust` | 2,817 | 100.00% | generated from the `regex` crate 1.13.1, which carries UCD 16.0.0; 1 excluded |
 | `python` | 2,177 | 100.00% | generated from CPython 3.14.7 |
@@ -265,8 +265,9 @@ engine and no network.
 
 Vim assertion captures, marker ownership and repeat activation are covered by
 public profile regressions, allocation-failure tests and explicit execution
-budget controls. The fifteen former NFA capture gaps now pass their committed
-oracle-authored vectors. Run `make test tools` to reproduce the conformance
+budget controls. Combining atoms, collection marks, newline paths, lookbehind boundaries and
+competing scalar frontiers have paired reference-authored vectors, including
+all 380 formerly skipped composing rows per profile. Run `make test tools` to reproduce the conformance
 and public regression checks.
 
 Read the denominators with the rates: they differ by two orders of magnitude,

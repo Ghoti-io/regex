@@ -30,8 +30,8 @@
 #include <ghoti.io/regex/core.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <string.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "compile_internal.h"
 
@@ -88,6 +88,8 @@ static const char * assert_name(uint8_t kind) {
     "sentence-boundary", "not-sentence-boundary",
     "line-boundary", "not-line-boundary", "look-length",
     "byte-column", "never", "screen-column",
+      "scalar-frontier",
+      "no-scalar-frontier",
   };
   return kind < GRX_ASSERT_COUNT ? names[kind] : "?";
 }
@@ -157,6 +159,8 @@ void grx_program_init(GRX_Program * program, const GRX_Allocator * allocator,
   grx_arena_init(&program->insts, allocator, sizeof(GRX_Inst),
       limits->max_program_size, GRX_DIAG_LIMIT_PROGRAM_SIZE);
   grx_class_table_init(&program->classes, allocator, limits->max_class_ranges);
+  grx_arena_init(&program->scalar_scopes, allocator, sizeof(uint32_t),
+      limits->max_program_size, GRX_DIAG_LIMIT_PROGRAM_SIZE);
   grx_arena_init(
       &program->scan_lists, allocator, sizeof(uint32_t), 0, GRX_DIAG_NONE);
   grx_arena_init(
@@ -166,6 +170,9 @@ void grx_program_init(GRX_Program * program, const GRX_Allocator * allocator,
   grx_arena_init(
       &program->callout_strings, allocator, sizeof(char), 0, GRX_DIAG_NONE);
   program->flags = 0;
+  program->candidate_literal = 0;
+  program->candidate_literal_length = 0;
+  program->candidate_options = 0;
   program->register_count = 0;
   // The prefilter fields are not filled until after codegen, and "not known"
   // has to be what they say until then: every one of them is read by the
@@ -190,6 +197,13 @@ GRX_Result grx_program_add(
   }
 
   return grx_arena_append(&program->insts, inst, out_index);
+}
+
+uint32_t grx_program_scope(const GRX_Program * program, uint32_t index) {
+  const uint32_t * scope = program && index < program->insts.count
+      ? GRX_ARENA_AT(const uint32_t, &program->scalar_scopes, index)
+      : NULL;
+  return scope ? *scope : 0;
 }
 
 GRX_Inst * grx_program_at(const GRX_Program * program, uint32_t index) {
@@ -231,6 +245,8 @@ static void dump_operands(
       break;
     case GRX_OP_ASSERT:
       fputs(assert_name(inst->mode), out);
+      if (inst->policy & GRX_POLICY_ASSERT_FINAL_BOUNDARY)
+        fputs(" whole-boundary", out);
       if (inst->mode == GRX_ASSERT_LOOK_LENGTH) {
         // `x` is a length span here, not a class.
         size_t min = 0;
@@ -249,8 +265,8 @@ static void dump_operands(
       fprintf(out, "count=#%u, %u", inst->x, inst->y);
       if (inst->x < program->look_spans.count &&
           program->look_spans.count - inst->x >= 3) {
-        const size_t * count = GRX_ARENA_AT(
-            const size_t, &program->look_spans, inst->x);
+        const size_t * count =
+            GRX_ARENA_AT(const size_t, &program->look_spans, inst->x);
         fprintf(out, " (r%zu, %zu..%zu)", count[2], count[0], count[1]);
       }
       break;
@@ -264,8 +280,8 @@ static void dump_operands(
       fprintf(out, "r%u, slot %u  (group %u)", inst->x, inst->y, inst->y / 2);
       break;
     case GRX_OP_PROGRESS_CHECK:
-      fprintf(out, "r%u, %u  (%s)", inst->x, inst->y,
-          empty_loop_name(inst->mode));
+      fprintf(
+          out, "r%u, %u  (%s)", inst->x, inst->y, empty_loop_name(inst->mode));
       break;
     case GRX_OP_BACKREF:
       // `x` is a group number, unless the name it was written with belongs
@@ -274,6 +290,10 @@ static void dump_operands(
       // may not have. The same is true of a conditional below.
       dump_group_operand(out, program, inst);
       fprintf(out, "  (unset %s)", backref_unset_name(inst->mode));
+      if (inst->policy & GRX_POLICY_COMPLETE_COMPOSING)
+        fputs(" forward-composing", out);
+      if (inst->policy & GRX_POLICY_REPORT_COMPOSING)
+        fputs(" report-composing", out);
       break;
     case GRX_OP_LOOK: {
       size_t min = 0;
@@ -323,11 +343,15 @@ static void dump_operands(
       if (inst->flags & GRX_INST_LOOK_REQUIRED) {
         fputs(" required-tail", out);
       }
+      if ((inst->mode == GRX_LOOK_AHEAD_POSITIVE ||
+              inst->mode == GRX_LOOK_AHEAD_NEGATIVE) &&
+          (inst->flags & GRX_INST_LOOK_BODY_NULLABLE))
+        fputs(" nullable-body", out);
       if (repeated) {
         size_t global = 0;
         size_t copy = 0;
-        grx_program_look_repeat(program, inst, &repeat_state, &repeat_context,
-            &global, &copy);
+        grx_program_look_repeat(
+            program, inst, &repeat_state, &repeat_context, &global, &copy);
         fprintf(out, " repeat=r%zu global=r%zu marker=r%zu copy=%zu",
             repeat_state, global, global + 1, copy);
         if (repeat_context & GRX_LOOK_REPEAT_BOUNDED) {
@@ -380,6 +404,10 @@ static void dump_operands(
       if (inst->policy & GRX_POLICY_ATOMIC_END_OWNER) {
         fputs(" end-context-owner", out);
       }
+      break;
+    case GRX_OP_ATOMIC_END:
+      if (inst->policy & GRX_POLICY_COMPLETE_COMPOSING)
+        fputs("complete-composing", out);
       break;
     case GRX_OP_KEEP_END:
       if (inst->policy & GRX_POLICY_END_CONTEXT_ONLY) {
@@ -452,6 +480,13 @@ GRX_Result grx_program_dump(const GRX_Program * program, FILE * out) {
     fprintf(out, "  submatch=%s\n", submatch_name(program->submatch));
   }
 
+  if (program->candidate_literal_length) {
+    fprintf(out, "  candidate-run bytes=%zu caseless=%u ignore-composing=%u\n",
+        program->candidate_literal_length,
+        !!(program->candidate_options & GRX_OPT_CASELESS),
+        !!(program->candidate_options & GRX_OPT_IGNORE_COMBINING));
+  }
+
   for (size_t i = 0; i < program->insts.count; i++) {
     const GRX_Inst * inst
         = GRX_ARENA_AT(const GRX_Inst, &program->insts, i);
@@ -461,6 +496,9 @@ GRX_Result grx_program_dump(const GRX_Program * program, FILE * out) {
 
     fprintf(out, "  %4zu  %-14s ", i, grx_opcode_name((GRX_Opcode)inst->op));
     dump_operands(out, program, inst);
+    uint32_t scope = grx_program_scope(program, (uint32_t)i);
+    if (scope)
+      fprintf(out, " scope=%u", scope);
     if (inst->op == GRX_OP_SPLIT &&
         (inst->policy & GRX_POLICY_NULLABLE_BRANCH)) {
       fputs(" nullable", out);
@@ -568,6 +606,7 @@ void grx_program_clear(GRX_Program * program) {
   grx_class_table_clear(&program->classes);
   grx_arena_clear(&program->scan_lists);
   grx_arena_clear(&program->look_spans);
+  grx_arena_clear(&program->scalar_scopes);
   grx_arena_clear(&program->callouts);
   grx_arena_clear(&program->callout_strings);
   program->register_count = 0;

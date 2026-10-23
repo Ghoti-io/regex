@@ -68,9 +68,9 @@ typedef enum {
   FRAME_RESUME = 0, ///< An alternative not yet tried: `pc` and `position`.
   FRAME_ASSERTION_CAPTURE, ///< An assertion-result write; atomic entry owns it.
   FRAME_CAPTURE,           ///< A capture slot to put back: `index` and `value`.
-  FRAME_COUNTER,           ///< Decrement a lexical counted-loop visit on unwind.
-  FRAME_REGISTER,          ///< A progress register to put back.
-  FRAME_ATOMIC,            ///< A barrier ATOMIC_END pops through and discards.
+  FRAME_COUNTER,  ///< Decrement a lexical counted-loop visit on unwind.
+  FRAME_REGISTER, ///< A progress register to put back.
+  FRAME_ATOMIC,   ///< A barrier ATOMIC_END pops through and discards.
   /**
    * A RESUME that a `(*THEN)` may unwind to: one arm of an alternation.
    *
@@ -110,7 +110,8 @@ typedef enum {
    */
   FRAME_SKIP_MARK,
   FRAME_PENDING, ///< One heap-owned assertion activation to leave on rollback.
-  FRAME_PENDING_STATE, ///< An activation state to restore before its marker.
+  FRAME_PENDING_STATE,   ///< An activation state to restore before its marker.
+  FRAME_PRIORITY_BRANCH, ///< Nonpreferred branch, retained for frontier order.
 } FrameKind;
 
 /**
@@ -189,8 +190,43 @@ enum {
   ATOMIC_CAPTURE_MARKED_REPORT = 8 ///< A competing closure owns its report.
 };
 
+typedef struct BehindFrontier {
+  struct BehindFrontier * previous;
+  uint32_t body;
+  size_t words;
+  size_t origin;
+  struct ScalarPriority * priorities;
+  unsigned char exposed[];
+} BehindFrontier;
+
+typedef struct ScalarPriority {
+  struct ScalarPriority * next;
+  size_t target;
+  size_t origin;
+  size_t count;
+  size_t words;
+  unsigned char path[];
+} ScalarPriority;
+
+typedef struct ScalarScope {
+  GRX_ExecRequest request;
+  const GRX_ExecRequest * outer;
+  unsigned char * frontiers;
+  size_t words;
+  uint32_t pc;
+  uint32_t stop;
+  size_t origin;
+  int atomic;
+  size_t old_defer;
+  size_t old_report;
+  size_t floor;
+  ScalarPriority * priorities;
+  BehindFrontier * activation;
+} ScalarScope;
+
 typedef struct AtomicContext {
   struct AtomicContext * previous;
+  ScalarScope * frontier;
   int merged;
   int overlap; ///< A preceding accepting BODY covers this input position.
   int incoming;
@@ -225,6 +261,7 @@ typedef struct AtomicSchedule {
   struct AtomicSchedule * next;
   AtomicArrival * arrivals;
   AtomicIncoming * incoming;
+  BehindFrontier * frontiers;
   uint32_t pc;
   size_t attempt;
   int merged;
@@ -265,6 +302,8 @@ typedef struct {
    * at `shadow + N * 2`.
    */
   size_t shadow;
+  BehindFrontier * behind_frontiers;
+  int scalar_prepass;
   const size_t * capture_context; ///< Captures inherited by this assertion run.
   size_t atomic_result_slots; ///< Numbered captures owned by a prior accepting
                               ///< result.
@@ -285,6 +324,11 @@ typedef struct {
    * search.
    */
   size_t * atomic_history;
+  /** Two instruction-indexed regions: staged root attempt and committed
+   * final-boundary activation. Query copies borrow this immutable prefix;
+   * only the owning user run may stage or commit entries. */
+  size_t * ahead_arrivals;
+
   size_t frontier_position; ///< Current subject assertion frontier.
   size_t alternative_epoch; ///< Explicit alternatives already abandoned.
   size_t branch_epoch; ///< New alternatives distinguish current capture writes.
@@ -296,6 +340,7 @@ typedef struct {
   size_t capture_open_slots;
   size_t capture_sequence; ///< Monotonic source of executed-write generations.
   size_t forward_result_slots; ///< Actual spans produced by forward assertions.
+  size_t reference_end_slot;   ///< Undoable physical end owned by a reference.
   size_t forwarded_slots;      ///< Per-capture outer-owner generation, or NPOS.
   size_t
       behind_owner_slot; ///< Undoable generation of completed backward owners.
@@ -551,6 +596,13 @@ typedef struct {
 #define GRX_PENDING_WORDS                                                      \
   ((sizeof(PendingLook) + sizeof(size_t) - 1) / sizeof(size_t))
 
+static int scalar_scope_enter(Backtrack * bt, uint32_t pc, size_t position,
+    uint32_t scope, uint32_t stop, int atomic, ScalarScope ** out_scope);
+static void scalar_scope_leave(Backtrack * bt, ScalarScope * scope);
+static int scalar_priority_save(Backtrack * bt, size_t target);
+static int scalar_reports_cluster(Backtrack * bt, size_t position);
+static int pending_step(Backtrack * bt);
+static void scalar_activation_free(Backtrack * bt, BehindFrontier * activation);
 static void pending_destroy(Backtrack * bt, PendingLook * pending);
 static void atomic_context_leave(Backtrack * bt);
 static void pending_restore(
@@ -908,6 +960,9 @@ static int backtrack(Backtrack * bt, uint32_t * out_pc, size_t * out_position,
                 !advance_generation(bt, &bt->alternative_epoch))) {
           return 0;
         }
+        if ((bt->program->flags & GRX_PROGRAM_SCALAR_FRONTIER) &&
+            !push(bt, FRAME_PRIORITY_BRANCH, frame.pc, frame.position))
+          return 0;
         *out_pc = frame.pc;
         *out_position = frame.position;
         return 1;
@@ -1350,7 +1405,25 @@ static int assertion_holds(
     case GRX_ASSERT_NOT_COMPOSING:
       return !(has_after && in_class(bt, inst->x, after));
 
+    case GRX_ASSERT_SCALAR_FRONTIER:
+    case GRX_ASSERT_NO_SCALAR_FRONTIER: {
+      size_t previous_width = 0;
+      uint32_t previous = 0;
+      int active = bt->request->scalar_frontiers &&
+          read_backward(bt, position, &previous, &previous_width) &&
+          bt->request->scalar_frontiers[position - previous_width];
+      return inst->mode == GRX_ASSERT_SCALAR_FRONTIER ? active : !active;
+    }
+
     case GRX_ASSERT_CLUSTER_BOUNDARY:
+      if (inst->policy & GRX_POLICY_ASSERT_INITIAL_BOUNDARY) {
+        uint32_t base = 0;
+        return position != bt->attempt_start || !has_after ||
+            !in_class(bt, inst->x, after) ||
+            !grx_cluster_base_before(
+                text, bt->window_start, position, bt->utf, bt->wtf8, &base) ||
+            grx_display_cell_width(base, 0) == 0;
+      }
       return !has_before || !(has_after && in_class(bt, inst->x, after));
 
     case GRX_ASSERT_LOOK_LENGTH: {
@@ -1536,6 +1609,56 @@ static void restore_spans(Backtrack * bt, const size_t * before) {
     memcpy(bt->slots + bt->shadow, before + bt->shadow,
         (bt->slot_count - bt->shadow) * sizeof(size_t));
   }
+}
+
+/** Forward BODY results retain scalar tags but own reference completion.
+ * Atomic executed-write provenance is separate from ahead reporting ownership. */
+static int backref_complete(Backtrack * bt, const GRX_Inst * inst, size_t width,
+    int reverse, size_t * position) {
+  uint32_t group = (inst->flags & GRX_INST_AMBIGUOUS_REF)
+      ? ambiguous_group(bt, inst)
+      : inst->x;
+  size_t slot = (size_t)group * 2;
+  if (slot + 1 >= bt->captures)
+    return 1;
+  int ahead = bt->forward_result_slots &&
+      bt->slots[bt->forward_result_slots + slot] != GRX_NPOS &&
+      bt->slots[bt->forward_result_slots + slot + 1] != GRX_NPOS;
+  int atomic = bt->atomic_history &&
+      bt->atomic_history[4 * bt->captures + slot + 1] == 1;
+  if (bt->reference_end_slot) {
+    if (!save_slot(bt, bt->reference_end_slot))
+      return 0;
+    bt->slots[bt->reference_end_slot] =
+        width && (ahead || atomic) ? GRX_NPOS : *position;
+  }
+  if (!width || reverse || !(inst->policy & GRX_POLICY_COMPLETE_COMPOSING))
+    return 1;
+  if (!ahead && !atomic)
+    return 1;
+  int scalar = bt->request->scalar_frontiers &&
+      bt->request->scalar_frontiers[*position - width];
+  size_t end = *position;
+  uint32_t point = 0;
+  size_t mark_width = 0;
+  while (read_forward(bt, end, &point, &mark_width) &&
+      grx_display_cell_width(point, 0) == 0) {
+    if (!pending_step(bt))
+      return 0;
+    end += mark_width;
+  }
+  if (!scalar) {
+    *position = end;
+  }
+  else if ((inst->policy & GRX_POLICY_REPORT_COMPOSING) &&
+      scalar_reports_cluster(bt, *position)) {
+    size_t report = bt->captures +
+        ((bt->program->flags & GRX_PROGRAM_DEFER_COMPOSING) ? 1u : 0u);
+    if (!save_slot(bt, report))
+      return 0;
+    bt->slots[report] = end;
+  }
+  return bt->failure == GRX_OK;
 }
 
 static int backref_matches(const Backtrack * bt, const GRX_Inst * inst,
@@ -1745,6 +1868,8 @@ static void atomic_context_leave(Backtrack * bt) {
   if (!context) {
     return;
   }
+  if (context->frontier)
+    scalar_scope_leave(bt, context->frontier);
   bt->atomic_context = context->previous;
   capture_free(
       bt, context, sizeof(*context) / sizeof(size_t) + 5 * bt->captures);
@@ -1844,39 +1969,68 @@ static int run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
     bt->failure_diag = GRX_DIAG_LIMIT_RECURSION_DEPTH;
     return 0;
   }
-  size_t origin_count = 0;
-  size_t * origin = NULL;
+  typedef struct {
+    const size_t * outer_entry;
+    const size_t * outer_history;
+    AtomicContext * outer_atomic_context;
+    PendingLook * outer;
+    PendingLook * outer_ready;
+    PendingLook * outer_results;
+    size_t outer_sequence;
+    size_t outer_frontier_count;
+    size_t outer_branch;
+    size_t outer_alternative;
+    size_t outer_frontier_position;
+    AtomicSchedule * outer_schedules;
+    uint32_t outer_pc;
+    size_t outer_position;
+    size_t origin_count;
+    size_t * origin;
+    int scalar_prepass;
+  } RunContext;
+  const size_t saved_words =
+      (sizeof(RunContext) + sizeof(size_t) - 1) / sizeof(size_t);
+  RunContext * saved = capture_alloc(bt, saved_words);
+  if (!saved)
+    return 0;
+  saved->scalar_prepass = bt->scalar_prepass;
+  bt->scalar_prepass = 0;
+  saved->origin_count = 0;
+  saved->origin = NULL;
   if (bt->program->flags & GRX_PROGRAM_ATOMIC_FRONTIER) {
-    origin_count = bt->slot_count + (bt->atomic_history ? 7 * bt->captures : 0);
-    origin = capture_alloc(bt, origin_count);
-    if (!origin) {
+    saved->origin_count =
+        bt->slot_count + (bt->atomic_history ? 7 * bt->captures : 0);
+    saved->origin = capture_alloc(bt, saved->origin_count);
+    if (!saved->origin) {
+      capture_free(bt, saved, saved_words);
       return 0;
     }
-    memcpy(origin, bt->slots, bt->slot_count * sizeof(size_t));
+    memcpy(saved->origin, bt->slots, bt->slot_count * sizeof(size_t));
     if (bt->atomic_history) {
-      memcpy(origin + bt->slot_count, bt->atomic_history,
+      memcpy(saved->origin + bt->slot_count, bt->atomic_history,
           7 * bt->captures * sizeof(size_t));
     }
   }
-  const size_t * outer_entry = bt->body_entry;
-  const size_t * outer_history = bt->body_history;
-  bt->body_entry = origin;
-  bt->body_history =
-      origin && bt->atomic_history ? origin + bt->slot_count : NULL;
-  AtomicContext * outer_atomic_context = bt->atomic_context;
+  saved->outer_entry = bt->body_entry;
+  saved->outer_history = bt->body_history;
+  bt->body_entry = saved->origin;
+  bt->body_history = saved->origin && bt->atomic_history
+      ? saved->origin + bt->slot_count
+      : NULL;
+  saved->outer_atomic_context = bt->atomic_context;
   bt->atomic_context = NULL;
-  PendingLook * outer = bt->pending;
-  PendingLook * outer_ready = bt->ready;
-  PendingLook * outer_results = bt->results;
-  size_t outer_sequence = bt->pending_sequence;
-  size_t outer_frontier_count = bt->frontier_count;
-  size_t outer_branch = bt->branch_epoch;
-  size_t outer_alternative = bt->alternative_epoch;
-  size_t outer_frontier_position = bt->frontier_position;
-  AtomicSchedule * outer_schedules = bt->atomic_schedules;
-  uint32_t outer_pc = bt->body_pc;
-  size_t outer_position = bt->body_position;
-  bt->atomic_schedules = toplevel ? outer_schedules : NULL;
+  saved->outer = bt->pending;
+  saved->outer_ready = bt->ready;
+  saved->outer_results = bt->results;
+  saved->outer_sequence = bt->pending_sequence;
+  saved->outer_frontier_count = bt->frontier_count;
+  saved->outer_branch = bt->branch_epoch;
+  saved->outer_alternative = bt->alternative_epoch;
+  saved->outer_frontier_position = bt->frontier_position;
+  saved->outer_schedules = bt->atomic_schedules;
+  saved->outer_pc = bt->body_pc;
+  saved->outer_position = bt->body_position;
+  bt->atomic_schedules = toplevel ? saved->outer_schedules : NULL;
   bt->body_pc = pc;
   bt->body_position = position;
   bt->branch_epoch = 0;
@@ -1886,7 +2040,17 @@ static int run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
   bt->pending_sequence = 0;
   bt->frontier_count = 0;
   bt->run_depth++;
-  int matched = run_body(bt, pc, position, floor, toplevel, out_end);
+  int matched = 0;
+  // An atomic incoming-path pass resumes the current BODY, rather than
+  // invoking a new assertion scope. Retain that BODY's discovery request;
+  // creating another scope here would recursively rediscover this prefix.
+  if (toplevel || bt->run_depth == bt->discovery_depth ||
+      !(bt->program->flags & GRX_PROGRAM_SCALAR_FRONTIER) ||
+      scalar_scope_enter(bt, pc, position, grx_program_scope(bt->program, pc),
+          GRX_INDEX_NONE, 0, NULL)) {
+    if (!saved->scalar_prepass)
+      matched = run_body(bt, pc, position, floor, toplevel, out_end);
+  }
   bt->run_depth--;
   while (bt->pending) {
     PendingLook * finished = bt->pending;
@@ -1896,15 +2060,20 @@ static int run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
   while (bt->atomic_context) {
     atomic_context_leave(bt);
   }
-  bt->atomic_context = outer_atomic_context;
-  bt->pending = outer;
-  bt->ready = outer_ready;
-  bt->results = outer_results;
-  bt->pending_sequence = outer_sequence;
-  bt->frontier_count = outer_frontier_count;
-  bt->branch_epoch = outer_branch;
-  bt->alternative_epoch = outer_alternative;
-  bt->frontier_position = outer_frontier_position;
+  if (bt->request->scalar_local == 2 &&
+      bt->request->scalar_depth == bt->run_depth + 1 &&
+      !((ScalarScope *)bt->request->scalar_owner)->atomic) {
+    scalar_scope_leave(bt, bt->request->scalar_owner);
+  }
+  bt->atomic_context = saved->outer_atomic_context;
+  bt->pending = saved->outer;
+  bt->ready = saved->outer_ready;
+  bt->results = saved->outer_results;
+  bt->pending_sequence = saved->outer_sequence;
+  bt->frontier_count = saved->outer_frontier_count;
+  bt->branch_epoch = saved->outer_branch;
+  bt->alternative_epoch = saved->outer_alternative;
+  bt->frontier_position = saved->outer_frontier_position;
   while (!toplevel && bt->atomic_schedules) {
     AtomicSchedule * schedule = bt->atomic_schedules;
     bt->atomic_schedules = schedule->next;
@@ -1916,18 +2085,20 @@ static int run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
               bt->captures);
     }
     atomic_incoming_clear(bt, &schedule->incoming);
+    scalar_activation_free(bt, schedule->frontiers);
     capture_free(bt, schedule,
         (sizeof(*schedule) + sizeof(size_t) - 1) / sizeof(size_t));
   }
   if (!toplevel) {
-    bt->atomic_schedules = outer_schedules;
+    bt->atomic_schedules = saved->outer_schedules;
   }
-  bt->body_pc = outer_pc;
-  bt->body_position = outer_position;
-  bt->body_entry = outer_entry;
-  bt->body_history = outer_history;
-  capture_free(bt, origin, origin_count);
-  return matched;
+  bt->body_pc = saved->outer_pc;
+  bt->body_position = saved->outer_position;
+  bt->body_entry = saved->outer_entry;
+  bt->body_history = saved->outer_history;
+  capture_free(bt, saved->origin, saved->origin_count);
+  capture_free(bt, saved, saved_words);
+  return matched && bt->failure == GRX_OK;
 }
 
 /**
@@ -2009,6 +2180,20 @@ static int return_from_call(
  * @param out_end Receives where the body ended.
  * @return Non-zero when some start matched.
  */
+static void scalar_activation_free(
+    Backtrack * bt, BehindFrontier * activation) {
+  while (activation) {
+    BehindFrontier * previous = activation->previous;
+    while (activation->priorities) {
+      ScalarPriority * priority = activation->priorities;
+      activation->priorities = priority->next;
+      capture_free(bt, priority, priority->words);
+    }
+    capture_free(bt, activation, activation->words);
+    activation = previous;
+  }
+}
+
 static int look_behind_forward(Backtrack * bt, uint32_t body, size_t position,
     size_t min, size_t max, int nearest, int round_bound, int persist,
     const size_t * before, int fresh, const size_t * context,
@@ -2020,6 +2205,28 @@ static int look_behind_forward(Backtrack * bt, uint32_t body, size_t position,
         && (bt->request->subject[position - reach] & 0xc0u) == 0x80u) {
       reach++;
     }
+  }
+  int clusters = (bt->program->flags & GRX_PROGRAM_COMPOSING_CLUSTERS) != 0;
+  if (round_bound && clusters && reach < available) {
+    size_t at = position - reach;
+    uint32_t point = 0;
+    while (at > bt->window_start) {
+      if (!pending_step(bt)) {
+        return 0;
+      }
+      if (!grx_unicode_utf8_decode(bt->request->subject + at,
+              bt->window_end - at, bt->wtf8, &point) ||
+          grx_display_cell_width(point, 0) != 0) {
+        break;
+      }
+      size_t width = grx_unicode_utf8_decode_prev(
+          bt->request->subject, at, bt->wtf8, &point);
+      if (!width) {
+        break;
+      }
+      at -= width;
+    }
+    reach = position - at;
   }
   if (reach < min) {
     // Not enough subject behind this position for the shortest body.
@@ -2037,61 +2244,117 @@ static int look_behind_forward(Backtrack * bt, uint32_t body, size_t position,
   bt->visited = NULL;
   bt->memo_after = 0;
   bt->look_end = position;
+  BehindFrontier * frontier = NULL;
+  if (bt->program->flags & GRX_PROGRAM_SCALAR_FRONTIER) {
+    uint32_t scope = grx_program_scope(bt->program, body);
+    int competition = 0;
+    for (size_t i = 0; i < bt->program->insts.count && !competition; i++) {
+      if (!pending_step(bt))
+        break;
+      const GRX_Inst * inst = grx_program_at(bt->program, (uint32_t)i);
+      competition = grx_program_scope(bt->program, (uint32_t)i) == scope &&
+          grx_exec_scalar_cluster_consumer(inst);
+    }
+    if (competition && bt->failure == GRX_OK) {
+      size_t words = (sizeof(*frontier) + sizeof(size_t) - 1) / sizeof(size_t) +
+          bt->request->length / sizeof(size_t) + 1;
+      frontier = capture_alloc(bt, words);
+      if (frontier) {
+        memset(frontier, 0, words * sizeof(size_t));
+        frontier->previous = bt->behind_frontiers;
+        frontier->body = body;
+        frontier->words = words;
+        bt->behind_frontiers = frontier;
+      }
+    }
+  }
 
   size_t floor = bt->depth;
   int matched = 0;
   bt->behind_depth++;
-  for (size_t back = nearest ? min : reach;;
-      back = nearest ? back + 1 : back - 1) {
-    if (!persist) {
-      restore_spans(bt, before);
-    }
-    if (fresh) {
-      for (size_t i = 2; i < bt->captures; i++) {
-        bt->slots[i] = context ? context[i] : GRX_NPOS;
-        if (bt->shadow) {
-          bt->slots[bt->shadow + i] =
-              context ? context[bt->shadow + i] : GRX_NPOS;
+  for (int discovering = frontier ? 1 : 0; discovering >= 0; discovering--) {
+    for (size_t back = nearest ? min : reach;;
+        back = nearest ? back + 1 : back - 1) {
+      if (bt->failure != GRX_OK)
+        break;
+      if (clusters && position - back > bt->window_start &&
+          position - back < bt->window_end) {
+        uint32_t point = 0;
+        if (!pending_step(bt)) {
+          break;
+        }
+        size_t at = position - back;
+        int continuation = (bt->request->subject[at] & 0xc0u) == 0x80u;
+        int composing = !continuation &&
+            grx_unicode_utf8_decode(bt->request->subject + at,
+                bt->window_end - at, bt->wtf8, &point) &&
+            grx_display_cell_width(point, 0) == 0;
+        if (continuation ||
+            (composing && !(frontier && (frontier->exposed[at] & 1u)))) {
+          if (back == (nearest ? reach : min)) {
+            break;
+          }
+          continue;
         }
       }
-    }
-    if (fresh) {
-      // A forward lookbehind preserves the openings owned by its enclosing
-      // capture frames, while completed incoming captures use the fresh base.
-      for (size_t i = 2; i + 1 < bt->captures; i += 2) {
-        if (before[i] != GRX_NPOS && before[i + 1] == GRX_NPOS) {
-          bt->slots[i] = before[i];
+      if (!persist) {
+        restore_spans(bt, before);
+      }
+      if (fresh) {
+        for (size_t i = 2; i < bt->captures; i++) {
+          bt->slots[i] = context ? context[i] : GRX_NPOS;
+          if (bt->shadow) {
+            bt->slots[bt->shadow + i] =
+                context ? context[bt->shadow + i] : GRX_NPOS;
+          }
         }
       }
+      if (fresh) {
+        // A forward lookbehind preserves the openings owned by its enclosing
+        // capture frames, while completed incoming captures use the fresh base.
+        for (size_t i = 2; i + 1 < bt->captures; i += 2) {
+          if (before[i] != GRX_NPOS && before[i + 1] == GRX_NPOS) {
+            bt->slots[i] = before[i];
+          }
+        }
+      }
+      if (bt->pending_end_slot) {
+        bt->slots[bt->pending_end_slot] = GRX_NPOS;
+      }
+      bt->depth = floor;
+      if (bt->atomic_base) {
+        bt->slots[bt->atomic_base_present] = GRX_NPOS;
+      }
+      if (bt->atomic_result_slots) {
+        bt->slots[bt->atomic_result_present] = GRX_NPOS;
+      }
+      if (bt->forward_scope_slot) {
+        bt->slots[bt->forward_scope_slot] = GRX_NPOS;
+      }
+      if (discovering)
+        bt->scalar_prepass = 1;
+      matched = run(bt, body, position - back, floor, 0, out_end);
+      bt->depth = floor;
+      if (matched || bt->failure != GRX_OK) {
+        break;
+      }
+      // A `(*COMMIT)`, `(*PRUNE)` or `(*SKIP)` that fired in the body has
+      // already said there are to be no more attempts, and another candidate
+      // start is another attempt. The caller decides how far out the refusal
+      // travels; this only stops adding to it.
+      if (bt->verb_stop != VERB_NONE) {
+        break;
+      }
+      if (back == (nearest ? reach : min)) {
+        break;
+      }
     }
-    if (bt->pending_end_slot) {
-      bt->slots[bt->pending_end_slot] = GRX_NPOS;
-    }
-    bt->depth = floor;
-    if (bt->atomic_base) {
-      bt->slots[bt->atomic_base_present] = GRX_NPOS;
-    }
-    if (bt->atomic_result_slots) {
-      bt->slots[bt->atomic_result_present] = GRX_NPOS;
-    }
-    if (bt->forward_scope_slot) {
-      bt->slots[bt->forward_scope_slot] = GRX_NPOS;
-    }
-    matched = run(bt, body, position - back, floor, 0, out_end);
-    bt->depth = floor;
-    if (matched || bt->failure != GRX_OK) {
-      break;
-    }
-    // A `(*COMMIT)`, `(*PRUNE)` or `(*SKIP)` that fired in the body has
-    // already said there are to be no more attempts, and another candidate
-    // start is another attempt. The caller decides how far out the refusal
-    // travels; this only stops adding to it.
-    if (bt->verb_stop != VERB_NONE) {
-      break;
-    }
-    if (back == (nearest ? reach : min)) {
-      break;
-    }
+  }
+
+  if (frontier) {
+    bt->behind_frontiers = frontier->previous;
+    frontier->previous = NULL;
+    scalar_activation_free(bt, frontier);
   }
 
   bt->behind_depth--;
@@ -2138,6 +2401,36 @@ static int apply_atomic_owner(Backtrack * bt) {
           bt, bt->slots[bt->atomic_base + bt->behind_owner_slot]);
 }
 
+/** Successful root arrivals retain evaluation activation, not capture values.
+ * Discovery copies may observe this immutable prefix, but never extend it. */
+static int ahead_arrival(Backtrack * bt, uint32_t pc, int record) {
+  if (bt->run_depth != 1)
+    return 0;
+  if (record && !bt->request->scalar_query && !bt->discovery_depth) {
+    if (!bt->ahead_arrivals) {
+      size_t count = bt->program->insts.count;
+      if (count > SIZE_MAX / 2) {
+        bt->failure = GRX_ERR_LIMIT;
+        bt->failure_diag = GRX_DIAG_LIMIT_MATCH_MEMORY;
+        return -1;
+      }
+      bt->ahead_arrivals = capture_alloc(bt, 2 * count);
+      if (!bt->ahead_arrivals)
+        return -1;
+      for (size_t i = 0; i < 2 * count; i++) {
+        if (!pending_step(bt))
+          return -1;
+        bt->ahead_arrivals[i] = GRX_NPOS;
+      }
+    }
+    if (bt->ahead_arrivals[bt->program->insts.count + pc] != 1)
+      bt->ahead_arrivals[pc] = bt->attempt_start;
+  }
+  return bt->ahead_arrivals &&
+      bt->ahead_arrivals[bt->program->insts.count + pc] == 1 &&
+      bt->ahead_arrivals[pc] != bt->attempt_start;
+}
+
 /** Evaluate one assertion, leaving continuation and undo ownership to its
  * caller. */
 static int evaluate_look(Backtrack * bt, uint32_t pc, size_t position,
@@ -2147,8 +2440,14 @@ static int evaluate_look(Backtrack * bt, uint32_t pc, size_t position,
   const GRX_Inst * inst = grx_program_at(bt->program, pc);
   int fresh = (inst->policy & GRX_POLICY_LOOK_FRESH) != 0 ||
       (owned_ahead && (inst->flags & GRX_INST_LOOK_REQUIRED) &&
-          (inst->mode == GRX_LOOK_BEHIND_POSITIVE ||
+          (inst->mode == GRX_LOOK_AHEAD_POSITIVE ||
+              inst->mode == GRX_LOOK_AHEAD_NEGATIVE ||
+              inst->mode == GRX_LOOK_BEHIND_POSITIVE ||
               inst->mode == GRX_LOOK_BEHIND_NEGATIVE));
+  int root_arrival = inst->mode == GRX_LOOK_AHEAD_POSITIVE && fresh &&
+      (inst->policy & GRX_POLICY_LOOK_HAS_CAPTURES) && bt->run_depth == 1;
+  if (root_arrival && ahead_arrival(bt, pc, 0))
+    fresh = 0;
   int negative = inst->mode == GRX_LOOK_AHEAD_NEGATIVE ||
       inst->mode == GRX_LOOK_BEHIND_NEGATIVE;
   // A conditional's condition: it chooses a branch rather than
@@ -2322,6 +2621,9 @@ static int evaluate_look(Backtrack * bt, uint32_t pc, size_t position,
   }
   bt->keep_last = outer_keep_last;
   bt->capture_context = outer_context;
+  // A zero-width BODY cannot replace its caller's physical reference end.
+  if (bt->reference_end_slot)
+    bt->slots[bt->reference_end_slot] = before[bt->reference_end_slot];
   if (bt->atomic_result_slots) {
     memcpy(bt->slots + bt->atomic_result_slots,
         before + bt->atomic_result_slots, bt->captures * sizeof(size_t));
@@ -2368,6 +2670,14 @@ static int evaluate_look(Backtrack * bt, uint32_t pc, size_t position,
         inst->mode == GRX_LOOK_BEHIND_NEGATIVE) {
       restore_spans(bt, before);
     }
+    capture_free(bt, keep_last, bt->captures);
+    bt->active_capture_owner = outer_owner;
+    bt->capture_owner_depth--;
+    capture_free(bt, before, before_count);
+    return 0;
+  }
+
+  if (body_matched && root_arrival && ahead_arrival(bt, pc, 1) < 0) {
     capture_free(bt, keep_last, bt->captures);
     bt->active_capture_owner = outer_owner;
     bt->capture_owner_depth--;
@@ -2718,6 +3028,9 @@ static int pending_ready(
     return !frontier && next->state != 1;
   }
   size_t value = next->state;
+  if (demand && !next->evaluated && inst->mode == GRX_LOOK_AHEAD_POSITIVE &&
+      (inst->flags & GRX_INST_LOOK_BODY_NULLABLE))
+    return 0;
   int repeated_demand = 0;
   if (demand && value == 0 && (inst->policy & GRX_POLICY_LOOK_REPEATED)) {
     size_t channel = 0;
@@ -3139,6 +3452,7 @@ static int atomic_discover(Backtrack * bt, AtomicSchedule * schedule,
     return 0;
   }
   *probe = *bt;
+  probe->behind_frontiers = NULL;
   probe->stack = NULL;
   probe->depth = 0;
   probe->capacity = 0;
@@ -3255,6 +3569,548 @@ static int atomic_discover(Backtrack * bt, AtomicSchedule * schedule,
   return 1;
 }
 
+static int scalar_priority_frame(const Frame * frame) {
+  return frame->kind == FRAME_RESUME || frame->kind == FRAME_ALTERNATIVE ||
+      frame->kind == FRAME_PRIORITY_BRANCH;
+}
+
+/** Save the ordered branch path at the first reachable scalar frontier. */
+static int scalar_priority_save(Backtrack * bt, size_t target) {
+  if (!bt->request->scalar_priority_out)
+    return 1;
+  size_t count = 0;
+  for (size_t i = bt->request->scalar_priority_floor; i < bt->depth; i++) {
+    if (!pending_step(bt))
+      return 0;
+    count += scalar_priority_frame(&bt->stack[i]);
+  }
+  size_t bytes = (count + 7) / 8;
+  size_t words =
+      (sizeof(ScalarPriority) + bytes + sizeof(size_t) - 1) / sizeof(size_t);
+  ScalarPriority * priority = capture_alloc(bt, words);
+  if (!priority)
+    return 0;
+  memset(priority, 0, words * sizeof(size_t));
+  priority->target = target;
+  priority->origin = bt->request->scalar_local
+      ? bt->request->scalar_priority_origin
+      : bt->attempt_start;
+  priority->count = count;
+  priority->words = words;
+  size_t bit = 0;
+  for (size_t i = bt->request->scalar_priority_floor; i < bt->depth; i++) {
+    if (!pending_step(bt)) {
+      capture_free(bt, priority, words);
+      return 0;
+    }
+    if (!scalar_priority_frame(&bt->stack[i]))
+      continue;
+    if (bt->stack[i].kind == FRAME_PRIORITY_BRANCH)
+      priority->path[bit / 8] |= (unsigned char)(1u << (bit % 8));
+    bit++;
+  }
+  *bt->request->scalar_priority_out = priority;
+  return 1;
+}
+
+/** Compare discovery path priorities; an ended path lies between preferred
+ * and fallback continuations. */
+static int scalar_priority_before(
+    Backtrack * bt, const ScalarPriority * a, const ScalarPriority * b) {
+  if (a->origin != b->origin)
+    return a->origin < b->origin;
+  size_t count = a->count < b->count ? a->count : b->count;
+  for (size_t bit = 0; bit < count; bit++) {
+    if (!pending_step(bt))
+      return 0;
+    int av = (a->path[bit / 8] >> (bit % 8)) & 1;
+    int bv = (b->path[bit / 8] >> (bit % 8)) & 1;
+    if (av != bv)
+      return av < bv;
+  }
+  if (a->count == b->count)
+    return 0;
+  if (a->count == count)
+    return ((b->path[count / 8] >> (count % 8)) & 1) != 0;
+  return ((a->path[count / 8] >> (count % 8)) & 1) == 0;
+}
+
+/** A higher-priority cluster arrival retains its logical cluster end. */
+static int scalar_reports_cluster(Backtrack * bt, size_t position) {
+  uint32_t point = 0;
+  size_t width = 0;
+  if (!read_backward(bt, position, &point, &width))
+    return 1;
+  size_t target = position - width;
+  const ScalarPriority * scalar = NULL;
+  for (const ScalarPriority * candidate = bt->request->scalar_priorities;
+      candidate; candidate = candidate->next) {
+    if (!pending_step(bt))
+      return 0;
+    if (candidate->target == target &&
+        (!scalar || scalar_priority_before(bt, candidate, scalar)))
+      scalar = candidate;
+  }
+  if (!scalar)
+    return 1;
+  size_t origin = bt->request->scalar_local
+      ? bt->request->scalar_priority_origin
+      : bt->attempt_start;
+  if (origin != scalar->origin)
+    return origin < scalar->origin;
+  size_t bit = 0;
+  for (size_t i = bt->request->scalar_priority_floor; i < bt->depth; i++) {
+    if (!pending_step(bt))
+      return 0;
+    if (!scalar_priority_frame(&bt->stack[i]))
+      continue;
+    int actual = bt->stack[i].kind == FRAME_PRIORITY_BRANCH;
+    if (bit == scalar->count)
+      return !actual;
+    int prior = (scalar->path[bit / 8] >> (bit % 8)) & 1;
+    if (actual != prior)
+      return actual < prior;
+    bit++;
+  }
+  if (bit < scalar->count)
+    return ((scalar->path[bit / 8] >> (bit % 8)) & 1) != 0;
+  return 1;
+}
+
+/** Map one borrowed assertion record into an isolated activation list. */
+static PendingLook * scalar_pending_map(Backtrack * bt,
+    const PendingLook * source, PendingLook * target,
+    const PendingLook * wanted) {
+  while (source && target) {
+    if (!pending_step(bt))
+      return NULL;
+    if (source == wanted)
+      return target;
+    source = source->previous;
+    target = target->previous;
+  }
+  return NULL;
+}
+
+/** A prefix query borrows no mutable caller capture, assertion or atomic data.
+ */
+static int scalar_scope_discover(
+    Backtrack * bt, ScalarScope * scope, size_t target, int * found) {
+  const size_t words =
+      (sizeof(Backtrack) + sizeof(size_t) - 1) / sizeof(size_t);
+  Backtrack * probe = capture_alloc(bt, words);
+  if (!probe)
+    return 0;
+  *probe = *bt;
+  GRX_ExecRequest request = scope->request;
+  request.scalar_query = 1;
+  request.scalar_local = 1;
+  request.scalar_depth = bt->run_depth;
+  request.scalar_target = target;
+  request.scalar_stop_pc = scope->stop;
+  void * priority_result = NULL;
+  request.scalar_priority_out = &priority_result;
+  request.scalar_priority_floor = bt->depth;
+  request.scalar_priority_origin = scope->origin;
+  request.match = NULL;
+  request.out_steps = NULL;
+  request.out_diag = NULL;
+  probe->request = &request;
+  probe->behind_frontiers = NULL;
+  probe->stack = NULL;
+  probe->depth = 0;
+  probe->capacity = 0;
+  probe->stack_is_scratch = 1;
+  probe->stack_depth_base = bt->stack_depth_base + bt->depth;
+  probe->slots = NULL;
+  probe->atomic_history = NULL;
+  probe->atomic_context = NULL;
+  probe->atomic_schedules = NULL;
+  probe->discovery_schedules = bt->atomic_schedules;
+  probe->discovery_depth = 0;
+  probe->discovery_atomic = GRX_INDEX_NONE;
+  probe->discovered_arrivals = NULL;
+  probe->discovered_incoming = NULL;
+  probe->visited = NULL;
+  probe->memo_after = 0;
+  probe->pending = NULL;
+  probe->ready = NULL;
+  probe->results = NULL;
+  probe->keep_last = NULL;
+  probe->best_slots = NULL;
+  probe->call_return = NULL;
+  probe->call_group = NULL;
+  probe->call_slots = NULL;
+  probe->call_depth = 0;
+  probe->call_capacity = 0;
+  probe->marks = NULL;
+  probe->mark_depth = 0;
+  probe->mark_capacity = 0;
+  probe->callout_captures = NULL;
+  size_t * entry = capture_alloc(probe, bt->slot_count);
+  probe->slots = capture_alloc(probe, bt->slot_count);
+  if (entry && probe->slots) {
+    memcpy(entry, bt->slots, bt->slot_count * sizeof(size_t));
+    memcpy(probe->slots, bt->slots, bt->slot_count * sizeof(size_t));
+  }
+  probe->body_entry = entry;
+  probe->body_pc = scope->pc;
+  probe->body_position = scope->origin;
+  if (bt->atomic_history && probe->failure == GRX_OK) {
+    probe->atomic_history = capture_alloc(probe, 7 * bt->captures);
+    if (probe->atomic_history)
+      memcpy(probe->atomic_history, bt->atomic_history,
+          7 * bt->captures * sizeof(size_t));
+  }
+  probe->body_history = probe->atomic_history;
+  AtomicContext ** context_tail = &probe->atomic_context;
+  for (const AtomicContext * old = bt->atomic_context;
+      old && probe->failure == GRX_OK; old = old->previous) {
+    size_t count = sizeof(*old) / sizeof(size_t) + 5 * bt->captures;
+    AtomicContext * copy = capture_alloc(probe, count);
+    if (!copy)
+      break;
+    memcpy(copy, old, count * sizeof(size_t));
+    copy->frontier = NULL;
+    copy->previous = NULL;
+    *context_tail = copy;
+    context_tail = &copy->previous;
+  }
+  PendingLook ** pending_tail = &probe->pending;
+  for (const PendingLook * old = bt->pending; old && probe->failure == GRX_OK;
+      old = old->previous) {
+    PendingLook * copy = capture_alloc(probe, GRX_PENDING_WORDS);
+    if (!copy)
+      break;
+    *copy = *old;
+    copy->previous = NULL;
+    copy->active_previous = NULL;
+    copy->active_next = NULL;
+    copy->result_previous = NULL;
+    copy->base = NULL;
+    copy->entry = NULL;
+    copy->result = NULL;
+    *pending_tail = copy;
+    pending_tail = &copy->previous;
+    if (old->base) {
+      copy->base = capture_alloc(probe, bt->atomic_base);
+      if (copy->base)
+        memcpy(copy->base, old->base, bt->atomic_base * sizeof(size_t));
+    }
+    if (old->entry) {
+      copy->entry = capture_alloc(probe, bt->captures);
+      if (copy->entry)
+        memcpy(copy->entry, old->entry, bt->captures * sizeof(size_t));
+    }
+    if (old->result) {
+      copy->result = capture_alloc(probe, bt->captures);
+      if (copy->result)
+        memcpy(copy->result, old->result, bt->captures * sizeof(size_t));
+    }
+  }
+  const PendingLook * old = bt->pending;
+  for (PendingLook * copy = probe->pending; copy && old;
+      copy = copy->previous, old = old->previous) {
+    copy->active_previous = scalar_pending_map(
+        probe, bt->pending, probe->pending, old->active_previous);
+    copy->active_next = scalar_pending_map(
+        probe, bt->pending, probe->pending, old->active_next);
+    copy->result_previous = scalar_pending_map(
+        probe, bt->pending, probe->pending, old->result_previous);
+  }
+  probe->ready =
+      scalar_pending_map(probe, bt->pending, probe->pending, bt->ready);
+  probe->results =
+      scalar_pending_map(probe, bt->pending, probe->pending, bt->results);
+  if (bt->depth && probe->failure == GRX_OK) {
+    probe->stack =
+        capture_alloc(probe, bt->depth * sizeof(Frame) / sizeof(size_t));
+    if (probe->stack) {
+      memcpy(probe->stack, bt->stack, bt->depth * sizeof(Frame));
+      probe->capacity = bt->depth;
+      probe->depth = bt->depth;
+      for (size_t i = 0; i < bt->depth; i++) {
+        if (!pending_step(probe))
+          break;
+        if (probe->stack[i].kind == FRAME_PENDING ||
+            probe->stack[i].kind == FRAME_PENDING_STATE) {
+          probe->stack[i].pending = scalar_pending_map(
+              probe, bt->pending, probe->pending, bt->stack[i].pending);
+        }
+      }
+    }
+  }
+  *found = 0;
+  if (probe->failure == GRX_OK) {
+    size_t ignored = 0;
+    *found =
+        run_body(probe, scope->pc, scope->origin, probe->depth, 0, &ignored);
+  }
+  while (probe->pending) {
+    PendingLook * pending = probe->pending;
+    probe->pending = pending->previous;
+    pending_destroy(probe, pending);
+  }
+  while (probe->atomic_context)
+    atomic_context_leave(probe);
+  while (probe->atomic_schedules) {
+    AtomicSchedule * schedule = probe->atomic_schedules;
+    probe->atomic_schedules = schedule->next;
+    while (schedule->arrivals) {
+      AtomicArrival * arrival = schedule->arrivals;
+      schedule->arrivals = arrival->next;
+      capture_free(probe, arrival,
+          (sizeof(*arrival) + sizeof(size_t) - 1) / sizeof(size_t) +
+              bt->captures);
+    }
+    atomic_incoming_clear(probe, &schedule->incoming);
+    scalar_activation_free(probe, schedule->frontiers);
+    capture_free(probe, schedule,
+        (sizeof(*schedule) + sizeof(size_t) - 1) / sizeof(size_t));
+  }
+  capture_free(
+      probe, probe->stack, probe->capacity * sizeof(Frame) / sizeof(size_t));
+  capture_free(probe, entry, bt->slot_count);
+  capture_free(probe, probe->slots, bt->slot_count);
+  capture_free(probe, probe->atomic_history, 7 * bt->captures);
+  gcu_allocator_free(bt->allocator, probe->call_return);
+  gcu_allocator_free(bt->allocator, probe->call_group);
+  gcu_allocator_free(bt->allocator, probe->call_slots);
+  gcu_allocator_free(bt->allocator, probe->marks);
+  gcu_allocator_free(bt->allocator, probe->visited);
+  ScalarPriority * priority = priority_result;
+  if (priority) {
+    if (probe->failure == GRX_OK && *found) {
+      priority->next = scope->priorities;
+      scope->priorities = priority;
+      scope->request.scalar_priorities = scope->priorities;
+    }
+    else
+      capture_free(probe, priority, priority->words);
+  }
+  bt->steps = probe->steps;
+  bt->failure = probe->failure;
+  bt->failure_diag = probe->failure_diag;
+  bt->scratch_bytes = probe->scratch_bytes;
+  capture_free(bt, probe, words);
+  return bt->failure == GRX_OK;
+}
+
+static void scalar_scope_leave(Backtrack * bt, ScalarScope * scope) {
+  if (scope->frontiers && scope->activation) {
+    for (size_t at = scope->origin;
+        at < bt->window_end && bt->failure == GRX_OK; at++) {
+      if (!pending_step(bt))
+        break;
+      if (!scope->frontiers[at])
+        continue;
+      scope->activation->exposed[at] |= 2u;
+      uint32_t point = 0;
+      size_t width = 0;
+      if (!read_forward(bt, at, &point, &width))
+        continue;
+      size_t next = at + width;
+      while (read_forward(bt, next, &point, &width) &&
+          grx_display_cell_width(point, 0) == 0) {
+        if (!pending_step(bt))
+          break;
+        scope->activation->exposed[next] |= 1u;
+        next += width;
+      }
+    }
+  }
+  if (bt->program->flags & GRX_PROGRAM_DEFER_COMPOSING)
+    bt->slots[bt->captures] = scope->old_defer;
+  if (bt->program->flags & GRX_PROGRAM_REPORT_COMPOSING)
+    bt->slots[bt->captures +
+        ((bt->program->flags & GRX_PROGRAM_DEFER_COMPOSING) ? 1u : 0u)] =
+        scope->old_report;
+  bt->request = scope->outer;
+  if (scope->activation) {
+    while (scope->activation->priorities) {
+      ScalarPriority * prior = scope->activation->priorities;
+      scope->activation->priorities = prior->next;
+      capture_free(bt, prior, prior->words);
+    }
+    while (scope->priorities) {
+      ScalarPriority * candidate = scope->priorities;
+      scope->priorities = candidate->next;
+      ScalarPriority ** selected = &scope->activation->priorities;
+      while (*selected && (*selected)->target != candidate->target) {
+        if (!pending_step(bt))
+          break;
+        selected = &(*selected)->next;
+      }
+      if (*selected && !scalar_priority_before(bt, candidate, *selected)) {
+        capture_free(bt, candidate, candidate->words);
+      }
+      else {
+        ScalarPriority * replaced = *selected;
+        candidate->next = replaced ? replaced->next : NULL;
+        *selected = candidate;
+        if (replaced)
+          capture_free(bt, replaced, replaced->words);
+      }
+    }
+  }
+  while (scope->priorities) {
+    ScalarPriority * priority = scope->priorities;
+    scope->priorities = priority->next;
+    capture_free(bt, priority, priority->words);
+  }
+  capture_free(bt, scope->frontiers, scope->words);
+  capture_free(
+      bt, scope, (sizeof(*scope) + sizeof(size_t) - 1) / sizeof(size_t));
+}
+
+/** Each body invocation owns a fresh query input and a fresh frontier table. */
+static int scalar_scope_enter(Backtrack * bt, uint32_t pc, size_t position,
+    uint32_t id, uint32_t stop, int atomic, ScalarScope ** out_scope) {
+  ScalarScope * scope =
+      capture_alloc(bt, (sizeof(*scope) + sizeof(size_t) - 1) / sizeof(size_t));
+  if (!scope)
+    return 0;
+  *scope = (ScalarScope){.request = *bt->request,
+      .outer = bt->request,
+      .pc = pc,
+      .stop = stop,
+      .origin = position,
+      .atomic = atomic,
+      .floor = bt->depth};
+  scope->request.scalar_scope = id;
+  scope->request.scalar_frontiers = NULL;
+  scope->request.scalar_query = 0;
+  scope->request.scalar_depth = bt->run_depth;
+  scope->request.scalar_local = 2;
+  scope->request.scalar_owner = scope;
+  scope->request.scalar_cutoff = NULL;
+  scope->request.scalar_priorities = NULL;
+  scope->request.scalar_priority_out = NULL;
+  scope->request.scalar_priority_floor = bt->depth;
+  scope->request.scalar_priority_origin = position;
+  bt->request = &scope->request;
+  if (bt->program->flags & GRX_PROGRAM_DEFER_COMPOSING) {
+    scope->old_defer = bt->slots[bt->captures];
+    bt->slots[bt->captures] = GRX_NPOS;
+  }
+  if (bt->program->flags & GRX_PROGRAM_REPORT_COMPOSING) {
+    size_t slot = bt->captures +
+        ((bt->program->flags & GRX_PROGRAM_DEFER_COMPOSING) ? 1u : 0u);
+    scope->old_report = bt->slots[slot];
+    bt->slots[slot] = GRX_NPOS;
+  }
+  if (out_scope)
+    *out_scope = scope;
+  int competition = 0;
+  for (size_t i = 0; i < bt->program->insts.count; i++) {
+    if (!pending_step(bt))
+      break;
+    const GRX_Inst * inst = grx_program_at(bt->program, (uint32_t)i);
+    if (grx_program_scope(bt->program, (uint32_t)i) == id &&
+        grx_exec_scalar_cluster_consumer(inst)) {
+      competition = 1;
+      break;
+    }
+  }
+  if (bt->failure == GRX_OK && competition && atomic) {
+    for (AtomicSchedule * schedule = bt->atomic_schedules; schedule;
+        schedule = schedule->next) {
+      if (!pending_step(bt))
+        break;
+      if (schedule->pc + 1 != pc || schedule->attempt != bt->attempt_start)
+        continue;
+      BehindFrontier * activation = schedule->frontiers;
+      while (activation && activation->origin != position) {
+        if (!pending_step(bt))
+          break;
+        activation = activation->previous;
+      }
+      if (!activation && bt->failure == GRX_OK) {
+        size_t words =
+            (sizeof(*activation) + sizeof(size_t) - 1) / sizeof(size_t) +
+            bt->request->length / sizeof(size_t) + 1;
+        activation = capture_alloc(bt, words);
+        if (activation) {
+          memset(activation, 0, words * sizeof(size_t));
+          activation->previous = schedule->frontiers;
+          activation->origin = position;
+          activation->words = words;
+          activation->body = pc;
+          schedule->frontiers = activation;
+        }
+      }
+      scope->activation = activation;
+      break;
+    }
+  }
+  if (!atomic && bt->behind_frontiers && bt->behind_frontiers->body == pc)
+    scope->activation = bt->behind_frontiers;
+  if (bt->failure == GRX_OK && competition) {
+    scope->words = bt->request->length / sizeof(size_t) + 1;
+    scope->frontiers = capture_alloc(bt, scope->words);
+    if (scope->frontiers) {
+      memset(scope->frontiers, 0, scope->words * sizeof(size_t));
+      scope->request.scalar_frontiers = scope->frontiers;
+      if (scope->activation) {
+        for (size_t at = position; at < bt->window_end; at++) {
+          if (!pending_step(bt))
+            break;
+          scope->frontiers[at] = (scope->activation->exposed[at] & 2u) != 0;
+        }
+        for (ScalarPriority * prior = scope->activation->priorities; prior;
+            prior = prior->next) {
+          if (!pending_step(bt))
+            break;
+          ScalarPriority * copy = capture_alloc(bt, prior->words);
+          if (!copy)
+            break;
+          memcpy(copy, prior, prior->words * sizeof(size_t));
+          copy->next = scope->priorities;
+          scope->priorities = copy;
+        }
+        scope->request.scalar_priorities = scope->priorities;
+      }
+      for (size_t at = position;
+          at < bt->window_end && bt->failure == GRX_OK;) {
+        uint32_t point = 0;
+        uint32_t next = 0;
+        size_t width = 0;
+        size_t next_width = 0;
+        if (!pending_step(bt) || !read_forward(bt, at, &point, &width))
+          break;
+        int relevant = read_forward(bt, at + width, &next, &next_width) &&
+            grx_display_cell_width(next, 0) == 0;
+        int literal = 0;
+        for (size_t i = 0; relevant && !literal && i < bt->program->insts.count;
+            i++) {
+          if (!pending_step(bt))
+            break;
+          const GRX_Inst * inst = grx_program_at(bt->program, (uint32_t)i);
+          literal = grx_program_scope(bt->program, (uint32_t)i) == id &&
+              (inst->policy & GRX_POLICY_SCALAR_LITERAL) &&
+              ((inst->op == GRX_OP_CHAR && inst->x == point) ||
+                  (inst->op == GRX_OP_CLASS && in_class(bt, inst->x, point)));
+        }
+        if (literal && bt->failure == GRX_OK) {
+          int found = 0;
+          if (!scalar_scope_discover(bt, scope, at, &found))
+            break;
+          scope->frontiers[at] |= (unsigned char)found;
+        }
+        at += width;
+      }
+    }
+  }
+  if (bt->failure != GRX_OK) {
+    if (out_scope)
+      *out_scope = NULL;
+    scalar_scope_leave(bt, scope);
+    return 0;
+  }
+  return 1;
+}
+
+
 /**
  * Enumerate incoming paths with this same instruction machine. The isolated
  * pass stops each path at its atomic exit, so it never tests or commits the
@@ -3281,6 +4137,8 @@ static int atomic_entry_allowed(Backtrack * bt, uint32_t pc, size_t position) {
       bt->atomic_schedules = schedule;
     }
     schedule->attempt = bt->attempt_start;
+    scalar_activation_free(bt, schedule->frontiers);
+    schedule->frontiers = NULL;
     atomic_incoming_clear(bt, &schedule->incoming);
     schedule->future_bound = 0;
     if (!atomic_discover(bt, schedule, pc, 0, 0)) {
@@ -3410,11 +4268,75 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
       return 0;
     }
 
+    if (bt->request->scalar_query &&
+        bt->run_depth == bt->request->scalar_depth) {
+      size_t target = bt->request->scalar_target;
+      if (inst->op == GRX_OP_ASSERT && inst->mode == GRX_ASSERT_LOOK_LENGTH) {
+        pc++;
+        continue;
+      }
+      if (bt->request->scalar_local && pc == bt->request->scalar_stop_pc) {
+        if (!backtrack(bt, &pc, &position, floor))
+          return 0;
+        continue;
+      }
+      int consumer = inst->op == GRX_OP_CHAR || inst->op == GRX_OP_CLASS ||
+          inst->op == GRX_OP_ANY || inst->op == GRX_OP_ANY_NL;
+      if (position > target || (consumer && position == target)) {
+        uint32_t point = 0;
+        size_t width = 0;
+        if (position == target &&
+            grx_program_scope(bt->program, pc) == bt->request->scalar_scope &&
+            (inst->policy & GRX_POLICY_SCALAR_LITERAL) &&
+            read_forward(bt, position, &point, &width) &&
+            ((inst->op == GRX_OP_CHAR && point == inst->x) ||
+                (inst->op == GRX_OP_CLASS && in_class(bt, inst->x, point)))) {
+          if (!scalar_priority_save(bt, position))
+            return 0;
+          *out_end = position;
+          return 1;
+        }
+        if (!backtrack(bt, &pc, &position, floor))
+          return 0;
+        continue;
+      }
+    }
+
+    if ((bt->program->flags & GRX_PROGRAM_DEFER_COMPOSING) &&
+        bt->slots[bt->captures] != GRX_NPOS &&
+        grx_exec_composing_frontier(inst)) {
+      if (!save_slot(bt, bt->captures)) {
+        return 0;
+      }
+      size_t saved_position = bt->slots[bt->captures];
+      bt->slots[bt->captures] = GRX_NPOS;
+      uint32_t mark = 0;
+      size_t width = 0;
+      size_t previous_width = 0;
+      uint32_t previous = 0;
+      int scalar = bt->request->scalar_frontiers &&
+          read_backward(bt, saved_position, &previous, &previous_width) &&
+          bt->request->scalar_frontiers[saved_position - previous_width];
+      while (!scalar && read_forward(bt, position, &mark, &width) &&
+          grx_display_cell_width(mark, 0) == 0) {
+        if (!pending_step(bt)) {
+          return 0;
+        }
+        position += width;
+      }
+    }
     int reverse = (inst->flags & GRX_INST_REVERSE) != 0;
     uint32_t codepoint = 0;
     size_t width = 0;
     int consumed = 0;
     int ok = 1;
+    size_t reported_position = position;
+    if (bt->program->flags & GRX_PROGRAM_REPORT_COMPOSING) {
+      size_t index = bt->captures +
+          ((bt->program->flags & GRX_PROGRAM_DEFER_COMPOSING) ? 1u : 0u);
+      if (bt->slots[index] != GRX_NPOS && bt->slots[index] > reported_position)
+        reported_position = bt->slots[index];
+    }
 
     switch ((GRX_Opcode)inst->op) {
       case GRX_OP_CHAR:
@@ -3438,9 +4360,24 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
           case GRX_OP_CHAR:
             ok = codepoint == inst->x;
             break;
-          case GRX_OP_CLASS:
-            ok = in_class(bt, inst->x, codepoint);
+          case GRX_OP_CLASS: {
+            uint32_t tested = codepoint;
+            if (inst->policy & GRX_POLICY_CLASS_TAIL) {
+              size_t at = position + width;
+              uint32_t mark = 0;
+              size_t mark_width = 0;
+              while (read_forward(bt, at, &mark, &mark_width) &&
+                  grx_display_cell_width(mark, 0) == 0) {
+                if (!pending_step(bt)) {
+                  return 0;
+                }
+                tested = mark;
+                at += mark_width;
+              }
+            }
+            ok = in_class(bt, inst->x, tested);
             break;
+          }
           case GRX_OP_ANY:
             ok = !in_class(bt, inst->x, codepoint);
             // `.` and `\N` refuse the position where a line terminator
@@ -3527,7 +4464,7 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
           return 0;
         }
         if (inst->x < bt->captures) {
-          bt->slots[inst->x] = position;
+          bt->slots[inst->x] = reported_position;
           // An odd slot is a group's end, so the group has just become whole.
           // Recorded rather than read off the slots at the end, because by
           // then a later iteration may have cleared it.
@@ -3560,9 +4497,28 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
         pc++;
         continue;
 
-      case GRX_OP_ASSERT:
-        ok = assertion_holds(bt, inst, position);
+      case GRX_OP_ASSERT: {
+        size_t previous_width = 0;
+        uint32_t previous = 0;
+        int scalar = bt->request->scalar_frontiers &&
+            read_backward(bt, position, &previous, &previous_width) &&
+            bt->request->scalar_frontiers[position - previous_width];
+        ok = ((bt->program->flags & GRX_PROGRAM_DEFER_COMPOSING) &&
+                 bt->slots[bt->captures] != GRX_NPOS && !scalar &&
+                 inst->mode == GRX_ASSERT_CLUSTER_BOUNDARY) ||
+            assertion_holds(bt, inst, position);
+        if (!ok && (inst->policy & GRX_POLICY_ASSERT_FINAL_BOUNDARY) &&
+            bt->run_depth == 1 && !bt->request->scalar_query &&
+            !bt->discovery_depth && bt->ahead_arrivals) {
+          for (size_t i = 0; i < bt->program->insts.count; i++) {
+            if (!pending_step(bt))
+              return 0;
+            if (bt->ahead_arrivals[i] == bt->attempt_start)
+              bt->ahead_arrivals[bt->program->insts.count + i] = 1;
+          }
+        }
         break;
+      }
 
       case GRX_OP_COUNT_INIT:
       case GRX_OP_COUNT_STEP:
@@ -3572,8 +4528,8 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
           bt->failure = GRX_ERR_INTERNAL;
           return 0;
         }
-        const size_t * metadata = GRX_ARENA_AT(
-            const size_t, &bt->program->look_spans, inst->x);
+        const size_t * metadata =
+            GRX_ARENA_AT(const size_t, &bt->program->look_spans, inst->x);
         if (bt->registers < 5 || metadata[2] > bt->registers - 5) {
           bt->failure = GRX_ERR_INTERNAL;
           return 0;
@@ -3665,6 +4621,17 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
         }
         if (index < bt->captures + bt->registers) {
           bt->slots[index] = position;
+          if ((inst->policy & GRX_POLICY_REPORT_COMPOSING) &&
+              scalar_reports_cluster(bt, position)) {
+            uint32_t point = 0;
+            size_t width = 0;
+            while (read_forward(bt, bt->slots[index], &point, &width) &&
+                grx_display_cell_width(point, 0) == 0) {
+              if (!pending_step(bt))
+                return 0;
+              bt->slots[index] += width;
+            }
+          }
         }
         pc++;
         continue;
@@ -3770,6 +4737,8 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
         ok = backref_matches(bt, inst, position, reverse, &width);
         if (ok) {
           position = reverse ? position - width : position + width;
+          if (!backref_complete(bt, inst, width, reverse, &position))
+            return 0;
         }
         pc++;
         if (ok) {
@@ -3839,7 +4808,8 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
           if (bt->failure != GRX_OK) {
             return 0;
           }
-          if (!allowed && atomic_owns_frontier(bt, inst)) {
+          if (!allowed && !bt->request->scalar_query &&
+              atomic_owns_frontier(bt, inst)) {
             ok = 0;
             break;
           }
@@ -3847,8 +4817,12 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
         if (bt->atomic_base) {
           if (bt->slots[bt->atomic_base_present] != GRX_NPOS) {
             for (size_t group = 2; group + 1 < bt->captures; group += 2) {
-              if (bt->slots[bt->capture_branch_slots + group] ==
-                  bt->branch_epoch) {
+              // An enclosing open capture owns its start until its closing
+              // SAVE. A nested BODY's inherited closed-capture snapshot
+              // cannot replace that live opening.
+              if (bt->slots[bt->capture_open_slots + group] == 1 ||
+                  bt->slots[bt->capture_branch_slots + group] ==
+                      bt->branch_epoch) {
                 continue;
               }
               for (size_t i = group; i <= group + 1; i++) {
@@ -3872,6 +4846,7 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
             return 0;
           }
           context->previous = bt->atomic_context;
+          context->frontier = NULL;
           context->merged = bt->atomic_entry_merged;
           context->overlap = bt->atomic_entry_overlap;
           context->reporting = bt->slots[bt->atomic_result_present] == GRX_NPOS
@@ -3955,6 +4930,22 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
             }
           }
         }
+        // A completed deferred ahead owns the caller's reported captures;
+        // a later capture-reading BODY starts from its fresh read context.
+        // Keep the reporting owner in context->caller before projecting reads.
+        if ((inst->policy & GRX_POLICY_ATOMIC_READS_CAPTURES) &&
+            has_ahead_result(bt, bt->pending)) {
+          for (size_t slot = 2; slot < bt->captures; slot++) {
+            if (!save_slot(bt, slot) || !shadow_clear(bt, slot))
+              return 0;
+            bt->slots[slot] =
+                bt->capture_context ? bt->capture_context[slot] : GRX_NPOS;
+            if (bt->shadow)
+              bt->slots[bt->shadow + slot] = bt->capture_context
+                  ? bt->capture_context[bt->shadow + slot]
+                  : GRX_NPOS;
+          }
+        }
         if (bt->atomic_context) {
           bt->atomic_context->incoming = atomic_needs_incoming_record(bt, pc);
           bt->atomic_context->input_owner =
@@ -4024,6 +5015,24 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
           }
           bt->slots[1] = GRX_NPOS;
           bt->slots[bt->pending_end_slot] = GRX_NPOS;
+        }
+        if ((bt->program->flags & GRX_PROGRAM_SCALAR_FRONTIER) &&
+            bt->atomic_context) {
+          uint32_t stop = pc + 1;
+          while (stop < bt->program->insts.count) {
+            if (!pending_step(bt))
+              return 0;
+            const GRX_Inst * end = grx_program_at(bt->program, stop);
+            if (end->op == GRX_OP_ATOMIC_END &&
+                grx_program_scope(bt->program, stop) ==
+                    grx_program_scope(bt->program, pc))
+              break;
+            stop++;
+          }
+          if (!scalar_scope_enter(bt, pc + 1, position,
+                  grx_program_scope(bt->program, pc), stop, 1,
+                  &bt->atomic_context->frontier))
+            return 0;
         }
         if (!push(bt, FRAME_ATOMIC, pc, position)) {
           return 0;
@@ -4437,6 +5446,18 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
           }
           bt->slots[bt->forward_scope_slot] = 1;
         }
+        if ((inst->policy & GRX_POLICY_COMPLETE_COMPOSING) &&
+            (!bt->reference_end_slot ||
+                bt->slots[bt->reference_end_slot] != position)) {
+          uint32_t point = 0;
+          size_t width = 0;
+          while (read_forward(bt, position, &point, &width) &&
+              grx_display_cell_width(point, 0) == 0) {
+            if (!pending_step(bt))
+              return 0;
+            position += width;
+          }
+        }
         pc++;
         continue;
       }
@@ -4580,7 +5601,11 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
           break;
         }
         if ((inst->mode == GRX_LOOK_BEHIND_POSITIVE ||
-                inst->mode == GRX_LOOK_BEHIND_NEGATIVE) &&
+                inst->mode == GRX_LOOK_BEHIND_NEGATIVE ||
+                ((inst->mode == GRX_LOOK_AHEAD_POSITIVE ||
+                     inst->mode == GRX_LOOK_AHEAD_NEGATIVE) &&
+                    (inst->flags & GRX_INST_LOOK_REQUIRED) &&
+                    has_ahead_result(bt, bt->pending))) &&
             !restore_ahead_results(bt, bt->pending)) {
           return 0;
         }
@@ -4595,8 +5620,8 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
         // which is how pcre2test answers `(?:(x)|y)(b)(*scs:(1,2)b)` - group
         // one is unset, so the scan runs over group two.
         size_t count = 0;
-        const uint32_t * groups
-            = grx_program_scan_list(bt->program, inst->x, &count);
+        const uint32_t * groups =
+            grx_program_scan_list(bt->program, inst->x, &count);
         if (!groups) {
           bt->failure = GRX_ERR_INVALID;
           return 0;
@@ -4606,8 +5631,8 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
         size_t to = GRX_NPOS;
         for (size_t i = 0; i < count; i++) {
           size_t first = (size_t)groups[i] * 2;
-          if (first + 1 < bt->captures && bt->slots[first] != GRX_NPOS
-              && bt->slots[first + 1] != GRX_NPOS) {
+          if (first + 1 < bt->captures && bt->slots[first] != GRX_NPOS &&
+              bt->slots[first + 1] != GRX_NPOS) {
             from = bt->slots[first];
             to = bt->slots[first + 1];
             break;
@@ -4690,6 +5715,14 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
           ok = 0;
           break;
         }
+        if (bt->request->scalar_query &&
+            bt->run_depth == bt->request->scalar_depth) {
+          if (bt->request->scalar_cutoff &&
+              position < *bt->request->scalar_cutoff)
+            *bt->request->scalar_cutoff = position;
+          ok = 0;
+          break;
+        }
         if (toplevel && bt->slots[1] == GRX_NPOS) {
           if (!save_slot(bt, 1)) {
             return 0;
@@ -4767,7 +5800,7 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
         if (!save_slot(bt, 0)) {
           return 0;
         }
-        bt->slots[0] = position;
+        bt->slots[0] = reported_position;
         if (bt->capture_branch_slots) {
           for (size_t group = 2; group + 1 < bt->captures; group += 2) {
             if (!save_slot(bt, bt->capture_branch_slots + group + 1)) {
@@ -4827,7 +5860,7 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
           if (!save_slot(bt, 1)) {
             return 0;
           }
-          bt->slots[1] = position;
+          bt->slots[1] = reported_position;
           // An explicit end supersedes an assertion's provisional end.
           // Undo both writes when this path is abandoned.
           if (bt->pending_end_slot
@@ -4904,6 +5937,33 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
               continue;
             }
 
+            if (inst->policy & GRX_POLICY_ACCEPT_OPEN) {
+              size_t barrier = bt->depth;
+              for (size_t i = bt->depth; i > floor; i--) {
+                if (bt->stack[i - 1].kind == FRAME_ATOMIC) {
+                  barrier = i - 1;
+                  break;
+                }
+              }
+              if (barrier < bt->depth) {
+                size_t end = bt->depth;
+                for (size_t i = barrier + 1; i < end; i++) {
+                  const Frame * frame = &bt->stack[i];
+                  size_t slot = frame->pc;
+                  if (frame->kind == FRAME_CAPTURE && slot >= 2 &&
+                      slot < bt->captures && !(slot & 1u) &&
+                      bt->slots[slot + 1] == GRX_NPOS) {
+                    if (!save_slot(bt, slot)) {
+                      return 0;
+                    }
+                    bt->slots[slot] = GRX_NPOS;
+                  }
+                }
+                pc = grx_program_at(bt->program, bt->stack[barrier].pc)->x;
+                continue;
+              }
+            }
+
             // The match ends here, with whatever the groups hold. The
             // closing SAVE of group 0 is skipped over, so it is written by
             // hand: an accepted match has an end whether or not the program
@@ -4919,7 +5979,12 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
             // all, where both references report two.
             for (size_t i = 0; i + 1 < bt->captures; i += 2) {
               if (bt->slots[i] != GRX_NPOS && bt->slots[i + 1] == GRX_NPOS) {
-                bt->slots[i + 1] = position;
+                if (i && (inst->policy & GRX_POLICY_ACCEPT_OPEN)) {
+                  bt->slots[i] = GRX_NPOS;
+                }
+                else {
+                  bt->slots[i + 1] = position;
+                }
               }
             }
             if (bt->slots[1] == GRX_NPOS) {
@@ -5048,6 +6113,12 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
 
     if (ok) {
       if (consumed) {
+        if (bt->reference_end_slot &&
+            bt->slots[bt->reference_end_slot] != GRX_NPOS) {
+          if (!save_slot(bt, bt->reference_end_slot))
+            return 0;
+          bt->slots[bt->reference_end_slot] = GRX_NPOS;
+        }
         for (PendingLook * next = bt->frontier_count ? bt->ready : NULL; next;
             next = next->active_previous) {
           if (!pending_step(bt)) {
@@ -5095,10 +6166,11 @@ static int backtrack_layout_fits(
   }
   size_t mirrored = 0;
   if (program->flags & GRX_PROGRAM_PROVISIONAL_LOOK_END) {
-    if (slot_limit - slots < 6 || captures > (slot_limit - slots - 6) / 5) {
+    // Six assertion-owner tags plus the physical reference endpoint.
+    if (slot_limit - slots < 7 || captures > (slot_limit - slots - 7) / 5) {
       return 0;
     }
-    slots += 5 * captures + 6;
+    slots += 5 * captures + 7;
     mirrored = slots;
     if (slots > (slot_limit - 1) / 2) {
       return 0;
@@ -5115,6 +6187,102 @@ static int backtrack_layout_fits(
   }
   *out_captures = captures;
   return 1;
+}
+
+/**
+ * Feasibility of the selected lexical run under its effective policies.
+ *
+ * Run selection uses the original encoded lengths and barriers. Folding or
+ * removing marks before selection would choose a different required run.
+ * The comparison itself is on scalars: folded partners may have different
+ * UTF-8 lengths, and ignored marks may occur on either side of a base.
+ */
+static int candidate_run_compare(Backtrack * bt, const char * literal,
+    size_t length, size_t position, int ignore_marks) {
+  uint32_t options = bt->program->candidate_options;
+  size_t start = position;
+  size_t bases = 0;
+  size_t total_bases = 0;
+  if (ignore_marks) {
+    for (size_t i = 0; i < length;) {
+      if (!pending_step(bt)) {
+        return 0;
+      }
+      uint32_t point = 0;
+      size_t width = grx_unicode_utf8_decode(literal + i, length - i, 0, &point);
+      if (!width) {
+        return 0;
+      }
+      i += width;
+      total_bases += grx_display_cell_width(point, 0) != 0;
+    }
+  }
+  for (size_t i = 0; i < length;) {
+    if (!pending_step(bt)) {
+      return 0;
+    }
+    uint32_t wanted = 0;
+    size_t width = grx_unicode_utf8_decode(literal + i, length - i, 0, &wanted);
+    if (!width) {
+      return 0;
+    }
+    i += width;
+    // Caseless feasibility accepts the first complete written cluster;
+    // the ignored-mark fallback still compares the entire selected run.
+    if (!ignore_marks && (options & GRX_OPT_CASELESS) && bases &&
+        grx_display_cell_width(wanted, 0) != 0) {
+      return 1;
+    }
+    if (ignore_marks && grx_display_cell_width(wanted, 0) == 0) {
+      continue;
+    }
+    uint32_t found = 0;
+    do {
+      if (!pending_step(bt) ||
+          !read_forward(bt, position, &found, &width)) {
+        return 0;
+      }
+      position += width;
+    } while (ignore_marks && bases &&
+        grx_display_cell_width(found, 0) == 0);
+    if ((options & GRX_OPT_CASELESS) &&
+        (!ignore_marks || (!bases && total_bases > 1))) {
+      wanted = grx_unicode_fold_simple(wanted);
+      found = grx_unicode_fold_simple(found);
+    }
+    if (wanted != found) {
+      return 0;
+    }
+    bases++;
+    if (ignore_marks) {
+      uint32_t next = 0;
+      while (position < bt->window_end) {
+        if (!pending_step(bt) ||
+            !read_forward(bt, position, &next, &width)) {
+          return 0;
+        }
+        if (grx_display_cell_width(next, 0) != 0) {
+          break;
+        }
+        position += width;
+      }
+      if (position - start >= length) {
+        return 1;
+      }
+    }
+  }
+  return 1;
+}
+
+/** Exact folding precedes the old mark-ignoring, suffix-caseful fallback. */
+static int candidate_run_at(Backtrack * bt, const char * literal,
+    size_t length, size_t position) {
+  if (candidate_run_compare(bt, literal, length, position, 0)) {
+    return 1;
+  }
+  return bt->failure == GRX_OK &&
+      (bt->program->candidate_options & GRX_OPT_IGNORE_COMBINING) &&
+      candidate_run_compare(bt, literal, length, position, 1);
 }
 
 GRX_Result grx_exec_backtrack(
@@ -5144,6 +6312,7 @@ GRX_Result grx_exec_backtrack(
   Backtrack bt = {
       .request = request,
       .program = program,
+      .stack_is_scratch = request->scalar_query,
       .allocator = request->regex->allocator,
       .captures = capture_slots,
       .registers = program->register_count,
@@ -5200,6 +6369,60 @@ GRX_Result grx_exec_backtrack(
     bt.allocator = grx_allocator_default();
   }
 
+  if (program->candidate_literal_length) {
+    size_t length = program->candidate_literal_length;
+    const char * literal = GRX_ARENA_AT(
+        const char, &program->callout_strings, program->candidate_literal);
+    int found = 0;
+    if (program->candidate_options) {
+      for (size_t at = request->start; !found;) {
+        found = candidate_run_at(&bt, literal, length, at);
+        if (bt.failure != GRX_OK) {
+          if (request->out_diag) {
+            *request->out_diag = bt.failure_diag;
+          }
+          if (request->out_steps) {
+            *request->out_steps = bt.steps;
+          }
+          return bt.failure;
+        }
+        uint32_t point = 0;
+        size_t width = 0;
+        if (!read_forward(&bt, at, &point, &width)) {
+          break;
+        }
+        at += width;
+      }
+    }
+    else if (length <= request->length - request->start) {
+      size_t last = request->length - length;
+      for (size_t at = request->start; at <= last && !found; at++) {
+        found = 1;
+        for (size_t i = 0; i < length; i++) {
+          if (!pending_step(&bt)) {
+            if (request->out_diag) {
+              *request->out_diag = bt.failure_diag;
+            }
+            if (request->out_steps) {
+              *request->out_steps = bt.steps;
+            }
+            return bt.failure;
+          }
+          if (request->subject[at + i] != literal[i]) {
+            found = 0;
+            break;
+          }
+        }
+      }
+    }
+    if (!found) {
+      if (request->out_steps) {
+        *request->out_steps = bt.steps;
+      }
+      return GRX_OK;
+    }
+  }
+
   // The shadow spans sit after the registers, and only for a program that
   // has a backreference to read them - see GRX_PROGRAM_SHADOW_CAPTURES.
   bt.slot_count = bt.captures + bt.registers;
@@ -5217,6 +6440,7 @@ GRX_Result grx_exec_backtrack(
     bt.slot_count += bt.captures;
     bt.forward_result_slots = bt.slot_count;
     bt.slot_count += bt.captures;
+    bt.reference_end_slot = bt.slot_count++;
     bt.capture_open_slots = bt.slot_count;
     bt.slot_count += bt.captures;
     bt.capture_branch_slots = bt.slot_count;
@@ -5313,8 +6537,107 @@ GRX_Result grx_exec_backtrack(
   }
 
   GRX_Result result = GRX_OK;
+  unsigned char * scalar_frontiers = NULL;
+  ScalarPriority * scalar_priorities = NULL;
+  size_t frontier_words = request->length / sizeof(size_t) + 1;
+  GRX_ExecRequest active_request;
+  if ((program->flags & GRX_PROGRAM_SCALAR_FRONTIER) &&
+      !request->scalar_query) {
+    scalar_frontiers = capture_alloc(&bt, frontier_words);
+    if (!scalar_frontiers) {
+      result = bt.failure;
+    }
+    else {
+      memset(scalar_frontiers, 0, frontier_words * sizeof(size_t));
+      active_request = *request;
+      active_request.scalar_frontiers = scalar_frontiers;
+      bt.request = &active_request;
+      request = &active_request;
+      for (size_t position = request->start; position < request->length;) {
+        uint32_t point = 0;
+        uint32_t next = 0;
+        size_t width = 0;
+        size_t next_width = 0;
+        if (!pending_step(&bt) ||
+            !read_forward(&bt, position, &point, &width)) {
+          result = bt.failure;
+          break;
+        }
+        int relevant =
+            read_forward(&bt, position + width, &next, &next_width) &&
+            grx_display_cell_width(next, 0) == 0;
+        int literal = 0;
+        for (size_t i = 0; relevant && !literal && i < program->insts.count;
+            i++) {
+          if (!pending_step(&bt)) {
+            result = bt.failure;
+            break;
+          }
+          const GRX_Inst * inst = grx_program_at(program, (uint32_t)i);
+          literal = grx_program_scope(program, (uint32_t)i) == 0 &&
+              (inst->policy & GRX_POLICY_SCALAR_LITERAL) &&
+              ((inst->op == GRX_OP_CHAR && inst->x == point) ||
+                  (inst->op == GRX_OP_CLASS && in_class(&bt, inst->x, point)));
+        }
+        if (result != GRX_OK)
+          break;
+        if (literal) {
+          GRX_Limits remaining = *request->limits;
+          if (remaining.max_steps) {
+            if (bt.steps >= remaining.max_steps) {
+              bt.failure_diag = GRX_DIAG_LIMIT_STEPS;
+              result = GRX_ERR_LIMIT;
+              break;
+            }
+            remaining.max_steps -= bt.steps;
+          }
+          if (remaining.max_match_memory) {
+            if (bt.scratch_bytes >= remaining.max_match_memory) {
+              bt.failure_diag = GRX_DIAG_LIMIT_MATCH_MEMORY;
+              result = GRX_ERR_LIMIT;
+              break;
+            }
+            remaining.max_match_memory -= bt.scratch_bytes;
+          }
+          GRX_ExecRequest probe = *request;
+          size_t steps = 0;
+          size_t cutoff = GRX_NPOS;
+          void * priority_result = NULL;
+          int found = 0;
+          probe.scalar_query = 1;
+          probe.scalar_depth = 1;
+          probe.scalar_scope = 0;
+          probe.scalar_priority_out = &priority_result;
+          probe.scalar_priority_floor = 0;
+          probe.scalar_target = position;
+          probe.scalar_cutoff = &cutoff;
+          probe.match = NULL;
+          probe.memoize = 0;
+          probe.limits = &remaining;
+          probe.out_steps = &steps;
+          probe.out_diag = &bt.failure_diag;
+          result = grx_exec_backtrack(&probe, &found);
+          bt.steps += steps;
+          ScalarPriority * priority = priority_result;
+          if (priority) {
+            bt.scratch_bytes += priority->words * sizeof(size_t);
+            priority->next = scalar_priorities;
+            scalar_priorities = priority;
+            active_request.scalar_priorities = scalar_priorities;
+          }
+          if (result != GRX_OK)
+            break;
+          scalar_frontiers[position] = (unsigned char)found;
+        }
+        position += width;
+      }
+    }
+  }
   size_t start = request->start;
-  for (;;) {
+  for (; result == GRX_OK;) {
+    if (request->scalar_query && request->scalar_cutoff &&
+        start >= *request->scalar_cutoff)
+      break;
     // Step over every position whose byte cannot begin a match, this one
     // included. Each would have failed on its first consumed byte, and
     // failing takes a descent through the program where this takes a byte
@@ -5325,7 +6648,9 @@ GRX_Result grx_exec_backtrack(
     // can skip is a first attempt that hides a wrong set from any test whose
     // subject matches at offset zero, which is how the first version of this
     // let a mutation of prefilter.c's give-up arm pass.
-    if (!request->anchored && !(program->flags & GRX_PROGRAM_ATOMIC_FRONTIER)) {
+    if (!request->anchored && !request->scalar_query &&
+        !(program->flags &
+            (GRX_PROGRAM_ATOMIC_FRONTIER | GRX_PROGRAM_CLUSTER_SEARCH))) {
       start = grx_exec_skip_to_first_byte(
           program, request->subject, request->length, start);
     }
@@ -5399,7 +6724,11 @@ GRX_Result grx_exec_backtrack(
       // records what was asked for and this loop is what acts on it.
       break;
     }
-    if (request->anchored || start >= request->length) {
+    if (request->anchored || start >= request->length ||
+        (request->scalar_query &&
+            (start >= request->scalar_target ||
+                (request->scalar_cutoff &&
+                    start >= *request->scalar_cutoff)))) {
       break;
     }
     if (bt.verb_stop == VERB_STOP_SKIP && bt.skip_to > start) {
@@ -5434,7 +6763,34 @@ GRX_Result grx_exec_backtrack(
       start += 2;
       continue;
     }
+    size_t origin = start;
     start += width;
+    int expose = request->scalar_frontiers && request->scalar_frontiers[origin];
+    if (!expose && (program->flags & GRX_PROGRAM_CLUSTER_SEARCH) &&
+        grx_display_cell_width(codepoint, 0) == 0) {
+      for (size_t i = 0; !expose && i < program->insts.count; i++) {
+        if (!pending_step(&bt)) {
+          result = bt.failure;
+          break;
+        }
+        const GRX_Inst * inst = grx_program_at(program, (uint32_t)i);
+        expose = grx_program_scope(program, (uint32_t)i) == 0 &&
+            (inst->policy & GRX_POLICY_SCALAR_LITERAL) &&
+            ((inst->op == GRX_OP_CHAR && inst->x == codepoint) ||
+                (inst->op == GRX_OP_CLASS &&
+                    in_class(&bt, inst->x, codepoint)));
+      }
+    }
+    if ((program->flags & GRX_PROGRAM_CLUSTER_SEARCH) && !expose) {
+      while (read_forward(&bt, start, &codepoint, &width) &&
+          grx_display_cell_width(codepoint, 0) == 0) {
+        if (!pending_step(&bt)) {
+          result = bt.failure;
+          break;
+        }
+        start += width;
+      }
+    }
   }
 
   if (result == GRX_OK && request->match) {
@@ -5488,9 +6844,17 @@ GRX_Result grx_exec_backtrack(
               bt.captures);
     }
     atomic_incoming_clear(&bt, &schedule->incoming);
+    scalar_activation_free(&bt, schedule->frontiers);
     capture_free(&bt, schedule,
         (sizeof(*schedule) + sizeof(size_t) - 1) / sizeof(size_t));
   }
+  while (scalar_priorities) {
+    ScalarPriority * priority = scalar_priorities;
+    scalar_priorities = priority->next;
+    capture_free(&bt, priority, priority->words);
+  }
+  capture_free(&bt, scalar_frontiers, frontier_words);
+  capture_free(&bt, bt.ahead_arrivals, 2 * program->insts.count);
   capture_free(&bt, bt.atomic_history, 7 * bt.captures);
   gcu_allocator_free(bt.allocator, bt.visited);
   gcu_allocator_free(bt.allocator, bt.best_slots);

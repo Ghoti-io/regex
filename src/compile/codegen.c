@@ -65,7 +65,8 @@ typedef struct {
   size_t min;    ///< Shortest the subtree can match.
   size_t max;    ///< Longest it can match, or GRX_NPOS.
   uint8_t state; ///< 0 not asked, 1 answered, 2 asked and there is no answer.
-  uint32_t counted_register; ///< Lexical signed count/backedge/progress/origin registers, plus one.
+  uint32_t counted_register; ///< Lexical signed count/backedge/progress/origin
+                             ///< registers, plus one.
   uint32_t repeat_global; ///< Shared activation count and marker channel, plus one.
   size_t repeat_owner; ///< Emission activation owning the repeat channel.
   uint32_t repeat_register; ///< Shared by copies of one repeated assertion;
@@ -405,7 +406,9 @@ static GRX_Result emit(Codegen * codegen, GRX_Opcode op, uint8_t mode,
                                                         : 0u) |
           ((node && (node->flags & GRX_IR_NEWLINE_CRLF)) ? GRX_INST_NEWLINE_CRLF
                                                          : 0u)),
-      .policy = 0,
+      .policy = node && (node->flags & GRX_IR_SCALAR_LITERAL)
+          ? GRX_POLICY_SCALAR_LITERAL
+          : 0,
       .x = x,
       .y = y,
   };
@@ -416,6 +419,25 @@ static GRX_Result emit(Codegen * codegen, GRX_Opcode op, uint8_t mode,
   }
   if (result != GRX_OK) {
     return fail(codegen, GRX_DIAG_OUT_OF_MEMORY, node);
+  }
+
+  if ((codegen->ir->flags & GRX_PROGRAM_SCALAR_FRONTIER) ||
+      codegen->program->scalar_scopes.count ||
+      (node && node->scope && (node->flags & GRX_IR_SCALAR_LITERAL))) {
+    while (
+        codegen->program->scalar_scopes.count < codegen->program->insts.count) {
+      uint32_t scope = codegen->program->scalar_scopes.count + 1 ==
+                  codegen->program->insts.count &&
+              node
+          ? node->scope
+          : 0;
+      result = grx_arena_append(&codegen->program->scalar_scopes, &scope, NULL);
+      if (result != GRX_OK)
+        return fail(codegen,
+            result == GRX_ERR_LIMIT ? GRX_DIAG_LIMIT_PROGRAM_SIZE
+                                    : GRX_DIAG_OUT_OF_MEMORY,
+            node);
+    }
   }
 
   return GRX_OK;
@@ -2246,9 +2268,14 @@ static GRX_Result gen_backref(Codegen * codegen, const GRX_IRNode * node) {
   if (result != GRX_OK) {
     return result;
   }
+  if (node->flags & GRX_IR_COMPLETE_COMPOSING)
+    grx_program_at(codegen->program, index)->policy |=
+        GRX_POLICY_COMPLETE_COMPOSING;
+  if (node->flags & GRX_IR_REPORT_COMPOSING)
+    grx_program_at(codegen->program, index)->policy |=
+        GRX_POLICY_REPORT_COMPOSING;
   if (node->flags & GRX_IR_AMBIGUOUS_REF) {
-    GRX_Inst * inst
-        = GRX_ARENA_AT(GRX_Inst, &codegen->program->insts, index);
+    GRX_Inst * inst = GRX_ARENA_AT(GRX_Inst, &codegen->program->insts, index);
     if (!inst) {
       return fail(codegen, GRX_DIAG_INTERNAL, node);
     }
@@ -2310,6 +2337,18 @@ static GRX_Result gen_step(Codegen * codegen, GenFrame * frame,
     const GRX_IRNode * node, GenAction * action, uint32_t * out_child) {
   switch (node->kind) {
     case GRX_IR_EMPTY:
+      if ((node->flags & GRX_IR_REPORT_COMPOSING) &&
+          (codegen->ir->flags & GRX_PROGRAM_SCALAR_FRONTIER)) {
+        uint32_t at = GRX_INDEX_NONE;
+        uint32_t reg =
+            (codegen->ir->flags & GRX_PROGRAM_DEFER_COMPOSING) ? 1u : 0u;
+        GRX_Result result =
+            emit(codegen, GRX_OP_PROGRESS_SET, 0, reg, 0, node, &at);
+        if (result == GRX_OK)
+          grx_program_at(codegen->program, at)->policy |=
+              GRX_POLICY_REPORT_COMPOSING;
+        return result;
+      }
       return node->flags & GRX_IR_EMPTY_FRONTIER
           ? emit(codegen, GRX_OP_JMP, 0, here(codegen) + 1, 0, node, NULL)
           : GRX_OK;
@@ -2317,8 +2356,17 @@ static GRX_Result gen_step(Codegen * codegen, GenFrame * frame,
     case GRX_IR_CHAR:
       return emit(codegen, GRX_OP_CHAR, 0, node->a, 0, node, NULL);
 
-    case GRX_IR_CLASS:
-      return emit(codegen, GRX_OP_CLASS, 0, node->a, 0, node, NULL);
+    case GRX_IR_CLASS: {
+      uint32_t at = GRX_INDEX_NONE;
+      GRX_Result result = emit(codegen, GRX_OP_CLASS, 0, node->a, 0, node, &at);
+      if (result == GRX_OK && (node->flags & GRX_IR_CLASS_TAIL)) {
+        grx_program_at(codegen->program, at)->policy |= GRX_POLICY_CLASS_TAIL;
+      }
+      if (result == GRX_OK && (node->flags & GRX_IR_DEFER_COMPOSING)) {
+        result = emit(codegen, GRX_OP_PROGRESS_SET, 0, 0, 0, node, NULL);
+      }
+      return result;
+    }
 
     case GRX_IR_ANY:
       // "Any code point at all" is its own opcode rather than a class of
@@ -2361,11 +2409,24 @@ static GRX_Result gen_step(Codegen * codegen, GenFrame * frame,
           codegen, GRX_OP_SAVE, 0, frame->u.one.slot, 0, node, NULL);
     }
 
-    case GRX_IR_ASSERT:
+    case GRX_IR_ASSERT: {
+      if (node->flags & (GRX_IR_INITIAL_BOUNDARY | GRX_IR_FINAL_BOUNDARY)) {
+        uint32_t at = GRX_INDEX_NONE;
+        GRX_Result result = emit(
+            codegen, GRX_OP_ASSERT, node->mode, node->a, node->b, node, &at);
+        if (result == GRX_OK) {
+          grx_program_at(codegen->program, at)->policy |=
+              (node->flags & GRX_IR_INITIAL_BOUNDARY)
+              ? GRX_POLICY_ASSERT_INITIAL_BOUNDARY
+              : GRX_POLICY_ASSERT_FINAL_BOUNDARY;
+        }
+        return result;
+      }
       // `y` is only read by GRX_ASSERT_BYTE_COLUMN, which is the only
       // assertion carrying two numbers; every other kind leaves `b` zero.
       return emit(
           codegen, GRX_OP_ASSERT, node->mode, node->a, node->b, node, NULL);
+    }
 
     case GRX_IR_LOOK:
       return gen_look_step(codegen, frame, node, action, out_child);
@@ -2395,6 +2456,9 @@ static GRX_Result gen_step(Codegen * codegen, GenFrame * frame,
         if (node->flags & GRX_IR_LOOK_PERSIST_CAPTURES) {
           grx_program_at(codegen->program, end)->flags |= GRX_INST_LOOK_PERSIST_CAPTURES;
         }
+        if (node->flags & GRX_IR_COMPLETE_COMPOSING)
+          grx_program_at(codegen->program, end)->policy |=
+              GRX_POLICY_COMPLETE_COMPOSING;
         patch_x(codegen, frame->u.one.slot, end);
       }
       return result;
@@ -2418,8 +2482,15 @@ static GRX_Result gen_step(Codegen * codegen, GenFrame * frame,
       return result;
     }
 
-    case GRX_IR_VERB:
-      return emit(codegen, GRX_OP_VERB, node->mode, node->a, 0, node, NULL);
+    case GRX_IR_VERB: {
+      uint32_t at = GRX_INDEX_NONE;
+      GRX_Result result =
+          emit(codegen, GRX_OP_VERB, node->mode, node->a, 0, node, &at);
+      if (result == GRX_OK && (node->flags & GRX_IR_ACCEPT_OPEN)) {
+        grx_program_at(codegen->program, at)->policy |= GRX_POLICY_ACCEPT_OPEN;
+      }
+      return result;
+    }
 
     case GRX_IR_SCAN:
       return gen_scan_step(codegen, frame, node, action, out_child);
@@ -2884,6 +2955,11 @@ static GRX_Result resolve_look_context(Codegen * codegen) {
                 cost[inst->x] < cost[inst->y] ? cost[inst->x] : cost[inst->y];
           }
           break;
+        case GRX_OP_ATOMIC_BEGIN:
+          // A nested atomic BODY completes at an assertion frontier;
+          // continuation scheduling retains its separate completion boundary.
+          value = pass == 1 ? LOOK_COST_ASSERTION : 0;
+          break;
         case GRX_OP_SAVE:
         case GRX_OP_ASSERT:
         case GRX_OP_PROGRESS_SET:
@@ -3061,6 +3137,8 @@ static GRX_Result resolve_look_context(Codegen * codegen) {
       if (inst->mode == GRX_LOOK_AHEAD_POSITIVE ||
           inst->mode == GRX_LOOK_AHEAD_NEGATIVE) {
         inst->policy |= GRX_POLICY_LOOK_FRESH;
+        if (cost[2 * count + i + 1])
+          inst->flags |= GRX_INST_LOOK_BODY_NULLABLE;
         if (!(inst->policy & GRX_POLICY_LOOK_REPEATED)) {
           if (codegen->registers == UINT32_MAX) {
             gcu_allocator_free(allocator, heads);
@@ -3170,25 +3248,26 @@ GRX_Result grx_codegen_program(const GRX_IR * ir, const GRX_Limits * limits,
   }
 
   Codegen codegen = {
-    .ir = ir,
-    .captures_are_read = captures_are_read,
-    .program = out_program,
-    .limits = limits,
-    .error = out_error,
-    .registers = 0,
-    .no_memo = 0,
-    .simulated = 0,
-    .has_keep_end = 0,
-    .called = {0},
-    .called_definition = {0},
-    .entry = {0},
-    .called_count = 0,
-    .fixups = {0},
-    .frames = {0},
-    .walk = {0},
-    .node_empty = {0},
-    .node_span = {0},
-    .memo = NULL,
+      .ir = ir,
+      .captures_are_read = captures_are_read,
+      .program = out_program,
+      .limits = limits,
+      .error = out_error,
+      .registers = ((ir->flags & GRX_PROGRAM_DEFER_COMPOSING) ? 1u : 0u) +
+          ((ir->flags & GRX_PROGRAM_REPORT_COMPOSING) ? 1u : 0u),
+      .no_memo = 0,
+      .simulated = 0,
+      .has_keep_end = 0,
+      .called = {0},
+      .called_definition = {0},
+      .entry = {0},
+      .called_count = 0,
+      .fixups = {0},
+      .frames = {0},
+      .walk = {0},
+      .node_empty = {0},
+      .node_span = {0},
+      .memo = NULL,
   };
   grx_arena_init(&codegen.fixups, out_program->insts.allocator, sizeof(Fixup),
       limits->max_program_size, GRX_DIAG_LIMIT_PROGRAM_SIZE);
@@ -3280,7 +3359,7 @@ GRX_Result grx_codegen_program(const GRX_IR * ir, const GRX_Limits * limits,
     // span that group last closed with rather than the half-written one.
     out_program->flags |= GRX_PROGRAM_SHADOW_CAPTURES;
   }
-  if (codegen.no_memo) {
+  if (codegen.no_memo || (ir->flags & GRX_PROGRAM_SCALAR_FRONTIER)) {
     out_program->flags |= GRX_PROGRAM_NO_MEMO;
   }
   if (codegen.simulated) {
@@ -3293,5 +3372,19 @@ GRX_Result grx_codegen_program(const GRX_IR * ir, const GRX_Limits * limits,
   out_program->iteration = ir->iteration;
   out_program->search_start = ir->search_start;
   out_program->register_count = codegen.registers;
+  out_program->candidate_literal = (uint32_t)out_program->callout_strings.count;
+  out_program->candidate_literal_length = ir->candidate_literal_length;
+  out_program->candidate_options = ir->candidate_options;
+  for (size_t i = 0; i < ir->candidate_literal_length; i++) {
+    const char * byte =
+        GRX_ARENA_AT(const char, &ir->names, ir->candidate_literal + i);
+    result = grx_arena_append(&out_program->callout_strings, byte, NULL);
+    if (result != GRX_OK) {
+      return fail(&codegen,
+          result == GRX_ERR_LIMIT ? GRX_DIAG_LIMIT_PROGRAM_SIZE
+                                  : GRX_DIAG_OUT_OF_MEMORY,
+          NULL);
+    }
+  }
   return GRX_OK;
 }

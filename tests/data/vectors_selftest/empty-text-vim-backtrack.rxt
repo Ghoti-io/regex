@@ -1,0 +1,12 @@
+# Paired Vim capture TEXT controls: empty and unset are indistinguishable.
+dialect: vim-backtrack
+
+pattern: \\(\\)\\@=\\1
+subject: \u0301
+expect: 0-0
+groups: - - - - - - - - -
+
+pattern: \\(a\\?\\)\\@=\\1.
+subject: a\u0301
+expect: 0-3
+groups: - - - - - - - - -

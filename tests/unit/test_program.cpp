@@ -439,3 +439,79 @@ int main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
+
+TEST(Program, CombiningScopeMetadataIsOptionalAlignedAndExplicitInTheDump) {
+  EXPECT_EQ(sizeof(GRX_Inst), 12u);
+  for (const char * pattern : {"abc", R"(\([ab].\|abX\)\@=.)", R"(\(a\)\@>x)",
+           R"(\(a\)\@=a\1)", R"(\(a\?\)\@=\1.)", R"(\(a\)\@=\(aX\|\1\)\@=.)",
+           R"(\(a\)\@>.\1)", R"(\(a\)\@>a\1)"}) {
+    SCOPED_TRACE(pattern);
+    GRX_Regex * regex = nullptr;
+    ASSERT_EQ(
+        grx_regex_compile(pattern, GRX_SYNTAX_VIM_NFA, 0, &regex), GRX_OK);
+    const bool query = std::strstr(pattern, "abX") != nullptr ||
+        std::strstr(pattern, "aX") != nullptr ||
+        std::strstr(pattern, ">a\\1") != nullptr ||
+        std::strstr(pattern, "=a\\1") != nullptr;
+    EXPECT_EQ((regex->program.flags & GRX_PROGRAM_SCALAR_FRONTIER) != 0, query);
+    if (query) {
+      EXPECT_FALSE(regex->facts.is_regular);
+      EXPECT_EQ(regex->program.scalar_scopes.count, regex->program.insts.count);
+    }
+    if (std::strcmp(pattern, "abc") == 0) {
+      EXPECT_EQ(regex->program.scalar_scopes.count, 0u);
+    }
+    EXPECT_EQ(grx_program_scope(&regex->program, GRX_INDEX_NONE), 0u);
+    EXPECT_EQ(grx_program_scope(&regex->program,
+                  static_cast<uint32_t>(regex->program.insts.count)),
+        0u);
+    const std::string dump = grxtest::capture_dump(
+        [&](FILE * out) { EXPECT_EQ(grx_regex_dump(regex, out), GRX_OK); });
+    EXPECT_NE(dump.find("whole-boundary"), std::string::npos);
+    if (std::strstr(pattern, "\\1")) {
+      EXPECT_EQ(regex->facts.max_length, GRX_NPOS);
+      EXPECT_NE(dump.find("forward-composing"), std::string::npos);
+    }
+    size_t finals = 0;
+    for (size_t i = 0; i < regex->program.insts.count; i++) {
+      const GRX_Inst * op =
+          grx_program_at(&regex->program, static_cast<uint32_t>(i));
+      if (op->op == GRX_OP_BACKREF) {
+        EXPECT_EQ(grx_exec_scalar_cluster_consumer(op),
+            (op->policy & GRX_POLICY_REPORT_COMPOSING) != 0);
+      }
+      if (op->op == GRX_OP_ASSERT &&
+          (op->policy & GRX_POLICY_ASSERT_FINAL_BOUNDARY)) {
+        EXPECT_EQ(op->mode, GRX_ASSERT_CLUSTER_BOUNDARY);
+        EXPECT_FALSE(op->policy & GRX_POLICY_ASSERT_INITIAL_BOUNDARY);
+        finals++;
+      }
+    }
+    EXPECT_EQ(finals, 1u);
+    if (std::strstr(pattern, "a\\?")) {
+      EXPECT_NE(dump.find("nullable-body"), std::string::npos);
+    }
+    if (query) {
+      EXPECT_NE(dump.find("scope="), std::string::npos);
+    }
+    if (std::strstr(pattern, "@>")) {
+      EXPECT_NE(dump.find("complete-composing"), std::string::npos);
+    }
+    grx_regex_free(regex);
+  }
+}
+
+TEST(Program, LexicalCandidatePolicyIsExplicitAndKeepsCompactInstructions) {
+  EXPECT_EQ(sizeof(GRX_Inst), 12u);
+  GRX_Regex * regex = nullptr;
+  ASSERT_EQ(grx_regex_compile("\\c\\Z\u0301\\?a\u0302b",
+                GRX_SYNTAX_VIM_BACKTRACK, 0, &regex), GRX_OK);
+  EXPECT_EQ(regex->program.candidate_options,
+      static_cast<uint32_t>(GRX_OPT_CASELESS | GRX_OPT_IGNORE_COMBINING));
+  EXPECT_EQ(regex->program.candidate_literal_length, 4u);
+  const std::string dump = grxtest::capture_dump(
+      [&](FILE * out) { EXPECT_EQ(grx_regex_dump(regex, out), GRX_OK); });
+  EXPECT_NE(dump.find("candidate-run bytes=4 caseless=1 ignore-composing=1"),
+      std::string::npos);
+  grx_regex_free(regex);
+}

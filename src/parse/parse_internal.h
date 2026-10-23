@@ -229,6 +229,14 @@ typedef enum {
  * Set by the front end, which is what knows which spelling it read.
  */
 #define GRX_CLASS_ITEM_NO_FOLD GRX_BIT(1)
+/** A numeric scalar escape, distinct from a literal collection mark. */
+#define GRX_CLASS_ITEM_NUMERIC GRX_BIT(2)
+/** The collection escape \n retains newline origin. */
+#define GRX_CLASS_ITEM_NEWLINE_ESCAPE GRX_BIT(3)
+/** A literal mark following a lexical collection range. */
+#define GRX_CLASS_ITEM_RANGE_MARK GRX_BIT(4)
+/** A member expanded from a named collection predicate. */
+#define GRX_CLASS_ITEM_NAMED_ORIGIN GRX_BIT(5)
 
 /** @brief One item inside a character class, as written. */
 typedef struct GRX_ClassItem {
@@ -265,7 +273,25 @@ typedef struct GRX_ClassItem {
 #define GRX_NODE_SCRIPT_RUN GRX_BIT(7)
 /** CLASS: a collection written with brackets, rather than a named atom. */
 #define GRX_NODE_COLLECTION GRX_BIT(8)
+/** CLASS: underscore adds a separate newline path. */
+#define GRX_NODE_ADDED_NEWLINE GRX_BIT(9)
+/** CLASS: added newline came from a positive named predicate. */
+#define GRX_NODE_DEFER_NEWLINE_MARKS GRX_BIT(10)
+/** CLASS: underscore collection ordinary path excludes LF. */
+#define GRX_NODE_EXCLUDE_LF GRX_BIT(11)
+/** CLASS: the collection explicitly writes a newline member. */
+#define GRX_NODE_EXPLICIT_LF GRX_BIT(12)
+/** CLASS: explicit LF or a negated named newline absorbs its marks. */
+#define GRX_NODE_NEWLINE_CLUSTER GRX_BIT(13)
+/** LITERAL: a numeric escape retains scalar mark syntax. */
+#define GRX_NODE_NUMERIC GRX_BIT(14)
+/** REPEAT: shorthand optional, distinct from a counted 0..1. */
+#define GRX_NODE_SHORT_OPTIONAL GRX_BIT(15)
+#define GRX_NODE_DOT_MARK GRX_BIT(16)
+#define GRX_NODE_ESCAPED_LITERAL GRX_BIT(17)
+#define GRX_NODE_NEWLINE_INNER GRX_BIT(18)
 
+// clang-format off
 /**
  * @brief One node of a parsed pattern.
  *
@@ -315,6 +341,7 @@ typedef struct GRX_ClassItem {
  * unbounded pattern rather than a set, and the tier that specifies it
  * (documentation/work-packages.md WP-18) adds its node kind then.
  */
+// clang-format on
 typedef struct GRX_Node {
   GRX_NodeKind kind;     ///< What this node is.
   uint32_t flags;        ///< GRX_NODE_* bits that apply to this kind.

@@ -29,8 +29,8 @@
 #include <ghoti.io/regex/allocator.h>
 #include <ghoti.io/regex/core.h>
 #include <stddef.h>
-#include <stdio.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "ir_internal.h"
@@ -69,6 +69,8 @@ static const char * assert_name(uint8_t kind) {
     "sentence-boundary", "not-sentence-boundary",
     "line-boundary", "not-line-boundary", "look-length",
     "byte-column", "never", "screen-column",
+      "scalar-frontier",
+      "no-scalar-frontier",
   };
   return kind < GRX_ASSERT_COUNT ? names[kind] : "?";
 }
@@ -514,6 +516,8 @@ static void dump_payload(FILE * out, const GRX_IR * ir, const GRX_IRNode * node)
     case GRX_IR_BACKREF:
       fprintf(out, " #%u unset=%s", node->a,
           backref_unset_name(node->backref_unset));
+      if (node->flags & GRX_IR_COMPLETE_COMPOSING)
+        fputs(" forward-composing", out);
       if (node->flags & GRX_IR_CASELESS) {
         fputs(" caseless", out);
       }

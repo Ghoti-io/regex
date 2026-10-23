@@ -90,9 +90,9 @@ def check():
                     report = vim_diff.failure_report('replacement' if replacement else 'match')
                     def run():
                         if replacement:
-                            answers = replace_diff.ask_vim([('', p, s, 'X') for p, s in cases], engine=engine)
+                            answers = replace_diff.ask_vim_batch_diagnostic([('', p, s, 'X') for p, s in cases], engine=engine)
                         else:
-                            answers = vim_diff.ask_vim(cases, engine=engine)
+                            answers = vim_diff.ask_vim_batch_diagnostic(cases, engine=engine)
                         report['reference_evidence'] = answers.evidence
                         report['complete'] = True
                         return 0
@@ -250,7 +250,8 @@ def check():
             else:
                 raise AssertionError('timeout accepted')
         checked += 1
-    return checked
+    import check_vim_isolated
+    return checked + check_vim_isolated.check()
 
 
 if __name__ == '__main__':

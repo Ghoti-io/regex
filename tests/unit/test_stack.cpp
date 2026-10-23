@@ -830,7 +830,8 @@ TEST(Stack, VimBehindAndMixedAssertionsRespectTheNativeStackBound) {
           continue;
         }
         std::fprintf(stderr,
-            "Vim assertion native stack syntax %d mixed %d depth %zu: %zu bytes\n",
+            "Vim assertion native stack syntax %d mixed %d depth %zu: %zu "
+            "bytes\n",
             syntax, mixed, depth, m.bytes);
         EXPECT_LT(m.bytes, kHarnessBudget);
         if (!boundary) {
@@ -1053,4 +1054,55 @@ TEST(Stack, TheDeepestPatternTheseTestsCompileGeneratesWithinBudget) {
 int main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
+}
+
+TEST(Stack, CombiningFrontierQueriesPreserveDefaultNestingAndNativeStackBound) {
+  for (bool behind : {false, true}) {
+    for (size_t depth : {1u, 32u, 128u}) {
+      std::string pattern = R"(^a\?.)";
+      for (size_t level = 0; level < depth; ++level)
+        pattern = "\\%(" + pattern + (behind ? "\\)\\@<=" : "\\)\\@=");
+      pattern += behind ? 'x' : '.';
+      GRX_Limits compile_limits = deep_limits();
+      GRX_Regex * regex =
+          compile_or_fail(pattern, GRX_SYNTAX_VIM_NFA, &compile_limits);
+      ASSERT_NE(regex, nullptr);
+      Measurement m = measure(regex, "a\u0301x", GRX_ENGINE_BACKTRACK, nullptr);
+      grx_regex_free(regex);
+      EXPECT_EQ(m.result, GRX_OK) << "depth " << depth << " behind " << behind;
+      EXPECT_TRUE(m.matched);
+      ASSERT_FALSE(m.saturated);
+      if (m.measured) {
+        std::fprintf(stderr,
+            "Combining query native stack behind %d depth %zu: %zu bytes\n",
+            behind, depth, m.bytes);
+        EXPECT_LT(m.bytes, kHarnessBudget);
+      }
+    }
+  }
+}
+
+TEST(Stack, LocalReferenceFrontiersPreserveNestedNativeStackBound) {
+  for (size_t depth : {1u, 32u, 126u}) {
+    std::string pattern = R"(^\(a\)\@=\(aX\|\1\)\@=.)";
+    for (size_t level = 0; level < depth; ++level) {
+      pattern = "\\%(" + pattern + "\\)\\@=";
+    }
+    pattern += '.';
+    GRX_Limits compile_limits = deep_limits();
+    GRX_Regex * regex =
+        compile_or_fail(pattern, GRX_SYNTAX_VIM_NFA, &compile_limits);
+    ASSERT_NE(regex, nullptr);
+    Measurement m = measure(regex, "a\u0301", GRX_ENGINE_BACKTRACK, nullptr);
+    grx_regex_free(regex);
+    EXPECT_EQ(m.result, GRX_OK) << "depth " << depth;
+    EXPECT_TRUE(m.matched);
+    ASSERT_FALSE(m.saturated);
+    if (m.measured) {
+      std::fprintf(stderr,
+          "Local reference native stack depth %zu: %zu bytes\n", depth,
+          m.bytes);
+      EXPECT_LT(m.bytes, kHarnessBudget);
+    }
+  }
 }

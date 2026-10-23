@@ -50,10 +50,11 @@
 
 #include "../charclass/charclass_internal.h"
 #include "../core/arena_internal.h"
-#include "../core/semantics_internal.h"
 #include "../core/core_internal.h"
+#include "../core/semantics_internal.h"
 
-/** Declared, not included: codegen takes an IR and the IR does not take a program. */
+/** Declared, not included: codegen takes an IR and the IR does not take a
+ * program. */
 struct GRX_IR;
 
 #ifdef __cplusplus
@@ -107,6 +108,7 @@ int grx_byte_ranges_from_set(
  */
 #define GRX_LITERAL_MAX 64
 
+// clang-format off
 /**
  * @brief One instruction of the compiled program.
  *
@@ -152,16 +154,17 @@ int grx_byte_ranges_from_set(
  * A SAVE's slot is twice the group number for a start and twice plus one for
  * an end, so group 0's start is slot 0 and the whole match is slots 0 and 1.
  */
+// clang-format on
 typedef enum {
-  GRX_OP_MATCH = 0,    ///< The match succeeded.
-  GRX_OP_CHAR,         ///< Consume one specific code point.
-  GRX_OP_CLASS,        ///< Consume one code point in a class.
-  GRX_OP_ANY,          ///< Consume one code point outside the excluded set.
-  GRX_OP_ANY_NL,       ///< Consume any code point at all.
-  GRX_OP_SPLIT,        ///< Try two continuations, in priority order.
-  GRX_OP_JMP,          ///< Continue at another instruction.
-  GRX_OP_SAVE,         ///< Record a capture boundary.
-  GRX_OP_ASSERT,       ///< A zero-width assertion.
+  GRX_OP_MATCH = 0, ///< The match succeeded.
+  GRX_OP_CHAR,      ///< Consume one specific code point.
+  GRX_OP_CLASS,     ///< Consume one code point in a class.
+  GRX_OP_ANY,       ///< Consume one code point outside the excluded set.
+  GRX_OP_ANY_NL,    ///< Consume any code point at all.
+  GRX_OP_SPLIT,     ///< Try two continuations, in priority order.
+  GRX_OP_JMP,       ///< Continue at another instruction.
+  GRX_OP_SAVE,      ///< Record a capture boundary.
+  GRX_OP_ASSERT,    ///< A zero-width assertion.
   /**
    * Record the current position in register `x`.
    *
@@ -204,7 +207,7 @@ typedef enum {
    */
   GRX_OP_RESET_STALE,
   GRX_OP_PROGRESS_CHECK, ///< Apply the empty-iteration rule at a loop's end.
-  GRX_OP_BACKREF,      ///< Match what a group matched earlier.
+  GRX_OP_BACKREF,        ///< Match what a group matched earlier.
   /**
    * Run a sub-program without consuming input.
    *
@@ -251,7 +254,7 @@ typedef enum {
    * unwind beside the slot itself.
    */
   GRX_OP_KEEP_END,
-  GRX_OP_VERB,         ///< A backtracking control verb.
+  GRX_OP_VERB, ///< A backtracking control verb.
   /**
    * Fail unless the text from register `x` to here is a script run.
    *
@@ -277,10 +280,11 @@ typedef enum {
   /** Count metadata is three look_spans words: minimum, maximum, register
    * base. Five registers hold magnitude, negative sign, last BODY end,
    * invocation progress, and the current BODY start. */
-  GRX_OP_COUNT_INIT, ///< Reset this invocation, retaining counted backedge history.
+  GRX_OP_COUNT_INIT, ///< Reset this invocation, retaining counted backedge
+                     ///< history.
   GRX_OP_COUNT_STEP, ///< Enter a counted BODY or its prioritized exit.
   GRX_OP_COUNT_BACK, ///< Check BODY progress and revisit its count.
-  GRX_OP_COUNT         ///< Closes the enum; not an opcode.
+  GRX_OP_COUNT       ///< Closes the enum; not an opcode.
 } GRX_Opcode;
 
 /**
@@ -316,6 +320,18 @@ typedef enum {
 #define GRX_POLICY_ATOMIC_FRONTIER GRX_BIT(0)
 /** KEEP_END: only the body result context owns this marker. */
 #define GRX_POLICY_END_CONTEXT_ONLY GRX_BIT(0)
+/** ASSERT: ordinary scalar search starts cannot enter an existing cluster. */
+#define GRX_POLICY_ASSERT_INITIAL_BOUNDARY GRX_BIT(1)
+/** ASSERT: the whole-match composing acceptance frontier. */
+#define GRX_POLICY_ASSERT_FINAL_BOUNDARY GRX_BIT(2)
+/** VERB ACCEPT: composing terminals bypass capture closing tags. */
+#define GRX_POLICY_ACCEPT_OPEN GRX_BIT(0)
+/** CLASS: membership tests the final scalar of this composing cluster. */
+#define GRX_POLICY_CLASS_TAIL GRX_BIT(2)
+#define GRX_POLICY_SCALAR_LITERAL GRX_BIT(7)
+#define GRX_POLICY_REPORT_COMPOSING GRX_BIT(0)
+/** ATOMIC_END/BACKREF: complete the physical composing suffix under its owner. */
+#define GRX_POLICY_COMPLETE_COMPOSING GRX_BIT(4)
 /** ATOMIC_BEGIN: a body end marker claims the inherited result end. */
 #define GRX_POLICY_ATOMIC_END_OWNER GRX_BIT(1)
 /** ATOMIC_BEGIN: the body writes numbered captures. */
@@ -351,6 +367,8 @@ typedef enum {
 #define GRX_INST_LOOK_REQUIRED GRX_BIT(1)
 /** LOOK: extend the byte threshold to the preceding UTF-8 boundary. */
 #define GRX_INST_LOOK_ROUND_BOUND GRX_BIT(5)
+/** Forward LOOK: a nullable BODY need not resolve on first reference demand. */
+#define GRX_INST_LOOK_BODY_NULLABLE GRX_BIT(5)
 /** LOOK/ATOMIC_END: successful assertion-body captures can survive rollback. */
 #define GRX_INST_LOOK_PERSIST_CAPTURES GRX_BIT(4)
 /** LOOK: the assertion's end marker has continuation-dependent ownership. */
@@ -511,6 +529,11 @@ typedef struct GRX_Program {
    * tree it came from.
    */
   GRX_Arena look_spans;
+  /** Optional instruction-aligned frontier ownership. Empty means root scope
+   * throughout. Codegen fills preceding entries with0 on lazy activation and
+   * appends exactly once per later instruction; no consumer retains a pointer
+   * across arena growth. Query programs always carry the complete table. */
+  GRX_Arena scalar_scopes;
   /**
    * The `(?C...)` records a `GRX_OP_CALLOUT`'s `x` indexes.
    *
@@ -528,6 +551,9 @@ typedef struct GRX_Program {
    */
   GRX_Arena callout_strings;
   uint32_t flags;                 ///< GRX_PROGRAM_* bits.
+  uint32_t candidate_literal; ///< Lexical byte-run offset in callout_strings.
+  size_t candidate_literal_length; ///< Zero when absent.
+  uint32_t candidate_options; ///< Effective case and composing policies.
   uint32_t register_count;        ///< Progress registers a thread needs.
   GRX_MatchPreference preference; ///< Which match a search reports.
   GRX_SubmatchRule submatch; ///< Which division of it the groups get.
@@ -654,6 +680,9 @@ GRX_Result grx_program_add(
  *   Invalidated by the next grx_program_add().
  */
 GRX_Inst * grx_program_at(const GRX_Program * program, uint32_t index);
+
+/** Frontier scope, or root scope0 when no ownership table is needed. */
+uint32_t grx_program_scope(const GRX_Program * program, uint32_t index);
 
 /**
  * @brief The callout record at an index in a program.

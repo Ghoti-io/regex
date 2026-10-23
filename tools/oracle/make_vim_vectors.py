@@ -217,15 +217,12 @@ def record_for(pattern, subject, answer):
         raise ValueError("Vim match span splits a UTF-8 character") from error
     lines.append("expect: %s-%s" % (start, end))
 
-    groups = list(fields[1:])
-    while groups and groups[-1] == "":
-        groups.pop()
-    # An empty `groups:` line would be a line saying nothing, and the reader
-    # would read it as "no groups stated" anyway. Written only when vim named
-    # at least one.
-    if groups:
-        lines.append("groups: "
-            + " ".join(make_vectors.escape_group(g) for g in groups))
+    # Vim cannot distinguish an unset group from an empty capture. Explicit
+    # TEXT mode is required even when every reported group is empty: omitting
+    # `groups:` would instead require exact unset capture spans.
+    groups = list(fields[1:]) or [""]
+    lines.append("groups: "
+        + " ".join(make_vectors.escape_group(g) for g in groups))
     return "\n".join(lines) + "\n"
 
 
@@ -276,6 +273,112 @@ def write_file(path, rows, answers, version, dropped, syntax):
         "%d duplicate refusal rows\n"
         % (path, len(answers), len(rows), len(body), duplicate_refusals))
     return len(body)
+
+
+# Exact input spellings supplement the generated combining grammar. Answers
+# are acquired below from each forced reference, never from the unit fixture.
+NAMED_CASES.extend([
+    ("", "\\(a\\)\\@>\\1", ["a\u0301a\u0301"]),
+    ("", "\\(a\\)\\(\\1\\)\\@>x", ["aa\u0301x"]),
+    ("", "\\(a\\)\\@>a\\1", ["aaa\u0301"]),
+    ("", "\\(a\\)\\@=a\\(\\1\\)\\@=.", ["a\u0301a\u0301"]),
+    ("", "\\(a\\)\\@=a\\(\\1\\)\\@>x", ["aa\u0301x"]),
+    ("", "\\(a\\)\\@>\\(\\1\\)\\@<=x", ["a\u0301x"]),
+    ("", "\\(a\\)\\@>.\\1", ["aaa\u0301"]),
+    ("", "\\(.\\+\\)\\@1<=x", ["a\u0301x"]),
+    ("", "\\(.\\+\\)\\@<=x", ["ba\u0301x"]),
+    ("", "\\_s", ["\n\u0301b"]),
+    ("", "\\(\\_s\\)b", ["\n\u0301b"]),
+    ("", "\\_s\\zs$", ["\n\u0301"]),
+    ("", "\\_[ab]b", ["\n\u0301b"]),
+    ("", "\\_[^x]b", ["\n\u0301b"]),
+    ("", "[a\u0301]", ["a\u0302\u0301"]),
+    ("", "[a\u0301\u0301]", ["a\u0301"]),
+    ("", "[ab\u0301]", ["b"]),
+    ("", "\u0301b", ["a\u0301x"]),
+    ("", "\u0301\\?b", ["a\u0301xb"]),
+    ("", "\u0301\\?bb", ["a\u0301bxb"]),
+    ("", "\u0301\\?[b]", ["a\u0301x"]),
+    ("", "\\Za\u0301$", ["a\u0301\u0302"]),
+    ("", "\\Za\u0301b", ["a\u0301\u0302b"]),
+    ("", "\\Z\\(a\u0301\\)b", ["a\u0301\u0302b"]),
+    ("", "\\%u0301b", ["a\u0301x"]),
+    ("", "\\Za\\%u0301\u0302", ["a\u0301"]),
+    ("", "\\w.", ["a\u0301b"]),
+    ("", "\\w*.", ["a\u0301b"]),
+    ("", "\\W*.", ["a\u0301b"]),
+    ("", "\\W\\?.", ["a\u0301b"]),
+    ("", "\\(\\W\\{1}\\).", ["a\u0301\u0302b"]),
+    ("", "\\(\\W\\)\\{1}.", ["a\u0301\u0302b"]),
+    ("", "\\%(a\\|[ab]\\)", ["a\u0301b"]),
+    ("", "^\\%(a\\|[ab]\\)", ["a\u0301"]),
+    ("", "\\%9ca\\|[ab]", ["a\u0301b"]),
+    ("", "a\\%9c\\|[ab]", ["a\u0301b"]),
+    ("", "^\\%([ab].\\|a\\nX\\)", ["a\n\u0301b"]),
+    ("", "^\\%([ab]..\\|a\\nX\\)", ["a\n\u0301b"]),
+    ("", "\\_[ab].", ["a\n\u0301b"]),
+    ("", "^\\%(\\_[ab]\\).", ["a\n\u0301b"]),
+    ("", "\\(\\_[^x]\\).", ["\n\u0301b"]),
+    ("", "\\_[^x]\\zs.", ["\n\u0301b"]),
+    ("", "\\_[^\\n]\\zs.", ["\n\u0301b"]),
+    ("", "b.\u0301", ["ba\u0301x"]),
+    ("", "b.\u0301", ["b.\u0301"]),
+    ("", "b.\u0301\\?", ["b..\u0301"]),
+    ("", "b\\.\u0301", ["b.\u0301"]),
+    ("", "b\\%u002e\u0301", ["b..\u0301"]),
+    ("", "\\(a\\)\\@>x", ["a\u0301x"]),
+    ("", "\\(a\\)\\@>\\zsx", ["a\u0301x"]),
+    ("", "\\(a\\).", ["a\u0301x"]),
+    ("", "\\([ab].\\|abX\\)\\@=.", ["a\u0301"]),
+    ("", "^\\([ab]\\)\\(\\%(\\1aX\\|[ab].x\\)\\)\\@=.", ["aaa\u0301x"]),
+    ("", "^\\([ab]\\)\\(\\%(\\1aX\\|[ab].x\\)\\)\\@=.", ["baa\u0301x"]),
+    ("", "[\\n].", ["\n\u0301b"]),
+    ("", "[\\n]*.", ["\n\u0301b"]),
+    ("", "^\\(a\\)\\?a\\?b\\(\\%(\\1aX\\|[ab].x\\)\\)\\@>", ["abaa\u0301x"]),
+    ("", "^\\(a\\)\\?a\\?b\\(\\%(\\1aX\\|[ab].x\\)\\)\\@>", ["abaa\u0301\u0301x"]),
+    ("", "^\\(a\\)\\?a\\?b\\(\\%([ab].x\\|\\1aX\\)\\)\\@>", ["abaa\u0301x"]),
+    ("", "^\\(a\\)\\?a\\?b\\(\\%([ab].x\\|\\1aX\\)\\)\\@>", ["abaa\u0301\u0301x"]),
+    ("", "^\\(a\\)\\?a*b\\(\\%(\\1aX\\|[ab].x\\)\\)\\@>", ["abaa\u0301x"]),
+    ("", "^\\(a\\)\\?a*b\\(\\%(\\1aX\\|[ab].x\\)\\)\\@>", ["abaa\u0301\u0301x"]),
+    ("", "^\\(a\\)\\?a*b\\(\\%([ab].x\\|\\1aX\\)\\)\\@>", ["abaa\u0301x"]),
+    ("", "^\\(a\\)\\?a*b\\(\\%([ab].x\\|\\1aX\\)\\)\\@>", ["abaa\u0301\u0301x"]),
+    ("", "\\(a*.\\)", ["a\u0301x"]),
+    ("", "\\(a*.\\)\\@=.", ["a\u0301x"]),
+    ("", "\\(a*.\\)\\@>.", ["a\u0301x"]),
+    ("", "\\(a*.\\)\\@<=x", ["a\u0301x"]),
+    ("", "\\%(\\(a*.\\)\\@=.\\)\\@=.", ["a\u0301x"]),
+    ("", "\\(a\\?.\\)", ["a\u0301x"]),
+    ("", "\\(a\\?.\\)\\@=.", ["a\u0301x"]),
+    ("", "\\(a\\?.\\)\\@>.", ["a\u0301x"]),
+    ("", "\\(a\\?.\\)\\@<=x", ["a\u0301x"]),
+    ("", "\\(a\\?.\\)\\@<=x", ["aa\u0301x"]),
+    ("", "\\%(\\(a\\?.\\)\\@=.\\)\\@=.", ["a\u0301x"]),
+    ("", "\\(\\(a\\zsb\\)\\@>\\)\\@>", ["ab"]),
+    ("", "\\(\\(a\\zsb\\)\\@>\\)\\@>", ["xab"]),
+    ("", "\\(\\(a\\zsb\\)\\@>\\)\\@>", ["abab"]),
+    ("", "\\(\\(a\\zeb\\)\\@>\\)\\@>", ["ab"]),
+    ("", "\\(\\(a\\zeb\\)\\@>\\)\\@>", ["xab"]),
+    ("", "\\(\\(a\\zeb\\)\\@>\\)\\@>", ["abab"]),
+    ('', '\\(x\\)\\%(\\(\\(ab\\)\\@>\\)\\@>\\)\\@=.', ['xab']),
+    ('', '\\(x\\)\\%(\\(\\(ab\\)\\@>\\)\\@>\\)\\@=.', ['xab́']),
+    ('', '\\(x\\)\\%(\\(\\(\\(ab\\)\\@>\\)\\@>\\)\\@>\\)\\@=.', ['xab']),
+    ('', '\\(\\%(a\\)\\)\\@=\\(a\\)\\@=a', ['aaab']),
+    ('', '\\(\\%(a\\)\\)\\@=\\(a\\)\\@=a', ['áab']),
+    ('', '\\(a\\+\\)\\@=\\(a\\)\\@=a', ['áaaa']),
+    ('', '\\(\\%(a\\|b\\)\\)\\@=\\(a\\)\\@=a', ['b́a']),
+    ('', '\\(a\\)\\@=\\1', ['á']),
+    ('', '\\(a\\)\\@=.\\1', ['áá']),
+    ('', '\\(a\\)\\@=a\\1', ['aáa']),
+    ('', '\\(a\\)\\@=\\(a\\)\\@=\\1', ['á']),
+    ('', '\\(\\)\\@=\\1', ['́']),
+    ('', '\\(a\\?\\)\\@=\\1.', ['á']),
+    ('', '\\(a\\)\\@=\\(aX\\|\\1\\)\\@=.', ['á']),
+    ('', '\\(a\\)\\@=\\(\\1\\|aX\\)\\@=.', ['á']),
+    ('', '\\(a\\)\\@=\\(aX\\|\\1\\)\\@>x', ['áx']),
+    ('', '\\(a\\)\\@=\\(\\1\\|aX\\)\\@>x', ['áx']),
+    ('', '\\(a\\)\\@=\\(a\\%9cX\\|\\1\\)\\@=.', ['á']),
+    ('', '\\(a\\)\\@=\\(\\%9caX\\|\\1\\)\\@=.', ['á']),
+])
 
 
 def collect(cases, dropped, syntax):
@@ -331,7 +434,7 @@ def main(argv):
         for subject in rng.sample(vim_diff.SUBJECTS,
                 min(args.subjects, len(vim_diff.SUBJECTS))):
             rows.append((pattern, subject))
-    for case in vim_diff.composing_cases():
+    for case in vim_diff.composing_cases() + vim_diff.combining_grammar_cases():
         if not artifact_shape(case[0]):
             rows.append(case)
     rows.sort()
@@ -341,9 +444,7 @@ def main(argv):
     # is in rows, and each line says which.
     shape_counts = {"patterns not generated: %s" % reason: count
         for reason, count in shapes.items()}
-    shape_counts["composing rows omitted by named COMPOSING_SKIP limitations"] = (
-        len(vim_diff.ATOMS) * len(vim_diff.COMPOSING_SUBJECTS) * 2
-        - len(vim_diff.composing_cases()))
+
 
     profiles = vim_diff.PROFILES if args.syntax == "all" else (args.syntax,)
     for syntax in profiles:

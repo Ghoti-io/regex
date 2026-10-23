@@ -60,9 +60,9 @@
 
 #include <ghoti.io/regex/allocator.h>
 #include <ghoti.io/regex/core.h>
-#include <stdio.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 
 #include "../charclass/charclass_internal.h"
 #include "../core/arena_internal.h"
@@ -227,6 +227,21 @@ typedef enum {
 /** End-marker presence claims the caller end without writing inside this body.
  */
 #define GRX_IR_END_CONTEXT_ONLY GRX_BIT(17)
+/** CLASS: tags observe scalar end before marks are skipped. */
+#define GRX_IR_DEFER_COMPOSING GRX_BIT(18)
+/** ASSERT: scalar search ownership is checked only at the attempt origin. */
+#define GRX_IR_INITIAL_BOUNDARY GRX_BIT(19)
+/** VERB ACCEPT: open captures stay open at a composing terminal. */
+#define GRX_IR_ACCEPT_OPEN GRX_BIT(20)
+/** Literal scalar frontier, before any composing-cluster policy. */
+#define GRX_IR_SCALAR_LITERAL GRX_BIT(21)
+/** CLASS: direct repeated predicate tests the composing tail. */
+#define GRX_IR_CLASS_TAIL GRX_BIT(23)
+#define GRX_IR_REPORT_COMPOSING GRX_BIT(24)
+/** ATOMIC/BACKREF: physical completion may absorb an unbounded mark suffix. */
+#define GRX_IR_COMPLETE_COMPOSING GRX_BIT(25)
+/** ASSERT: rejecting the whole match at a composing boundary. */
+#define GRX_IR_FINAL_BOUNDARY GRX_BIT(26)
 
 /**
  * @brief LOOK: a negative one keeps what its body captured before failing.
@@ -301,6 +316,7 @@ typedef enum {
  */
 #define GRX_IR_LOOK_CONDITION GRX_BIT(9)
 
+// clang-format off
 /**
  * @brief One node of the intermediate representation.
  *
@@ -331,9 +347,11 @@ typedef enum {
  * | FOLD_RUN | edge-list offset | positions in the folded string | - | - |
  * | CALLOUT | the number | string offset in `names`, or GRX_INDEX_NONE | - | `min` is the string's length, `max` its offset in the pattern |
  */
+// clang-format on
 typedef struct GRX_IRNode {
   GRX_IRKind kind;       ///< What this node is.
   uint32_t flags;        ///< GRX_IR_* bits that apply to this kind.
+  uint32_t scope;        ///< Owning physical scalar-frontier body.
   uint32_t first_child;  ///< First child, or GRX_INDEX_NONE.
   uint32_t last_child;   ///< Last child, or GRX_INDEX_NONE.
   uint32_t next_sibling; ///< Next sibling, or GRX_INDEX_NONE.
@@ -360,6 +378,9 @@ typedef struct GRX_IRNode {
 typedef struct GRX_IR {
   const GRX_Allocator * allocator; ///< The allocator everything came from.
   uint32_t root;                   ///< Root node, or GRX_INDEX_NONE.
+  uint32_t candidate_literal;      ///< Byte-run filter offset in names.
+  size_t candidate_literal_length; ///< Zero when no lexical filter applies.
+  uint32_t candidate_options; ///< Effective case and composing policies.
   uint32_t flags;                  ///< GRX_PROGRAM_* bits.
   GRX_MatchPreference preference;  ///< Which match a search reports.
   GRX_SubmatchRule submatch;  ///< Which division of it the groups get.

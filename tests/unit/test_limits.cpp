@@ -26,8 +26,8 @@
 
 #include "test_helpers.h"
 
-#include "../conformance/rxt.h"
 #include "../../src/exec/exec_internal.h"
+#include "../conformance/rxt.h"
 
 namespace {
 
@@ -41,8 +41,25 @@ class ScratchAllocationMeter {
   size_t live_ = 0;
   size_t baseline_ = 0;
   size_t peak_ = 0;
-  size_t first_stack_ = 0;
   bool measuring_ = false;
+  struct StackAllocation {
+    void * pointer;
+    size_t id;
+  };
+  struct Event {
+    size_t live, stack, size;
+  };
+  std::vector<StackAllocation> stacks_;
+  std::vector<Event> events_;
+  size_t next_stack_ = 0;
+  size_t root_stack_id_ = 0;
+
+  size_t stack_id(void * pointer) const {
+    for (const auto & stack : stacks_)
+      if (stack.pointer == pointer)
+        return stack.id;
+    return 0;
+  }
 
   void * resize(void * ptr, size_t size, bool stack_candidate) {
     if (size > static_cast<size_t>(-1) - sizeof(Header)) {
@@ -50,6 +67,9 @@ class ScratchAllocationMeter {
     }
     Header * old = ptr ? static_cast<Header *>(ptr) - 1 : nullptr;
     const size_t prior = old ? old->size : 0;
+    const size_t id = measuring_ && stack_candidate
+        ? (ptr ? stack_id(ptr) : ++next_stack_)
+        : 0;
     Header * block = static_cast<Header *>(
         std::realloc(old, sizeof(Header) + (size ? size : 1)));
     if (!block) {
@@ -58,9 +78,15 @@ class ScratchAllocationMeter {
     block->size = size;
     live_ = live_ - prior + size;
     if (measuring_) {
-      if (stack_candidate && !ptr && !first_stack_) {
-        first_stack_ = size;
+      if (id) {
+        if (!ptr)
+          stacks_.push_back({block + 1, id});
+        else
+          for (auto & stack : stacks_)
+            if (stack.id == id)
+              stack.pointer = block + 1;
       }
+      events_.push_back({live_, id, size});
       if (live_ > peak_) {
         peak_ = live_;
       }
@@ -72,7 +98,8 @@ public:
   ScratchAllocationMeter() {
     allocator_.ctx = this;
     allocator_.malloc_fn = [](void * ctx, size_t size) -> void * {
-      return static_cast<ScratchAllocationMeter *>(ctx)->resize(nullptr, size, false);
+      return static_cast<ScratchAllocationMeter *>(ctx)->resize(
+          nullptr, size, false);
     };
     allocator_.calloc_fn = [](void * ctx, size_t count, size_t size) -> void * {
       if (count && size > static_cast<size_t>(-1) / count) {
@@ -86,26 +113,64 @@ public:
       return ptr;
     };
     allocator_.realloc_fn = [](void * ctx, void * ptr, size_t size) -> void * {
-      return static_cast<ScratchAllocationMeter *>(ctx)->resize(ptr, size, true);
+      return static_cast<ScratchAllocationMeter *>(ctx)->resize(
+          ptr, size, true);
     };
     allocator_.free_fn = [](void * ctx, void * ptr) {
       if (ptr) {
         auto * self = static_cast<ScratchAllocationMeter *>(ctx);
         Header * block = static_cast<Header *>(ptr) - 1;
         self->live_ -= block->size;
+        if (self->measuring_) {
+          const size_t id = self->stack_id(ptr);
+          if (id) {
+            // Query stacks retire before their caller. For these capture/
+            // assertion programs the final realloc-backed buffer is the
+            // ordinary root stack, whose legacy charge is outside this gate.
+            self->root_stack_id_ = id;
+            for (auto & stack : self->stacks_)
+              if (stack.id == id)
+                stack.pointer = nullptr;
+          }
+          self->events_.push_back({self->live_, id, 0});
+        }
         std::free(block);
       }
     };
   }
-  const GRX_Allocator * get() const { return &allocator_; }
+  const GRX_Allocator * get() const {
+    return &allocator_;
+  }
   void begin() {
     baseline_ = peak_ = live_;
-    first_stack_ = 0;
+    next_stack_ = root_stack_id_ = 0;
+    stacks_.clear();
+    events_.clear();
     measuring_ = true;
   }
-  size_t peak() const { return peak_ - baseline_; }
-  size_t root_stack() const { return first_stack_; }
-  size_t live() const { return live_; }
+  size_t peak() const {
+    return peak_ - baseline_;
+  }
+  size_t root_stack() const {
+    size_t bytes = 0;
+    for (const auto & event : events_)
+      if (event.stack && event.stack == root_stack_id_)
+        bytes = std::max(bytes, event.size);
+    return bytes;
+  }
+  size_t charged_peak() const {
+    size_t root_live = 0, peak = 0;
+    for (const auto & event : events_) {
+      if (event.stack && event.stack == root_stack_id_)
+        root_live = event.size;
+      if (event.live > baseline_ + root_live)
+        peak = std::max(peak, event.live - baseline_ - root_live);
+    }
+    return peak;
+  }
+  size_t live() const {
+    return live_;
+  }
 };
 
 struct Row {
@@ -118,12 +183,23 @@ uint32_t options_for(const std::string & flags) {
   uint32_t options = 0;
   for (char f : flags) {
     switch (f) {
-      case 'i': options |= GRX_OPT_CASELESS; break;
-      case 'm': options |= GRX_OPT_MULTILINE; break;
-      case 's': options |= GRX_OPT_DOTALL; break;
-      case 'u': options |= GRX_OPT_UTF; break;
-      case 'v': options |= GRX_OPT_UNICODE_SETS | GRX_OPT_UTF; break;
-      default: break;
+      case 'i':
+        options |= GRX_OPT_CASELESS;
+        break;
+      case 'm':
+        options |= GRX_OPT_MULTILINE;
+        break;
+      case 's':
+        options |= GRX_OPT_DOTALL;
+        break;
+      case 'u':
+        options |= GRX_OPT_UTF;
+        break;
+      case 'v':
+        options |= GRX_OPT_UNICODE_SETS | GRX_OPT_UTF;
+        break;
+      default:
+        break;
     }
   }
   return options;
@@ -1014,7 +1090,7 @@ TEST(Limits, AtomicDiscoveryStackChargeUsesAnAbiSizedBudget) {
   // runtime buffers on this input belong to the charged assertion search.
   // Derive the cap from physical allocations, independently of the charge:
   // dropping discovery's stack charge must still make this search succeed.
-  const size_t charged_peak = meter.peak() - meter.root_stack();
+  const size_t charged_peak = meter.charged_peak();
   std::fprintf(stderr, "Discovery physical peak %zu, root stack %zu, cap %zu\n",
       meter.peak(), meter.root_stack(), charged_peak - 1);
   GRX_Limits limits;
@@ -1154,5 +1230,245 @@ TEST(Limits,
     EXPECT_EQ(steps, 0u);
     EXPECT_EQ(allocator.requested(), 0);
     EXPECT_EQ(allocator.live(), 0);
+  }
+}
+
+TEST(Limits, MirroredReferenceEndpointLayoutChecksTheExactBoundary) {
+  const size_t words = SIZE_MAX / sizeof(size_t);
+  const size_t slots = std::min(words, static_cast<size_t>(GRX_INDEX_NONE));
+  const size_t mirrored = std::min((slots - 1) / 2, (words - 1) / 3);
+  // Two group-zero slots, five two-slot regions and seven owner tags.
+  const size_t registers = mirrored - 19;
+  for (size_t extra : {size_t{0}, size_t{1}}) {
+    SCOPED_TRACE(extra);
+    grxtest::FailingAllocator allocator(1);
+    GRX_Regex regex = {};
+    regex.allocator = allocator.get();
+    regex.program.insts.count = 1;
+    regex.program.flags = GRX_PROGRAM_PROVISIONAL_LOOK_END;
+    regex.program.register_count = static_cast<uint32_t>(registers + extra);
+    GRX_Limits limits;
+    grx_limits_unlimited(&limits);
+    GRX_ExecRequest request = {};
+    request.regex = &regex;
+    request.limits = &limits;
+    GRX_Diag diag = GRX_DIAG_NONE;
+    request.out_diag = &diag;
+    int matched = 1;
+    EXPECT_EQ(grx_exec_backtrack(&request, &matched),
+        extra ? GRX_ERR_LIMIT : GRX_ERR_OOM);
+    EXPECT_FALSE(matched);
+    EXPECT_EQ(allocator.requested(), extra ? 0 : 1);
+    EXPECT_EQ(allocator.live(), 0);
+    if (extra) {
+      EXPECT_EQ(diag, GRX_DIAG_LIMIT_MATCH_MEMORY);
+    }
+  }
+}
+
+TEST(Limits, CombiningQueriesChargePhysicalScratchAndAggregateSteps) {
+  struct Row {
+    const char * pattern;
+    const char * subject;
+  };
+  for (const Row & row : {Row{R"(\([ab].\|abX\)\@=.)", "a\u0301"},
+           Row{R"(\([ab].\|abX\)\@>)", "a\u0301"},
+           Row{R"(\(a\?.\)\@<=x)", "aa\u0301x"},
+           Row{R"(\(a\+\)\@=\(a\)\@=a)", "a\u0301aaa"},
+           Row{R"(\(a\)\@=a\1)", "aab"}, Row{R"(\(a\)\@>.\1)", "aaa\u0301"},
+           Row{R"(\(a\)\@=a\(\1\)\@=.)", "a\u0301a\u0301"},
+           Row{R"(\(a\)\@=\(aX\|\1\)\@=.)", "a\u0301"},
+           Row{R"(\(a\)\@=\(\1\|aX\)\@>x)", "a\u0301x"}}) {
+    const char * pattern = row.pattern;
+    const char * subject = row.subject;
+    SCOPED_TRACE(pattern);
+    ScratchAllocationMeter meter;
+    GRX_Regex * regex = nullptr;
+    ASSERT_EQ(grx_regex_compile_with_allocator(pattern, std::strlen(pattern),
+                  GRX_SYNTAX_VIM_NFA, 0, nullptr, meter.get(), nullptr, &regex),
+        GRX_OK);
+    GRX_Match * match = nullptr;
+    ASSERT_EQ(grx_match_create(regex, meter.get(), &match), GRX_OK);
+    const size_t baseline = meter.live();
+    meter.begin();
+    int matched = 0;
+    ASSERT_EQ(grx_regex_search(regex, subject, std::strlen(subject), 0,
+                  GRX_ENGINE_BACKTRACK, nullptr, match, &matched),
+        GRX_OK);
+    ASSERT_TRUE(matched);
+    const size_t steps = grx_match_steps(match);
+    ASSERT_GT(steps, 1u);
+    ASSERT_GT(meter.root_stack(), 0u);
+    ASSERT_GT(meter.peak(), meter.root_stack() + 1);
+    const size_t peak = meter.charged_peak();
+    EXPECT_EQ(meter.live(), baseline);
+    std::fprintf(stderr,
+        "Combining query physical peak %zu, legacy root stack %zu, charged "
+        "peak %zu, steps %zu\n",
+        meter.peak(), meter.root_stack(), peak, steps);
+    for (size_t budget : {size_t{1}, steps - 1, steps}) {
+      GRX_Limits limits;
+      grx_limits_default(&limits);
+      limits.max_steps = budget;
+      EXPECT_EQ(grx_regex_search(regex, subject, std::strlen(subject), 0,
+                    GRX_ENGINE_BACKTRACK, &limits, match, &matched),
+          budget < steps ? GRX_ERR_LIMIT : GRX_OK);
+      EXPECT_EQ(matched, budget >= steps);
+      if (budget < steps) {
+        EXPECT_EQ(grx_match_error(match)->diag, GRX_DIAG_LIMIT_STEPS);
+      }
+      EXPECT_EQ(meter.live(), baseline);
+    }
+    for (size_t budget : {size_t{1}, peak - 1, peak}) {
+      GRX_Limits limits;
+      grx_limits_default(&limits);
+      limits.max_match_memory = budget;
+      EXPECT_EQ(grx_regex_search(regex, subject, std::strlen(subject), 0,
+                    GRX_ENGINE_BACKTRACK, &limits, match, &matched),
+          budget < peak ? GRX_ERR_LIMIT : GRX_OK);
+      EXPECT_EQ(matched, budget >= peak);
+      if (budget < peak) {
+        EXPECT_EQ(grx_match_error(match)->diag, GRX_DIAG_LIMIT_MATCH_MEMORY);
+      }
+      EXPECT_EQ(meter.live(), baseline);
+    }
+    EXPECT_EQ(grx_regex_search(regex, subject, std::strlen(subject), 0,
+                  GRX_ENGINE_BACKTRACK, nullptr, match, &matched),
+        GRX_OK);
+    EXPECT_TRUE(matched);
+    grx_match_destroy(match);
+    grx_regex_free(regex);
+    EXPECT_EQ(meter.live(), 0u);
+  }
+}
+
+TEST(Limits, CombiningFrontiersBoundLongMarkRunsAndRecoverAfterLimit) {
+  for (const char * pattern :
+      {R"(\%(a\|[ab]\))", R"(\([ab].\|abX\)\@=.)", R"(\(a\|.\)\@<=b)",
+          R"(\(a\)\@=\1)"}) {
+    SCOPED_TRACE(pattern);
+    GRX_Regex * regex = nullptr;
+    ASSERT_EQ(
+        grx_regex_compile(pattern, GRX_SYNTAX_VIM_NFA, 0, &regex), GRX_OK);
+    GRX_Match * match = nullptr;
+    ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+    for (size_t count : {64u, 2048u}) {
+      std::string subject = "a";
+      for (size_t i = 0; i < count; i++)
+        subject += "\u0301";
+      subject += 'b';
+      GRX_Limits limits;
+      grx_limits_default(&limits);
+      limits.max_steps = 16;
+      int matched = 0;
+      EXPECT_EQ(grx_regex_search(regex, subject.data(), subject.size(), 0,
+                    GRX_ENGINE_BACKTRACK, &limits, match, &matched),
+          GRX_ERR_LIMIT);
+      EXPECT_FALSE(matched);
+      EXPECT_EQ(grx_match_error(match)->diag, GRX_DIAG_LIMIT_STEPS);
+      limits.max_steps = 200000000;
+      ASSERT_EQ(grx_regex_search(regex, subject.data(), subject.size(), 0,
+                    GRX_ENGINE_BACKTRACK, &limits, match, &matched),
+          GRX_OK);
+      std::fprintf(stderr, "Combining long marks %zu, steps %zu: %s\n", count,
+          grx_match_steps(match), pattern);
+      ASSERT_TRUE(matched);
+      GRX_Capture whole;
+      ASSERT_EQ(grx_match_group(match, 0, &whole), GRX_OK);
+      const bool ahead = std::strstr(pattern, "@=") != nullptr;
+      EXPECT_EQ(whole.start, ahead ? 0u : subject.size() - 1);
+      EXPECT_EQ(whole.end, ahead ? subject.size() - 1 : subject.size());
+    }
+    grx_match_destroy(match);
+    grx_regex_free(regex);
+  }
+}
+
+TEST(Limits, CharacterPolicyCandidateScansChargeEveryScalarAndRecover) {
+  const char * patterns[] = {"\\c\u0301\\?b", "\\Z\u0301\\?a\u0302b",
+      "\\c\\Z\u0301\\?a\u0302b"};
+  for (const char * pattern : patterns) {
+    SCOPED_TRACE(pattern);
+    GRX_Regex * regex = nullptr;
+    ASSERT_EQ(grx_regex_compile(pattern, GRX_SYNTAX_VIM_BACKTRACK, 0, &regex),
+        GRX_OK);
+    GRX_Match * match = nullptr;
+    ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+    for (size_t count : {64u, 2048u}) {
+      std::string subject = "a";
+      for (size_t i = 0; i < count; i++) {
+        subject += "\u0301";
+      }
+      subject += "a\u0301b";
+      int matched = 0;
+      ASSERT_EQ(grx_regex_search(regex, subject.data(), subject.size(), 0,
+                    GRX_ENGINE_BACKTRACK, nullptr, match, &matched), GRX_OK);
+      ASSERT_TRUE(matched);
+      const size_t steps = grx_match_steps(match);
+      ASSERT_GT(steps, count);
+      GRX_Capture baseline;
+      ASSERT_EQ(grx_match_group(match, 0, &baseline), GRX_OK);
+      for (size_t budget : {size_t{1}, steps - 1, steps}) {
+        GRX_Limits limits;
+        grx_limits_default(&limits);
+        limits.max_steps = budget;
+        EXPECT_EQ(grx_regex_search(regex, subject.data(), subject.size(), 0,
+                      GRX_ENGINE_BACKTRACK, &limits, match, &matched),
+            budget < steps ? GRX_ERR_LIMIT : GRX_OK);
+        EXPECT_EQ(matched, budget >= steps);
+        if (budget < steps) {
+          EXPECT_EQ(grx_match_error(match)->diag, GRX_DIAG_LIMIT_STEPS);
+        }
+      }
+      ASSERT_EQ(grx_regex_search(regex, subject.data(), subject.size(), 0,
+                    GRX_ENGINE_BACKTRACK, nullptr, match, &matched), GRX_OK);
+      ASSERT_TRUE(matched);
+      GRX_Capture recovered;
+      ASSERT_EQ(grx_match_group(match, 0, &recovered), GRX_OK);
+      EXPECT_EQ(recovered.start, baseline.start);
+      EXPECT_EQ(recovered.end, baseline.end);
+    }
+    grx_match_destroy(match);
+    grx_regex_free(regex);
+  }
+}
+
+TEST(Limits, NonliteralMarkedCollectionsRecoverAfterLowBudgetsAndLongMarks) {
+  for (GRX_Syntax syntax : {GRX_SYNTAX_VIM_BACKTRACK, GRX_SYNTAX_VIM_NFA}) {
+    for (const char * pattern : {"[a-ź]", "[[:alpha:]́]"}) {
+      SCOPED_TRACE(pattern);
+      GRX_Regex * regex = nullptr;
+      ASSERT_EQ(grx_regex_compile(pattern, syntax, 0, &regex), GRX_OK);
+      GRX_Match * match = nullptr;
+      ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+      for (size_t count : {64u, 2048u}) {
+        std::string subject = "b";
+        for (size_t i = 0; i < count; i++) subject += "́";
+        subject += 'b';
+        for (GRX_Engine engine : {GRX_ENGINE_AUTO, GRX_ENGINE_BACKTRACK,
+                 GRX_ENGINE_PIKE, GRX_ENGINE_BITSTATE}) {
+          if (syntax == GRX_SYNTAX_VIM_BACKTRACK &&
+              (engine == GRX_ENGINE_PIKE || engine == GRX_ENGINE_BITSTATE))
+            continue;
+          GRX_Limits limits;
+          grx_limits_default(&limits);
+          limits.max_steps = 1;
+          int matched = 0;
+          EXPECT_EQ(grx_regex_search(regex, subject.data(), subject.size(), 0,
+                        engine, &limits, match, &matched), GRX_ERR_LIMIT);
+          EXPECT_FALSE(matched);
+          ASSERT_EQ(grx_regex_search(regex, subject.data(), subject.size(), 0,
+                        engine, nullptr, match, &matched), GRX_OK);
+          ASSERT_TRUE(matched);
+          GRX_Capture whole;
+          ASSERT_EQ(grx_match_group(match, 0, &whole), GRX_OK);
+          EXPECT_EQ(whole.start, 0u);
+          EXPECT_EQ(whole.end, syntax == GRX_SYNTAX_VIM_BACKTRACK
+                  ? 1u : subject.size() - 1);
+        }
+      }
+      grx_match_destroy(match);
+      grx_regex_free(regex);
+    }
   }
 }

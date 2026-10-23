@@ -6,11 +6,9 @@ does", one oracle decides every row - the arrangement `python_diff.py` and
 `perl_diff.py` use, and not the glibc-and-musl agreement the POSIX rows are
 held to.
 
-**One vim process for the whole run.** `probe.py`'s vim driver starts one per
-case, which is fine for the eighty rows that page fills and hopeless for a
-differential. vim reads a file of cases and writes a file of answers, so a
-hundred thousand rows cost one fork - the same order of magnitude as
-`python_diff.py`'s in-process `re`, for a reference that cannot be imported.
+**One fresh Vim process per input.** One container supervises bounded processes;
+raw process-local envelopes and the explicit aggregation map are retained.
+The batch transport is available only as a diagnostic of history dependence.
 
 **The subject is a string, not a buffer.** `matchstrpos()` is what this
 drives, and over a string vim's line break is an ordinary character: `a.b`
@@ -52,6 +50,7 @@ import tempfile
 import unicodedata
 
 import vim_runner
+import vim_isolated
 import vim_protocol
 import escape_floor
 
@@ -144,65 +143,53 @@ ATOMS = [
     "\\Z",
 ]
 
-# The composing-cluster block: every atom above, against subjects that hold
-# a base and the marks that belong to it.
-#
-# A block of its own rather than more subjects, because it is **one atom per
-# pattern**. Vim's default engine shares one step length between the threads
-# alive at a position (see SUBJECTS), so a second atom in a pattern can take
-# the marks away from the first and vim's answer stops being a rule. One atom
-# is one thread, and there every row is a measurement. Each atom is asked
-# twice, with and without `\Z`, because the marker's whole meaning is that
-# the marks are carried rather than matched.
-#
-# The subjects are the bases that carry marks: a letter, a letter with two of
-# them, a cluster at the end of the subject and one in the middle, a mark
-# with nothing before it - which is a character of its own and not a mark -
-# and the three bases that are not letters at all, a line break, a space and
-# a wide character.
+# Paired composing controls exercise every atom against marked bases and
+# leading marks. Multi-atom grammar below also measures competing frontiers,
+# lexical repeat ownership, captures and assertion-local boundaries. Each
+# profile is checked against its own forced reference engine.
 COMPOSING_SUBJECTS = [
     "áb", "á̂b", "á", "xá", "áá",
     "́a", "́̂a", "a\ńb", "a ́b", "日́b",
 ]
-
-# The atoms this block does not ask about. Each is a deviation already
-# recorded in documentation/dialects.md section 6 rather than a rule this
-# library declined to build, and each was measured before it was listed:
-#
-#   - the **positive `\_` forms**, where the line break vim adds does not
-#     take the composing characters after it and this library's does:
-#     `\_d` over a break carrying a mark is 1-2 there and 1-4 here. Vim's
-#     own classes do take them - `\_W` over the same text is 1-4 in both -
-#     so following it would mean a break that is a whole character when
-#     `\W` matches it and half of one when `\_` does.
-#   - the **bounded lookbehinds**, where vim's byte count and a cluster
-#     disagree about how far back two bytes reaches.
-#   - a **marker inside an assertion**, which is section 6's item 9: vim's
-#     two engines answer those differently already and this library follows
-#     the one whose answer can be stated as a rule.
-#   - `\(a\+\)\@>`, where vim's two engines give two answers and neither is
-#     coherent: `re=1` ends the match inside the cluster, and `re=2` ends it
-#     past marks that no atom in the pattern matched.
-COMPOSING_SKIP = {
-    "\\_s", "\\_d", "\\_w", "\\_[ab]", "\\_[^ab]", "\\_[^\\n]",
-    "a\\%[\\_s]",
-    "\\(a\\)\\@1<=", "\\(ab\\)\\@1<=", "\\(ab\\)\\@2<=",
-    "\\(\\w\\+\\)\\@2<=", "\\(ab\\)\\@1<!", "(a|ab)@2<=",
-    "\\(a\\zsb\\)\\@>", "\\(a\\zeb\\)\\@>", "\\(a\\zsb\\)\\@=",
-    "\\(a\\zeb\\)\\@=", "\\(a\\zeb\\)\\@<=", "\\(a\\+\\)\\@>",
-}
 
 
 def composing_cases():
     """Every atom the block asks about, with and without `\\Z`."""
     out = []
     for atom in ATOMS:
-        if atom in COMPOSING_SKIP:
-            continue
         for subject in COMPOSING_SUBJECTS:
             out.append((atom, subject))
             out.append(("\\Z" + atom, subject))
     return out
+
+
+COMBINING_ATOMS = [
+    "\u0301", "a\u0301", "a\u0301\u0302", ".\u0301", "[a\u0301]",
+    "[ab\u0301]", "[^a\u0301]", r"\%u0301", r"\_[ab]", r"\_[^x]",
+    r"\_s", r"\W",
+]
+COMBINING_TAILS = ["", ".", "b", r"\zs.", r"\ze."]
+
+
+def combining_patterns():
+    """Lexical atoms, repeats, competing paths and local assertion scopes."""
+    patterns = [atom + tail for atom in COMBINING_ATOMS
+                for tail in COMBINING_TAILS]
+    for atom in COMBINING_ATOMS:
+        patterns.extend([atom + r"\?.", atom + r"\{1}.",
+                         r"\(" + atom + r"\)."])
+    for branch in [r"a\|[ab]", r"[ab]\|a", r"[ab].\|abX",
+                   r"a*bX\|[ab].", r"[ab].\|a*bX"]:
+        body = r"\(" + branch + r"\)"
+        patterns.extend([body, body + r"\@=.", body + r"\@>",
+                         body + r"\@<=b"])
+    return patterns
+
+
+def combining_grammar_cases():
+    return [(prefix + pattern, subject)
+            for pattern in combining_patterns()
+            for prefix in ("", r"\Z") for subject in COMPOSING_SUBJECTS]
 
 
 # Constructs vim refuses or this library refuses on purpose. Kept in the
@@ -218,29 +205,6 @@ REFUSED = [
     "\\%(a", "a\\{1}\\+", "\\v+a", "\\v?a", "\\v@a",
     "\\zs*", "\\ze\\+", "\\zs\\{0,1}", "\\v\\ze{2}",
     "a\\%[b*]", "a\\%[b\\|c]", "a\\%[]", "a\\%[b\\=]",
-]
-
-# Constructs vim *accepts* and this library refuses, listed here and
-# deliberately not generated. A differential is a comparison, and a row whose
-# two answers are known to differ by design measures nothing except how many
-# times the generator happened to spell it - it would put a floor under the
-# disagreement count and hide the next real one under it.
-#
-# Two entries, and `\Z` is no longer one of them: the composing-cluster
-# model it asks for is built, so `\Z` is generated like any other marker.
-# What is left is the *pattern* side of that model, where vim's rule is an
-# accident of where its reader takes a character rather than a rule about
-# matching - and where, for the collection, its two engines disagree with
-# each other. Both are refused here and both are in dialects.md section 6
-# with the measurement; tests/unit/test_vim.cpp asserts the refusals.
-#
-# `~` and `\~` are *not* here, and that is the correction rather than the
-# omission: this library refuses `~` and reads `\~` as a literal tilde, and
-# so does vim, because "the last `:s` replacement" is E33 in the only state
-# a library ever has. They are generated like anything else.
-NOT_IMPLEMENTED = [
-    ".\u0301",     # a composing character that begins an atom
-    "[a\u0301]",   # a composing character inside a collection
 ]
 
 # The four levels, written as the prefix that selects one. The empty string
@@ -436,6 +400,23 @@ def ask_vim(cases, engine=2):
 
 
 def _ask(cases, script):
+    inputs = [[pattern, subject] for pattern, subject in cases]
+    answers = vim_isolated.ask(inputs, script, 'vimdiff_in', 'vimdiff_out')
+    return vim_protocol.decode(answers, lambda answer: vim_protocol.match_answer(
+        answer, answer['input'][1]))
+
+
+def ask_vim_batch_diagnostic(cases, engine=2):
+    """Diagnostic only: distinct cases share history in this transport."""
+    if engine not in (1, 2):
+        raise ValueError('a forced Vim engine (1 or 2) is required')
+    answers = _ask_batch(cases, 'set regexpengine=%d\n' % engine + VIM_SCRIPT)
+    answers.evidence['normative'] = False
+    answers.evidence['transport'] = 'batch-diagnostic'
+    return answers
+
+
+def _ask_batch(cases, script):
     work = tempfile.mkdtemp(prefix="vim_diff.")
     in_path = os.path.join(work, "cases.jsonl")
     out_path = os.path.join(work, "answers.txt")
@@ -733,12 +714,10 @@ def run_comparison(args, report):
         for subject in subjects:
             cases.append((pattern, subject))
     composing = composing_cases()
-    composing_population = len(ATOMS) * len(COMPOSING_SUBJECTS) * 2
-    print("%s composing population: %d candidate rows, %d generated, "
-        "%d omitted by named COMPOSING_SKIP limitations"
-        % (args.syntax, composing_population, len(composing),
-            composing_population - len(composing)))
+    print("%s composing population: %d atom rows, %d grammar rows, no skips"
+        % (args.syntax, len(composing), len(combining_grammar_cases())))
     cases.extend(composing)
+    cases.extend(combining_grammar_cases())
 
     bare, classed = escape_floor.check(args.syntax, ATOMS, driver=ours)
     print("%s vocabulary: %d bare and %d in-class constructs, all spelled"

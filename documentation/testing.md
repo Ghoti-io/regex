@@ -906,8 +906,16 @@ not an exclusion category for either profile.
 `tools/oracle/vim_diff.py` compares each named compatibility profile with
 its corresponding forced pinned Vim engine: `vim-backtrack` with
 `regexpengine=1`, `vim-nfa` with `regexpengine=2`. `make check-oracle-vim`
-runs both in strict mode. Each run uses one reference process for its batch,
-requires a complete answer population, and prints the profile, engine and
+runs both in strict mode. Each normative matching, replacement, or vector
+acquisition uses one fresh reference process per input case, with a per-process
+timeout and an independent deadline around the container supervisor. The
+evidence retains each raw process-local answer, exact Vim and supervisor
+scripts, and the explicit input-to-process aggregation map before removing
+that acquisition's scratch directory. Setup and execution failures retain their
+original error when scratch cleanup also fails. A
+timeout, diagnostic, incomplete population, or invalid envelope fails the run
+and preserves incomplete evidence. Batch acquisition is explicitly diagnostic
+and cannot override isolated results. Each run prints the profile, engine and
 disagreement counts. `--syntax` selects one profile for a focused run.
 
 The original engine-split rows are fixed regression cases. The missing
@@ -954,18 +962,14 @@ are in the ordinary list - six of vim's nine classes, each beside Latin and
 beside one another - because `\<` and `\>` follow those classes now rather
 than a word set.
 
-**Composing characters are a block of their own**: every atom in the
-vocabulary, with and without `\Z`, against ten subjects that hold a base and
-its marks - 2,900 rows a run, beside the 20,000 the generator writes. One
-atom per pattern, and that is the point rather than a convenience. Vim's
-default engine shares one step length between every thread alive at a
-position, so a second atom in the pattern can take the marks away from the
-first: `a\|` beside a cluster branch finds nothing where that branch alone
-finds the cluster, and `b\|` beside it finds it. A rule cannot depend on
-what a failed alternative begins with, so rows like that would measure how
-often the generator spelled one. Nineteen atoms are named in `COMPOSING_SKIP`
-with the reason for each, every one a row already in
-[dialects.md](dialects.md) §6.
+**Composing controls include all atoms and interacting grammar.** Every atom
+is asked with and without `\Z` against ten marked subjects. All 19 former
+composing skips are restored (380 additional rows per profile). A separate
+grammar covers standalone and fused marks, numeric origins, marked and
+negative collections, LF paths, repeats, captures, competing alternatives and
+assertion-local frontiers. The ordinary escape-floor vocabulary stays intact.
+Each profile is compared with its own forced reference engine, including
+branch-priority and physical versus reporting-boundary distinctions.
 
 **The vocabulary carries what vim refuses**, at one row in eight - `\z(`,
 `\z1`, `\1` with no group, `a\{2`, `\(a`, `a**`, `\v+a`, `\v@a` and
@@ -987,8 +991,7 @@ Vim gives whole-match byte offsets but only group text. The `groups:` field
 therefore compares each group's contents, folding unset and empty together;
 no expected capture offsets are borrowed from this library. Generated positive
 and negative assertions, lookbehind and atomic groups are retained, as are
-literal `@` characters. Remaining syntax-shape omissions and composing-axis
-omissions are named and counted in the generated headers. They measure
+literal `@` characters. Remaining syntax-shape omissions are named and counted in the generated headers. They measure
 coverage limits and cannot establish complete compatibility.
 
 Exposed failures remain oracle-authored vectors. Exact temporary entries in
@@ -3200,3 +3203,15 @@ process diagnostics and incomplete status; a failed reference execution never
 supplies a compatibility expectation. Successful replacement text is carried
 separately from status, including empty text and literal `syntax`, `compile`
 or `error`.
+
+Vim match vectors always carry explicit `groups:` TEXT expectations, including
+nine empty texts. Vim cannot distinguish a participating empty capture from an
+unset capture, so omitting the field would incorrectly impose exact unset spans.
+The conformance controls preserve that distinction without inferring offsets.
+
+Character-policy regressions cover both effective case directives, Unicode
+fold partners of different encoded widths, ignored marks, literal/numeric
+barriers, single-base versus multi-base runs, trailing marks, groups and direct
+repeats. They compare all nine capture texts for both Vim profiles and run
+eligible linear engines on regular controls. Candidate scans also have exact
+step-boundary, long-mark-run, allocation-fault and same-object recovery checks.

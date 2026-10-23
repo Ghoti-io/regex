@@ -1137,24 +1137,15 @@ TEST_F(VimNfa, IgnoreCombiningCarriesTheMarksInsteadOfMatchingThem) {
   EXPECT_EQ(span("\\Z*", "aaa"), "nomatch");
 }
 
-TEST_F(VimNfa, AComposingCharacterThatBeginsAnAtomIsRefused) {
-  // A mark written after `.`, after `\w`, after a group, or with nothing
-  // before it at all is a second matching rule in vim - the atom then
-  // matches any cluster carrying that mark, base ignored - and its own two
-  // engines disagree about the collection. Refused rather than answered
-  // either way; documentation/dialects.md section 6.
-  EXPECT_EQ(accepts(".\u0301"), "refused");
-  EXPECT_EQ(accepts("\\w\u0301"), "refused");
-  EXPECT_EQ(accepts("\\(a\\)\u0301"), "refused");
-  EXPECT_EQ(accepts("\u0301"), "refused");
-  EXPECT_EQ(accepts("[a\u0301]"), "refused");
-  EXPECT_EQ(accepts("x\\|\u0301"), "refused");
-  EXPECT_EQ(why(".\u0301"), GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED);
-  EXPECT_EQ(why("[a\u0301]"), GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED);
-  // And `\Z` does not make them legal: under it a composing character
-  // beside a base is dropped, but one that begins an atom still asks for
-  // the rule above.
-  EXPECT_EQ(accepts("\\Z.\u0301"), "refused");
+TEST_F(VimNfa, StandalonePostAtomAndCollectionMarksAreAccepted) {
+  for (const char * pattern : {".\u0301", "\\w\u0301", "\\(a\\)\u0301",
+           "\u0301", "[a\u0301]", "x\\|\u0301", "\\Z.\u0301"}) {
+    EXPECT_NE(accepts(pattern), "refused") << pattern;
+  }
+  EXPECT_EQ(span(".\u0301", "a\u0301b"), "0-3");
+  EXPECT_EQ(span("\\w\u0301", "a\u0301a\u0301"), "0-6");
+  EXPECT_EQ(span("[a\u0301]", "a\u0301b"), "0-3");
+  EXPECT_EQ(span("\u0301", "ab"), "nomatch");
 }
 
 TEST_F(VimNfa, EveryRefusalIsASyntaxRefusalButTheOneConstructVimHas) {

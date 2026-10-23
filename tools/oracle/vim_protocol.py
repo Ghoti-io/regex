@@ -205,11 +205,17 @@ def run(command, out_path, inputs, timeout=1800):
         evidence['raw_answers_hex'] = raw.hex()
     else:
         raw = b''
+    return validate_process(evidence, inputs, path.exists())
+
+
+def validate_process(evidence, inputs, output_exists=True):
+    """Validate saved process evidence without changing its local identities."""
+    raw = bytes.fromhex(evidence.get('raw_answers_hex', ''))
     # The container CLI's one known startup notice is not a Vim diagnostic.
     # Match its complete line, preserving it verbatim in evidence; a diagnostic
     # containing these words still invalidates the run.
     if (evidence.get('error') or evidence['returncode'] != 0
-            or evidence['stdout'] or diagnostics(evidence['stderr']) or not path.exists()):
+            or evidence['stdout'] or diagnostics(evidence['stderr']) or not output_exists):
         raise Failure('Vim reference process failed', evidence)
     try:
         rows = lines(raw.decode('utf-8'))

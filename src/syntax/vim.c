@@ -354,6 +354,8 @@ static GRX_Result anchor_node(GRX_Parser * parser, GRX_AnchorKind anchor,
  */
 static GRX_Result wrap_with_newline(
     GRX_Parser * parser, size_t start, uint32_t inner, uint32_t * out_node) {
+  const GRX_Node * original = grx_pattern_node(parser->pattern, inner);
+  uint32_t origin = original ? original->flags : 0;
   uint32_t literal = GRX_INDEX_NONE;
   GRX_Result result = grx_parse_class_node(parser, start, &literal);
   if (result != GRX_OK) {
@@ -366,6 +368,18 @@ static GRX_Result wrap_with_newline(
   result = grx_parse_class_add(parser, literal, &newline);
   if (result != GRX_OK) {
     return result;
+  }
+  if (!(origin & GRX_NODE_EXPLICIT_LF)) {
+    grx_pattern_node(parser->pattern, literal)->flags |= GRX_NODE_ADDED_NEWLINE;
+  }
+  if ((origin & GRX_NODE_EXPLICIT_LF) ||
+      (!(origin & GRX_NODE_COLLECTION) && (origin & GRX_NODE_NEGATED))) {
+    grx_pattern_node(parser->pattern, literal)->flags |=
+        GRX_NODE_NEWLINE_CLUSTER | (origin & GRX_NODE_EXPLICIT_LF);
+  }
+  if (!(origin & GRX_NODE_COLLECTION) && !(origin & GRX_NODE_NEGATED)) {
+    grx_pattern_node(parser->pattern, literal)->flags |=
+        GRX_NODE_DEFER_NEWLINE_MARKS;
   }
   uint32_t alternate = GRX_INDEX_NONE;
   result = add_plain(parser, GRX_NODE_ALTERNATE, start, &alternate);
@@ -382,6 +396,8 @@ static GRX_Result wrap_with_newline(
     return result;
   }
   grx_pattern_node(parser->pattern, group)->b = GRX_INDEX_NONE;
+  grx_pattern_node(parser->pattern, group)->flags |=
+      GRX_NODE_ADDED_NEWLINE | (origin & GRX_NODE_COLLECTION);
   if (grx_pattern_add_child(parser->pattern, group, alternate) != GRX_OK) {
     return grx_parse_fail(parser, GRX_DIAG_OUT_OF_MEMORY, start, 0);
   }
@@ -431,30 +447,12 @@ static GRX_Result range_class(GRX_Parser * parser, const VimRange * ranges,
       return result;
     }
   }
-  if (with_newline && !negated) {
-    // `\_x` is "x, or a line break", which for a positive set is one more
-    // member. The negated forms cannot be written that way - see
-    // wrap_with_newline() - and are handled below.
-    GRX_ClassItem newline = {
-      .kind = GRX_CLASS_ITEM_SINGLE,
-      .flags = 0,
-      .lo = '\n',
-      .hi = '\n',
-      .a = 0,
-      .offset = start,
-      .length = parser->position - start,
-    };
-    result = grx_parse_class_add(parser, *out_node, &newline);
-    if (result != GRX_OK) {
-      return result;
-    }
-  }
   GRX_Node * node = grx_pattern_node(parser->pattern, *out_node);
   if (negated) {
     node->flags |= GRX_NODE_NEGATED;
   }
   node->length = parser->position - start;
-  if (with_newline && negated) {
+  if (with_newline) {
     return wrap_with_newline(parser, start, *out_node, out_node);
   }
   return GRX_OK;
@@ -482,8 +480,8 @@ static const VimRange vim_set_upper[] = {{'A', 'Z'}};
  *
  * `\i` is 'isident', `\k` is 'iskeyword', `\f` is 'isfname' and `\p` is
  * 'isprint', and each is written here as the pinned vim answers it at the
- * defaults with no vimrc. The first three of these were *sampled* when they were
- * first written and three of the four were wrong: `\i` and `\k` both
+ * defaults with no vimrc. The first three of these were *sampled* when they
+ * were first written and three of the four were wrong: `\i` and `\k` both
  * missed U+00B5, and `\k` took in 5,463 code points vim excludes, since
  * 'iskeyword' default is `@,48-57,_,192-255` and vim's `@` is its own
  * alphabetic classification rather than "everything above Latin-1". `\p`
@@ -957,9 +955,14 @@ static GRX_Result read_class_item(
     size_t length = 0;
     if (read_numeric_escape(parser, 1, &value, &length)) {
       parser->position += length;
-      *out_item = (GRX_ClassItem) {
-        .kind = GRX_CLASS_ITEM_SINGLE, .flags = 0, .lo = value, .hi = value,
-        .a = 0, .offset = start, .length = parser->position - start,
+      *out_item = (GRX_ClassItem){
+          .kind = GRX_CLASS_ITEM_SINGLE,
+          .flags = GRX_CLASS_ITEM_NUMERIC,
+          .lo = value,
+          .hi = value,
+          .a = 0,
+          .offset = start,
+          .length = parser->position - start,
       };
       return GRX_OK;
     }
@@ -975,10 +978,14 @@ static GRX_Result read_class_item(
     }
     if (control) {
       parser->position += 2;
-      *out_item = (GRX_ClassItem) {
-        .kind = GRX_CLASS_ITEM_SINGLE, .flags = 0, .lo = control,
-        .hi = control, .a = 0, .offset = start,
-        .length = parser->position - start,
+      *out_item = (GRX_ClassItem){
+          .kind = GRX_CLASS_ITEM_SINGLE,
+          .flags = control == '\n' ? GRX_CLASS_ITEM_NEWLINE_ESCAPE : 0,
+          .lo = control,
+          .hi = control,
+          .a = 0,
+          .offset = start,
+          .length = parser->position - start,
       };
       return GRX_OK;
     }
@@ -1065,6 +1072,7 @@ static GRX_Result read_collection(GRX_Parser * parser, size_t start,
   }
 
   int first = 1;
+  int range_marks = 0;
   for (;;) {
     if (grx_parse_at_end(parser)) {
       return grx_parse_fail(parser, GRX_DIAG_UNMATCHED_OPEN_BRACKET, start,
@@ -1085,6 +1093,7 @@ static GRX_Result read_collection(GRX_Parser * parser, size_t start,
       size_t own_count = 0;
       const VimRange * own = vim_own_class(name, name_length, &own_count);
       if (own) {
+        range_marks = 0;
         // Vim's own, so the ranges are written straight into the collection
         // being built rather than named for lowering to resolve: what they
         // stand for is this dialect's measurement and not a definition the
@@ -1094,7 +1103,7 @@ static GRX_Result read_collection(GRX_Parser * parser, size_t start,
           GRX_ClassItem member = {
             .kind = own[i].lo == own[i].hi ? GRX_CLASS_ITEM_SINGLE
                                            : GRX_CLASS_ITEM_RANGE,
-            .flags = GRX_CLASS_ITEM_NO_FOLD,
+            .flags = GRX_CLASS_ITEM_NO_FOLD | GRX_CLASS_ITEM_NAMED_ORIGIN,
             .lo = own[i].lo, .hi = own[i].hi,
             .a = 0, .offset = item_start,
             .length = parser->position - item_start,
@@ -1161,16 +1170,18 @@ static GRX_Result read_collection(GRX_Parser * parser, size_t start,
       item.length = parser->position - item_start;
     }
 
-    if ((item.kind == GRX_CLASS_ITEM_SINGLE
-            || item.kind == GRX_CLASS_ITEM_RANGE)
-        && (vim_is_composing(item.lo) || vim_is_composing(item.hi))) {
-      // Vim fuses a composing character onto the member before it, so
-      // `[a` U+0301 `]` holds one member and not two - and its own two
-      // engines disagree about what that member then matches. Refused
-      // rather than answered either way; documentation/dialects.md
-      // section 6.
-      return grx_parse_fail(parser, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED,
-          item_start, parser->position - item_start);
+    if (range_marks && item.kind == GRX_CLASS_ITEM_SINGLE &&
+        grx_display_cell_width(item.lo, 0) == 0 &&
+        !(item.flags & GRX_CLASS_ITEM_NUMERIC)) {
+      item.flags |= GRX_CLASS_ITEM_RANGE_MARK;
+    }
+    else {
+      range_marks = item.kind == GRX_CLASS_ITEM_RANGE;
+    }
+
+    if (!negated && item.kind == GRX_CLASS_ITEM_SINGLE && item.lo == '\n') {
+      grx_pattern_node(parser->pattern, *out_node)->flags |=
+          GRX_NODE_EXPLICIT_LF;
     }
 
     GRX_Result added = grx_parse_class_add(parser, *out_node, &item);
@@ -1185,20 +1196,28 @@ static GRX_Result read_collection(GRX_Parser * parser, size_t start,
     with_newline = 0;
   }
 
-  if (with_newline && !negated) {
-    GRX_ClassItem newline = {
-      .kind = GRX_CLASS_ITEM_SINGLE, .flags = 0, .lo = '\n', .hi = '\n',
-      .a = 0, .offset = start, .length = parser->position - start,
-    };
-    GRX_Result added = grx_parse_class_add(parser, *out_node, &newline);
-    if (added != GRX_OK) {
-      return added;
-    }
+  if (with_newline) {
+    grx_pattern_node(parser->pattern, *out_node)->flags &=
+        ~(uint32_t)GRX_NODE_EXPLICIT_LF;
+  }
+  else if (grx_pattern_node(parser->pattern, *out_node)->flags &
+      GRX_NODE_EXPLICIT_LF) {
+    with_newline = 1;
+  }
+  if (with_newline) {
+    grx_pattern_node(parser->pattern, *out_node)->flags |=
+        GRX_NODE_NEWLINE_INNER;
+  }
+  if (with_newline &&
+      (parser->profile.scalar_collections ||
+          !(grx_pattern_node(parser->pattern, *out_node)->flags &
+              GRX_NODE_NEGATED))) {
+    grx_pattern_node(parser->pattern, *out_node)->flags |= GRX_NODE_EXCLUDE_LF;
   }
 
   grx_pattern_node(parser->pattern, *out_node)->length
       = parser->position - start;
-  if (with_newline && negated) {
+  if (with_newline) {
     return wrap_with_newline(parser, start, *out_node, out_node);
   }
   return GRX_OK;
@@ -1638,8 +1657,12 @@ static GRX_Result read_percent(
       return grx_parse_fail(parser, GRX_DIAG_CODEPOINT_OUT_OF_RANGE, start,
           parser->position - start);
     }
-    return grx_parse_literal_node(
+    GRX_Result result = grx_parse_literal_node(
         parser, value, start, parser->position - start, out_node);
+    if (result == GRX_OK) {
+      grx_pattern_node(parser->pattern, *out_node)->flags |= GRX_NODE_NUMERIC;
+    }
+    return result;
   }
   if (c == 'd' || c == 'o' || c == 'x' || c == 'u' || c == 'U') {
     // vim: "E678: Invalid character after \%[dxouU]".
@@ -2203,12 +2226,37 @@ static GRX_Result vim_postfix_atom(GRX_Parser * parser, uint32_t * node) {
       break;
     }
     const GRX_Node * atom = grx_pattern_node(parser->pattern, *node);
+    if (atom && atom->kind == GRX_NODE_LITERAL &&
+        ((atom->flags & GRX_NODE_NUMERIC) ||
+            (!parser->profile.scalar_collections &&
+                atom->offset < parser->length &&
+                parser->text[atom->offset] == '\\'))) {
+      grx_pattern_node(parser->pattern, *node)->flags |=
+          GRX_NODE_ESCAPED_LITERAL;
+      break;
+    }
+    if (atom && (atom->flags & GRX_NODE_COLLECTION) &&
+        !parser->profile.scalar_collections) {
+      // A literal mark after an NFA collection is lexically consumed;
+      // the collection itself retains its ordinary cluster predicate.
+      parser->position += width;
+      continue;
+    }
+    if (atom && atom->kind == GRX_NODE_ANY) {
+      size_t offset = atom->offset;
+      GRX_Result result = grx_parse_literal_node(
+          parser, codepoint, offset, parser->position + width - offset, node);
+      if (result != GRX_OK) {
+        return result;
+      }
+      grx_pattern_node(parser->pattern, *node)->flags |= GRX_NODE_DOT_MARK;
+      parser->position += width;
+      continue;
+    }
     if (!atom || atom->kind != GRX_NODE_LITERAL) {
-      // After `.`, a collection or a group, vim's answer is a second rule
-      // rather than this one, and its two engines do not agree on the
-      // collection: section 6.
-      return grx_parse_fail(parser, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED,
-          parser->position, width);
+      // Named classes, groups and old collections leave a following mark
+      // as a separate atom, with its own repeat and assertion operators.
+      break;
     }
     GRX_Result result = grx_parse_literal_extend(parser, *node, codepoint);
     if (result != GRX_OK) {
@@ -2383,17 +2431,6 @@ static GRX_Result vim_literal_atom(GRX_Parser * parser, uint32_t codepoint,
       return anchor_node(parser, GRX_ANCHOR_DOLLAR, offset, out_node);
     }
   }
-  if (vim_is_composing(codepoint)) {
-    // A composing character that *begins* an atom, which is what one after
-    // `.`, after `\w`, after a group, or at the start of the pattern is.
-    // Vim matches such an atom against any cluster carrying that mark, its
-    // base ignored, and that is a second matching rule rather than this
-    // one: documentation/dialects.md section 6 has the measurements. A
-    // composing character after a literal never reaches here - the literal
-    // has already taken it, which is what vim's own reader does.
-    return grx_parse_fail(
-        parser, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, offset, length);
-  }
   if (codepoint == '~' && (level == VIM_MAGIC || level == VIM_VERY_MAGIC)) {
     // The text of the last `:s` replacement. There has not been one, and
     // vim says so itself - "E33: No previous substitute regular expression"
@@ -2422,7 +2459,8 @@ static GRX_Result vim_literal_atom(GRX_Parser * parser, uint32_t codepoint,
  * spelling is the whole of its rule and `quantifier_is_optional()` is what
  * has already applied it.
  */
-static void absorb_marker_optional(GRX_Pattern * pattern, uint32_t index) {
+static void absorb_marker_optional(GRX_Parser * parser, uint32_t index) {
+  GRX_Pattern * pattern = parser->pattern;
   while (index != GRX_INDEX_NONE) {
     GRX_Node * node = grx_pattern_node(pattern, index);
     if (!node) {
@@ -2440,7 +2478,18 @@ static void absorb_marker_optional(GRX_Pattern * pattern, uint32_t index) {
         node->max = 0;
       }
     }
-    absorb_marker_optional(pattern, node->first_child);
+    if (node->kind == GRX_NODE_REPEAT && node->min == 0 && node->max == 1) {
+      const GRX_Node * body = grx_pattern_node(pattern, node->first_child);
+      size_t at = body ? body->offset + body->length : parser->length;
+      if (at < parser->length && parser->text[at] == '\\') {
+        at++;
+      }
+      if (at < parser->length &&
+          (parser->text[at] == '?' || parser->text[at] == '=')) {
+        node->flags |= GRX_NODE_SHORT_OPTIONAL;
+      }
+    }
+    absorb_marker_optional(parser, node->first_child);
     node = grx_pattern_node(pattern, index);
     index = node ? node->next_sibling : GRX_INDEX_NONE;
   }
@@ -2474,7 +2523,46 @@ static void absorb_marker_optional(GRX_Pattern * pattern, uint32_t index) {
  * than dropping it, by asking `set re=1` about each.
  */
 static GRX_Result vim_validate(GRX_Parser * parser) {
-  absorb_marker_optional(parser->pattern, parser->pattern->root);
+  absorb_marker_optional(parser, parser->pattern->root);
+  if (parser->profile.scalar_collections) {
+    for (size_t i = 0; i < parser->pattern->nodes.count; i++) {
+      const GRX_Node * sequence =
+          grx_pattern_node(parser->pattern, (uint32_t)i);
+      if (!sequence || sequence->kind != GRX_NODE_CONCAT)
+        continue;
+      int literal_prefix = 0;
+      for (uint32_t child = sequence->first_child; child != GRX_INDEX_NONE;) {
+        GRX_Node * node = grx_pattern_node(parser->pattern, child);
+        uint32_t next = node->next_sibling;
+        GRX_Node * atom = node->kind == GRX_NODE_REPEAT
+            ? grx_pattern_node(parser->pattern, node->first_child)
+            : node;
+        if (literal_prefix && atom && (atom->flags & GRX_NODE_DOT_MARK)) {
+          uint32_t count = atom->b;
+          uint32_t old = atom->a;
+          uint32_t begin = (uint32_t)parser->pattern->literals.count;
+          uint32_t period = '.';
+          GRX_Result result =
+              grx_arena_append(&parser->pattern->literals, &period, NULL);
+          for (size_t j = 0; result == GRX_OK && j < count; j++) {
+            uint32_t point = *GRX_ARENA_AT(
+                const uint32_t, &parser->pattern->literals, old + j);
+            result = grx_arena_append(&parser->pattern->literals, &point, NULL);
+          }
+          if (result != GRX_OK)
+            return grx_parse_fail(parser,
+                result == GRX_ERR_OOM ? GRX_DIAG_OUT_OF_MEMORY
+                                      : GRX_DIAG_LIMIT_NODES,
+                atom->offset, atom->length);
+          atom->a = begin;
+          atom->b = count + 1;
+        }
+        literal_prefix = node->kind == GRX_NODE_LITERAL &&
+            !(node->flags & (GRX_NODE_NUMERIC | GRX_NODE_ESCAPED_LITERAL));
+        child = next;
+      }
+    }
+  }
   return GRX_OK;
 }
 

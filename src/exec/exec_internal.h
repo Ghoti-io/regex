@@ -197,6 +197,19 @@ typedef struct GRX_ExecRequest {
    * reached at arbitrary positions in arbitrary order, and a walk from the
    * start at each of them would be quadratic in the subject.
    */
+  const unsigned char * scalar_frontiers; ///< Fresh global-prefix discovery.
+  size_t scalar_target;
+  size_t scalar_depth;
+  uint32_t scalar_scope;
+  uint32_t scalar_stop_pc;
+  int scalar_local;
+  void * scalar_owner;
+  const void * scalar_priorities;
+  void ** scalar_priority_out;
+  size_t scalar_priority_floor;
+  size_t scalar_priority_origin;
+  size_t * scalar_cutoff;
+  int scalar_query;
   const uint32_t * columns;
 } GRX_ExecRequest;
 
@@ -905,6 +918,37 @@ static inline int grx_crlf_begins_at(
 }
 
 /** @} */
+
+/** Local discovery uses the same compiled cluster consumers in every scope. */
+static inline int grx_exec_scalar_cluster_consumer(const GRX_Inst * inst) {
+  return (inst->op == GRX_OP_ASSERT &&
+             inst->mode == GRX_ASSERT_SCALAR_FRONTIER) ||
+      (inst->op == GRX_OP_BACKREF &&
+          (inst->policy & (GRX_POLICY_COMPLETE_COMPOSING |
+              GRX_POLICY_REPORT_COMPOSING)) ==
+              (GRX_POLICY_COMPLETE_COMPOSING | GRX_POLICY_REPORT_COMPOSING));
+}
+
+/** Tags and structural epsilon edges precede deferred mark skipping. */
+static inline int grx_exec_composing_frontier(const GRX_Inst * inst) {
+  switch ((GRX_Opcode)inst->op) {
+    case GRX_OP_CHAR:
+    case GRX_OP_CLASS:
+    case GRX_OP_ANY:
+    case GRX_OP_ANY_NL:
+    case GRX_OP_BACKREF:
+    case GRX_OP_LOOK:
+    case GRX_OP_ATOMIC_BEGIN:
+    case GRX_OP_COND:
+      return 1;
+    case GRX_OP_ASSERT:
+      return inst->mode != GRX_ASSERT_CLUSTER_BOUNDARY &&
+          inst->mode != GRX_ASSERT_SCALAR_FRONTIER &&
+          inst->mode != GRX_ASSERT_NO_SCALAR_FRONTIER;
+    default:
+      return 0;
+  }
+}
 
 #ifdef __cplusplus
 }

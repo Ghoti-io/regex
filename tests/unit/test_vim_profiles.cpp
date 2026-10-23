@@ -22,7 +22,8 @@ class VimProfiles : public ::testing::TestWithParam<GRX_Syntax> {
   bool old() const { return GetParam() == GRX_SYNTAX_VIM_BACKTRACK; }
 
   void expect(const char * pattern, const std::string & subject,
-      size_t start, size_t end, const std::vector<std::string> & groups = {}) {
+      size_t start, size_t end, const std::vector<std::string> & groups = {},
+      GRX_Engine engine = GRX_ENGINE_BACKTRACK) {
     SCOPED_TRACE(pattern);
     SCOPED_TRACE(grx_syntax_name(GetParam()));
     GRX_Regex * raw_regex = nullptr;
@@ -36,7 +37,7 @@ class VimProfiles : public ::testing::TestWithParam<GRX_Syntax> {
         raw_match, grx_match_destroy);
     int matched = 0;
     ASSERT_EQ(grx_regex_search(regex.get(), subject.data(), subject.size(), 0,
-        GRX_ENGINE_BACKTRACK, nullptr, match.get(), &matched), GRX_OK);
+                  engine, nullptr, match.get(), &matched), GRX_OK);
     if (start == GRX_NPOS) {
       EXPECT_FALSE(matched);
       return;
@@ -47,6 +48,10 @@ class VimProfiles : public ::testing::TestWithParam<GRX_Syntax> {
     EXPECT_EQ(whole.start, start);
     EXPECT_EQ(whole.end, end);
     for (size_t i = 0; i < groups.size(); i++) {
+      if (i >= grx_regex_capture_count(regex.get())) {
+        EXPECT_EQ(groups[i], "") << "group " << i + 1;
+        continue;
+      }
       GRX_Capture group;
       ASSERT_EQ(grx_match_group(match.get(), i + 1, &group), GRX_OK);
       std::string text;
@@ -863,6 +868,343 @@ TEST_P(VimProfiles, AtomicDiscoveryUsesUtf8ByteFrontiersAtPublicOffsets) {
   }
 }
 
+TEST_P(VimProfiles, CombiningClosureMatchesPhysicalAndReportedFrontiers) {
+  // Exact paired pinned-reference rows; missing capture texts are empty.
+  struct Row {
+    const char * pattern;
+    const char * subject;
+    size_t old_start, old_end, nfa_start, nfa_end;
+    std::vector<std::string> old_groups, nfa_groups;
+  };
+  const Row rows[] = {
+      {"\\(a\\)\\@>\\1", "a\u0301a\u0301", GRX_NPOS, GRX_NPOS, 0, 6,
+          {"", "", "", "", "", "", "", "", ""},
+          {"a", "", "", "", "", "", "", "", ""}},
+      {"\\(a\\)\\(\\1\\)\\@>x", "aa\u0301x", GRX_NPOS, GRX_NPOS, GRX_NPOS,
+          GRX_NPOS, {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\(a\\)\\@>a\\1", "aaa\u0301", 0, 3, GRX_NPOS, GRX_NPOS,
+          {"a", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\(a\\)\\@=a\\(\\1\\)\\@=.", "a\u0301a\u0301", GRX_NPOS, GRX_NPOS, 0, 3,
+          {"", "", "", "", "", "", "", "", ""},
+          {"a", "", "", "", "", "", "", "", ""}},
+      {"\\(a\\)\\@=a\\(\\1\\)\\@>x", "aa\u0301x", GRX_NPOS, GRX_NPOS, GRX_NPOS,
+          GRX_NPOS, {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\(a\\)\\@>\\(\\1\\)\\@<=x", "a\u0301x", GRX_NPOS, GRX_NPOS, 0, 4,
+          {"", "", "", "", "", "", "", "", ""},
+          {"a", "a\u0301", "", "", "", "", "", "", ""}},
+      {"\\(a\\)\\@>.\\1", "aaa\u0301", 0, 3, 0, 5,
+          {"a", "", "", "", "", "", "", "", ""},
+          {"a", "", "", "", "", "", "", "", ""}},
+      {"\\(a\\)\\@=\\(aX\\|\\1\\)\\@=.", "a\u0301", GRX_NPOS, GRX_NPOS, 0, 3,
+          {"", "", "", "", "", "", "", "", ""},
+          {"a", "a", "", "", "", "", "", "", ""}},
+      {"\\(a\\)\\@=\\(\\1\\|aX\\)\\@=.", "a\u0301", GRX_NPOS, GRX_NPOS, 0, 3,
+          {"", "", "", "", "", "", "", "", ""},
+          {"a", "a\u0301", "", "", "", "", "", "", ""}},
+      {"\\(a\\)\\@=\\(aX\\|\\1\\)\\@>x", "a\u0301x", GRX_NPOS, GRX_NPOS, 0, 4,
+          {"", "", "", "", "", "", "", "", ""},
+          {"a", "a", "", "", "", "", "", "", ""}},
+      {"\\(a\\)\\@=\\(\\1\\|aX\\)\\@>x", "a\u0301x", GRX_NPOS, GRX_NPOS, 0, 4,
+          {"", "", "", "", "", "", "", "", ""},
+          {"a", "a\u0301", "", "", "", "", "", "", ""}},
+      {"\\(a\\)\\@=\\(a\\%9cX\\|\\1\\)\\@=.", "a\u0301", GRX_NPOS, GRX_NPOS, 0,
+          3, {"", "", "", "", "", "", "", "", ""},
+          {"a", "a", "", "", "", "", "", "", ""}},
+      {"\\(a\\)\\@=\\(\\%9caX\\|\\1\\)\\@=.", "a\u0301", GRX_NPOS, GRX_NPOS, 0,
+          3, {"", "", "", "", "", "", "", "", ""},
+          {"a", "a\u0301", "", "", "", "", "", "", ""}},
+      {"\\(\\%(a\\)\\)\\@=\\(a\\)\\@=a", "aaab", 0, 1, 0, 1,
+          {"a", "a", "", "", "", "", "", "", ""},
+          {"", "a", "", "", "", "", "", "", ""}},
+      {"\\(\\%(a\\)\\)\\@=\\(a\\)\\@=a", "a\u0301ab", 3, 4, 3, 4,
+          {"a", "a", "", "", "", "", "", "", ""},
+          {"a", "a", "", "", "", "", "", "", ""}},
+      {"\\(a\\+\\)\\@=\\(a\\)\\@=a", "a\u0301aaa", 3, 4, 3, 4,
+          {"aaa", "a", "", "", "", "", "", "", ""},
+          {"aaa", "a", "", "", "", "", "", "", ""}},
+      {"\\(\\%(a\\|b\\)\\)\\@=\\(a\\)\\@=a", "b\u0301a", 3, 4, 3, 4,
+          {"a", "a", "", "", "", "", "", "", ""},
+          {"", "a", "", "", "", "", "", "", ""}},
+      {"\\(a\\)\\@=\\1", "a\u0301", GRX_NPOS, GRX_NPOS, 0, 3,
+          {"", "", "", "", "", "", "", "", ""},
+          {"a", "", "", "", "", "", "", "", ""}},
+      {"\\(a\\)\\@=.\\1", "a\u0301a\u0301", GRX_NPOS, GRX_NPOS, 0, 6,
+          {"", "", "", "", "", "", "", "", ""},
+          {"a", "", "", "", "", "", "", "", ""}},
+      {"\\(a\\)\\@=a\\1", "aa\u0301a", 0, 2, GRX_NPOS, GRX_NPOS,
+          {"a", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\(a\\)\\@=\\(a\\)\\@=\\1", "a\u0301", GRX_NPOS, GRX_NPOS, 0, 3,
+          {"", "", "", "", "", "", "", "", ""},
+          {"a", "a", "", "", "", "", "", "", ""}},
+      {"\\(\\)\\@=\\1", "\u0301", 0, 0, 0, 0,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\(a\\?\\)\\@=\\1.", "a\u0301", 0, 3, 0, 3,
+          {"", "", "", "", "", "", "", "", ""},
+          {"a", "", "", "", "", "", "", "", ""}},
+      {"\\(x\\)\\%(\\(\\(ab\\)\\@>\\)\\@>\\)\\@=.", "xab", 0, 2, 0, 2,
+          {"x", "ab", "ab", "", "", "", "", "", ""},
+          {"x", "ab", "ab", "", "", "", "", "", ""}},
+      {"\\(x\\)\\%(\\(\\(ab\\)\\@>\\)\\@>\\)\\@=.", "xab\u0301", GRX_NPOS,
+          GRX_NPOS, 0, 2, {"", "", "", "", "", "", "", "", ""},
+          {"x", "ab\u0301", "ab", "", "", "", "", "", ""}},
+      {"\\(x\\)\\%(\\(\\(\\(ab\\)\\@>\\)\\@>\\)\\@>\\)\\@=.", "xab", 0, 2, 0, 2,
+          {"x", "ab", "ab", "ab", "", "", "", "", ""},
+          {"x", "ab", "ab", "ab", "", "", "", "", ""}},
+      {"\\(.\\+\\)\\@1<=x", "a\u0301x", GRX_NPOS, GRX_NPOS, 3, 4,
+          {"", "", "", "", "", "", "", "", ""},
+          {"a\u0301", "", "", "", "", "", "", "", ""}},
+      {"\\(.\\+\\)\\@<=x", "ba\u0301x", 4, 5, 4, 5,
+          {"a\u0301", "", "", "", "", "", "", "", ""},
+          {"ba\u0301", "", "", "", "", "", "", "", ""}},
+      {"\\_s", "\n\u0301b", 0, 3, 0, 1, {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\(\\_s\\)b", "\n\u0301b", 0, 4, 0, 4,
+          {"\n\u0301", "", "", "", "", "", "", "", ""},
+          {"\n", "", "", "", "", "", "", "", ""}},
+      {"\\_s\\zs$", "\n\u0301", 3, 3, 1, 3,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\_[ab]b", "\n\u0301b", 0, 4, GRX_NPOS, GRX_NPOS,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\_[^x]b", "\n\u0301b", 0, 4, 1, 4,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"[a\u0301]", "a\u0302\u0301", GRX_NPOS, GRX_NPOS, 0, 5,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"[a\u0301\u0301]", "a\u0301", GRX_NPOS, GRX_NPOS, 0, 3,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"[ab\u0301]", "b", 0, 1, GRX_NPOS, GRX_NPOS,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\u0301b", "a\u0301x", 0, 3, GRX_NPOS, GRX_NPOS,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\u0301\\?b", "a\u0301xb", 0, 3, 4, 5,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\u0301\\?bb", "a\u0301bxb", GRX_NPOS, GRX_NPOS, GRX_NPOS, GRX_NPOS,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\u0301\\?[b]", "a\u0301x", 0, 3, GRX_NPOS, GRX_NPOS,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\Za\u0301$", "a\u0301\u0302", GRX_NPOS, GRX_NPOS, 0, 5,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\Za\u0301b", "a\u0301\u0302b", 0, 6, 0, 6,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\Z\\(a\u0301\\)b", "a\u0301\u0302b", GRX_NPOS, GRX_NPOS, 0, 6,
+          {"", "", "", "", "", "", "", "", ""},
+          {"a\u0301\u0302", "", "", "", "", "", "", "", ""}},
+      {"\\%u0301b", "a\u0301x", 0, 3, GRX_NPOS, GRX_NPOS,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\Za\\%u0301\u0302", "a\u0301", 0, 3, GRX_NPOS, GRX_NPOS,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\w.", "a\u0301b", 0, 4, 0, 4, {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\w*.", "a\u0301b", 0, 3, 0, 4, {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\W*.", "a\u0301b", 0, 4, 0, 3, {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\W\\?.", "a\u0301b", 0, 3, 0, 3, {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\(\\W\\{1}\\).", "a\u0301\u0302b", 0, 6, GRX_NPOS, GRX_NPOS,
+          {"a\u0301\u0302", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\(\\W\\)\\{1}.", "a\u0301\u0302b", GRX_NPOS, GRX_NPOS, GRX_NPOS,
+          GRX_NPOS, {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\%(a\\|[ab]\\)", "a\u0301b", 0, 1, 3, 4,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"^\\%(a\\|[ab]\\)", "a\u0301", 0, 1, GRX_NPOS, GRX_NPOS,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\%9ca\\|[ab]", "a\u0301b", 0, 1, 0, 3,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"a\\%9c\\|[ab]", "a\u0301b", 0, 1, 3, 4,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"^\\%([ab].\\|a\\nX\\)", "a\n\u0301b", 0, 4, GRX_NPOS, GRX_NPOS,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"^\\%([ab]..\\|a\\nX\\)", "a\n\u0301b", 0, 5, 0, 4,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\_[ab].", "a\n\u0301b", 0, 4, 1, 4,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"^\\%(\\_[ab]\\).", "a\n\u0301b", 0, 4, 0, 4,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\(\\_[^x]\\).", "\n\u0301b", 0, 4, 0, 3,
+          {"\n\u0301", "", "", "", "", "", "", "", ""},
+          {"\n\u0301", "", "", "", "", "", "", "", ""}},
+      {"\\_[^x]\\zs.", "\n\u0301b", 3, 4, 3, 3,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\_[^\\n]\\zs.", "\n\u0301b", 3, 4, 1, 3,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"b.\u0301", "ba\u0301x", GRX_NPOS, GRX_NPOS, 0, 4,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"b.\u0301", "b.\u0301", 0, 4, 0, 4, {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"b.\u0301\\?", "b..\u0301", 0, 5, 0, 1,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"b\\.\u0301", "b.\u0301", 0, 4, GRX_NPOS, GRX_NPOS,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"b\\%u002e\u0301", "b..\u0301", 0, 5, 0, 5,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\(a\\)\\@>x", "a\u0301x", GRX_NPOS, GRX_NPOS, 0, 4,
+          {"", "", "", "", "", "", "", "", ""},
+          {"a", "", "", "", "", "", "", "", ""}},
+      {"\\(a\\)\\@>\\zsx", "a\u0301x", GRX_NPOS, GRX_NPOS, 3, 4,
+          {"", "", "", "", "", "", "", "", ""},
+          {"a", "", "", "", "", "", "", "", ""}},
+      {"\\(a\\).", "a\u0301x", GRX_NPOS, GRX_NPOS, 0, 3,
+          {"", "", "", "", "", "", "", "", ""},
+          {"a", "", "", "", "", "", "", "", ""}},
+      {"\\([ab].\\|abX\\)\\@=.", "a\u0301", 0, 3, 0, 3,
+          {"a\u0301", "", "", "", "", "", "", "", ""},
+          {"a\u0301", "", "", "", "", "", "", "", ""}},
+      {"^\\([ab]\\)\\(\\%(\\1aX\\|[ab].x\\)\\)\\@=.", "aaa\u0301x", 0, 2,
+          GRX_NPOS, GRX_NPOS, {"a", "aa\u0301x", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"^\\([ab]\\)\\(\\%(\\1aX\\|[ab].x\\)\\)\\@=.", "baa\u0301x", 0, 2, 0, 2,
+          {"b", "aa\u0301x", "", "", "", "", "", "", ""},
+          {"b", "aa\u0301x", "", "", "", "", "", "", ""}},
+      {"[\\n].", "\n\u0301b", 0, 4, 0, 4, {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"[\\n]*.", "\n\u0301b", 0, 3, 0, 4, {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"^\\(a\\)\\?a\\?b\\(\\%(\\1aX\\|[ab].x\\)\\)\\@>", "abaa\u0301x", 0, 7,
+          GRX_NPOS, GRX_NPOS, {"a", "aa\u0301x", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"^\\(a\\)\\?a\\?b\\(\\%(\\1aX\\|[ab].x\\)\\)\\@>", "abaa\u0301\u0301x",
+          0, 9, GRX_NPOS, GRX_NPOS,
+          {"a", "aa\u0301\u0301x", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"^\\(a\\)\\?a\\?b\\(\\%([ab].x\\|\\1aX\\)\\)\\@>", "abaa\u0301x", 0, 7,
+          GRX_NPOS, GRX_NPOS, {"a", "aa\u0301x", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"^\\(a\\)\\?a\\?b\\(\\%([ab].x\\|\\1aX\\)\\)\\@>", "abaa\u0301\u0301x",
+          0, 9, GRX_NPOS, GRX_NPOS,
+          {"a", "aa\u0301\u0301x", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"^\\(a\\)\\?a*b\\(\\%(\\1aX\\|[ab].x\\)\\)\\@>", "abaa\u0301x", 0, 7,
+          GRX_NPOS, GRX_NPOS, {"a", "aa\u0301x", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"^\\(a\\)\\?a*b\\(\\%(\\1aX\\|[ab].x\\)\\)\\@>", "abaa\u0301\u0301x", 0,
+          9, GRX_NPOS, GRX_NPOS,
+          {"a", "aa\u0301\u0301x", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"^\\(a\\)\\?a*b\\(\\%([ab].x\\|\\1aX\\)\\)\\@>", "abaa\u0301x", 0, 7,
+          GRX_NPOS, GRX_NPOS, {"a", "aa\u0301x", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"^\\(a\\)\\?a*b\\(\\%([ab].x\\|\\1aX\\)\\)\\@>", "abaa\u0301\u0301x", 0,
+          9, GRX_NPOS, GRX_NPOS,
+          {"a", "aa\u0301\u0301x", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\(a*.\\)", "a\u0301x", 0, 3, 0, 3,
+          {"a\u0301", "", "", "", "", "", "", "", ""},
+          {"a\u0301", "", "", "", "", "", "", "", ""}},
+      {"\\(a*.\\)\\@=.", "a\u0301x", 0, 3, 0, 3,
+          {"a\u0301", "", "", "", "", "", "", "", ""},
+          {"a\u0301", "", "", "", "", "", "", "", ""}},
+      {"\\(a*.\\)\\@>.", "a\u0301x", 0, 4, 0, 4,
+          {"a\u0301", "", "", "", "", "", "", "", ""},
+          {"a\u0301", "", "", "", "", "", "", "", ""}},
+      {"\\(a*.\\)\\@<=x", "a\u0301x", 3, 4, 3, 4,
+          {"a\u0301", "", "", "", "", "", "", "", ""},
+          {"a\u0301", "", "", "", "", "", "", "", ""}},
+      {"\\%(\\(a*.\\)\\@=.\\)\\@=.", "a\u0301x", 0, 3, 0, 3,
+          {"a\u0301", "", "", "", "", "", "", "", ""},
+          {"a\u0301", "", "", "", "", "", "", "", ""}},
+      {"\\(a\\?.\\)", "a\u0301x", 0, 3, 0, 3,
+          {"a\u0301", "", "", "", "", "", "", "", ""},
+          {"a\u0301", "", "", "", "", "", "", "", ""}},
+      {"\\(a\\?.\\)\\@=.", "a\u0301x", 0, 3, 0, 3,
+          {"a\u0301", "", "", "", "", "", "", "", ""},
+          {"a\u0301", "", "", "", "", "", "", "", ""}},
+      {"\\(a\\?.\\)\\@>.", "a\u0301x", 0, 4, 0, 4,
+          {"a\u0301", "", "", "", "", "", "", "", ""},
+          {"a\u0301", "", "", "", "", "", "", "", ""}},
+      {"\\(a\\?.\\)\\@<=x", "a\u0301x", 3, 4, 3, 4,
+          {"a\u0301", "", "", "", "", "", "", "", ""},
+          {"a\u0301", "", "", "", "", "", "", "", ""}},
+      {"\\(a\\?.\\)\\@<=x", "aa\u0301x", 4, 5, 4, 5,
+          {"a\u0301", "", "", "", "", "", "", "", ""},
+          {"a\u0301", "", "", "", "", "", "", "", ""}},
+      {"\\%(\\(a\\?.\\)\\@=.\\)\\@=.", "a\u0301x", 0, 3, 0, 3,
+          {"a\u0301", "", "", "", "", "", "", "", ""},
+          {"a\u0301", "", "", "", "", "", "", "", ""}},
+      {"[a\u0301]\\{1}.", "a\n\u0301b", 0, 4, GRX_NPOS, GRX_NPOS,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"[ab\u0301]\\{1}.", "a\u0301b", 0, 4, 0, 4,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"[^a\u0301]\\{1}.", "\u0301\u0302a", 0, 5, GRX_NPOS, GRX_NPOS,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\%u0301", "\u0302\u0301a", 0, 4, GRX_NPOS, GRX_NPOS,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\%u0301", "\u0301\u0301", 0, 4, 2, 4,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\Z\\%u0301.", "\u0301\u0302a", 0, 4, 0, 5,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\Z\\(\\%u0301\\).", "\u0301\u0302a", 0, 4, 0, 5,
+          {"", "", "", "", "", "", "", "", ""},
+          {"\u0301\u0302", "", "", "", "", "", "", "", ""}},
+      {"\\(\\(a\\zsb\\)\\@>\\)\\@>", "ab", 1, 2, 0, 2,
+          {"ab", "ab", "", "", "", "", "", "", ""},
+          {"ab", "ab", "", "", "", "", "", "", ""}},
+      {"\\(\\(a\\zsb\\)\\@>\\)\\@>", "xab", 2, 3, 1, 3,
+          {"ab", "ab", "", "", "", "", "", "", ""},
+          {"ab", "ab", "", "", "", "", "", "", ""}},
+      {"\\(\\(a\\zsb\\)\\@>\\)\\@>", "abab", 1, 2, 0, 2,
+          {"ab", "ab", "", "", "", "", "", "", ""},
+          {"ab", "ab", "", "", "", "", "", "", ""}},
+      {"\\(\\(a\\zeb\\)\\@>\\)\\@>", "ab", 0, 1, 0, 2,
+          {"ab", "ab", "", "", "", "", "", "", ""},
+          {"ab", "ab", "", "", "", "", "", "", ""}},
+      {"\\(\\(a\\zeb\\)\\@>\\)\\@>", "xab", 1, 2, 1, 3,
+          {"ab", "ab", "", "", "", "", "", "", ""},
+          {"ab", "ab", "", "", "", "", "", "", ""}},
+      {"\\(\\(a\\zeb\\)\\@>\\)\\@>", "abab", 0, 1, 0, 2,
+          {"ab", "ab", "", "", "", "", "", "", ""},
+          {"ab", "ab", "", "", "", "", "", "", ""}},
+  };
+  for (const Row & row : rows) {
+    for (GRX_Engine engine : {GRX_ENGINE_AUTO, GRX_ENGINE_BACKTRACK}) {
+      SCOPED_TRACE(engine);
+      expect(row.pattern, row.subject, old() ? row.old_start : row.nfa_start,
+          old() ? row.old_end : row.nfa_end,
+          old() ? row.old_groups : row.nfa_groups, engine);
+    }
+  }
+}
+
 TEST_P(VimProfiles, PublicNameAndCompiledIdentityRoundTrip) {
   const char * name = old() ? "vim-backtrack" : "vim-nfa";
   EXPECT_STREQ(grx_syntax_name(GetParam()), name);
@@ -898,4 +1240,498 @@ TEST_P(VimProfiles, PatternLocalEngineSelectorsAreExplicitlyUnsupported) {
 int main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
+}
+
+TEST(VimCombining, FrontierContextsResetOnSameObjectAcrossSubjectsAndWindows) {
+  for (const char * ending : {R"(\@=.)", R"(\@>)"}) {
+    std::string pattern = R"(^\([ab]\)\(\%(\1aX\|[ab].x\)\))";
+    pattern += ending;
+    GRX_Regex * regex = nullptr;
+    ASSERT_EQ(grx_regex_compile(pattern.c_str(), GRX_SYNTAX_VIM_NFA, 0, &regex),
+        GRX_OK);
+    GRX_Match * match = nullptr;
+    ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+    for (const char * subject : {"aaa\u0301x", "baa\u0301x", "bba\u0301x",
+             "aba\u0301x", "aaa\u0301x", "baa\u0301x"}) {
+      int matched = 0;
+      ASSERT_EQ(grx_regex_search(regex, subject, std::strlen(subject), 0,
+                    GRX_ENGINE_BACKTRACK, nullptr, match, &matched),
+          GRX_OK);
+      const bool expected = subject[0] != subject[1];
+      ASSERT_EQ(matched, expected);
+      if (expected) {
+        GRX_Capture whole;
+        ASSERT_EQ(grx_match_group(match, 0, &whole), GRX_OK);
+        EXPECT_EQ(whole.start, 0u);
+        EXPECT_EQ(whole.end, ending[2] == '=' ? 2u : 6u);
+      }
+    }
+    grx_match_destroy(match);
+    grx_regex_free(regex);
+  }
+  GRX_Regex * regex = nullptr;
+  ASSERT_EQ(
+      grx_regex_compile(R"(\([ab].\|abX\)\@=.)", GRX_SYNTAX_VIM_NFA, 0, &regex),
+      GRX_OK);
+  GRX_Match * match = nullptr;
+  ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+  const std::string subject = "xa\u0301xa\u0301";
+  GRX_SearchOptions search{};
+  search.begin = 1;
+  search.end = 4;
+  search.engine = GRX_ENGINE_BACKTRACK;
+  int matched = 0;
+  ASSERT_EQ(grx_regex_search_ex(regex, subject.data(), subject.size(), &search,
+                match, &matched),
+      GRX_OK);
+  ASSERT_TRUE(matched);
+  GRX_Capture whole;
+  ASSERT_EQ(grx_match_group(match, 0, &whole), GRX_OK);
+  EXPECT_EQ(whole.start, 1u);
+  EXPECT_EQ(whole.end, 4u);
+  ASSERT_EQ(grx_regex_search_next(regex, subject.data(), subject.size(),
+                &search, match, &matched),
+      GRX_OK);
+  EXPECT_FALSE(matched);
+  search.begin = 4;
+  search.end = subject.size();
+  ASSERT_EQ(grx_regex_search_ex(regex, subject.data(), subject.size(), &search,
+                match, &matched),
+      GRX_OK);
+  ASSERT_TRUE(matched);
+  ASSERT_EQ(grx_match_group(match, 0, &whole), GRX_OK);
+  EXPECT_EQ(whole.start, 5u);
+  EXPECT_EQ(whole.end, 8u);
+  grx_match_destroy(match);
+  grx_regex_free(regex);
+}
+
+TEST(VimCombining, QueryProgramsExposeEngineRequirementsWithoutPenalizingLiterals) {
+  for (bool query : {false, true}) {
+    GRX_Regex * regex = nullptr;
+    ASSERT_EQ(grx_regex_compile(query ? R"(\%(a\|[ab]\))" : "a",
+        GRX_SYNTAX_VIM_NFA, 0, &regex), GRX_OK);
+    GRX_Match * match = nullptr;
+    ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+    for (GRX_Engine engine : {GRX_ENGINE_AUTO, GRX_ENGINE_BACKTRACK,
+             GRX_ENGINE_PIKE, GRX_ENGINE_BITSTATE, GRX_ENGINE_DFA}) {
+      int matched = 0;
+      const char * subject = query ? "a\u0301b" : "a";
+      GRX_Result result = grx_regex_search(regex, subject, std::strlen(subject),
+          0, engine, nullptr, match, &matched);
+      if (engine == GRX_ENGINE_DFA ||
+          (query && engine != GRX_ENGINE_AUTO && engine != GRX_ENGINE_BACKTRACK)) {
+        EXPECT_EQ(result, GRX_ERR_UNSUPPORTED);
+      }
+      else {
+        ASSERT_EQ(result, GRX_OK);
+        ASSERT_TRUE(matched);
+        GRX_Capture whole;
+        ASSERT_EQ(grx_match_group(match, 0, &whole), GRX_OK);
+        EXPECT_EQ(whole.start, query ? 3u : 0u);
+        EXPECT_EQ(whole.end, query ? 4u : 1u);
+      }
+    }
+    grx_match_destroy(match);
+    grx_regex_free(regex);
+  }
+}
+
+TEST(VimCombining, EligibleEnginesUseReachedPriorScalarForLeadingMarkOrigins) {
+  GRX_Regex * regex = nullptr;
+  ASSERT_EQ(grx_regex_compile(R"(\%u0301)", GRX_SYNTAX_VIM_NFA, 0, &regex), GRX_OK);
+  GRX_Match * match = nullptr;
+  ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+  struct Row { const char * subject; bool matched; };
+  const Row rows[] = {{"\u0302\u0301", false}, {"\u0301\u0302", false},
+      {"\u0301\u0301", true}};
+  for (const Row & row : rows) {
+    const char * subject = row.subject;
+    for (GRX_Engine engine : {GRX_ENGINE_AUTO, GRX_ENGINE_BACKTRACK,
+             GRX_ENGINE_PIKE, GRX_ENGINE_BITSTATE}) {
+      int matched = 0;
+      ASSERT_EQ(grx_regex_search(regex, subject, std::strlen(subject), 0, engine,
+          nullptr, match, &matched), GRX_OK);
+      ASSERT_EQ(matched, row.matched);
+      if (matched) {
+        GRX_Capture whole;
+        ASSERT_EQ(grx_match_group(match, 0, &whole), GRX_OK);
+        EXPECT_EQ(whole.start, 2u);
+        EXPECT_EQ(whole.end, 4u);
+      }
+    }
+  }
+  grx_match_destroy(match);
+  grx_regex_free(regex);
+}
+
+TEST(VimProfileState, WholeClusterFailureActivationResetsForEveryPublicSearch) {
+  GRX_Regex * raw_regex = nullptr;
+  ASSERT_EQ(grx_regex_compile(
+                R"(\(a\+\)\@=\(a\)\@=a)", GRX_SYNTAX_VIM_NFA, 0, &raw_regex),
+      GRX_OK);
+  std::unique_ptr<GRX_Regex, decltype(&grx_regex_free)> regex(
+      raw_regex, grx_regex_free);
+  GRX_Match * raw_match = nullptr;
+  ASSERT_EQ(grx_match_create(regex.get(), nullptr, &raw_match), GRX_OK);
+  std::unique_ptr<GRX_Match, decltype(&grx_match_destroy)> match(
+      raw_match, grx_match_destroy);
+  struct Row {
+    const char * subject;
+    size_t start, first, last;
+    const char * group;
+  };
+  for (GRX_Engine engine : {GRX_ENGINE_AUTO, GRX_ENGINE_BACKTRACK}) {
+    for (const Row & row : {Row{"a\u0301aaa", 0, 3, 4, "aaa"},
+             Row{"aaab", 0, 0, 1, ""}, Row{"a\u0301aaa", 3, 3, 4, ""},
+             Row{"b\u0301a", 0, 3, 4, ""}, Row{"a\u0301aaa", 0, 3, 4, "aaa"}}) {
+      int matched = 0;
+      ASSERT_EQ(
+          grx_regex_search(regex.get(), row.subject, std::strlen(row.subject),
+              row.start, engine, nullptr, match.get(), &matched),
+          GRX_OK);
+      ASSERT_TRUE(matched);
+      GRX_Capture whole, group;
+      ASSERT_EQ(grx_match_group(match.get(), 0, &whole), GRX_OK);
+      EXPECT_EQ(whole.start, row.first);
+      EXPECT_EQ(whole.end, row.last);
+      ASSERT_EQ(grx_match_group(match.get(), 1, &group), GRX_OK);
+      EXPECT_EQ(group.start == GRX_NPOS
+              ? std::string()
+              : std::string(row.subject + group.start, group.end - group.start),
+          row.group);
+    }
+  }
+}
+
+TEST_P(VimProfiles, LexicalCandidatesAndMarkedBasesUseEffectiveCharacterPolicies) {
+  // Forced-engine controls include scalar/run ownership, encoded-length
+  // selection, numeric barriers, Unicode folding and both directive orders.
+  struct Row {
+    const char * pattern;
+    const char * subject;
+    size_t old_start, old_end, nfa_start, nfa_end;
+    std::vector<std::string> old_groups, nfa_groups;
+  };
+  const Row rows[] = {
+      {"\\c\u0301\\?b", "a\u0301B", 0, 3, 0, 4,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\C\u0301\\?b", "a\u0301B", GRX_NPOS, GRX_NPOS, GRX_NPOS, GRX_NPOS,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\c\\C\u0301\\?b", "a\u0301B", 0, 3, 0, 4,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\C\\c\u0301\\?b", "a\u0301B", 0, 3, 0, 4,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\Z\u0301\\?a\u0302b", "a\u0301a\u0301b", 0, 3, 0, 7,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\c\u0301\\?\u212a", "a\u0301k", 0, 3, 0, 4,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\c\u0301\\?\u00c9", "a\u0301\u00e9", 0, 3, 0, 5,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\Z\u0301\\?\u0302", "a\u0301bK", 0, 3, GRX_NPOS, GRX_NPOS,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\Z\u0301\\?\\%u0302", "a\u0301bK", 0, 3, GRX_NPOS, GRX_NPOS,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\c\u0301\\?b\\zs.", "a\u0301bK", 0, 3, 4, 5,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\Z\u0301\\?a\u0302\\(b\\)", "a\u0301a\u0301b", 0, 3, 0, 7,
+          {"", "", "", "", "", "", "", "", ""},
+          {"b", "", "", "", "", "", "", "", ""}},
+      {"\\Z\u0301\\?a\u0302\\%u0062", "a\u0301a\u0301b", 0, 3, 0, 7,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\c\\Z\u0301\\?a\u0302b", "a\u0301a\u0301B", GRX_NPOS, GRX_NPOS, 0, 7,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\c\\Z\u0301\\?a\u0302b", "a\u0301a\u0302B", 0, 3, 0, 7,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\c\\Za\u0302b", "A\u0301b", 0, 4, GRX_NPOS, GRX_NPOS,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\c\\Za\u0302b", "a\u0301B", GRX_NPOS, GRX_NPOS, 0, 4,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\c\\Za\u0302b", "a\u0301a\u0302B", 3, 7, 3, 7,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\c\\Za", "a\u0301b", 0, 3, 0, 3,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\c\\Za", "A\u0301b", GRX_NPOS, GRX_NPOS, 0, 3,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\c\\Za", "Ab", 0, 1, 0, 1,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\c\\Za\u0302", "A\u0302b", 0, 3, GRX_NPOS, GRX_NPOS,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\c\\Za\u0302", "A\u0301b", GRX_NPOS, GRX_NPOS, GRX_NPOS, GRX_NPOS,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\c\\Z[a\u0302]b", "A\u0301b", GRX_NPOS, GRX_NPOS, GRX_NPOS, GRX_NPOS,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\c\\Z\u00e9\u0302b", "\u00c9\u0301b", 0, 5, GRX_NPOS, GRX_NPOS,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\c\\Z\u212a\u0302b", "k\u0301b", 0, 4, GRX_NPOS, GRX_NPOS,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\c\\Z\\(a\u0302\\)b", "A\u0301b", GRX_NPOS, GRX_NPOS, GRX_NPOS, GRX_NPOS,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\c\\Z\\(a\u0302\\)b", "a\u0301B", 0, 4, 0, 4,
+          {"a\u0301", "", "", "", "", "", "", "", ""},
+          {"a\u0301", "", "", "", "", "", "", "", ""}},
+      {"\\c\\Za\u0302\\?b", "a\u0301B", 0, 4, 0, 4,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\c\\Za\u0302\\?b", "A\u0301b", GRX_NPOS, GRX_NPOS, 3, 4,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\c\\Za\u0302\\{1}b", "a\u0302B", GRX_NPOS, GRX_NPOS, 0, 4,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\c\\Za\\%u0302b", "a\u0302B", GRX_NPOS, GRX_NPOS, GRX_NPOS, GRX_NPOS,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\c\\Z\\%u0061\u0302b", "a\u0302B", GRX_NPOS, GRX_NPOS, GRX_NPOS, GRX_NPOS,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\ca\u0302", "A\u0302b", 0, 3, GRX_NPOS, GRX_NPOS,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\c[a\u0302]", "A\u0302b", 0, 3, GRX_NPOS, GRX_NPOS,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\ca\u0302\\?b", "A\u0302b", GRX_NPOS, GRX_NPOS, 3, 4,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\c\\Zab", "ab\u0301", 0, 4, 0, 4,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\c\\Zab", "aB\u0301", GRX_NPOS, GRX_NPOS, 0, 4,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\Zab", "a\u0301b\u0301", 0, 6, 0, 6,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\Za\u0302b", "ab\u0301", 0, 4, 0, 4,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\c\u0301\\?bbb", "a\u0301b", 0, 3, GRX_NPOS, GRX_NPOS,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\u0301\\?bbb", "a\u0301b", GRX_NPOS, GRX_NPOS, GRX_NPOS, GRX_NPOS,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\c\u0301\\?a\u0302bc", "a\u0301a\u0302", 0, 3, GRX_NPOS, GRX_NPOS,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\c\\Z\u0301\\?a\u0302bc", "a\u0301a\u0302", 0, 3, GRX_NPOS, GRX_NPOS,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\u0301\\?\u0302", "a\u0301b", 0, 3, GRX_NPOS, GRX_NPOS,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\c\u0301\\?\u0302", "a\u0301b", 0, 3, GRX_NPOS, GRX_NPOS,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\\c\\Z\u0301\\?b", "a\u0301B\u0301", 0, 3, 0, 6,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+      {"\u0301\\?bb\\(\\)\u0302", "a\u0301b", GRX_NPOS, GRX_NPOS, GRX_NPOS, GRX_NPOS,
+          {"", "", "", "", "", "", "", "", ""},
+          {"", "", "", "", "", "", "", "", ""}},
+  };
+  for (const Row & row : rows) {
+    for (GRX_Engine engine : {GRX_ENGINE_AUTO, GRX_ENGINE_BACKTRACK}) {
+      SCOPED_TRACE(engine);
+      expect(row.pattern, row.subject, old() ? row.old_start : row.nfa_start,
+          old() ? row.old_end : row.nfa_end,
+          old() ? row.old_groups : row.nfa_groups, engine);
+    }
+  }
+  if (!old()) {
+    for (GRX_Engine engine : {GRX_ENGINE_PIKE, GRX_ENGINE_BITSTATE}) {
+      expect("\\c\\Za\u0302b", "A\u0301b", GRX_NPOS, GRX_NPOS, {}, engine);
+      expect("\\c\\Za\u0302b", "a\u0301B", 0, 4,
+          {"", "", "", "", "", "", "", "", ""}, engine);
+    }
+  }
+}
+
+TEST_P(VimProfiles, NonliteralMarkedCollectionsPreserveLexicalMemberKinds) {
+  struct Row {
+    const char * pattern;
+    const char * subject;
+    size_t old_start, old_end;
+    std::vector<std::string> old_groups;
+    size_t nfa_start, nfa_end;
+    std::vector<std::string> nfa_groups;
+  };
+  const Row rows[] = {
+      {"[́̂]", "á̂", GRX_NPOS, GRX_NPOS, {}, 0, 5, {}},
+      {"[́̂]", "́̂", 0, 4, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[a-ź]", "b", 0, 1, {"", "", "", "", "", "", "", "", ""}, 0, 1, {"", "", "", "", "", "", "", "", ""}},
+      {"[a-ź]", "1", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[a-ź]", "b́", 0, 1, {"", "", "", "", "", "", "", "", ""}, 0, 3, {"", "", "", "", "", "", "", "", ""}},
+      {"[a-ź]", "b̂́", 0, 1, {"", "", "", "", "", "", "", "", ""}, 0, 5, {"", "", "", "", "", "", "", "", ""}},
+      {"[a-ź]", "é́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[a-ź]", "日́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[a-ź]", "́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[a-ź]", "\ń", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"\\([a-ź]\\)", "b", 0, 1, {"b", "", "", "", "", "", "", "", ""}, 0, 1, {"b", "", "", "", "", "", "", "", ""}},
+      {"\\([a-ź]\\)", "1", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"\\([a-ź]\\)", "b́", 0, 1, {"b", "", "", "", "", "", "", "", ""}, 0, 3, {"b́", "", "", "", "", "", "", "", ""}},
+      {"\\([a-ź]\\)", "b̂́", 0, 1, {"b", "", "", "", "", "", "", "", ""}, 0, 5, {"b̂́", "", "", "", "", "", "", "", ""}},
+      {"\\([a-ź]\\)", "é́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"\\([a-ź]\\)", "日́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"\\([a-ź]\\)", "́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"\\([a-ź]\\)", "\ń", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[a-ź]\\+", "b", 0, 1, {"", "", "", "", "", "", "", "", ""}, 0, 1, {"", "", "", "", "", "", "", "", ""}},
+      {"[a-ź]\\+", "1", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[a-ź]\\+", "b́", 0, 3, {"", "", "", "", "", "", "", "", ""}, 0, 3, {"", "", "", "", "", "", "", "", ""}},
+      {"[a-ź]\\+", "b̂́", 0, 5, {"", "", "", "", "", "", "", "", ""}, 0, 5, {"", "", "", "", "", "", "", "", ""}},
+      {"[a-ź]\\+", "é́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[a-ź]\\+", "日́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[a-ź]\\+", "́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[a-ź]\\+", "\ń", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"\\%([a-ź]\\)\\+", "b", 0, 1, {"", "", "", "", "", "", "", "", ""}, 0, 1, {"", "", "", "", "", "", "", "", ""}},
+      {"\\%([a-ź]\\)\\+", "1", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"\\%([a-ź]\\)\\+", "b́", 0, 1, {"", "", "", "", "", "", "", "", ""}, 0, 3, {"", "", "", "", "", "", "", "", ""}},
+      {"\\%([a-ź]\\)\\+", "b̂́", 0, 1, {"", "", "", "", "", "", "", "", ""}, 0, 5, {"", "", "", "", "", "", "", "", ""}},
+      {"\\%([a-ź]\\)\\+", "é́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"\\%([a-ź]\\)\\+", "日́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"\\%([a-ź]\\)\\+", "́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"\\%([a-ź]\\)\\+", "\ń", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"\\_[a-ź]", "b", 0, 1, {"", "", "", "", "", "", "", "", ""}, 0, 1, {"", "", "", "", "", "", "", "", ""}},
+      {"\\_[a-ź]", "1", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"\\_[a-ź]", "b́", 0, 1, {"", "", "", "", "", "", "", "", ""}, 0, 3, {"", "", "", "", "", "", "", "", ""}},
+      {"\\_[a-ź]", "b̂́", 0, 1, {"", "", "", "", "", "", "", "", ""}, 0, 5, {"", "", "", "", "", "", "", "", ""}},
+      {"\\_[a-ź]", "é́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"\\_[a-ź]", "日́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"\\_[a-ź]", "́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"\\_[a-ź]", "\ń", 0, 3, {"", "", "", "", "", "", "", "", ""}, GRX_NPOS, GRX_NPOS, {}},
+      {"[[:alpha:]́]", "b", 0, 1, {"", "", "", "", "", "", "", "", ""}, 0, 1, {"", "", "", "", "", "", "", "", ""}},
+      {"[[:alpha:]́]", "1", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[[:alpha:]́]", "b́", 0, 1, {"", "", "", "", "", "", "", "", ""}, 0, 3, {"", "", "", "", "", "", "", "", ""}},
+      {"[[:alpha:]́]", "b̂́", 0, 1, {"", "", "", "", "", "", "", "", ""}, 0, 5, {"", "", "", "", "", "", "", "", ""}},
+      {"[[:alpha:]́]", "é́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[[:alpha:]́]", "日́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[[:alpha:]́]", "́", GRX_NPOS, GRX_NPOS, {}, 0, 2, {"", "", "", "", "", "", "", "", ""}},
+      {"[[:alpha:]́]", "\ń", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[a-á]", "b", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[a-á]", "1", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[a-á]", "b́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[a-á]", "b̂́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[a-á]", "é́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[a-á]", "日́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[a-á]", "́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[a-á]", "\ń", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[é-ế]", "b", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[é-ế]", "1", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[é-ế]", "b́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[é-ế]", "b̂́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[é-ế]", "é́", 0, 2, {"", "", "", "", "", "", "", "", ""}, 0, 4, {"", "", "", "", "", "", "", "", ""}},
+      {"[é-ế]", "日́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[é-ế]", "́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[é-ế]", "\ń", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[日-旦́]", "b", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[日-旦́]", "1", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[日-旦́]", "b́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[日-旦́]", "b̂́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[日-旦́]", "é́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[日-旦́]", "日́", 0, 3, {"", "", "", "", "", "", "", "", ""}, 0, 5, {"", "", "", "", "", "", "", "", ""}},
+      {"[日-旦́]", "́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[日-旦́]", "\ń", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[a-z\\u0301]", "b", 0, 1, {"", "", "", "", "", "", "", "", ""}, 0, 1, {"", "", "", "", "", "", "", "", ""}},
+      {"[a-z\\u0301]", "1", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[a-z\\u0301]", "b́", 0, 1, {"", "", "", "", "", "", "", "", ""}, 0, 3, {"", "", "", "", "", "", "", "", ""}},
+      {"[a-z\\u0301]", "b̂́", 0, 1, {"", "", "", "", "", "", "", "", ""}, 0, 5, {"", "", "", "", "", "", "", "", ""}},
+      {"[a-z\\u0301]", "é́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[a-z\\u0301]", "日́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[a-z\\u0301]", "́", GRX_NPOS, GRX_NPOS, {}, 0, 2, {"", "", "", "", "", "", "", "", ""}},
+      {"[a-z\\u0301]", "\ń", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[a-ź́]", "b", 0, 1, {"", "", "", "", "", "", "", "", ""}, 0, 1, {"", "", "", "", "", "", "", "", ""}},
+      {"[a-ź́]", "1", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[a-ź́]", "b́", 0, 1, {"", "", "", "", "", "", "", "", ""}, 0, 3, {"", "", "", "", "", "", "", "", ""}},
+      {"[a-ź́]", "b̂́", 0, 1, {"", "", "", "", "", "", "", "", ""}, 0, 5, {"", "", "", "", "", "", "", "", ""}},
+      {"[a-ź́]", "é́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[a-ź́]", "日́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[a-ź́]", "́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[a-ź́]", "\ń", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[ba-ź]", "b", 0, 1, {"", "", "", "", "", "", "", "", ""}, 0, 1, {"", "", "", "", "", "", "", "", ""}},
+      {"[ba-ź]", "1", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[ba-ź]", "b́", 0, 1, {"", "", "", "", "", "", "", "", ""}, 0, 3, {"", "", "", "", "", "", "", "", ""}},
+      {"[ba-ź]", "b̂́", 0, 1, {"", "", "", "", "", "", "", "", ""}, 0, 5, {"", "", "", "", "", "", "", "", ""}},
+      {"[ba-ź]", "é́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[ba-ź]", "日́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[ba-ź]", "́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[ba-ź]", "\ń", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[a-zb́]", "b", 0, 1, {"", "", "", "", "", "", "", "", ""}, 0, 1, {"", "", "", "", "", "", "", "", ""}},
+      {"[a-zb́]", "1", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[a-zb́]", "b́", 0, 1, {"", "", "", "", "", "", "", "", ""}, 0, 3, {"", "", "", "", "", "", "", "", ""}},
+      {"[a-zb́]", "b̂́", 0, 1, {"", "", "", "", "", "", "", "", ""}, 0, 5, {"", "", "", "", "", "", "", "", ""}},
+      {"[a-zb́]", "é́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[a-zb́]", "日́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[a-zb́]", "́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[a-zb́]", "\ń", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[^a-ź]", "b", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[^a-ź]", "1", 0, 1, {"", "", "", "", "", "", "", "", ""}, 0, 1, {"", "", "", "", "", "", "", "", ""}},
+      {"[^a-ź]", "b́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[^a-ź]", "b̂́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[^a-ź]", "é́", 0, 2, {"", "", "", "", "", "", "", "", ""}, 0, 4, {"", "", "", "", "", "", "", "", ""}},
+      {"[^a-ź]", "日́", 0, 3, {"", "", "", "", "", "", "", "", ""}, 0, 5, {"", "", "", "", "", "", "", "", ""}},
+      {"[^a-ź]", "́", 0, 2, {"", "", "", "", "", "", "", "", ""}, 0, 2, {"", "", "", "", "", "", "", "", ""}},
+      {"[^a-ź]", "\ń", 0, 1, {"", "", "", "", "", "", "", "", ""}, 0, 3, {"", "", "", "", "", "", "", "", ""}},
+      {"[^[:alpha:]́]", "b", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[^[:alpha:]́]", "1", 0, 1, {"", "", "", "", "", "", "", "", ""}, 0, 1, {"", "", "", "", "", "", "", "", ""}},
+      {"[^[:alpha:]́]", "b́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[^[:alpha:]́]", "b̂́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"[^[:alpha:]́]", "é́", 0, 2, {"", "", "", "", "", "", "", "", ""}, 0, 4, {"", "", "", "", "", "", "", "", ""}},
+      {"[^[:alpha:]́]", "日́", 0, 3, {"", "", "", "", "", "", "", "", ""}, 0, 5, {"", "", "", "", "", "", "", "", ""}},
+      {"[^[:alpha:]́]", "́", 0, 2, {"", "", "", "", "", "", "", "", ""}, GRX_NPOS, GRX_NPOS, {}},
+      {"[^[:alpha:]́]", "\ń", 0, 1, {"", "", "", "", "", "", "", "", ""}, 0, 3, {"", "", "", "", "", "", "", "", ""}},
+      {"\\c[a-ź]", "b", 0, 1, {"", "", "", "", "", "", "", "", ""}, 0, 1, {"", "", "", "", "", "", "", "", ""}},
+      {"\\c[a-ź]", "1", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"\\c[a-ź]", "b́", 0, 1, {"", "", "", "", "", "", "", "", ""}, 0, 3, {"", "", "", "", "", "", "", "", ""}},
+      {"\\c[a-ź]", "b̂́", 0, 1, {"", "", "", "", "", "", "", "", ""}, 0, 5, {"", "", "", "", "", "", "", "", ""}},
+      {"\\c[a-ź]", "é́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"\\c[a-ź]", "日́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"\\c[a-ź]", "́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"\\c[a-ź]", "\ń", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"\\Z[a-ź]", "b", 0, 1, {"", "", "", "", "", "", "", "", ""}, 0, 1, {"", "", "", "", "", "", "", "", ""}},
+      {"\\Z[a-ź]", "1", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"\\Z[a-ź]", "b́", 0, 1, {"", "", "", "", "", "", "", "", ""}, 0, 3, {"", "", "", "", "", "", "", "", ""}},
+      {"\\Z[a-ź]", "b̂́", 0, 1, {"", "", "", "", "", "", "", "", ""}, 0, 5, {"", "", "", "", "", "", "", "", ""}},
+      {"\\Z[a-ź]", "é́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"\\Z[a-ź]", "日́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"\\Z[a-ź]", "́", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+      {"\\Z[a-ź]", "\ń", GRX_NPOS, GRX_NPOS, {}, GRX_NPOS, GRX_NPOS, {}},
+  };
+  for (const Row & row : rows) {
+    for (GRX_Engine engine : {GRX_ENGINE_AUTO, GRX_ENGINE_BACKTRACK,
+             GRX_ENGINE_PIKE, GRX_ENGINE_BITSTATE}) {
+      if ((old() || std::strncmp(row.pattern, "\\_", 2) == 0 ||
+              std::strcmp(row.pattern, "[́̂]") == 0) &&
+          (engine == GRX_ENGINE_PIKE || engine == GRX_ENGINE_BITSTATE))
+        continue;
+      expect(row.pattern, row.subject, old() ? row.old_start : row.nfa_start,
+          old() ? row.old_end : row.nfa_end,
+          old() ? row.old_groups : row.nfa_groups, engine);
+    }
+  }
 }

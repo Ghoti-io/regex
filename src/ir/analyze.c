@@ -262,8 +262,8 @@ typedef struct {
  *
  * The constant was also reachable, which is what made replacing it worth doing
  * rather than merely tidy. `max_nesting_depth` is the caller's to raise
- * (design.md section 6), lowering costs up to about three IR levels per level of
- * it, and a raise past 171 put an ordinary pattern over 512: at 511 levels
+ * (design.md section 6), lowering costs up to about three IR levels per level
+ * of it, and a raise past 171 put an ordinary pattern over 512: at 511 levels
  * `(?:a...)*` was regular and the Pike VM ran it, at 513 it was not and the
  * Pike VM answered GRX_ERR_UNSUPPORTED. One IR level, a linear-time guarantee,
  * and no diagnostic. tests/unit/test_lower.cpp pins that pair.
@@ -849,6 +849,10 @@ static WalkAction walk_step(
 
     case WALK_GROUP_BODY:
       frame->span = analysis->result;
+      if (node->flags & GRX_IR_COMPLETE_COMPOSING) {
+        frame->span.max_length = GRX_NPOS;
+        frame->span.anchored_end = 0;
+      }
       return WALK_POP;
 
     case WALK_LOOK_BODY: {
@@ -992,7 +996,10 @@ static WalkAction walk_step(
       if (analysis->ir->flags & GRX_PROGRAM_UTF) {
         codepoint_widths(analysis->ir, node, &low, &high);
       }
-      frame->span = (Span) {low, high, 0, 0, 0, 0};
+      if (node->flags & GRX_IR_DEFER_COMPOSING) {
+        high = GRX_NPOS;
+      }
+      frame->span = (Span){low, high, 0, 0, 0, 0};
       return WALK_POP;
     }
 
@@ -1092,7 +1099,11 @@ static WalkAction walk_step(
       return WALK_DESCEND;
 
     case GRX_IR_ASSERT:
-      frame->span = (Span) {0, 0, 0, 0, 0, 0};
+      if (node->mode == GRX_ASSERT_SCALAR_FRONTIER ||
+          node->mode == GRX_ASSERT_NO_SCALAR_FRONTIER) {
+        analysis->is_regular = 0;
+      }
+      frame->span = (Span){0, 0, 0, 0, 0, 0};
       if (node->mode == GRX_ASSERT_START_SUBJECT
           || node->mode == GRX_ASSERT_SEARCH_START) {
         frame->span.anchored_start = 1;
@@ -1279,6 +1290,12 @@ static Span walk(Analysis * analysis, uint32_t node_index) {
         break;
       }
       frame->span = measured;
+      const GRX_IRNode * node = grx_ir_node(analysis->ir, frame->node);
+      if (node->kind == GRX_IR_BACKREF &&
+          (node->flags & GRX_IR_COMPLETE_COMPOSING)) {
+        frame->span.max_length = GRX_NPOS;
+        frame->span.anchored_end = 0;
+      }
     }
 
     // A subtree that can reach `(*ACCEPT)` can stop there, so nothing after
@@ -1474,4 +1491,3 @@ int grx_ir_can_match_empty(const GRX_IR * ir, uint32_t node_index) {
   analysis_done(&analysis);
   return span.min_length == 0;
 }
-

@@ -2032,30 +2032,74 @@ NFA reference reports 0:3. A backtracking collection steps over the base and
 can leave its marks for the next atom: `[ab].` reports 0:3, while NFA reports
 0:4. These are independent of lookbehind candidate selection.
 
-For underscore classes, the newline supplied by `\_` is another profile
-choice. On LF U+0301, `\_d` reports 0:3 in backtracking and 0:1 in NFA.
-A plain class that already includes LF, such as `\W`, carries the marks
-in both. Composing marks inside collections and marks beginning an atom
-remain explicitly unsupported (section 6).
+For underscore classes, the supplied LF path retains its lexical origin.
+On LF U+0301, `\_d` reports 0:3 in backtracking and 0:1 in NFA. With a following
+`b`, both consume through the mark and `b`, but the NFA class capture remains
+LF. Added collection LF paths have separate physical and reporting boundaries;
+for example `\(\_[^x]\).` can capture LF plus its mark while the continuation
+starts at the mark. Explicit LF collections, ordinary named classes and added
+LF branches keep their independently measured policies.
 
-Multiple simultaneous NFA branches can also affect the measured composing
-step. On `a` U+0301 `b`, `[ab]` alone reports 0:3, but `a\|[ab]` reports
-3:4; `b\|[ab]` again reports 0:3. This interaction remains a named
-limitation; no general engine-disagreement exemption follows from it.
+Marks may begin an atom or appear inside a collection. Backtracking marked
+literals require the written order and duplicate marks; NFA marked literals
+require presence and absorb the cluster. Collection policies depend on the
+first marked member and its lexical origin. Standalone marks and marks after
+a dot differ from marks fused with a literal; quantifying a mark can change
+which lexical atom owns it. These distinctions survive parsing and lowering.
 
-Backtracking `\Z` carries composing marks between adjacent literals in a
-literal run: `\Za` on `a` U+0301 `b` reports 0:1, while `\Zab` reports
-0:4. Direct simple literal repeats `a*`, `a\+`, `a\{1}` and
-`a\{1,2}` can consume the base alone in backtracking. The optional `a\?`
-and a repeated capturing or noncapturing group retain atom validation.
-These choices are selected during lowering rather than by testing the
-dialect identity in execution.
+Concurrent NFA scalar literal frontiers affect competing cluster consumers,
+including later continuations and search origins. On `a` U+0301 `b`, `[ab]`
+alone reports 0:3, `a\|[ab]` reports 3:4, and `b\|[ab]` reports 0:3. Physical
+consumption and capture reporting can differ according to path priority.
+Assertions isolate this interaction within their BODY. Forward lookbehind
+discovers candidate frontiers across the invocation; atomic entries retain
+frontiers within their owning attempt. Queries retain actual capture and
+pending-assertion read context and use the ordinary execution limits.
+Collection member kind remains lexical: a range followed by literal composing
+marks keeps its range predicate and ignores those marks as members; numeric
+mark escapes remain scalar members. Marks following named/POSIX predicates
+also remain scalar members. Thus `[a-ź]` and `[[:alpha:]́]` accept both plain
+and marked letters: the backtracking profile reports the base scalar, while
+NFA includes the full subject cluster. A leading standalone mark is admitted
+by the named-plus-mark collection, but not by the range-plus-literal-mark
+collection. Degenerate ranges retain their range spelling policy, and named
+predicates expanded to scalar/range items retain their named origin.
 
-A base with marks written beside it in the pattern forms one atom. The
-cluster must carry the named marks, in any order, and may carry additional
-marks. `\Z` drops marks written beside a base from that requirement and
-sets `GRX_OPT_IGNORE_COMBINING`; it is a whole-pattern directive like `\c`,
-not an atom, so `a\Z*` is a syntax error.
+Programs requiring these prefix queries advertise backtracking eligibility;
+explicit linear engines refuse them.
+
+Backtracking `\Z` first commits an exact lexical literal run when it matches.
+If that run itself fails, its fallback ignores written marks and carries
+subject marks between its bases. Failure of a later group or anchor cannot
+retry an already successful exact run. Numeric escapes, groups and markers
+split lexical runs. `\Z` sets `GRX_OPT_IGNORE_COMBINING` for the whole pattern;
+like `\c`, it is a directive rather than a quantifiable atom.
+
+Case folding preserves the lexical atom/run distinctions. In the backtracking
+profile, a caseless exact run must finish its last composing cluster. Its
+`\Z` fallback consumes the final cluster and compares later bases casefully;
+a one-base fallback compares that base casefully too. In the NFA profile,
+an explicitly marked base is caseful even under `\c`, including when `\Z`
+ignores the written marks. Unmarked bases retain the effective case policy.
+
+The backtracking optional-mark candidate check selects its required lexical
+run using original UTF-8 lengths, later ties and numeric/group barriers.
+Standalone composing atoms do not start these required runs. Caseless exact
+feasibility tests the first written cluster; if it fails under `\Z`, the
+mark-ignoring fallback compares bases within the selected run's original byte
+bound, counting complete target clusters. Caseful exact feasibility tests the
+whole run. Both scalar comparisons and scans
+are charged to the ordinary step budget. A raw byte comparison is used only
+when neither policy changes character equality.
+
+Simple backtracking named-class repeats test a composing cluster's final
+scalar and consume the cluster once. Simple explicit-LF collection repeats
+consume scalar LF; grouping the atom preserves the ordinary atom policy.
+Marks written on collection members are ignored by simple counted/star
+collection repeats; shorthand optional and grouped repeats preserve their
+ordinary atom ownership. Numeric standalone marks under `\Z` consume the
+remaining composing suffix. These choices are parser and IR policy, without runtime dialect
+identity checks.
 
 ### 5.21 What a subroutine call gives back
 
@@ -2182,14 +2226,8 @@ answer.
 | .NET | `IgnoreCase` folds where .NET maps; balancing groups deferred | §5.8 - and the row there used to blame the culture, which measurement refuted: `CultureInvariant` does not make .NET agree, because the rule is the invariant simple lowercase mapping and not a fold orbit. Two pairs disagree today, U+017F against `s` and U+0345 against U+03B9, both of them "folds together, maps apart"; `dotnet_flags_diff.py` excludes exactly those and fails if a third joins them. WP-50, because the rule needs no locale; [design.md](design.md) §2 for the balancing groups | `GRX_ERR_UNSUPPORTED` for balancing groups |
 | Emacs | Syntax classes (`\s-`, `\w`) use fixed Unicode definitions, not a syntax table | no syntax table | - |
 | Vim | The subject is a string, not a buffer | vim's help describes matching against a *buffer*, where `.` refuses the line break. `matchstrpos()` over a string is what this library can be, and what its differential asks: there `a.b` matches "a\nb", `[^x]` matches the break, and `^`, `$`, `\_^` and `\_$` hold at the two ends only. The `\_` forms are still distinct, because `\s` refuses a break and `\_s` accepts one | - |
-| Vim | A composing character that **begins an atom** is refused | vim reads a character out of a pattern with its marks, so a mark written after a *literal* belongs to that literal and is built here. A mark written after `.`, after `\w`, after a group, or with nothing before it is a second rule: the atom then matches any cluster carrying that mark with its base ignored, so `\w` U+0301 against "a" U+0301 "a" U+0301 is the **whole** string in both of vim's engines - two clusters for what reads as one atom and one mark. And the collection is worse than unbuilt: `[ab]` U+0301 against "ab" is a match under `re=2` and no match under `re=1`, the mark being ignored by one engine and required by the other. Refused rather than answered either way | `GRX_ERR_UNSUPPORTED` |
-| Vim | A composing character **inside a collection** is refused | vim fuses it onto the member before it, so `[a` U+0301 `]` holds one member - the cluster - and not two; `[a` U+0301 `]` against "ab" is no match there. This library's collection is a set of code points, and the member that is a cluster has nowhere to live in it | `GRX_ERR_UNSUPPORTED` |
-| Vim NFA | Composing marks with competing branches | A literal in an alternative can affect another branch's composing-character step. `[ab]` over `a` U+0301 `b` reports 0:3 in the reference, but `a\|[ab]` reports 3:4. The differential uses composing subjects with isolated atoms and counts any explicitly selected interacting cases separately. This is a named limitation of NFA compatibility, not an exemption for arbitrary engine disagreements. | - |
 | Vim | `\i`, `\k`, `\f` and `\p` are vim's *defaults* | those four are the options 'isident', 'iskeyword', 'isfname' and 'isprint', and a user who has changed one has a dialect this library does not read. Measured at the defaults, and measured by enumeration: every one of the 1,114,112 code points put to vim for each of the 52 class spellings, which is what a set whose members are decided one at a time needs. They had been *sampled* instead, and three of the four were wrong - `\i` and `\k` both missed U+00B5, and `\k` took in 5,463 code points vim excludes. **That correction went two code points too far**, fixed 2026-09-24: U+00D7 and U+00F7 are the only members of 192-255 that vim's `@` does not cover, so the explicit range is the whole reason they are keyword characters, and vim matches both with `\k`. The enumeration ran `vim -u NONE`, which leaves vim *Vi-compatible*, and 'iskeyword' is one of exactly two regex-visible options whose default differs between the two modes - `@,48-57,_` there against the `@,48-57,_,192-255` vim's help calls the Vim default. 'isident' does not differ, which is why `\i` had `{0xC0, 0xFF}` whole while `\k` had a hole in the same range: one numeric range, measured twice, under two different defaults. `tools/oracle/vim_diff.py` pins the option now, beside the encoding pin, rather than the mode - the mode would also flip 'cpoptions', which is the other difference and not the one in question | - |
 | Vim | An unknown `[:name:]` is refused | vim compiles a collection holding one into a pattern that can never match anything at all - `[[:foo:]]*a` does not match "a" - which is a degenerate answer rather than a rule | `GRX_ERR_SYNTAX` |
-| Both Vim profiles | Lookbehind candidates inside composing clusters | Candidate scans can begin at a composing mark rather than the beginning of its cluster. `\(.\+\)\@2<=x` on `a` U+0301 `x` can capture only the mark here; the backtracking reference refuses the match, and NFA captures the full cluster. The ordinary multibyte-scalar threshold is profiled; this remaining limitation concerns composing clusters. | - |
-| Both Vim profiles | Underscore collections on LF with composing suffix | The added-LF branch of `\_[ab]` and `\_[^x]` does not reproduce all reference cluster and continuation behavior. On LF U+0301 `b`, backtracking Vim reports 0:3 for either; NFA reports 3:4 for the positive collection and 1:3 for the negative one. Plain collections and subjects without composing suffixes remain covered independently. | - |
-| Vim NFA | Added LF in named underscore classes at match end | `\_s`, `\_w` and `\_d` on LF U+0301 `b` report 0:1 in NFA Vim, while this library carries the mark and reports 0:3. With a following `b` both report 0:4. This narrow terminal-offset difference remains distinct from newline membership inside optional sequences. | - |
 | Both Vim profiles | Remaining parser limitations | Forward backreferences that Vim accepts only before lookbehind are refused. Parser artifacts include `\v\_^*`, a bare `*` after a line-number assertion, and the exceptional leading-star spellings `^\m*` and `\%(*\)`. Every grammar disagreement remains visible in the matching differential. | - |
 | Both Vim profiles | Groups and nested sequences inside `\%[...]` are refused | Backtracking Vim refuses these with E54; NFA Vim accepts them. The shared grammar keeps the refusal explicit instead of interpreting their contents as ordinary atoms. Classes, collections, numeric atoms, markers and backreferences remain supported members. | `GRX_ERR_SYNTAX` |
 

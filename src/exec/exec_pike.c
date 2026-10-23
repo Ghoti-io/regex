@@ -494,7 +494,8 @@ static int read_forward(const Pike * pike, size_t position,
   return 1;
 }
 
-/** Decode the code point ending at an offset, for the assertions that look back. */
+/** Decode the code point ending at an offset, for the assertions that look
+ * back. */
 static int read_backward(
     const Pike * pike, size_t position, uint32_t * out_codepoint) {
   if (!position) {
@@ -779,7 +780,9 @@ static uint64_t stall_mask(
     registers = 64;
   }
   for (size_t index = 0; index < registers; index++) {
-    if (state->slots[pike->captures + index] == position) {
+    if (((pike->program->flags & GRX_PROGRAM_DEFER_COMPOSING) && index == 0)
+            ? state->slots[pike->captures] != GRX_NPOS
+            : state->slots[pike->captures + index] == position) {
       mask |= (uint64_t)1 << index;
     }
   }
@@ -1137,6 +1140,22 @@ static void add_thread(
       capacity = pike->stack_capacity;
     }
 
+    if ((pike->program->flags & GRX_PROGRAM_DEFER_COMPOSING) &&
+        current->slots[pike->captures] != GRX_NPOS &&
+        grx_exec_composing_frontier(inst)) {
+      uint32_t mark = 0;
+      size_t width = 0;
+      if (read_forward(pike, position, &mark, &width) &&
+          grx_display_cell_width(mark, 0) == 0) {
+        list->threads[slot].state = current;
+        continue;
+      }
+      current = state_for_write(pike, current);
+      if (!current) {
+        continue;
+      }
+      current->slots[pike->captures] = GRX_NPOS;
+    }
     switch ((GRX_Opcode)inst->op) {
       case GRX_OP_JMP:
         stack[depth].pc = inst->x;
@@ -1167,8 +1186,25 @@ static void add_thread(
         break;
       }
 
-      case GRX_OP_ASSERT:
-        if (assertion_holds(pike, inst, position)) {
+      case GRX_OP_ASSERT: {
+        uint32_t base = 0;
+        int initial = 0;
+        if (inst->policy & GRX_POLICY_ASSERT_INITIAL_BOUNDARY) {
+          uint32_t point = 0;
+          size_t width = 0;
+          initial = position != current->slots[0] ||
+              !read_forward(pike, position, &point, &width) ||
+              grx_display_cell_width(point, 0) != 0 ||
+              !grx_cluster_base_before(pike->request->subject, 0, position,
+                  pike->utf, pike->wtf8, &base) ||
+              grx_display_cell_width(base, 0) == 0;
+        }
+        if (initial ||
+            (!(inst->policy & GRX_POLICY_ASSERT_INITIAL_BOUNDARY) &&
+                (((pike->program->flags & GRX_PROGRAM_DEFER_COMPOSING) &&
+                     current->slots[pike->captures] != GRX_NPOS &&
+                     inst->mode == GRX_ASSERT_CLUSTER_BOUNDARY) ||
+                    assertion_holds(pike, inst, position)))) {
           stack[depth].pc = current_pc + 1;
           stack[depth].state = current;
           depth++;
@@ -1177,6 +1213,7 @@ static void add_thread(
           state_release(pike, current);
         }
         break;
+      }
 
       case GRX_OP_PROGRESS_SET: {
         PikeState * writable = state_for_write(pike, current);
@@ -1315,6 +1352,8 @@ static void add_thread(
 
 /** Whether the program holds an instruction this engine cannot run. */
 static int program_is_runnable(const GRX_Program * program) {
+  if (program->flags & GRX_PROGRAM_SCALAR_FRONTIER)
+    return 0;
   for (size_t i = 0; i < program->insts.count; i++) {
     const GRX_Inst * inst
         = GRX_ARENA_AT(const GRX_Inst, &program->insts, (uint32_t)i);
@@ -1441,6 +1480,9 @@ GRX_Result grx_exec_pike(const GRX_ExecRequest * request, int * out_matched) {
   }
 
   size_t position = request->start;
+  size_t ownership_scan = request->start;
+  int ownership_has_base = 0;
+  int scalar_exposed = 0;
   for (;;) {
     // Nothing in flight, nothing matched, and no position between here and
     // the next byte that could begin one is worth seeding at - so step over
@@ -1449,7 +1491,8 @@ GRX_Result grx_exec_pike(const GRX_ExecRequest * request, int * out_matched) {
     // costs a byte test at every byte. It is guarded on an empty list because
     // a thread already running has to be stepped, and on `!matched` because
     // after a match the loop is draining and not searching.
-    if (!pike.matched && !pike.current.count && !request->anchored) {
+    if (!pike.matched && !pike.current.count && !request->anchored &&
+        !(program->flags & GRX_PROGRAM_CLUSTER_SEARCH)) {
       position = grx_exec_skip_to_first_byte(
           program, request->subject, request->length, position);
     }
@@ -1470,8 +1513,34 @@ GRX_Result grx_exec_pike(const GRX_ExecRequest * request, int * out_matched) {
         && !(program->flags & GRX_PROGRAM_HAS_CR_OR_LF)
         && position != request->start
         && grx_between_crlf(request->subject, 0, request->length, position);
-    if (!pike.matched && !crlf_skip
-        && (!request->anchored || position == request->start)) {
+    int cluster_skip = 0;
+    if (program->flags & GRX_PROGRAM_CLUSTER_SEARCH) {
+      while (ownership_scan < position) {
+        uint32_t prior = 0;
+        size_t prior_width = 0;
+        if (charge_steps(&pike, 1)) {
+          result = pike.failure;
+          goto done;
+        }
+        if (!read_forward(&pike, ownership_scan, &prior, &prior_width)) {
+          result = GRX_ERR_INVALID;
+          goto done;
+        }
+        if (grx_display_cell_width(prior, 0) != 0)
+          ownership_has_base = 1;
+        ownership_scan += prior_width;
+      }
+      if (position != request->start) {
+        uint32_t point = 0;
+        size_t width = 0;
+        cluster_skip = read_forward(&pike, position, &point, &width) &&
+            grx_display_cell_width(point, 0) == 0;
+        if (cluster_skip && !ownership_has_base && scalar_exposed)
+          cluster_skip = 0;
+      }
+    }
+    if (!pike.matched && !crlf_skip && !cluster_skip &&
+        (!request->anchored || position == request->start)) {
       PikeState * state = state_create(&pike);
       if (!state) {
         result = pike.failure;
@@ -1497,7 +1566,7 @@ GRX_Result grx_exec_pike(const GRX_ExecRequest * request, int * out_matched) {
     // the search one character before the answer. `b$` against
     // "\x00\r\nb" under `(*ANY)` is the case - the backtracker found
     // 3-4 and this engine reported no match.
-    if (!pike.current.count && !crlf_skip) {
+    if (!pike.current.count && !crlf_skip && !cluster_skip) {
       break;
     }
 
@@ -1513,6 +1582,7 @@ GRX_Result grx_exec_pike(const GRX_ExecRequest * request, int * out_matched) {
 
     // `current` is not written during this loop - add_thread() builds `next`
     // - so its block and count are read once rather than at every thread.
+    int next_scalar = 0;
     PikeThread * const live = pike.current.threads;
     const size_t live_count = pike.current.count;
     for (size_t i = 0; i < live_count; i++) {
@@ -1537,14 +1607,42 @@ GRX_Result grx_exec_pike(const GRX_ExecRequest * request, int * out_matched) {
 
       // Every pc in a list was bounds-tested before it was put there.
       const GRX_Inst * inst = &pike.insts[pc];
+      if ((program->flags & GRX_PROGRAM_DEFER_COMPOSING) &&
+          state->slots[pike.captures] != GRX_NPOS &&
+          grx_exec_composing_frontier(inst) && have_input &&
+          grx_display_cell_width(codepoint, 0) == 0) {
+        add_thread(&pike, &pike.next, pc, state, position + width);
+        if (pike.failure != GRX_OK) {
+          result = pike.failure;
+          goto done;
+        }
+        continue;
+      }
       int advance = 0;
       switch ((GRX_Opcode)inst->op) {
         case GRX_OP_CHAR:
           advance = have_input && codepoint == inst->x;
           break;
-        case GRX_OP_CLASS:
-          advance = have_input && in_class(&pike, inst->x, codepoint);
+        case GRX_OP_CLASS: {
+          uint32_t tested = codepoint;
+          if (have_input && (inst->policy & GRX_POLICY_CLASS_TAIL)) {
+            size_t at = position + width;
+            uint32_t mark = 0;
+            size_t mark_width = 0;
+            while (read_forward(&pike, at, &mark, &mark_width) &&
+                grx_display_cell_width(mark, 0) == 0) {
+              if (charge_steps(&pike, 1)) {
+                state_release(&pike, state);
+                result = pike.failure;
+                goto done;
+              }
+              tested = mark;
+              at += mark_width;
+            }
+          }
+          advance = have_input && in_class(&pike, inst->x, tested);
           break;
+        }
         case GRX_OP_ANY:
           advance = have_input && !in_class(&pike, inst->x, codepoint);
           // The same clause exec_backtrack.c carries, for the same reason:
@@ -1625,6 +1723,9 @@ GRX_Result grx_exec_pike(const GRX_ExecRequest * request, int * out_matched) {
       }
 
       if (advance) {
+        if ((inst->policy & GRX_POLICY_SCALAR_LITERAL) &&
+            grx_program_scope(program, pc) == 0)
+          next_scalar = 1;
         add_thread(&pike, &pike.next, pc + 1, state, position + width);
         if (pike.failure != GRX_OK) {
           result = pike.failure;
@@ -1650,6 +1751,7 @@ GRX_Result grx_exec_pike(const GRX_ExecRequest * request, int * out_matched) {
     if (position >= request->length) {
       break;
     }
+    scalar_exposed = next_scalar;
     position += width ? width : 1;
   }
 

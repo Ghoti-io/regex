@@ -451,6 +451,44 @@ TEST(OutOfMemory, DeferredVimAssertionSnapshotsUnwindEveryAllocationFailure) {
     int expected_match = 1;
   };
   const Case cases[] = {
+      {GRX_SYNTAX_VIM_BACKTRACK, "[a-ź]", "b́"},
+      {GRX_SYNTAX_VIM_NFA, "[a-ź]", "b́"},
+      {GRX_SYNTAX_VIM_BACKTRACK, "[[:alpha:]́]", "á"},
+      {GRX_SYNTAX_VIM_NFA, "[[:alpha:]́]", "á"},
+      {GRX_SYNTAX_VIM_BACKTRACK, "\\([a-ź]\\)", "b́"},
+      {GRX_SYNTAX_VIM_NFA, "\\([[:alpha:]́]\\)", "á"},
+      {GRX_SYNTAX_VIM_BACKTRACK, "\\c\u0301\\?b", "a\u0301B"},
+      {GRX_SYNTAX_VIM_BACKTRACK, "\\Z\u0301\\?a\u0302b", "a\u0301a\u0301b"},
+      {GRX_SYNTAX_VIM_BACKTRACK, "\\c\\Za\u0302b", "a\u0301B", 0, 0},
+      {GRX_SYNTAX_VIM_NFA, "\\c\\Za\u0302b", "A\u0301b", 0, 0},
+      {GRX_SYNTAX_VIM_NFA, R"(\(a\)\@>.\1)", "aaa\u0301", 1024},
+      {GRX_SYNTAX_VIM_NFA, R"(\(a\)\@=a\(\1\)\@=.)", "a\u0301a\u0301", 1024},
+      {GRX_SYNTAX_VIM_NFA, R"(\(a\)\@=a\(\1\)\@>x)", "aa\u0301x", 1024, 0},
+      {GRX_SYNTAX_VIM_NFA, R"(\(a\)\(\1\)\@>x)", "aa\u0301x", 1024, 0},
+      {GRX_SYNTAX_VIM_NFA, R"(\(a\)\@=\(aX\|\1\)\@=.)", "a\u0301", 1024},
+      {GRX_SYNTAX_VIM_NFA, R"(\(a\)\@=\(\1\|aX\)\@>x)", "a\u0301x", 1024},
+      {GRX_SYNTAX_VIM_NFA, R"(\(a\+\)\@=\(a\)\@=a)", "a\u0301aaa", 1024},
+      {GRX_SYNTAX_VIM_NFA, R"(\(a\)\@=a\1)", "aab", 1024},
+      {GRX_SYNTAX_VIM_NFA, R"(\(a\?\)\@=\1.)", "a\u0301", 1024},
+      {GRX_SYNTAX_VIM_NFA, R"(\(\(a\zsb\)\@>\)\@>)", "ab", 1024},
+      {GRX_SYNTAX_VIM_NFA, R"(\(x\)\%(\(\(ab\)\@>\)\@>\)\@=.)", "xab", 1024},
+      {GRX_SYNTAX_VIM_NFA, R"(^\(a\)\?a\?b\(\%(\1aX\|[ab].x\)\)\@>)",
+          "abaa\u0301x", 1024, 0},
+      {GRX_SYNTAX_VIM_NFA, R"(\(\([ab].\|abX\)\@=.\)\@=.)", "a\u0301", 1024},
+      {GRX_SYNTAX_VIM_NFA, R"(\(a\?.\)\@<=x)", "aa\u0301x", 1024},
+      {GRX_SYNTAX_VIM_NFA, R"(\%(a\|[ab]\))", "a\u0301b", 1024},
+      {GRX_SYNTAX_VIM_NFA, R"(^\%([ab]..\|a\nX\))", "a\n\u0301b", 1024},
+      {GRX_SYNTAX_VIM_NFA, R"(\(\_[^x]\).)", "\n\u0301b", 1024},
+      {GRX_SYNTAX_VIM_NFA, R"(\([ab].\|abX\)\@=.)", "a\u0301", 1024},
+      {GRX_SYNTAX_VIM_NFA, R"(^\([ab]\)\(\%(\1aX\|[ab].x\)\)\@>)", "baa\u0301x",
+          1024},
+      {GRX_SYNTAX_VIM_NFA, R"(\(a\|.\)\@<=x)", "a\u0301x", 1024},
+      {GRX_SYNTAX_VIM_BACKTRACK, "\u0301\\?b", "a\u0301xb"},
+      {GRX_SYNTAX_VIM_BACKTRACK,
+          R"(\Za)"
+          "\u0301"
+          "\u0302b",
+          "a\u0302\u0301b"},
       {GRX_SYNTAX_VIM_BACKTRACK, R"(\%(aa\|a\)\{2}aab)", "aaab"},
       {GRX_SYNTAX_VIM_BACKTRACK, R"(\%(\%(a\)\{1,2}\)\{2}b)", "aab", 0, 0},
       {GRX_SYNTAX_VIM_BACKTRACK, R"(\%(\%(a\)\+\)\{2}b)", "aab"},
@@ -477,10 +515,10 @@ TEST(OutOfMemory, DeferredVimAssertionSnapshotsUnwindEveryAllocationFailure) {
       {GRX_SYNTAX_VIM_BACKTRACK, R"(a\%(a\)\@<=\%(a\|aa\)x)", "aaab", 0, 0},
       {GRX_SYNTAX_VIM_NFA, R"(\(a\)\@=\(\1b\)\@=ab)", "ab", 0, 0},
       {GRX_SYNTAX_VIM_NFA, R"(a\+\(a\)\@>\(a\)\@<=x)", "aaab", 0, 0},
-      {GRX_SYNTAX_VIM_NFA, R"(\%(\%(a\(a\ze\)\@<=\)\{0,2}\)\{0,3}b)",
-          "aaab", 1024},
-      {GRX_SYNTAX_VIM_NFA, R"(\(a*\)\zs\(a\)\%(\1a\)\@>\%(a\)\@<=b)",
-          "aaaab", 1024},
+      {GRX_SYNTAX_VIM_NFA, R"(\%(\%(a\(a\ze\)\@<=\)\{0,2}\)\{0,3}b)", "aaab",
+          1024},
+      {GRX_SYNTAX_VIM_NFA, R"(\(a*\)\zs\(a\)\%(\1a\)\@>\%(a\)\@<=b)", "aaaab",
+          1024},
   };
   size_t fault_runs = 0;
   size_t successful_fallbacks = 0;
@@ -580,7 +618,8 @@ TEST(OutOfMemory, DeferredVimAssertionSnapshotsUnwindEveryAllocationFailure) {
   }
   std::fprintf(stderr,
       "Vim assertion OOM invariance: %zu fault runs, "
-      "%zu successful fallbacks, %zu recovered searches, %zu capture spans compared\n",
+      "%zu successful fallbacks, %zu recovered searches, %zu capture spans "
+      "compared\n",
       fault_runs, successful_fallbacks, recovered_searches, compared_spans);
 }
 

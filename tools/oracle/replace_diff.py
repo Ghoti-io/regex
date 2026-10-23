@@ -485,14 +485,18 @@ def parse_vim_reply(line, reference=False):
 
 
 def ask_vim(rows, engine=2):
-    """vim's answers: one process for the whole run, as vim_diff.py does.
+    """Acquire replacement answers in fresh, bounded Vim processes."""
+    if engine not in (1, 2):
+        raise ValueError('a forced Vim engine (1 or 2) is required')
+    import vim_isolated
+    inputs = [[pattern, subject, template] for _, pattern, subject, template in rows]
+    answers = vim_isolated.ask(inputs, 'set regexpengine=%d\n' % engine + VIM_SCRIPT,
+                               'in', 'o')
+    return vim_protocol.decode(answers, vim_protocol.replacement_answer)
 
-    `substitute()` and not `:s`, for the reason vim_diff.py drives
-    `matchstrpos()`: the subject here is a string, and `:s` works on a
-    buffer. Over a string vim's `\r` is U+000D and its `\n` is U+000A,
-    where in a buffer the first splits the line and the second writes a NUL
-    - the same two characters seen through a different container.
-    """
+
+def ask_vim_batch_diagnostic(rows, engine=2):
+    """Diagnostic only: shared process history cannot author normative answers."""
     if engine not in (1, 2):
         raise ValueError('a forced Vim engine (1 or 2) is required')
     work = tempfile.mkdtemp(prefix="replace_diff.")
@@ -519,6 +523,8 @@ def ask_vim(rows, engine=2):
     inputs = [[pattern, subject, template] for _, pattern, subject, template in rows]
     answers = vim_protocol.run(vim_runner.command(
         extra + ['-c', 'source ' + script_path], scratch=work), out_path, inputs)
+    answers.evidence['normative'] = False
+    answers.evidence['transport'] = 'batch-diagnostic'
     return vim_protocol.decode(answers, vim_protocol.replacement_answer)
 
 

@@ -1151,3 +1151,52 @@ int main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
+
+TEST(Rxt, EmptyVimTextGroupsPermitParticipatingEmptyCaptures) {
+  for (const char * profile : {"vim-backtrack", "vim-nfa"}) {
+    grxtest::VectorFile file;
+    std::string error;
+    ASSERT_TRUE(grxtest::read_vector_file(
+        grxtest::data("vectors_selftest") + "/empty-text-" + profile + ".rxt",
+        &file, &error))
+        << error;
+    ASSERT_FALSE(file.records.empty());
+    for (const grxtest::Record & record : file.records) {
+      ASSERT_TRUE(record.has_groups);
+      ASSERT_EQ(record.groups.size(), 9u);
+      for (const std::string & text : record.groups) {
+        EXPECT_TRUE(text.empty());
+      }
+      Outcome text = run_record(record);
+      EXPECT_TRUE(text.passed) << text.reason;
+      // Without TEXT mode an omitted group means an exact unset span.
+      grxtest::Record spans = record;
+      spans.has_groups = false;
+      Outcome exact = run_record(spans);
+      EXPECT_FALSE(exact.passed);
+      EXPECT_NE(exact.reason.find("expected"), std::string::npos);
+    }
+  }
+}
+
+TEST(Conformance, VimVectorsRetainTextOnlyCaptureContract) {
+  for (const char * profile : {"vim-backtrack", "vim-nfa"}) {
+    for (const char * name : {"named.rxt", "generated.rxt"}) {
+      grxtest::VectorFile file;
+      std::string error;
+      ASSERT_TRUE(grxtest::read_vector_file(
+          grxtest::data("vectors") + "/" + profile + "/" + name, &file, &error))
+          << error;
+      ASSERT_FALSE(file.records.empty());
+      for (const grxtest::Record & record : file.records) {
+        SCOPED_TRACE(record.text);
+        if (record.expectation == grxtest::Expectation::Spans) {
+          EXPECT_TRUE(record.has_groups);
+          EXPECT_EQ(record.groups.size(), 9u);
+        }
+        Outcome result = run_record(record);
+        EXPECT_TRUE(result.passed) << result.reason;
+      }
+    }
+  }
+}

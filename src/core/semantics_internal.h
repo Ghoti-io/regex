@@ -71,6 +71,14 @@ extern "C" {
  * guarantees by refusing GRX_OPT_WTF8 without GRX_OPT_UTF.
  */
 #define GRX_PROGRAM_WTF8 GRX_BIT(12)
+/** Forward lookbehind candidates are composing-cluster starts. */
+#define GRX_PROGRAM_COMPOSING_CLUSTERS GRX_BIT(13)
+/** Register zero holds an LF path awaiting composing-mark skipping. */
+#define GRX_PROGRAM_DEFER_COMPOSING GRX_BIT(14)
+/** Global scalar/cluster discovery requires the backtracker. */
+#define GRX_PROGRAM_SCALAR_FRONTIER GRX_BIT(15)
+#define GRX_PROGRAM_CLUSTER_SEARCH GRX_BIT(16)
+#define GRX_PROGRAM_REPORT_COMPOSING GRX_BIT(17)
 /** Assertions select a capture context from their continuation frontier. */
 #define GRX_PROGRAM_LOOK_CONTEXT GRX_BIT(9)
 /** Assertion end markers carry undoable continuation and subrun ownership. */
@@ -384,6 +392,9 @@ typedef enum {
    * pattern pays nothing.
    */
   GRX_ASSERT_SCREEN_COLUMN,
+  GRX_ASSERT_SCALAR_FRONTIER,    ///< Competing scalar frontier at the prior
+                                 ///< scalar.
+  GRX_ASSERT_NO_SCALAR_FRONTIER, ///< No competing scalar frontier.
   GRX_ASSERT_COUNT              ///< Closes the enum; not an assertion.
 } GRX_AssertKind;
 

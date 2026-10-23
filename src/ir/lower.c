@@ -66,6 +66,9 @@ typedef struct {
   int scalar_direct;          ///< Direct literal quantifier consumes scalars.
   int skip_composing_prefix;  ///< Adjacent literals may skip intervening marks.
   unsigned atomic_end_depth;   ///< End markers suppressed by atomic bodies.
+  uint32_t frontier_scope;
+  uint32_t frontier_scopes;
+  unsigned assertion_depth;    ///< Scalar frontiers are local to a body.
   unsigned atomic_depth;       ///< Marker-suppressing atomic nesting.
   int reverse;                 ///< Non-zero inside a lookbehind body.
   uint32_t newline_class;      ///< The line-terminator set, or GRX_INDEX_NONE.
@@ -115,6 +118,7 @@ static GRX_Result add(Lowering * low, GRX_IRKind kind, const GRX_Node * node,
     return storage_failed(low, result, node);
   }
 
+  grx_ir_node(low->ir, *out_node)->scope = low->frontier_scope;
   if (low->reverse) {
     grx_ir_node(low->ir, *out_node)->flags |= GRX_IR_REVERSE;
   }
@@ -304,7 +308,15 @@ static GRX_Result posix_class_named_set(Lowering * low, const char * name,
   const char * second = NULL;        ///< A second property to union with it.
   int refuse_wide = 0;               ///< Widened by PCRE2, not yet by this.
 
-#define POSIX_ROW(text, table, wide_name, wide_second, refuse)                  if (strcmp(name, text) == 0) {                                                 ranges = table;                                                              count = sizeof(table) / sizeof(*table);                                      property = wide_name;                                                        second = wide_second;                                                        refuse_wide = refuse;                                                      } else
+#define POSIX_ROW(text, table, wide_name, wide_second, refuse)                 \
+  if (strcmp(name, text) == 0) {                                               \
+    ranges = table;                                                            \
+    count = sizeof(table) / sizeof(*table);                                    \
+    property = wide_name;                                                      \
+    second = wide_second;                                                      \
+    refuse_wide = refuse;                                                      \
+  }                                                                            \
+  else
 
   POSIX_ROW("alnum", alnum, "Alphabetic", "Nd", 0)
   POSIX_ROW("alpha", alpha, "Alphabetic", NULL, 0)
@@ -755,6 +767,21 @@ static GRX_Result evaluate_class(
       return fail(low, GRX_DIAG_INTERNAL, node);
     }
 
+    if (!low->profile.scalar_collections &&
+        (item->flags & GRX_CLASS_ITEM_RANGE_MARK)) {
+      continue;
+    }
+    if (low->profile.scalar_collections && (node->flags & GRX_NODE_NEGATED) &&
+        (item->flags & GRX_CLASS_ITEM_NEWLINE_ESCAPE)) {
+      continue;
+    }
+    if (low->profile.scalar_collections &&
+        (node->flags & GRX_NODE_COLLECTION) && i > 0 &&
+        item->kind == GRX_CLASS_ITEM_SINGLE &&
+        grx_display_cell_width(item->lo, 0) == 0) {
+      continue;
+    }
+
     GRX_CharClass piece;
     grx_charclass_init(&piece, out->allocator);
     GRX_Result result = item_base_set(low, item, node, &piece);
@@ -827,6 +854,22 @@ static GRX_Result evaluate_class(
       return result;
     }
     out->negated = 1;
+  }
+
+  if (node->flags & GRX_NODE_EXCLUDE_LF) {
+    GRX_CharClass newline;
+    grx_charclass_init(&newline, out->allocator);
+    result = grx_charclass_add_range(&newline, '\n', '\n', low->limits);
+    if (result == GRX_OK) {
+      result = grx_charclass_canonicalize(out, low->limits);
+    }
+    if (result == GRX_OK) {
+      result = grx_charclass_subtract(out, &newline, low->limits);
+    }
+    grx_charclass_clear(&newline);
+    if (result != GRX_OK) {
+      return storage_failed(low, result, node);
+    }
   }
 
   return GRX_OK;
@@ -1065,6 +1108,10 @@ static GRX_Result attach_composing_assert(Lowering * low,
   }
   grx_ir_node(low->ir, assertion)->mode = (uint8_t)kind;
   grx_ir_node(low->ir, assertion)->a = index;
+  if (node && (node->flags & GRX_NODE_NUMERIC) &&
+      kind == GRX_ASSERT_CLUSTER_BOUNDARY) {
+    grx_ir_node(low->ir, assertion)->flags |= GRX_IR_INITIAL_BOUNDARY;
+  }
   return attach(low, parent, assertion);
 }
 
@@ -1090,6 +1137,35 @@ static GRX_Result lower_codepoint(Lowering * low, uint32_t codepoint,
  */
 static GRX_Result lower_cluster(Lowering * low, const uint32_t * points,
     size_t length, const GRX_Node * node, uint32_t * out_node) {
+  if (low->profile.scalar_collections && !is_composing(points[0]) &&
+      !ignoring_composing(low)) {
+    uint32_t exact = GRX_INDEX_NONE;
+    GRX_Result result = add(low, GRX_IR_CONCAT, node, &exact);
+    for (size_t i = 0; result == GRX_OK && i < length; i++) {
+      uint32_t scalar = GRX_INDEX_NONE;
+      result = lower_codepoint(low, points[i], node, &scalar);
+      if (result == GRX_OK) {
+        result = attach(low, exact, scalar);
+      }
+    }
+    if (result == GRX_OK) {
+      result =
+          attach_composing_assert(low, node, exact, GRX_ASSERT_NOT_COMPOSING);
+    }
+    *out_node = exact;
+    return result;
+  }
+  if (ignoring_composing(low) && !is_composing(points[0]) &&
+      !low->profile.scalar_collections) {
+    uint32_t base = GRX_INDEX_NONE;
+    GRX_FoldKind outer_fold = low->fold;
+    low->fold = GRX_FOLD_NONE;
+    GRX_Result result = lower_codepoint(low, points[0], node, &base);
+    low->fold = outer_fold;
+    if (result == GRX_OK)
+      result = cluster_wrap(low, node, base, out_node);
+    return result;
+  }
   uint32_t index = GRX_INDEX_NONE;
   GRX_Result result = composing_class(low, &index);
   if (result != GRX_OK) {
@@ -1103,7 +1179,56 @@ static GRX_Result lower_cluster(Lowering * low, const uint32_t * points,
   }
 
   uint32_t base = GRX_INDEX_NONE;
-  result = lower_codepoint(low, points[0], node, &base);
+  int wildcard = is_composing(points[0]);
+  if (wildcard) {
+    GRX_CharClass bases;
+    grx_charclass_init(&bases, low->ir->allocator);
+    size_t count = 0;
+    const GRX_CharRange * marks =
+        grx_class_table_get(&low->ir->classes, index, &count);
+    for (size_t i = 0; result == GRX_OK && i < count; i++) {
+      result = grx_charclass_add_range(
+          &bases, marks[i].low, marks[i].high, low->limits);
+    }
+    if (result == GRX_OK) {
+      bases.negated = 1;
+      uint32_t bases_index = GRX_INDEX_NONE;
+      result = intern(low, &bases, node, &bases_index);
+      if (result == GRX_OK) {
+        result = add(low, GRX_IR_CLASS, node, &base);
+        if (result == GRX_OK) {
+          grx_ir_node(low->ir, base)->a = bases_index;
+        }
+      }
+    }
+    grx_charclass_clear(&bases);
+    if (result == GRX_OK && !low->profile.scalar_collections) {
+      result = add(low, GRX_IR_ANY, node, &base);
+      if (result == GRX_OK) {
+        grx_ir_node(low->ir, base)->a = GRX_INDEX_NONE;
+      }
+    }
+    if (result == GRX_OK && low->profile.scalar_collections) {
+      uint32_t optional = GRX_INDEX_NONE;
+      result = add(low, GRX_IR_REPEAT, node, &optional);
+      if (result == GRX_OK) {
+        GRX_IRNode * repeat = grx_ir_node(low->ir, optional);
+        repeat->min = 0;
+        repeat->max = 1;
+        repeat->mode = GRX_REPEAT_GREEDY;
+        result = attach(low, optional, base);
+        base = optional;
+      }
+    }
+  }
+  else {
+    GRX_FoldKind outer_fold = low->fold;
+    if (!low->profile.scalar_collections) {
+      low->fold = GRX_FOLD_NONE;
+    }
+    result = lower_codepoint(low, points[0], node, &base);
+    low->fold = outer_fold;
+  }
   if (result == GRX_OK) {
     result = attach(low, sequence, base);
   }
@@ -1111,7 +1236,7 @@ static GRX_Result lower_cluster(Lowering * low, const uint32_t * points,
     return result;
   }
 
-  for (size_t i = 1; result == GRX_OK && i < length; i++) {
+  for (size_t i = wildcard ? 0 : 1; result == GRX_OK && i < length; i++) {
     uint32_t look = GRX_INDEX_NONE;
     result = add(low, GRX_IR_LOOK, node, &look);
     if (result != GRX_OK) {
@@ -1174,6 +1299,26 @@ static GRX_Result lower_cluster(Lowering * low, const uint32_t * points,
   if (result != GRX_OK) {
     return result;
   }
+  if (wildcard && low->profile.scalar_collections) {
+    uint32_t terminal = GRX_INDEX_NONE;
+    uint32_t sequence = GRX_INDEX_NONE;
+    result = add(low, GRX_IR_CONCAT, node, &sequence);
+    if (result == GRX_OK) {
+      result = attach(low, sequence, absorbed);
+    }
+    if (result == GRX_OK) {
+      result = add(low, GRX_IR_VERB, node, &terminal);
+    }
+    if (result == GRX_OK) {
+      GRX_IRNode * accept = grx_ir_node(low->ir, terminal);
+      accept->mode = GRX_VERB_ACCEPT;
+      accept->a = GRX_INDEX_NONE;
+      accept->flags |= GRX_IR_ACCEPT_OPEN;
+      result = attach(low, sequence, terminal);
+    }
+    *out_node = sequence;
+    return result;
+  }
   *out_node = absorbed;
   return GRX_OK;
 }
@@ -1219,6 +1364,28 @@ static GRX_Result cluster_wrap(Lowering * low, const GRX_Node * node,
     return result;
   }
 
+  uint32_t tail = sequence;
+  uint32_t alternate = GRX_INDEX_NONE;
+  if (!low->profile.scalar_collections && !low->skip_composing_prefix &&
+      !(node->flags & GRX_NODE_ATOMIC)) {
+    result = add(low, GRX_IR_ALTERNATE, node, &alternate);
+    if (result == GRX_OK)
+      result = attach(low, sequence, alternate);
+    if (result == GRX_OK)
+      result = add(low, GRX_IR_CONCAT, node, &tail);
+    if (result == GRX_OK)
+      result = attach(low, alternate, tail);
+    uint32_t guard = GRX_INDEX_NONE;
+    if (result == GRX_OK)
+      result = add(low, GRX_IR_ASSERT, node, &guard);
+    if (result == GRX_OK) {
+      grx_ir_node(low->ir, guard)->mode = GRX_ASSERT_NO_SCALAR_FRONTIER;
+      result = attach(low, tail, guard);
+    }
+    if (result != GRX_OK)
+      return result;
+  }
+
   uint32_t repeat = GRX_INDEX_NONE;
   result = add(low, GRX_IR_REPEAT, node, &repeat);
   if (result != GRX_OK) {
@@ -1239,17 +1406,42 @@ static GRX_Result cluster_wrap(Lowering * low, const GRX_Node * node,
   grx_ir_node(low->ir, body)->a = index;
   result = attach(low, repeat, body);
   if (result == GRX_OK) {
-    result = attach(low, sequence, repeat);
+    result = attach(low, tail, repeat);
   }
   if (result == GRX_OK && low->skip_composing_prefix) {
     result = attach(low, sequence, atom);
   }
   if (result == GRX_OK && !low->skip_composing_prefix) {
-    result = attach_composing_assert(
-        low, node, sequence, GRX_ASSERT_NOT_COMPOSING);
+    result = attach_composing_assert(low, node, tail, GRX_ASSERT_NOT_COMPOSING);
   }
   if (result != GRX_OK) {
     return result;
+  }
+  if (alternate != GRX_INDEX_NONE) {
+    uint32_t guard = GRX_INDEX_NONE;
+    result = add(low, GRX_IR_ASSERT, node, &guard);
+    if (result == GRX_OK) {
+      grx_ir_node(low->ir, guard)->mode = GRX_ASSERT_SCALAR_FRONTIER;
+      {
+        uint32_t reported = GRX_INDEX_NONE;
+        result = add(low, GRX_IR_CONCAT, node, &reported);
+        if (result == GRX_OK)
+          result = attach(low, reported, guard);
+        uint32_t report = GRX_INDEX_NONE;
+        if (result == GRX_OK)
+          result = add(low, GRX_IR_EMPTY, node, &report);
+        if (result == GRX_OK) {
+          grx_ir_node(low->ir, report)->flags |= GRX_IR_REPORT_COMPOSING;
+          low->ir->flags |= GRX_PROGRAM_REPORT_COMPOSING;
+          result = attach(low, reported, report);
+        }
+        guard = reported;
+      }
+      if (result == GRX_OK)
+        result = attach(low, alternate, guard);
+    }
+    if (result != GRX_OK)
+      return result;
   }
   *out_node = sequence;
   return GRX_OK;
@@ -1838,6 +2030,13 @@ static GRX_Result lower_group(
   uint32_t body = GRX_INDEX_NONE;
   GRX_Result result = GRX_OK;
 
+  uint32_t outer_frontier_scope = low->frontier_scope;
+  uint32_t body_frontier_scope = outer_frontier_scope;
+  if ((node->flags & GRX_NODE_ATOMIC) && composing_clusters(low) &&
+      !low->profile.scalar_collections) {
+    body_frontier_scope = ++low->frontier_scopes;
+    low->frontier_scope = body_frontier_scope;
+  }
   int suppress_markers = (node->flags & GRX_NODE_ATOMIC)
       && low->profile.atomic_ignores_markers;
   low->atomic_depth += suppress_markers ? 1u : 0u;
@@ -1850,6 +2049,7 @@ static GRX_Result lower_group(
   }
   low->atomic_depth -= suppress_markers ? 1u : 0u;
   low->atomic_end_depth -= suppress_markers ? 1u : 0u;
+  low->frontier_scope = outer_frontier_scope;
   if (result != GRX_OK) {
     return result;
   }
@@ -1860,6 +2060,7 @@ static GRX_Result lower_group(
     if (result != GRX_OK) {
       return result;
     }
+    grx_ir_node(low->ir, atomic)->scope = body_frontier_scope;
     if (low->profile.assertion_context_from_continuation) {
       low->ir->flags |=
           GRX_PROGRAM_LOOK_CONTEXT | GRX_PROGRAM_PROVISIONAL_LOOK_END;
@@ -1874,6 +2075,8 @@ static GRX_Result lower_group(
     body = atomic;
     if (!(node->flags & GRX_NODE_SCRIPT_RUN)) {
       *out_node = atomic;
+      if (composing_clusters(low) && !low->profile.scalar_collections)
+        grx_ir_node(low->ir, atomic)->flags |= GRX_IR_COMPLETE_COMPOSING;
       return GRX_OK;
     }
   }
@@ -2662,13 +2865,64 @@ static GRX_Result lower_repeat(
 
   uint32_t body = GRX_INDEX_NONE;
   const GRX_Node * atom = grx_pattern_node(low->pattern, node->first_child);
+  if (low->profile.direct_repeat_scalar && atom &&
+      atom->kind == GRX_NODE_LITERAL && atom->b > 1 &&
+      !(atom->flags & GRX_NODE_NUMERIC)) {
+    const uint32_t * points =
+        GRX_ARENA_AT(const uint32_t, &low->pattern->literals, atom->a);
+    if (is_composing(points[atom->b - 1])) {
+      GRX_Node prefix = *atom;
+      prefix.b--;
+      uint32_t sequence = GRX_INDEX_NONE;
+      uint32_t prefix_ir = GRX_INDEX_NONE;
+      uint32_t scalar = GRX_INDEX_NONE;
+      uint32_t repeat_ir = GRX_INDEX_NONE;
+      GRX_Result result = add(low, GRX_IR_CONCAT, node, &sequence);
+      if (result == GRX_OK) {
+        result = lower_literal(low, &prefix, &prefix_ir);
+      }
+      if (result == GRX_OK) {
+        result = attach(low, sequence, prefix_ir);
+      }
+      if (result == GRX_OK) {
+        if (node->flags & GRX_NODE_SHORT_OPTIONAL) {
+          result = lower_run(low, points + atom->b - 1, 1, atom, &scalar);
+        }
+        else {
+          result = lower_codepoint(low, points[atom->b - 1], atom, &scalar);
+        }
+      }
+      if (result == GRX_OK) {
+        result = add(low, GRX_IR_REPEAT, node, &repeat_ir);
+      }
+      if (result == GRX_OK) {
+        GRX_IRNode * repeat = grx_ir_node(low->ir, repeat_ir);
+        repeat->min = node->min;
+        repeat->max = node->max;
+        repeat->mode = (uint8_t)node->a;
+        repeat->empty_loop = (uint8_t)low->profile.empty_loop;
+        repeat->capture_reset = (uint8_t)low->profile.capture_reset;
+        result = attach(low, repeat_ir, scalar);
+      }
+      if (result == GRX_OK) {
+        result = attach(low, sequence, repeat_ir);
+      }
+      *out_node = sequence;
+      return result;
+    }
+  }
   int simple_counter_atom = atom &&
       ((atom->kind == GRX_NODE_LITERAL && atom->b == 1) ||
           atom->kind == GRX_NODE_CLASS || atom->kind == GRX_NODE_ANY);
   int outer_scalar = low->scalar_direct;
-  low->scalar_direct = low->profile.direct_repeat_scalar
-      && atom && atom->kind == GRX_NODE_LITERAL && atom->b == 1
-      && !(node->min == 0 && node->max == 1);
+  low->scalar_direct = low->profile.direct_repeat_scalar && atom &&
+          !(node->flags & GRX_NODE_SHORT_OPTIONAL)
+      ? (atom->kind == GRX_NODE_LITERAL && atom->b == 1 ? 1
+                : (atom->kind == GRX_NODE_CLASS ||
+                      (atom->flags & GRX_NODE_ADDED_NEWLINE))
+                ? ((atom->flags & GRX_NODE_COLLECTION) ? 2 : 3)
+                : 0)
+      : 0;
   GRX_Result result = lower_node(low, node->first_child, &body);
   low->scalar_direct = outer_scalar;
   if (result != GRX_OK) {
@@ -2818,6 +3072,12 @@ static GRX_Result lower_look(
 
   uint32_t body = GRX_INDEX_NONE;
   low->atomic_depth += low->profile.atomic_ignores_markers ? 1u : 0u;
+  low->assertion_depth++;
+  uint32_t outer_frontier_scope = low->frontier_scope;
+  if (composing_clusters(low) && !low->profile.scalar_collections) {
+    low->frontier_scope = ++low->frontier_scopes;
+    grx_ir_node(low->ir, *out_node)->scope = low->frontier_scope;
+  }
 
   if (node->first_child != GRX_INDEX_NONE) {
     result = lower_node(low, node->first_child, &body);
@@ -2825,6 +3085,8 @@ static GRX_Result lower_look(
   else {
     result = add(low, GRX_IR_EMPTY, node, &body);
   }
+  low->frontier_scope = outer_frontier_scope;
+  low->assertion_depth--;
   low->atomic_depth -= low->profile.atomic_ignores_markers ? 1u : 0u;
 
   low->reverse = outer;
@@ -2926,6 +3188,71 @@ static void empty_branch_yields(Lowering * low, uint32_t alternation) {
 }
 
 /** Lower a concatenation or an alternation: the same shape, a different kind. */
+/** The old ignore-marks matcher commits once a lexical run's exact arm wins. */
+static GRX_Result lower_old_ignore_run(Lowering * low, const uint32_t * points,
+    size_t length, const GRX_Node * node, uint32_t * out_node) {
+  uint32_t alternate = GRX_INDEX_NONE;
+  uint32_t exact = GRX_INDEX_NONE;
+  uint32_t fallback = GRX_INDEX_NONE;
+  GRX_Result result = add(low, GRX_IR_ATOMIC, node, out_node);
+  if (result == GRX_OK)
+    result = add(low, GRX_IR_ALTERNATE, node, &alternate);
+  if (result == GRX_OK)
+    result = add(low, GRX_IR_CONCAT, node, &exact);
+  if (result == GRX_OK)
+    result = add(low, GRX_IR_CONCAT, node, &fallback);
+  size_t bases = 0;
+  size_t total_bases = 0;
+  for (size_t i = 0; i < length; i++) {
+    total_bases += !is_composing(points[i]);
+  }
+  for (size_t i = 0; result == GRX_OK && i < length; i++) {
+    uint32_t scalar = GRX_INDEX_NONE;
+    result = lower_codepoint(low, points[i], node, &scalar);
+    if (result == GRX_OK)
+      result = attach(low, exact, scalar);
+    if (is_composing(points[i]))
+      continue;
+    if (result == GRX_OK) {
+      // Exact-run folding does not extend to later fallback bases.
+      GRX_FoldKind outer_fold = low->fold;
+      if (bases || total_bases == 1) {
+        low->fold = GRX_FOLD_NONE;
+      }
+      result = lower_codepoint(low, points[i], node, &scalar);
+      low->fold = outer_fold;
+    }
+    if (result == GRX_OK && bases) {
+      int previous = low->skip_composing_prefix;
+      low->skip_composing_prefix = 1;
+      result = cluster_wrap(low, node, scalar, &scalar);
+      low->skip_composing_prefix = previous;
+    }
+    if (result == GRX_OK)
+      result = attach(low, fallback, scalar);
+    bases++;
+  }
+  if (result == GRX_OK && low->fold != GRX_FOLD_NONE) {
+    result = attach_composing_assert(
+        low, node, exact, GRX_ASSERT_NOT_COMPOSING);
+  }
+  if (result == GRX_OK && length) {
+    uint32_t rest = GRX_INDEX_NONE;
+    result = add(low, GRX_IR_EMPTY, node, &rest);
+    if (result == GRX_OK)
+      result = cluster_wrap(low, node, rest, &rest);
+    if (result == GRX_OK)
+      result = attach(low, fallback, rest);
+  }
+  if (result == GRX_OK)
+    result = attach(low, alternate, exact);
+  if (result == GRX_OK)
+    result = attach(low, alternate, fallback);
+  if (result == GRX_OK)
+    result = attach(low, *out_node, alternate);
+  return result;
+}
+
 static GRX_Result lower_sequence(Lowering * low, const GRX_Node * node,
     GRX_IRKind kind, uint32_t * out_node) {
   GRX_Result result = add(low, kind, node, out_node);
@@ -3035,6 +3362,47 @@ static GRX_Result lower_sequence(Lowering * low, const GRX_Node * node,
       // so the term had no reader outside the fuzzer.
       fold_run_cleared = 1;
       fold_run_cleared_to = after;
+    }
+
+    if (kind == GRX_IR_CONCAT && ignoring_composing(low) &&
+        low->profile.scalar_collections &&
+        child_node->kind == GRX_NODE_LITERAL &&
+        !(child_node->flags & GRX_NODE_NUMERIC)) {
+      const uint32_t * first_points =
+          GRX_ARENA_AT(const uint32_t, &low->pattern->literals, child_node->a);
+      if (first_points && child_node->b && !is_composing(first_points[0])) {
+        GRX_Arena run;
+        grx_arena_init(
+            &run, low->ir->allocator, sizeof(uint32_t), 0, GRX_DIAG_NONE);
+        uint32_t after = child;
+        for (uint32_t scan = child;
+            result == GRX_OK && scan != GRX_INDEX_NONE;) {
+          const GRX_Node * literal = grx_pattern_node(low->pattern, scan);
+          if (!literal || literal->kind != GRX_NODE_LITERAL ||
+              (literal->flags & GRX_NODE_NUMERIC))
+            break;
+          const uint32_t * points =
+              GRX_ARENA_AT(const uint32_t, &low->pattern->literals, literal->a);
+          for (size_t i = 0; result == GRX_OK && i < literal->b; i++) {
+            result = grx_arena_append(&run, &points[i], NULL);
+          }
+          after = literal->next_sibling;
+          scan = after;
+        }
+        uint32_t lowered = GRX_INDEX_NONE;
+        if (result == GRX_OK)
+          result =
+              lower_old_ignore_run(low, GRX_ARENA_AT(const uint32_t, &run, 0),
+                  run.count, child_node, &lowered);
+        if (result == GRX_OK)
+          result = attach(low, *out_node, lowered);
+        grx_arena_clear(&run);
+        if (result != GRX_OK)
+          return result;
+        child = after;
+        previous_literal = 1;
+        continue;
+      }
     }
 
     uint32_t lowered = GRX_INDEX_NONE;
@@ -3589,6 +3957,42 @@ static GRX_Result evaluate_class_set(
  */
 static GRX_Result lower_run_clusters(Lowering * low, const uint32_t * points,
     size_t length, const GRX_Node * node, uint32_t * out_node) {
+  if (length && is_composing(points[0]) && low->profile.scalar_collections &&
+      (node->flags & GRX_NODE_NUMERIC))
+    length = 1;
+  if (length && is_composing(points[0])) {
+    if ((!low->profile.scalar_collections &&
+            (node->flags & GRX_NODE_NUMERIC)) ||
+        (low->profile.scalar_collections && low->scalar_direct &&
+            !(node->flags & GRX_NODE_NUMERIC))) {
+      uint32_t sequence = GRX_INDEX_NONE;
+      GRX_Result result = add(low, GRX_IR_CONCAT, node, &sequence);
+      if (result == GRX_OK && !low->profile.scalar_collections) {
+        result = attach_composing_assert(
+            low, node, sequence, GRX_ASSERT_CLUSTER_BOUNDARY);
+      }
+      for (size_t i = 0; result == GRX_OK && i < length; i++) {
+        uint32_t scalar = GRX_INDEX_NONE;
+        result = lower_codepoint(low, points[i], node, &scalar);
+        if (result == GRX_OK && !low->profile.scalar_collections &&
+            !ignoring_composing(low)) {
+          grx_ir_node(low->ir, scalar)->flags |= GRX_IR_SCALAR_LITERAL;
+        }
+        if (result == GRX_OK) {
+          result = attach(low, sequence, scalar);
+        }
+      }
+      *out_node = sequence;
+      if (result == GRX_OK && !low->profile.scalar_collections &&
+          ignoring_composing(low))
+        result = cluster_wrap(low, node, sequence, out_node);
+      return result;
+    }
+    return lower_cluster(low, points, length, node, out_node);
+  }
+  if (ignoring_composing(low) && low->profile.scalar_collections) {
+    return lower_old_ignore_run(low, points, length, node, out_node);
+  }
   if (ignoring_composing(low)) {
     // `\Zá` matches "ab": the mark is not part of the pattern at all, and
     // what is left of the run absorbs whatever the text carries.
@@ -3600,10 +4004,17 @@ static GRX_Result lower_run_clusters(Lowering * low, const uint32_t * points,
         continue;
       }
       uint32_t child = GRX_INDEX_NONE;
+      // An explicitly marked base retains exact case when its marks are
+      // ignored. Other bases still use the effective folding policy.
+      GRX_FoldKind outer_fold = low->fold;
+      if (i + 1 < length && is_composing(points[i + 1])) {
+        low->fold = GRX_FOLD_NONE;
+      }
       result = lower_codepoint(low, points[i], node, &child);
-      if (result == GRX_OK
-          && !(low->profile.ignore_combining_literal_run
-              && (low->scalar_direct || bases == 0))) {
+      low->fold = outer_fold;
+      if (result == GRX_OK &&
+          !(low->profile.ignore_combining_literal_run &&
+              (low->scalar_direct || (bases == 0 && length == 1)))) {
         int outer_lazy = low->skip_composing_prefix;
         low->skip_composing_prefix = low->profile.ignore_combining_literal_run;
         result = cluster_wrap(low, node, child, &child);
@@ -3622,7 +4033,7 @@ static GRX_Result lower_run_clusters(Lowering * low, const uint32_t * points,
   }
 
   if (length && is_composing(points[0])) {
-    return fail(low, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, node);
+    return lower_cluster(low, points, length, node, out_node);
   }
 
   uint32_t sequence = GRX_INDEX_NONE;
@@ -3637,11 +4048,14 @@ static GRX_Result lower_run_clusters(Lowering * low, const uint32_t * points,
     result = span == 1
         ? lower_codepoint(low, points[i], node, &child)
         : lower_cluster(low, points + i, span, node, &child);
+    if (result == GRX_OK && span == 1 && !low->profile.scalar_collections) {
+      grx_ir_node(low->ir, child)->flags |= GRX_IR_SCALAR_LITERAL;
+    }
     if (result == GRX_OK) {
       result = attach(low, sequence, child);
     }
-    if (result == GRX_OK && low->profile.literal_cluster_guard
-        && !low->scalar_direct) {
+    if (result == GRX_OK && low->profile.literal_cluster_guard &&
+        low->profile.scalar_collections && !low->scalar_direct) {
       result = attach_composing_assert(
           low, node, sequence, GRX_ASSERT_NOT_COMPOSING);
     }
@@ -3927,6 +4341,100 @@ static GRX_Result lower_class_full_folds(Lowering * low,
   return GRX_OK;
 }
 
+/** Collection spelling determines the first cluster's predicate and extent. */
+static GRX_Result lower_marked_collection(
+    Lowering * low, const GRX_Node * node, int * handled, uint32_t * out_node) {
+  *handled = 0;
+  // A lexical simple collection repeat ignores member marks and uses the
+  // ordinary repeated collection's base predicate and full-cluster extent.
+  if (low->profile.scalar_collections && low->scalar_direct == 2)
+    return GRX_OK;
+  if (!composing_clusters(low) || !(node->flags & GRX_NODE_COLLECTION)) {
+    return GRX_OK;
+  }
+  const GRX_ClassItem * items =
+      GRX_ARENA_AT(const GRX_ClassItem, &low->pattern->class_items, node->a);
+  size_t marked = node->b;
+  for (size_t i = 1; i < node->b; i++) {
+    if (items[i].kind == GRX_CLASS_ITEM_SINGLE && is_composing(items[i].lo) &&
+        !(items[i].flags & GRX_CLASS_ITEM_RANGE_MARK) &&
+        items[i - 1].kind == GRX_CLASS_ITEM_SINGLE &&
+        !(items[i - 1].flags & GRX_CLASS_ITEM_NAMED_ORIGIN) &&
+        (i == 1 || !is_composing(items[i - 1].lo)) &&
+        (low->profile.scalar_collections ||
+            !(items[i].flags & GRX_CLASS_ITEM_NUMERIC))) {
+      marked = i;
+      break;
+    }
+  }
+  if (marked == node->b) {
+    return GRX_OK;
+  }
+  *handled = 1;
+  if (!low->profile.scalar_collections && marked == 1) {
+    // A literal first marked member is a positive cluster predicate even
+    // in a negated collection. Later members do not extend that predicate.
+    GRX_Arena points;
+    grx_arena_init(&points, low->ir->allocator, sizeof(uint32_t),
+        low->limits->max_nodes, GRX_DIAG_LIMIT_NODES);
+    GRX_Result result = grx_arena_append(&points, &items[0].lo, NULL);
+    for (size_t i = 1; result == GRX_OK && i < node->b &&
+        items[i].kind == GRX_CLASS_ITEM_SINGLE && is_composing(items[i].lo);
+        i++) {
+      result = grx_arena_append(&points, &items[i].lo, NULL);
+    }
+    if (result == GRX_OK) {
+      result = lower_cluster(low, GRX_ARENA_AT(uint32_t, &points, 0),
+          points.count, node, out_node);
+    }
+    grx_arena_clear(&points);
+    return storage_failed(low, result, node);
+  }
+  GRX_Node scalar = *node;
+  if (!low->profile.scalar_collections) {
+    scalar.b = (node->flags & GRX_NODE_NEGATED) ? 0 : (uint32_t)marked - 1;
+    scalar.flags &= ~(uint32_t)GRX_NODE_NEGATED;
+  }
+  GRX_CharClass cls;
+  grx_charclass_init(&cls, low->ir->allocator);
+  GRX_Result result = evaluate_class(low, &scalar, &cls);
+  uint32_t index = GRX_INDEX_NONE;
+  if (result == GRX_OK) {
+    result = intern(low, &cls, node, &index);
+  }
+  grx_charclass_clear(&cls);
+  uint32_t base = GRX_INDEX_NONE;
+  if (result == GRX_OK) {
+    result = add(low, GRX_IR_CLASS, node, &base);
+  }
+  if (result != GRX_OK) {
+    return result;
+  }
+  grx_ir_node(low->ir, base)->a = index;
+  if (!low->profile.scalar_collections) {
+    return cluster_wrap(low, node, base, out_node);
+  }
+  uint32_t sequence = GRX_INDEX_NONE;
+  result = add(low, GRX_IR_CONCAT, node, &sequence);
+  if (result == GRX_OK) {
+    result = attach(low, sequence, base);
+  }
+  // Old collections apply the written first member's mark prefix to the
+  // selected base. The prefix is ordered, repeated marks remain repeated,
+  // and trailing subject marks are left for the continuation.
+  for (size_t i = 1; result == GRX_OK && i < node->b &&
+      items[i].kind == GRX_CLASS_ITEM_SINGLE && is_composing(items[i].lo);
+      i++) {
+    uint32_t mark = GRX_INDEX_NONE;
+    result = lower_codepoint(low, items[i].lo, node, &mark);
+    if (result == GRX_OK) {
+      result = attach(low, sequence, mark);
+    }
+  }
+  *out_node = sequence;
+  return result;
+}
+
 static GRX_Result lower_node(
     Lowering * low, uint32_t node_index, uint32_t * out_node) {
   const GRX_Node * node = grx_pattern_node(low->pattern, node_index);
@@ -3942,6 +4450,12 @@ static GRX_Result lower_node(
       return lower_literal(low, node, out_node);
 
     case GRX_NODE_CLASS: {
+      int handled = 0;
+      GRX_Result special =
+          lower_marked_collection(low, node, &handled, out_node);
+      if (special != GRX_OK || handled) {
+        return special;
+      }
       if (low->options & GRX_OPT_UNICODE_SETS) {
         return lower_class_set(low, node, out_node);
       }
@@ -3966,9 +4480,54 @@ static GRX_Result lower_node(
       if (result != GRX_OK) {
         return result;
       }
-      if (low->profile.scalar_collections
-          && (node->flags & GRX_NODE_COLLECTION)) {
+      if (low->profile.scalar_collections && low->scalar_direct == 2 &&
+          ((node->flags & GRX_NODE_ADDED_NEWLINE) ||
+              (node->flags & GRX_NODE_EXPLICIT_LF))) {
         return GRX_OK;
+      }
+      if ((node->flags & GRX_NODE_ADDED_NEWLINE) && ignoring_composing(low) &&
+          !(node->flags & GRX_NODE_DEFER_NEWLINE_MARKS) &&
+          !low->profile.scalar_collections) {
+        return cluster_wrap(low, node, *out_node, out_node);
+      }
+      if ((node->flags & GRX_NODE_ADDED_NEWLINE) &&
+          !(node->flags & GRX_NODE_NEWLINE_CLUSTER) &&
+          !low->profile.scalar_collections) {
+        if (node->flags & GRX_NODE_DEFER_NEWLINE_MARKS) {
+          grx_ir_node(low->ir, class_node)->flags |= GRX_IR_DEFER_COMPOSING;
+          low->ir->flags |= GRX_PROGRAM_DEFER_COMPOSING;
+        }
+        else {
+          grx_ir_node(low->ir, class_node)->flags |= GRX_IR_SCALAR_LITERAL;
+        }
+        return GRX_OK;
+      }
+      if (low->profile.scalar_collections && low->scalar_direct == 3) {
+        grx_ir_node(low->ir, class_node)->flags |= GRX_IR_CLASS_TAIL;
+        return cluster_wrap(low, node, *out_node, out_node);
+      }
+      if (low->profile.scalar_collections &&
+          (node->flags & GRX_NODE_COLLECTION) && low->scalar_direct != 2) {
+        return GRX_OK;
+      }
+      if (!low->profile.scalar_collections &&
+          (node->flags & GRX_NODE_COLLECTION) &&
+          !(node->flags & (GRX_NODE_EXCLUDE_LF | GRX_NODE_NEWLINE_INNER))) {
+        uint32_t guarded = GRX_INDEX_NONE;
+        result = add(low, GRX_IR_CONCAT, node, &guarded);
+        if (result == GRX_OK) {
+          GRX_Node initial = *node;
+          initial.flags |= GRX_NODE_NUMERIC;
+          result = attach_composing_assert(
+              low, &initial, guarded, GRX_ASSERT_CLUSTER_BOUNDARY);
+        }
+        if (result == GRX_OK) {
+          result = attach(low, guarded, *out_node);
+        }
+        if (result != GRX_OK) {
+          return result;
+        }
+        *out_node = guarded;
       }
       // A collection takes the composing characters after what it matched,
       // where a literal does not: `[a]` over "a" U+0301 is 0-3 in Vim.
@@ -4104,6 +4663,216 @@ static GRX_Result lower_node(
   }
 }
 
+/** Only programs with both scalar frontiers and cluster tails need discovery.
+ */
+static GRX_Result lower_scalar_frontiers(Lowering * low) {
+  GRX_Arena scopes;
+  grx_arena_init(
+      &scopes, low->ir->allocator, sizeof(uint8_t), 0, GRX_DIAG_NONE);
+  GRX_Result result =
+      grx_arena_reserve(&scopes, (size_t)low->frontier_scopes + 1);
+  if (result != GRX_OK)
+    return storage_failed(low, result, NULL);
+  memset(scopes.data, 0, (size_t)low->frontier_scopes + 1);
+  for (size_t i = 0; i < low->ir->nodes.count; i++) {
+    const GRX_IRNode * node = grx_ir_node(low->ir, (uint32_t)i);
+    uint8_t * flags = (uint8_t *)scopes.data + node->scope;
+    if (node->flags & GRX_IR_SCALAR_LITERAL)
+      *flags |= 1;
+    if ((node->kind == GRX_IR_ASSERT &&
+            node->mode == GRX_ASSERT_SCALAR_FRONTIER) ||
+        (node->kind == GRX_IR_BACKREF &&
+            (low->ir->flags & GRX_PROGRAM_LOOK_CONTEXT)))
+      *flags |= 2;
+  }
+  low->ir->flags &=
+      ~(uint32_t)(GRX_PROGRAM_SCALAR_FRONTIER | GRX_PROGRAM_REPORT_COMPOSING);
+  for (size_t i = 0; i < low->ir->nodes.count; i++) {
+    GRX_IRNode * node = grx_ir_node(low->ir, (uint32_t)i);
+    if (node->kind == GRX_IR_BACKREF &&
+        (low->ir->flags & GRX_PROGRAM_LOOK_CONTEXT))
+      node->flags |= GRX_IR_COMPLETE_COMPOSING;
+    if (*((uint8_t *)scopes.data + node->scope) == 3) {
+      if (node->kind == GRX_IR_BACKREF &&
+          (node->flags & GRX_IR_COMPLETE_COMPOSING))
+        node->flags |= GRX_IR_REPORT_COMPOSING;
+      low->ir->flags |= GRX_PROGRAM_SCALAR_FRONTIER;
+      if (node->flags & GRX_IR_REPORT_COMPOSING)
+        low->ir->flags |= GRX_PROGRAM_REPORT_COMPOSING;
+    }
+    else {
+      if (node->kind == GRX_IR_ASSERT &&
+          node->mode == GRX_ASSERT_SCALAR_FRONTIER)
+        node->mode = GRX_ASSERT_NEVER;
+      else if (node->kind == GRX_IR_ASSERT &&
+          node->mode == GRX_ASSERT_NO_SCALAR_FRONTIER)
+        node->kind = GRX_IR_EMPTY;
+      node->flags &= ~(uint32_t)GRX_IR_REPORT_COMPOSING;
+    }
+  }
+  grx_arena_clear(&scopes);
+  return GRX_OK;
+}
+
+/** Whether the lexical beginning requests the old required-run optimization. */
+static GRX_Result terminal_candidate_start(Lowering * low, int * wanted) {
+  GRX_Arena stack;
+  grx_arena_init(&stack, low->ir->allocator, sizeof(uint32_t),
+      low->limits->max_nodes, GRX_DIAG_LIMIT_NODES);
+  uint32_t root = low->pattern->root;
+  GRX_Result result = grx_arena_append(&stack, &root, NULL);
+  *wanted = 0;
+  while (result == GRX_OK && stack.count && !*wanted) {
+    uint32_t index = *GRX_ARENA_AT(uint32_t, &stack, stack.count - 1);
+    stack.count--;
+    const GRX_Node * node = grx_pattern_node(low->pattern, index);
+    if (!node)
+      continue;
+    if (node->kind == GRX_NODE_LOOKAROUND) {
+      *wanted = 1;
+    }
+    else if (node->kind == GRX_NODE_REPEAT) {
+      const GRX_Node * body = grx_pattern_node(low->pattern, node->first_child);
+      const uint32_t * points = body && body->kind == GRX_NODE_LITERAL
+          ? GRX_ARENA_AT(const uint32_t, &low->pattern->literals, body->a)
+          : NULL;
+      int mandatory_prefix = points && body->b > 1 &&
+          !is_composing(points[0]) && is_composing(points[1]);
+      *wanted = node->min == 0 && !mandatory_prefix;
+      if (!*wanted && !mandatory_prefix && body) {
+        result = grx_arena_append(&stack, &node->first_child, NULL);
+      }
+    }
+    else if (node->kind == GRX_NODE_ALTERNATE) {
+      for (uint32_t child = node->first_child;
+          result == GRX_OK && child != GRX_INDEX_NONE;
+          child = grx_pattern_node(low->pattern, child)->next_sibling) {
+        result = grx_arena_append(&stack, &child, NULL);
+      }
+    }
+    else if ((node->kind == GRX_NODE_CONCAT || node->kind == GRX_NODE_GROUP) &&
+        node->first_child != GRX_INDEX_NONE) {
+      result = grx_arena_append(&stack, &node->first_child, NULL);
+    }
+  }
+  grx_arena_clear(&stack);
+  return result;
+}
+
+/** Select the old lexical run before applying its character policies. */
+static GRX_Result lower_terminal_candidate(Lowering * low, uint32_t root) {
+  if (!low->profile.scalar_collections) {
+    return GRX_OK;
+  }
+  typedef struct {
+    uint32_t node;
+    int optional;
+  } TerminalFrame;
+  GRX_Arena stack;
+  GRX_Arena run;
+  GRX_Arena best;
+  grx_arena_init(&stack, low->ir->allocator, sizeof(TerminalFrame),
+      low->limits->max_nodes, GRX_DIAG_LIMIT_NODES);
+  grx_arena_init(&run, low->ir->allocator, sizeof(char), 0, GRX_DIAG_NONE);
+  grx_arena_init(&best, low->ir->allocator, sizeof(char), 0, GRX_DIAG_NONE);
+  TerminalFrame first = {root, 0};
+  GRX_Result result = grx_arena_append(&stack, &first, NULL);
+  int has_terminal = 0;
+  int optimize_start = 0;
+  while (result == GRX_OK && stack.count) {
+    TerminalFrame frame = *GRX_ARENA_AT(TerminalFrame, &stack, stack.count - 1);
+    stack.count--;
+    const GRX_IRNode * node = grx_ir_node(low->ir, frame.node);
+    if (!node) {
+      continue;
+    }
+    if (node->kind == GRX_IR_VERB && (node->flags & GRX_IR_ACCEPT_OPEN)) {
+      has_terminal = 1;
+    }
+    int optional =
+        frame.optional || (node->kind == GRX_IR_REPEAT && !node->min);
+    for (uint32_t child = node->first_child;
+        result == GRX_OK && child != GRX_INDEX_NONE;
+        child = grx_ir_node(low->ir, child)->next_sibling) {
+      TerminalFrame descend = {child, optional};
+      result = grx_arena_append(&stack, &descend, NULL);
+    }
+  }
+  if (result == GRX_OK)
+    result = terminal_candidate_start(low, &optimize_start);
+  const GRX_Node * outer = grx_pattern_node(low->pattern, low->pattern->root);
+  uint32_t index =
+      has_terminal && optimize_start && outer && outer->kind == GRX_NODE_CONCAT
+      ? outer->first_child
+      : GRX_INDEX_NONE;
+  const GRX_Node * initial = grx_pattern_node(low->pattern, index);
+  if (initial && initial->kind == GRX_NODE_ANCHOR &&
+      (initial->a == GRX_ANCHOR_CARET ||
+          initial->a == GRX_ANCHOR_START_SUBJECT)) {
+    index = GRX_INDEX_NONE;
+  }
+  while (result == GRX_OK && index != GRX_INDEX_NONE) {
+    const GRX_Node * node = grx_pattern_node(low->pattern, index);
+    int numeric = (node->flags & GRX_NODE_NUMERIC) != 0;
+    if (node->kind != GRX_NODE_LITERAL || numeric) {
+      if (run.count && run.count >= best.count) {
+        result = grx_arena_reserve(&best, run.count);
+        if (result == GRX_OK) {
+          memcpy(best.data, run.data, run.count);
+          best.count = run.count;
+        }
+      }
+      run.count = 0;
+    }
+    if (node->kind == GRX_NODE_LITERAL && result == GRX_OK) {
+      const uint32_t * points =
+          GRX_ARENA_AT(const uint32_t, &low->pattern->literals, node->a);
+      for (size_t i = 0; result == GRX_OK && i < node->b; i++) {
+        // Standalone composing atoms do not start a required lexical run.
+        if (!run.count && is_composing(points[i])) {
+          continue;
+        }
+        char bytes[4];
+        size_t width = grx_unicode_utf8_encode(points[i], bytes, 0);
+        for (size_t j = 0; result == GRX_OK && j < width; j++) {
+          result = grx_arena_append(&run, &bytes[j], NULL);
+        }
+      }
+    }
+    if (numeric) {
+      if (run.count && run.count >= best.count) {
+        result = grx_arena_reserve(&best, run.count);
+        if (result == GRX_OK) {
+          memcpy(best.data, run.data, run.count);
+          best.count = run.count;
+        }
+      }
+      run.count = 0;
+    }
+    index = node->next_sibling;
+  }
+  if (result == GRX_OK && run.count && run.count >= best.count) {
+    result = grx_arena_reserve(&best, run.count);
+    if (result == GRX_OK) {
+      memcpy(best.data, run.data, run.count);
+      best.count = run.count;
+    }
+  }
+  if (result == GRX_OK && best.count) {
+    result = grx_ir_add_name(
+        low->ir, best.data, best.count, &low->ir->candidate_literal);
+    if (result == GRX_OK) {
+      low->ir->candidate_literal_length = best.count;
+      low->ir->candidate_options = low->options &
+          (GRX_OPT_CASELESS | GRX_OPT_IGNORE_COMBINING);
+    }
+  }
+  grx_arena_clear(&best);
+  grx_arena_clear(&run);
+  grx_arena_clear(&stack);
+  return storage_failed(low, result, NULL);
+}
+
 GRX_Result grx_lower_pattern(const GRX_Pattern * pattern,
     const GRX_Limits * limits, const GRX_Allocator * allocator,
     GRX_Error * out_error, GRX_IR ** out_ir) {
@@ -4178,6 +4947,9 @@ GRX_Result grx_lower_pattern(const GRX_Pattern * pattern,
   low.ir->preference = low.profile.preference;
   low.ir->submatch = low.profile.submatch;
   low.ir->iteration = low.profile.iteration;
+  if (composing_clusters(&low) && !low.profile.scalar_collections) {
+    low.ir->flags |= GRX_PROGRAM_CLUSTER_SEARCH;
+  }
   low.ir->search_start = low.profile.search_start;
   low.ir->capture_count = pattern->capture_count;
   if ((low.options & GRX_OPT_UTF) || low.profile.subject_is_text) {
@@ -4205,6 +4977,13 @@ GRX_Result grx_lower_pattern(const GRX_Pattern * pattern,
   }
   else {
     result = lower_node(&low, pattern->root, &root);
+  }
+
+  if (result == GRX_OK) {
+    result = lower_terminal_candidate(&low, root);
+  }
+  if (result == GRX_OK) {
+    result = lower_scalar_frontiers(&low);
   }
 
   // Vim's two cluster rules that are about the *match* rather than about an
@@ -4246,9 +5025,10 @@ GRX_Result grx_lower_pattern(const GRX_Pattern * pattern,
   }
 
   if (result == GRX_OK && composing_clusters(&low)) {
+    low.ir->flags |= GRX_PROGRAM_COMPOSING_CLUSTERS;
     uint32_t guarded = GRX_INDEX_NONE;
     result = add(&low, GRX_IR_CONCAT, NULL, &guarded);
-    if (result == GRX_OK) {
+    if (result == GRX_OK && low.profile.scalar_collections) {
       result = attach_composing_assert(
           &low, NULL, guarded, GRX_ASSERT_CLUSTER_BOUNDARY);
     }
@@ -4259,6 +5039,10 @@ GRX_Result grx_lower_pattern(const GRX_Pattern * pattern,
         && low.profile.match_end_cluster_boundary) {
       result = attach_composing_assert(
           &low, NULL, guarded, GRX_ASSERT_CLUSTER_BOUNDARY);
+      if (result == GRX_OK) {
+        uint32_t final = grx_ir_node(low.ir, guarded)->last_child;
+        grx_ir_node(low.ir, final)->flags |= GRX_IR_FINAL_BOUNDARY;
+      }
     }
     root = guarded;
   }

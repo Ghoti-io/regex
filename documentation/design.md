@@ -1287,3 +1287,68 @@ blocks the first work packages.
    them with more than one division to choose between, and the oracle is made
    to refuse the references' own answer first so that an instrument corrected
    three times towards agreement is shown still able to say no.
+
+
+### Vim composing-frontier ownership
+
+The Vim NFA profile distinguishes physical scalar consumption from logical
+capture reporting when scalar literals compete with cluster atoms. Lowering
+assigns root, LOOK and ATOMIC body scopes. Only programs requiring frontier
+discovery retain the query guards and lose linear-engine eligibility. Compiled
+instructions remain 12 bytes; an optional aligned scope arena carries ownership
+where needed, with checked access and the ordinary program allocation lifetime.
+
+Discovery uses isolated prefix executions of the existing backtracking machine.
+Capture/shadow spans, pending assertions and undo prefixes, repeat state and
+atomic read owners are copied into owned scratch. Query failures propagate
+OOM or LIMIT. Cache bytes and priority traces are owned by a search/body
+activation; each query reads the actual input context. Lookbehind discovers
+all candidate frontiers before selection, and atomic schedules accumulate
+frontiers across entries within one attempt. Public calls cannot retain them.
+All newly instantiated scratch, including query stacks and recursive saved
+contexts, shares the match-memory budget; query and main work share step caps.
+
+Atomic cluster completion is an explicit ATOMIC_END policy after BODY captures
+and read-owner bookkeeping. Its width and prefilter bounds include the possible
+composing suffix. It adds no lexical continuation branch for assertion scheduling
+to misclassify. Recursive caller state uses metered heap storage, preserving
+the default 128 runtime nesting and native 128KiB ceiling.
+
+Nested atomic entry preserves an enclosing open capture's current opening tag;
+its inherited closed-capture baseline cannot replace that opening. Scheduling
+uses an assertion frontier for an atomic BODY and keeps atomic continuation
+completion separate. The whole-match composing guard carries an explicit policy.
+A rejected guard can retain successful root lookahead activation for later search
+arrivals; the BODY still executes with the current capture input. This activation
+stores no capture values, is charged to match scratch and is cleared on every
+public call. Discovery observes an immutable prefix and cannot commit speculative
+activations. Nullable deferred forward bodies can remain pending across an initial
+reference demand. Empty references consume no composing suffix. Nonempty references
+owned by a forward assertion or an executed atomic capture write complete their
+target cluster unless an active scalar frontier competes there. Atomic write
+provenance remains separate from forward assertion reporting. An ordinary captured
+reference does not acquire cluster completion merely by ending an atomic BODY;
+an undoable physical endpoint records that distinction through rollback and nested
+atomic exits. Zero-width assertions restore their caller's physical endpoint.
+
+Local scope entry and lookbehind candidate discovery share the compiled cluster
+consumer classification, including references that can complete a forward-owned
+capture. Scalar competition controls physical reference advancement; the same
+ordered path trace used by class arrivals controls its logical capture end.
+Atomic incoming-prefix discovery resumes the existing BODY scope. Its scalar
+queries expose a reached literal before deferred atomic entry selection, while
+the ordinary execution still enforces that selection. A completed deferred ahead
+retains its caller's capture reports separately from the fresh read input of a
+later required assertion BODY. Discovery copies that input and never commits
+speculative assertion activation.
+
+The optional-composing lexical candidate retains its original encoded run and
+an explicit effective case/composing policy in IR and compiled-program data.
+Run selection precedes character comparison, so removing marks or folding
+before choosing a run cannot change its encoded-length priority or barriers.
+Policy-aware feasibility uses charged scalar decoding. Its caseless exact
+query tests the first written cluster; the mark-ignoring fallback compares
+bases until the selected run ends or the original encoded run bound is reached
+across complete target clusters. Standalone marks do not start required lexical runs.
+Unchanged character equality keeps the byte comparison. This needs no additional matcher, uncharged scratch or
+larger instructions. Program dumps state the selected run length and policies.
