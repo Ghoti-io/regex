@@ -1631,6 +1631,15 @@ static GRX_Result vim_atom_escape(GRX_Parser * parser, uint32_t * out_node) {
       parser->position += 2;
       return add_plain(parser, GRX_NODE_KEEP, start, out_node);
     }
+    if (kind == '\\' && byte_at(parser, 2) == 's') {
+      // The whitespace class is a token in vim's reader, and the letter `\z`
+      // takes after it is the token's own, so `\z\s` is `\zs`. Measured on
+      // vim 9.2 under both engines and all five magic levels: of `\z\X` for
+      // every printable ASCII `X`, this is the only one that compiles, and it
+      // matches exactly as `\zs` does.
+      parser->position += 3;
+      return add_plain(parser, GRX_NODE_KEEP, start, out_node);
+    }
     if (kind == 'e') {
       parser->position += 2;
       return add_plain(parser, GRX_NODE_KEEP_END, start, out_node);

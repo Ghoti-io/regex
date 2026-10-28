@@ -643,6 +643,22 @@ TEST_P(Vim, KeepMovesTheReportedStart) {
   EXPECT_EQ(span("a\\zsb", "ab"), "1-2");
 }
 
+TEST_P(Vim, TheWhitespaceClassAfterZIsKeep) {
+  // vim 9.2 reads `\z\s` as `\zs` under both engines and at every magic
+  // level; no other `\z\X` compiles. The near misses stay refused.
+  EXPECT_EQ(span("a\\z\\s", "xab"), "2-2");
+  EXPECT_EQ(span("a\\z\\sb", "ab"), "1-2");
+  EXPECT_EQ(span("\\va\\z\\s", "xab"), "2-2");
+  EXPECT_EQ(span("\\Ma\\z\\s", "xab"), "2-2");
+  EXPECT_EQ(span("\\Va\\z\\s", "xab"), "2-2");
+  for (const char * refused : {"\\z\\S", "\\z\\_s", "\\z\\s\\+", "\\z\\e"}) {
+    EXPECT_EQ(compile(refused, GRX_SYNTAX_VIM_BACKTRACK).result,
+        GRX_ERR_SYNTAX) << refused;
+    EXPECT_EQ(compile(refused, GRX_SYNTAX_VIM_NFA).result, GRX_ERR_SYNTAX)
+        << refused;
+  }
+}
+
 TEST_P(Vim, KeepEndMovesTheReportedEnd) {
   // `\ze`: the text after it still has to match and the span stops here.
   EXPECT_EQ(span("a\\zeb", "ab"), "0-1");

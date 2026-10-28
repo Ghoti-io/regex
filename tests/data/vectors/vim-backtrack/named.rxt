@@ -9,7 +9,7 @@
 # contents. `-` is a group that did not participate or matched empty, which
 # vim spells the same way.
 #
-# population: 263 reference answers, 253 records, 10 duplicate refusal rows
+# population: 276 reference answers, 266 records, 10 duplicate refusal rows
 dialect: vim-backtrack
 
 pattern: \\(a\\)\\@!\\|a\\%[\\_s]
@@ -1191,3 +1191,61 @@ expect: nomatch
 pattern: \\(a\\)\\@=\\(\\%9caX\\|\\1\\)\\@=.
 subject: a\u0301
 expect: nomatch
+
+pattern: a\\z\\s
+subject: xab
+expect: 2-2
+groups: - - - - - - - - -
+
+pattern: a\\z\\s
+subject: a
+expect: 1-1
+groups: - - - - - - - - -
+
+pattern: a\\z\\s
+subject: aa
+expect: 1-1
+groups: - - - - - - - - -
+
+pattern: \\va\\z\\s
+subject: xab
+expect: 2-2
+groups: - - - - - - - - -
+
+pattern: \\Ma\\z\\s
+subject: xab
+expect: 2-2
+groups: - - - - - - - - -
+
+pattern: \\Va\\z\\s
+subject: xab
+expect: 2-2
+groups: - - - - - - - - -
+
+pattern: \\z\\s
+subject: a
+expect: 0-0
+groups: - - - - - - - - -
+
+pattern: \\z\\s
+subject:
+expect: 0-0
+groups: - - - - - - - - -
+
+pattern: \\V\\%$\\M\\(a\\)\\@<=\\z\\s
+subject: a
+expect: 1-1
+groups: a - - - - - - - -
+
+pattern: \\V\\%$\\M\\(a\\)\\@<=\\z\\s
+subject: ab
+expect: nomatch
+
+pattern: \\z\\S
+expect: refused
+
+pattern: \\z\\_s
+expect: refused
+
+pattern: \\z\\s\\+
+expect: refused

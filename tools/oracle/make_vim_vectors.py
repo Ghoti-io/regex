@@ -387,6 +387,21 @@ NAMED_CASES.extend([
 ])
 
 
+# `\z\s` reads as `\zs`: found by a seed no earlier run had used, and the
+# whole `\z\X` family swept on vim 9.2 to show it is the only spelling.
+NAMED_CASES.extend([
+    ("", "a\\z\\s", ["xab", "a", "aa"]),
+    ("\\v", "a\\z\\s", ["xab"]),
+    ("\\M", "a\\z\\s", ["xab"]),
+    ("\\V", "a\\z\\s", ["xab"]),
+    ("", "\\z\\s", ["a", ""]),
+    ("", "\\V\\%$\\M\\(a\\)\\@<=\\z\\s", ["a", "ab"]),
+    ("", "\\z\\S", ["a"]),
+    ("", "\\z\\_s", ["a"]),
+    ("", "\\z\\s\\+", ["a b"]),
+])
+
+
 def collect(cases, dropped, syntax):
     """Ask precisely the engine named by this profile, retaining every split."""
     raw = vim_diff.ask_vim(cases, engine=vim_diff.PROFILES[syntax])
