@@ -2379,6 +2379,9 @@ static GRX_Result gen_step(Codegen * codegen, GenFrame * frame,
       if (result == GRX_OK && (node->flags & GRX_IR_CLASS_TAIL)) {
         grx_program_at(codegen->program, at)->policy |= GRX_POLICY_CLASS_TAIL;
       }
+      if (result == GRX_OK && (node->flags & GRX_IR_SKIP_MARKS)) {
+        grx_program_at(codegen->program, at)->policy |= GRX_POLICY_SKIP_MARKS;
+      }
       if (result == GRX_OK && (node->flags & GRX_IR_DEFER_COMPOSING)) {
         result = emit(codegen, GRX_OP_PROGRESS_SET, 0, 0, 0, node, NULL);
       }

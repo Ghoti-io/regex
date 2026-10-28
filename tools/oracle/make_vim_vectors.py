@@ -439,7 +439,9 @@ def collect(cases, dropped, syntax):
 
 
 # `\%C`, from a matrix of thirty patterns by nine subjects and a second of
-# the counted repeats, asked of both engines. U is U+0301 and V is U+0302.
+# the counted repeats, asked of both engines. `\\_s\\(\\%C\\)*` is not a row: the NFA
+# reference captures the marks there and this library does not, which
+# documentation/dialects.md records, and the vim vectors do not carry gaps. U is U+0301 and V is U+0302.
 _U = "\u0301"
 _V = "\u0302"
 _C_SUBJECTS = ["ab", "a" + _U + "b", "a" + _U + _V + "b", _U + "b", "a",
@@ -460,6 +462,20 @@ NAMED_CASES.extend([
         "a\\(\\%C\\)\\?", "a\\(\\%C\\)\\{2}", "\\%C\\{1,}", "a\\%C\\{1,}",
         "\\%C\\{1,}b", "\\%C\\{0,}", "a\\%C\\{0,}", "a\\%C\\{1,3}", "\\%C\\{-1,}",
         "a\\%C\\{-1,}",
+    )
+] + [
+    ("", pattern, ["a\n" + _U + "b", "a\n" + _U, "\n" + _U + "b",
+                   "a\n" + _U + _V + "b", "a\nb"])
+    for pattern in (
+        "\\_s\\%C", "\\_s\\%Cb", "\\_d\\%C", "\\_w\\%C", "\\_a\\%C", "\\_[ab]\\%C",
+        "\\_[^x]\\%C", "\\_S\\%C", "\\_W\\%C", "\\_s", "\\_s.", "\\_s\\%C.",
+        "\\(\\_s\\)\\%C", "\\(\\_s\\%C\\)b", "\\_.\\%C", "\\n\\%C", "\\_s\\%C\\+",
+        "\\_s\\%C*", "\\_s\\(\\%C\\)", "\\_s\\%C$", "\\_s\\%C\\=", "\\_s\\%C\\?",
+        "\\_s\\%C\\{0}", "\\_s\\%C\\{1}", "\\_s\\%C\\{2}", "\\_s\\%C\\{0,1}",
+        "\\_s\\%C\\{0,}", "\\_s\\%C\\{1,}", "\\_s\\%C\\{-}", "\\_s\\%C\\{-1}",
+        "\\_s\\%C\\{-0,1}", "\\_s\\%C\\{-1,}", "\\_s\\%C*b", "\\_s\\%C\\=b",
+        "\\_s\\%C\\{0,}b", "\\_s\\(\\%C\\)\\=", "\\_s\\%C\\%C*",
+        "\\_s\\%C*\\%C", "\\n\\%C*", "\\n\\%C\\=", "\\_.\\%C*",
     )
 ] + [
     ("\\v", pattern, _C_SUBJECTS) for pattern in ("%C", "%Cb", "b%C", "a%C+", "a%C*")

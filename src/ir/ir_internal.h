@@ -255,6 +255,8 @@ typedef enum {
 #define GRX_IR_COMPLETE_COMPOSING GRX_BIT(25)
 /** ASSERT: rejecting the whole match at a composing boundary. */
 #define GRX_IR_FINAL_BOUNDARY GRX_BIT(26)
+/** CLASS: the loop of a composing skip, which takes deferred marks itself. */
+#define GRX_IR_SKIP_MARKS GRX_BIT(27)
 
 /**
  * @brief LOOK: a negative one keeps what its body captured before failing.

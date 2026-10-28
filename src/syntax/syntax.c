@@ -1288,6 +1288,7 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
   },
   [GRX_SYNTAX_VIM_NFA] = {
     VIM_PROFILE_COMMON,
+    .optional_composing_skip_defers = 1,
     .lookbehind = GRX_LOOKBEHIND_FORWARD_FURTHEST,
     .lookbehind_round_bound = 1,
     .atomic_ignores_markers = 1,

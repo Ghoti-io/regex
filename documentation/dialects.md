@@ -580,14 +580,18 @@ any subject; the NFA reference repeats it like any atom that can match empty.
 Both behaviours are measured and carried by the profile axes
 `composing_skip_count_never` and the literal guard, not by the engines.
 
-One case is not yet followed. On the NFA profile, `\%C` directly after an
-underscore class that matched a line break carrying composing characters (`\_s`,
-`\_d`, `\_w`, `\_a`, a group around them, or `\%C` repeated or grouped) takes
-the marks in the reference, so `\_s\%C` on `a`, LF, U+0301, `b` is 1:4, and this
-library reports 1:2: the marks that follow a line break are carried to the
-next consumer (section 5.20), and `\%C` is not yet one that reports them. The
-backtracking profile agrees on every such row, and so does the NFA profile for
-`\n` and `\_.`; the pattern shapes were probed in 240 rows, 22 of which differ.
+The marks that follow a line break an underscore class took belong to the next
+consumer (section 5.20), and `\%C` is one on the NFA profile, with one
+exception that the reference makes: a bare `\%C` repeated with a minimum of
+zero (`*`, `\=`, `\?`, `\{0,}`, `\{0,1}`, `\{-}`, `\{0}`) leaves them alone. On `a`,
+LF, U+0301, `b`, `\_s\%C` is 1:4 and `\_s\%C*` is 1:2, while `\_s\%C*b` still
+reaches the `b` past the marks (1:5); `\_s\%C\+`, a count of one or more and a
+grouped `\_s\(\%C\)*` take the marks. Profile axis
+`optional_composing_skip_defers`. One group-text difference remains: for
+`\_s\(\%C\)*` the reference captures the marks in group 1 and this library
+reports it empty, with the whole-match span agreeing (1:4); `\=`, `\{0,1}`, `\+`
+and a bare `\%C` agree. Probed in 530 rows over the underscore
+classes, `\n`, `\_.` and every repeat spelling, all agreeing on both profiles.
 
 The independently measured profile axes are:
 

@@ -66,6 +66,7 @@ typedef struct {
   int scalar_direct;          ///< Direct literal quantifier consumes scalars.
   int skip_composing_prefix;  ///< Adjacent literals may skip intervening marks.
   int composing_skip_follows; ///< `\%C` is written right after this literal.
+  int composing_skip_defers;  ///< This `\%C` is a bare optional repeat's body.
   unsigned atomic_end_depth;   ///< End markers suppressed by atomic bodies.
   uint32_t frontier_scope;
   uint32_t frontier_scopes;
@@ -1168,6 +1169,9 @@ static GRX_Result lower_composing_skip(
     return result;
   }
   grx_ir_node(low->ir, marks)->a = index;
+  if (!low->composing_skip_defers) {
+    grx_ir_node(low->ir, marks)->flags |= GRX_IR_SKIP_MARKS;
+  }
   uint32_t loop = GRX_INDEX_NONE;
   result = add(low, GRX_IR_REPEAT, node, &loop);
   if (result != GRX_OK) {
@@ -3069,7 +3073,12 @@ static GRX_Result lower_repeat(
                 : 0)
       : 0;
   size_t body_nodes_begin = low->ir->nodes.count;
+  const GRX_Node * written = grx_pattern_node(low->pattern, node->first_child);
+  int outer_defers = low->composing_skip_defers;
+  low->composing_skip_defers = low->profile.optional_composing_skip_defers
+      && node->min == 0 && written && written->kind == GRX_NODE_COMPOSING_SKIP;
   GRX_Result result = lower_node(low, node->first_child, &body);
+  low->composing_skip_defers = outer_defers;
   low->scalar_direct = outer_scalar;
   if (result != GRX_OK) {
     return result;

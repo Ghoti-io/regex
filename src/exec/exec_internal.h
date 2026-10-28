@@ -932,8 +932,12 @@ static inline int grx_exec_scalar_cluster_consumer(const GRX_Inst * inst) {
 /** Tags and structural epsilon edges precede deferred mark skipping. */
 static inline int grx_exec_composing_frontier(const GRX_Inst * inst) {
   switch ((GRX_Opcode)inst->op) {
-    case GRX_OP_CHAR:
     case GRX_OP_CLASS:
+      // A composing skip's own loop consumes the marks deferred to it, so
+      // stepping over them first would leave the loop nothing to take and its
+      // exit nowhere to go.
+      return !(inst->policy & GRX_POLICY_SKIP_MARKS);
+    case GRX_OP_CHAR:
     case GRX_OP_ANY:
     case GRX_OP_ANY_NL:
     case GRX_OP_BACKREF:

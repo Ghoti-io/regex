@@ -1409,3 +1409,33 @@ TEST_F(VimNfa, PercentCRepeatedIsReachableThroughAnythingThatCanReachIt) {
   EXPECT_EQ(span("\\%C\\{2}", U + "b"), "0-2");
   EXPECT_EQ(span("\\%C\\{-0,1}", U + "b"), "0-0");
 }
+
+TEST_F(VimNfa, PercentCAfterALineBreakTakesItsMarksUnlessBareAndOptional) {
+  // The marks after a line break that an underscore class took belong to the
+  // next consumer, and `\%C` is one - except a bare `\%C` repeated with a
+  // minimum of zero, which leaves them and ends at the break. Measured on the
+  // NFA reference; the backtracking reference takes them in every spelling.
+  const std::string U = "\xCC\x81";
+  const std::string subject = "a\n" + U + "b";
+  EXPECT_EQ(span("\\_s", subject), "1-2");
+  EXPECT_EQ(span("\\_s\\%C", subject), "1-4");
+  EXPECT_EQ(span("\\_s\\%C\\+", subject), "1-4");
+  EXPECT_EQ(span("\\_s\\%C\\{2}", subject), "1-4");
+  EXPECT_EQ(span("\\_s\\(\\%C\\)*", subject), "1-4");
+  EXPECT_EQ(span("\\n\\%C*", subject), "1-4");
+  for (const char * leaves : {"\\_s\\%C*", "\\_s\\%C\\=", "\\_s\\%C\\{0,1}",
+           "\\_s\\%C\\{0,}", "\\_s\\%C\\{-}", "\\_s\\%C\\{0}"}) {
+    EXPECT_EQ(span(leaves, subject), "1-2") << leaves;
+  }
+  EXPECT_EQ(span("\\_s\\%C*b", subject), "1-5");
+}
+
+TEST(VimBacktrack, PercentCAfterALineBreakTakesItsMarksInEverySpelling) {
+  current_vim = GRX_SYNTAX_VIM_BACKTRACK;
+  const std::string U = "\xCC\x81";
+  const std::string subject = "a\n" + U + "b";
+  for (const char * takes : {"\\_s\\%C", "\\_s\\%C*", "\\_s\\%C\\=",
+           "\\_s\\%C\\{0,}", "\\_s\\(\\%C\\)*"}) {
+    EXPECT_EQ(span(takes, subject), "1-4") << takes;
+  }
+}

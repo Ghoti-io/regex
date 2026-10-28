@@ -329,6 +329,8 @@ typedef enum {
 /** CLASS: membership tests the final scalar of this composing cluster. */
 #define GRX_POLICY_CLASS_TAIL GRX_BIT(2)
 #define GRX_POLICY_SCALAR_LITERAL GRX_BIT(7)
+/** CLASS: the loop of a composing skip; marks deferred to it are its own. */
+#define GRX_POLICY_SKIP_MARKS GRX_BIT(3)
 #define GRX_POLICY_REPORT_COMPOSING GRX_BIT(0)
 /** BACKREF: compare the current capture endpoints rather than shadow spans. */
 #define GRX_POLICY_BACKREF_LIVE GRX_BIT(1)

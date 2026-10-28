@@ -770,6 +770,16 @@ typedef struct GRX_Profile {
    * repeats it like any other atom that can match empty.
    */
   int composing_skip_count_never;
+  /**
+   * A bare `\%C` repeated with a minimum of zero leaves deferred marks alone.
+   *
+   * The marks after a line break that an underscore class took belong to the
+   * next consumer (documentation/dialects.md section 5.20). The NFA reference
+   * lets `\%C+`, a count of one or more, and a grouped `\(\%C\)*` take them
+   * and does not let `\%C*`, `\%C\=` or `\%C\{0,}` do so: `\_s\%C*` ends at the
+   * line break and `\_s\%C*b` still reaches the `b` past the marks.
+   */
+  int optional_composing_skip_defers;
   GRX_SplitRule split;              ///< How grx_regex_split() divides.
   GRX_IterationRule iteration;      ///< Search-all after an empty match.
   GRX_SearchStartRule search_start; ///< What `\G` asserts while iterating.

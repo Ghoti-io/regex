@@ -19,8 +19,32 @@ import vim_protocol
 import vim_runner
 
 
+DEFAULT_DEADLINE = 900.0
+
+
+def deadline():
+    """The whole-run deadline, `GRX_VIM_DEADLINE_SECONDS` if the caller set it.
+
+    A full generation of the vim vectors is some ten minutes on an idle
+    machine, so a fixed fifteen minutes fails on a loaded one without the
+    reference having done anything wrong. A run that sets it says so in the
+    evidence, which records `timeout`, and a malformed value is an error and
+    never the default.
+    """
+    value = os.environ.get('GRX_VIM_DEADLINE_SECONDS')
+    if value is None:
+        return DEFAULT_DEADLINE
+    try:
+        seconds = float(value)
+    except ValueError:
+        raise ValueError('GRX_VIM_DEADLINE_SECONDS must be a number')
+    return seconds
+
+
 def ask(inputs, script, input_variable, output_variable,
-        process_timeout=5, timeout=900):
+        process_timeout=5, timeout=None):
+    if timeout is None:
+        timeout = deadline()
     if not inputs:
         raise ValueError('isolated reference requires a nonempty population')
     if any(not math.isfinite(value) or value <= 0 for value in (process_timeout, timeout)):
