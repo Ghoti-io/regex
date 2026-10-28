@@ -39,6 +39,8 @@ tests/test_helpers.h      What every test includes: the data paths and
 tests/unit/               Unit tests (gtest)
 tests/conformance/        The .rxt vector reader and its runner
 tests/fuzz/               libFuzzer harnesses and seed corpora
+tests/oracle/             Drivers the oracle gates build: they print how a compile
+                          or replacement result is reported
 tests/data/vectors/       Checked-in conformance vectors
 tests/data/vectors_selftest/  Fixtures the runner is pointed at to prove it
                           can fail a record at all
