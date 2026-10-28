@@ -99,6 +99,8 @@ const char * grx_node_kind_name(GRX_NodeKind kind) {
       return "callout";
     case GRX_NODE_KEEP_END:
       return "keep-end";
+    case GRX_NODE_COMPOSING_SKIP:
+      return "composing-skip";
     case GRX_NODE_COUNT:
     default:
       return "?";

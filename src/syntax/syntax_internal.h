@@ -762,6 +762,14 @@ typedef struct GRX_Profile {
   int line_star_initial_literal; ///< Very-magic first simple token retains star.
   int optional_tail_omits_newline; ///< Final optional class loses added LF.
   int trailing_backslash_literal; ///< A final lone backslash is itself.
+  /**
+   * A counted repeat of `\%C` with a minimum of two or more never matches.
+   *
+   * Measured on the backtracking reference, on every subject and for
+   * `\{2}`, `\{3}`, `\{2,3}` and `\{-2}`, grouped or not. The NFA reference
+   * repeats it like any other atom that can match empty.
+   */
+  int composing_skip_count_never;
   GRX_SplitRule split;              ///< How grx_regex_split() divides.
   GRX_IterationRule iteration;      ///< Search-all after an empty match.
   GRX_SearchStartRule search_start; ///< What `\G` asserts while iterating.

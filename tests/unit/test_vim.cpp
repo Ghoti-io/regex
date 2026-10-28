@@ -661,11 +661,11 @@ TEST_P(Vim, AFinalLoneBackslashIsALiteralBackslash) {
 }
 
 TEST_P(Vim, APercentEscapeIsEitherValidOutOfContractOrASyntaxError) {
-  // What vim accepts but needs a buffer for, or composing handling this
-  // library does not model, is unsupported. Every other spelling is vim's
-  // "E71: Invalid character after \%" and is a malformed pattern.
-  for (const char * unsupported : {"\\%C", "\\%Cb", "\\%'a", "\\%<'a", "\\%.l",
-           "\\%<.c", "\\%>.v"}) {
+  // What vim accepts but needs a buffer for is unsupported. Every other
+  // spelling is vim's "E71: Invalid character after \%" and is a malformed
+  // pattern.
+  for (const char * unsupported :
+      {"\\%'a", "\\%<'a", "\\%.l", "\\%<.c", "\\%>.v"}) {
     EXPECT_EQ(compile(unsupported, GRX_SYNTAX_VIM_BACKTRACK).result,
         GRX_ERR_UNSUPPORTED) << unsupported;
     EXPECT_EQ(compile(unsupported, GRX_SYNTAX_VIM_NFA).result,
@@ -1347,4 +1347,65 @@ TEST_P(Vim, ALiteralTheMatchNeedsAnswersWithoutSearchingPastALookaround) {
   // The literal being present is the case the prefilter must not answer.
   EXPECT_EQ(span("\\%(a\\(a\\)\\@<=\\)*ab", std::string(600, 'a') + "b"),
       "0-601");
+}
+
+TEST_P(Vim, PercentCSkipsTheComposingCharactersAtThePosition) {
+  // Every expectation was asked of vim 9.2 on both engines. U is U+0301 and
+  // V is U+0302.
+  const std::string U = "\xCC\x81";
+  const std::string V = "\xCC\x82";
+  // Zero-width where nothing composing follows, and a leading mark is its
+  // own cluster that nothing else can start on.
+  EXPECT_EQ(span("\\%C", "ab"), "0-0");
+  EXPECT_EQ(span("\\%C", U + "b"), "0-2");
+  EXPECT_EQ(span("\\%Cb", "a" + U + "b"), "3-4");
+  EXPECT_EQ(span("\\%Cb", U + "b"), "0-3");
+  EXPECT_EQ(span("^\\%C", "a" + U), "0-0");
+  EXPECT_EQ(span("\\%C$", "a" + U), "3-3");
+  // It waives the preceding literal's refusal of the marks that follow it,
+  // where the literal alone says no.
+  EXPECT_EQ(span("a", "a" + U), "nomatch");
+  EXPECT_EQ(span("a\\%C", "a" + U), "0-3");
+  EXPECT_EQ(span("a\\%C", "a" + U + V + "b"), "0-5");
+  EXPECT_EQ(span("a\\%Cb", "a" + U + "b"), "0-4");
+  EXPECT_EQ(span("a\\%C\\+", "a" + U), "0-3");
+  EXPECT_EQ(span("\\(a\\%C\\)b", "a" + U + "b"), "0-4");
+  EXPECT_EQ(span("a\\%C\\@=", "a" + U), "nomatch");
+  EXPECT_EQ(span("a\\%C\\@!", "a"), "nomatch");
+  EXPECT_EQ(span("\\v%Cb", U + "b"), "0-3");
+  EXPECT_EQ(span("\\vb%C", "b" + U), "0-3");
+}
+
+TEST(VimBacktrack, PercentCRepeatedWaivesOnlyWhenAdjacent) {
+  current_vim = GRX_SYNTAX_VIM_BACKTRACK;
+  const std::string U = "\xCC\x81";
+  // The literal is waived by an adjacent `\%C` only: a repeat that can be
+  // zero, a counted one-or-more and a group around it are not adjacent, and
+  // a count of two or more never matches at all.
+  EXPECT_EQ(span("a\\%C*", "a" + U), "nomatch");
+  EXPECT_EQ(span("a\\%C\\?", "a" + U), "nomatch");
+  EXPECT_EQ(span("a\\%C\\{1,}", "a" + U), "nomatch");
+  EXPECT_EQ(span("a\\%C\\{1}", "a" + U), "nomatch");
+  EXPECT_EQ(span("a\\(\\%C\\)", "a" + U), "nomatch");
+  EXPECT_EQ(span("a\\%C*", "a"), "0-1");
+  for (const char * never : {"\\%C\\{2}", "\\%C\\{3}", "\\%C\\{2,3}",
+           "\\%C\\{-2}", "\\(\\%C\\)\\{2}"}) {
+    EXPECT_EQ(span(never, "ab"), "nomatch") << never;
+    EXPECT_EQ(span(never, U + "b"), "nomatch") << never;
+  }
+  EXPECT_EQ(span("\\%C\\{1}", U + "b"), "0-2");
+  EXPECT_EQ(span("\\%C\\{-1,2}", U + "b"), "0-2");
+}
+
+TEST_F(VimNfa, PercentCRepeatedIsReachableThroughAnythingThatCanReachIt) {
+  const std::string U = "\xCC\x81";
+  // The NFA reference waives the literal wherever a `\%C` can be reached,
+  // and repeats it like any atom that can match empty.
+  EXPECT_EQ(span("a\\%C*", "a" + U), "0-3");
+  EXPECT_EQ(span("a\\%C\\?", "a" + U), "0-3");
+  EXPECT_EQ(span("a\\%C\\{1,}", "a" + U), "0-3");
+  EXPECT_EQ(span("a\\(\\%C\\)", "a" + U), "0-3");
+  EXPECT_EQ(span("a\\%C\\{0}", "a" + U), "nomatch");
+  EXPECT_EQ(span("\\%C\\{2}", U + "b"), "0-2");
+  EXPECT_EQ(span("\\%C\\{-0,1}", U + "b"), "0-0");
 }

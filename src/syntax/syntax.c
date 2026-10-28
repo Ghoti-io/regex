@@ -1279,6 +1279,7 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     .posix_case_classes_latin1 = 1,
     .scalar_collections = 1,
     .literal_cluster_guard = 1,
+    .composing_skip_count_never = 1,
     .empty_loop_after_mandatory = 1,
     .direct_repeat_scalar = 1,
     .complex_repeat_counter = 1,

@@ -65,6 +65,7 @@ typedef struct {
   int adjacent_literal;       ///< This literal continues a concatenated run.
   int scalar_direct;          ///< Direct literal quantifier consumes scalars.
   int skip_composing_prefix;  ///< Adjacent literals may skip intervening marks.
+  int composing_skip_follows; ///< `\%C` is written right after this literal.
   unsigned atomic_end_depth;   ///< End markers suppressed by atomic bodies.
   uint32_t frontier_scope;
   uint32_t frontier_scopes;
@@ -1119,6 +1120,69 @@ static GRX_Result cluster_wrap(Lowering * low, const GRX_Node * node,
     uint32_t atom, uint32_t * out_node);
 static GRX_Result lower_codepoint(Lowering * low, uint32_t codepoint,
     const GRX_Node * node, uint32_t * out_node);
+
+/**
+ * Whether `\%C` directly follows, as the backtracking reference reads it.
+ *
+ * Its literal refuses the marks that follow it unless the pattern wrote `\%C`
+ * right after it, unquantified or with `\+`, which is `\%C` followed by `\%C*`
+ * and so has one of them adjacent. Any other count, a group around it or an
+ * alternation does not count: measured, `a\%C*`, `a\%C\{1,}` and
+ * `a\(\%C\)` refuse "a" U+0301 there and `a\%C` and `a\%C\+` take it.
+ */
+static int skip_follows(const Lowering * low, uint32_t sibling) {
+  const GRX_Node * next = sibling == GRX_INDEX_NONE
+      ? NULL : grx_pattern_node(low->pattern, sibling);
+  if (!next) {
+    return 0;
+  }
+  if (next->kind == GRX_NODE_COMPOSING_SKIP) {
+    return 1;
+  }
+  if (next->kind != GRX_NODE_REPEAT || next->min != 1
+      || next->max != GRX_REPEAT_INF || next->first_child == GRX_INDEX_NONE
+      || !(next->flags & GRX_NODE_SHORT_PLUS)) {
+    return 0;
+  }
+  const GRX_Node * body = grx_pattern_node(low->pattern, next->first_child);
+  return body && body->kind == GRX_NODE_COMPOSING_SKIP;
+}
+
+/**
+ * Vim's `\%C`: every composing character at this position, or none.
+ *
+ * A greedy loop over the composing set and nothing around it. It is not
+ * wrapped as a cluster, which is the point: what it consumes is the marks,
+ * and a mark that leads the subject has no base to be a cluster with.
+ */
+static GRX_Result lower_composing_skip(
+    Lowering * low, const GRX_Node * node, uint32_t * out_node) {
+  uint32_t index = GRX_INDEX_NONE;
+  GRX_Result result = composing_class(low, &index);
+  if (result != GRX_OK) {
+    return result;
+  }
+  uint32_t marks = GRX_INDEX_NONE;
+  result = add(low, GRX_IR_CLASS, node, &marks);
+  if (result != GRX_OK) {
+    return result;
+  }
+  grx_ir_node(low->ir, marks)->a = index;
+  uint32_t loop = GRX_INDEX_NONE;
+  result = add(low, GRX_IR_REPEAT, node, &loop);
+  if (result != GRX_OK) {
+    return result;
+  }
+  GRX_IRNode * repeat = grx_ir_node(low->ir, loop);
+  repeat->min = 0;
+  repeat->max = GRX_REPEAT_INF;
+  repeat->mode = GRX_REPEAT_GREEDY;
+  repeat->empty_loop = (uint8_t)low->profile.empty_loop;
+  repeat->capture_reset = (uint8_t)low->profile.capture_reset;
+  result = attach(low, loop, marks);
+  *out_node = loop;
+  return result;
+}
 
 /**
  * Lower one cluster written in the pattern: a base and the marks after it.
@@ -2902,16 +2966,30 @@ static GRX_Result lower_backref(
 }
 
 /** Lower a repeat, attaching the dialect's two loop rules as modes. */
+/** Whether a repeat's body is `\%C`, bare or alone in a group. */
+static int repeats_composing_skip(const Lowering * low, const GRX_Node * node) {
+  const GRX_Node * body = grx_pattern_node(low->pattern, node->first_child);
+  if (body && body->kind == GRX_NODE_GROUP
+      && body->first_child != GRX_INDEX_NONE
+      && body->first_child == body->last_child) {
+    body = grx_pattern_node(low->pattern, body->first_child);
+  }
+  return body && body->kind == GRX_NODE_COMPOSING_SKIP;
+}
+
 static GRX_Result lower_repeat(
     Lowering * low, const GRX_Node * node, uint32_t * out_node) {
   if (node->first_child == GRX_INDEX_NONE) {
     return fail(low, GRX_DIAG_INTERNAL, node);
   }
 
-  if (node->min > node->max) {
-    // Only Perl's parser lets one of these through, and what it means there
+  if (node->min > node->max
+      || (low->profile.composing_skip_count_never && node->min >= 2
+          && repeats_composing_skip(low, node))) {
+    // Perl's parser lets a reversed range through, and what it means there
     // is a construct that never matches: `((def){37,17})?ABC` matches "ABC"
-    // with group 1 unset. An empty class rather than a failing verb, because
+    // with group 1 unset. Vim's backtracking engine never matches `\%C\{2}`
+    // either, whatever the subject. An empty class rather than a failing verb, because
     // a class matches nothing without making the program irregular - the
     // Pike engine can still run the rest of the pattern.
     GRX_CharClass empty;
@@ -3492,7 +3570,12 @@ static GRX_Result lower_sequence(Lowering * low, const GRX_Node * node,
     int outer_adjacent = low->adjacent_literal;
     low->adjacent_literal = kind == GRX_IR_CONCAT && previous_literal
         && child_node->kind == GRX_NODE_LITERAL;
+    int outer_follows = low->composing_skip_follows;
+    low->composing_skip_follows = kind == GRX_IR_CONCAT
+        && child_node->kind == GRX_NODE_LITERAL
+        && skip_follows(low, next);
     result = lower_node(low, child, &lowered);
+    low->composing_skip_follows = outer_follows;
     low->adjacent_literal = outer_adjacent;
     previous_literal = child_node->kind == GRX_NODE_LITERAL;
     if (result == GRX_OK) {
@@ -4138,7 +4221,8 @@ static GRX_Result lower_run_clusters(Lowering * low, const uint32_t * points,
       result = attach(low, sequence, child);
     }
     if (result == GRX_OK && low->profile.literal_cluster_guard &&
-        low->profile.scalar_collections && !low->scalar_direct) {
+        low->profile.scalar_collections && !low->scalar_direct &&
+        !(low->composing_skip_follows && i + span == length)) {
       result = attach_composing_assert(
           low, node, sequence, GRX_ASSERT_NOT_COMPOSING);
     }
@@ -4659,6 +4743,9 @@ static GRX_Result lower_node(
     case GRX_NODE_KEEP:
       return add(low, low->atomic_depth ? GRX_IR_EMPTY : GRX_IR_KEEP,
           node, out_node);
+
+    case GRX_NODE_COMPOSING_SKIP:
+      return lower_composing_skip(low, node, out_node);
 
     case GRX_NODE_KEEP_END: {
       GRX_Result result = add(low, GRX_IR_KEEP_END, node, out_node);

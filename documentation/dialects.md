@@ -559,8 +559,35 @@ lone backslash matches that backslash (`a\`, `\(a\)\`, `a*\`). A `\%` that
 vim does not accept (`\%`, `\%0`, `\%c`, a column number with no `l`, `c` or
 `v`) is a syntax error, and a backslash before the character after `\%` changes
 nothing (`\%\(a\)` is `\%(a\)`). Only what vim accepts but a string cannot
-supply, a mark (`\%'m`) or the cursor (`\%.l`), and `\%C`, which skips
-composing characters, stay `GRX_ERR_UNSUPPORTED`. A repeat cannot open `\%[...]`.
+supply, a mark (`\%'m`) or the cursor (`\%.l`), stay
+`GRX_ERR_UNSUPPORTED`. A repeat cannot open `\%[...]`.
+
+`\%C` skips the composing characters at the position: zero or more, greedily,
+and zero-width where none follows, so `\%Cb` matches `b` after a lone leading
+mark (`GRX_NODE_COMPOSING_SKIP`). Its other effect is on the atom before it,
+which is the one place the engines differ. A literal refuses the composing
+characters that follow it in the subject (section 5.20), and a `\%C` after it
+waives that: `a\%C` matches `a` U+0301 as 0:3, where `a` alone does not. The
+backtracking reference waives only by adjacency, a `\%C` written right after
+the literal and either bare or followed by `\+`; a repeat that can be zero
+(`*`, `\=`), a counted one (`\{1,}`, `\{1}`) and a group around it are not
+adjacent, and neither is one inside a lookahead. The NFA reference waives
+wherever a `\%C` can be reached from the literal, so `a\%C*`, `a\(\%C\)` and
+`a\%C\{0,1}` all match the marks, and only a repeat count of zero does not.
+Under the backtracking reference a counted repeat of `\%C` whose minimum is two
+or more (`\{2}`, `\{3}`, `\{2,3}`, `\{-2}`, bare or grouped) never matches, on
+any subject; the NFA reference repeats it like any atom that can match empty.
+Both behaviours are measured and carried by the profile axes
+`composing_skip_count_never` and the literal guard, not by the engines.
+
+One case is not yet followed. On the NFA profile, `\%C` directly after an
+underscore class that matched a line break carrying composing characters (`\_s`,
+`\_d`, `\_w`, `\_a`, a group around them, or `\%C` repeated or grouped) takes
+the marks in the reference, so `\_s\%C` on `a`, LF, U+0301, `b` is 1:4, and this
+library reports 1:2: the marks that follow a line break are carried to the
+next consumer (section 5.20), and `\%C` is not yet one that reports them. The
+backtracking profile agrees on every such row, and so does the NFA profile for
+`\n` and `\_.`; the pattern shapes were probed in 240 rows, 22 of which differ.
 
 The independently measured profile axes are:
 

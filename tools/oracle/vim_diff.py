@@ -79,6 +79,9 @@ ATOMS = [
     "\\s", "\\S", "\\d", "\\D", "\\w", "\\W", "\\h", "\\H", "\\a", "\\A",
     "\\l", "\\L", "\\u", "\\U", "\\x", "\\X", "\\o", "\\O", "\\i", "\\k",
     "\\f", "\\F", "\\I", "\\K",
+    # Skips the composing characters at the position; the engines differ in
+    # what it waives for the atom before it, so it is generated after atoms.
+    "\\%C",
     "\\_s", "\\_d", "\\_w", "\\_.", "\\_[ab]", "\\_^", "\\_$",
     # The negated underscore forms, which are not the positive ones with a
     # member added: a negated class carries its negation over the items, so
@@ -93,7 +96,7 @@ ATOMS = [
     "[\\u0041]", "[a\\b]",
     # Groups and alternation, in both spellings.
     "\\(a\\)", "\\(a\\|b\\)", "\\%(ab\\)", "\\(a\\)\\1",
-    "(a)", "(a|b)", "%(ab)", "(a)\\1",
+    "(a)", "(a|b)", "%(ab)", "(a)\\1", "%C",
     # Postfix assertions, including markers whose behavior differs between
     # the forced profiles. Both profiles receive the same vocabulary.
     "\\(a\\)\\@=", "\\(a\\)\\@!", "\\(a\\)\\@<=", "\\(a\\)\\@<!",

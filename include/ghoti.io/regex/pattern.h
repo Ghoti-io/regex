@@ -123,6 +123,16 @@ typedef enum {
    * own answer rather than this library rounding one.
    */
   GRX_NODE_KEEP_END,
+  /**
+   * `\%C`: skip the composing characters at this position.
+   *
+   * Vim's alone. Zero or more of them are consumed, greedily, and nothing
+   * else: where none follows it matches empty. It is a node of its own and
+   * not a class repeated because what a composing character is belongs to
+   * the dialect (documentation/dialects.md section 5.20), and because the
+   * atom before it is read differently when it is there.
+   */
+  GRX_NODE_COMPOSING_SKIP,
   GRX_NODE_COUNT        ///< Closes the enum; not a node kind.
 } GRX_NodeKind;
 

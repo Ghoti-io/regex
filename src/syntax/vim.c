@@ -1425,15 +1425,18 @@ static GRX_Result read_position(
   }
   if (byte_at(parser, scan) < '0' || byte_at(parser, scan) > '9') {
     // What vim accepts without a column number is a mark (`\%'m`) or the
-    // cursor (`\%.l`, `.c`, `.v`), and `\%C` skips composing characters:
-    // all four need a buffer or are not modelled, so they stay unsupported.
+    // cursor (`\%.l`, `.c`, `.v`), which need a buffer and so stay
+    // unsupported; `\%C` skips composing characters and is a node of its own.
     // Every other spelling is vim's "E71: Invalid character after \%" (or
     // "E1273" for a bare `\%c`), which is a malformed pattern and not a
     // feature this library lacks.
     char after = byte_at(parser, scan);
     char kind = byte_at(parser, scan + 1);
-    if (after == '\'' || (compare == '=' && after == 'C')
-        || (after == '.' && (kind == 'l' || kind == 'c' || kind == 'v'))) {
+    if (compare == '=' && after == 'C') {
+      parser->position += scan + 1;
+      return add_plain(parser, GRX_NODE_COMPOSING_SKIP, start, out_node);
+    }
+    if (after == '\'' || (after == '.' && (kind == 'l' || kind == 'c' || kind == 'v'))) {
       return grx_parse_fail(
           parser, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, start, 3);
     }
@@ -2400,6 +2403,17 @@ static void absorb_marker_optional(GRX_Parser * parser) {
       if (at < parser->length &&
           (parser->text[at] == '?' || parser->text[at] == '=')) {
         node->flags |= GRX_NODE_SHORT_OPTIONAL;
+      }
+    }
+    if (node->kind == GRX_NODE_REPEAT && node->min == 1
+        && node->max == GRX_REPEAT_INF) {
+      const GRX_Node * body = grx_pattern_node(pattern, node->first_child);
+      size_t at = body ? body->offset + body->length : parser->length;
+      if (at < parser->length && parser->text[at] == '\\') {
+        at++;
+      }
+      if (at < parser->length && parser->text[at] == '+') {
+        node->flags |= GRX_NODE_SHORT_PLUS;
       }
     }
   }

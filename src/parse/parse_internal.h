@@ -295,6 +295,8 @@ typedef struct GRX_ClassItem {
 #define GRX_NODE_UNSET_REFERENCE GRX_BIT(23) ///< EMPTY: retained comparison boundary.
 #define GRX_NODE_OPEN_REFERENCE GRX_BIT(21) ///< BACKREF: target is lexically open.
 #define GRX_NODE_OPTIONAL_SEQUENCE GRX_BIT(20) ///< GROUP: optional-prefix members.
+/** REPEAT: written `+`, distinct from a counted one-or-more. */
+#define GRX_NODE_SHORT_PLUS GRX_BIT(24)
 
 // clang-format off
 /**

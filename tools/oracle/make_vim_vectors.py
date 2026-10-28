@@ -404,7 +404,7 @@ NAMED_CASES.extend([
 
 # The `\%` family, the trailing backslash and `\%[*]`, found by sweeping every
 # printable character after each escape prefix in all five magic levels against
-# both engines. `\%C` and the mark atoms stay unsupported and are not rows.
+# both engines. The mark atoms (`\%'m`, `\%.l`) need a buffer and are not rows.
 NAMED_CASES.extend([
     ("", "a\\", ["a\\", "ab", ""]),
     ("", "\\", ["a\\b", "ab"]),
@@ -436,6 +436,38 @@ def collect(cases, dropped, syntax):
             % (syntax, len(raw), len(cases)))
         return None, None
     return cases, raw
+
+
+# `\%C`, from a matrix of thirty patterns by nine subjects and a second of
+# the counted repeats, asked of both engines. U is U+0301 and V is U+0302.
+_U = "\u0301"
+_V = "\u0302"
+_C_SUBJECTS = ["ab", "a" + _U + "b", "a" + _U + _V + "b", _U + "b", "a",
+               "a" + _U, _U, "b" + _U, "a" + _U + _U + "b"]
+NAMED_CASES.extend([
+    ("", pattern, _C_SUBJECTS) for pattern in (
+        "\\%C", "a\\%C", "\\%Ca", "a\\%Cb", "\\%Cb", "a\\%C*", "a\\%C\\+",
+        "a\\%C\\?", "\\%C*", "\\%C\\+", "\\%C\\{2}", "a.\\%C", "a\\zs\\%Cb",
+        "[ab]\\%C", ".\\%C", "\\w\\%C", "\\Za\\%C", "a\\%C$", "^\\%C", "\\%C$",
+        "\\(a\\%C\\)b", "\\(\\%C\\)b", "a\\|\\%C", "\\%C\\|a", "a\\%C\\%Cb",
+        "\\%Cb\\@=", "a\\(\\%C\\)", "x\\@!\\%Cb",
+        "\\%C\\{0}", "\\%C\\{1}", "\\%C\\{3}", "\\%C\\{0,1}", "\\%C\\{1,2}",
+        "\\%C\\{2,3}", "\\%C\\{-1}", "\\%C\\{-2}", "\\%C\\{-0,1}", "\\%C\\{-1,2}",
+        "\\%C\\{}", "\\%C\\{-}", "\\%C\\{,2}", "a\\%C\\{0}", "a\\%C\\{1}",
+        "a\\%C\\{2}", "a\\%C\\{0,1}", "a\\%C\\{1,2}", "a\\%C\\{-1}", "a\\%C\\{-0,1}",
+        "a\\%C\\{}", "a\\%C\\{-}", "a\\%C\\=", "a\\%C\\@=", "a\\%C\\@!",
+        "\\(\\%C\\)*", "\\(\\%C\\)\\{2}", "a\\(\\%C\\)*", "a\\(\\%C\\)\\+",
+        "a\\(\\%C\\)\\?", "a\\(\\%C\\)\\{2}", "\\%C\\{1,}", "a\\%C\\{1,}",
+        "\\%C\\{1,}b", "\\%C\\{0,}", "a\\%C\\{0,}", "a\\%C\\{1,3}", "\\%C\\{-1,}",
+        "a\\%C\\{-1,}",
+    )
+] + [
+    ("\\v", pattern, _C_SUBJECTS) for pattern in ("%C", "%Cb", "b%C", "a%C+", "a%C*")
+] + [
+    ("\\M", pattern, _C_SUBJECTS) for pattern in ("\\%C", "a\\%C", "a\\%Cb")
+] + [
+    ("\\V", pattern, _C_SUBJECTS) for pattern in ("\\%C", "a\\%C", "a\\%Cb")
+])
 
 
 def main(argv):
@@ -496,3 +528,4 @@ def main(argv):
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv))
+
