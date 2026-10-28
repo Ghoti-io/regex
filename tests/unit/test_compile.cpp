@@ -1009,7 +1009,8 @@ const char * const kLiteralPatterns[] = {
   "(abc)+", "^hello world", "a{3}b", "xyzzy", "aaaaaaaaab", "colou?r",
   "(a|b)zebra(c|d)", "[abc]def", "ab(cd)ef", "(a)(b)(c)", "q(?:abc)+z",
   "\\d+apple", "x*apple", "(?:ab)+cd", "ab\\Kcd", "ab\\Kcd|q",
-  "(?=x)abc", "(?i)abc", "\\bword\\b", "a(?:bc)d", "foo(?!bar)",
+  "(?=x)abc", "(?<=xyz)abc", "a(?=xyz)bc", "(?:a(?<=a))*ab", "(?:(?>(?=a)a))*ab",
+  "(?=ab)ab", "a(?!b)c*b", "(?i)abc", "\\bword\\b", "a(?:bc)d", "foo(?!bar)",
   "(?<=x)abc", "(?>abc)d", "a(?#x)bc", "\\Qa+b\\E", "z(a)\\1z",
   "(?:a|a)bc", "a+b+c", "[^q]xyz", "\\A\\Qliteral\\E\\z", "(a*)bcd(e*)",
   "abc$", "(?m)abc$", "a\\nb", "a\\x00b", "(?:x|y)hello(?:x|y)",
@@ -1400,9 +1401,14 @@ TEST(Compile, WhichLiteralsTheseParticularPatternsHaveAndWhichHaveNone) {
     // A class is a choice of code points, so it ends a literal run.
     {"(?i)abc", nullptr, nullptr},
     {"[abc]def", nullptr, "def"},
-    // A lookaround consumes nothing of the match, so the prefix walks past it
-    // and the required literal refuses the program outright.
-    {"(?=x)abc", "abc", nullptr},
+    // A lookaround consumes nothing of the match, so both walks go past it.
+    // Its body is a sub-program with a MATCH of its own and is never entered:
+    // a literal inside an assertion is not one the match contains.
+    {"(?=x)abc", "abc", "abc"},
+    {"(?<=xyz)abc", "abc", "abc"},
+    {"a(?=xyz)bc", "abc", "bc"},
+    {"(?:a(?<=a))*ab", nullptr, "ab"},
+    {"(?:(?>(?=a)a))*ab", nullptr, "ab"},
     {"", nullptr, nullptr},
     {".", nullptr, nullptr},
   };

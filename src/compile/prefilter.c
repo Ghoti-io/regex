@@ -481,11 +481,12 @@ size_t grx_program_literal_prefix(
  * whose control flow is not spelled out here refuses the whole analysis
  * rather than being given no edges.
  *
- * `LOOK` is refused rather than modelled, and the reason is worth stating
- * because it looks over-cautious: a lookaround's body **ends in a MATCH of
- * its own**. Treating that as the program's end would let a node inside an
- * assertion's body dominate "every MATCH" while consuming text no match
- * contains.
+ * `LOOK` continues at its `y` and nowhere else, which is what keeps the body
+ * out of the graph: the body **ends in a MATCH of its own**, and an edge into
+ * it would let a node inside an assertion's body dominate "every MATCH" while
+ * consuming text no match contains. The two-jump form is refused, because
+ * which of its two jumps continues the match is the thing this would have to
+ * know.
  *
  * @return Non-zero when the opcode is modelled; the count is written to
  *   `out_count` and the targets to `out`.
@@ -518,6 +519,13 @@ static int successors_of(const GRX_Program * program, uint32_t pc,
 
     case GRX_OP_JMP:
       out[(*out_count)++] = inst->x;
+      return 1;
+
+    case GRX_OP_LOOK:
+      if (inst->flags & GRX_INST_COND_ELSE) {
+        return 0;
+      }
+      out[(*out_count)++] = inst->y;
       return 1;
 
     case GRX_OP_SPLIT:

@@ -1134,11 +1134,15 @@ TEST(Limits, AtomicDiscoveryIncludesCallerFramesInBacktrackLimit) {
 TEST(Limits, AtomicCandidateLateFailureKeepsTheDefaultStepCeiling) {
   GRX_Regex * regex = nullptr;
   ASSERT_EQ(grx_regex_compile(
-                R"(\%(\%(\(a\)\@=a\)\@>\)*ab)", GRX_SYNTAX_VIM_NFA, 0, &regex),
+                R"(\%(\%(\(a\)\@=a\)\@>\)*ab$)", GRX_SYNTAX_VIM_NFA, 0, &regex),
       GRX_OK);
   GRX_Match * match = nullptr;
   ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
-  for (const char * tail : {"", "x"}) {
+  // Both tails hold the `ab` the pattern requires, so the required-literal
+  // prefilter cannot answer and the search has to try every start; the `$`
+  // is what makes each of them fail late. Without the `ab` the search is
+  // skipped and never reaches a ceiling.
+  for (const char * tail : {"abx", "abxx"}) {
     std::string subject(600, 'a');
     subject += tail;
     int matched = 1;
@@ -1169,11 +1173,13 @@ TEST(Limits,
     DeferredAssertionLateFailureReportsStepsAndAcceptsAnExplicitBudget) {
   GRX_Regex * regex = nullptr;
   ASSERT_EQ(
-      grx_regex_compile(R"(\%(a\(a\)\@<=\)*ab)", GRX_SYNTAX_VIM_NFA, 0, &regex),
+      grx_regex_compile(R"(\%(a\(a\)\@<=\)*ab$)", GRX_SYNTAX_VIM_NFA, 0,
+          &regex),
       GRX_OK);
   GRX_Match * match = nullptr;
   ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
-  std::string subject(600, 'a');
+  // `ab` is present so the required-literal prefilter cannot skip the search.
+  std::string subject = std::string(600, 'a') + "abx";
   int matched = 1;
   EXPECT_EQ(grx_regex_search(regex, subject.data(), subject.size(), 0,
                 GRX_ENGINE_BACKTRACK, nullptr, match, &matched),

@@ -1311,3 +1311,40 @@ TEST(VimContextUnavailable, AnUnbuiltDialectKeepsItsGeneralUnsupportedDiagnostic
   EXPECT_EQ(attempt.regex, nullptr);
   grx_regex_free(attempt.regex);
 }
+
+TEST_P(Vim, ALiteralTheMatchNeedsAnswersWithoutSearchingPastALookaround) {
+  // Both patterns end in `ab`, and a subject of `a`s has no `b`, so no start
+  // can match. The required literal is what says so without trying one: it
+  // used to give up at a lookaround, and a search then tried every start and
+  // read to the end from each, a cost that grew with the square of the
+  // subject (the cube, through an atomic group) and passed the default step
+  // limit before 600 bytes. The result is checked rather than the span,
+  // because a step limit is an error and not a no-match.
+  const std::string patterns[] = {
+    "\\%(a\\(a\\)\\@<=\\)*ab",
+    "\\%(\\%(\\(a\\)\\@=a\\)\\@>\\)*ab",
+  };
+  const std::string subjects[] = {
+    std::string(600, 'a'),
+    std::string(600, 'a') + "x",
+  };
+  for (const std::string & pattern : patterns) {
+    for (const std::string & subject : subjects) {
+      Attempt attempt = compile(pattern, current_vim);
+      ASSERT_EQ(attempt.result, GRX_OK) << pattern;
+      GRX_Match * match = nullptr;
+      ASSERT_EQ(grx_match_create(attempt.regex, nullptr, &match), GRX_OK);
+      int matched = 1;
+      EXPECT_EQ(grx_regex_search(attempt.regex, subject.data(), subject.size(),
+                    0, GRX_ENGINE_AUTO, nullptr, match, &matched),
+          GRX_OK)
+          << pattern << " on " << subject.size() << " bytes";
+      EXPECT_FALSE(matched) << pattern;
+      grx_match_destroy(match);
+      grx_regex_free(attempt.regex);
+    }
+  }
+  // The literal being present is the case the prefilter must not answer.
+  EXPECT_EQ(span("\\%(a\\(a\\)\\@<=\\)*ab", std::string(600, 'a') + "b"),
+      "0-601");
+}
