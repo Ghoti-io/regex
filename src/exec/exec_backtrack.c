@@ -5039,13 +5039,13 @@ static int run_path(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
       case GRX_OP_COUNT_STEP:
       case GRX_OP_COUNT_BACK: {
         if (inst->x >= bt->program->look_spans.count ||
-            bt->program->look_spans.count - inst->x < 3) {
+            bt->program->look_spans.count - inst->x < 4) {
           bt->failure = GRX_ERR_INTERNAL;
           return 0;
         }
         const size_t * metadata =
             GRX_ARENA_AT(const size_t, &bt->program->look_spans, inst->x);
-        if (bt->registers < 7 || metadata[2] > bt->registers - 7) {
+        if (bt->registers < 8 || metadata[2] > bt->registers - 8) {
           bt->failure = GRX_ERR_INTERNAL;
           return 0;
         }
@@ -5081,23 +5081,89 @@ static int run_path(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
         // entry would reject a later invocation before trying its BODY.
         if (inst->op == GRX_OP_COUNT_BACK) {
           const GRX_Inst * step = grx_program_at(bt->program, inst->y);
-          if (bt->slots[state + 4] == position) {
-            // An initially empty complex BODY gets one trailing attempt
-            // when its bounds permit it. Successful assertion captures from
-            // that attempt can remain visible even when the loop rejects it.
-            // Phase 2 records this attempt independently of consuming progress.
-            if (!bt->slots[state + 3] && metadata[0] <= 1 && metadata[1] > 1) {
-              bt->slots[state + 3] = 2;
-              pc = inst->y;
+          // The quantifiers written without braces are a different loop in
+          // the reference, and keep the plainer rule: an empty iteration
+          // leaves the loop, whatever it set.
+          if (!metadata[3]) {
+            if (bt->slots[state + 4] == position) {
+              // An initially empty complex BODY gets one trailing attempt
+              // when its bounds permit it. Successful assertion captures from
+              // that attempt can remain visible even when the loop rejects it.
+              // Phase 2 records this attempt independently of consuming
+              // progress.
+              if (!bt->slots[state + 3] && metadata[0] <= 1 &&
+                  metadata[1] > 1) {
+                bt->slots[state + 3] = 2;
+                pc = inst->y;
+                continue;
+              }
+              if ((metadata[0] == 0 && bt->slots[state + 3]) ||
+                  (metadata[0] > 1 && !bt->slots[state + 3])) {
+                ok = 0;
+                break;
+              }
+              pc = step->y;
               continue;
             }
-            if ((metadata[0] == 0 && bt->slots[state + 3]) ||
-                (metadata[0] > 1 && !bt->slots[state + 3])) {
+            bt->slots[state + 3] = 1;
+            if (bt->slots[state + 2] == position &&
+                (bt->slots[state] != 1 || bt->slots[state + 1] ||
+                    bt->slots[state + 6] != 1)) {
               ok = 0;
               break;
             }
-            pc = step->y;
+            bt->slots[state + 2] = position;
+            pc = inst->y;
             continue;
+          }
+          // A braced loop judges an iteration that ends where it began the
+          // first time its BODY completes, and only then: backtracking into
+          // the BODY and completing it again is not judged. Deliberately not
+          // undone, because the stored value is what the retry reads.
+          int again = bt->slots[state + 7] != 0;
+          bt->slots[state + 7] = 1;
+          if (bt->slots[state + 4] == position) {
+            bt->slots[state + 2] = position;
+            if (again) {
+              pc = bt->slots[state] < metadata[0] ? inst->y : step->y;
+              continue;
+            }
+            // While nothing has consumed, the first empty iteration is let
+            // through and the loop tries a further one, which the next empty
+            // completion refuses; a successful assertion captured by that
+            // attempt can remain visible even when the loop rejects it.
+            // Leaving the loop at this point is available once the minimum
+            // is met.
+            if (!bt->slots[state + 3]) {
+              if (!save_slot(bt, state + 3)) {
+                return 0;
+              }
+              bt->slots[state + 3] = 2;
+              if (metadata[1] > 1) {
+                if (bt->slots[state + 1] == 0 &&
+                    bt->slots[state] >= metadata[0] &&
+                    !push(bt, FRAME_RESUME, step->y, position)) {
+                  return 0;
+                }
+                pc = inst->y;
+                continue;
+              }
+              pc = step->y;
+              continue;
+            }
+            // After a consuming iteration an empty one is a step toward the
+            // minimum when one is still owed, and is otherwise refused: the
+            // loop leaves by the exit its previous iteration left behind.
+            if (bt->slots[state + 3] == 1 && metadata[0] > 1 &&
+                bt->slots[state + 1] == 0 && bt->slots[state] < metadata[0]) {
+              pc = inst->y;
+              continue;
+            }
+            ok = 0;
+            break;
+          }
+          if (bt->slots[state + 3] != 1 && !save_slot(bt, state + 3)) {
+            return 0;
           }
           bt->slots[state + 3] = 1;
           if (bt->slots[state + 2] == position &&
@@ -5140,6 +5206,12 @@ static int run_path(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
           bt->failure = GRX_ERR_LIMIT;
           bt->failure_diag = GRX_DIAG_LIMIT_MATCH_MEMORY;
           return 0;
+        }
+        if (metadata[3]) {
+          if (!save_slot(bt, state + 7)) {
+            return 0;
+          }
+          bt->slots[state + 7] = 0;
         }
         if (!push(bt, FRAME_COUNTER, (uint32_t)state, 0)) {
           return 0;

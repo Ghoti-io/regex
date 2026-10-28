@@ -1163,17 +1163,18 @@ static GRX_Result gen_repeat_step(Codegen * codegen, GenFrame * frame,
         if (!memo) {
           return fail(codegen, GRX_DIAG_OUT_OF_MEMORY, node);
         }
-        if (codegen->registers > UINT32_MAX - 7 ||
-            codegen->program->look_spans.count > GRX_INDEX_NONE - 3u) {
+        if (codegen->registers > UINT32_MAX - 8 ||
+            codegen->program->look_spans.count > GRX_INDEX_NONE - 4u) {
           return fail(codegen, GRX_DIAG_LIMIT_PROGRAM_SIZE, node);
         }
         if (!memo->counted_register) {
           memo->counted_register = codegen->registers + 1;
-          codegen->registers += 7;
+          codegen->registers += 8;
         }
-        size_t metadata[] = {node->min, node->max, memo->counted_register - 1};
+        size_t metadata[] = {node->min, node->max, memo->counted_register - 1,
+            (node->flags & GRX_IR_REPEAT_BRACE_FORM) ? 1u : 0u};
         uint32_t span = (uint32_t)codegen->program->look_spans.count;
-        for (size_t i = 0; i < 3; ++i) {
+        for (size_t i = 0; i < 4; ++i) {
           GRX_Result result = grx_arena_append(
               &codegen->program->look_spans, &metadata[i], NULL);
           if (result != GRX_OK) {

@@ -2394,6 +2394,16 @@ static void absorb_marker_optional(GRX_Parser * parser) {
         node->max = 0;
       }
     }
+    if (node->kind == GRX_NODE_REPEAT) {
+      const GRX_Node * body = grx_pattern_node(pattern, node->first_child);
+      size_t at = body ? body->offset + body->length : parser->length;
+      if (at < parser->length && parser->text[at] == '\\') {
+        at++;
+      }
+      if (at < parser->length && parser->text[at] == '{') {
+        node->flags |= GRX_NODE_BRACE_FORM;
+      }
+    }
     if (node->kind == GRX_NODE_REPEAT && node->min == 0 && node->max == 1) {
       const GRX_Node * body = grx_pattern_node(pattern, node->first_child);
       size_t at = body ? body->offset + body->length : parser->length;

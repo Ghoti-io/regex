@@ -264,7 +264,7 @@ static void dump_operands(
     case GRX_OP_COUNT_BACK:
       fprintf(out, "count=#%u, %u", inst->x, inst->y);
       if (inst->x < program->look_spans.count &&
-          program->look_spans.count - inst->x >= 3) {
+          program->look_spans.count - inst->x >= 4) {
         const size_t * count =
             GRX_ARENA_AT(const size_t, &program->look_spans, inst->x);
         fprintf(out, " (r%zu, %zu..%zu)", count[2], count[0], count[1]);

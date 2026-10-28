@@ -3106,6 +3106,9 @@ static GRX_Result lower_repeat(
       node->max != 0 &&
       !(node->min == 0 && node->max == 1)) {
     repeat->flags |= GRX_IR_REPEAT_LEXICAL_COUNTER;
+    if (node->flags & GRX_NODE_BRACE_FORM) {
+      repeat->flags |= GRX_IR_REPEAT_BRACE_FORM;
+    }
   }
   repeat->min = node->min;
   repeat->max = node->max;

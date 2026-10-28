@@ -170,6 +170,8 @@ typedef enum {
 #define GRX_IR_REPEAT_CAPTURE_PROGRESS GRX_BIT(19)
 /** REPEAT: bounded optional copies are serial choices rather than nested exits. */
 #define GRX_IR_REPEAT_SERIAL_OPTIONALS GRX_BIT(24)
+/** REPEAT: written with braces; the counted loop follows that spelling. */
+#define GRX_IR_REPEAT_BRACE_FORM GRX_BIT(20)
 
 /** @brief BACKREF: compare case-insensitively, using the folded code points. */
 #define GRX_IR_CASELESS GRX_BIT(0)

@@ -661,6 +661,36 @@ this history require BACKTRACK; AUTO selects it and explicitly requested Pike,
 bit-state and DFA engines return UNSUPPORTED. The NFA profile retains ordinary
 repeat lowering and its existing engine eligibility.
 
+A braced repeat (`\{n,m}`) of a body that can match empty follows rules
+measured on the backtracking reference, and the quantifiers written `*`, `\+`
+and `\=` do not: the reference runs them as a different loop, and they keep the
+plainer rule that an empty iteration ends the loop with whatever it set.
+For the braced form:
+
+- An iteration that ends where it began is judged the first time its body
+  completes, and only then. A body that is made to give up its text and
+  complete again, by backtracking into it, is not judged again and may finish
+  the loop.
+- While nothing has consumed, the first empty iteration is let through and the
+  loop tries one more; a second empty completion in a row is refused. So
+  `\(\|a\)\{3}` finds no match over `a` and matches `aa` over `aa`, and
+  `\(a*\)\{2}` finds no match over the empty subject.
+- After a consuming iteration an empty one is refused unless the minimum is
+  still owed, when it counts toward it. The loop then leaves by the exit its
+  previous iteration left behind, so the groups read as the last consuming
+  iteration set them, and `\zs` from the refused iteration is not kept:
+  `\(a*\)\{2}` over `aa` reads group 1 as `a`, not `aa`, and
+  `\%(a\|\zs\)\{1,}` over `aa` starts at 0 where `\%(a\|\zs\)\+` starts at 2.
+- The position where an iteration ended is remembered and is not undone by
+  backtracking. This is why `\%(\%(a\)\{1,2}\)\{2}` finds no match over `aa`,
+  which the reference does not either.
+
+The NFA profile has no such rules. `\(a*\)\{2,}\(\1\)` is stopped by the
+backtracking reference with E363 on every subject and is not among the
+vectors. The rules were fitted on probes and then checked on others; the
+counted-repeat block of `make_vim_vectors.py` asks every pattern of subjects
+that most of them were not fitted on.
+
 Assertion and atomic capture ownership is context-sensitive. An atomic BODY can
 read an incoming capture while a following lookbehind reads a later closed
 context. A numbered BODY write can publish a complete result that clears an

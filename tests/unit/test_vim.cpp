@@ -1439,3 +1439,78 @@ TEST(VimBacktrack, PercentCAfterALineBreakTakesItsMarksInEverySpelling) {
     EXPECT_EQ(span(takes, subject), "1-4") << takes;
   }
 }
+
+/** One group's text, or "unset"/"nomatch"/"error". */
+static std::string captured(const std::string & pattern,
+    const std::string & subject, size_t index) {
+  std::string where = group(pattern, subject, index);
+  size_t dash = where.find('-');
+  if (dash == std::string::npos) {
+    return where;
+  }
+  size_t begin = std::stoul(where.substr(0, dash));
+  size_t end = std::stoul(where.substr(dash + 1));
+  return subject.substr(begin, end - begin);
+}
+
+TEST(VimBacktrack, ABracedRepeatOfAnEmptyBodyDoesNotCountItsLastEmptyIteration) {
+  current_vim = GRX_SYNTAX_VIM_BACKTRACK;
+  // An iteration that ends where it began is judged the first time its body
+  // completes. After a consuming one it is refused, so the loop takes the
+  // split that ends on a consuming iteration: `\(a*\)\{2}` over "aa" is "a"
+  // then "a", not "aa" then nothing.
+  EXPECT_EQ(span("\\(a*\\)\\{2}", ""), "nomatch");
+  EXPECT_EQ(span("\\(a*\\)\\{2}", "ba"), "1-2");
+  EXPECT_EQ(span("\\(a*\\)\\{2}", "aa"), "0-2");
+  EXPECT_EQ(captured("\\(a*\\)\\{2}", "aa", 1), "a");
+  EXPECT_EQ(captured("\\(a*\\)\\{3}", "a", 1), "a");
+  EXPECT_EQ(captured("\\(a\\|\\)\\{2,}", "aa", 1), "a");
+  EXPECT_EQ(captured("\\(a*b*\\)\\{2}", "aab", 1), "b");
+  // Once the minimum is met the last iteration is not owed, so the group
+  // keeps what the one before it took.
+  EXPECT_EQ(captured("\\(a*\\)\\{1,2}", "aa", 1), "aa");
+  EXPECT_EQ(span("\\(a*\\)\\{1,2}", ""), "0-0");
+  EXPECT_EQ(captured("\\(\\(a\\)\\=\\(b\\)\\=\\)\\{2,3}", "aab", 1), "ab");
+  // Every group in the body reads as the last consuming iteration left it.
+  EXPECT_EQ(captured("\\(\\(a\\)\\|\\(b\\)\\|\\)\\{3}", "ab", 1), "b");
+  EXPECT_EQ(captured("\\(\\(a\\)\\|\\(b\\)\\|\\)\\{3}", "ab", 2), "a");
+  EXPECT_EQ(captured("\\(\\(a\\)\\|\\(b\\)\\|\\)\\{3}", "ab", 3), "b");
+}
+
+TEST(VimBacktrack, ABracedRepeatMayFinishOnAnEmptyIterationItReachedByBacktracking) {
+  current_vim = GRX_SYNTAX_VIM_BACKTRACK;
+  // The judgement is made once, when the body first completes. A body that
+  // is made to give up its text and complete again is not judged again, so
+  // `\(a*\)\{2}\(\1\)` over "aa" ends after one `a` with the back reference
+  // empty, which the all-or-nothing reading would put at two.
+  EXPECT_EQ(span("\\(a*\\)\\{2}\\(\\1\\)", "a"), "0-0");
+  EXPECT_EQ(span("\\(a*\\)\\{2}\\(\\1\\)", "aa"), "0-1");
+  EXPECT_EQ(span("\\(a*\\)\\{2}\\(\\1\\)", "aaa"), "0-2");
+  EXPECT_EQ(span("\\(a\\|\\)\\{3}\\1", "aa"), "0-1");
+  // A run of empty iterations is let through once, and not twice.
+  EXPECT_EQ(span("\\(\\|a\\)\\{3}", "a"), "nomatch");
+  EXPECT_EQ(span("\\(\\|a\\)\\{3}", "aa"), "0-2");
+  EXPECT_EQ(span("\\(\\|a\\)\\{2,3}", "aaa"), "0-2");
+  EXPECT_EQ(span("\\(\\|a\\)\\{1,3}", "a"), "0-1");
+  EXPECT_EQ(span("\\(\\|a\\)\\{1,3}", ""), "0-0");
+}
+
+TEST(VimBacktrack, ABracedRepeatRemembersWhereItsIterationsEndedAcrossBacktracking) {
+  current_vim = GRX_SYNTAX_VIM_BACKTRACK;
+  // The reference refuses these, and the remembered end of the inner loop is
+  // why: it survives the outer loop coming back for another turn.
+  EXPECT_EQ(span("\\%(\\%(a\\)\\{1,2}\\)\\{2}", "aa"), "nomatch");
+  EXPECT_EQ(span("\\%(\\%(a\\)\\{1,2}\\)\\{2}b", "aab"), "nomatch");
+  EXPECT_EQ(span("\\%(\\%(a\\)\\{2}\\)\\{2}b", "aaaab"), "0-5");
+}
+
+TEST(VimBacktrack, OnlyTheBracedSpellingFollowsTheBracedRepeatRules) {
+  current_vim = GRX_SYNTAX_VIM_BACKTRACK;
+  // `\+` and `*` are not the braced loop in the reference. A trailing empty
+  // iteration under them stays, and its `\zs` with it; under `\{1,}` it is
+  // refused.
+  EXPECT_EQ(span("\\%(a\\|\\zs\\)\\+", "aa"), "2-2");
+  EXPECT_EQ(span("\\%(a\\|\\zs\\)\\{1,}", "aa"), "0-2");
+  EXPECT_EQ(span("\\%(a\\|\\zs\\)\\{2,3}", "aa"), "0-2");
+  EXPECT_EQ(span("\\%(\\zs\\|a\\)\\{1,3}", "aa"), "0-2");
+}
