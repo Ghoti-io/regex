@@ -436,6 +436,24 @@ Either exhausted is `GRX_ERR_LIMIT` with the count in the match object, and
 is never reported as "no match", because "no match" is a fact about the
 subject and a limit is a fact about the budget.
 
+**Aggregate scratch.** All live backtracking heap scratch shares one memory
+budget: frames, call and mark arrays, capture and input snapshots, deferred and
+atomic state, callback capture storage, longest-match storage and memo bitmaps.
+Allocated capacity stays charged across search starts, and is released when its
+owner releases the allocation. Copied interpreters share the meter. A recursive
+query receives only the remaining allowance; exported priority storage transfers
+its charge to the caller exactly once.
+
+The meter counts requested live payload bytes, including rounded internal
+records. Immutable program and subject storage, caller-owned output, and the
+allocator's own bookkeeping or temporary realloc implementation are outside this
+budget. Successful realloc replaces the old charge; failure preserves it.
+Required storage is refused before calling the allocator when it cannot fit:
+`GRX_ERR_LIMIT` with `GRX_DIAG_LIMIT_MATCH_MEMORY`. Failure of a required allocation
+within the budget is OOM. Zero means unlimited match memory. The late memo may
+skip either a budget refusal or an allocator failure, because it is optional.
+An explicitly requested bit-state bitmap remains required.
+
 **The late memo.** This engine is the one that has to be able to run
 anything, but that is no reason for it to be exponential on the programs it
 does *not* have to. When the program is memoizable (§3.5.3) it arms the same
@@ -876,6 +894,89 @@ lowering and instruction policies; the execution engine sees no Vim dialect
 identifier. These choices cover assertion captures, lookbehind starts and
 UTF-8 thresholds, match markers, optional sequences, and empty iterations.
 The exact measured rules and limitations are in [dialects.md](dialects.md).
+
+Optional-sequence group acceptance is a grammar profile policy: NFA permits
+ordinary grouped members and nested optional sequences, while backtracking
+refuses them. Direct optional members retain their distinct lexical context.
+Global case/composing directives are collected by the actual Vim grammar and
+applied before lowering, so grouped directives affect the whole pattern without
+promoting literal direct-member letters into directives. Numeric references use
+raw suffix text for Vim's later-lookbehind acceptance exception; validation
+marks finally nonexistent references as empty comparisons without allocating
+undeclared captures. Their comparison identity is retained through lowering: an
+empty comparison can affect NFA frontier priority even though its width is zero.
+The bytecode also retains the final absence fact. Dependency analysis skips
+its incoming endpoints while preserving the comparison's execution. A capture
+that exists but has not participated keeps its runtime endpoint policy.
+Atomic accepting-frontier analysis follows a finally absent reference only when
+its configured unset mode succeeds empty, so it can inspect the real following
+continuation. Existing captures and failing unset modes retain their own
+reference boundary. This analysis does not remove the comparison instruction
+or its execution checkpoint.
+
+Capture inputs and reported captures have separate ownership. Open references
+read live endpoints: absent endpoints can mean empty, while inverted endpoints
+fail. Competing NFA-compatible continuations retain their incoming capture
+context and assertion encounter identity, so their own later output cannot
+become an earlier input. Completed atomic BODY capture writes have a separate
+per-search reporting history. Root deferred-assertion completion projects that
+history; ordinary consuming and immediate zero-width continuations retain their
+existing output context. Continuation snapshots share the invocation's charged
+capture-state budget and step counter.
+
+Forward programs eligible for ordered comparison execution use CURRENT and NEXT
+frontiers. Consuming an atom expands its continuation into NEXT; an empty
+comparison or completed pending predicate rejoins CURRENT. Matching inputs and
+capture reports remain separate during coalescing. CURRENT capture-close
+reentry has its own first-visit records, keyed by genuine future matching reads,
+pending constraints and live control state. Epsilon expansion while constructing
+NEXT never seeds those records. All records belong to the search allocator and
+are released when the frontier ends, including limit and allocation failures.
+
+When a compiled program contains backreferences and no lookaround instructions,
+terminal visit markers can move between frontiers. A duplicate NEXT arrival
+updates the marker while preserving the first NEXT thread's matching inputs and
+capture report. CURRENT can revisit a terminal whose marker moved to NEXT.
+Lookaround programs retain their pending-predicate scheduling and cache lifecycle.
+
+A pending predicate retains its operator and encounter position until evaluation.
+After a stateless predicate succeeds, its cache lifecycle still distinguishes it
+from an unused cache; dead activation counters do not distinguish equivalent
+matching inputs. A backreference must validate pending context-free truth even
+when that predicate does not write the referenced capture. Capture-dependent
+predicates retain selective capture demand and their invocation context.
+
+Eligible forward assertions whose references are local to their BODY use a
+definition-owned input channel and separate capture reports. Immediate BODYs run
+during epsilon expansion; deferred BODYs retain their pending encounter ownership.
+An empty-fragment frontier demands these pending BODYs before continuing. Actual
+BODY writes update only the captures they own, preserving unrelated caller reports.
+The ordered run owns and releases its input records on success and failure.
+
+Eligible backward assertions also distinguish the selected input provider from
+the captures their BODY later reports. A successful provider can supply live
+endpoints, while a selected failed CLOSE supplies a fixed comparison snapshot.
+An atomic return can retain an earlier closed span separately from the later
+live endpoint; an inverted open span then reads that closed fallback without
+rewinding the live provider. Pending records carry run-owned binding identifiers,
+and rollback releases their records without retaining pointers into providers.
+The binding currently applies to one distinct local definition. Atomic replay
+uses an unset root-entry snapshot only when a structural proof rules out an
+earlier definition or feedback into the prefix. Each search origin has its own
+entry position, including origins reached by repeated search and replacement;
+the caller's requested start does not identify that origin. Unsupported ownership
+or control-flow shapes retain their existing behavior.
+
+Storage failures in compile-time nullability and span analysis return
+`GRX_ERR_OOM`. Conservative fallback facts can change guards and capture priority,
+so a failed exact query cannot publish a compiled matcher. Analysis failures stay
+recorded across later queries; optional per-node caches can still fall back to
+successful exact queries.
+
+Exceptional star parsing retains lexical provenance and initial-operand state.
+Direct literals, numeric scalar tokens, collections, group openers and transparent
+directives can establish different boundaries even when they lower to similar
+matching instructions. Profile data selects those grammar rules before lowering.
 
 Complex repetition in the backtracking profile carries an explicit IR policy.
 `COUNT_INIT`, `COUNT_STEP` and `COUNT_BACK` implement it in the existing

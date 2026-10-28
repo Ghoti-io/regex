@@ -1101,7 +1101,7 @@ static GRX_Result parse_term(GRX_Parser * parser, uint32_t * out_node) {
   return GRX_OK;
 }
 
-GRX_Result grx_parse_concatenation(
+static GRX_Result read_concatenation(
     GRX_Parser * parser, uint32_t * out_node) {
   if (!parser || !out_node) {
     return GRX_ERR_INVALID;
@@ -1255,6 +1255,18 @@ static GRX_Result parse_branch(GRX_Parser * parser, uint32_t * out_node) {
   grx_pattern_node(parser->pattern, concat)->length = parser->position - start;
   *out_node = concat;
   return GRX_OK;
+}
+
+GRX_Result grx_parse_concatenation(
+    GRX_Parser * parser, uint32_t * out_node) {
+  if (!parser || !out_node) {
+    return GRX_ERR_INVALID;
+  }
+  size_t outer_start = parser->branch_start;
+  parser->branch_start = parser->position;
+  GRX_Result result = read_concatenation(parser, out_node);
+  parser->branch_start = outer_start;
+  return result;
 }
 
 GRX_Result grx_parse_alternation(GRX_Parser * parser, uint32_t * out_node) {

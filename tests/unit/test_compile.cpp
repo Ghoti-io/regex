@@ -170,8 +170,10 @@ TEST(Compile, AGroupsLengthIsMeasuredOncePerGroupNotOncePerReference) {
   auto seconds
       = std::chrono::duration_cast<std::chrono::duration<double>>(elapsed)
             .count();
-  EXPECT_LT(seconds, 5.0) << pattern.size() << "-byte pattern with 40 groups "
-                             "took " << seconds << " s to compile";
+  if (grxtest::record_native_wall_clock(seconds, 5.0)) {
+    EXPECT_LT(seconds, 5.0) << pattern.size() << "-byte pattern with 40 groups "
+                               "took " << seconds << " s to compile";
+  }
 }
 
 TEST(Compile, AGroupThatReferencesItselfIsMeasuredOnceNotOncePerReference) {
@@ -234,12 +236,14 @@ TEST(Compile, AGroupThatReferencesItselfIsMeasuredOnceNotOncePerReference) {
   auto seconds
       = std::chrono::duration_cast<std::chrono::duration<double>>(elapsed)
             .count();
-  EXPECT_LT(seconds, 0.5)
-      << pattern.size() << "-byte pattern, one self-referencing group and "
-      << "4,000 references to it, took " << seconds
-      << " s to compile. group_span() remembers a span whose give-ups were all "
-         "at or above the group's own place on the resolving stack; a figure "
-         "this large means it is refusing to remember them again";
+  if (grxtest::record_native_wall_clock(seconds, 0.5)) {
+    EXPECT_LT(seconds, 0.5)
+        << pattern.size() << "-byte pattern, one self-referencing group and "
+        << "4,000 references to it, took " << seconds
+        << " s to compile. group_span() remembers a span whose give-ups were all "
+           "at or above the group's own place on the resolving stack; a figure "
+           "this large means it is refusing to remember them again";
+  }
 }
 
 TEST(Compile, OneAnalysisMemoServesTheWholeCompileNotOneQuestion) {
@@ -301,12 +305,14 @@ TEST(Compile, OneAnalysisMemoServesTheWholeCompileNotOneQuestion) {
   auto seconds
       = std::chrono::duration_cast<std::chrono::duration<double>>(elapsed)
             .count();
-  EXPECT_LT(seconds, 0.5)
-      << pattern.size() << "-byte pattern, one expensive group and 6,000 "
-      << "repeats that each ask about it, took " << seconds
-      << " s to compile. codegen holds one GRX_IRMemo for the compile; a "
-         "figure this large means every question is building its own analysis "
-         "again";
+  if (grxtest::record_native_wall_clock(seconds, 0.5)) {
+    EXPECT_LT(seconds, 0.5)
+        << pattern.size() << "-byte pattern, one expensive group and 6,000 "
+        << "repeats that each ask about it, took " << seconds
+        << " s to compile. codegen holds one GRX_IRMemo for the compile; a "
+           "figure this large means every question is building its own analysis "
+           "again";
+  }
 }
 
 TEST(Compile, ASubtreeIsAskedAboutTheEmptyStringOncePerNodeNotOncePerCopy) {
@@ -366,11 +372,13 @@ TEST(Compile, ASubtreeIsAskedAboutTheEmptyStringOncePerNodeNotOncePerCopy) {
   auto seconds
       = std::chrono::duration_cast<std::chrono::duration<double>>(elapsed)
             .count();
-  EXPECT_LT(seconds, 0.5)
-      << pattern.size() << "-byte pattern, 16 levels of {1,2} over 40 "
-      << "backreferences, took " << seconds
-      << " s to compile. codegen caches grx_ir_can_match_empty() per IR node; "
-         "a figure this large means it is asking once per expanded copy again";
+  if (grxtest::record_native_wall_clock(seconds, 0.5)) {
+    EXPECT_LT(seconds, 0.5)
+        << pattern.size() << "-byte pattern, 16 levels of {1,2} over 40 "
+        << "backreferences, took " << seconds
+        << " s to compile. codegen caches grx_ir_can_match_empty() per IR node; "
+           "a figure this large means it is asking once per expanded copy again";
+  }
 }
 
 TEST(Compile, AnAlternationBranchIsMeasuredOncePerNodeNotOncePerCopy) {
@@ -441,12 +449,14 @@ TEST(Compile, AnAlternationBranchIsMeasuredOncePerNodeNotOncePerCopy) {
   auto seconds
       = std::chrono::duration_cast<std::chrono::duration<double>>(elapsed)
             .count();
-  EXPECT_LT(seconds, 0.5)
-      << pattern.size() << "-byte pattern, 14 levels of {1,2} over a "
-      << "six-branch lookbehind, took " << seconds
-      << " s to compile. codegen caches grx_ir_span() per IR node; a figure "
-         "this large means gen_length_guard() is measuring once per expanded "
-         "copy again";
+  if (grxtest::record_native_wall_clock(seconds, 0.5)) {
+    EXPECT_LT(seconds, 0.5)
+        << pattern.size() << "-byte pattern, 14 levels of {1,2} over a "
+        << "six-branch lookbehind, took " << seconds
+        << " s to compile. codegen caches grx_ir_span() per IR node; a figure "
+           "this large means gen_length_guard() is measuring once per expanded "
+           "copy again";
+  }
 }
 
 namespace {
@@ -952,11 +962,13 @@ TEST(Compile, TheEngineSkipsWhatThePrefilterRulesOut) {
   auto seconds
       = std::chrono::duration_cast<std::chrono::duration<double>>(elapsed)
             .count();
-  EXPECT_LT(seconds, 1.0)
-      << "100 failing searches of a 1 MB subject for a five-byte literal took "
-      << seconds
-      << " s. Both engines skip positions whose byte is not in the program's "
-         "first-byte set; a figure this large means the skip is not happening";
+  if (grxtest::record_native_wall_clock(seconds, 1.0)) {
+    EXPECT_LT(seconds, 1.0)
+        << "100 failing searches of a 1 MB subject for a five-byte literal took "
+        << seconds
+        << " s. Both engines skip positions whose byte is not in the program's "
+           "first-byte set; a figure this large means the skip is not happening";
+  }
 }
 
 TEST(Compile, AllocatesNothingOnAFailedCompile) {

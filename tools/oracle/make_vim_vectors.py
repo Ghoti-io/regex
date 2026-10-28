@@ -20,9 +20,8 @@ which.
 
 Every generated postfix assertion and atomic group is retained. Expectations
 are obtained only from the corresponding forced reference engine, including
-known compatibility gaps. Literal `@` characters are retained too. The few
-remaining syntax-shape omissions are named and counted in each output header;
-they are coverage omissions, not proof of compatibility.
+compile refusals. Literal `@` characters are retained too. Generated syntax
+shapes are never omitted: each input receives its forced engine's answer.
 
 Each named profile is answered by its corresponding forced Vim engine.
 Engine disagreements are retained as independent expectations in two corpora.
@@ -135,42 +134,49 @@ NAMED_CASES = [
     ("", "\\(a\\)\\1", ["aa", "ab"]),
     ("", "\\(a\\|b\\)\\1", ["aa", "ab", "bb"]),
     ("", "\\~", ["~"]),
+    # Paired grammar controls: each profile retains its own compile verdict.
+    ("", "a\\%[\\(b\\)c]", ["a", "ab", "abc"]),
+    ("", "a\\%[b\\%[cd]]", ["a", "ab", "abc", "abcd"]),
+    ("", "a\\%[\\(b\\|c\\)d]", ["ab", "ac", "acd"]),
+    ("", "a\\%[\\(b\\c\\)d]", ["aB", "aBd"]),
+    ("", "a\\%[b\\cd]", ["aB", "abc", "abcd"]),
+    ("", "\\9[@<=]", ["", "@", "<", "="]),
+    ("", "\\9[@1<=]", ["@"]),
+    ("", "[@<=]\\9", ["@"]),
+    ("", "\\1\\(a\\)\\@<=", ["", "a", "aa"]),
+    ("", "\\(a\\1\\)\\@<=", ["", "a", "aa"]),
+    ("", "[[:foo:]]", ["[[:foo:]]", ":]", "f]", "[]", "a"]),
+    ("", "[a[:foo:]]*a", ["a", "aa", "a]a"]),
+    ("", "\\_^*", ["", "*"]),
+    ("\\v", "\\_^*", ["", "*"]),
+    ("", "\\%23l*", ["", "a"]),
+    ("", "\\%23l\\m*", ["", "a"]),
+    ("", "a\\%23l*", ["", "a", "ab"]),
+    ("", "a\\|\\%23l*", ["", "b"]),
+    ("", "a\\%23l**", ["a"]),
+    ("\\v", "%23l*", ["", "a"]),
+    ("\\v", "a%23l*", ["a", "ab"]),
+    ("\\v", "[ab]%23l*", ["a", "b"]),
+    ("\\v", ".%23l*", ["a", "b"]),
+    ("\\v", "x.%23l*", ["xa", "xb"]),
+    ("\\v", "\\w%23l*", ["a", "b"]),
+    ("\\v", "(a%23l*)", ["a"]),
+    ("\\v", "a\\c%23l*", ["a"]),
+    ("\\v", "a%23l{0,}", ["a"]),
+    # Physical EOF permits a partial literal candidate, but not a missing
+    # composing mark or a conflicting scalar that is present in the subject.
+    ("", "\\ć\\?bb", ["áb", "ábcd", "ábbcd"]),
+    ("", "\\ć\\?é̂b", ["áé", "áé̂", "áé̂b"]),
+    ("", "\\c\\Ź\\?é̂b", ["áé", "áé̂", "áé̂b"]),
+    ("", "\\_%", ["a"]),
+    ("", "^\\m*", ["", "*"]),
+    ("", "\\%(*\\)", ["", "*"]),
+    # Span and capture operations must each be fresh. Calling a second API
+    # in the same NFA process changes these results.
+    ("", "^\\(\\1a\\)*b[@<=]\\{0}$", ["aab"]),
+    ("", "^\\%(\\(a\\1\\)\\)\\{2}aab[@<=]\\{0}$", ["aaaab"]),
+
 ]
-
-# A bare multi after `\%(`, or after a `^` with only level and case markers
-# between. The two spellings vim refuses where six others accept one - see
-# the reference-only syntax-shape omission used for generated coverage.
-MARKERS = ("\\v", "\\m", "\\M", "\\V", "\\c", "\\C")
-
-
-def leading_star_shape(pattern):
-    for index, char in enumerate(pattern):
-        if char != "*" or index == 0:
-            continue
-        head = pattern[:index]
-        if head.endswith("\\%("):
-            return True
-        while head[-2:] in MARKERS:
-            head = head[:-2]
-            if head.endswith("^"):
-                return True
-    return False
-
-
-def artifact_shape(pattern):
-    """Which known vim artifact this pattern could reach, or None.
-
-    Named rather than counted, so that a regeneration whose distribution
-    moved says which bucket moved.
-    """
-    if vim_diff.LINE_NUMBER_STAR.search(pattern):
-        return "line number with a multi"
-    if "\\_^*" in pattern:
-        return "very magic line start with a star"
-    if leading_star_shape(pattern):
-        return "a bare multi vim refuses in this spelling"
-    return None
-
 
 def record_for(pattern, subject, answer):
     """One `.rxt` record from one complete Vim answer; fail on unknown output."""
@@ -419,31 +425,15 @@ def main(argv):
             named.append((level + pattern, subject))
 
     rng = random.Random(args.seed)
-    generated = []
-    shapes = {}
-    while len(generated) < args.patterns:
-        pattern = vim_diff.make_pattern(rng)
-        shape = artifact_shape(pattern)
-        if shape:
-            shapes[shape] = shapes.get(shape, 0) + 1
-            continue
-        generated.append(pattern)
-
+    generated = [vim_diff.make_pattern(rng) for _ in range(args.patterns)]
     rows = []
     for pattern in generated:
         for subject in rng.sample(vim_diff.SUBJECTS,
                 min(args.subjects, len(vim_diff.SUBJECTS))):
             rows.append((pattern, subject))
-    for case in vim_diff.composing_cases() + vim_diff.combining_grammar_cases():
-        if not artifact_shape(case[0]):
-            rows.append(case)
+    rows.extend(vim_diff.composing_cases())
+    rows.extend(vim_diff.combining_grammar_cases())
     rows.sort()
-
-    # Counted in *patterns* rather than rows, because a pattern is refused
-    # before its subjects are chosen. The engine-split count `collect()` adds
-    # is in rows, and each line says which.
-    shape_counts = {"patterns not generated: %s" % reason: count
-        for reason, count in shapes.items()}
 
 
     profiles = vim_diff.PROFILES if args.syntax == "all" else (args.syntax,)
@@ -452,7 +442,7 @@ def main(argv):
         os.makedirs(out_dir, exist_ok=True)
         for name, cases, dropped in (
                 ("named.rxt", named, {}),
-                ("generated.rxt", rows, dict(shape_counts))):
+                ("generated.rxt", rows, {})):
             kept_cases, kept_answers = collect(cases, dropped, syntax)
             if kept_cases is None:
                 return 2

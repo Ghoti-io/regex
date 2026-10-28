@@ -636,6 +636,271 @@ TEST(OutOfMemory, TheHarnessItselfFailsWhatItSaysItFails) {
   EXPECT_EQ(allocator.live(), 0);
 }
 
+// Early startup exits must release every coexisting scratch allocation.
+namespace {
+GRX_Result continue_search(const GRX_Callout *, int * fail, void *) {
+  *fail = 0;
+  return GRX_OK;
+}
+
+void create_search(grxtest::FailingAllocator & allocator,
+    GRX_Regex ** regex, GRX_Match ** match,
+    GRX_Syntax syntax = GRX_SYNTAX_POSIX_ERE) {
+  const char pattern[] = "^(a+)$";
+  ASSERT_EQ(grx_regex_compile_with_allocator(pattern, sizeof(pattern) - 1,
+                syntax, 0, nullptr, allocator.get(), nullptr,
+                regex), GRX_OK);
+  ASSERT_EQ(grx_match_create(*regex, allocator.get(), match), GRX_OK);
+}
+
+void verify_success(GRX_Match * match,
+    GRX_Engine engine = GRX_ENGINE_BACKTRACK) {
+  ASSERT_NE(grx_match_error(match), nullptr);
+  EXPECT_EQ(grx_match_error(match)->code, GRX_OK);
+  EXPECT_EQ(grx_match_error(match)->diag, GRX_DIAG_NONE);
+  EXPECT_EQ(grx_match_engine(match), engine);
+  for (size_t group = 0; group < 2; ++group) {
+    GRX_Capture capture;
+    ASSERT_EQ(grx_match_group(match, group, &capture), GRX_OK);
+    EXPECT_EQ(capture.start, 0u);
+    EXPECT_EQ(capture.end, 3u);
+  }
+}
+
+GRX_SearchOptions options(
+    GRX_Engine engine = GRX_ENGINE_BACKTRACK) {
+  GRX_SearchOptions value;
+  grx_search_options_default(&value);
+  value.engine = engine;
+  value.callout = continue_search;
+  return value;
+}
+} // namespace
+
+static void sweep_callback_search(GRX_Syntax syntax, GRX_Engine engine) {
+  long setup_calls = 0;
+  long search_calls = 0;
+  {
+    grxtest::FailingAllocator healthy(0);
+    GRX_Regex * regex = nullptr;
+    GRX_Match * match = nullptr;
+    create_search(healthy, &regex, &match, syntax);
+    ASSERT_NE(regex, nullptr);
+    ASSERT_NE(match, nullptr);
+    setup_calls = healthy.requested();
+    const long baseline = healthy.live();
+    auto request = options(engine);
+    int matched = 0;
+    ASSERT_EQ(grx_regex_search_ex(regex, "aaa", 3, &request, match,
+                  &matched), GRX_OK);
+    ASSERT_EQ(matched, 1);
+    verify_success(match, engine);
+    EXPECT_EQ(healthy.live(), baseline);
+    search_calls = healthy.requested() - setup_calls;
+    grx_match_destroy(match);
+    grx_regex_free(regex);
+    EXPECT_EQ(healthy.live(), 0);
+  }
+  ASSERT_GT(search_calls, 0);
+  size_t exercised = 0;
+  for (long failure = 1; failure <= search_calls; ++failure) {
+    SCOPED_TRACE(failure);
+    grxtest::FailingAllocator allocator(setup_calls + failure);
+    GRX_Regex * regex = nullptr;
+    GRX_Match * match = nullptr;
+    create_search(allocator, &regex, &match, syntax);
+    ASSERT_NE(regex, nullptr);
+    ASSERT_NE(match, nullptr);
+    ASSERT_EQ(allocator.requested(), setup_calls);
+    const long baseline = allocator.live();
+    auto request = options(engine);
+    int matched = 1;
+    EXPECT_EQ(grx_regex_search_ex(regex, "aaa", 3, &request, match,
+                  &matched), GRX_ERR_OOM);
+    EXPECT_EQ(matched, 0);
+    EXPECT_TRUE(allocator.failed());
+    EXPECT_EQ(allocator.live(), baseline);
+    matched = 0;
+    EXPECT_EQ(grx_regex_search_ex(regex, "aaa", 3, &request, match,
+                  &matched), GRX_OK);
+    EXPECT_EQ(matched, 1);
+    verify_success(match, engine);
+    EXPECT_EQ(allocator.live(), baseline);
+    grx_match_destroy(match);
+    grx_regex_free(regex);
+    EXPECT_EQ(allocator.live(), 0);
+    ++exercised;
+  }
+  ::testing::Test::RecordProperty("faults_and_recovered_searches", exercised);
+}
+
+TEST(OutOfMemory, LongestCallbackSearchFailuresCleanUpAndRetry) {
+  sweep_callback_search(GRX_SYNTAX_POSIX_ERE, GRX_ENGINE_BACKTRACK);
+}
+
+TEST(OutOfMemory, BitstateCallbackSearchFailuresCleanUpAndRetry) {
+  sweep_callback_search(GRX_SYNTAX_ECMASCRIPT, GRX_ENGINE_BITSTATE);
+}
+
+TEST(StartupCleanup, RejectedEnginesAndMemoryLimitsReleaseCallbackScratch) {
+  struct Case {
+    GRX_Syntax syntax;
+    size_t cap;
+    GRX_Result result;
+  } cases[] = {
+    {GRX_SYNTAX_POSIX_ERE, 0, GRX_ERR_UNSUPPORTED},
+    {GRX_SYNTAX_ECMASCRIPT, 32, GRX_ERR_LIMIT},
+  };
+  size_t exercised = 0;
+  for (const auto & row : cases) {
+    for (bool callback : {false, true}) {
+      SCOPED_TRACE(row.syntax);
+      SCOPED_TRACE(callback);
+      grxtest::FailingAllocator allocator(0);
+      GRX_Regex * regex = nullptr;
+      GRX_Match * match = nullptr;
+      create_search(allocator, &regex, &match, row.syntax);
+      ASSERT_NE(regex, nullptr);
+      ASSERT_NE(match, nullptr);
+      const long baseline = allocator.live();
+      GRX_Limits limits;
+      grx_limits_default(&limits);
+      limits.max_match_memory = row.cap;
+      auto request = options(GRX_ENGINE_BITSTATE);
+      if (!callback) {
+        request.callout = nullptr;
+      }
+      request.limits = &limits;
+      std::string subject(row.cap ? 100 : 3, 'a');
+      int matched = 1;
+      EXPECT_EQ(grx_regex_search_ex(regex, subject.data(), subject.size(),
+                    &request, match, &matched), row.result);
+      EXPECT_EQ(matched, 0);
+      if (row.result == GRX_ERR_LIMIT) {
+        EXPECT_EQ(grx_match_error(match)->diag, GRX_DIAG_LIMIT_MATCH_MEMORY);
+      }
+      EXPECT_EQ(allocator.live(), baseline);
+      request.engine = GRX_ENGINE_BACKTRACK;
+      request.limits = nullptr;
+      matched = 0;
+      EXPECT_EQ(grx_regex_search_ex(regex, "aaa", 3, &request, match,
+                    &matched), GRX_OK);
+      EXPECT_EQ(matched, 1);
+      verify_success(match);
+      EXPECT_EQ(allocator.live(), baseline);
+      grx_match_destroy(match);
+      grx_regex_free(regex);
+      EXPECT_EQ(allocator.live(), 0);
+      ++exercised;
+    }
+  }
+  ::testing::Test::RecordProperty("rejections_and_recovered_searches", exercised);
+}
+
+
+TEST(OutOfMemory, SearchAllocationFailuresPublishOomDiagnosticsAndRecover) {
+  for (GRX_Engine engine : {GRX_ENGINE_BACKTRACK, GRX_ENGINE_PIKE}) {
+    SCOPED_TRACE(engine == GRX_ENGINE_BACKTRACK ? "backtrack" : "pike");
+    long setup_calls = 0, search_calls = 0;
+    {
+      grxtest::FailingAllocator allocator(0);
+      GRX_Regex * regex = nullptr;
+      GRX_Match * match = nullptr;
+      ASSERT_NO_FATAL_FAILURE(create_search(
+          allocator, &regex, &match, GRX_SYNTAX_ECMASCRIPT));
+      setup_calls = allocator.requested();
+      int matched = 0;
+      ASSERT_EQ(grx_regex_search(regex, "aaa", 3, 0, engine, nullptr,
+                    match, &matched), GRX_OK);
+      ASSERT_EQ(matched, 1);
+      verify_success(match, engine);
+      search_calls = allocator.requested() - setup_calls;
+      grx_match_destroy(match);
+      grx_regex_free(regex);
+      EXPECT_EQ(allocator.live(), 0);
+    }
+    ASSERT_GT(search_calls, 1);
+    long startup_oom = 0, later_oom = 0;
+    for (long fault = 1; fault <= search_calls; ++fault) {
+      SCOPED_TRACE("search allocation " + std::to_string(fault));
+      grxtest::FailingAllocator allocator(setup_calls + fault);
+      GRX_Regex * regex = nullptr;
+      GRX_Match * match = nullptr;
+      ASSERT_NO_FATAL_FAILURE(create_search(
+          allocator, &regex, &match, GRX_SYNTAX_ECMASCRIPT));
+      ASSERT_EQ(allocator.requested(), setup_calls);
+      int matched = 1;
+      GRX_Result result = grx_regex_search(regex, "aaa", 3, 0, engine,
+          nullptr, match, &matched);
+      ASSERT_TRUE(allocator.failed());
+      ASSERT_TRUE(result == GRX_ERR_OOM || result == GRX_OK);
+      if (result == GRX_ERR_OOM) {
+        EXPECT_EQ(matched, 0);
+        const GRX_Error * error = grx_match_error(match);
+        ASSERT_NE(error, nullptr);
+        EXPECT_EQ(error->code, GRX_ERR_OOM);
+        EXPECT_EQ(error->diag, GRX_DIAG_OUT_OF_MEMORY);
+        EXPECT_STREQ(error->message, grx_diag_string(GRX_DIAG_OUT_OF_MEMORY));
+        EXPECT_EQ(error->offset, GRX_NPOS);
+        EXPECT_EQ(error->length, 0u);
+        if (fault == 1) ++startup_oom;
+        else ++later_oom;
+      }
+      else {
+        ASSERT_EQ(matched, 1);
+        verify_success(match, engine);
+      }
+      // The one refused allocation is spent; reuse the same Match normally.
+      matched = 0;
+      ASSERT_EQ(grx_regex_search(regex, "aaa", 3, 0, engine, nullptr,
+                    match, &matched), GRX_OK);
+      ASSERT_EQ(matched, 1);
+      verify_success(match, engine);
+      EXPECT_STREQ(grx_match_error(match)->message, "");
+      grx_match_destroy(match);
+      grx_regex_free(regex);
+      EXPECT_EQ(allocator.live(), 0);
+    }
+    EXPECT_EQ(startup_oom, 1);
+    EXPECT_GT(later_oom, 0);
+    std::string suffix = engine == GRX_ENGINE_BACKTRACK ? "backtrack" : "pike";
+    RecordProperty("search_allocations_" + suffix, search_calls);
+    RecordProperty("startup_oom_" + suffix, startup_oom);
+    RecordProperty("later_oom_" + suffix, later_oom);
+  }
+}
+
+TEST(OutOfMemory, SearchDiagnosticFallbackPreservesLimitsAndSuccessReset) {
+  for (GRX_Engine engine : {GRX_ENGINE_BACKTRACK, GRX_ENGINE_PIKE}) {
+    SCOPED_TRACE(engine == GRX_ENGINE_BACKTRACK ? "backtrack" : "pike");
+    grxtest::FailingAllocator allocator(0);
+    GRX_Regex * regex = nullptr;
+    GRX_Match * match = nullptr;
+    ASSERT_NO_FATAL_FAILURE(create_search(
+        allocator, &regex, &match, GRX_SYNTAX_ECMASCRIPT));
+    GRX_Limits limits;
+    grx_limits_default(&limits);
+    limits.max_steps = 1;
+    int matched = 1;
+    EXPECT_EQ(grx_regex_search(regex, "aaa", 3, 0, engine, &limits,
+                  match, &matched), GRX_ERR_LIMIT);
+    EXPECT_EQ(matched, 0);
+    EXPECT_EQ(grx_match_error(match)->code, GRX_ERR_LIMIT);
+    EXPECT_EQ(grx_match_error(match)->diag, GRX_DIAG_LIMIT_STEPS);
+    EXPECT_STREQ(grx_match_error(match)->message,
+        grx_diag_string(GRX_DIAG_LIMIT_STEPS));
+    EXPECT_EQ(grx_regex_search(regex, "aaa", 3, 0, engine, nullptr,
+                  match, &matched), GRX_OK);
+    EXPECT_EQ(matched, 1);
+    verify_success(match, engine);
+    EXPECT_STREQ(grx_match_error(match)->message, "");
+    grx_match_destroy(match);
+    grx_regex_free(regex);
+    EXPECT_EQ(allocator.live(), 0);
+  }
+}
+
+
 int main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

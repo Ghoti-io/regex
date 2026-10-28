@@ -126,7 +126,7 @@ public:
           if (id) {
             // Query stacks retire before their caller. For these capture/
             // assertion programs the final realloc-backed buffer is the
-            // ordinary root stack, whose legacy charge is outside this gate.
+            // ordinary root stack, also included in the aggregate scratch peak.
             self->root_stack_id_ = id;
             for (auto & stack : self->stacks_)
               if (stack.id == id)
@@ -159,14 +159,8 @@ public:
     return bytes;
   }
   size_t charged_peak() const {
-    size_t root_live = 0, peak = 0;
-    for (const auto & event : events_) {
-      if (event.stack && event.stack == root_stack_id_)
-        root_live = event.size;
-      if (event.live > baseline_ + root_live)
-        peak = std::max(peak, event.live - baseline_ - root_live);
-    }
-    return peak;
+    // Every requested live scratch byte participates, including root frames.
+    return peak();
   }
   size_t live() const {
     return live_;

@@ -156,15 +156,23 @@ typedef struct {
   };
 } Frame;
 
+/* The stack is charged in bytes and released in size_t words. */
+_Static_assert(sizeof(Frame) % sizeof(size_t) == 0,
+    "Frame must be a whole number of size_t words");
+
 /** An assertion whose body observes a completed continuation. */
 typedef struct PendingLook {
   struct PendingLook * previous;
   struct PendingLook * active_previous;
   struct PendingLook * active_next;
   struct PendingLook * result_previous;
+  struct CohortBranch * cohort_branch;
+  int cohort_deferred;
   size_t sequence; ///< Encounter order within this body run.
   int evaluated;   ///< A completed frontier can be revisited after rollback.
   int linked;      ///< On the unevaluated activation list.
+  size_t bound_execution; ///< Selected local input provider binding.
+  size_t closed_execution; ///< Immutable atomic-return closed-span binding.
   size_t repeat_activation; ///< Prior activations of this logical assertion.
   size_t repeat_context;    ///< Lexical repeat ownership boundaries.
   int repeat_later;         ///< A repeated assertion has an earlier activation.
@@ -244,6 +252,7 @@ typedef struct AtomicArrival {
   size_t origin;
   size_t prior_end; ///< Furthest accepting exit from a strictly earlier input.
   int displaced;
+  int successor_known_absent;
   size_t input_owner;
   /** Closed incoming capture identity, excluding search origin. */
   size_t context[];
@@ -324,6 +333,8 @@ typedef struct {
    * search.
    */
   size_t * atomic_history;
+  size_t * atomic_reports; ///< Completed BODY reports; separate from read input.
+  size_t report_sequence; ///< Explicit end writes and atomic end ownership.
   /** Two instruction-indexed regions: staged root attempt and committed
    * final-boundary activation. Query copies borrow this immutable prefix;
    * only the owning user run may stage or commit entries. */
@@ -338,6 +349,17 @@ typedef struct {
    * inherited assertion context does not produce a numbered capture write.
    */
   size_t capture_open_slots;
+  size_t capture_position_slots;
+  uint32_t atomic_shadow_pc;
+  size_t atomic_shadow_execution;
+  int local_input_frozen;
+  uint32_t local_input_pc; ///< Active local-reference BODY owner, plus one.
+  size_t local_input_position;
+  size_t local_input_activation;
+  int cohort_search_complete;
+  uint32_t candidate_body;
+  size_t candidate_last;
+  size_t pending_completions; ///< Actual BODY completions, independent of undo.
   size_t capture_sequence; ///< Monotonic source of executed-write generations.
   size_t forward_result_slots; ///< Actual spans produced by forward assertions.
   size_t reference_end_slot;   ///< Undoable physical end owned by a reference.
@@ -379,7 +401,7 @@ typedef struct {
       frontier_count; ///< Pending frontier work; delayed-only loops skip scans.
   PendingLook * pending; ///< Assertions belonging to the current body run.
   size_t
-      scratch_bytes; ///< Live slots and assertion snapshots charged together.
+      * scratch_bytes; ///< Shared logical live payload, including nested interpreters.
   size_t slot_count;     ///< Captures, registers and shadows together.
   size_t * slots;        ///< Captures, then registers.
   Frame * stack;
@@ -387,8 +409,6 @@ typedef struct {
   size_t capacity;       ///< Frames allocated.
   size_t
       stack_depth_base;  ///< Caller frames still live during an isolated pass.
-  int stack_is_scratch;  ///< Isolated candidate stacks share the assertion
-                         ///< budget.
   size_t steps;          ///< Instructions executed, against max_steps.
   int utf;               ///< Whether a step is a code point or a byte.
   int wtf8;              ///< Whether an unpaired surrogate decodes.
@@ -446,6 +466,7 @@ typedef struct {
    */
   unsigned char * visited;
   size_t stride;         ///< Positions per instruction: length + 1.
+  size_t visited_bytes;
 
   /**
    * The step count past which the plain backtracker starts memoising, or 0
@@ -483,6 +504,9 @@ typedef struct {
   size_t * call_slots;
   size_t call_depth;
   size_t call_capacity;
+  size_t call_return_bytes;
+  size_t call_group_bytes;
+  size_t call_slots_bytes;
 
   /**
    * How deep run() has called itself, against GRX_BACKTRACK_MAX_C_DEPTH.
@@ -492,6 +516,13 @@ typedef struct {
    * machinery they use. This is the C stack itself.
    */
   size_t run_depth;
+  struct CohortRun * cohorts;
+  struct Cohort * cohort;
+  uint32_t stage_pc;
+  size_t stage_position;
+  int stage_kind;
+  size_t cohort_activation;
+  struct CohortBranch * cohort_scope;
   size_t behind_depth; ///< Additional forward-lookbehind candidate frames.
 
   /**
@@ -596,6 +627,12 @@ typedef struct {
 #define GRX_PENDING_WORDS                                                      \
   ((sizeof(PendingLook) + sizeof(size_t) - 1) / sizeof(size_t))
 
+static int scratch_fits(Backtrack * bt, size_t old_bytes, size_t bytes);
+static void scratch_limit(Backtrack * bt);
+static void * scratch_alloc(Backtrack * bt, size_t bytes);
+static void scratch_free(Backtrack * bt, void * data, size_t bytes);
+static void * scratch_realloc(Backtrack * bt, void * data, size_t old_bytes, size_t bytes);
+
 static int scalar_scope_enter(Backtrack * bt, uint32_t pc, size_t position,
     uint32_t scope, uint32_t stop, int atomic, ScalarScope ** out_scope);
 static void scalar_scope_leave(Backtrack * bt, ScalarScope * scope);
@@ -605,6 +642,22 @@ static int pending_step(Backtrack * bt);
 static void scalar_activation_free(Backtrack * bt, BehindFrontier * activation);
 static void pending_destroy(Backtrack * bt, PendingLook * pending);
 static void atomic_context_leave(Backtrack * bt);
+static const size_t * cohort_input(Backtrack * bt, size_t group,
+    uint32_t pc, size_t position, size_t execution);
+static int cohort_record(Backtrack * bt, uint32_t pc, size_t position);
+static int cohort_capture_atomic_shadow(Backtrack * bt, uint32_t pc, size_t position);
+static const size_t * cohort_closed_input(Backtrack * bt, size_t group, uint32_t pc, size_t execution);
+static void cohort_publish(Backtrack * bt, size_t group, size_t position);
+static struct CohortBranch * cohort_branch_at(Backtrack * bt);
+static int cohort_published_before(Backtrack * bt, size_t group);
+static int atomic_report_write(Backtrack * bt, size_t group);
+static int atomic_report_project(Backtrack * bt, int local_references);
+static int atomic_report_end(Backtrack * bt, size_t position);
+static int atomic_explicit_end(Backtrack * bt);
+
+
+
+
 static void pending_restore(
     Backtrack * bt, PendingLook * pending, size_t state);
 
@@ -668,56 +721,51 @@ static void enable_memo(Backtrack * bt) {
   if (bytes == GRX_NPOS) {
     return;
   }
-  const GRX_Limits * limits = bt->request->limits;
-  if (limits->max_match_memory && bytes > limits->max_match_memory) {
+  if (!scratch_fits(bt, 0, bytes)) {
     return;
   }
+  // Optional memo allocation preserves the established OOM fallback.
   bt->visited = gcu_allocator_calloc(bt->allocator, bytes, 1);
+  if (bt->visited) {
+    bt->visited_bytes = bytes;
+    *bt->scratch_bytes += bytes;
+  }
 }
 
-/** Make room for `wanted` active calls, charged against max_match_memory. */
+/** Partial successful growth retains its actual sizes even if a later row fails. */
 static int call_reserve(Backtrack * bt, size_t wanted) {
   if (wanted <= bt->call_capacity) {
     return 1;
   }
-
-  size_t capacity = bt->call_capacity ? bt->call_capacity * 2 : 8;
+  size_t capacity = bt->call_capacity ? bt->call_capacity : 8;
   while (capacity < wanted) {
+    if (capacity > SIZE_MAX / 2) {
+      scratch_limit(bt);
+      return 0;
+    }
     capacity *= 2;
   }
-
-  size_t bytes = capacity * (2 * sizeof(uint32_t) + bt->captures * sizeof(size_t));
-  const GRX_Limits * limits = bt->request->limits;
-  if (limits->max_match_memory && bytes > limits->max_match_memory) {
-    bt->failure = GRX_ERR_LIMIT;
-    bt->failure_diag = GRX_DIAG_LIMIT_MATCH_MEMORY;
+  if (capacity > SIZE_MAX / sizeof(uint32_t) ||
+      bt->slot_count > SIZE_MAX / sizeof(size_t) ||
+      (bt->slot_count &&
+          capacity > SIZE_MAX / (bt->slot_count * sizeof(size_t)))) {
+    scratch_limit(bt);
     return 0;
   }
-
-  uint32_t * call_return = gcu_allocator_realloc(
-      bt->allocator, bt->call_return, capacity * sizeof(uint32_t));
-  if (!call_return) {
-    bt->failure = GRX_ERR_OOM;
-    return 0;
-  }
-  bt->call_return = call_return;
-
-  uint32_t * call_group = gcu_allocator_realloc(
-      bt->allocator, bt->call_group, capacity * sizeof(uint32_t));
-  if (!call_group) {
-    bt->failure = GRX_ERR_OOM;
-    return 0;
-  }
-  bt->call_group = call_group;
-
-  size_t * call_slots = gcu_allocator_realloc(bt->allocator, bt->call_slots,
-      capacity * bt->slot_count * sizeof(size_t));
-  if (!call_slots) {
-    bt->failure = GRX_ERR_OOM;
-    return 0;
-  }
-  bt->call_slots = call_slots;
-
+  size_t bytes = capacity * sizeof(uint32_t);
+  uint32_t * returns = scratch_realloc(bt, bt->call_return, bt->call_return_bytes, bytes);
+  if (!returns) return 0;
+  bt->call_return = returns;
+  bt->call_return_bytes = bytes;
+  uint32_t * groups = scratch_realloc(bt, bt->call_group, bt->call_group_bytes, bytes);
+  if (!groups) return 0;
+  bt->call_group = groups;
+  bt->call_group_bytes = bytes;
+  bytes = capacity * bt->slot_count * sizeof(size_t);
+  size_t * slots = scratch_realloc(bt, bt->call_slots, bt->call_slots_bytes, bytes);
+  if (!slots) return 0;
+  bt->call_slots = slots;
+  bt->call_slots_bytes = bytes;
   bt->call_capacity = capacity;
   return 1;
 }
@@ -744,26 +792,14 @@ static int push(Backtrack * bt, FrameKind kind, uint32_t pc, size_t position) {
     if (limits->max_backtrack && capacity > limits->max_backtrack) {
       capacity = limits->max_backtrack;
     }
-    size_t extra = (capacity - bt->capacity) * sizeof(Frame);
-    if (bt->stack_is_scratch &&
-        (extra > SIZE_MAX - bt->scratch_bytes ||
-            (limits->max_match_memory &&
-                (bt->scratch_bytes > limits->max_match_memory ||
-                    extra > limits->max_match_memory - bt->scratch_bytes)))) {
-      bt->failure = GRX_ERR_LIMIT;
-      bt->failure_diag = GRX_DIAG_LIMIT_MATCH_MEMORY;
+    if (capacity <= bt->capacity || capacity > SIZE_MAX / sizeof(Frame)) {
+      scratch_limit(bt);
       return 0;
     }
-    Frame * grown = gcu_allocator_realloc(
-        bt->allocator, bt->stack, capacity * sizeof(Frame));
-    if (!grown) {
-      bt->failure = GRX_ERR_OOM;
-      return 0;
-    }
+    Frame * grown = scratch_realloc(bt, bt->stack,
+        bt->capacity * sizeof(Frame), capacity * sizeof(Frame));
+    if (!grown) return 0;
     bt->stack = grown;
-    if (bt->stack_is_scratch) {
-      bt->scratch_bytes += extra;
-    }
     bt->capacity = capacity;
   }
 
@@ -822,12 +858,13 @@ static int push_mark(Backtrack * bt, uint32_t index, size_t position) {
       bt->failure_diag = GRX_DIAG_LIMIT_BACKTRACK;
       return 0;
     }
-    MarkEntry * grown = gcu_allocator_realloc(
-        bt->allocator, bt->marks, capacity * sizeof(MarkEntry));
-    if (!grown) {
-      bt->failure = GRX_ERR_OOM;
+    if (capacity < bt->mark_capacity || capacity > SIZE_MAX / sizeof(MarkEntry)) {
+      scratch_limit(bt);
       return 0;
     }
+    MarkEntry * grown = scratch_realloc(bt, bt->marks,
+        bt->mark_capacity * sizeof(MarkEntry), capacity * sizeof(MarkEntry));
+    if (!grown) return 0;
     bt->marks = grown;
     bt->mark_capacity = capacity;
   }
@@ -1673,7 +1710,7 @@ static int backref_matches(const Backtrack * bt, const GRX_Inst * inst,
   if (end_slot >= bt->captures) {
     return inst->mode == GRX_BACKREF_UNSET_EMPTY;
   }
-  if (bt->shadow) {
+  if (bt->shadow && !(inst->policy & GRX_POLICY_BACKREF_LIVE)) {
     // The span the group last closed with, which is the live one unless the
     // group is open right now. `^(a\1?){4}$` is the case that needs it.
     start_slot += bt->shadow;
@@ -1690,7 +1727,18 @@ static int backref_matches(const Backtrack * bt, const GRX_Inst * inst,
 
   size_t from = bt->slots[start_slot];
   size_t to = bt->slots[end_slot];
+  if (to < from && (inst->policy & GRX_POLICY_BACKREF_OPEN) &&
+      bt->capture_position_slots && bt->shadow &&
+      bt->slots[bt->capture_position_slots + start_slot] == position &&
+      bt->slots[bt->shadow + start_slot] != GRX_NPOS &&
+      bt->slots[bt->shadow + end_slot] != GRX_NPOS &&
+      bt->slots[bt->shadow + start_slot] <= bt->slots[bt->shadow + end_slot]) {
+    from = bt->slots[bt->shadow + start_slot];
+    to = bt->slots[bt->shadow + end_slot];
+  }
   if (to < from) {
+    // Existing endpoints in reverse order are an invalid span, not an
+    // absent capture. A gap between repeated openings exposes this case.
     return 0;
   }
 
@@ -1810,10 +1858,10 @@ static int run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
  * machinery costs about 864 bytes per nested run in the pinned GCC 16
  * build, and forward lookbehind adds a candidate-search frame. The budget
  * charges seven units per run and one per active candidate-search frame,
- * with 148 * 7 units available. Thus 128 default nested forward lookbehinds
+ * with 147 * 7 units available. Thus 128 default nested forward lookbehinds
  * plus the top-level run fit, while raised nesting stops before the test's
- * 128 KB allowance. Measurements peak at 130,655 bytes for forward behind,
- * 130,623 for mixed ahead/behind, and 129,567 for ahead alone.
+ * 128 KB allowance. Measurements peak at 130,511 bytes for forward behind,
+ * 130,607 for mixed ahead/behind, and 129,551 for ahead alone.
  * tests/unit/test_stack.cpp measures both bounds because frame sizes change
  * with compiler and optimisation settings.
  *
@@ -1824,35 +1872,82 @@ static int run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
  * floor underneath it, and it is deliberately not a GRX_Limits field - a
  * bound whose whole job is to be un-liftable should not come with a lever.
  */
-#define GRX_BACKTRACK_MAX_C_DEPTH 148
+#define GRX_BACKTRACK_MAX_C_DEPTH 147
 #define GRX_BACKTRACK_RUN_WEIGHT 7
 
-/** Allocate capture state under the aggregate assertion scratch budget. */
-static void * capture_alloc(Backtrack * bt, size_t count) {
+/** Every interpreter copy shares one live-payload budget. No allocation headers
+ * are needed: each owner retains the exact capacity it successfully acquired. */
+static int scratch_fits(Backtrack * bt, size_t old_bytes, size_t bytes) {
+  size_t live = *bt->scratch_bytes;
   size_t limit = bt->request->limits->max_match_memory;
-  if (count > SIZE_MAX / sizeof(size_t) ||
-      count * sizeof(size_t) > SIZE_MAX - bt->scratch_bytes ||
-      (limit &&
-          (bt->scratch_bytes > limit ||
-              count * sizeof(size_t) > limit - bt->scratch_bytes))) {
-    bt->failure = GRX_ERR_LIMIT;
-    bt->failure_diag = GRX_DIAG_LIMIT_MATCH_MEMORY;
+  return old_bytes <= live && bytes <= SIZE_MAX - (live - old_bytes) &&
+      (!limit || (live - old_bytes <= limit &&
+          bytes <= limit - (live - old_bytes)));
+}
+
+static void scratch_limit(Backtrack * bt) {
+  if (bt->failure != GRX_OK) return;
+  bt->failure = GRX_ERR_LIMIT;
+  bt->failure_diag = GRX_DIAG_LIMIT_MATCH_MEMORY;
+}
+
+static void * scratch_alloc(Backtrack * bt, size_t bytes) {
+  if (bt->failure != GRX_OK) return NULL;
+  if (!scratch_fits(bt, 0, bytes)) {
+    scratch_limit(bt);
     return NULL;
   }
-  size_t * data = gcu_allocator_malloc(bt->allocator, count * sizeof(size_t));
+  void * data = gcu_allocator_malloc(bt->allocator, bytes);
   if (!data) {
     bt->failure = GRX_ERR_OOM;
     return NULL;
   }
-  bt->scratch_bytes += count * sizeof(size_t);
+  *bt->scratch_bytes += bytes;
   return data;
 }
 
-static void capture_free(Backtrack * bt, void * data, size_t count) {
+static void scratch_free(Backtrack * bt, void * data, size_t bytes) {
   if (data) {
-    bt->scratch_bytes -= count * sizeof(size_t);
+    *bt->scratch_bytes -= bytes;
     gcu_allocator_free(bt->allocator, data);
   }
+}
+
+static void * scratch_realloc(
+    Backtrack * bt, void * data, size_t old_bytes, size_t bytes) {
+  if (bt->failure != GRX_OK) return NULL;
+  if (!scratch_fits(bt, old_bytes, bytes)) {
+    scratch_limit(bt);
+    return NULL;
+  }
+  void * grown = gcu_allocator_realloc(bt->allocator, data, bytes);
+  if (!grown) {
+    bt->failure = GRX_ERR_OOM;
+    return NULL;
+  }
+  *bt->scratch_bytes = *bt->scratch_bytes - old_bytes + bytes;
+  return grown;
+}
+
+static void * capture_alloc(Backtrack * bt, size_t count) {
+  if (bt->failure != GRX_OK) return NULL;
+  if (count > SIZE_MAX / sizeof(size_t)) {
+    scratch_limit(bt);
+    return NULL;
+  }
+  return scratch_alloc(bt, count * sizeof(size_t));
+}
+
+static void capture_free(Backtrack * bt, void * data, size_t count) {
+  scratch_free(bt, data, count * sizeof(size_t));
+}
+
+static void scratch_arrays_free(Backtrack * bt) {
+  scratch_free(bt, bt->call_return, bt->call_return_bytes);
+  scratch_free(bt, bt->call_group, bt->call_group_bytes);
+  scratch_free(bt, bt->call_slots, bt->call_slots_bytes);
+  scratch_free(bt, bt->marks, bt->mark_capacity * sizeof(MarkEntry));
+  scratch_free(bt, bt->visited, bt->visited_bytes);
 }
 
 static void atomic_incoming_clear(Backtrack * bt, AtomicIncoming ** list) {
@@ -1875,8 +1970,17 @@ static void atomic_context_leave(Backtrack * bt) {
       bt, context, sizeof(*context) / sizeof(size_t) + 5 * bt->captures);
 }
 
-/** Pending records are execution work even when their result is cached. */
+/** Pending records are execution work even when their result is cached.
+ * Out of line on purpose: inlined into evaluate_look, its first-failure guard
+ * grew that recursive frame by 32 bytes and carried the nested-assertion peak
+ * past the native-stack bound, which the stack tests measure. */
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((noinline))
+#elif defined(_MSC_VER)
+__declspec(noinline)
+#endif
 static int pending_step(Backtrack * bt) {
+  if (bt->failure != GRX_OK) return 0;
   bt->steps++;
   if (bt->request->limits->max_steps &&
       bt->steps > bt->request->limits->max_steps) {
@@ -1932,7 +2036,7 @@ static void pending_destroy(Backtrack * bt, PendingLook * pending) {
   if (pending->linked) {
     pending_unlink(bt, pending);
   }
-  capture_free(bt, pending->entry, bt->captures);
+  capture_free(bt, pending->entry, 2 * bt->captures);
   capture_free(bt, pending->result, bt->captures);
   capture_free(bt, pending->base, bt->atomic_base);
   capture_free(bt, pending, GRX_PENDING_WORDS);
@@ -1946,6 +2050,8 @@ static int pending_set_state(
   }
   bt->stack[bt->depth - 1].pending = pending;
   if (state == 1 && pending->state != 1) {
+    if (!advance_generation(bt, &bt->pending_completions))
+      return 0;
     pending_unlink(bt, pending);
     if (pending->result) {
       pending->result_previous = bt->results;
@@ -1959,6 +2065,42 @@ static int pending_set_state(
 /** One body run; deferred continuations stay in its interpreter loop. */
 static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
     int toplevel, size_t * out_end);
+static int run_path(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
+    int toplevel, size_t * out_end);
+// Root worklist locals must not inflate every recursive assertion frame.
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((noinline))
+#elif defined(_MSC_VER)
+__declspec(noinline)
+#endif
+static int cohort_run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
+    int toplevel, size_t * out_end);
+static void cohort_save_report(Backtrack * bt, uint32_t slot);
+static void cohort_return_report(Backtrack * bt);
+static int cohort_ordered(const Backtrack * bt);
+static int cohort_scope_active(const Backtrack * bt);
+static int cohort_refresh_local_reference(Backtrack * bt, const GRX_Inst * inst);
+static int comparison_body_candidates(Backtrack * bt, uint32_t pc, size_t position,
+    size_t floor, int toplevel, size_t * out_end);
+static int cohort_candidate_body(Backtrack * bt, uint32_t body);
+static size_t comparison_owned_predicate(Backtrack * bt, uint32_t pc);
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((noinline))
+#elif defined(_MSC_VER)
+__declspec(noinline)
+#endif
+static int cohort_run_behind_candidates(Backtrack * bt, uint32_t body,
+    size_t begin, size_t last, size_t floor, size_t * out_end);
+static int comparison_frontiers_eligible(Backtrack * bt);
+static int cohort_predicates_before_reference(Backtrack * bt);
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((noinline))
+#elif defined(_MSC_VER)
+__declspec(noinline)
+#endif
+static int cohort_close_frontier(Backtrack * bt, uint32_t pc, size_t position);
+static int cohort_publish_closure(Backtrack * bt, uint32_t slot);
+static size_t cohort_body_execution(Backtrack * bt);
 
 static int run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
     int toplevel, size_t * out_end) {
@@ -2333,7 +2475,17 @@ static int look_behind_forward(Backtrack * bt, uint32_t body, size_t position,
       }
       if (discovering)
         bt->scalar_prepass = 1;
-      matched = run(bt, body, position - back, floor, 0, out_end);
+      if (!discovering && bt->local_input_pc && bt->cohorts &&
+          !bt->discovery_depth && !bt->request->scalar_query)
+        matched = cohort_run_behind_candidates(
+            bt, body, position - back, position - min, floor, out_end);
+      else
+        matched = run(bt, body, position - back, floor, 0, out_end);
+      if (matched >= 2) {
+        matched -= 2;
+        bt->depth = floor;
+        break;
+      }
       bt->depth = floor;
       if (matched || bt->failure != GRX_OK) {
         break;
@@ -2431,12 +2583,145 @@ static int ahead_arrival(Backtrack * bt, uint32_t pc, int record) {
       bt->ahead_arrivals[pc] != bt->attempt_start;
 }
 
+/** Does this assertion own the opening read by this lexical self-reference? */
+static int look_owns_reference(Backtrack * bt, uint32_t pc, uint32_t reference) {
+  const GRX_Inst * read = grx_program_at(bt->program, reference);
+  if (read->op != GRX_OP_BACKREF ||
+      !(read->policy & GRX_POLICY_BACKREF_OPEN)) {
+    return 0;
+  }
+  for (uint32_t prefix = pc + 1; prefix < reference; prefix++) {
+    if (!pending_step(bt)) {
+      return 0;
+    }
+    const GRX_Inst * saved = grx_program_at(bt->program, prefix);
+    if (saved->op == GRX_OP_SAVE && saved->x == 2 * read->x) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+static int cohort_local_behind(Backtrack * bt, uint32_t pc) {
+  if (!(bt->program->flags & GRX_PROGRAM_CAPTURE_COHORTS) || bt->run_depth != 1 || bt->discovery_depth ||
+      bt->request->scalar_query || bt->atomic_context)
+    return 0;
+  const GRX_Inst * look = grx_program_at(bt->program, pc);
+  if (look->mode != GRX_LOOK_BEHIND_POSITIVE &&
+      look->mode != GRX_LOOK_BEHIND_NEGATIVE)
+    return 0;
+  for (uint32_t body = pc + 1; body < look->y; body++) {
+    if (!pending_step(bt))
+      return 0;
+    const GRX_Inst * part = grx_program_at(bt->program, body);
+    if (part->op != GRX_OP_BACKREF)
+      continue;
+    if (look_owns_reference(bt, pc, body))
+      return 1;
+    size_t group = 2 * (size_t)part->x;
+    if (group + 1 >= bt->captures || bt->slots[group] != GRX_NPOS ||
+        bt->slots[bt->capture_open_slots + group] == 1)
+      continue;
+    int owned = 0;
+    for (const PendingLook * prior = bt->pending; prior && !owned;
+        prior = prior->previous) {
+      const GRX_Inst * source = grx_program_at(bt->program, prior->pc);
+      for (uint32_t saved = prior->pc + 1; saved < source->y; saved++) {
+        if (!pending_step(bt))
+          return 0;
+        const GRX_Inst * write = grx_program_at(bt->program, saved);
+        if (write->op == GRX_OP_SAVE && write->x == group)
+          owned = 1;
+      }
+    }
+    if (!owned)
+      return 1;
+  }
+  return 0;
+}
+
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((noinline))
+#elif defined(_MSC_VER)
+__declspec(noinline)
+#endif
+static int bind_pending_local_input(Backtrack * bt, uint32_t pc,
+    size_t position, PendingLook * deferred) {
+  const GRX_Inst * look = grx_program_at(bt->program, pc);
+  size_t group = 0;
+  for (uint32_t body = pc + 1; body < look->y; body++) {
+    if (!pending_step(bt)) return 0;
+    if (!look_owns_reference(bt, pc, body)) continue;
+    size_t candidate = 2 * (size_t)grx_program_at(bt->program, body)->x;
+    // Multiple local definitions retain the existing per-invocation policy.
+    if (group && group != candidate) return bt->failure == GRX_OK;
+    group = candidate;
+  }
+  if (bt->failure != GRX_OK || !group || group + 1 >= bt->captures)
+    return bt->failure == GRX_OK;
+  deferred->bound_execution = cohort_body_execution(bt);
+  size_t old_activation = bt->cohort_activation;
+  bt->cohort_activation = deferred->sequence;
+  const size_t * incoming =
+      cohort_input(bt, group, pc, position, deferred->bound_execution);
+  bt->cohort_activation = old_activation;
+  if (!incoming) deferred->bound_execution = 0;
+  return bt->failure == GRX_OK;
+}
+
+/** Project assertion-owned self-reference inputs without changing other captures. */
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((noinline))
+#elif defined(_MSC_VER)
+__declspec(noinline)
+#endif
+static int overlay_local_references(Backtrack * bt, uint32_t pc,
+    size_t * context, const size_t * before, const size_t * entry,
+    size_t position, const PendingLook * binding) {
+  size_t execution = binding && binding->bound_execution
+      ? binding->bound_execution : cohort_body_execution(bt);
+  if (bt->failure != GRX_OK) return 0;
+  const GRX_Inst * look = grx_program_at(bt->program, pc);
+  for (uint32_t body = pc + 1; body < look->y; body++) {
+    if (!pending_step(bt)) {
+      return 0;
+    }
+    if (!look_owns_reference(bt, pc, body)) {
+      if (bt->failure != GRX_OK) {
+        return 0;
+      }
+      continue;
+    }
+    size_t group = 2 * (size_t)grx_program_at(bt->program, body)->x;
+    if (group + 1 < bt->captures) {
+      const size_t * incoming = cohort_input(bt, group, pc, position, execution);
+      if (bt->failure != GRX_OK)
+        return 0;
+      context[group] = incoming ? incoming[group]
+          : entry ? entry[group] : before[group];
+      context[group + 1] = incoming ? incoming[group + 1]
+          : entry ? entry[group + 1] : before[group + 1];
+      if (bt->shadow) {
+        const size_t * closed = binding ? cohort_closed_input(
+            bt, group, pc, binding->closed_execution) : NULL;
+        if (bt->failure != GRX_OK) return 0;
+        context[bt->shadow + group] = closed ? closed[group]
+            : incoming ? incoming[group] : entry ? entry[group] : before[bt->shadow + group];
+        context[bt->shadow + group + 1] = closed ? closed[group + 1]
+            : incoming ? incoming[group + 1] : entry ? entry[group + 1] : before[bt->shadow + group + 1];
+      }
+    }
+  }
+  return 1;
+}
+
 /** Evaluate one assertion, leaving continuation and undo ownership to its
  * caller. */
 static int evaluate_look(Backtrack * bt, uint32_t pc, size_t position,
     uint32_t * out_next, int retain_end, const size_t * entry_base,
     int scheduled, int owned_ahead, size_t entry_owner, const size_t * entry,
-    size_t repeat_context) {
+    size_t repeat_context, const PendingLook * binding) {
+  int outer_input_frozen = bt->local_input_frozen;
   const GRX_Inst * inst = grx_program_at(bt->program, pc);
   int fresh = (inst->policy & GRX_POLICY_LOOK_FRESH) != 0 ||
       (owned_ahead && (inst->flags & GRX_INST_LOOK_REQUIRED) &&
@@ -2460,13 +2745,62 @@ static int evaluate_look(Backtrack * bt, uint32_t pc, size_t position,
   // into. The capture writes it made are turned into undo frames on
   // the caller's stack so that backtracking past the whole lookaround
   // still puts them back.
+  int local_references = 0;
+  int entered_reference = 0;
+  if ((bt->program->flags & GRX_PROGRAM_LOOK_CONTEXT) &&
+      (bt->program->flags & GRX_PROGRAM_CAPTURE_COHORTS)) {
+    for (uint32_t body = pc + 1; body < inst->y; body++) {
+      if (!pending_step(bt)) {
+        return 0;
+      }
+      const GRX_Inst * part = grx_program_at(bt->program, body);
+      if (part->op == GRX_OP_BACKREF) {
+        size_t group = 2 * (size_t)part->x;
+        if (group + 1 < bt->captures && bt->capture_open_slots) {
+          size_t generation = entry ? entry[bt->captures + group]
+              : bt->slots[bt->capture_open_slots + group + 1];
+          if (generation != GRX_NPOS)
+            entered_reference = 1;
+        }
+      }
+      if ((bt->program->flags & GRX_PROGRAM_OPEN_REFERENCES) &&
+          look_owns_reference(bt, pc, body)) {
+        local_references = 1;
+        break;
+      }
+    }
+    if (bt->failure != GRX_OK) {
+      return 0;
+    }
+  }
   size_t before_count = bt->slot_count +
       (bt->atomic_history && bt->atomic_base ? bt->atomic_base : 0);
+  size_t local_offset = before_count;
+  size_t local_count = bt->atomic_base ? bt->atomic_base : bt->slot_count;
+  if (local_references) {
+    if (local_count > SIZE_MAX - before_count) {
+      bt->failure = GRX_ERR_OOM;
+      return 0;
+    }
+    before_count += local_count;
+  }
+  if (bt->program->flags & GRX_PROGRAM_OPEN_REFERENCES) {
+    if (before_count > SIZE_MAX - 3) {
+      bt->failure = GRX_ERR_OOM;
+      return 0;
+    }
+    before_count += 3;
+  }
   size_t * before = capture_alloc(bt, before_count);
   if (!before) {
     return 0;
   }
   snapshot_spans(bt, before);
+  if (bt->program->flags & GRX_PROGRAM_OPEN_REFERENCES) {
+    before[before_count - 3] = bt->local_input_pc;
+    before[before_count - 2] = bt->local_input_position;
+    before[before_count - 1] = bt->local_input_activation;
+  }
   size_t outer_owner = bt->active_capture_owner;
   if (bt->behind_owner_slot && (scheduled || !bt->capture_owner_depth)) {
     bt->active_capture_owner =
@@ -2505,20 +2839,36 @@ static int evaluate_look(Backtrack * bt, uint32_t pc, size_t position,
     // An unobserved later input does not replace the caller's reporting owner.
     bt->capture_context = before;
   }
-  if (bt->atomic_history && bt->atomic_base && bt->capture_context &&
+  if (local_references && bt->cohorts && bt->run_depth == 1 &&
+      !bt->discovery_depth && !bt->request->scalar_query)
+    fresh = 1;
+  if (bt->atomic_history && bt->atomic_base &&
+      (bt->capture_context ||
+          (bt->program->flags & GRX_PROGRAM_CAPTURE_COHORTS)) &&
       (inst->mode == GRX_LOOK_BEHIND_POSITIVE ||
           inst->mode == GRX_LOOK_BEHIND_NEGATIVE)) {
     // Captures from competing incoming paths become visible to a postponed
     // body only after their closing frontier has been crossed.
     size_t * context = before + bt->slot_count;
-    memcpy(context, fresh ? bt->capture_context : before,
-        bt->atomic_base * sizeof(size_t));
+    if (fresh) {
+      for (size_t i = 0; i < bt->atomic_base; i++)
+        context[i] = bt->capture_context ? bt->capture_context[i] : GRX_NPOS;
+    }
+    else
+      memcpy(context, before, bt->atomic_base * sizeof(size_t));
     int inherited = fresh;
     for (size_t group = 2; group + 1 < bt->captures; group += 2) {
       size_t source = bt->captures + group;
       const size_t * inherited_context = bt->atomic_history;
       int complete = before[bt->atomic_result_present] != GRX_NPOS &&
           (before[bt->atomic_result_present] & ATOMIC_REPORT_COMPLETE);
+      size_t incoming_owner = bt->atomic_history[6 * bt->captures + group];
+      int incoming_absent = (entry ? entry[group] : before[group]) == GRX_NPOS;
+      if (bt->atomic_history[source] == GRX_NPOS && incoming_absent &&
+          incoming_owner != GRX_NPOS && incoming_owner < bt->frontier_position &&
+          cohort_published_before(bt, group)) {
+        source = 5 * bt->captures + group;
+      }
       if (complete && bt->atomic_history[source] == GRX_NPOS) {
         if (before[bt->forward_result_slots + group] != GRX_NPOS) {
           inherited_context = before;
@@ -2534,7 +2884,11 @@ static int evaluate_look(Backtrack * bt, uint32_t pc, size_t position,
               (before[bt->atomic_base_present] != GRX_NPOS &&
                   (before[bt->atomic_base_present] & ATOMIC_BASE_READS)))) {
         inherited = 1;
-        if (!complete || before[bt->forward_result_slots + group] != GRX_NPOS) {
+        int published = source == 5 * bt->captures + group && incoming_absent &&
+            cohort_published_before(bt, group) &&
+            bt->atomic_history[4 * bt->captures + group + 1] != 1;
+        if (!complete || published ||
+            before[bt->forward_result_slots + group] != GRX_NPOS) {
           context[group] = inherited_context[source];
           context[group + 1] = inherited_context[source + 1];
         }
@@ -2548,6 +2902,26 @@ static int evaluate_look(Backtrack * bt, uint32_t pc, size_t position,
       fresh = 1;
       bt->capture_context = context;
     }
+  }
+  if (local_references && bt->cohorts && bt->run_depth == 1 &&
+      !bt->discovery_depth && !bt->request->scalar_query)
+    fresh = 1;
+  if (fresh && local_references) {
+    // Fresh incoming captures belong to the selected outer frontier. A
+    // lexical self-reference instead observes this assertion's own previous
+    // endpoints, which may have been produced by an earlier empty iteration.
+    size_t * context = before + local_offset;
+    for (size_t i = 0; i < local_count; i++) {
+      context[i] = bt->capture_context ? bt->capture_context[i] : GRX_NPOS;
+    }
+    if (!overlay_local_references(bt, pc, context, before, entry, position, binding)) {
+      bt->capture_context = outer_context;
+      bt->active_capture_owner = outer_owner;
+      bt->capture_owner_depth--;
+      capture_free(bt, before, before_count);
+      return 0;
+    }
+    bt->capture_context = context;
   }
   if (fresh) {
     for (size_t i = 2; i < bt->captures; i++) {
@@ -2604,11 +2978,15 @@ static int evaluate_look(Backtrack * bt, uint32_t pc, size_t position,
     }
     bt->keep_last = keep_last;
   }
+  bt->local_input_frozen = binding && binding->bound_execution;
+  bt->local_input_pc = local_references ? pc + 1 : 0;
+  bt->local_input_position = position;
+  bt->local_input_activation = bt->cohort_activation;
   if ((inst->mode == GRX_LOOK_BEHIND_POSITIVE ||
           inst->mode == GRX_LOOK_BEHIND_NEGATIVE) &&
       grx_program_look_span(bt->program, inst->x, &min, &max)) {
     body_matched = look_behind_forward(bt, pc + 1, position, min, max,
-        (inst->flags & GRX_INST_LOOK_NEAREST) != 0,
+        (inst->flags & GRX_INST_LOOK_NEAREST) != 0 && !local_references,
         (inst->flags & GRX_INST_LOOK_ROUND_BOUND) != 0,
         (inst->flags & GRX_INST_LOOK_PERSIST_CAPTURES) != 0, before, fresh != 0,
         bt->capture_context, &end);
@@ -2618,6 +2996,12 @@ static int evaluate_look(Backtrack * bt, uint32_t pc, size_t position,
     bt->look_end = GRX_NPOS;
     body_matched = run(bt, pc + 1, position, body_floor, 0, &end);
     bt->look_end = outer_look_end;
+  }
+  if (bt->program->flags & GRX_PROGRAM_OPEN_REFERENCES) {
+    bt->local_input_frozen = outer_input_frozen;
+    bt->local_input_pc = (uint32_t)before[before_count - 3];
+    bt->local_input_position = before[before_count - 2];
+    bt->local_input_activation = before[before_count - 1];
   }
   bt->keep_last = outer_keep_last;
   bt->capture_context = outer_context;
@@ -3014,7 +3398,8 @@ static int evaluate_look(Backtrack * bt, uint32_t pc, size_t position,
   // jumps, so the branches stay in source order. For everything else
   // `y` is simply where the outer program resumes.
   *out_next = choosing && body_matched == negative ? inst->y + 1 : inst->y;
-  return 1;
+  return atomic_report_project(bt, local_references || entered_reference) &&
+      cohort_record(bt, pc, position);
 }
 
 /** Whether a pending record needs this frontier, before allocating scratch. */
@@ -3024,8 +3409,11 @@ static int pending_ready(
     return 0;
   }
   const GRX_Inst * inst = grx_program_at(bt->program, next->pc);
+  if (frontier && !demand && next->cohort_deferred)
+    return 0;
   if (!(inst->policy & GRX_POLICY_LOOK_FRONTIER)) {
-    return !frontier && next->state != 1;
+    return (!frontier || (demand && next->cohort_deferred)) &&
+        next->state != 1;
   }
   size_t value = next->state;
   if (demand && !next->evaluated && inst->mode == GRX_LOOK_AHEAD_POSITIVE &&
@@ -3094,7 +3482,7 @@ static int has_ahead_result(Backtrack * bt, const PendingLook * pending) {
  */
 static int check_pending_owned(
     Backtrack * bt, int frontier, uint32_t demand, size_t owner_floor) {
-  if (frontier && !bt->frontier_count) {
+  if (frontier && !bt->frontier_count && !(demand && bt->cohorts)) {
     return 1;
   }
   int ready = 0;
@@ -3156,10 +3544,12 @@ static int check_pending_owned(
       }
     }
     uint32_t after = 0;
+    bt->cohort_activation = next->sequence;
+    bt->cohort_scope = next->cohort_branch;
     if (!evaluate_look(bt, next->pc, next->position, &after,
             combining || next->repeat_later, next->base, 1,
             has_ahead_result(bt, next->previous), next->owner, next->entry,
-            next->repeat_context)) {
+            next->repeat_context, next)) {
       capture_free(bt, continuation, bt->slot_count);
       return 0;
     }
@@ -3254,6 +3644,43 @@ static const size_t * atomic_inherited_context(
   return owner != GRX_NPOS && owner <= position
       ? bt->atomic_history + 5 * bt->captures
       : NULL;
+}
+
+/** Incoming closed spans exist when a BODY is invoked, even if it refuses. */
+static int atomic_publish_input(Backtrack * bt, size_t position) {
+  if (!bt->atomic_base ||
+      !(bt->program->flags & GRX_PROGRAM_CAPTURE_COHORTS) || bt->run_depth != 1 ||
+      bt->discovery_depth || bt->request->scalar_query)
+    return 1;
+  if (!bt->atomic_history) {
+    bt->atomic_history = capture_alloc(bt, 7 * bt->captures);
+    if (!bt->atomic_history)
+      return 0;
+    for (size_t i = 0; i < 7 * bt->captures; i++)
+      bt->atomic_history[i] = GRX_NPOS;
+  }
+  for (size_t group = 2; group + 1 < bt->captures; group += 2) {
+    if (!pending_step(bt))
+      return 0;
+    int closed = bt->slots[bt->capture_open_slots + group] != 1 &&
+        bt->slots[group] != GRX_NPOS && bt->slots[group + 1] != GRX_NPOS;
+    int owned = bt->slots[bt->capture_branch_slots + group] == bt->branch_epoch;
+    if (!closed || !owned)
+      continue;
+    if (bt->atomic_history[4 * bt->captures + group] != 1) {
+      bt->atomic_history[4 * bt->captures + group] = 1;
+      bt->atomic_history[bt->captures + group] = bt->slots[group];
+      bt->atomic_history[bt->captures + group + 1] = bt->slots[group + 1];
+    }
+    size_t * owner = bt->atomic_history + 6 * bt->captures + group;
+    if (*owner == GRX_NPOS || position < *owner) {
+      *owner = position;
+      bt->atomic_history[5 * bt->captures + group] = bt->slots[group];
+      bt->atomic_history[5 * bt->captures + group + 1] = bt->slots[group + 1];
+    }
+    cohort_publish(bt, group, position);
+  }
+  return 1;
 }
 
 /** Effective BODY input before entry materializes its undoable capture overlay.
@@ -3391,6 +3818,10 @@ static int atomic_incoming(Backtrack * bt, size_t position) {
   return 1;
 }
 
+static size_t atomic_successor_input_epoch(Backtrack * bt, uint32_t pc);
+
+static int atomic_successor_input_is_absent(Backtrack * bt, uint32_t pc);
+
 static int atomic_arrival(Backtrack * bt, size_t start, size_t end) {
   AtomicArrival ** at = &bt->discovered_arrivals;
   while (*at && (*at)->start < start) {
@@ -3432,7 +3863,8 @@ static int atomic_arrival(Backtrack * bt, size_t start, size_t end) {
       .end = end,
       .priority = bt->discovery_priority - 1,
       .origin = bt->attempt_start,
-      .input_owner = input_owner};
+      .input_owner = input_owner,
+      .successor_known_absent = atomic_successor_input_is_absent(bt, bt->discovery_atomic)};
   memcpy(arrival->context, context, bt->captures * sizeof(size_t));
   *at = arrival;
   return 1;
@@ -3456,7 +3888,6 @@ static int atomic_discover(Backtrack * bt, AtomicSchedule * schedule,
   probe->stack = NULL;
   probe->depth = 0;
   probe->capacity = 0;
-  probe->stack_is_scratch = 1;
   probe->stack_depth_base = bt->stack_depth_base + bt->depth;
   probe->discovery_schedules = bt->atomic_schedules;
   probe->atomic_schedules = NULL;
@@ -3478,6 +3909,7 @@ static int atomic_discover(Backtrack * bt, AtomicSchedule * schedule,
   probe->discovery_prefix_only = future;
   probe->discovery_bound = bound;
   probe->visited = NULL;
+  probe->visited_bytes = 0;
   probe->memo_after = 0;
   probe->pending = NULL;
   probe->ready = NULL;
@@ -3491,6 +3923,7 @@ static int atomic_discover(Backtrack * bt, AtomicSchedule * schedule,
   probe->call_slots = NULL;
   probe->call_depth = 0;
   probe->call_capacity = 0;
+  probe->call_return_bytes = probe->call_group_bytes = probe->call_slots_bytes = 0;
   probe->marks = NULL;
   probe->mark_depth = 0;
   probe->mark_capacity = 0;
@@ -3542,18 +3975,13 @@ static int atomic_discover(Backtrack * bt, AtomicSchedule * schedule,
   // programs, but are independently owned if an instruction grows them.
   capture_free(
       probe, probe->stack, probe->capacity * sizeof(Frame) / sizeof(size_t));
-  gcu_allocator_free(bt->allocator, probe->call_return);
-  gcu_allocator_free(bt->allocator, probe->call_group);
-  gcu_allocator_free(bt->allocator, probe->call_slots);
-  gcu_allocator_free(bt->allocator, probe->marks);
-  gcu_allocator_free(bt->allocator, probe->visited);
+  scratch_arrays_free(probe);
   capture_free(probe, probe->slots, bt->slot_count);
   capture_free(probe, probe->atomic_history, 7 * bt->captures);
   bt->discovery_priority = probe->discovery_priority;
   bt->steps = probe->steps;
   bt->failure = probe->failure;
   bt->failure_diag = probe->failure_diag;
-  bt->scratch_bytes = probe->scratch_bytes;
   if (!future) {
     schedule->arrivals = probe->discovered_arrivals;
     schedule->merged = probe->discovery_multiple;
@@ -3720,7 +4148,6 @@ static int scalar_scope_discover(
   probe->stack = NULL;
   probe->depth = 0;
   probe->capacity = 0;
-  probe->stack_is_scratch = 1;
   probe->stack_depth_base = bt->stack_depth_base + bt->depth;
   probe->slots = NULL;
   probe->atomic_history = NULL;
@@ -3732,6 +4159,7 @@ static int scalar_scope_discover(
   probe->discovered_arrivals = NULL;
   probe->discovered_incoming = NULL;
   probe->visited = NULL;
+  probe->visited_bytes = 0;
   probe->memo_after = 0;
   probe->pending = NULL;
   probe->ready = NULL;
@@ -3743,6 +4171,7 @@ static int scalar_scope_discover(
   probe->call_slots = NULL;
   probe->call_depth = 0;
   probe->call_capacity = 0;
+  probe->call_return_bytes = probe->call_group_bytes = probe->call_slots_bytes = 0;
   probe->marks = NULL;
   probe->mark_depth = 0;
   probe->mark_capacity = 0;
@@ -3798,9 +4227,9 @@ static int scalar_scope_discover(
         memcpy(copy->base, old->base, bt->atomic_base * sizeof(size_t));
     }
     if (old->entry) {
-      copy->entry = capture_alloc(probe, bt->captures);
+      copy->entry = capture_alloc(probe, 2 * bt->captures);
       if (copy->entry)
-        memcpy(copy->entry, old->entry, bt->captures * sizeof(size_t));
+        memcpy(copy->entry, old->entry, 2 * bt->captures * sizeof(size_t));
     }
     if (old->result) {
       copy->result = capture_alloc(probe, bt->captures);
@@ -3873,11 +4302,7 @@ static int scalar_scope_discover(
   capture_free(probe, entry, bt->slot_count);
   capture_free(probe, probe->slots, bt->slot_count);
   capture_free(probe, probe->atomic_history, 7 * bt->captures);
-  gcu_allocator_free(bt->allocator, probe->call_return);
-  gcu_allocator_free(bt->allocator, probe->call_group);
-  gcu_allocator_free(bt->allocator, probe->call_slots);
-  gcu_allocator_free(bt->allocator, probe->marks);
-  gcu_allocator_free(bt->allocator, probe->visited);
+  scratch_arrays_free(probe);
   ScalarPriority * priority = priority_result;
   if (priority) {
     if (probe->failure == GRX_OK && *found) {
@@ -3891,7 +4316,6 @@ static int scalar_scope_discover(
   bt->steps = probe->steps;
   bt->failure = probe->failure;
   bt->failure_diag = probe->failure_diag;
-  bt->scratch_bytes = probe->scratch_bytes;
   capture_free(bt, probe, words);
   return bt->failure == GRX_OK;
 }
@@ -4118,6 +4542,9 @@ static int scalar_scope_enter(Backtrack * bt, uint32_t pc, size_t position,
  * a competing entry at that position. The ordinary pass retains path priority
  * among the remaining entries, including all continuation backtracking.
  */
+
+static size_t atomic_successor_input_epoch(Backtrack * bt, uint32_t pc);
+
 static int atomic_entry_allowed(Backtrack * bt, uint32_t pc, size_t position) {
   AtomicSchedule * schedule = bt->atomic_schedules;
   while (schedule && schedule->pc != pc) {
@@ -4217,7 +4644,9 @@ static int atomic_entry_allowed(Backtrack * bt, uint32_t pc, size_t position) {
     if (arrival->start == position && arrival->input_owner == input_owner &&
         atomic_context_equal(bt, pc, arrival->context, NULL)) {
       bt->atomic_entry_overlap = arrival->prior_end > position;
-      return !arrival->displaced &&
+      size_t epoch = atomic_successor_input_epoch(bt, pc);
+      int changed = epoch && arrival->successor_known_absent;
+      return (!arrival->displaced || changed) &&
           (arrival->end != GRX_NPOS || arrival->origin == bt->attempt_start);
     }
   }
@@ -4226,12 +4655,29 @@ static int atomic_entry_allowed(Backtrack * bt, uint32_t pc, size_t position) {
 
 static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
     int toplevel, size_t * out_end) {
+  if (bt->candidate_body == pc && !toplevel && !bt->request->scalar_query &&
+      !bt->discovery_depth)
+    return comparison_body_candidates(bt, pc, position, floor, toplevel, out_end);
+  if (!bt->cohorts && toplevel && bt->run_depth == 1 &&
+      !bt->request->scalar_query && !bt->discovery_depth &&
+      ((bt->program->flags &
+          (GRX_PROGRAM_OPEN_REFERENCES | GRX_PROGRAM_INCOMING_LOOK_COHORTS |
+              GRX_PROGRAM_EMPTY_COMPARISONS)) || comparison_frontiers_eligible(bt)) &&
+      (bt->program->flags & GRX_PROGRAM_LOOK_CONTEXT))
+    return cohort_run(bt, pc, position, floor, toplevel, out_end);
+  return run_path(bt, pc, position, floor, toplevel, out_end);
+}
+
+static int run_path(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
+    int toplevel, size_t * out_end) {
   const GRX_Limits * limits = bt->request->limits;
   // The call depth this run started at. `(*ACCEPT)` ends the innermost thing
   // it is inside, and a sub-match's own body is one of those: a call entered
   // *before* this run began belongs to the caller, so a verb here must not
   // return from it.
   size_t call_floor = bt->call_depth;
+  const uint32_t resumed_pc = pc;
+  const int resumed_phase = bt->stage_kind;
 
   for (;;) {
     bt->steps++;
@@ -4338,12 +4784,33 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
         reported_position = bt->slots[index];
     }
 
+    int staged = cohort_scope_active(bt) &&
+        !bt->atomic_context && !bt->discovery_depth && !bt->request->scalar_query;
+    int phase = pc == resumed_pc ? resumed_phase : 0;
+    int atom = inst->op == GRX_OP_CHAR || inst->op == GRX_OP_CLASS ||
+        inst->op == GRX_OP_ANY || inst->op == GRX_OP_ANY_NL;
+    int posted_predicate = inst->op == GRX_OP_LOOK && cohort_ordered(bt) &&
+        (inst->policy & (GRX_POLICY_LOOK_DELAYED | GRX_POLICY_LOOK_FRONTIER));
+    int inline_body = inst->op == GRX_OP_LOOK && cohort_ordered(bt) &&
+        !posted_predicate && comparison_owned_predicate(bt, pc);
+    int evaluation = (inst->op == GRX_OP_LOOK && !posted_predicate && !inline_body) ||
+        inst->op == GRX_OP_MATCH || inst->op == GRX_OP_BACKREF ||
+        inst->op == GRX_OP_ATOMIC_BEGIN;
+    if (staged && ((atom && phase != 3 && phase != 4) ||
+            (evaluation && phase != 4))) {
+      bt->stage_pc = pc;
+      bt->stage_position = position;
+      bt->stage_kind = atom ? 3 : 4;
+      return 2;
+    }
+
+    size_t completion_before = bt->pending_completions;
     switch ((GRX_Opcode)inst->op) {
       case GRX_OP_CHAR:
       case GRX_OP_CLASS:
       case GRX_OP_ANY:
       case GRX_OP_ANY_NL: {
-        if (!check_pending(bt, 1, 0)) {
+        if (!staged && !check_pending(bt, 1, 0)) {
           if (bt->failure != GRX_OK || bt->verb_stop != VERB_NONE) {
             return 0;
           }
@@ -4396,11 +4863,35 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
             ok = 1;
             break;
         }
+        if (staged && ok && phase == 3) {
+          bt->stage_pc = pc;
+          bt->stage_position = position;
+          bt->stage_kind = 4;
+          return 2;
+        }
+        if (staged && ok && !check_pending(bt, 1, 0)) {
+          if (bt->failure != GRX_OK || bt->verb_stop != VERB_NONE)
+            return 0;
+          ok = 0;
+        }
+        if (staged && ok && cohort_ordered(bt) &&
+            completion_before != bt->pending_completions) {
+          bt->stage_pc = pc;
+          bt->stage_position = position;
+          bt->stage_kind = 5;
+          return 2;
+        }
         consumed = ok;
         break;
       }
 
       case GRX_OP_SPLIT:
+        if (staged) {
+          bt->stage_pc = pc;
+          bt->stage_position = position;
+          bt->stage_kind = 2;
+          return 2;
+        }
         if (!advance_generation(bt, &bt->branch_epoch)) {
           return 0;
         }
@@ -4417,10 +4908,26 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
         continue;
 
       case GRX_OP_JMP:
+        if (staged && cohort_ordered(bt) && inst->x == pc + 1) {
+          int owned_pending = 0;
+          for (const PendingLook * pending = bt->ready; pending;
+              pending = pending->active_previous) {
+            if (!pending_step(bt)) return 0;
+            if (comparison_owned_predicate(bt, pending->pc)) owned_pending = 1;
+          }
+          if (owned_pending && !check_pending(bt, 1, 0)) {
+            if (bt->failure != GRX_OK) return 0;
+            ok = 0;
+            break;
+          }
+        }
         pc = inst->x;
         continue;
 
       case GRX_OP_SAVE:
+        if (staged && inst->x >= 3 && (inst->x & 1) &&
+            !cohort_close_frontier(bt, pc, position))
+          return 0;
         // The program's closing save of group 0 carries
         // GRX_INST_SAVE_IF_UNSET when a `\ze` is somewhere in the pattern,
         // and then defers to whatever that marker left in the slot. Nothing
@@ -4443,6 +4950,12 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
           }
           bt->slots[bt->forward_result_slots + inst->x] = GRX_NPOS;
           bt->slots[bt->forward_result_slots + inst->x + 1] = GRX_NPOS;
+        }
+        if (bt->capture_position_slots && inst->x >= 2 &&
+            inst->x < bt->captures && !(inst->x & 1)) {
+          if (!save_slot(bt, bt->capture_position_slots + inst->x))
+            return 0;
+          bt->slots[bt->capture_position_slots + inst->x] = position;
         }
         if (bt->capture_open_slots && inst->x >= 2 && inst->x < bt->captures) {
           size_t group = inst->x & ~(size_t)1;
@@ -4474,7 +4987,9 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
             bt->keep_last[inst->x] = bt->slots[inst->x];
           }
         }
-        if (!shadow_close(bt, inst->x, reverse)) {
+        cohort_save_report(bt, inst->x);
+        if (!shadow_close(bt, inst->x, reverse) ||
+            !cohort_publish_closure(bt, inst->x)) {
           return 0;
         }
         pc++;
@@ -4530,7 +5045,7 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
         }
         const size_t * metadata =
             GRX_ARENA_AT(const size_t, &bt->program->look_spans, inst->x);
-        if (bt->registers < 5 || metadata[2] > bt->registers - 5) {
+        if (bt->registers < 7 || metadata[2] > bt->registers - 7) {
           bt->failure = GRX_ERR_INTERNAL;
           return 0;
         }
@@ -4539,6 +5054,14 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
         // search-origin local; an unbounded loop instead scopes that cache
         // to this invocation. Progress and BODY starts have ordinary undo.
         if (inst->op == GRX_OP_COUNT_INIT) {
+          // Lexical history survives reentry; undo restores the invocation
+          // whose BODY is being retried, including at the same input offset.
+          size_t activation = bt->slots[state + 5] == GRX_NPOS
+              ? 0 : bt->slots[state + 5];
+          if (!advance_generation(bt, &activation) || !save_slot(bt, state + 6))
+            return 0;
+          bt->slots[state + 5] = activation;
+          bt->slots[state + 6] = activation;
           bt->slots[state] = 0;
           bt->slots[state + 1] = 0;
           if (metadata[1] == GRX_REPEAT_INF) {
@@ -4559,6 +5082,15 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
         if (inst->op == GRX_OP_COUNT_BACK) {
           const GRX_Inst * step = grx_program_at(bt->program, inst->y);
           if (bt->slots[state + 4] == position) {
+            // An initially empty complex BODY gets one trailing attempt
+            // when its bounds permit it. Successful assertion captures from
+            // that attempt can remain visible even when the loop rejects it.
+            // Phase 2 records this attempt independently of consuming progress.
+            if (!bt->slots[state + 3] && metadata[0] <= 1 && metadata[1] > 1) {
+              bt->slots[state + 3] = 2;
+              pc = inst->y;
+              continue;
+            }
             if ((metadata[0] == 0 && bt->slots[state + 3]) ||
                 (metadata[0] > 1 && !bt->slots[state + 3])) {
               ok = 0;
@@ -4568,7 +5100,9 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
             continue;
           }
           bt->slots[state + 3] = 1;
-          if (bt->slots[state + 2] == position) {
+          if (bt->slots[state + 2] == position &&
+              (bt->slots[state] != 1 || bt->slots[state + 1] ||
+                  bt->slots[state + 6] != 1)) {
             ok = 0;
             break;
           }
@@ -4720,12 +5254,19 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
       }
 
       case GRX_OP_BACKREF:
-        if (!check_pending(bt, 1, inst->x)) {
+        if (!cohort_predicates_before_reference(bt) || !check_pending(bt, 1, inst->x)) {
           if (bt->failure != GRX_OK || bt->verb_stop != VERB_NONE) {
             return 0;
           }
           ok = 0;
           break;
+        }
+        if (staged && cohort_ordered(bt) &&
+            completion_before != bt->pending_completions) {
+          bt->stage_pc = pc;
+          bt->stage_position = position;
+          bt->stage_kind = 5;
+          return 2;
         }
         // A lookbehind runs its body backwards, and this instruction used to
         // ignore that: it compared forward from `position` and advanced
@@ -4734,6 +5275,7 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
         // against "aaa" reported group 2 as 3-1 - and lookbehinds that matched
         // when they must not. Found by test262's named-group and backreference
         // cases.
+        if (!cohort_refresh_local_reference(bt, inst)) return 0;
         ok = backref_matches(bt, inst, position, reverse, &width);
         if (ok) {
           position = reverse ? position - width : position + width;
@@ -4742,6 +5284,12 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
         }
         pc++;
         if (ok) {
+          if (staged) {
+            bt->stage_pc = pc;
+            bt->stage_position = position;
+            bt->stage_kind = 1;
+            return 2;
+          }
           continue;
         }
         break;
@@ -4808,6 +5356,8 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
           if (bt->failure != GRX_OK) {
             return 0;
           }
+          if (!atomic_publish_input(bt, position))
+            return 0;
           if (!allowed && !bt->request->scalar_query &&
               atomic_owns_frontier(bt, inst)) {
             ok = 0;
@@ -4860,6 +5410,7 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
             context->caller[2 * bt->captures + i] = bt->slots[i];
             size_t group = i & ~(size_t)1;
             int current = i < 2 ||
+                bt->slots[bt->capture_open_slots + group] == 1 ||
                 bt->slots[bt->capture_branch_slots + group] == bt->branch_epoch;
             context->caller[i] = context->reporting && !current
                 ? bt->slots[bt->atomic_result_slots + i]
@@ -4990,6 +5541,7 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
             }
             size_t group = i & ~(size_t)1;
             int current = i < 2 ||
+                bt->slots[bt->capture_open_slots + group] == 1 ||
                 bt->slots[bt->capture_branch_slots + group] ==
                     bt->branch_epoch ||
                 bt->slots[bt->atomic_base_present] != GRX_NPOS;
@@ -5069,6 +5621,9 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
             bt->stack[barrier].pc == bt->discovery_atomic;
         size_t arrival_start =
             barrier < bt->depth ? bt->stack[barrier].position : position;
+        if (!discovering && barrier < bt->depth &&
+            !cohort_capture_atomic_shadow(bt, bt->stack[barrier].pc, position))
+          return 0;
         int reads = barrier < bt->depth &&
             (grx_program_at(bt->program, bt->stack[barrier].pc)->policy &
                 GRX_POLICY_ATOMIC_READS_CAPTURES);
@@ -5240,6 +5795,9 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
           }
           if (marker_owner) {
             bt->atomic_history[bt->captures] = 1;
+            if (!atomic_report_end(bt, bt->slots[1] != GRX_NPOS
+                    ? bt->slots[1] : bt->atomic_history[bt->captures + 1]))
+              return 0;
           }
           for (size_t group = 2; group + 1 < bt->captures; group += 2) {
             if (bt->slots[group] != GRX_NPOS &&
@@ -5283,6 +5841,8 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
                 (context->caller[3 * bt->captures + group] &
                     (2 | ATOMIC_CAPTURE_BEFORE_START |
                         ATOMIC_CAPTURE_MARKED_REPORT)) | body_owned;
+            if (body_owned && !atomic_report_write(bt, group))
+              return 0;
             if (body_owned && bt->atomic_history) {
               bt->atomic_history[4 * bt->captures + group + 1] = 1;
             }
@@ -5319,6 +5879,9 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
             }
           }
         }
+        int comparison_body = barrier < bt->depth &&
+            (grx_program_at(bt->program, bt->stack[barrier].pc)->policy &
+                GRX_POLICY_ATOMIC_COMPARISONS);
         for (read = barrier + 1, write = barrier; read < bt->depth; read++) {
           // Both resume kinds. FRAME_ALTERNATIVE is a resume point that
           // `(*THEN)` can name, and for one revision this line kept them -
@@ -5458,7 +6021,16 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
             position += width;
           }
         }
+        cohort_return_report(bt);
         pc++;
+        if (comparison_body && bt->cohorts && cohort_ordered(bt) &&
+            bt->run_depth == 1 && !bt->atomic_context && !bt->discovery_depth &&
+            !bt->request->scalar_query) {
+          bt->stage_pc = pc;
+          bt->stage_position = position;
+          bt->stage_kind = 1;
+          return 2;
+        }
         continue;
       }
 
@@ -5521,8 +6093,10 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
           }
           bt->slots[bt->behind_owner_slot] = owner == GRX_NPOS ? 0 : owner + 1;
         }
-        if (inst->policy &
-            (GRX_POLICY_LOOK_DELAYED | GRX_POLICY_LOOK_FRONTIER)) {
+        int cohort_deferred = cohort_local_behind(bt, pc);
+        if ((inst->policy &
+                (GRX_POLICY_LOOK_DELAYED | GRX_POLICY_LOOK_FRONTIER)) ||
+            cohort_deferred) {
           if (!advance_generation(bt, &bt->pending_sequence)) {
             return 0;
           }
@@ -5533,6 +6107,8 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
           }
           *deferred = (PendingLook){
               .previous = bt->pending,
+              .cohort_branch = cohort_branch_at(bt),
+              .cohort_deferred = cohort_deferred,
               .sequence = bt->pending_sequence - 1,
               .state = GRX_NPOS,
               .repeat_later = repeat_later,
@@ -5540,18 +6116,31 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
               .repeat_activation = repeat_activation,
               .pc = pc,
               .position = position,
+              .closed_execution = bt->atomic_shadow_pc == pc ? bt->atomic_shadow_execution : 0,
               .owner = bt->capture_owner_depth
                   ? bt->active_capture_owner
                   : (bt->behind_owner_slot ? bt->slots[bt->behind_owner_slot]
                                            : GRX_NPOS),
           };
+          bt->atomic_shadow_pc = 0;
+          bt->atomic_shadow_execution = 0;
+          if (cohort_deferred && bt->cohorts &&
+              !bind_pending_local_input(bt, pc, position, deferred)) {
+            pending_destroy(bt, deferred);
+            return 0;
+          }
           if (bt->forwarded_slots) {
-            deferred->entry = capture_alloc(bt, bt->captures);
+            deferred->entry = capture_alloc(bt, 2 * bt->captures);
             if (!deferred->entry) {
               pending_destroy(bt, deferred);
               return 0;
             }
             memcpy(deferred->entry, bt->slots, bt->captures * sizeof(size_t));
+            for (size_t group = 0; group + 1 < bt->captures; group += 2) {
+              deferred->entry[bt->captures + group] = bt->capture_open_slots
+                  ? bt->slots[bt->capture_open_slots + group + 1] : GRX_NPOS;
+              deferred->entry[bt->captures + group + 1] = GRX_NPOS;
+            }
           }
           if (bt->atomic_base &&
               bt->slots[bt->atomic_base_present] != GRX_NPOS) {
@@ -5591,9 +6180,13 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
           pc = inst->y;
           continue;
         }
+        bt->cohort_activation = bt->pending_sequence;
+        bt->cohort_scope = cohort_branch_at(bt);
+        if (staged && !advance_generation(bt, &bt->pending_sequence))
+          return 0;
         if (!evaluate_look(bt, pc, position, &pc, repeat_later, NULL, 0,
                 has_ahead_result(bt, bt->pending), GRX_NPOS, NULL,
-                repeat_context)) {
+                repeat_context, NULL)) {
           if (bt->failure != GRX_OK || bt->verb_stop != VERB_NONE) {
             return 0;
           }
@@ -5608,6 +6201,12 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
                     has_ahead_result(bt, bt->pending))) &&
             !restore_ahead_results(bt, bt->pending)) {
           return 0;
+        }
+        if (staged && cohort_ordered(bt) && !inline_body) {
+          bt->stage_pc = pc;
+          bt->stage_position = position;
+          bt->stage_kind = 1;
+          return 2;
         }
         continue;
       }
@@ -5715,6 +6314,13 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
           ok = 0;
           break;
         }
+        if (staged && cohort_ordered(bt) &&
+            completion_before != bt->pending_completions) {
+          bt->stage_pc = pc;
+          bt->stage_position = position;
+          bt->stage_kind = 5;
+          return 2;
+        }
         if (bt->request->scalar_query &&
             bt->run_depth == bt->request->scalar_depth) {
           if (bt->request->scalar_cutoff &&
@@ -5820,6 +6426,8 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
           pc++;
           continue;
         }
+        if (!atomic_explicit_end(bt))
+          return 0;
         // An explicit end commits the ordinary nullable caller closure.
         // An abandoned alternative and a complete numbered result retain
         // their own reporting ownership instead of reviving that closure.
@@ -6134,6 +6742,12 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
         position = reverse ? position - width : position + width;
       }
       pc++;
+      if (consumed && staged) {
+        bt->stage_pc = pc;
+        bt->stage_position = position;
+        bt->stage_kind = 1;
+        return 2;
+      }
       continue;
     }
 
@@ -6141,6 +6755,1807 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
       return 0;
     }
   }
+}
+
+/* A staged invocation owns all of its competing interpreter continuations. */
+typedef struct CohortBranch {
+  struct CohortBranch * next;
+  struct CohortBranch * parent;
+} CohortBranch;
+
+struct ComparisonTag;
+
+typedef struct Cohort {
+  struct Cohort * next;
+  struct Cohort * all_next;
+  struct Cohort * all_previous;
+  int listed;
+  Backtrack state;
+  size_t * report;
+  size_t * frontier_input;
+  size_t * history;
+  size_t * generations;
+  size_t * owners;
+  CohortBranch * branch;
+  size_t words;
+  size_t priority_count;
+  int accepted;
+  int epsilon_key;
+  size_t end;
+  struct ComparisonTag * terminal_tag;
+  uint32_t frontier_pc;
+  size_t frontier_position;
+  unsigned char priority[];
+} Cohort;
+
+typedef struct CohortInput {
+  struct CohortInput * next;
+  uint32_t pc;
+  size_t position;
+  size_t activation;
+  size_t group;
+  int present;
+  int live_provider;
+  size_t provider_origin;
+  size_t context[];
+} CohortInput;
+
+typedef struct CohortClosure {
+  struct CohortClosure * next;
+  uint32_t pc;
+  size_t position, activation, group, generation, from, to, origin;
+} CohortClosure;
+
+typedef struct ComparisonTag {
+  struct ComparisonTag * next;
+  struct ComparisonTag ** previous;
+  Cohort * representative;
+  size_t frontier;
+} ComparisonTag;
+
+typedef struct AtomicSuccessorProof {
+  struct AtomicSuccessorProof * next;
+  uint32_t pc;
+  uint32_t look_pc;
+  size_t group; /* Zero means structurally rejected. */
+} AtomicSuccessorProof;
+
+typedef struct CohortRun {
+  Backtrack * owner;
+  CohortInput * inputs;
+  CohortClosure * closures;
+  CohortBranch * branches;
+  CohortBranch ** published;
+  size_t * published_sequence;
+  Cohort * live;
+  Cohort * living;
+  Cohort * epsilon_seen;
+  int current_epsilon;
+  size_t generation;
+  size_t body_sequence;
+  int ordered_frontiers;
+  size_t scope_depth;
+  struct CohortRun * input_owner;
+  int retag_comparisons;
+  ComparisonTag ** terminal_tags;
+  size_t * read_masks;
+  size_t * predicate_registers;
+  AtomicSuccessorProof * successor_proofs;
+} CohortRun;
+
+/** Prove absence in the isolated root-entry prefix, not the live caller.
+ * Earlier physical copies or feedback can establish this definition before
+ * the atomic; those cases keep their existing reservation identity.
+ */
+static size_t atomic_successor_private_group(Backtrack * bt, uint32_t pc, uint32_t * out_look) {
+  uint32_t next = grx_program_at(bt->program, pc)->x + 1;
+  while (next < bt->program->insts.count) {
+    if (!pending_step(bt)) return 0;
+    const GRX_Inst * part = grx_program_at(bt->program, next);
+    if (part->op == GRX_OP_JMP && part->x > next) { next = part->x; continue; }
+    break;
+  }
+  if (next >= bt->program->insts.count) return 0;
+  const GRX_Inst * look = grx_program_at(bt->program, next);
+  if (look->op != GRX_OP_LOOK || look->mode != GRX_LOOK_BEHIND_POSITIVE) return 0;
+  size_t group = 0;
+  for (uint32_t at = next + 1; at < look->y; at++) {
+    if (!pending_step(bt)) return 0;
+    const GRX_Inst * part = grx_program_at(bt->program, at);
+    if (part->op == GRX_OP_LOOK || part->op == GRX_OP_ATOMIC_BEGIN || part->op == GRX_OP_CALL) return 0;
+    if (part->op == GRX_OP_BACKREF && look_owns_reference(bt, next, at)) {
+      size_t candidate = 2 * (size_t)part->x;
+      if (group && group != candidate) return 0;
+      group = candidate;
+    }
+  }
+  if (!group || group + 1 >= bt->captures) return 0;
+  for (uint32_t at=0;at<bt->program->insts.count;at++) {
+    if (!pending_step(bt)) return 0;
+    const GRX_Inst * part=grx_program_at(bt->program,at);
+    if (at < next && part->op==GRX_OP_SAVE && (part->x==group || part->x==group+1)) return 0;
+    if (part->op==GRX_OP_CALL || part->op==GRX_OP_RET || part->op==GRX_OP_COND) return 0;
+    if (at < pc) continue;
+    if ((part->op==GRX_OP_JMP || part->op==GRX_OP_SPLIT) && part->x<=pc) return 0;
+    if ((part->op==GRX_OP_SPLIT || part->op==GRX_OP_COUNT_STEP || part->op==GRX_OP_COUNT_BACK ||
+         part->op==GRX_OP_PROGRESS_CHECK) && part->y<=pc) return 0;
+  }
+  if (bt->failure==GRX_OK) { *out_look=next; return group; }
+  return 0;
+}
+
+static AtomicSuccessorProof * atomic_successor_proof(Backtrack * bt, uint32_t pc) {
+  if (!bt->cohorts) return NULL;
+  CohortRun * owner=bt->cohorts;
+  while (owner->input_owner) {
+    if (!pending_step(bt)) return 0;
+    owner=owner->input_owner;
+  }
+  AtomicSuccessorProof * proof=owner->successor_proofs;
+  for (;proof;proof=proof->next) {
+    if (!pending_step(bt)) return 0;
+    if (proof->pc==pc) break;
+  }
+  if (!proof) {
+    uint32_t look_pc=0;
+    size_t group=atomic_successor_private_group(bt,pc,&look_pc);
+    if (bt->failure!=GRX_OK) return 0;
+    proof=capture_alloc(bt,(sizeof(*proof)+sizeof(size_t)-1)/sizeof(size_t));
+    if (!proof) return 0;
+    *proof=(AtomicSuccessorProof){.next=owner->successor_proofs,.pc=pc,.look_pc=look_pc,.group=group};
+    owner->successor_proofs=proof;
+  }
+  return proof;
+}
+
+static int atomic_successor_input_is_absent(Backtrack * bt, uint32_t pc) {
+  // Each root search origin starts from the immutable run-entry snapshot.
+  // Its isolated prefix proof does not depend on the requested search start.
+  if (!bt->cohorts || bt->body_pc != 0 ||
+      bt->body_position != bt->attempt_start || !bt->body_entry) return 0;
+  AtomicSuccessorProof * proof=atomic_successor_proof(bt,pc);
+  if (!proof) return 0;
+  size_t group=proof->group;
+  if (!group) return 0;
+  if (bt->body_entry[group] != GRX_NPOS || bt->body_entry[group + 1] != GRX_NPOS) return 0;
+  if (bt->body_history && (bt->body_history[5 * bt->captures + group] != GRX_NPOS ||
+      bt->body_history[5 * bt->captures + group + 1] != GRX_NPOS)) return 0;
+  return bt->failure==GRX_OK;
+}
+
+static size_t atomic_successor_input_epoch(Backtrack * bt, uint32_t pc) {
+  if (!bt->cohorts || bt->run_depth != 1 || bt->discovery_depth || bt->request->scalar_query) return 0;
+  uint32_t next = grx_program_at(bt->program, pc)->x + 1;
+  while (next < bt->program->insts.count) {
+    if (!pending_step(bt)) return 0;
+    const GRX_Inst * part = grx_program_at(bt->program, next);
+    if (part->op == GRX_OP_JMP && part->x > next) { next = part->x; continue; }
+    break;
+  }
+  if (next >= bt->program->insts.count) return 0;
+  const GRX_Inst * look = grx_program_at(bt->program, next);
+  if (look->op != GRX_OP_LOOK || look->mode != GRX_LOOK_BEHIND_POSITIVE) return 0;
+  size_t group = 0;
+  for (uint32_t at = next + 1; at < look->y; at++) {
+    if (!pending_step(bt)) return 0;
+    const GRX_Inst * part = grx_program_at(bt->program, at);
+    if (part->op == GRX_OP_LOOK || part->op == GRX_OP_ATOMIC_BEGIN || part->op == GRX_OP_CALL) return 0;
+    if (part->op == GRX_OP_BACKREF && look_owns_reference(bt, next, at)) {
+      size_t candidate = 2 * (size_t)part->x;
+      if (group && group != candidate) return 0;
+      group = candidate;
+    }
+  }
+  if (!group || group + 1 >= bt->captures) return 0;
+  size_t origin = GRX_NPOS, generation = 0;
+  for (const Cohort * item = bt->cohorts->ordered_frontiers ? bt->cohorts->living : bt->cohorts->live;
+       item; item = bt->cohorts->ordered_frontiers ? item->all_next : item->next) {
+    if (!pending_step(bt)) return 0;
+    uint32_t producer = (uint32_t)item->owners[group];
+    if (producer >= bt->program->insts.count ||
+        grx_program_scope(bt->program, producer + 1) != grx_program_scope(bt->program, next + 1)) continue;
+    if (item->generations[group] && (item->state.attempt_start < origin ||
+        (item->state.attempt_start == origin && item->generations[group] > generation))) {
+      origin = item->state.attempt_start; generation = item->generations[group];
+    }
+  }
+  for (const CohortClosure * item = bt->cohorts->closures; item; item = item->next) {
+    if (!pending_step(bt)) return 0;
+    if (item->group == group && grx_program_scope(bt->program, item->pc + 1) == grx_program_scope(bt->program, next + 1) &&
+        (item->origin < origin || (item->origin == origin && item->generation > generation))) {
+      origin = item->origin; generation = item->generation;
+    }
+  }
+  return generation;
+}
+
+/** Snapshot a real closed input at the actual atomic return, before its frame is compacted. */
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((noinline))
+#elif defined(_MSC_VER)
+__declspec(noinline)
+#endif
+static int cohort_capture_atomic_shadow(Backtrack * bt, uint32_t pc, size_t position) {
+  if (!bt->cohorts || bt->run_depth != 1 || bt->discovery_depth || bt->request->scalar_query) return 1;
+  bt->atomic_shadow_pc=0;
+  bt->atomic_shadow_execution=0;
+  AtomicSuccessorProof * proof=atomic_successor_proof(bt,pc);
+  if (bt->failure!=GRX_OK) return 0;
+  if (!proof || !proof->group) return 1;
+  size_t execution=cohort_body_execution(bt);
+  if (bt->failure!=GRX_OK) return 0;
+  const size_t * closed=cohort_input(bt,proof->group,proof->look_pc,position,execution);
+  if (bt->failure!=GRX_OK) return 0;
+  if (closed) { bt->atomic_shadow_pc=proof->look_pc; bt->atomic_shadow_execution=execution; }
+  return 1;
+}
+
+/** Closed bindings are immutable snapshots; do not refresh their H provider. */
+static const size_t * cohort_closed_input(Backtrack * bt, size_t group, uint32_t pc, size_t execution) {
+  if (!execution || !bt->cohorts) return NULL;
+  CohortRun * owner=bt->cohorts;
+  while (owner->input_owner) { if (!pending_step(bt)) return NULL; owner=owner->input_owner; }
+  for (const CohortInput * input=owner->inputs;input;input=input->next) {
+    if (!pending_step(bt)) return NULL;
+    if (input->pc==pc && input->group==group && input->activation==execution)
+      return input->present ? input->context : NULL;
+  }
+  return NULL;
+}
+
+static int atomic_report_write(Backtrack * bt, size_t group) {
+  if (!(bt->program->flags & GRX_PROGRAM_LOOK_CONTEXT) || bt->run_depth != 1 ||
+      bt->discovery_depth || bt->request->scalar_query)
+    return 1;
+  Backtrack * owner = bt->cohorts ? bt->cohorts->owner : bt;
+  if (!owner->atomic_reports) {
+    owner->atomic_reports = capture_alloc(bt, 2 * bt->captures);
+    if (!owner->atomic_reports)
+      return 0;
+    for (size_t i = 0; i < 2 * bt->captures; i++)
+      owner->atomic_reports[i] = GRX_NPOS;
+  }
+  bt->atomic_reports = owner->atomic_reports;
+  owner->atomic_reports[group] = bt->slots[group];
+  owner->atomic_reports[group + 1] = bt->slots[group + 1];
+  owner->atomic_reports[bt->captures + group] = 1;
+  return 1;
+}
+
+static int atomic_explicit_end(Backtrack * bt) {
+  if (!(bt->program->flags & GRX_PROGRAM_LOOK_CONTEXT) || !bt->capture_open_slots ||
+      bt->discovery_depth || bt->request->scalar_query)
+    return 1;
+  Backtrack * owner = bt->cohorts ? bt->cohorts->owner : bt;
+  if (!advance_generation(bt, &owner->report_sequence) ||
+      !save_slot(bt, bt->capture_open_slots + 1))
+    return 0;
+  bt->slots[bt->capture_open_slots + 1] = owner->report_sequence;
+  return 1;
+}
+
+static int atomic_report_end(Backtrack * bt, size_t position) {
+  if (!(bt->program->flags & GRX_PROGRAM_LOOK_CONTEXT) || bt->run_depth != 1 ||
+      bt->discovery_depth || bt->request->scalar_query)
+    return 1;
+  if (!atomic_report_write(bt, 0))
+    return 0;
+  Backtrack * owner = bt->cohorts ? bt->cohorts->owner : bt;
+  if (!advance_generation(bt, &owner->report_sequence))
+    return 0;
+  owner->atomic_reports[1] = position;
+  owner->atomic_reports[bt->captures + 1] = owner->report_sequence;
+  return 1;
+}
+
+static int atomic_report_project(Backtrack * bt, int local_references) {
+  if (!(bt->program->flags & GRX_PROGRAM_LOOK_CONTEXT) || bt->run_depth != 1 ||
+      bt->discovery_depth || bt->request->scalar_query)
+    return 1;
+  Backtrack * owner = bt->cohorts ? bt->cohorts->owner : bt;
+  const size_t * report = owner->atomic_reports;
+  if (!report)
+    return 1;
+  size_t explicit_end = bt->capture_open_slots
+      ? bt->slots[bt->capture_open_slots + 1] : GRX_NPOS;
+  if (!local_references && report[bt->captures] == 1 && report[1] != GRX_NPOS &&
+      (explicit_end == GRX_NPOS || explicit_end <= report[bt->captures + 1])) {
+    if (!save_slot(bt, 1))
+      return 0;
+    bt->slots[1] = report[1];
+    if (bt->pending_end_slot) {
+      if (!save_slot(bt, bt->pending_end_slot))
+        return 0;
+      bt->slots[bt->pending_end_slot] = GRX_NPOS;
+    }
+  }
+  for (size_t group = 2; group + 1 < bt->captures; group += 2) {
+    if (!pending_step(bt))
+      return 0;
+    if (bt->slots[group] != GRX_NPOS || report[bt->captures + group] != 1 ||
+        report[group] == GRX_NPOS || report[group + 1] == GRX_NPOS)
+      continue;
+    for (size_t i = group; i <= group + 1; i++) {
+      if (!save_slot(bt, i))
+        return 0;
+      bt->stack[bt->depth - 1].kind = FRAME_ASSERTION_CAPTURE;
+      bt->slots[i] = report[i];
+    }
+  }
+  return 1;
+}
+
+static CohortBranch * cohort_branch_at(Backtrack * bt) {
+  return bt->cohorts && bt->run_depth == 1 && !bt->discovery_depth &&
+          !bt->request->scalar_query ? bt->cohort->branch : NULL;
+}
+
+static int cohort_published_before(Backtrack * bt, size_t group) {
+  if (bt->run_depth != 1 || bt->discovery_depth || bt->request->scalar_query)
+    return 0;
+  if (!bt->cohorts)
+    return (bt->program->flags & GRX_PROGRAM_CAPTURE_COHORTS) != 0;
+  const CohortBranch * branch = bt->cohorts->published[group];
+  if (!branch || !bt->cohort_scope ||
+      bt->cohorts->published_sequence[group] <= bt->cohort_activation)
+    return 1;
+  while (branch) {
+    if (!pending_step(bt))
+      return 0;
+    if (branch == bt->cohort_scope)
+      return 0;
+    branch = branch->parent;
+  }
+  return 1;
+}
+
+static void cohort_publish(Backtrack * bt, size_t group, size_t position) {
+  if (!bt->cohorts || bt->run_depth != 1 || bt->discovery_depth ||
+      bt->request->scalar_query)
+    return;
+  size_t * shared = bt->cohorts->owner->atomic_history;
+  size_t * owner = shared + 6 * bt->captures + group;
+  if (*owner == GRX_NPOS || position < *owner) {
+    *owner = position;
+    bt->cohorts->published[group] = bt->cohort->branch;
+    bt->cohorts->published_sequence[group] = bt->pending_sequence;
+    shared[5 * bt->captures + group] = bt->slots[group];
+    shared[5 * bt->captures + group + 1] = bt->slots[group + 1];
+  }
+}
+
+static const size_t * cohort_input(Backtrack * bt, size_t group,
+    uint32_t pc, size_t position, size_t execution) {
+  if (!bt->cohorts || bt->run_depth != 1 || bt->discovery_depth ||
+      bt->request->scalar_query)
+    return NULL;
+  for (CohortInput * input = bt->cohorts->inputs; input; input = input->next) {
+    if (!pending_step(bt))
+      return NULL;
+    if (input->pc == pc && input->position == position &&
+        input->activation == execution && input->group == group) {
+      if (input->live_provider) {
+        size_t latest = 0;
+        for (const Cohort * item = bt->cohorts->ordered_frontiers ? bt->cohorts->living : bt->cohorts->live;
+             item; item = bt->cohorts->ordered_frontiers ? item->all_next : item->next) {
+          if (!pending_step(bt)) return NULL;
+          uint32_t owner = (uint32_t)item->owners[group];
+          int same = owner == pc &&
+              item->owners[bt->captures + group] == position &&
+              item->owners[2 * bt->captures + group] == bt->cohort_activation &&
+              item->state.attempt_start == bt->attempt_start;
+          if (!same && item->state.attempt_start == input->provider_origin && owner < bt->program->insts.count &&
+              grx_program_scope(bt->program, owner + 1) == grx_program_scope(bt->program, pc + 1) &&
+              item->generations[group] > latest) {
+            latest = item->generations[group];
+            input->context[group] = item->history[group];
+            input->context[group + 1] = item->history[group + 1];
+          }
+        }
+      }
+      return input->present ? input->context : NULL;
+    }
+  }
+  const size_t * result = NULL;
+  size_t generation = 0;
+  size_t producer_origin = GRX_NPOS;
+  for (const Cohort * item = bt->cohorts->ordered_frontiers
+           ? bt->cohorts->living : bt->cohorts->live;
+      item; item = bt->cohorts->ordered_frontiers ? item->all_next : item->next) {
+    if (!pending_step(bt))
+      return NULL;
+    int same = item->owners[group] == pc &&
+        item->owners[bt->captures + group] == position &&
+        item->owners[2 * bt->captures + group] == bt->cohort_activation &&
+        item->state.attempt_start == bt->attempt_start;
+    if (!same && item->generations[group] &&
+        (item->state.attempt_start < producer_origin ||
+            (item->state.attempt_start == producer_origin &&
+                item->generations[group] > generation))) {
+      producer_origin = item->state.attempt_start;
+      generation = item->generations[group];
+      result = item->history;
+    }
+  }
+  const CohortClosure * closure = NULL;
+  for (const CohortClosure * item = bt->cohorts->closures; item; item = item->next) {
+    if (!pending_step(bt)) return NULL;
+    if (item->group == group &&
+        grx_program_scope(bt->program, item->pc + 1) ==
+            grx_program_scope(bt->program, pc + 1) &&
+        (item->pc != pc || item->position != position ||
+            item->activation != bt->cohort_activation || item->origin != bt->attempt_start) &&
+        (item->origin < producer_origin ||
+            (item->origin == producer_origin && item->generation > generation))) {
+      producer_origin = item->origin;
+      generation = item->generation;
+      closure = item;
+    }
+  }
+  size_t words = (sizeof(CohortInput) + sizeof(size_t) - 1) / sizeof(size_t) +
+      bt->captures;
+  CohortInput * input = capture_alloc(bt, words);
+  if (!input)
+    return NULL;
+  input->next = bt->cohorts->inputs;
+  input->pc = pc;
+  input->position = position;
+  input->activation = execution;
+  input->group = group;
+  input->present = result != NULL || closure != NULL;
+  input->live_provider = result != NULL && closure == NULL;
+  input->provider_origin = producer_origin;
+  if (closure) {
+    input->context[group] = closure->from;
+    input->context[group + 1] = closure->to;
+  }
+  else if (result) {
+    input->context[group] = result[group];
+    input->context[group + 1] = result[group + 1];
+  }
+  bt->cohorts->inputs = input;
+  return input->present ? input->context : NULL;
+}
+
+static size_t cohort_body_execution(Backtrack * bt) {
+  if (!bt->cohorts) return 0;
+  if (!advance_generation(bt, &bt->cohorts->body_sequence)) return 0;
+  return bt->cohorts->body_sequence;
+}
+
+/** Executed local BODY closures are inputs, independent of undo/verdict. */
+static int cohort_publish_closure(Backtrack * bt, uint32_t slot) {
+  if (!bt->cohorts || !bt->cohort || !bt->local_input_pc || slot < 3 ||
+      !(slot & 1) || slot >= bt->captures || bt->discovery_depth ||
+      bt->request->scalar_query)
+    return 1;
+  CohortRun * inputs = bt->cohorts;
+  while (inputs->input_owner) inputs = inputs->input_owner;
+  size_t group = slot - 1;
+  if (bt->slots[group] == GRX_NPOS || bt->slots[slot] == GRX_NPOS)
+    return 1;
+  uint32_t pc = bt->local_input_pc - 1;
+  const GRX_Inst * look = grx_program_at(bt->program, pc);
+  int owned = 0;
+  for (uint32_t body = pc + 1; body < look->y; body++) {
+    if (!pending_step(bt)) return 0;
+    const GRX_Inst * reference = grx_program_at(bt->program, body);
+    if (reference->op == GRX_OP_BACKREF && 2 * (size_t)reference->x == group &&
+        look_owns_reference(bt, pc, body)) { owned = 1; break; }
+  }
+  if (!owned) return bt->failure == GRX_OK;
+  CohortClosure * item = inputs->closures;
+  for (; item; item = item->next) {
+    if (!pending_step(bt)) return 0;
+    if (item->pc == pc && item->position == bt->local_input_position &&
+        item->activation == bt->local_input_activation && item->group == group &&
+        item->origin == bt->attempt_start)
+      break;
+  }
+  if (!item) {
+    item = capture_alloc(bt, (sizeof(*item) + sizeof(size_t) - 1) / sizeof(size_t));
+    if (!item) return 0;
+    *item = (CohortClosure){.next=inputs->closures, .pc=pc,
+        .position=bt->local_input_position, .activation=bt->local_input_activation,
+        .group=group, .origin=bt->attempt_start};
+    inputs->closures = item;
+  }
+  if (!advance_generation(bt, &inputs->generation)) return 0;
+  item->generation = inputs->generation;
+  item->from = bt->slots[group];
+  item->to = bt->slots[slot];
+  return 1;
+}
+
+static void cohort_inputs_free(CohortRun * run) {
+  while (run->successor_proofs) {
+    AtomicSuccessorProof * proof=run->successor_proofs;
+    run->successor_proofs=proof->next;
+    capture_free(run->owner,proof,(sizeof(*proof)+sizeof(size_t)-1)/sizeof(size_t));
+  }
+  while (run->inputs) {
+    CohortInput * input = run->inputs;
+    run->inputs = input->next;
+    capture_free(run->owner, input,
+        (sizeof(*input) + sizeof(size_t) - 1) / sizeof(size_t) +
+            run->owner->captures);
+  }
+}
+
+static void cohort_closures_free(CohortRun * run) {
+  while (run->closures) {
+    CohortClosure * item = run->closures;
+    run->closures = item->next;
+    capture_free(run->owner, item,
+        (sizeof(*item) + sizeof(size_t) - 1) / sizeof(size_t));
+  }
+}
+
+static int cohort_record(Backtrack * bt, uint32_t pc, size_t position) {
+  if (!bt->cohorts || bt->run_depth != 1 || bt->discovery_depth ||
+      bt->request->scalar_query)
+    return 1;
+  const GRX_Inst * look = grx_program_at(bt->program, pc);
+  if (bt->cohorts->ordered_frontiers) {
+    for (uint32_t body = pc + 1; body < look->y; body++) {
+      if (!pending_step(bt))
+        return 0;
+      const GRX_Inst * saved = grx_program_at(bt->program, body);
+      if (saved->op == GRX_OP_SAVE && saved->x >= 2 && saved->x < bt->captures)
+        bt->cohort->report[saved->x] = bt->slots[saved->x];
+    }
+  }
+  for (uint32_t body = pc + 1; body < look->y; body++) {
+    if (!pending_step(bt))
+      return 0;
+    if (!look_owns_reference(bt, pc, body))
+      continue;
+    size_t group = 2 * (size_t)grx_program_at(bt->program, body)->x;
+    if (group + 1 < bt->captures && bt->slots[group] != GRX_NPOS &&
+        bt->slots[group + 1] != GRX_NPOS) {
+      if (!advance_generation(bt, &bt->cohorts->generation))
+        return 0;
+      bt->cohort->generations[group] = bt->cohorts->generation;
+      bt->cohort->owners[group] = pc;
+      bt->cohort->owners[bt->captures + group] = position;
+      bt->cohort->owners[2 * bt->captures + group] = bt->cohort_activation;
+      bt->cohort->history[group] = bt->slots[group];
+      bt->cohort->history[group + 1] = bt->slots[group + 1];
+    }
+  }
+  return bt->failure == GRX_OK;
+}
+
+static int cohort_before(const Cohort * a, const Cohort * b) {
+  if (a->state.attempt_start != b->state.attempt_start)
+    return a->state.attempt_start < b->state.attempt_start;
+  size_t count = a->priority_count < b->priority_count
+      ? a->priority_count : b->priority_count;
+  int order = memcmp(a->priority, b->priority, count);
+  return order < 0 || (!order && a->priority_count < b->priority_count);
+}
+
+static void * cohort_copy(Backtrack * owner, const void * source, size_t words) {
+  if (!source)
+    return NULL;
+  void * copy = capture_alloc(owner, words);
+  if (copy)
+    memcpy(copy, source, words * sizeof(size_t));
+  return copy;
+}
+
+static void cohort_schedule_free(Backtrack * owner, AtomicSchedule * schedule) {
+  while (schedule) {
+    AtomicSchedule * next = schedule->next;
+    while (schedule->arrivals) {
+      AtomicArrival * item = schedule->arrivals;
+      schedule->arrivals = item->next;
+      capture_free(owner, item,
+          (sizeof(*item) + sizeof(size_t) - 1) / sizeof(size_t) + owner->captures);
+    }
+    atomic_incoming_clear(owner, &schedule->incoming);
+    scalar_activation_free(owner, schedule->frontiers);
+    capture_free(owner, schedule,
+        (sizeof(*schedule) + sizeof(size_t) - 1) / sizeof(size_t));
+    schedule = next;
+  }
+}
+
+static void comparison_tag_remove(CohortRun * run, ComparisonTag * tag) {
+  *tag->previous = tag->next;
+  if (tag->next) tag->next->previous = tag->previous;
+  if (tag->representative && tag->representative->terminal_tag == tag)
+    tag->representative->terminal_tag = NULL;
+  capture_free(run->owner, tag,
+      (sizeof(*tag) + sizeof(size_t) - 1) / sizeof(size_t));
+}
+
+static void cohort_free(CohortRun * run, Cohort * item) {
+  if (item->terminal_tag) comparison_tag_remove(run, item->terminal_tag);
+  Backtrack * owner = run->owner;
+  Backtrack * state = &item->state;
+  // Failed opaque BODY execution can stop before its normal END checkpoint.
+  // Release its private context/scalar scope before discarding this state.
+  while (state->atomic_context)
+    atomic_context_leave(state);
+  while (state->pending) {
+    PendingLook * pending = state->pending;
+    state->pending = pending->previous;
+    pending->linked = 0;
+    pending_destroy(owner, pending);
+  }
+  cohort_schedule_free(owner, state->atomic_schedules);
+  scratch_arrays_free(state);
+  capture_free(owner, state->stack, state->capacity * sizeof(Frame) / sizeof(size_t));
+  capture_free(owner, state->slots, state->slot_count);
+  capture_free(owner, state->atomic_history, 7 * state->captures);
+  capture_free(owner, state->ahead_arrivals, 2 * state->program->insts.count);
+  if (item->listed) {
+    if (item->all_previous)
+      item->all_previous->all_next = item->all_next;
+    else
+      run->living = item->all_next;
+    if (item->all_next)
+      item->all_next->all_previous = item->all_previous;
+  }
+  capture_free(owner, item->report, state->captures);
+  capture_free(owner, item->frontier_input, state->captures + state->registers);
+  capture_free(owner, item->history, state->captures);
+  capture_free(owner, item->generations, state->captures);
+  capture_free(owner, item->owners, 3 * state->captures);
+  capture_free(owner, item, item->words);
+}
+
+static Cohort * cohort_clone(CohortRun * run, const Backtrack * source,
+    const Cohort * parent, int branch) {
+  Backtrack * owner = run->owner;
+  if (run->ordered_frontiers)
+    branch = -1;
+  size_t count = !run->ordered_frontiers && parent ? parent->priority_count : 0;
+  size_t words = (sizeof(Cohort) + count + (branch >= 0) + sizeof(size_t) - 1)
+      / sizeof(size_t);
+  Cohort * item = capture_alloc(owner, words);
+  if (!item)
+    return NULL;
+  memset(item, 0, words * sizeof(size_t));
+  item->words = words;
+  item->priority_count = count + (branch >= 0);
+  if (parent && count)
+    memcpy(item->priority, parent->priority, count);
+  if (branch >= 0)
+    item->priority[count] = (unsigned char)branch;
+  Backtrack * state = &item->state;
+  *state = *source;
+  state->cohorts = run;
+  state->cohort = item;
+  state->slots = NULL;
+  state->stack = NULL;
+  state->capacity = 0;
+  state->pending = state->ready = state->results = NULL;
+  state->atomic_history = NULL;
+  state->ahead_arrivals = NULL;
+  state->atomic_schedules = NULL;
+  state->visited = NULL;
+  state->memo_after = 0;
+  state->visited_bytes = 0;
+  state->call_return = NULL;
+  state->call_group = NULL;
+  state->call_slots = NULL;
+  state->call_return_bytes = state->call_group_bytes = state->call_slots_bytes = 0;
+  state->marks = NULL;
+  state->mark_capacity = 0;
+  if (source->call_return) {
+    state->call_return = scratch_alloc(owner, source->call_return_bytes);
+    if (state->call_return) {
+      state->call_return_bytes = source->call_return_bytes;
+      memcpy(state->call_return, source->call_return, state->call_return_bytes);
+    }
+  }
+  if (source->call_group) {
+    state->call_group = scratch_alloc(owner, source->call_group_bytes);
+    if (state->call_group) {
+      state->call_group_bytes = source->call_group_bytes;
+      memcpy(state->call_group, source->call_group, state->call_group_bytes);
+    }
+  }
+  if (source->call_slots) {
+    state->call_slots = scratch_alloc(owner, source->call_slots_bytes);
+    if (state->call_slots) {
+      state->call_slots_bytes = source->call_slots_bytes;
+      memcpy(state->call_slots, source->call_slots, state->call_slots_bytes);
+    }
+  }
+  if (source->marks) {
+    state->marks = scratch_alloc(owner, source->mark_capacity * sizeof(MarkEntry));
+    if (state->marks) {
+      state->mark_capacity = source->mark_capacity;
+      memcpy(state->marks, source->marks, source->mark_depth * sizeof(MarkEntry));
+    }
+  }
+  state->slots = cohort_copy(owner, source->slots, source->slot_count);
+  if (source->depth) {
+    state->capacity = source->depth;
+    state->stack = cohort_copy(owner, source->stack,
+        source->depth * sizeof(Frame) / sizeof(size_t));
+  }
+  state->atomic_history = cohort_copy(owner, source->atomic_history, 7 * source->captures);
+  state->ahead_arrivals = cohort_copy(owner, source->ahead_arrivals,
+      2 * source->program->insts.count);
+  if (run->ordered_frontiers) {
+    item->report = cohort_copy(owner, parent ? parent->report : source->slots,
+        source->captures);
+    item->frontier_input = capture_alloc(owner, source->captures + source->registers);
+  }
+  item->history = capture_alloc(owner, source->captures);
+  item->generations = capture_alloc(owner, source->captures);
+  item->owners = capture_alloc(owner, 3 * source->captures);
+  if (item->history && item->generations && item->owners) {
+    for (size_t i = 0; i < 3 * source->captures; i++)
+      item->owners[i] = parent ? parent->owners[i] : GRX_NPOS;
+    for (size_t i = 0; i < source->captures; i++) {
+      item->history[i] = parent ? parent->history[i] : GRX_NPOS;
+      item->generations[i] = parent ? parent->generations[i] : 0;
+    }
+  }
+  PendingLook ** tail = &state->pending;
+  for (const PendingLook * old = source->pending;
+      old && owner->failure == GRX_OK; old = old->previous) {
+    PendingLook * copy = capture_alloc(owner, GRX_PENDING_WORDS);
+    if (!copy)
+      break;
+    *copy = *old;
+    copy->previous = NULL;
+    copy->base = copy->entry = copy->result = NULL;
+    *tail = copy;
+    tail = &copy->previous;
+    copy->base = cohort_copy(owner, old->base, source->atomic_base);
+    copy->entry = cohort_copy(owner, old->entry, 2 * source->captures);
+    copy->result = cohort_copy(owner, old->result, source->captures);
+  }
+  const PendingLook * old = source->pending;
+  for (PendingLook * copy = state->pending; copy && old;
+      copy = copy->previous, old = old->previous) {
+    copy->active_previous = scalar_pending_map(owner, source->pending,
+        state->pending, old->active_previous);
+    copy->active_next = scalar_pending_map(owner, source->pending,
+        state->pending, old->active_next);
+    copy->result_previous = scalar_pending_map(owner, source->pending,
+        state->pending, old->result_previous);
+  }
+  state->ready = scalar_pending_map(owner, source->pending, state->pending, source->ready);
+  state->results = scalar_pending_map(owner, source->pending, state->pending, source->results);
+  if (state->stack) {
+    for (size_t i = 0; i < state->depth; i++) {
+      if (state->stack[i].kind == FRAME_PENDING ||
+          state->stack[i].kind == FRAME_PENDING_STATE)
+        state->stack[i].pending = scalar_pending_map(owner, source->pending,
+            state->pending, source->stack[i].pending);
+    }
+  }
+  AtomicSchedule ** schedule_tail = &state->atomic_schedules;
+  for (const AtomicSchedule * old_schedule = source->atomic_schedules;
+      old_schedule && owner->failure == GRX_OK; old_schedule = old_schedule->next) {
+    size_t n = (sizeof(*old_schedule) + sizeof(size_t) - 1) / sizeof(size_t);
+    AtomicSchedule * copy = cohort_copy(owner, old_schedule, n);
+    if (!copy)
+      break;
+    copy->next = NULL;
+    copy->arrivals = NULL;
+    copy->incoming = NULL;
+    copy->frontiers = NULL;
+    *schedule_tail = copy;
+    schedule_tail = &copy->next;
+    AtomicArrival ** arrival_tail = &copy->arrivals;
+    for (const AtomicArrival * a = old_schedule->arrivals;
+        a && owner->failure == GRX_OK; a = a->next) {
+      n = (sizeof(*a) + sizeof(size_t) - 1) / sizeof(size_t) + source->captures;
+      AtomicArrival * b = cohort_copy(owner, a, n);
+      if (!b)
+        break;
+      b->next = NULL;
+      *arrival_tail = b;
+      arrival_tail = &b->next;
+    }
+    AtomicIncoming ** incoming_tail = &copy->incoming;
+    for (const AtomicIncoming * a = old_schedule->incoming;
+        a && owner->failure == GRX_OK; a = a->next) {
+      n = (sizeof(*a) + sizeof(size_t) - 1) / sizeof(size_t) + source->captures;
+      AtomicIncoming * b = cohort_copy(owner, a, n);
+      if (!b)
+        break;
+      b->next = NULL;
+      *incoming_tail = b;
+      incoming_tail = &b->next;
+    }
+  }
+  if (owner->failure == GRX_OK && !run->ordered_frontiers) {
+    item->branch = capture_alloc(owner,
+        (sizeof(CohortBranch) + sizeof(size_t) - 1) / sizeof(size_t));
+    if (item->branch) {
+      item->branch->next = run->branches;
+      item->branch->parent = parent ? parent->branch : NULL;
+      run->branches = item->branch;
+    }
+  }
+  if (owner->failure != GRX_OK) {
+    cohort_free(run, item);
+    return NULL;
+  }
+  if (run->ordered_frontiers) {
+    item->all_next = run->living;
+    if (run->living)
+      run->living->all_previous = item;
+    run->living = item;
+    item->listed = 1;
+  }
+  return item;
+}
+
+/** Local predicate inputs arrive through the shared BODY definition channel. */
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((noinline))
+#elif defined(_MSC_VER)
+__declspec(noinline)
+#endif
+static size_t comparison_owned_predicate(Backtrack * bt, uint32_t pc) {
+  const GRX_Inst * look = grx_program_at(bt->program, pc);
+  if (look->op != GRX_OP_LOOK || look->mode != GRX_LOOK_AHEAD_POSITIVE ||
+      !(look->policy & GRX_POLICY_LOOK_HAS_CAPTURES)) return 0;
+  size_t outputs = 0;
+  int local = 0;
+  for (uint32_t body = pc + 1; body < look->y; body++) {
+    if (!pending_step(bt)) return 0;
+    const GRX_Inst * inst = grx_program_at(bt->program, body);
+    if (inst->op == GRX_OP_LOOK || inst->op == GRX_OP_ATOMIC_BEGIN ||
+        inst->op == GRX_OP_KEEP || inst->op == GRX_OP_KEEP_END) return 0;
+    if (inst->op == GRX_OP_SAVE && inst->x >= 2 && inst->x < bt->captures)
+      outputs |= (size_t)1 << inst->x;
+    if (inst->op == GRX_OP_BACKREF) {
+      if (!(inst->policy & GRX_POLICY_BACKREF_OPEN)) return 0;
+      int owned = 0;
+      for (uint32_t prefix = pc + 1; prefix < body; prefix++) {
+        if (!pending_step(bt)) return 0;
+        const GRX_Inst * save = grx_program_at(bt->program, prefix);
+        if (save->op == GRX_OP_SAVE && save->x == 2 * inst->x) owned = 1;
+      }
+      if (!owned) return 0;
+      local = 1;
+    }
+  }
+  return local ? outputs : 0;
+}
+
+/** Endpoint inputs matter only until an instruction overwrites them. */
+static int cohort_read_masks(CohortRun * run) {
+  Backtrack * bt = run->owner;
+  if (bt->captures >= sizeof(size_t) * 8)
+    return 1;
+  size_t count = bt->program->insts.count;
+  run->read_masks = capture_alloc(bt, count);
+  if (!run->read_masks)
+    return 0;
+  memset(run->read_masks, 0, count * sizeof(size_t));
+  int changed;
+  do {
+    changed = 0;
+    for (size_t i = count; i-- > 0;) {
+      if (!pending_step(bt))
+        return 0;
+      const GRX_Inst * inst = grx_program_at(bt->program, (uint32_t)i);
+      size_t mask = i + 1 < count ? run->read_masks[i + 1] : 0;
+      if (inst->op == GRX_OP_MATCH)
+        mask = 0;
+      else if (inst->op == GRX_OP_JMP)
+        mask = run->read_masks[inst->x];
+      else if (inst->op == GRX_OP_SPLIT)
+        mask = run->read_masks[inst->x] | run->read_masks[inst->y];
+      else if (inst->op == GRX_OP_SAVE && inst->x < bt->captures)
+        mask &= ~((size_t)1 << inst->x);
+      else if (inst->op == GRX_OP_RESET) {
+        for (size_t slot = inst->x; slot < inst->y && slot < bt->captures; slot++)
+          mask &= ~((size_t)1 << slot);
+      }
+      else if (inst->op == GRX_OP_BACKREF && 2 * (size_t)inst->x + 1 < bt->captures)
+        mask |= (size_t)3 << (2 * inst->x);
+      else if (inst->op == GRX_OP_COUNT_STEP || inst->op == GRX_OP_COUNT_BACK ||
+          inst->op == GRX_OP_PROGRESS_CHECK)
+        mask |= run->read_masks[inst->y];
+      else if (inst->op == GRX_OP_LOOK && (inst->policy & GRX_POLICY_LOOK_FRONTIER) && comparison_owned_predicate(bt, (uint32_t)i))
+        mask = run->read_masks[inst->y] & ~comparison_owned_predicate(bt, (uint32_t)i);
+      else if (inst->op == GRX_OP_LOOK &&
+          !(inst->policy & (GRX_POLICY_LOOK_READS_CAPTURES | GRX_POLICY_LOOK_HAS_CAPTURES)))
+        mask = run->read_masks[inst->y];
+      else if (inst->op == GRX_OP_ATOMIC_BEGIN &&
+          (inst->policy & GRX_POLICY_ATOMIC_COMPARISONS)) {
+        // A deterministic comparison BODY has no capture writes or branch.
+      }
+      else if (inst->op == GRX_OP_LOOK || inst->op == GRX_OP_ATOMIC_BEGIN ||
+          inst->op == GRX_OP_COND || inst->op == GRX_OP_CALL)
+        mask = ((size_t)1 << bt->captures) - 1;
+      if (run->read_masks[i] != mask) {
+        run->read_masks[i] = mask;
+        changed = 1;
+      }
+    }
+  } while (changed);
+  return 1;
+}
+
+static int cohort_ordered(const Backtrack * bt) {
+  return bt->cohorts && bt->cohorts->ordered_frontiers;
+}
+
+static void cohort_save_report(Backtrack * bt, uint32_t slot) {
+  if (bt->cohorts && bt->cohorts->ordered_frontiers &&
+      cohort_scope_active(bt) && !bt->discovery_depth && !bt->request->scalar_query &&
+      slot >= 3 &&
+      (slot & 1) && slot < bt->captures) {
+    bt->cohort->report[slot - 1] = bt->slots[slot - 1];
+    bt->cohort->report[slot] = bt->slots[slot];
+  }
+}
+
+/** The completed opaque BODY returns its selected closed caller context. */
+static void cohort_return_report(Backtrack * bt) {
+  if (!cohort_ordered(bt) || bt->run_depth != 1 || bt->discovery_depth ||
+      bt->request->scalar_query)
+    return;
+  for (size_t group = 2; group + 1 < bt->captures; group += 2)
+    if (!bt->capture_open_slots || bt->slots[bt->capture_open_slots + group] != 1)
+      cohort_save_report(bt, (uint32_t)group + 1);
+}
+
+/** Opaque BODY invocations keep the deferred owner scheduler. */
+static int comparison_frontiers_eligible(Backtrack * bt) {
+  if (bt->captures >= sizeof(size_t) * 8)
+    return 0;
+  for (size_t pc = 0; pc < bt->program->insts.count; pc++) {
+    const GRX_Inst * inst = grx_program_at(bt->program, (uint32_t)pc);
+    switch (inst->op) {
+      case GRX_OP_LOOK:
+        if ((inst->policy & (GRX_POLICY_LOOK_READS_CAPTURES | GRX_POLICY_LOOK_HAS_CAPTURES)) &&
+            !comparison_owned_predicate(bt, (uint32_t)pc)) return 0;
+        break;
+      case GRX_OP_ATOMIC_BEGIN:
+        if (!(inst->policy & GRX_POLICY_ATOMIC_COMPARISONS))
+          return 0;
+        break;
+      case GRX_OP_ATOMIC_END:
+        break;
+      case GRX_OP_CALL: case GRX_OP_RET: case GRX_OP_COND: case GRX_OP_VERB:
+      case GRX_OP_CALLOUT: case GRX_OP_SCAN: case GRX_OP_REWIND:
+      case GRX_OP_RESET_STALE:
+        return 0;
+      default: break;
+    }
+  }
+  return 1;
+}
+
+static int cohort_scope_active(const Backtrack * bt) {
+  return bt->cohorts && bt->run_depth == bt->cohorts->scope_depth;
+}
+
+/** The same instruction VM supports a regular local BODY candidate batch. */
+static int cohort_candidate_body(Backtrack * bt, uint32_t body) {
+  if (bt->captures >= sizeof(size_t) * 8) return 0;
+  const GRX_Inst * look = grx_program_at(bt->program, body - 1);
+  for (uint32_t pc = body; pc < look->y; pc++) {
+    if (!pending_step(bt)) return 0;
+    const GRX_Inst * inst = grx_program_at(bt->program, pc);
+    switch (inst->op) {
+      case GRX_OP_LOOK: case GRX_OP_ATOMIC_BEGIN: case GRX_OP_ATOMIC_END:
+      case GRX_OP_CALL: case GRX_OP_RET: case GRX_OP_COND: case GRX_OP_VERB:
+      case GRX_OP_CALLOUT: case GRX_OP_SCAN: case GRX_OP_REWIND:
+      case GRX_OP_RESET_STALE: return 0;
+      default: break;
+    }
+  }
+  return 1;
+}
+
+static int cohort_refresh_local_reference(Backtrack * bt, const GRX_Inst * inst) {
+  if (bt->local_input_frozen) return 1;
+  if (!bt->local_input_pc || !bt->cohorts || !bt->cohorts->input_owner ||
+      bt->discovery_depth || bt->request->scalar_query ||
+      !(inst->policy & GRX_POLICY_BACKREF_OPEN))
+    return 1;
+  size_t group = 2 * (size_t)inst->x;
+  if (group + 1 >= bt->captures) return 1;
+  CohortRun * inputs = bt->cohorts;
+  while (inputs->input_owner) inputs = inputs->input_owner;
+  const CohortClosure * selected = NULL;
+  for (const CohortClosure * item = inputs->closures; item; item = item->next) {
+    if (!pending_step(bt)) return 0;
+    int same_owner = item->pc + 1 == bt->local_input_pc &&
+        item->position == bt->local_input_position &&
+        item->activation == bt->local_input_activation &&
+        item->origin == bt->attempt_start;
+    if (item->group == group && !same_owner &&
+        grx_program_scope(bt->program, item->pc + 1) ==
+            grx_program_scope(bt->program, bt->local_input_pc) &&
+        (!selected || item->origin < selected->origin ||
+            (item->origin == selected->origin &&
+                item->generation > selected->generation))) selected = item;
+  }
+  if (!selected) return 1;
+  if (!save_slot(bt, group + 1)) return 0;
+  bt->slots[group + 1] = selected->to;
+  if (bt->shadow) {
+    if (!save_slot(bt, bt->shadow + group) ||
+        !save_slot(bt, bt->shadow + group + 1)) return 0;
+    bt->slots[bt->shadow + group] = selected->from;
+    bt->slots[bt->shadow + group + 1] = selected->to;
+  }
+  return 1;
+}
+
+/** Candidate starts share the original behind UTF/composing domain. */
+static size_t comparison_next_candidate(Backtrack * bt, size_t at, size_t last) {
+  while (at < last) {
+    at++;
+    if (!pending_step(bt)) return GRX_NPOS;
+    if ((bt->program->flags & GRX_PROGRAM_UTF) && at < bt->window_end &&
+        (bt->request->subject[at] & 0xc0u) == 0x80u) continue;
+    uint32_t point = 0;
+    int composing = (bt->program->flags & GRX_PROGRAM_COMPOSING_CLUSTERS) &&
+        at < bt->window_end &&
+        grx_unicode_utf8_decode(bt->request->subject + at,
+            bt->window_end - at, bt->wtf8, &point) &&
+        grx_display_cell_width(point, 0) == 0;
+    if (!composing || (bt->behind_frontiers &&
+        (bt->behind_frontiers->exposed[at] & 1u))) return at;
+  }
+  return GRX_NPOS;
+}
+
+/** Pending predicates retain their existing cache/lifecycle scheduler. */
+static int comparison_epoch_domain(Backtrack * bt) {
+  int comparison = 0;
+  for (size_t pc = 0; pc < bt->program->insts.count; pc++) {
+    if (!pending_step(bt)) return 0;
+    const GRX_Inst * inst = grx_program_at(bt->program, (uint32_t)pc);
+    if (inst->op == GRX_OP_LOOK) return 0;
+    if (inst->op == GRX_OP_BACKREF) comparison = 1;
+  }
+  return comparison;
+}
+
+static int comparison_slice(CohortRun * run, Cohort * item, size_t floor,
+    int toplevel, size_t * end) {
+  Backtrack * owner = run->owner;
+  Backtrack * state = &item->state;
+  state->steps = owner->steps;
+  if (owner->atomic_history && state->atomic_history)
+    memcpy(state->atomic_history + 5 * owner->captures,
+        owner->atomic_history + 5 * owner->captures,
+        2 * owner->captures * sizeof(size_t));
+  int result = run_path(state, state->stage_pc, state->stage_position,
+      floor, toplevel, end);
+  owner->steps = state->steps;
+  owner->failure = state->failure;
+  owner->failure_diag = state->failure_diag;
+  return result;
+}
+
+/** Successful predicate cache state outlives its encounter position/opcode. */
+static int comparison_predicate_history(CohortRun * run, const Backtrack * state) {
+  for (const PendingLook * item = state->pending; item; item = item->previous) {
+    if (!pending_step(run->owner))
+      return 0;
+    if (item->state == 1)
+      return 1;
+  }
+  return 0;
+}
+
+/** Counter provenance is not predicate input when BODY cannot report context. */
+static int comparison_predicate_registers(CohortRun * run) {
+  Backtrack * owner = run->owner;
+  for (size_t pc = 0; pc < owner->program->insts.count; pc++) {
+    if (!pending_step(owner))
+      return 0;
+    const GRX_Inst * inst = grx_program_at(owner->program, (uint32_t)pc);
+    if (inst->op != GRX_OP_LOOK ||
+        ((inst->policy & (GRX_POLICY_LOOK_HAS_CAPTURES | GRX_POLICY_LOOK_READS_CAPTURES)) &&
+            (!(inst->policy & GRX_POLICY_LOOK_FRONTIER) || !comparison_owned_predicate(owner, (uint32_t)pc))))
+      continue;
+    int reports = 0;
+    for (size_t body = pc + 1; body < inst->y; body++) {
+      if (!pending_step(owner))
+        return 0;
+      unsigned op = grx_program_at(owner->program, (uint32_t)body)->op;
+      if (op == GRX_OP_KEEP || op == GRX_OP_KEEP_END)
+        reports = 1;
+    }
+    if (reports)
+      continue;
+    // Eligibility reserves the high bit beyond all endpoint input bits.
+    run->read_masks[pc] |= (SIZE_MAX / 2 + 1);
+    if (!(inst->policy & GRX_POLICY_LOOK_REPEATED))
+      continue;
+    size_t channel = 0, context = 0, global = 0, copy = 0;
+    if (!grx_program_look_repeat(owner->program, inst, &channel, &context, &global, &copy))
+      continue;
+    if (!run->predicate_registers) {
+      run->predicate_registers = capture_alloc(owner, owner->registers);
+      if (!run->predicate_registers)
+        return 0;
+      memset(run->predicate_registers, 0, owner->registers * sizeof(size_t));
+    }
+    if (channel < owner->registers)
+      run->predicate_registers[channel] = 1;
+    if (global < owner->registers)
+      run->predicate_registers[global] = 1;
+    if (global + 1 < owner->registers)
+      run->predicate_registers[global + 1] = 1;
+  }
+  return 1;
+}
+
+/** Pure pending truth constrains a comparison even without capture demand. */
+static int cohort_predicates_before_reference(Backtrack * bt) {
+  if (!cohort_ordered(bt) || bt->run_depth != 1 || bt->discovery_depth ||
+      bt->request->scalar_query)
+    return 1;
+  CohortRun * run = bt->cohorts;
+  const size_t pure = SIZE_MAX / 2 + 1;
+  for (const PendingLook * item = bt->ready; item; item = item->active_previous) {
+    if (!pending_step(bt))
+      return 0;
+    if (!(run->read_masks[item->pc] & pure))
+      return 1;
+  }
+  return check_pending(bt, 0, 0);
+}
+
+/** A terminal has immutable read input and a separately selected report. */
+static int comparison_key(CohortRun * run, const Cohort * old,
+    const Cohort * item, int physical) {
+  const Backtrack * state = &item->state;
+  if (old->frontier_pc != state->stage_pc ||
+      (physical && old->frontier_position != state->stage_position))
+    return 0;
+  // An unresolved predicate remains an input even when it reads no captures.
+  const PendingLook * a = old->state.pending;
+  const PendingLook * b = state->pending;
+  int unresolved = 0;
+  for (;;) {
+    if (!pending_step(run->owner))
+      return 0;
+    while (a && a->state == 1)
+      a = a->previous;
+    while (b && b->state == 1)
+      b = b->previous;
+    if (!a || !b) {
+      if (a || b)
+        return 0;
+      break;
+    }
+    unresolved = 1;
+    if (a->pc != b->pc || a->position != b->position ||
+        a->state != b->state || a->evaluated != b->evaluated)
+      return 0;
+    int context_free = (run->read_masks[a->pc] & (SIZE_MAX / 2 + 1)) != 0;
+    if (!context_free && (a->repeat_context != b->repeat_context ||
+            a->repeat_activation != b->repeat_activation ||
+            a->repeat_later != b->repeat_later))
+      return 0;
+    a = a->previous;
+    b = b->previous;
+  }
+  if (!old->epsilon_key && !unresolved &&
+      comparison_predicate_history(run, &old->state) !=
+          comparison_predicate_history(run, state))
+    return 0;
+  size_t mask = run->read_masks[state->stage_pc] | 3;
+  for (size_t slot = 0; slot < state->captures; slot++)
+    if ((mask & ((size_t)1 << slot)) && old->frontier_input[slot] != state->slots[slot])
+      return 0;
+  for (size_t slot = 0; slot < state->registers; slot++)
+    if ((!run->predicate_registers || !run->predicate_registers[slot]) &&
+        old->frontier_input[state->captures + slot] != state->slots[state->captures + slot])
+      return 0;
+  for (size_t slot = 2; slot < state->captures; slot++)
+    if ((mask & ((size_t)1 << slot)) && old->history[slot] != item->history[slot])
+      return 0;
+  return 1;
+}
+
+static int comparison_same(CohortRun * run, const Cohort * old,
+    const Cohort * item) {
+  return comparison_key(run, old, item, 1);
+}
+
+static ComparisonTag * comparison_tag_find(CohortRun * run, Cohort * item) {
+  uint32_t pc = item->state.stage_pc;
+  for (ComparisonTag * tag = run->terminal_tags[pc]; tag; tag = tag->next) {
+    if (!pending_step(run->owner)) return NULL;
+    if (comparison_key(run, tag->representative, item, 0)) return tag;
+  }
+  return NULL;
+}
+
+static int comparison_tag_set(CohortRun * run, ComparisonTag * tag,
+    Cohort * representative) {
+  if (!tag) {
+    tag = capture_alloc(run->owner,
+        (sizeof(*tag) + sizeof(size_t) - 1) / sizeof(size_t));
+    if (!tag) return 0;
+    uint32_t pc = representative->state.stage_pc;
+    *tag = (ComparisonTag){.next=run->terminal_tags[pc],
+        .previous=&run->terminal_tags[pc]};
+    if (tag->next) tag->next->previous = &tag->next;
+    run->terminal_tags[pc] = tag;
+  }
+  if (tag->representative && tag->representative != representative &&
+      tag->representative->terminal_tag == tag)
+    tag->representative->terminal_tag = NULL;
+  tag->representative = representative;
+  tag->frontier = representative->state.stage_position;
+  representative->terminal_tag = tag;
+  return 1;
+}
+
+/** CURRENT first-visit epochs are distinct from eager NEXT expansion. */
+static int cohort_close_frontier(Backtrack * bt, uint32_t pc, size_t position) {
+  if (!cohort_ordered(bt) ||
+      (!bt->cohorts->current_epsilon && !bt->cohorts->retag_comparisons))
+    return 1;
+  CohortRun * run = bt->cohorts;
+  Backtrack * owner = run->owner;
+  uint32_t saved_pc = bt->stage_pc;
+  size_t saved_position = bt->stage_position;
+  bt->stage_pc = pc;
+  bt->stage_position = position;
+  owner->steps = bt->steps;
+  owner->failure = bt->failure;
+  owner->failure_diag = bt->failure_diag;
+  int entered = 1;
+  // NEXT only invalidates an earlier CURRENT visit. It never seeds one.
+  if (!run->current_epsilon) {
+    Cohort ** link = &run->epsilon_seen;
+    while (*link && owner->failure == GRX_OK) {
+      Cohort * old = *link;
+      if (!pending_step(owner)) break;
+      if (comparison_key(run, old, bt->cohort, 0)) {
+        *link = old->next;
+        cohort_free(run, old);
+      }
+      else link = &old->next;
+    }
+    bt->steps = owner->steps;
+
+    bt->failure = owner->failure;
+    bt->failure_diag = owner->failure_diag;
+    bt->stage_pc = saved_pc;
+    bt->stage_position = saved_position;
+    return bt->failure == GRX_OK;
+  }
+  for (Cohort * old = run->epsilon_seen; old; old = old->next) {
+    if (!pending_step(owner)) {
+      entered = 0;
+      break;
+    }
+    if (comparison_same(run, old, bt->cohort)) {
+      entered = 0;
+      break;
+    }
+  }
+  if (entered && owner->failure == GRX_OK) {
+    Cohort * record = cohort_clone(run, bt, bt->cohort, -1);
+    if (record) {
+      record->frontier_pc = pc;
+      record->frontier_position = position;
+      record->epsilon_key = 1;
+      memcpy(record->frontier_input, bt->slots,
+          (bt->captures + bt->registers) * sizeof(size_t));
+      record->next = run->epsilon_seen;
+      run->epsilon_seen = record;
+    }
+    else
+      entered = 0;
+  }
+  bt->steps = owner->steps;
+  bt->failure = owner->failure;
+  bt->failure_diag = owner->failure_diag;
+  bt->stage_pc = saved_pc;
+  bt->stage_position = saved_position;
+  return entered && bt->failure == GRX_OK;
+}
+
+/** Expand epsilon work into NEXT, or immediately after the CURRENT cursor.
+ * A comparison may replace an unprocessed CURRENT report, never its input. */
+static void comparison_expand(CohortRun * run, Cohort * initial,
+    Cohort ** frontier, Cohort *** insertion, int current, size_t floor,
+    int toplevel) {
+  Backtrack * owner = run->owner;
+  int outer_epsilon = run->current_epsilon;
+  run->current_epsilon = current;
+  Cohort * work = initial;
+  initial->next = NULL;
+  while (work && owner->failure == GRX_OK) {
+    Cohort * item = work;
+    work = item->next;
+    size_t end = 0;
+    int result = comparison_slice(run, item, floor, toplevel, &end);
+    if (result == 2 && item->state.stage_kind == 2) {
+      const GRX_Inst * split = grx_program_at(owner->program, item->state.stage_pc);
+      Cohort * left = cohort_clone(run, &item->state, item, 0);
+      Cohort * right = left ? cohort_clone(run, &item->state, item, 1) : NULL;
+      if (right) {
+        right->state.stage_pc = split->y;
+        right->state.stage_kind = 0;
+        right->next = work;
+        work = right;
+      }
+      if (left) {
+        left->state.stage_pc = split->x;
+        left->state.stage_kind = 0;
+        left->next = work;
+        work = left;
+      }
+      cohort_free(run, item);
+      continue;
+    }
+    if (run->retag_comparisons) {
+      if (result == 2) {
+        ComparisonTag * tag = comparison_tag_find(run, item);
+        Cohort * existing = NULL;
+        if (!current) {
+          // A duplicate NEXT arrival retags the terminal, while the first
+          // NEXT representative keeps its READ inputs and REPORT snapshot.
+          for (existing = *frontier; existing; existing = existing->next) {
+            if (!pending_step(owner)) break;
+            if (comparison_same(run, existing, item)) break;
+          }
+        }
+        else if (tag && tag->frontier == item->state.stage_position &&
+            comparison_same(run, tag->representative, item)) {
+          existing = tag->representative;
+        }
+        if (owner->failure != GRX_OK) {
+          cohort_free(run, item);
+          break;
+        }
+        if (!existing) {
+          item->frontier_pc = item->state.stage_pc;
+          item->frontier_position = item->state.stage_position;
+          memcpy(item->frontier_input, item->state.slots,
+              (owner->captures + owner->registers) * sizeof(size_t));
+          if (comparison_tag_set(run, tag, item)) {
+            item->next = **insertion;
+            **insertion = item;
+            *insertion = &item->next;
+            continue;
+          }
+        }
+        else {
+          if (!comparison_tag_set(run, tag, existing)) {
+            cohort_free(run, item);
+            break;
+          }
+          if (current && !existing->accepted)
+            memcpy(existing->report, item->report,
+                owner->captures * sizeof(size_t));
+        }
+      }
+    }
+    else {
+      if (result == 2) {
+        Cohort * existing = *frontier;
+        for (; existing; existing = existing->next) {
+          if (!pending_step(owner))
+            break;
+          if (comparison_same(run, existing, item))
+            break;
+        }
+        if (!existing && owner->failure == GRX_OK) {
+          item->frontier_pc = item->state.stage_pc;
+          item->frontier_position = item->state.stage_position;
+          memcpy(item->frontier_input, item->state.slots,
+              (owner->captures + owner->registers) * sizeof(size_t));
+          item->next = **insertion;
+          **insertion = item;
+          *insertion = &item->next;
+          continue;
+        }
+        if (existing && current && !existing->accepted)
+          memcpy(existing->report, item->report, owner->captures * sizeof(size_t));
+      }
+    }
+    cohort_free(run, item);
+  }
+  while (work) {
+    Cohort * item = work;
+    work = item->next;
+    cohort_free(run, item);
+  }
+  run->current_epsilon = outer_epsilon;
+}
+
+static void comparison_frontier_free(CohortRun * run, Cohort * frontier) {
+  while (frontier) {
+    Cohort * item = frontier;
+    frontier = item->next;
+    cohort_free(run, item);
+  }
+}
+
+static int comparison_run_seeded(Backtrack * bt, uint32_t pc, size_t position,
+    size_t floor, int toplevel, size_t * out_end, int candidates) {
+  if (bt->atomic_base && !bt->atomic_history) {
+    bt->atomic_history = capture_alloc(bt, 7 * bt->captures);
+    if (!bt->atomic_history)
+      return 0;
+    for (size_t i = 0; i < 7 * bt->captures; i++)
+      bt->atomic_history[i] = GRX_NPOS;
+  }
+  CohortRun run = {.owner = bt, .ordered_frontiers = 1,
+      .scope_depth = bt->run_depth, .input_owner = bt->cohorts};
+  if (bt->atomic_base) {
+    run.published = capture_alloc(bt, bt->captures);
+    run.published_sequence = capture_alloc(bt, bt->captures);
+    if (run.published)
+      memset(run.published, 0, bt->captures * sizeof(size_t));
+    if (run.published_sequence)
+      memset(run.published_sequence, 0, bt->captures * sizeof(size_t));
+  }
+  run.retag_comparisons = comparison_epoch_domain(bt);
+  if (run.retag_comparisons && bt->failure == GRX_OK) {
+    run.terminal_tags = capture_alloc(bt,
+        (bt->program->insts.count * sizeof(*run.terminal_tags) +
+            sizeof(size_t) - 1) / sizeof(size_t));
+    if (run.terminal_tags)
+      memset(run.terminal_tags, 0,
+          bt->program->insts.count * sizeof(*run.terminal_tags));
+  }
+  if (bt->failure == GRX_OK) cohort_read_masks(&run);
+  if (bt->failure == GRX_OK)
+    comparison_predicate_registers(&run);
+  Cohort * current = NULL;
+  Cohort ** insert = &current;
+  Cohort * first = bt->failure == GRX_OK ? cohort_clone(&run, bt, NULL, -1) : NULL;
+  if (first) {
+    first->state.stage_pc = pc;
+    first->state.stage_position = position;
+    comparison_expand(&run, first, &current, &insert, 0, floor, toplevel);
+  }
+  int matched = 0;
+  size_t next_candidate = candidates
+      ? comparison_next_candidate(bt, position, bt->candidate_last) : GRX_NPOS;
+  while ((current || next_candidate != GRX_NPOS) && bt->failure == GRX_OK) {
+    size_t physical = next_candidate;
+    for (const Cohort * item = current; item; item = item->next)
+      if (physical == GRX_NPOS || item->state.stage_position < physical)
+        physical = item->state.stage_position;
+    Cohort * future = NULL;
+    Cohort ** future_tail = &future;
+    Cohort ** active = &current;
+    while (*active) {
+      Cohort * item = *active;
+      if (item->state.stage_position != physical) {
+        *active = item->next;
+        item->next = NULL;
+        *future_tail = item;
+        future_tail = &item->next;
+      }
+      else active = &item->next;
+    }
+    if (next_candidate == physical) {
+      Cohort * origin = cohort_clone(&run, bt, NULL, -1);
+      if (origin) {
+        origin->state.stage_pc = pc;
+        origin->state.stage_position = physical;
+        origin->state.stage_kind = 0;
+        origin->state.body_position = physical;
+        Cohort ** tail = &current;
+        while (*tail) tail = &(*tail)->next;
+        comparison_expand(&run, origin, &current, &tail, 0, floor, toplevel);
+      }
+      next_candidate = comparison_next_candidate(bt, physical, bt->candidate_last);
+    }
+    int frontier_match = 0;
+    Cohort * next = future;
+    Cohort ** next_insert = &next;
+    while (*next_insert) next_insert = &(*next_insert)->next;
+    for (Cohort * cursor = current; cursor && bt->failure == GRX_OK;
+        cursor = cursor->next) {
+      cursor->accepted = 1;
+      Cohort * item = cohort_clone(&run, &cursor->state, cursor, -1);
+      if (!item)
+        break;
+      const GRX_Inst * terminal = grx_program_at(bt->program, item->state.stage_pc);
+      size_t before = item->state.stage_position;
+      size_t end = 0;
+      int result = comparison_slice(&run, item, floor, toplevel, &end);
+      if (result == 2 && item->state.stage_kind == 4 &&
+          (terminal->op == GRX_OP_CHAR || terminal->op == GRX_OP_CLASS ||
+              terminal->op == GRX_OP_ANY || terminal->op == GRX_OP_ANY_NL))
+        result = comparison_slice(&run, item, floor, toplevel, &end);
+      if (result == 1) {
+        memcpy(bt->slots, item->state.slots, bt->slot_count * sizeof(size_t));
+        for (size_t slot = 2; slot < bt->captures; slot++)
+          bt->slots[slot] = item->report[slot];
+        *out_end = end;
+        matched = 1;
+        frontier_match = 1;
+      }
+      else if (result == 2 && ((item->state.stage_kind == 1 || item->state.stage_kind == 5) ||
+          (terminal->op == GRX_OP_LOOK && item->state.stage_pc != cursor->frontier_pc))) {
+        int same = item->state.stage_position == before;
+        Cohort ** current_insert = &cursor->next;
+        item->state.stage_kind = 0;
+        comparison_expand(&run, item, same ? &current : &next,
+            same ? &current_insert : &next_insert, same, floor, toplevel);
+        item = NULL;
+      }
+      if (item)
+        cohort_free(&run, item);
+      if (frontier_match)
+        break;
+    }
+    comparison_frontier_free(&run, current);
+    comparison_frontier_free(&run, run.epsilon_seen);
+    run.epsilon_seen = NULL;
+    current = next;
+  }
+  comparison_frontier_free(&run, current);
+  comparison_frontier_free(&run, run.epsilon_seen);
+  cohort_inputs_free(&run);
+  cohort_closures_free(&run);
+  while (run.branches) {
+    CohortBranch * branch = run.branches;
+    run.branches = branch->next;
+    capture_free(bt, branch, (sizeof(*branch) + sizeof(size_t) - 1) / sizeof(size_t));
+  }
+  capture_free(bt, run.terminal_tags,
+      (bt->program->insts.count * sizeof(*run.terminal_tags) +
+          sizeof(size_t) - 1) / sizeof(size_t));
+  capture_free(bt, run.read_masks, bt->program->insts.count);
+  capture_free(bt, run.predicate_registers, bt->registers);
+  capture_free(bt, run.published, bt->captures);
+  capture_free(bt, run.published_sequence, bt->captures);
+  return matched && bt->failure == GRX_OK;
+}
+
+static int comparison_run(Backtrack * bt, uint32_t pc, size_t position,
+    size_t floor, int toplevel, size_t * out_end) {
+  return comparison_run_seeded(bt, pc, position, floor, toplevel, out_end, 0);
+}
+
+static int comparison_body_candidates(Backtrack * bt, uint32_t pc, size_t position,
+    size_t floor, int toplevel, size_t * out_end) {
+  return comparison_run_seeded(bt, pc, position, floor, toplevel, out_end, 1);
+}
+
+/** Keep optional child-batch locals outside every ordinary behind frame. */
+static int cohort_run_behind_candidates(Backtrack * bt, uint32_t body,
+    size_t begin, size_t last, size_t floor, size_t * out_end) {
+  if (!cohort_candidate_body(bt, body))
+    return run(bt, body, begin, floor, 0, out_end);
+  uint32_t outer_body = bt->candidate_body;
+  size_t outer_last = bt->candidate_last;
+  bt->candidate_body = body;
+  bt->candidate_last = last;
+  int matched = run(bt, body, begin, floor, 0, out_end);
+  bt->candidate_body = outer_body;
+  bt->candidate_last = outer_last;
+  return 2 + matched;
+}
+
+
+static int cohort_phase(const Cohort * item) {
+  return item->state.stage_kind == 4 ? 2
+      : item->state.stage_kind == 3 ? 1 : 0;
+}
+
+/** Advance a real search origin with the engine's UTF/cluster policy. */
+static int cohort_next_origin(Backtrack * bt, size_t * next) {
+  const GRX_Program * program = bt->program;
+  const GRX_ExecRequest * request = bt->request;
+  size_t start = *next;
+  uint32_t codepoint = 0;
+  size_t width = 0;
+  if (!read_forward(bt, start, &codepoint, &width)) return 0;
+  if ((program->flags & GRX_PROGRAM_NEWLINE_CRLF) &&
+      !(program->flags & GRX_PROGRAM_HAS_CR_OR_LF) &&
+      grx_crlf_begins_at(request->subject, request->length, start)) {
+    *next = start + 2;
+    return 1;
+  }
+  size_t origin = start;
+  start += width;
+  int expose = request->scalar_frontiers && request->scalar_frontiers[origin];
+  if (!expose && (program->flags & GRX_PROGRAM_CLUSTER_SEARCH) &&
+      grx_display_cell_width(codepoint, 0) == 0) {
+    for (size_t i = 0; !expose && i < program->insts.count; i++) {
+      if (!pending_step(bt)) return 0;
+      const GRX_Inst * inst = grx_program_at(program, (uint32_t)i);
+      expose = grx_program_scope(program, (uint32_t)i) == 0 &&
+          (inst->policy & GRX_POLICY_SCALAR_LITERAL) &&
+          ((inst->op == GRX_OP_CHAR && inst->x == codepoint) ||
+              (inst->op == GRX_OP_CLASS && in_class(bt, inst->x, codepoint)));
+    }
+  }
+  if ((program->flags & GRX_PROGRAM_CLUSTER_SEARCH) && !expose) {
+    while (read_forward(bt, start, &codepoint, &width) &&
+        grx_display_cell_width(codepoint, 0) == 0) {
+      if (!pending_step(bt)) return 0;
+      start += width;
+    }
+  }
+  *next = start;
+  return 1;
+}
+
+static int cohort_run(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
+    int toplevel, size_t * out_end) {
+  if (comparison_frontiers_eligible(bt))
+    return comparison_run(bt, pc, position, floor, toplevel, out_end);
+  if (bt->atomic_base && !bt->atomic_history) {
+    bt->atomic_history = capture_alloc(bt, 7 * bt->captures);
+    if (!bt->atomic_history)
+      return 0;
+    for (size_t i = 0; i < 7 * bt->captures; i++)
+      bt->atomic_history[i] = GRX_NPOS;
+  }
+  CohortRun run = {.owner = bt, .scope_depth = bt->run_depth};
+  run.published = capture_alloc(bt, bt->captures);
+  run.published_sequence = capture_alloc(bt, bt->captures);
+  if (run.published)
+    memset(run.published, 0, bt->captures * sizeof(size_t));
+  if (run.published_sequence)
+    memset(run.published_sequence, 0, bt->captures * sizeof(size_t));
+  Cohort * first = bt->failure == GRX_OK ? cohort_clone(&run, bt, NULL, -1) : NULL;
+  if (!first) {
+    capture_free(bt, run.published, bt->captures);
+    capture_free(bt, run.published_sequence, bt->captures);
+    return 0;
+  }
+  first->state.stage_pc = pc;
+  first->state.stage_position = position;
+  run.live = first;
+  int interleaved = toplevel && pc == 0 && !bt->request->anchored &&
+      !bt->request->scalar_query &&
+      (bt->program->flags & GRX_PROGRAM_OPEN_REFERENCES);
+  size_t next_origin = position;
+  if (!interleaved || next_origin >= bt->request->length)
+    next_origin = GRX_NPOS;
+  else if (!cohort_next_origin(bt, &next_origin))
+    next_origin = GRX_NPOS;
+  if (interleaved) bt->cohort_search_complete = 1;
+  Cohort * winner = NULL;
+  while (bt->failure == GRX_OK) {
+    Cohort * selected = NULL;
+    for (Cohort * item = run.live; item; item = item->next) {
+      if (!pending_step(bt))
+        break;
+      if (!item->accepted && (!selected ||
+          item->state.stage_position < selected->state.stage_position ||
+          (item->state.stage_position == selected->state.stage_position &&
+              (cohort_phase(item) < cohort_phase(selected) ||
+                  (cohort_phase(item) == cohort_phase(selected) &&
+                      cohort_before(item, selected))))))
+        selected = item;
+    }
+    if (bt->failure != GRX_OK) break;
+    if (next_origin != GRX_NPOS &&
+        (!selected || next_origin <= selected->state.stage_position)) {
+      Cohort * origin = cohort_clone(&run, bt, NULL, -1);
+      if (!origin) break;
+      origin->state.attempt_start = next_origin;
+      origin->state.body_position = next_origin;
+      origin->state.frontier_position = next_origin;
+      origin->state.stage_pc = pc;
+      origin->state.stage_position = next_origin;
+      origin->state.stage_kind = 0;
+      origin->next = run.live;
+      run.live = origin;
+      if (next_origin >= bt->request->length ||
+          !cohort_next_origin(bt, &next_origin))
+        next_origin = GRX_NPOS;
+      continue;
+    }
+    if (!selected) break;
+    Backtrack * state = &selected->state;
+    state->steps = bt->steps;
+
+    if (bt->atomic_history && state->atomic_history)
+      memcpy(state->atomic_history + 5 * bt->captures,
+          bt->atomic_history + 5 * bt->captures,
+          2 * bt->captures * sizeof(size_t));
+    size_t end = 0;
+    int result = run_path(state, state->stage_pc, state->stage_position,
+        floor, toplevel, &end);
+    bt->steps = state->steps;
+
+    bt->failure = state->failure;
+    bt->failure_diag = state->failure_diag;
+    if (result == 2 && state->stage_kind == 2) {
+      const GRX_Inst * split = grx_program_at(bt->program, state->stage_pc);
+      Cohort * left = cohort_clone(&run, state, selected, 0);
+      Cohort * right = left ? cohort_clone(&run, state, selected, 1) : NULL;
+      if (left) {
+        left->state.stage_pc = split->x;
+        left->state.stage_kind = 0;
+        advance_generation(bt, &left->state.branch_epoch);
+        left->next = run.live;
+        run.live = left;
+      }
+      if (right) {
+        right->state.stage_pc = split->y;
+        right->state.stage_kind = 0;
+        right->next = run.live;
+        run.live = right;
+        if (advance_generation(bt, &right->state.branch_epoch) &&
+            advance_generation(bt, &right->state.branch_epoch))
+          advance_generation(bt, &right->state.alternative_epoch);
+      }
+      result = 0;
+    }
+    if (result == 1) {
+      selected->accepted = 1;
+      selected->end = end;
+      if (!winner || cohort_before(selected, winner))
+        winner = selected;
+    }
+    if (!result) {
+      Cohort ** link = &run.live;
+      while (*link != selected)
+        link = &(*link)->next;
+      *link = selected->next;
+      cohort_free(&run, selected);
+    }
+    if (winner) {
+      if (interleaved) {
+        int needed = 0;
+        for (const Cohort * item = run.live; item; item = item->next) {
+          if (!pending_step(bt)) break;
+          if (!item->accepted && cohort_before(item, winner)) needed = 1;
+        }
+        if (!needed || bt->failure != GRX_OK) break;
+      }
+      Cohort ** link = &run.live;
+      while (*link) {
+        Cohort * item = *link;
+        if (item != winner && !cohort_before(item, winner) &&
+            (!interleaved || item->state.attempt_start == winner->state.attempt_start)) {
+          *link = item->next;
+          cohort_free(&run, item);
+        }
+        else
+          link = &item->next;
+      }
+    }
+  }
+  int matched = winner && bt->failure == GRX_OK;
+  if (bt->atomic_history && bt->atomic_reports &&
+      bt->atomic_reports[bt->captures] == 1 &&
+      bt->atomic_reports[1] != GRX_NPOS) {
+    bt->atomic_history[bt->captures] = 1;
+    bt->atomic_history[bt->captures + 1] = bt->atomic_reports[1];
+  }
+  if (matched) {
+    memcpy(bt->slots, winner->state.slots, bt->slot_count * sizeof(size_t));
+    *out_end = winner->end;
+  }
+  while (run.live) {
+    Cohort * item = run.live;
+    run.live = item->next;
+    cohort_free(&run, item);
+  }
+  cohort_inputs_free(&run);
+  cohort_closures_free(&run);
+  while (run.branches) {
+    CohortBranch * branch = run.branches;
+    run.branches = branch->next;
+    capture_free(bt, branch,
+        (sizeof(*branch) + sizeof(size_t) - 1) / sizeof(size_t));
+  }
+  capture_free(bt, run.published, bt->captures);
+  capture_free(bt, run.published_sequence, bt->captures);
+  return matched;
 }
 
 /** Validate every expanded slot range before any offset arithmetic or
@@ -6165,17 +8580,24 @@ static int backtrack_layout_fits(
     slots += captures;
   }
   size_t mirrored = 0;
+  int open_context = (program->flags & GRX_PROGRAM_OPEN_REFERENCES) &&
+      (program->flags & GRX_PROGRAM_CAPTURE_COHORTS);
   if (program->flags & GRX_PROGRAM_PROVISIONAL_LOOK_END) {
     // Six assertion-owner tags plus the physical reference endpoint.
-    if (slot_limit - slots < 7 || captures > (slot_limit - slots - 7) / 5) {
+    if (slot_limit - slots < 7 || captures > (slot_limit - slots - 7) / (open_context ? 6 : 5)) {
       return 0;
     }
-    slots += 5 * captures + 7;
+    slots += (open_context ? 6 : 5) * captures + 7;
     mirrored = slots;
     if (slots > (slot_limit - 1) / 2) {
       return 0;
     }
     slots = 2 * slots + 1;
+  }
+  else if (open_context) {
+    if (captures > slot_limit - slots)
+      return 0;
+    slots += captures;
   }
   // Assertion snapshots include the mirrored prefix; discovery snapshots
   // additionally carry all seven capture-history regions. Both sums must
@@ -6227,20 +8649,17 @@ static int candidate_run_compare(Backtrack * bt, const char * literal,
       return 0;
     }
     i += width;
-    // Caseless feasibility accepts the first complete written cluster;
-    // the ignored-mark fallback still compares the entire selected run.
-    if (!ignore_marks && (options & GRX_OPT_CASELESS) && bases &&
-        grx_display_cell_width(wanted, 0) != 0) {
-      return 1;
-    }
     if (ignore_marks && grx_display_cell_width(wanted, 0) == 0) {
       continue;
     }
     uint32_t found = 0;
     do {
-      if (!pending_step(bt) ||
-          !read_forward(bt, position, &found, &width)) {
+      if (!pending_step(bt))
         return 0;
+      if (!read_forward(bt, position, &found, &width)) {
+        return position == bt->window_end && !ignore_marks &&
+            (options & GRX_OPT_CASELESS) && bases &&
+            grx_display_cell_width(wanted, 0) != 0;
       }
       position += width;
     } while (ignore_marks && bases &&
@@ -6309,10 +8728,11 @@ GRX_Result grx_exec_backtrack(
     return GRX_ERR_LIMIT;
   }
 
+  size_t scratch_bytes = 0;
   Backtrack bt = {
+      .scratch_bytes = &scratch_bytes,
       .request = request,
       .program = program,
-      .stack_is_scratch = request->scalar_query,
       .allocator = request->regex->allocator,
       .captures = capture_slots,
       .registers = program->register_count,
@@ -6431,6 +8851,8 @@ GRX_Result grx_exec_backtrack(
     bt.slot_count += bt.captures;
   }
 
+  int open_context = (program->flags & GRX_PROGRAM_OPEN_REFERENCES) &&
+      (program->flags & GRX_PROGRAM_CAPTURE_COHORTS);
   if (program->flags & GRX_PROGRAM_PROVISIONAL_LOOK_END) {
     bt.pending_end_slot = bt.slot_count++;
     bt.forward_scope_slot = bt.slot_count++;
@@ -6447,11 +8869,20 @@ GRX_Result grx_exec_backtrack(
     bt.slot_count += bt.captures;
     bt.atomic_result_slots = bt.slot_count;
     bt.slot_count += bt.captures;
+    if (open_context) {
+      bt.capture_position_slots = bt.slot_count;
+      bt.slot_count += bt.captures;
+    }
     bt.atomic_result_present = bt.slot_count++;
     bt.atomic_input_owner_slot = bt.slot_count++;
     bt.atomic_base = bt.slot_count;
     bt.slot_count += bt.atomic_base;
     bt.atomic_base_present = bt.slot_count++;
+  }
+
+  else if (open_context) {
+    bt.capture_position_slots = bt.slot_count;
+    bt.slot_count += bt.captures;
   }
 
   bt.slots = capture_alloc(&bt, bt.slot_count);
@@ -6462,19 +8893,21 @@ GRX_Result grx_exec_backtrack(
     return bt.failure;
   }
   if (request->callout) {
-    bt.callout_captures = gcu_allocator_malloc(
-        bt.allocator, (bt.captures / 2) * sizeof(GRX_Capture));
+    bt.callout_captures = scratch_alloc(
+        &bt, (bt.captures / 2) * sizeof(GRX_Capture));
     if (!bt.callout_captures) {
-      gcu_allocator_free(bt.allocator, bt.slots);
-      return GRX_ERR_OOM;
+      capture_free(&bt, bt.slots, bt.slot_count);
+      if (request->out_diag) *request->out_diag = bt.failure_diag;
+      return bt.failure;
     }
   }
   if (bt.longest) {
-    bt.best_slots = gcu_allocator_malloc(
-        bt.allocator, bt.slot_count * sizeof(size_t));
+    bt.best_slots = capture_alloc(&bt, bt.slot_count);
     if (!bt.best_slots) {
-      gcu_allocator_free(bt.allocator, bt.slots);
-      return GRX_ERR_OOM;
+      scratch_free(&bt, bt.callout_captures, (bt.captures / 2) * sizeof(GRX_Capture));
+      capture_free(&bt, bt.slots, bt.slot_count);
+      if (request->out_diag) *request->out_diag = bt.failure_diag;
+      return bt.failure;
     }
   }
 
@@ -6487,29 +8920,36 @@ GRX_Result grx_exec_backtrack(
     // refused a program it cannot run: a caller who named an engine asked
     // for that engine's guarantee, and quietly giving them a different
     // answer is worse than telling them it cannot be done.
-    gcu_allocator_free(bt.allocator, bt.best_slots);
-    gcu_allocator_free(bt.allocator, bt.slots);
+    capture_free(&bt, bt.best_slots, bt.slot_count);
+    scratch_free(&bt, bt.callout_captures, (bt.captures / 2) * sizeof(GRX_Capture));
+    capture_free(&bt, bt.slots, bt.slot_count);
     return GRX_ERR_UNSUPPORTED;
   }
   if (request->memoize) {
     size_t bytes = grx_exec_bitmap_bytes(request->regex, request->length);
     if (bytes == GRX_NPOS
-        || (request->limits->max_match_memory
-            && bytes > request->limits->max_match_memory)) {
+        || !scratch_fits(&bt, 0, bytes)) {
       // Refused rather than run without the bitmap: a caller who named this
       // engine asked for the linear-time guarantee, and quietly giving them
       // the exponential one is the substitution GRX_ENGINE_PIKE already
       // refuses to make.
-      gcu_allocator_free(bt.allocator, bt.slots);
+      scratch_free(&bt, bt.callout_captures, (bt.captures / 2) * sizeof(GRX_Capture));
+      capture_free(&bt, bt.slots, bt.slot_count);
       if (request->out_diag) {
         *request->out_diag = GRX_DIAG_LIMIT_MATCH_MEMORY;
       }
       return GRX_ERR_LIMIT;
     }
-    bt.visited = gcu_allocator_calloc(bt.allocator, bytes, 1);
+    bt.visited = scratch_alloc(&bt, bytes);
+    if (bt.visited) {
+      memset(bt.visited, 0, bytes);
+      bt.visited_bytes = bytes;
+    }
     if (!bt.visited) {
-      gcu_allocator_free(bt.allocator, bt.slots);
-      return GRX_ERR_OOM;
+      scratch_free(&bt, bt.callout_captures, (bt.captures / 2) * sizeof(GRX_Capture));
+      capture_free(&bt, bt.slots, bt.slot_count);
+      if (request->out_diag) *request->out_diag = bt.failure_diag;
+      return bt.failure;
     }
   }
   else if (!bt.longest && !request->callout
@@ -6592,12 +9032,12 @@ GRX_Result grx_exec_backtrack(
             remaining.max_steps -= bt.steps;
           }
           if (remaining.max_match_memory) {
-            if (bt.scratch_bytes >= remaining.max_match_memory) {
+            if ((*bt.scratch_bytes) >= remaining.max_match_memory) {
               bt.failure_diag = GRX_DIAG_LIMIT_MATCH_MEMORY;
               result = GRX_ERR_LIMIT;
               break;
             }
-            remaining.max_match_memory -= bt.scratch_bytes;
+            remaining.max_match_memory -= (*bt.scratch_bytes);
           }
           GRX_ExecRequest probe = *request;
           size_t steps = 0;
@@ -6620,7 +9060,7 @@ GRX_Result grx_exec_backtrack(
           bt.steps += steps;
           ScalarPriority * priority = priority_result;
           if (priority) {
-            bt.scratch_bytes += priority->words * sizeof(size_t);
+            (*bt.scratch_bytes) += priority->words * sizeof(size_t);
             priority->next = scalar_priorities;
             scalar_priorities = priority;
             active_request.scalar_priorities = scalar_priorities;
@@ -6724,7 +9164,7 @@ GRX_Result grx_exec_backtrack(
       // records what was asked for and this loop is what acts on it.
       break;
     }
-    if (request->anchored || start >= request->length ||
+    if (bt.cohort_search_complete || request->anchored || start >= request->length ||
         (request->scalar_query &&
             (start >= request->scalar_target ||
                 (request->scalar_cutoff &&
@@ -6739,57 +9179,9 @@ GRX_Result grx_exec_backtrack(
       continue;
     }
 
-    // Leftmost: try each starting position in turn, and take the first that
-    // matches. Stepping by a character rather than a byte matters in UTF
-    // mode - a match may not begin inside one.
-    uint32_t codepoint = 0;
-    size_t width = 0;
-    if (!read_forward(&bt, start, &codepoint, &width)) {
-      result = GRX_ERR_INVALID;
+    if (!cohort_next_origin(&bt, &start)) {
+      result = bt.failure == GRX_OK ? GRX_ERR_INVALID : bt.failure;
       break;
-    }
-    // pcre2api's CRLF rule, which it calls a compromise: an attempt that
-    // failed at a CR LF sequence resumes *after* the LF, so no attempt
-    // ever begins between the two - unless the pattern names CR or LF
-    // itself, in which case the author plainly meant to reach that
-    // position. pcre2's own example is `.+A`, which does not match
-    // "\r\nA" and where `[\r\n]A` does.
-    //
-    // A caller's explicit start offset is not affected, because this is
-    // the *advance* and the first attempt has already happened.
-    if ((program->flags & GRX_PROGRAM_NEWLINE_CRLF)
-        && !(program->flags & GRX_PROGRAM_HAS_CR_OR_LF)
-        && grx_crlf_begins_at(request->subject, request->length, start)) {
-      start += 2;
-      continue;
-    }
-    size_t origin = start;
-    start += width;
-    int expose = request->scalar_frontiers && request->scalar_frontiers[origin];
-    if (!expose && (program->flags & GRX_PROGRAM_CLUSTER_SEARCH) &&
-        grx_display_cell_width(codepoint, 0) == 0) {
-      for (size_t i = 0; !expose && i < program->insts.count; i++) {
-        if (!pending_step(&bt)) {
-          result = bt.failure;
-          break;
-        }
-        const GRX_Inst * inst = grx_program_at(program, (uint32_t)i);
-        expose = grx_program_scope(program, (uint32_t)i) == 0 &&
-            (inst->policy & GRX_POLICY_SCALAR_LITERAL) &&
-            ((inst->op == GRX_OP_CHAR && inst->x == codepoint) ||
-                (inst->op == GRX_OP_CLASS &&
-                    in_class(&bt, inst->x, codepoint)));
-      }
-    }
-    if ((program->flags & GRX_PROGRAM_CLUSTER_SEARCH) && !expose) {
-      while (read_forward(&bt, start, &codepoint, &width) &&
-          grx_display_cell_width(codepoint, 0) == 0) {
-        if (!pending_step(&bt)) {
-          result = bt.failure;
-          break;
-        }
-        start += width;
-      }
     }
   }
 
@@ -6856,14 +9248,11 @@ GRX_Result grx_exec_backtrack(
   capture_free(&bt, scalar_frontiers, frontier_words);
   capture_free(&bt, bt.ahead_arrivals, 2 * program->insts.count);
   capture_free(&bt, bt.atomic_history, 7 * bt.captures);
-  gcu_allocator_free(bt.allocator, bt.visited);
-  gcu_allocator_free(bt.allocator, bt.best_slots);
-  gcu_allocator_free(bt.allocator, bt.slots);
-  gcu_allocator_free(bt.allocator, bt.stack);
-  gcu_allocator_free(bt.allocator, bt.call_return);
-  gcu_allocator_free(bt.allocator, bt.call_group);
-  gcu_allocator_free(bt.allocator, bt.call_slots);
-  gcu_allocator_free(bt.allocator, bt.marks);
-  gcu_allocator_free(bt.allocator, bt.callout_captures);
+  capture_free(&bt, bt.atomic_reports, 2 * bt.captures);
+  scratch_arrays_free(&bt);
+  capture_free(&bt, bt.best_slots, bt.slot_count);
+  capture_free(&bt, bt.slots, bt.slot_count);
+  scratch_free(&bt, bt.stack, bt.capacity * sizeof(Frame));
+  scratch_free(&bt, bt.callout_captures, (bt.captures / 2) * sizeof(GRX_Capture));
   return result;
 }

@@ -290,6 +290,11 @@ typedef struct GRX_ClassItem {
 #define GRX_NODE_DOT_MARK GRX_BIT(16)
 #define GRX_NODE_ESCAPED_LITERAL GRX_BIT(17)
 #define GRX_NODE_NEWLINE_INNER GRX_BIT(18)
+#define GRX_NODE_LINE_ASSERTION GRX_BIT(19) ///< Line position keeps a literal star.
+#define GRX_NODE_LINE_STAR_LITERAL GRX_BIT(22) ///< ANCHOR: following star is literal.
+#define GRX_NODE_UNSET_REFERENCE GRX_BIT(23) ///< EMPTY: retained comparison boundary.
+#define GRX_NODE_OPEN_REFERENCE GRX_BIT(21) ///< BACKREF: target is lexically open.
+#define GRX_NODE_OPTIONAL_SEQUENCE GRX_BIT(20) ///< GROUP: optional-prefix members.
 
 // clang-format off
 /**
@@ -630,6 +635,7 @@ typedef struct GRX_Parser {
    * GRX_SyntaxSpec::unmatched_close_is_literal turns on.
    */
   size_t group_depth;
+  size_t branch_start; ///< Source start of the current concatenation.
   /** Capturing groups whose bodies enclose the current position. */
   const GRX_OpenGroup * open_groups;
   /**
@@ -735,6 +741,8 @@ typedef struct GRX_Parser {
    * member is otherwise an ordinary atom, so the reader is
    * grx_parse_atom() and this is what tells the escape hook where it is.
    */
+  uint32_t dialect_flags; ///< Global frontend directives collected by grammar.
+  size_t dialect_offset; ///< Cached frontend source position (zero when absent).
   int dialect_state;
 
   /**
@@ -1029,16 +1037,9 @@ typedef struct GRX_Frontend {
   /**
    * Settle the options before a byte is read. May be NULL.
    *
-   * For an option a pattern can set that applies to text the reader has
-   * already passed. Vim's `\c` and `\C` are the case: either one anywhere
-   * in the pattern decides caseless matching for the *whole* of it, so
-   * `x\ca` matches "XA" in vim 9.1 and `\Ca\cb` matches "AB" - the `\c`
-   * wins over an earlier `\C`, and both reach backwards.
-   *
-   * An option set while reading cannot do that: the pattern's options are
-   * fixed when it is created, and a node built before the setting was seen
-   * has already been built. So this is handed the raw text instead, before
-   * the parser exists, and returns the options to start from.
+   * A prescan for options that change how the grammar is read. Semantic-only
+   * global options can instead be collected by the actual grammar and applied
+   * to the completed pattern in validate(), as Vim's case/composing flags are.
    *
    * @param text The pattern text. Not NUL-terminated.
    * @param length Its length in bytes.

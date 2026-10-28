@@ -330,6 +330,12 @@ typedef enum {
 #define GRX_POLICY_CLASS_TAIL GRX_BIT(2)
 #define GRX_POLICY_SCALAR_LITERAL GRX_BIT(7)
 #define GRX_POLICY_REPORT_COMPOSING GRX_BIT(0)
+/** BACKREF: compare the current capture endpoints rather than shadow spans. */
+#define GRX_POLICY_BACKREF_LIVE GRX_BIT(1)
+/** BACKREF: the referenced group is lexically open here. */
+#define GRX_POLICY_BACKREF_OPEN GRX_BIT(2)
+/** BACKREF: final target is absent; comparison still executes. */
+#define GRX_POLICY_BACKREF_UNSET GRX_BIT(3)
 /** ATOMIC_END/BACKREF: complete the physical composing suffix under its owner. */
 #define GRX_POLICY_COMPLETE_COMPOSING GRX_BIT(4)
 /** ATOMIC_BEGIN: a body end marker claims the inherited result end. */
@@ -340,6 +346,8 @@ typedef enum {
 #define GRX_POLICY_ATOMIC_CONTEXT_CONTINUATION GRX_BIT(3)
 /** ATOMIC_BEGIN: the body observes incoming capture values. */
 #define GRX_POLICY_ATOMIC_READS_CAPTURES GRX_BIT(7)
+/** ATOMIC_BEGIN: its deterministic BODY contains comparisons only. */
+#define GRX_POLICY_ATOMIC_COMPARISONS GRX_BIT(4)
 /** LOOK: repeat scope owns provisional results beyond one iteration. */
 #define GRX_POLICY_LOOK_REPEATED GRX_BIT(6)
 /** Compiled context appended to repeated LOOK span metadata. */

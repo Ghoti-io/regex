@@ -612,22 +612,15 @@ TEST_P(Vim, WhatAnOptionalSequenceMemberMayNotBe) {
   EXPECT_EQ(why("a\\%[b\\=]"), GRX_DIAG_NOTHING_TO_REPEAT);
   EXPECT_EQ(why("a\\%[b\\{2}]"), GRX_DIAG_NOTHING_TO_REPEAT);
   EXPECT_EQ(why("\\va%[b+]"), GRX_DIAG_NOTHING_TO_REPEAT);
-  // No alternation, no branch operator, and no group - the last of which
-  // is `set re=1`; the default engine takes one. dialects.md section 6.
-  //
-  // GRX_DIAG_NOT_IN_DIALECT and not CONSTRUCT_NOT_IMPLEMENTED, which these
-  // read until 2026-09-26. Every one of these is an error in *vim*, in both
-  // of its engines - which is what the three lines of comment above this
-  // block already said - so there is nothing here for this library to build
-  // and "not implemented yet" promised a construct the dialect will never
-  // have. `\z(` and `\z1` in this dialect answer the same way. The
-  // difference is visible to a caller: one is a pattern that will never be
-  // valid and the other is a promise.
+  // Direct alternation/intersection remain invalid in both profiles.
   EXPECT_EQ(why("a\\%[b\\|c]"), GRX_DIAG_NOT_IN_DIALECT);
   EXPECT_EQ(why("a\\%[b\\&c]"), GRX_DIAG_NOT_IN_DIALECT);
-  EXPECT_EQ(why("a\\%[\\(bc\\)]"), GRX_DIAG_NOT_IN_DIALECT);
-  EXPECT_EQ(why("a\\%[\\%(bc\\)]"), GRX_DIAG_NOT_IN_DIALECT);
-  EXPECT_EQ(why("a\\%[b\\%[cd]]"), GRX_DIAG_NOT_IN_DIALECT);
+  // Groups and nesting are grammar features of the forced NFA engine.
+  for (const char * pattern : {R"(a\%[\(bc\)])", R"(a\%[\%(bc\)])",
+           R"(a\%[b\%[cd]])"}) {
+    EXPECT_EQ(accepts(pattern),
+        GetParam() == GRX_SYNTAX_VIM_NFA ? "ok" : "refused");
+  }
   // And the result code, which is the half a caller branches on.
   EXPECT_EQ(accepts("a\\%[b\\|c]"), "refused");
   EXPECT_EQ(compile("a\\%[b\\|c]", GRX_SYNTAX_VIM_BACKTRACK).result, GRX_ERR_SYNTAX);
@@ -719,7 +712,7 @@ TEST_P(Vim, TheConstructsItRefusesAndWhy) {
   // `~` is the last `:s` replacement, and there has never been one - which
   // is the state vim answers "E33" in, so this refusal is vim's own answer
   // and not a deviation. `\~` is the literal tilde in both.
-  EXPECT_EQ(why("a~"), GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED);
+  EXPECT_EQ(why("a~"), GRX_DIAG_PREVIOUS_SUBSTITUTE_UNAVAILABLE);
   EXPECT_EQ(span("a\\~", "a~"), "0-2");
   EXPECT_EQ(span("\\M~", "a~"), "1-2");
   // These two vim refuses itself, outside a syntax file.
@@ -1223,4 +1216,28 @@ TEST(VimEscapes, TheMatchMarkPrefixIsNotAnAtom) {
   // collapsing into this one.
   EXPECT_EQ(why("\\z("), GRX_DIAG_NOT_IN_DIALECT);
   EXPECT_EQ(why("\\z1"), GRX_DIAG_NOT_IN_DIALECT);
+}
+
+TEST_P(Vim, PreviousSubstituteStateHasItsOwnUnsupportedDiagnostic) {
+  for (const char * pattern : {"~", R"(\m~)", R"(\v~)", R"(\M\~)", R"(\V\~)", "a~"}) {
+    SCOPED_TRACE(pattern);
+    Attempt attempt = compile(pattern, GetParam());
+    EXPECT_EQ(attempt.result, GRX_ERR_UNSUPPORTED);
+    EXPECT_EQ(attempt.diag, GRX_DIAG_PREVIOUS_SUBSTITUTE_UNAVAILABLE);
+    EXPECT_EQ(attempt.regex, nullptr);
+    grx_regex_free(attempt.regex);
+  }
+  for (const char * pattern : {R"(\~)", R"(\m\~)", R"(\v\~)", R"(\M~)",
+           R"(\V~)", "[~]", R"(\%d126)"}) {
+    SCOPED_TRACE(pattern);
+    EXPECT_EQ(span(pattern, "~", GetParam()), "0-1");
+  }
+}
+
+TEST(VimContextUnavailable, AnUnbuiltDialectKeepsItsGeneralUnsupportedDiagnostic) {
+  Attempt attempt = compile("a", GRX_SYNTAX_RUBY);
+  EXPECT_EQ(attempt.result, GRX_ERR_UNSUPPORTED);
+  EXPECT_EQ(attempt.diag, GRX_DIAG_DIALECT_NOT_IMPLEMENTED);
+  EXPECT_EQ(attempt.regex, nullptr);
+  grx_regex_free(attempt.regex);
 }

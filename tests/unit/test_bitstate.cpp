@@ -462,17 +462,20 @@ TEST(BitState, RefusesABitmapThatWillNotFit) {
   limits.max_match_memory = 8 * 1024 * 1024;
   EXPECT_EQ(search_on(regex, subject, GRX_ENGINE_BITSTATE, &limits), "none");
 
-  // Compare the engines on the same early match and long subject. Even a
-  // one-instruction bitmap needs one bit per position, including the end;
-  // this byte cap is below that lower bound, while the backtracker only needs
-  // scratch storage for the short successful prefix. It still pays for its
-  // capture and saved caller state; having no bitmap does not exempt it.
+  // Compare the engines on the same early match and long subject. The bit-state
+  // bitmap needs one bit per instruction per position, which is far more than
+  // this cap, while the backtracker only needs scratch storage for the short
+  // successful prefix. That scratch is all live payload, root frames included:
+  // it fits 2 KiB, and a cap below its true peak refuses.
   const std::string early_match = "aab" + std::string(4096, 'x');
-  limits.max_match_memory = early_match.size() / 8;
+  limits.max_match_memory = 2048;
   limits.max_steps = 100000;
   EXPECT_EQ(search_on(regex, early_match, GRX_ENGINE_BITSTATE, &limits), kLimit);
   EXPECT_EQ(search_on(regex, early_match, GRX_ENGINE_BACKTRACK, &limits),
       "0..3 1..2");
+  limits.max_match_memory = early_match.size() / 8;
+  EXPECT_EQ(search_on(regex, early_match, GRX_ENGINE_BACKTRACK, &limits),
+      kLimit);
   limits.max_match_memory = 8 * 1024 * 1024;
   EXPECT_EQ(search_on(regex, early_match, GRX_ENGINE_BITSTATE, &limits),
       "0..3 1..2");

@@ -456,6 +456,7 @@ static const char * const spec_names[GRX_SYNTAX_COUNT] = {
 #define VIM_PROFILE_COMMON \
   .capture_reset = GRX_CAPTURE_KEEP_LAST_SET, \
   .backref_unset = GRX_BACKREF_UNSET_EMPTY, \
+  .backref_live_span = 1, \
   .dollar = GRX_DOLLAR_END_ONLY, \
   .newlines = GRX_NEWLINES_NONE, \
   .iteration = GRX_ITERATE_ADVANCE_ONE_STOP_AT_END, \
@@ -1291,6 +1292,9 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     .provisional_assertion_end = 1,
     .assertion_context_from_continuation = 1,
     .match_end_cluster_boundary = 1,
+    .bounded_repeat_serial = 1,
+    .optional_sequence_groups = 1,
+    .line_star_initial_literal = 1,
     .optional_tail_omits_newline = 1,
     .posix_case_classes_case_mapped = 1,
     .empty_loop = GRX_EMPTY_LOOP_BREAK,

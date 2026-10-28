@@ -467,6 +467,7 @@ TESTFLAGS := `PKG_CONFIG_PATH=$(PKG_CONFIG_LOOKUP_PATH) pkg-config --libs --cfla
 # The ratio was the reason to leave it out and the absolute figure is why
 # that reason does not hold.
 ALL_TEST_GATES := check-symbols check-layering check-aliasing check-oracle-exclusions \
+	check-oracle-driver-results \
 	check-unicode-tables check-dump-names check-readme-example \
 	check-diagnostics check-engine-equivalence check-json-schema-suite \
 	check-tables check-status-line check-corpus-seeds check-makefile-hash \
@@ -679,6 +680,11 @@ ifdef HAVE_TEXT
 TOOLS += $(patsubst tools/jsonschema/%.c,$(APP_DIR)/tools/%$(EXE_EXTENSION),$(JSONSCHEMA_TOOL_SOURCES))
 endif
 
+# Test-only versions of the actual drivers, with a portable compile-entry
+# fault fixture. These are not tools and are never installed.
+ORACLE_RESULT_TESTS := $(APP_DIR)/tests/oracle_result_match$(EXE_EXTENSION) \
+	$(APP_DIR)/tests/oracle_result_replace$(EXE_EXTENSION)
+
 # Where the test fixtures live. Tests run from build/.../apps, so the path is
 # baked in at compile time.
 REGEX_ROOT := $(CURDIR)
@@ -691,7 +697,8 @@ all: $(APP_DIR)/$(TARGET) $(APP_DIR)/$(STATIC_TARGET) ## Build shared + static l
 ####################################################################
 
 TEST_DEPFILES := $(foreach pair,$(TEST_PAIRS),$(OBJ_DIR)/tests/$(basename $(notdir $(word 1,$(subst |, ,$(pair))))).d)
-DEPFILES := $(LIBOBJECTS:.o=.d) $(TEST_HELPER_OBJ:.o=.d) $(TEST_DEPFILES)
+DEPFILES := $(LIBOBJECTS:.o=.d) $(TEST_HELPER_OBJ:.o=.d) $(TEST_DEPFILES) \
+	$(addsuffix .d,$(ORACLE_RESULT_TESTS))
 -include $(DEPFILES)
 
 # The sanitizer and fuzz trees get theirs at the end of this file, where the
@@ -859,6 +866,21 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/oracle/%.c $(APP_DIR)/$(STATIC_TARGET)
 	@printf "\n### Compiling Tool: $* ###\n"
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(INCLUDE) -o $@ $< $(LDFLAGS) $(REGEXLIBRARY) $(CUTIL_LIBS)
+
+# Include the real driver through the fixture; no GNU --wrap requirement.
+$(APP_DIR)/tests/oracle_result_match$(EXE_EXTENSION): \
+		tests/oracle/driver_compile_result.c tools/oracle/grx_match.c \
+		tools/oracle/grx_flags.h $(APP_DIR)/$(STATIC_TARGET) $(FLAGS_STAMP) \
+		| $(APP_DIR)/$(TARGET)
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(INCLUDE) -MMD -MP -MF $@.d -o $@ $< $(LDFLAGS) $(REGEXLIBRARY) $(CUTIL_LIBS)
+
+$(APP_DIR)/tests/oracle_result_replace$(EXE_EXTENSION): \
+		tests/oracle/driver_compile_result.c tools/oracle/grx_replace.c \
+		tools/oracle/grx_flags.h $(APP_DIR)/$(STATIC_TARGET) $(FLAGS_STAMP) \
+		| $(APP_DIR)/$(TARGET)
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(INCLUDE) -DGRX_ORACLE_REPLACE_DRIVER=1 -MMD -MP -MF $@.d -o $@ $< $(LDFLAGS) $(REGEXLIBRARY) $(CUTIL_LIBS)
 
 $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/limits/%.c $(APP_DIR)/$(STATIC_TARGET) \
 		| $(APP_DIR)/$(TARGET)
@@ -1392,11 +1414,9 @@ check-oracle-linear: $(TOOLS)
 	$(call run-oracle,rust,python3 tools/oracle/linear_diff.py --dialect rust --strict)
 
 check-oracle-vim: ## Compare the Vim front end against vim itself
-# One vim process for the whole run, not one per case: vim reads a file of
-# cases and writes a file of answers, which is what makes a differential
-# possible against a reference that cannot be imported. `probe.py`'s vim
-# driver starts a process per case and is fine for the eighty rows that page
-# fills; this asks tens of thousands.
+# Each reference operation uses a fresh bounded process. Span and group
+# queries are joined only after agreement. Two calls for one input can inherit
+# NFA state; the reference controls below prove that history trap is caught.
 #
 # It found a defect in code this dialect does not own, which is the second
 # time a new front end has: a lookaround restored the live capture slots when
@@ -1405,6 +1425,7 @@ check-oracle-vim: ## Compare the Vim front end against vim itself
 # matched "aa" here and "a" in node, and pcre2test refused it outright.
 check-oracle-vim: $(TOOLS)
 	@$(REQUIRE_PYTHON3)
+	$(call run-oracle,vim,python3 tools/oracle/check_vim_coherent.py)
 	$(call run-oracle,vim,python3 tools/oracle/vim_diff.py --syntax vim-backtrack --strict)
 	$(call run-oracle,vim,python3 tools/oracle/vim_diff.py --syntax vim-nfa --strict)
 
@@ -1661,6 +1682,13 @@ check-oracle-java-properties: $(APP_DIR)/tools/grx_properties$(EXE_EXTENSION)
 	@$(REQUIRE_PYTHON3)
 	$(call run-oracle,java25$(comma)java27,python3 tools/oracle/java_property_diff.py \
 		--driver $(APP_DIR)/tools/grx_properties$(EXE_EXTENSION))
+
+.PHONY: check-oracle-driver-results
+check-oracle-driver-results: $(ORACLE_RESULT_TESTS) ## Keep compile errors distinct from syntax refusals
+	@$(REQUIRE_PYTHON3)
+	python3 tools/oracle/check_driver_compile_results.py \
+		--match-driver $(word 1,$(ORACLE_RESULT_TESTS)) \
+		--replace-driver $(word 2,$(ORACLE_RESULT_TESTS))
 
 check-oracle-exclusions: ## Check exclusions and injected Vim comparison answers
 # Every exclusion in this directory narrows a gate, and a gate narrowed too

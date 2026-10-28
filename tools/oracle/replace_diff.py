@@ -476,7 +476,8 @@ def parse_vim_reply(line, reference=False):
             return dict(status="ok", text=bytes.fromhex(body).decode("utf-8"))
         except UnicodeDecodeError as error:
             raise ValueError("malformed Vim replacement UTF-8") from error
-    if re.fullmatch(r"compile [0-9]+", line):
+    # Typed unavailable context is deliberately refused in the fresh Vim API.
+    if re.fullmatch(r"(?:compile|unavailable) [0-9]+", line):
         return dict(status="refused")
     if re.fullmatch(r"error .+", line) or (not reference and
             re.fullmatch(r"template(?: [0-9]+ [0-9]+ [0-9]+)?", line)):

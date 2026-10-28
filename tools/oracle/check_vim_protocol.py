@@ -143,6 +143,13 @@ def check():
     for code in vim_protocol.REFUSALS:
         require(vim_protocol.classify_exception('Vim(let):E%d: measured syntax' % code) == 'refused', code)
         checked += 1
+    for exception, phase, expected in (
+            ('Vim(let):E877: (NFA regexp) Invalid character class: 37', 'pattern', 'refused'),
+            ('Vim(let):E877: (NFA regexp) Invalid character class: 37', 'replacement', 'error'),
+            ('Vim(let):E877: unclassified NFA failure', 'pattern', 'error'),
+            ('Vim(let):E877: (NFA regexp) Invalid character class: unknown', 'pattern', 'error')):
+        require(vim_protocol.classify_exception(exception, phase) == expected, exception)
+        checked += 1
     for exception in ('Vim(let):E363: memory', 'Vim(let):E342: Out of memory',
                       'Vim(let):E9999: unknown', 'E54: incomplete exception', '', None):
         require(vim_protocol.classify_exception(exception) == 'error', exception)
@@ -251,7 +258,8 @@ def check():
                 raise AssertionError('timeout accepted')
         checked += 1
     import check_vim_isolated
-    return checked + check_vim_isolated.check()
+    import check_vim_coherent
+    return checked + check_vim_isolated.check() + check_vim_coherent.join_controls()
 
 
 if __name__ == '__main__':

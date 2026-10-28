@@ -6,7 +6,10 @@ does", one oracle decides every row - the arrangement `python_diff.py` and
 `perl_diff.py` use, and not the glibc-and-musl agreement the POSIX rows are
 held to.
 
-**One fresh Vim process per input.** One container supervises bounded processes;
+**One fresh Vim process per reference operation.**
+Span and capture queries run separately: calling a second matching API can
+change NFA state even within one case. Their outcomes must agree before joining.
+One container supervises bounded processes;
 raw process-local envelopes and the explicit aggregation map are retained.
 The batch transport is available only as a diagnostic of history dependence.
 
@@ -64,6 +67,10 @@ ROOT = os.path.dirname(os.path.dirname(HERE))
 # because the magic level is what this dialect is *for* and a vocabulary that
 # only spelled magic-level patterns would test one of the four grammars.
 ATOMS = [
+    # Grouped optional sequences and lexical forward-reference permission
+    # deliberately distinguish the two compatibility profiles.
+    "[[:foo:]]", "[a[:foo:]]", "\\9[@<=]", "\\1\\(a\\)\\@<=",
+    "a\\%[\\(b\\)c]", "a\\%[b\\%[cd]]", "\\v\\_^*", "\\%23l*",
     # Literals and the characters whose meaning the level decides.
     "a", "b", ".", "\\.", "*", "\\*", "^", "$", "\\^", "\\$",
     "\\n", "\\t", "\\e", "\\r", "\\b", "\\\\", "z", "q",
@@ -196,10 +203,6 @@ def combining_grammar_cases():
 # vocabulary rather than left out, because a differential that only generates
 # what both sides accept never tests a rejection - `differential-needs-
 # invalid-input`, and the reason `python_diff.py` injects one row in eight.
-# `\%23l` and its comparisons, any level or case markers, then a bare
-# multi. The vector generator counts these syntax-shape omissions.
-LINE_NUMBER_STAR = re.compile(r"\\%[<>]?[0-9]+l(?:\\[vmMVcCZ])*(?:\*|\\\{1\})")
-
 REFUSED = [
     "\\z(a\\)", "\\z1", "\\1", "a\\{2", "\\(a", "a\\)", "a**", "\\@=",
     "\\%(a", "a\\{1}\\+", "\\v+a", "\\v?a", "\\v@a",
@@ -302,21 +305,58 @@ def make_pattern(rng):
         pieces.append(rng.choice(ATOMS))
     pattern = "".join(pieces)
     if rng.random() < 0.125:
-        # Spliced between pieces rather than at a random byte. A byte offset
-        # lands inside a construct as often as not, and the one construct
-        # that matters is `[[:name:]]`: vim compiles a collection with an
-        # unknown class name into a pattern that can never match *anything*
-        # - `[[:foo:]]*a` does not match "a" - which is a degenerate answer
-        # rather than a rule, and generating it by the thousand would put a
-        # floor under the disagreement count and hide the next real one.
-        # The invalid constructs are still generated; they are the entries
-        # of REFUSED, each of which vim refuses outright.
+        # Splice between complete atoms so the chosen invalid construct
+        # remains available as rejection coverage. Unknown POSIX names are
+        # ordinary collection fallback, included in ATOMS below.
         where = rng.randint(0, len(pieces))
         pieces.insert(where, rng.choice(REFUSED))
         pattern = "".join(pieces)
     return pattern
 
 
+# Separate fresh processes are required for span and group queries: even two
+# calls for one input can inherit NFA capture endpoints. Placeholder fields
+# let both replies use the same validated envelope; only ask_vim()
+# may combine their independently validated results.
+VIM_SPAN_SCRIPT = """
+let lines = readfile(g:vimdiff_in)
+let out = []
+for l in lines
+  let c = json_decode(l)
+  let phase = 'pattern'
+  try
+    let p = matchstrpos(c[1], c[0])
+    if p[1] < 0
+      let answer = {'status':'nomatch'}
+    else
+      let fields = [printf('%d:%d', p[1], p[2])] + repeat([''], 9)
+      let answer = {'status':'match', 'fields':fields}
+    endif
+""" + vim_protocol.CATCH + """endfor
+call writefile(out, g:vimdiff_out)
+qa!
+"""
+
+VIM_GROUP_SCRIPT = """
+let lines = readfile(g:vimdiff_in)
+let out = []
+for l in lines
+  let c = json_decode(l)
+  let phase = 'pattern'
+  try
+    let g = matchlist(c[1], c[0])
+    if empty(g)
+      let answer = {'status':'nomatch'}
+    else
+      let answer = {'status':'match', 'fields':['0:0'] + g[1:9]}
+    endif
+""" + vim_protocol.CATCH + """endfor
+call writefile(out, g:vimdiff_out)
+qa!
+"""
+
+# Historical two-query transport is diagnostic only. It must never supply
+# normative expectations, even when each distinct case has its own process.
 VIM_SCRIPT = """
 let lines = readfile(g:vimdiff_in)
 let out = []
@@ -392,11 +432,61 @@ qa!
 VIM_COMMAND = vim_runner.BASE + vim_runner.PINS
 
 
-def ask_vim(cases, engine=2):
-    """One forced pinned reference engine, with one answer per input row."""
+def ask_vim(cases, engine=2, reference_max_memory=None):
+    """Join fresh span/group operations, never two searches in one process."""
     if engine not in (1, 2):
         raise ValueError("a forced Vim engine (1 or 2) is required")
-    return _ask(cases, "set regexpengine=%d\n" % engine + VIM_SCRIPT)
+    settings = "set regexpengine=%d\n" % engine
+    if reference_max_memory is not None:
+        if type(reference_max_memory) is not int or reference_max_memory <= 0:
+            raise ValueError('reference memory allowance must be a positive integer')
+        settings += 'set maxmempattern=%d\n' % reference_max_memory
+    pairs = list(cases)
+    evidence = dict(complete=False, transport='fresh-process-per-operation-v2',
+                    inputs=[[p, s] for p, s in pairs], operations={}, aggregation=[])
+    try:
+        spans = _ask(pairs, settings + VIM_SPAN_SCRIPT)
+        evidence['operations']['span'] = spans.evidence
+        if spans.evidence.get('complete') is not True:
+            raise ValueError('incomplete span reference execution')
+        if len(spans) != len(pairs):
+            raise ValueError('short span reference population')
+        for answer, (_, subject) in zip(spans, pairs):
+            normalise_theirs(answer, subject)
+        selected = [i for i, answer in enumerate(spans) if answer.startswith('match ')]
+        if selected:
+            groups = _ask([pairs[i] for i in selected], settings + VIM_GROUP_SCRIPT)
+            evidence['operations']['groups'] = groups.evidence
+            if groups.evidence.get('complete') is not True:
+                raise ValueError('incomplete group reference execution')
+            if len(groups) != len(selected):
+                raise ValueError('short group reference population')
+        else:
+            groups = []
+        answers = list(spans)
+        for group_index, case_index in enumerate(selected):
+            group_answer = groups[group_index]
+            if not group_answer.startswith('match '):
+                raise ValueError('fresh reference span/group operations disagree on outcome')
+            span_fields = json.loads(spans[case_index][len('match '):])
+            group_fields = json.loads(group_answer[len('match '):])
+            fields = [span_fields[0]] + group_fields[1:]
+            if len(fields) != 10:
+                raise ValueError('reference must supply exactly nine group texts')
+            vim_protocol.validate_match_fields(fields, pairs[case_index][1])
+            answers[case_index] = 'match ' + json.dumps(fields)
+        group_indices = {case: group for group, case in enumerate(selected)}
+        evidence['aggregation'] = [dict(index=i, input=[p, s],
+            span_process=i, group_process=group_indices.get(i))
+            for i, (p, s) in enumerate(pairs)]
+        evidence['complete'] = True
+        return vim_protocol.Answers(answers, evidence)
+    except BaseException as error:
+        evidence['complete'] = False
+        if isinstance(error, vim_protocol.Failure):
+            evidence['failed_operation'] = error.evidence
+        evidence['error'] = str(error) or type(error).__name__
+        raise vim_protocol.Failure(evidence['error'], evidence) from error
 
 
 def _ask(cases, script):
@@ -468,7 +558,8 @@ def normalise_ours(line, subject):
     the spans are cut out of the subject here. The whole match keeps its
     span, which is the half vim states exactly.
     """
-    if re.fullmatch(r"compile [0-9]+", line):
+    # Typed unavailable context is deliberately refused in the fresh Vim API.
+    if re.fullmatch(r"(?:compile|unavailable) [0-9]+", line):
         return "compile"
     if line == "nomatch":
         return line

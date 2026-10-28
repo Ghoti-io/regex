@@ -79,6 +79,14 @@ extern "C" {
 #define GRX_PROGRAM_SCALAR_FRONTIER GRX_BIT(15)
 #define GRX_PROGRAM_CLUSTER_SEARCH GRX_BIT(16)
 #define GRX_PROGRAM_REPORT_COMPOSING GRX_BIT(17)
+/** Live capture references occur inside their own source group. */
+#define GRX_PROGRAM_OPEN_REFERENCES GRX_BIT(18)
+/** Capture comparisons advance competing continuation cohorts. */
+#define GRX_PROGRAM_CAPTURE_COHORTS GRX_BIT(19)
+/** An assertion reads a capture produced on another alternative. */
+#define GRX_PROGRAM_INCOMING_LOOK_COHORTS GRX_BIT(20)
+/** Always-empty comparisons retain scalar-frontier continuation ordering. */
+#define GRX_PROGRAM_EMPTY_COMPARISONS GRX_BIT(21)
 /** Assertions select a capture context from their continuation frontier. */
 #define GRX_PROGRAM_LOOK_CONTEXT GRX_BIT(9)
 /** Assertion end markers carry undoable continuation and subrun ownership. */

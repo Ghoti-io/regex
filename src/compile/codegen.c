@@ -236,8 +236,8 @@ typedef struct {
    * what each one costs: `grx_ir_can_match_empty()` and `grx_ir_span()` each
    * build a fresh analysis, and the analysis is where the group-span memo and
    * the capture index live, so 338 questions about one pattern built and threw
-   * away 338 caches. NULL when it could not be allocated, and then the
-   * one-shot forms are called, which is what happened before this existed.
+   * away 338 caches. Its sticky query status also prevents a storage failure
+   * from silently choosing a different operational program layout.
    */
   GRX_IRMemo * memo;
 } Codegen;
@@ -1163,13 +1163,13 @@ static GRX_Result gen_repeat_step(Codegen * codegen, GenFrame * frame,
         if (!memo) {
           return fail(codegen, GRX_DIAG_OUT_OF_MEMORY, node);
         }
-        if (codegen->registers > UINT32_MAX - 5 ||
+        if (codegen->registers > UINT32_MAX - 7 ||
             codegen->program->look_spans.count > GRX_INDEX_NONE - 3u) {
           return fail(codegen, GRX_DIAG_LIMIT_PROGRAM_SIZE, node);
         }
         if (!memo->counted_register) {
           memo->counted_register = codegen->registers + 1;
-          codegen->registers += 5;
+          codegen->registers += 7;
         }
         size_t metadata[] = {node->min, node->max, memo->counted_register - 1};
         uint32_t span = (uint32_t)codegen->program->look_spans.count;
@@ -1348,6 +1348,7 @@ static GRX_Result gen_repeat_step(Codegen * codegen, GenFrame * frame,
       // `{n,m}` in tools/oracle/linear_diff.py's shape battery.
       frame->u.repeat.guard
           = (node->empty_loop != GRX_EMPTY_LOOP_SIMULATE
+                && !(node->flags & GRX_IR_REPEAT_CAPTURE_PROGRESS)
                 && can_match_empty(codegen, frame->u.repeat.body))
           ? 1u
           : 0u;
@@ -1373,6 +1374,7 @@ static GRX_Result gen_repeat_step(Codegen * codegen, GenFrame * frame,
       if (result != GRX_OK) {
         return result;
       }
+      frame->u.repeat.top = split;
       if (frame->u.repeat.lazy) {
         patch_x(codegen, split, frame->u.repeat.stub);
         patch_y(codegen, split, here(codegen));
@@ -1417,6 +1419,12 @@ static GRX_Result gen_repeat_step(Codegen * codegen, GenFrame * frame,
       }
       if (result != GRX_OK) {
         return result;
+      }
+      if (node->flags & GRX_IR_REPEAT_SERIAL_OPTIONALS) {
+        if (frame->u.repeat.lazy)
+          patch_x(codegen, frame->u.repeat.top, here(codegen));
+        else
+          patch_y(codegen, frame->u.repeat.top, here(codegen));
       }
       frame->u.repeat.i++;
       frame->stage = 4;
@@ -2268,6 +2276,15 @@ static GRX_Result gen_backref(Codegen * codegen, const GRX_IRNode * node) {
   if (result != GRX_OK) {
     return result;
   }
+  if (node->flags & GRX_IR_BACKREF_LIVE) {
+    grx_program_at(codegen->program, index)->policy |= GRX_POLICY_BACKREF_LIVE;
+  }
+  if (node->flags & GRX_IR_BACKREF_OPEN) {
+    grx_program_at(codegen->program, index)->policy |= GRX_POLICY_BACKREF_OPEN;
+  }
+  if (node->flags & GRX_IR_BACKREF_UNSET) {
+    grx_program_at(codegen->program, index)->policy |= GRX_POLICY_BACKREF_UNSET;
+  }
   if (node->flags & GRX_IR_COMPLETE_COMPOSING)
     grx_program_at(codegen->program, index)->policy |=
         GRX_POLICY_COMPLETE_COMPOSING;
@@ -2459,6 +2476,13 @@ static GRX_Result gen_step(Codegen * codegen, GenFrame * frame,
         if (node->flags & GRX_IR_COMPLETE_COMPOSING)
           grx_program_at(codegen->program, end)->policy |=
               GRX_POLICY_COMPLETE_COMPOSING;
+        int comparisons = end > frame->u.one.slot + 1;
+        for (uint32_t pc = frame->u.one.slot + 1; pc < end; pc++)
+          if (grx_program_at(codegen->program, pc)->op != GRX_OP_BACKREF)
+            comparisons = 0;
+        if (comparisons)
+          grx_program_at(codegen->program, frame->u.one.slot)->policy |=
+              GRX_POLICY_ATOMIC_COMPARISONS;
         patch_x(codegen, frame->u.one.slot, end);
       }
       return result;
@@ -2587,6 +2611,8 @@ static GRX_Result gen(Codegen * codegen, uint32_t node_index) {
     GenAction action = GEN_POP;
     uint32_t child = GRX_INDEX_NONE;
     result = gen_step(codegen, frame, node, &action, &child);
+    if (grx_ir_memo_result(codegen->memo) != GRX_OK)
+      result = fail(codegen, GRX_DIAG_OUT_OF_MEMORY, node);
     if (result != GRX_OK) {
       break;
     }
@@ -2816,6 +2842,32 @@ static int epsilon_atomic(Codegen * codegen, uint32_t start, uint32_t * queue,
   return 0;
 }
 
+/** A live reference whose opening is inside this BODY reads local endpoints. */
+static int body_reads_incoming_capture(
+    const GRX_Program * program, size_t begin, size_t end) {
+  for (size_t at = begin; at < end; at++) {
+    const GRX_Inst * reference = grx_program_at(program, (uint32_t)at);
+    if (reference->op != GRX_OP_BACKREF ||
+        (reference->policy & GRX_POLICY_BACKREF_UNSET)) {
+      continue;
+    }
+    int local = 0;
+    if (reference->policy & GRX_POLICY_BACKREF_OPEN) {
+      for (size_t prefix = begin; prefix < at; prefix++) {
+        const GRX_Inst * saved = grx_program_at(program, (uint32_t)prefix);
+        if (saved->op == GRX_OP_SAVE && saved->x == 2 * reference->x) {
+          local = 1;
+          break;
+        }
+      }
+    }
+    if (!local) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
 /** Resolve scheduling over compiled control flow, without native recursion. */
 static GRX_Result resolve_look_context(Codegen * codegen) {
   if (!(codegen->ir->flags & GRX_PROGRAM_LOOK_CONTEXT)) {
@@ -3026,18 +3078,20 @@ static GRX_Result resolve_look_context(Codegen * codegen) {
         next++;
         continue;
       }
+      // An absent target has no incoming endpoint payload. Follow its
+      // continuation for accepting-frontier ownership only; the comparison
+      // instruction itself still executes at its original frontier.
+      if (tail->op == GRX_OP_BACKREF &&
+          (tail->policy & GRX_POLICY_BACKREF_UNSET) &&
+          tail->mode == GRX_BACKREF_UNSET_EMPTY) {
+        next++;
+        continue;
+      }
       int nullable_atomic = tail->op == GRX_OP_SPLIT &&
           (epsilon_atomic(codegen, tail->x, queue, queued) ||
               epsilon_atomic(codegen, tail->y, queue, queued));
-      int capture_dependent = 0;
-      if (tail->op == GRX_OP_LOOK) {
-        for (size_t body = next + 1; body < tail->y; body++) {
-          if (grx_program_at(codegen->program, (uint32_t)body)->op ==
-              GRX_OP_BACKREF) {
-            capture_dependent = 1;
-          }
-        }
-      }
+      int capture_dependent = tail->op == GRX_OP_LOOK &&
+          body_reads_incoming_capture(codegen->program, next + 1, tail->y);
       if (tail->op == GRX_OP_LOOK &&
           (tail->mode == GRX_LOOK_BEHIND_POSITIVE ||
               tail->mode == GRX_LOOK_BEHIND_NEGATIVE)) {
@@ -3072,6 +3126,8 @@ static GRX_Result resolve_look_context(Codegen * codegen) {
       continue;
     }
     unsigned char body = cost[count + i + 1];
+    int incoming_reference =
+        body_reads_incoming_capture(codegen->program, i + 1, inst->y);
     if (inst->policy & GRX_POLICY_LOOK_REPEATED) {
       int behind = inst->mode == GRX_LOOK_BEHIND_POSITIVE ||
           inst->mode == GRX_LOOK_BEHIND_NEGATIVE;
@@ -3088,7 +3144,7 @@ static GRX_Result resolve_look_context(Codegen * codegen) {
       }
     }
 
-    if (heads[inst->y] != heads[i + 1]) {
+    if (incoming_reference) {
       inst->policy |= GRX_POLICY_LOOK_READS_CAPTURES;
     }
     if (!cost[2 * count + inst->y]) {
@@ -3114,7 +3170,7 @@ static GRX_Result resolve_look_context(Codegen * codegen) {
       }
       // Capture-dependent candidate bodies require a fresh base even when
       // their consuming frontier would otherwise run eagerly.
-      if (heads[inst->y] != heads[i + 1] && cost[inst->y] &&
+      if (incoming_reference && cost[inst->y] &&
           !cost[2 * count + inst->y]) {
         inst->policy |= GRX_POLICY_LOOK_FRESH;
       }
@@ -3287,8 +3343,8 @@ GRX_Result grx_codegen_program(const GRX_IR * ir, const GRX_Limits * limits,
       }
     }
   }
-  // Same discipline as the two arenas above: a memo that could not be made
-  // means asking the long way, not failing.
+  // The per-node caches are optional; the analysis memo also retains query
+  // failures so codegen cannot silently publish conservative fallback layout.
   codegen.memo = grx_ir_memo_create(ir);
   grx_arena_init(&codegen.node_span, out_program->insts.allocator,
       sizeof(SpanMemo), 0, GRX_DIAG_NONE);
@@ -3300,7 +3356,11 @@ GRX_Result grx_codegen_program(const GRX_IR * ir, const GRX_Limits * limits,
     }
   }
 
-  GRX_Result result = copy_classes(&codegen, &ir->classes);
+  // Conservative analysis answers preserve accepted strings, but additional
+  // guards can change capture/frontier priority. Require exact successful
+  // queries rather than publishing such a fallback as a compiled matcher.
+  GRX_Result result = codegen.memo ? copy_classes(&codegen, &ir->classes)
+      : fail(&codegen, GRX_DIAG_OUT_OF_MEMORY, NULL);
 
   // Group 0 is the whole match, so the program brackets everything in its
   // two slots. An engine therefore never special-cases the overall span: it
@@ -3336,6 +3396,8 @@ GRX_Result grx_codegen_program(const GRX_IR * ir, const GRX_Limits * limits,
     result = gen_subroutines(&codegen);
   }
 
+  if (grx_ir_memo_result(codegen.memo) != GRX_OK)
+    result = fail(&codegen, GRX_DIAG_OUT_OF_MEMORY, NULL);
   if (result == GRX_OK) {
     result = resolve_look_context(&codegen);
   }

@@ -68,6 +68,584 @@ class VimProfiles : public ::testing::TestWithParam<GRX_Syntax> {
 INSTANTIATE_TEST_SUITE_P(Compatibility, VimProfiles, ::testing::Values(
     GRX_SYNTAX_VIM_BACKTRACK, GRX_SYNTAX_VIM_NFA));
 
+TEST_P(VimProfiles, OptionalMembersUseTheirProfileGrammarAndLexicalContexts) {
+  const struct Row {
+    const char * pattern;
+    const char * subject;
+    size_t end;
+    std::vector<std::string> groups;
+  } rows[] = {
+      {R"(a\%[\(b\)\1d])", "abbd", 4, {"b"}},
+      {R"(\(a\)\%[\(b\)\2d])", "abbd", 4, {"a", "b"}},
+      {R"(a\%[\(b\|c\)d])", "acd", 3, {"c"}},
+      {R"(a\%[\(b\+\)d])", "abbbd", 5, {"bbb"}},
+      {R"(a\%[\%(bc\)d])", "abcd", 4, {}},
+      {R"(a\%[b\%[cd]])", "abcd", 4, {}},
+      {R"(a\%[\(b\c\)d])", "aB", 2, {"B"}},
+      {R"(a\%[\(b\Z\)d])", "ab́d", 5, {"b́"}},
+      {R"(a\%[\(\vb+)d])", "abbbd", 5, {"bbb"}},
+      {R"(a\%[\(b\)\cd])", "abCd", 2, {"b"}},
+  };
+  for (const Row & row : rows) {
+    if (old()) {
+      GRX_Regex * regex = nullptr;
+      EXPECT_EQ(grx_regex_compile(row.pattern, GetParam(), 0, &regex),
+          GRX_ERR_SYNTAX) << row.pattern;
+      EXPECT_EQ(regex, nullptr);
+    }
+    else {
+      auto groups = row.groups;
+      groups.resize(9);
+      expect(row.pattern, row.subject, 0, row.end, groups);
+    }
+  }
+  // The direct escapes are letters; a group must restore this context.
+  expect(R"(a\%[b\cd])", "aB", 0, 1, std::vector<std::string>(9));
+  expect(R"(a\%[b\Zd])", "ab́d", 0, 1,
+      std::vector<std::string>(9));
+  expect(R"(\Ma\%[b*])", "ab*", 0, 3, std::vector<std::string>(9));
+}
+
+TEST_P(VimProfiles, DirectOptionalOperatorsKeepPreciseRefusals) {
+  for (const char * pattern : {R"(a\%[b*])", R"(a\%[b\+])",
+           R"(a\%[b\@=])", R"(a\%[b\|c])", R"(a\%[b\&c])",
+           R"(\va%[b+])", R"(a\%[\(b\)\@=])",
+           R"(a\%[\(\vb+\)d])"}) {
+    SCOPED_TRACE(pattern);
+    GRX_Regex * regex = nullptr;
+    GRX_Error error;
+    grx_error_clear(&error);
+    EXPECT_EQ(grx_regex_compile_with_allocator(pattern, std::strlen(pattern),
+                  GetParam(), 0, nullptr, nullptr, &error, &regex),
+        GRX_ERR_SYNTAX);
+    EXPECT_EQ(regex, nullptr);
+    EXPECT_LE(error.offset, std::strlen(pattern));
+    EXPECT_LE(error.length, std::strlen(pattern) - error.offset);
+  }
+}
+
+TEST_P(VimProfiles, LaterRawBehindTextAdmitsReferencesWithoutInventingCaptures) {
+  const struct Row {
+    const char * pattern;
+    const char * subject;
+    size_t start;
+    size_t end;
+    size_t count;
+    std::vector<std::string> groups;
+  } rows[] = {
+      {R"(\9[@<=])", "@", 0, 1, 0, {}},
+      {R"(\9[@<!])", "!", 0, 1, 0, {}},
+      {R"(\9\\@<=)", R"(\@<=)", 0, 4, 0, {}},
+      {R"(\9\V(a)@<=)", "(a)@<=", 0, 6, 0, {}},
+      {R"(\1\(a\)\@<=)", "a", 1, 1, 1, {"a"}},
+      {R"(\(a\1\)\@<=)", "a", 1, 1, 1, {"a"}},
+      {R"(\9\(a\)\@<=)", "a", 1, 1, 1, {"a"}},
+  };
+  for (const Row & row : rows) {
+    auto groups = row.groups;
+    groups.resize(9);
+    expect(row.pattern, row.subject, row.start, row.end, groups);
+    GRX_Regex * regex = nullptr;
+    ASSERT_EQ(grx_regex_compile(row.pattern, GetParam(), 0, &regex), GRX_OK);
+    EXPECT_EQ(grx_regex_capture_count(regex), row.count);
+    grx_regex_free(regex);
+  }
+  for (const char * pattern : {R"(\9)", R"(@<=\9)", R"([@<!]\9)",
+           R"(\9\(a\)\@0<=)", R"(\9\(a\)\@1<!)",
+           R"(\9[\x40<=])", R"(\9\%d64<=)",
+           R"(\1\(a\)\@<=\2)"}) {
+    GRX_Regex * regex = nullptr;
+    EXPECT_EQ(grx_regex_compile(pattern, GetParam(), 0, &regex), GRX_ERR_SYNTAX)
+        << pattern;
+    EXPECT_EQ(regex, nullptr);
+  }
+}
+
+TEST_P(VimProfiles, UnknownPosixNamesUseOrdinaryCollectionFallback) {
+  for (const char * subject : {":]", "f]", "[]"}) {
+    expect("[[:foo:]]", subject, 0, 2, std::vector<std::string>(9));
+  }
+  expect("[[:foo:]]", "[[:foo:]]", 6, 8, std::vector<std::string>(9));
+  expect("[a[:foo:]]", "a]", 0, 2, std::vector<std::string>(9));
+  expect("[a[:foo:]]*a", "aa", 0, 2, std::vector<std::string>(9));
+  expect("[a[:foo:]]*a", "a]a", 0, 3, std::vector<std::string>(9));
+  expect(R"(\V[[:foo:]])", "[[:foo:]]", 0, 9,
+      std::vector<std::string>(9));
+}
+
+TEST_P(VimProfiles, ExceptionalStarsPreserveAnchorAndOpenerSpelling) {
+  expect(R"(\v\_^*)", "*", 0, 1, std::vector<std::string>(9));
+  expect(R"(\v\_^*)", "", GRX_NPOS, 0);
+  expect(R"(\v\m\_^*)", "", 0, 0, std::vector<std::string>(9));
+  expect(R"(\m\v\_^*)", "*", 0, 1, std::vector<std::string>(9));
+  for (const char * pattern : {R"(\%23l*)", R"(\%23l\m*)"}) {
+    expect(pattern, "", GRX_NPOS, 0);
+    expect(pattern, "*", GRX_NPOS, 0);
+  }
+  expect(R"(\v%23l*)", "", 0, 0, std::vector<std::string>(9));
+  expect(R"(\v%23l*)", "*", 0, 0, std::vector<std::string>(9));
+  expect(R"(\(*\))", "*", 0, 1, {"*", "", "", "", "", "", "", "", ""});
+  expect(R"(\v%(*))", "*", 0, 1, std::vector<std::string>(9));
+}
+
+TEST_P(VimProfiles, FlatOptionalSequencesHaveNoArtificialMemberCeiling) {
+  for (size_t count : {64u, 65u, 128u, 1024u}) {
+    const std::string subject(count, 'a');
+    const std::string pattern = R"(\%[)" + subject + "]";
+    expect(pattern.c_str(), subject, 0, count, std::vector<std::string>(9));
+  }
+}
+
+TEST_P(VimProfiles, OptionalGrammarHonorsDepthNodeCaptureAndUtf8Limits) {
+  if (old()) {
+    return;
+  }
+  GRX_Limits limits;
+  grx_limits_default(&limits);
+  limits.max_nesting_depth = 8;
+  std::string pattern = "a";
+  for (size_t depth = 1; depth <= 9; depth++) {
+    pattern = R"(\%[)" + pattern + "]";
+    GRX_Error error;
+    grx_error_clear(&error);
+    GRX_Regex * regex = nullptr;
+    EXPECT_EQ(grx_regex_compile_with_allocator(pattern.data(), pattern.size(),
+                  GetParam(), 0, &limits, nullptr, &error, &regex),
+        depth <= 8 ? GRX_OK : GRX_ERR_LIMIT);
+    if (depth > 8) {
+      EXPECT_EQ(error.diag, GRX_DIAG_LIMIT_NESTING_DEPTH);
+      EXPECT_EQ(regex, nullptr);
+    }
+    grx_regex_free(regex);
+  }
+  for (const auto & entry : std::vector<std::pair<std::string, GRX_Diag>>{
+           {R"(\%[\(a\)\(b\)])", GRX_DIAG_LIMIT_CAPTURES},
+           {R"(\%[)" + std::string(100, 'a') + "]", GRX_DIAG_LIMIT_NODES},
+           {std::string(R"(\%[\%()") + char(0xff) + R"(\)])",
+               GRX_DIAG_INVALID_UTF8_IN_PATTERN}}) {
+    grx_limits_default(&limits);
+    limits.max_captures = 1;
+    limits.max_nodes = 32;
+    GRX_Error error;
+    grx_error_clear(&error);
+    GRX_Regex * regex = nullptr;
+    const GRX_Result result = grx_regex_compile_with_allocator(
+        entry.first.data(), entry.first.size(), GetParam(), 0, &limits, nullptr,
+        &error, &regex);
+    EXPECT_EQ(result, entry.second == GRX_DIAG_INVALID_UTF8_IN_PATTERN
+        ? GRX_ERR_SYNTAX : GRX_ERR_LIMIT);
+    EXPECT_EQ(error.diag, entry.second);
+    EXPECT_EQ(regex, nullptr);
+  }
+}
+
+TEST_P(VimProfiles, OptionalGrammarCleansUpEveryInjectedParseAllocationFailure) {
+  std::string pattern = R"(\9[@<=]\%[)" + std::string(80, 'a') + "]";
+  if (!old()) {
+    pattern += R"(\%[\%(b\c\|c\)\%[de]])";
+  }
+  long allocations = 0;
+  for (long fail = 0; fail <= allocations; fail++) {
+    grxtest::FailingAllocator allocator(fail);
+    GRX_Pattern * parsed = nullptr;
+    GRX_Error error;
+    grx_error_clear(&error);
+    GRX_Result result = grx_pattern_parse_with_allocator(pattern.data(),
+        pattern.size(), GetParam(), 0, nullptr, allocator.get(), &error, &parsed);
+    if (!fail) {
+      ASSERT_EQ(result, GRX_OK);
+      allocations = allocator.requested();
+      ASSERT_GT(allocations, 0);
+      grx_pattern_free(parsed);
+    }
+    else {
+      EXPECT_EQ(result, GRX_ERR_OOM) << fail;
+      EXPECT_EQ(error.diag, GRX_DIAG_OUT_OF_MEMORY) << fail;
+      EXPECT_EQ(parsed, nullptr) << fail;
+    }
+    EXPECT_EQ(allocator.live(), 0) << fail;
+  }
+  RecordProperty("injected_failures", std::to_string(allocations));
+}
+
+TEST_P(VimProfiles, FlatOptionalCompilationUnwindsEveryAllocationFailure) {
+  std::string subject = "@" + std::string(128, 'a');
+  std::string pattern = R"(\9[@<=]\%[)" + std::string(128, 'a') + "]";
+  if (!old()) {
+    pattern += R"(\%[\(b\)\%[cd]])";
+    subject += "bcd";
+  }
+  long allocations = 0;
+  for (long fail = 0; fail <= allocations; fail++) {
+    grxtest::FailingAllocator allocator(fail);
+    GRX_Regex * regex = nullptr;
+    GRX_Error error;
+    grx_error_clear(&error);
+    GRX_Result result = grx_regex_compile_with_allocator(pattern.data(),
+        pattern.size(), GetParam(), 0, nullptr, allocator.get(), &error, &regex);
+    if (!fail) {
+      ASSERT_EQ(result, GRX_OK);
+      allocations = allocator.requested();
+    }
+    if (result == GRX_OK) {
+      // Optional optimization allocations may fail while compilation still
+      // succeeds. A successful fallback must execute the complete pattern.
+      ASSERT_NE(regex, nullptr);
+      EXPECT_EQ(grx_regex_capture_count(regex), old() ? 0u : 1u);
+      GRX_Match * match = nullptr;
+      ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+      int matched = 0;
+      ASSERT_EQ(grx_regex_search(regex, subject.data(), subject.size(), 0,
+                    GRX_ENGINE_BACKTRACK, nullptr, match, &matched), GRX_OK);
+      EXPECT_TRUE(matched);
+      GRX_Capture whole;
+      ASSERT_EQ(grx_match_group(match, 0, &whole), GRX_OK);
+      EXPECT_EQ(whole.start, 0u);
+      EXPECT_EQ(whole.end, subject.size());
+      if (!old()) {
+        GRX_Capture group;
+        ASSERT_EQ(grx_match_group(match, 1, &group), GRX_OK);
+        EXPECT_EQ(group.start, 129u);
+        EXPECT_EQ(group.end, 130u);
+      }
+      grx_match_destroy(match);
+      grx_regex_free(regex);
+    }
+    else {
+      EXPECT_EQ(result, GRX_ERR_OOM) << fail;
+      EXPECT_EQ(regex, nullptr) << fail;
+    }
+    EXPECT_EQ(allocator.live(), 0) << fail;
+  }
+  RecordProperty("injected_failures", std::to_string(allocations));
+}
+
+TEST_P(VimProfiles, OptionalMembersSurviveMovingArenaStorage) {
+  grxtest::MovingAllocator allocator;
+  const std::string subject(128, 'a');
+  const std::string pattern = R"(\%[)" + subject + "]";
+  GRX_Regex * regex = nullptr;
+  ASSERT_EQ(grx_regex_compile_with_allocator(pattern.data(), pattern.size(),
+                GetParam(), 0, nullptr, allocator.get(), nullptr, &regex), GRX_OK);
+  GRX_Match * match = nullptr;
+  ASSERT_EQ(grx_match_create(regex, allocator.get(), &match), GRX_OK);
+  int matched = 0;
+  ASSERT_EQ(grx_regex_search(regex, subject.data(), subject.size(), 0,
+                GRX_ENGINE_BACKTRACK, nullptr, match, &matched), GRX_OK);
+  ASSERT_TRUE(matched);
+  GRX_Capture whole;
+  ASSERT_EQ(grx_match_group(match, 0, &whole), GRX_OK);
+  EXPECT_EQ(whole.start, 0u);
+  EXPECT_EQ(whole.end, subject.size());
+  grx_match_destroy(match);
+  grx_regex_free(regex);
+  EXPECT_EQ(allocator.live(), 0);
+  EXPECT_GT(allocator.moves(), 0);
+  RecordProperty("arena_moves", std::to_string(allocator.moves()));
+}
+
+TEST_P(VimProfiles, LocalReferenceSearchRecoversOnTheSameMatchAfterBudgetRefusal) {
+  if (old()) {
+    return;
+  }
+  const char * pattern = R"(^\%(\(a\1\)\@=\)\{2}aab[@<=]\{0}$)";
+  GRX_Regex * regex = nullptr;
+  ASSERT_EQ(grx_regex_compile(pattern, GetParam(), 0, &regex), GRX_OK);
+  GRX_Match * match = nullptr;
+  ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+  for (bool memory : {false, true}) {
+    GRX_Limits limits;
+    grx_limits_default(&limits);
+    if (memory) {
+      limits.max_match_memory = 32;
+    }
+    else {
+      limits.max_steps = 1;
+    }
+    int matched = 1;
+    EXPECT_EQ(grx_regex_search(regex, "aab", 3, 0, GRX_ENGINE_BACKTRACK,
+                  &limits, match, &matched), GRX_ERR_LIMIT);
+    EXPECT_FALSE(matched);
+    EXPECT_EQ(grx_match_error(match)->diag, memory
+        ? GRX_DIAG_LIMIT_MATCH_MEMORY : GRX_DIAG_LIMIT_STEPS);
+    for (const char * subject : {"aab", "ab", "aab"}) {
+      ASSERT_EQ(grx_regex_search(regex, subject, std::strlen(subject), 0,
+                    GRX_ENGINE_BACKTRACK, nullptr, match, &matched), GRX_OK);
+      EXPECT_EQ(matched, std::strlen(subject) == 3);
+      if (matched) {
+        GRX_Capture group;
+        ASSERT_EQ(grx_match_group(match, 1, &group), GRX_OK);
+        EXPECT_EQ(group.start, 0u);
+        EXPECT_EQ(group.end, 2u);
+      }
+    }
+  }
+  grx_match_destroy(match);
+  grx_regex_free(regex);
+}
+
+TEST_P(VimProfiles, LocalReferenceContextsUnwindAndRecoverAfterEveryAllocationFailure) {
+  if (old()) {
+    return;
+  }
+  const char * pattern = R"(^\%(\(a\1\)\@=\)\{2}aab[@<=]\{0}$)";
+  long allocations = 0;
+  long search_faults = 0;
+  for (long fail = 0; fail <= allocations; fail++) {
+    grxtest::FailingAllocator allocator(fail);
+    GRX_Regex * raw_regex = nullptr;
+    GRX_Result result = grx_regex_compile_with_allocator(pattern,
+        std::strlen(pattern), GetParam(), 0, nullptr, allocator.get(), nullptr,
+        &raw_regex);
+    std::unique_ptr<GRX_Regex, decltype(&grx_regex_free)> regex(
+        raw_regex, grx_regex_free);
+    GRX_Match * raw_match = nullptr;
+    if (result == GRX_OK) {
+      result = grx_match_create(regex.get(), allocator.get(), &raw_match);
+    }
+    std::unique_ptr<GRX_Match, decltype(&grx_match_destroy)> match(
+        raw_match, grx_match_destroy);
+    int matched = 0;
+    const bool searching = result == GRX_OK;
+    const long before_search = allocator.requested();
+    if (searching) {
+      result = grx_regex_search(regex.get(), "aab", 3, 0,
+          GRX_ENGINE_BACKTRACK, nullptr, match.get(), &matched);
+    }
+    if (!fail) {
+      ASSERT_EQ(result, GRX_OK);
+      allocations = allocator.requested();
+      ASSERT_GT(allocator.requested(), before_search);
+      RecordProperty("search_allocations",
+          std::to_string(allocator.requested() - before_search));
+    }
+    else if (result != GRX_OK) {
+      if (searching) {
+        search_faults++;
+      }
+      EXPECT_EQ(result, GRX_ERR_OOM) << fail;
+      EXPECT_FALSE(matched) << fail;
+    }
+    if (match) {
+      // The same allocator permits later requests after its one injected fault.
+      // Reuse must rebuild every released input/continuation context correctly.
+      ASSERT_EQ(grx_regex_search(regex.get(), "aab", 3, 0,
+                    GRX_ENGINE_BACKTRACK, nullptr, match.get(), &matched), GRX_OK)
+          << fail;
+      ASSERT_TRUE(matched) << fail;
+      GRX_Capture whole;
+      GRX_Capture group;
+      ASSERT_EQ(grx_match_group(match.get(), 0, &whole), GRX_OK);
+      ASSERT_EQ(grx_match_group(match.get(), 1, &group), GRX_OK);
+      EXPECT_EQ(whole.start, 0u) << fail;
+      EXPECT_EQ(whole.end, 3u) << fail;
+      EXPECT_EQ(group.start, 0u) << fail;
+      EXPECT_EQ(group.end, 2u) << fail;
+    }
+    match.reset();
+    regex.reset();
+    EXPECT_EQ(allocator.live(), 0) << fail;
+  }
+  EXPECT_GT(search_faults, 0);
+  RecordProperty("injected_failures", std::to_string(allocations));
+  RecordProperty("search_oom_faults", std::to_string(search_faults));
+}
+
+TEST_P(VimProfiles, ManyGroupedOptionalReferenceAssertionsStayWithinNormalBudgets) {
+  if (old()) {
+    return;
+  }
+  for (size_t count : {32u, 128u}) {
+    std::string pattern = R"(^\(\%[)";
+    for (size_t i = 0; i < count; i++) {
+      pattern += R"(\%(\%(\1\)\@=\))";
+    }
+    pattern += R"(]\)a[@<=]\{0}$)";
+    GRX_Regex * raw_regex = nullptr;
+    GRX_Limits limits;
+    grx_limits_default(&limits);
+    ASSERT_EQ(grx_regex_compile_with_allocator(pattern.data(), pattern.size(),
+                  GetParam(), 0, &limits, nullptr, nullptr, &raw_regex), GRX_OK);
+    std::unique_ptr<GRX_Regex, decltype(&grx_regex_free)> regex(
+        raw_regex, grx_regex_free);
+    GRX_Match * raw_match = nullptr;
+    ASSERT_EQ(grx_match_create(regex.get(), nullptr, &raw_match), GRX_OK);
+    std::unique_ptr<GRX_Match, decltype(&grx_match_destroy)> match(
+        raw_match, grx_match_destroy);
+    int matched = 0;
+    ASSERT_EQ(grx_regex_search(regex.get(), "a", 1, 0, GRX_ENGINE_BACKTRACK,
+                  &limits, match.get(), &matched), GRX_OK);
+    ASSERT_TRUE(matched);
+    GRX_Capture whole;
+    GRX_Capture group;
+    ASSERT_EQ(grx_match_group(match.get(), 0, &whole), GRX_OK);
+    ASSERT_EQ(grx_match_group(match.get(), 1, &group), GRX_OK);
+    EXPECT_EQ(whole.start, 0u);
+    EXPECT_EQ(whole.end, 1u);
+    EXPECT_EQ(group.start, 0u);
+    EXPECT_EQ(group.end, 0u);
+  }
+}
+
+TEST_P(VimProfiles, LocalReferenceScratchLimitsUnwindAcrossAllocationPhases) {
+  if (old()) {
+    return;
+  }
+  GRX_Regex * raw_regex = nullptr;
+  ASSERT_EQ(grx_regex_compile(R"(^\%(\(a\1\)\@=\)\{2}aab[@<=]\{0}$)",
+                GetParam(), 0, &raw_regex), GRX_OK);
+  std::unique_ptr<GRX_Regex, decltype(&grx_regex_free)> regex(
+      raw_regex, grx_regex_free);
+  GRX_Match * raw_match = nullptr;
+  ASSERT_EQ(grx_match_create(regex.get(), nullptr, &raw_match), GRX_OK);
+  std::unique_ptr<GRX_Match, decltype(&grx_match_destroy)> match(
+      raw_match, grx_match_destroy);
+  std::vector<size_t> caps;
+  for (size_t cap = 64; cap <= 4096; cap += 64) {
+    caps.push_back(cap);
+  }
+  for (size_t cap : {8192u, 16384u, 32768u, 65536u}) {
+    caps.push_back(cap);
+  }
+  size_t refusals = 0;
+  size_t sufficient = 0;
+  for (size_t cap : caps) {
+    GRX_Limits limits;
+    grx_limits_default(&limits);
+    limits.max_match_memory = cap;
+    int matched = 0;
+    GRX_Result result = grx_regex_search(regex.get(), "aab", 3, 0,
+        GRX_ENGINE_BACKTRACK, &limits, match.get(), &matched);
+    ASSERT_TRUE(result == GRX_OK || result == GRX_ERR_LIMIT) << cap;
+    if (result == GRX_ERR_LIMIT) {
+      refusals++;
+      EXPECT_FALSE(matched) << cap;
+      EXPECT_EQ(grx_match_error(match.get())->diag, GRX_DIAG_LIMIT_MATCH_MEMORY);
+    }
+    else {
+      ASSERT_TRUE(matched) << cap;
+      if (!sufficient) {
+        sufficient = cap;
+      }
+    }
+    ASSERT_EQ(grx_regex_search(regex.get(), "aab", 3, 0,
+                  GRX_ENGINE_BACKTRACK, nullptr, match.get(), &matched), GRX_OK)
+        << cap;
+    ASSERT_TRUE(matched) << cap;
+    GRX_Capture group;
+    ASSERT_EQ(grx_match_group(match.get(), 1, &group), GRX_OK);
+    EXPECT_EQ(group.start, 0u) << cap;
+    EXPECT_EQ(group.end, 2u) << cap;
+  }
+  EXPECT_GT(refusals, 0u);
+  EXPECT_GT(sufficient, 0u);
+  RecordProperty("budget_refusals", std::to_string(refusals));
+  RecordProperty("first_sufficient_budget", std::to_string(sufficient));
+}
+
+TEST_P(VimProfiles, SelfReferenceRepeatInputsUseFreshReferenceCaptures) {
+  // Each API ran in a fresh forced-engine process. Repeated calls can mutate
+  // Vim's endpoint cache, so two queries in one process are not these goldens.
+  struct Row {
+    const char * pattern;
+    const char * subject;
+    const char * old_group;
+    const char * nfa_group;
+    bool old_matched;
+    bool nfa_matched;
+  };
+  const Row rows[] = {
+      {"^\\%(\\(a\\1\\)\\@=\\)*aab[@<=]\\{0}$", "aab", "aa", "a", true, true},
+      {"^\\%(\\(a\\1\\)\\@=\\)*aaab[@<=]\\{0}$", "aaab", "aa", "a", true, true},
+      {"^\\%(\\(a\\1\\)\\@=\\)*aaaab[@<=]\\{0}$", "aaaab", "aa", "a", true, true},
+      {"^\\%(\\(a\\1\\)\\@=\\)\\+aab[@<=]\\{0}$", "aab", "aa", "aa", true, true},
+      {"^\\%(\\(a\\1\\)\\@=\\)\\+aaab[@<=]\\{0}$", "aaab", "aa", "aa", true, true},
+      {"^\\%(\\(a\\1\\)\\@=\\)\\+aaaab[@<=]\\{0}$", "aaaab", "aa", "aa", true, true},
+      {"^\\%(\\(a\\1\\)\\@=\\)\\{0,3}aab[@<=]\\{0}$", "aab", "aa", "aa", true, true},
+      {"^\\%(\\(a\\1\\)\\@=\\)\\{0,3}aaab[@<=]\\{0}$", "aaab", "aa", "aa", true, true},
+      {"^\\%(\\(a\\1\\)\\@=\\)\\{0,3}aaaab[@<=]\\{0}$", "aaaab", "aa", "aaaa", true, true},
+      {"^\\%(\\(a\\1\\)\\@=\\)\\{1,3}aab[@<=]\\{0}$", "aab", "aa", "aa", true, true},
+      {"^\\%(\\(a\\1\\)\\@=\\)\\{1,3}aaab[@<=]\\{0}$", "aaab", "aa", "aaa", true, true},
+      {"^\\%(\\(a\\1\\)\\@=\\)\\{1,3}aaaab[@<=]\\{0}$", "aaaab", "aa", "aaa", true, true},
+      {"^\\%(\\(a\\1\\)\\@=\\)\\{1,4}aab[@<=]\\{0}$", "aab", "aa", "aa", true, true},
+      {"^\\%(\\(a\\1\\)\\@=\\)\\{1,4}aaab[@<=]\\{0}$", "aaab", "aa", "aaa", true, true},
+      {"^\\%(\\(a\\1\\)\\@=\\)\\{1,4}aaaab[@<=]\\{0}$", "aaaab", "aa", "aaa", true, true},
+      {"^\\%(\\(a\\1\\)\\@=\\)\\{2}aab[@<=]\\{0}$", "aab", "", "aa", false, true},
+      {"^\\%(\\(a\\1\\)\\@=\\)\\{2}aaab[@<=]\\{0}$", "aaab", "", "aa", false, true},
+      {"^\\%(\\(a\\1\\)\\@=\\)\\{2}aaaab[@<=]\\{0}$", "aaaab", "", "aa", false, true},
+      {"^\\%(\\(a\\1\\)\\@=\\)\\{2,4}aab[@<=]\\{0}$", "aab", "", "aa", false, true},
+      {"^\\%(\\(a\\1\\)\\@=\\)\\{2,4}aaab[@<=]\\{0}$", "aaab", "", "aaa", false, true},
+      {"^\\%(\\(a\\1\\)\\@=\\)\\{2,4}aaaab[@<=]\\{0}$", "aaaab", "", "aaaa", false, true},
+      {"^\\%(\\(\\1a\\)\\@=\\)*aab[@<=]\\{0}$", "aab", "aa", "a", true, true},
+      {"^\\%(\\(\\1a\\)\\@=\\)*aaab[@<=]\\{0}$", "aaab", "aa", "a", true, true},
+      {"^\\%(\\(\\1a\\)\\@=\\)*aaaab[@<=]\\{0}$", "aaaab", "aa", "a", true, true},
+      {"^\\%(\\(\\1a\\)\\@=\\)\\+aab[@<=]\\{0}$", "aab", "aa", "aa", true, true},
+      {"^\\%(\\(\\1a\\)\\@=\\)\\+aaab[@<=]\\{0}$", "aaab", "aa", "aa", true, true},
+      {"^\\%(\\(\\1a\\)\\@=\\)\\+aaaab[@<=]\\{0}$", "aaaab", "aa", "aa", true, true},
+      {"^\\%(\\(\\1a\\)\\@=\\)\\{0,3}aab[@<=]\\{0}$", "aab", "aa", "aa", true, true},
+      {"^\\%(\\(\\1a\\)\\@=\\)\\{0,3}aaab[@<=]\\{0}$", "aaab", "aa", "aa", true, true},
+      {"^\\%(\\(\\1a\\)\\@=\\)\\{0,3}aaaab[@<=]\\{0}$", "aaaab", "aa", "aaaa", true, true},
+      {"^\\%(\\(\\1a\\)\\@=\\)\\{1,3}aab[@<=]\\{0}$", "aab", "aa", "aa", true, true},
+      {"^\\%(\\(\\1a\\)\\@=\\)\\{1,3}aaab[@<=]\\{0}$", "aaab", "aa", "aaa", true, true},
+      {"^\\%(\\(\\1a\\)\\@=\\)\\{1,3}aaaab[@<=]\\{0}$", "aaaab", "aa", "aaa", true, true},
+      {"^\\%(\\(\\1a\\)\\@=\\)\\{1,4}aab[@<=]\\{0}$", "aab", "aa", "aa", true, true},
+      {"^\\%(\\(\\1a\\)\\@=\\)\\{1,4}aaab[@<=]\\{0}$", "aaab", "aa", "aaa", true, true},
+      {"^\\%(\\(\\1a\\)\\@=\\)\\{1,4}aaaab[@<=]\\{0}$", "aaaab", "aa", "aaa", true, true},
+      {"^\\%(\\(\\1a\\)\\@=\\)\\{2}aab[@<=]\\{0}$", "aab", "", "aa", false, true},
+      {"^\\%(\\(\\1a\\)\\@=\\)\\{2}aaab[@<=]\\{0}$", "aaab", "", "aa", false, true},
+      {"^\\%(\\(\\1a\\)\\@=\\)\\{2}aaaab[@<=]\\{0}$", "aaaab", "", "aa", false, true},
+      {"^\\%(\\(\\1a\\)\\@=\\)\\{2,4}aab[@<=]\\{0}$", "aab", "", "aa", false, true},
+      {"^\\%(\\(\\1a\\)\\@=\\)\\{2,4}aaab[@<=]\\{0}$", "aaab", "", "aaa", false, true},
+      {"^\\%(\\(\\1a\\)\\@=\\)\\{2,4}aaaab[@<=]\\{0}$", "aaaab", "", "aaaa", false, true},
+      {"^\\(a\\|aa\\)\\{1,3}b$", "aaaab", "aa", "aa", true, true},
+      {"^\\(a\\|aa\\)\\{1,3}b$", "aaab", "a", "a", true, true},
+      {"^\\(aa\\|a\\)\\{1,3}b$", "aaaab", "aa", "aa", true, true},
+      {"^\\(aa\\|a\\)\\{1,3}b$", "aaab", "a", "a", true, true},
+      {"^\\(a\\1\\|aa\\)\\{1,3}b[@<=]\\{0}$", "aaaab", "aa", "a", true, true},
+      {"^\\(a\\1\\|aa\\)\\{1,3}b[@<=]\\{0}$", "aaab", "a", "aa", true, true},
+  };
+  for (const Row & row : rows) {
+    std::vector<std::string> groups(9);
+    groups[0] = old() ? row.old_group : row.nfa_group;
+    const bool matched = old() ? row.old_matched : row.nfa_matched;
+    expect(row.pattern, row.subject, matched ? 0 : GRX_NPOS,
+        std::strlen(row.subject), groups);
+  }
+}
+
+TEST_P(VimProfiles, GappedReopeningsDoNotTurnInvertedCaptureSpansIntoUnset) {
+  for (const char * body : {R"(\(a\1\))", R"(\(\1a\))"}) {
+    const std::string pattern = std::string(R"(^\%()") + body +
+        R"(x\)\{2}b[@<=]\{0}$)";
+    expect(pattern.c_str(), "axaxb", GRX_NPOS, 0);
+  }
+  expect(R"(^\%(\(a\)\1x\)\{2}b[@<=]\{0}$)", "aaxaaxb",
+      0, 7, {"a", "", "", "", "", "", "", "", ""});
+}
+
+TEST_P(VimProfiles, AtomicBodiesKeepTheirEnclosingLiveCaptureOpening) {
+  expect(R"(^\(a\%(\1a\)\@>\)\{2}b\%(b\)\@<=$)", "aaaab",
+      0, 5, {"aa", "", "", "", "", "", "", "", ""});
+  expect(R"(^\(a\%(\1a\)\@>\)\{2}b\%(b\)\@<=$)", "aaaaaab",
+      GRX_NPOS, 0);
+  expect(R"(^\(\(a\)\%(\2a\)\@>\)\{2}b\%(b\)\@<=$)",
+      "aaaaaab", 0, 7, {"aaa", "a", "", "", "", "", "", "", ""});
+}
+
+TEST_P(VimProfiles, OptionalGroupedModesKeepPositionalBranchBoundaries) {
+  if (old()) {
+    return;
+  }
+  expect(R"(\%[\(\va|\m^b\)])", "b", 0, 1,
+      {"b", "", "", "", "", "", "", "", ""});
+  expect(R"(\%[\(\va|\m^b\)])", "^b", 0, 0,
+      std::vector<std::string>(9));
+  expect(R"(\%[\(\va\m$\v)])", "a", 0, 1,
+      {"a", "", "", "", "", "", "", "", ""});
+  expect(R"(\%[\(\va\m$\v)])", "a$", 0, 0,
+      std::vector<std::string>(9));
+}
+
 TEST_P(VimProfiles, CountedRepetitionRetainsItsCountAndBackedgeHistory) {
   struct Row {
     const char * pattern;
@@ -1735,3 +2313,881 @@ TEST_P(VimProfiles, NonliteralMarkedCollectionsPreserveLexicalMemberKinds) {
     }
   }
 }
+
+TEST_P(VimProfiles, CaselessComposingCandidatesCompareTheSelectedLiteralRun) {
+  const struct Row {
+    const char * pattern;
+    const char * subject;
+    size_t old_end;
+    size_t nfa_end;
+  } rows[] = {
+      {R"(\ć\?bb)", "ábcd", GRX_NPOS, GRX_NPOS},
+      {R"(\ć\?bb)", "áb", 3, GRX_NPOS},
+      {R"(\ć\?é̂b)", "áé", GRX_NPOS, GRX_NPOS},
+      {R"(\c\Ź\?é̂b)", "áé", GRX_NPOS, GRX_NPOS},
+      {R"(\ć\?bbb)", "ább", 3, GRX_NPOS},
+      {R"(\ć\?bB)", "áb", 3, GRX_NPOS},
+      {R"(\ć\?bbb)", "ábbcd", GRX_NPOS, GRX_NPOS},
+      {R"(\ć\?bb)", "ábbcd", 3, 5},
+      {R"(\ć\?bB)", "ábbcd", 3, 5},
+      {R"(\ć\?bc)", "ábcd", 3, 5},
+      {R"(\ć\?b\(\)b)", "ábcd", 3, GRX_NPOS},
+      {R"(\ć\?b[b])", "ábcd", 3, GRX_NPOS},
+      {R"(\ć\?b\%d98)", "ábcd", 3, GRX_NPOS},
+      {R"(\c^́\?bb)", "ábcd", 3, GRX_NPOS},
+      {R"(\c\%u0301\?bb)", "ábcd", GRX_NPOS, GRX_NPOS},
+  };
+  for (const Row & row : rows) {
+    const size_t end = old() ? row.old_end : row.nfa_end;
+    for (GRX_Engine engine : {GRX_ENGINE_AUTO, GRX_ENGINE_BACKTRACK})
+      expect(row.pattern, row.subject, end == GRX_NPOS ? GRX_NPOS : 0,
+          end, {"", "", "", "", "", "", "", "", ""}, engine);
+  }
+}
+
+TEST_P(VimProfiles, LineAssertionStarsPreserveInitialLexicalOperandState) {
+  const struct Row {
+    const char * pattern;
+    const char * subject;
+    size_t old_end;
+    size_t nfa_end;
+  } rows[] = {
+      {R"(a\%23l*)", "a", 1, 1},
+      {R"(a\|\%23l*)", "b", 0, 0},
+      {R"(\(\%23l*\))", "", 0, 0},
+      {R"(^\%23l*)", "", 0, 0},
+      {R"(\m\%23l*)", "", GRX_NPOS, GRX_NPOS},
+      {R"(\v.%23l*)", "a", GRX_NPOS, GRX_NPOS},
+      {R"(\v^%23l*)", "", GRX_NPOS, GRX_NPOS},
+      {R"(\v(%23l*))", "", GRX_NPOS, GRX_NPOS},
+      {R"(\v%(%23l*))", "", 0, 0},
+      {R"(\va%23l*)", "a", 1, GRX_NPOS},
+      {R"(\v[ab]%23l*)", "a", 1, GRX_NPOS},
+      {R"(\v(a%23l*))", "a", 1, 1},
+      {R"(\va\c%23l*)", "a", 1, 1},
+      {R"(\v%d97%23l*)", "a", 1, 1},
+      {R"(\v\w%23l*)", "a", 1, 1},
+      {R"(\vx.%23l*)", "xa", 2, 2},
+  };
+  for (const Row & row : rows) {
+    size_t end = old() ? row.old_end : row.nfa_end;
+    for (GRX_Engine engine : {GRX_ENGINE_AUTO, GRX_ENGINE_BACKTRACK})
+      expect(row.pattern, row.subject, end == GRX_NPOS ? GRX_NPOS : 0, end,
+          {}, engine);
+  }
+}
+
+TEST_P(VimProfiles, AlternativeCaptureDependenciesUnwindCompilationFailures) {
+  const char * pattern = R"(\(a\)\%(z\)\@>x\|\(a\)\(a\1\)\@<=.)";
+  const std::string subject = "aaaab";
+  auto verify = [&](GRX_Regex * regex) {
+    ASSERT_EQ(grx_regex_capture_count(regex), 3u);
+    GRX_Match * raw_match = nullptr;
+    ASSERT_EQ(grx_match_create(regex, nullptr, &raw_match), GRX_OK);
+    std::unique_ptr<GRX_Match, decltype(&grx_match_destroy)> match(
+        raw_match, grx_match_destroy);
+    int matched = 0;
+    ASSERT_EQ(grx_regex_search(regex, subject.data(), subject.size(), 0,
+                  GRX_ENGINE_BACKTRACK, nullptr, match.get(), &matched), GRX_OK);
+    ASSERT_TRUE(matched);
+    GRX_Capture whole;
+    ASSERT_EQ(grx_match_group(match.get(), 0, &whole), GRX_OK);
+    EXPECT_EQ(whole.start, old() ? 0u : 1u);
+    EXPECT_EQ(whole.end, old() ? 2u : 3u);
+    const std::vector<std::string> groups = old()
+        ? std::vector<std::string>{"", "a", "a", "", "", "", "", "", ""}
+        : std::vector<std::string>{"a", "", "aa", "", "", "", "", "", ""};
+    for (size_t i = 0; i < groups.size(); i++) {
+      std::string text;
+      if (i < grx_regex_capture_count(regex)) {
+        GRX_Capture capture;
+        ASSERT_EQ(grx_match_group(match.get(), i + 1, &capture), GRX_OK);
+        if (capture.start != GRX_NPOS) {
+          ASSERT_LE(capture.start, capture.end);
+          ASSERT_LE(capture.end, subject.size());
+          text = subject.substr(capture.start, capture.end - capture.start);
+        }
+      }
+      EXPECT_EQ(text, groups[i]) << i + 1;
+    }
+  };
+  long allocations = 0;
+  for (long fail = 0; fail <= allocations; fail++) {
+    grxtest::FailingAllocator allocator(fail);
+    GRX_Regex * regex = nullptr;
+    GRX_Error error;
+    grx_error_clear(&error);
+    GRX_Result result = grx_regex_compile_with_allocator(pattern,
+        std::strlen(pattern), GetParam(), 0, nullptr, allocator.get(), &error,
+        &regex);
+    if (!fail) {
+      ASSERT_EQ(result, GRX_OK);
+      allocations = allocator.requested();
+    }
+    if (result == GRX_OK) {
+      ASSERT_NE(regex, nullptr);
+      verify(regex);
+      grx_regex_free(regex);
+    }
+    else {
+      EXPECT_EQ(result, GRX_ERR_OOM) << fail;
+      EXPECT_EQ(error.diag, GRX_DIAG_OUT_OF_MEMORY) << fail;
+      EXPECT_EQ(regex, nullptr) << fail;
+    }
+    EXPECT_EQ(allocator.live(), 0) << fail;
+  }
+  RecordProperty("dependency_compile_faults", std::to_string(allocations));
+  grxtest::MovingAllocator allocator;
+  GRX_Regex * regex = nullptr;
+  ASSERT_EQ(grx_regex_compile_with_allocator(pattern, std::strlen(pattern),
+                GetParam(), 0, nullptr, allocator.get(), nullptr, &regex), GRX_OK);
+  verify(regex);
+  grx_regex_free(regex);
+  EXPECT_GT(allocator.moves(), 0);
+  EXPECT_EQ(allocator.live(), 0);
+  RecordProperty("dependency_arena_moves", std::to_string(allocator.moves()));
+}
+
+TEST_P(VimProfiles, DeferredReferenceInputsAndAtomicReportsHaveDistinctOwners) {
+  const struct Row {
+    const char * pattern;
+    const char * subject;
+    size_t old_start, old_end;
+    std::vector<std::string> old_groups;
+    size_t nfa_start, nfa_end;
+    std::vector<std::string> nfa_groups;
+  } rows[] = {
+      {"\\(a\\+\\)\\@>x\\|a\\@=", "a", 0, 0, {"a", "", "", "", "", "", "", "", ""}, 0, 0, {"a", "", "", "", "", "", "", "", ""}},
+      {"\\(a\\+\\)\\@>x\\|\\(a\\)\\@=", "aa", 0, 0, {"aa", "a", "", "", "", "", "", "", ""}, 0, 0, {"aa", "a", "", "", "", "", "", "", ""}},
+      {"\\(a\\+\\)\\@>x\\|\\(a\\)\\@1<=", "aa", 1, 1, {"a", "a", "", "", "", "", "", "", ""}, 1, 1, {"aa", "a", "", "", "", "", "", "", ""}},
+      {"\\(a\\+\\)\\@>x\\|b\\@!", "a", 0, 0, {"a", "", "", "", "", "", "", "", ""}, 0, 0, {"a", "", "", "", "", "", "", "", ""}},
+      {"\\(a\\+\\)\\@>x\\|b\\@<!", "a", 0, 0, {"a", "", "", "", "", "", "", "", ""}, 0, 0, {"a", "", "", "", "", "", "", "", ""}},
+      {"\\(a\\+\\)\\@>x\\|\\(a\\)", "aa", 0, 1, {"aa", "a", "", "", "", "", "", "", ""}, 0, 1, {"", "a", "", "", "", "", "", "", ""}},
+      {"\\(a\\+\\)\\@>x\\|.", "aa", 0, 1, {"aa", "", "", "", "", "", "", "", ""}, 0, 1, {"", "", "", "", "", "", "", "", ""}},
+      {"\\(a\\+\\)x\\|\\(a\\)\\@1<=", "aa", 1, 1, {"", "a", "", "", "", "", "", "", ""}, 1, 1, {"", "a", "", "", "", "", "", "", ""}},
+      {"\\(a\\)\\@>x\\|\\(a\\)\\@=", "a", 0, 0, {"a", "a", "", "", "", "", "", "", ""}, 0, 0, {"a", "a", "", "", "", "", "", "", ""}},
+      {"a\\+\\(a\\1\\)\\@<=.", "aaaaaab", 0, 7, {"a", "", "", "", "", "", "", "", ""}, 0, 7, {"aaaaaa", "", "", "", "", "", "", "", ""}},
+      {"^a\\{3,4}\\(a\\1\\)\\@<=a\\{2}b$", "aaaaaab", 0, 7, {"a", "", "", "", "", "", "", "", ""}, 0, 7, {"a", "", "", "", "", "", "", "", ""}},
+      {"^a\\{3,4}\\(a\\1\\)\\@<=.", "aaaaaab", 0, 5, {"a", "", "", "", "", "", "", "", ""}, 0, 5, {"aaaa", "", "", "", "", "", "", "", ""}},
+      {"\\%(a\\ze\\)\\@>\\(a\\)\\@<=.", "ab", 0, 1, {"a", "", "", "", "", "", "", "", ""}, 0, 1, {"a", "", "", "", "", "", "", "", ""}},
+  };
+  for (const Row & row : rows)
+    for (GRX_Engine engine : {GRX_ENGINE_AUTO, GRX_ENGINE_BACKTRACK})
+      expect(row.pattern, row.subject, old() ? row.old_start : row.nfa_start,
+          old() ? row.old_end : row.nfa_end,
+          old() ? row.old_groups : row.nfa_groups, engine);
+}
+
+TEST_P(VimProfiles, InitialComparisonKeepsItsPhysicalOpeningAcrossGaps) {
+  for (const char * pattern : {
+           R"(^\%(\(\1a\)x\)\{2}b[@<=]\{0}$)",
+           R"(^\%(\(\%(\)\1a\)x\)\{2}b[@<=]\{0}$)",
+           R"(^\%(\(\%(\1\)\@>a\)x\)\{2}b[@<=]\{0}$)",
+           R"(^\%(\(\%(\1\)\@=\1a\)x\)\{2}b[@<=]\{0}$)",
+           R"(^\%(\(\1\{1}a\)x\)\{2}b[@<=]\{0}$)",
+           R"(^\%(\(b\?\1a\)x\)\{2}b[@<=]\{0}$)",
+           R"(^\%(\(\9\1a\)x\)\{2}b[@<=]\{0}$)",
+           R"(^\%(\(\1\9a\)x\)\{2}b[@<=]\{0}$)"}) {
+    for (GRX_Engine engine : {GRX_ENGINE_AUTO, GRX_ENGINE_BACKTRACK}) {
+      expect(pattern, "axaaxb", old() ? GRX_NPOS : 0,
+          old() ? GRX_NPOS : 6, {"aa", "", "", "", "", "", "", "", ""}, engine);
+    }
+  }
+  for (GRX_Engine engine : {GRX_ENGINE_AUTO, GRX_ENGINE_BACKTRACK})
+    expect(R"(^\%(\(a\1\)x\)\{2}b[@<=]\{0}$)", "axaaxb",
+        GRX_NPOS, GRX_NPOS, std::vector<std::string>(9), engine);
+}
+
+TEST_P(VimProfiles, CountedFirstBodyAlternativesKeepTheirClosedTailInput) {
+  for (const char * repeat : {R"(\{1,3})", "*"}) {
+    std::string pattern = R"(^\(a\1\|aa\))";
+    pattern += repeat;
+    pattern += R"(b\1[@<=]\{0}$)";
+    for (GRX_Engine engine : {GRX_ENGINE_AUTO, GRX_ENGINE_BACKTRACK})
+      expect(pattern.c_str(), "aabaa", 0, 5,
+          {"aa", "", "", "", "", "", "", "", ""}, engine);
+  }
+}
+
+TEST_P(VimProfiles, CountedReentryKeepsItsOriginalActivationIdentity) {
+  const struct Row { const char * pattern; const char * subject; size_t end; } rows[] = {
+      {R"(\%(\%(a\)\{1,2}\)\{2}b)", "aab", 3},
+      {R"(\%(\%(a\)\{1,2}\)\{2,3}b)", "aab", 3},
+      {R"(\%(\%(a\)\{1,2}\)\{3,4}b)", "aaab", 4},
+  };
+  for (const Row & row : rows)
+    for (GRX_Engine engine : {GRX_ENGINE_AUTO, GRX_ENGINE_BACKTRACK})
+      expect(row.pattern, row.subject, old() ? GRX_NPOS : 0,
+          old() ? GRX_NPOS : row.end, std::vector<std::string>(9), engine);
+}
+
+TEST_P(VimProfiles, UnsetComparisonAnalysisKeepsUnanchoredUtf8SearchOrigins) {
+  for (const char * pattern : {R"(\9a[@<=]\{0})", R"(a\9[@<=]\{0})"}) {
+    for (const char * prefix : {"b", "bb", "é", "😀"}) {
+      std::string subject = prefix;
+      size_t start = subject.size();
+      subject += "a";
+      for (GRX_Engine engine : {GRX_ENGINE_AUTO, GRX_ENGINE_BACKTRACK})
+        expect(pattern, subject, start, start + 1,
+            std::vector<std::string>(9), engine);
+    }
+  }
+}
+
+TEST_P(VimProfiles, AtomicComparisonReturnsItsSelectedClosedCallerReport) {
+  const struct Row { const char * subject; size_t old_start, old_end, nfa_start, nfa_end; } rows[] = {
+      {"abab", 1, 2, 2, 4},
+      {"ababab", 1, 2, 2, 4},
+      {"aéab", 4, 5, 3, 5},
+  };
+  for (const Row & row : rows)
+    for (GRX_Engine engine : {GRX_ENGINE_AUTO, GRX_ENGINE_BACKTRACK})
+      expect(R"(\(.\)\?\%(\1\)\@>b)", row.subject,
+          old() ? row.old_start : row.nfa_start,
+          old() ? row.old_end : row.nfa_end,
+          {old() ? "" : "a", "", "", "", "", "", "", "", ""}, engine);
+}
+
+TEST_P(VimProfiles, CurrentEpsilonEpochPreservesMultiarmArrivalPriority) {
+  for (size_t count = 1; count <= 8; count++) {
+    std::string subject(count, 'a');
+    subject += "b";
+    const struct Row { const char * pattern; const char * nfa_group; } rows[] = {
+        {R"(^\(a\9\|aa\9\|a\)*b[@<=]\{0}$)", count == 1 ? "a" : "aa"},
+        {R"(^\(a\|aa\9\|a\)*b[@<=]\{0}$)", "a"},
+        {R"(^\(a\9\|aa\|a\)*b[@<=]\{0}$)", count % 2 ? "a" : "aa"},
+    };
+    for (const Row & row : rows)
+      for (GRX_Engine engine : {GRX_ENGINE_AUTO, GRX_ENGINE_BACKTRACK})
+        expect(row.pattern, subject, 0, subject.size(),
+            {old() ? "a" : row.nfa_group, "", "", "", "", "", "", "", ""}, engine);
+  }
+}
+
+TEST_P(VimProfiles, ResolvedPredicateCacheKeepsSuccessWithoutEncounterHistory) {
+  const struct Row { const char * pattern; const char * subject; const char * old_group; const char * nfa_group; } rows[] = {
+      {"^\\(a\\%(\\)\\@=\\|aa\\)*b[@<=]\\{0}$", "aaab", "a", "a"},
+      {"^\\(a\\%(\\)\\@=\\|aa\\)*b[@<=]\\{0}$", "aaaab", "a", "aa"},
+      {"^\\(a\\%(\\)\\@=\\|\\9aa\\)*b[@<=]\\{0}$", "aaaaab", "a", "a"},
+      {"^\\(a\\%(\\)\\@=\\|\\9aa\\)*b[@<=]\\{0}$", "aaaaaab", "a", "aa"},
+      {"^\\(a\\%(\\)\\@=\\%(\\)\\@=\\|aa\\)*b[@<=]\\{0}$", "aaaab", "a", "aa"},
+      {"^\\(a\\%(\\)\\@=\\%(\\)\\@=\\%(\\)\\@=\\|aa\\)*b[@<=]\\{0}$", "aaaab", "a", "aa"},
+      {"^\\%(\\)\\@=\\(a\\%(\\)\\@=\\|aa\\)*b[@<=]\\{0}$", "aaab", "a", "aa"},
+      {"^\\%(\\)\\@=\\(a\\%(\\)\\@=\\|aa\\)*b[@<=]\\{0}$", "aaaab", "a", "a"},
+  };
+  for (const Row & row : rows)
+    for (GRX_Engine engine : {GRX_ENGINE_AUTO, GRX_ENGINE_BACKTRACK})
+      expect(row.pattern, row.subject, 0, std::strlen(row.subject),
+          {old() ? row.old_group : row.nfa_group, "", "", "", "", "", "", "", ""}, engine);
+}
+
+TEST_P(VimProfiles, AtomicReportChannelsUnwindAndRecoverAfterEveryAllocationFailure) {
+  if (old())
+    return;
+  const struct Row {
+    const char * pattern;
+    const char * subject;
+    size_t start, end;
+    std::vector<std::string> groups;
+    bool matches = true;
+  } rows[] = {
+      {R"(\(a\+\)\@>x\|\(a\)\@1<=)", "aa", 1, 1,
+          {"aa", "a", "", "", "", "", "", "", ""}},
+      {R"(\%(a\ze\)\@>\(a\)\@<=.)", "ab", 0, 1,
+          {"a", "", "", "", "", "", "", "", ""}},
+      {R"(^\(a\9\|aa\)*b[@<=]\{0}$)", "aaab", 0, 4,
+          {"aa", "", "", "", "", "", "", "", ""}},
+      {R"(^\%(\(\1a\)x\)\{2}b[@<=]\{0}$)", "axaaxb", 0, 6,
+          {"aa", "", "", "", "", "", "", "", ""}},
+      {R"(^\(a\%(\1\)\@>\|aa\)\{1,3}b[@<=]\{0}$)", "aaab", 0, 4,
+          {"aa", "", "", "", "", "", "", "", ""}},
+      {R"(\(.\)\?\%(\1\)\@>b)", "abab", 2, 4,
+          {"a", "", "", "", "", "", "", "", ""}},
+      {R"(^\(a\9\|aa\9\|a\)*b[@<=]\{0}$)", "aab", 0, 3,
+          {"aa", "", "", "", "", "", "", "", ""}},
+      {R"(^\(a\%(\)\@=\|aa\)*b[@<=]\{0}$)", "aaaab", 0, 5,
+          {"aa", "", "", "", "", "", "", "", ""}},
+      {R"(a*\%(a\)\@>\(\%2c\1a\)\@<=.)", "aaaab", 0, 4,
+          {"aa", "", "", "", "", "", "", "", ""}},
+      {R"(a*\%(a\)\@>\(\1a\)\@<=.)", "aaaaab", 0, 6,
+          {"aaaaa", "", "", "", "", "", "", "", ""}},
+      {R"(^a*\%(a\)\@>\(\%2c\1a\)\@<=.)", "aaaab", 0, 0, {}, false},
+      {R"(^\(a\9\|aa\|a\9\)*b[@<=]\{0}$)", "aaab", 0, 4,
+          {"a", "", "", "", "", "", "", "", ""}},
+      {R"(^\(a\9\|aa\|a\9\)*b[@<=]\{0}$)", "aaac", 0, 0, {}, false},
+      {R"(^\%(\(a\1\)\@=\)\{0,3}aaaab[@<=]\{0}$)", "aaaab", 0, 5,
+          {"aaaa", "", "", "", "", "", "", "", ""}},
+      {R"(^\%(\(a\1\)\@=\)\{0,3}a\1b[@<=]\{0}$)", "aaaxaaab", 0, 0, {}, false},
+      {R"(a*\%(a\)\@>\(\1a\)\@<=.)", "aaaab", 0, 5,
+          {"aa", "", "", "", "", "", "", "", ""}},
+      {R"(a*\%(a\)\@>\(\1a\)\@<=.\%>6c)", "aaaab", 0, 0, {}, false},
+      {R"(a*\%(aa\)\@>\(\1a\)\@<=.)", "aaaaaab", 0, 7,
+          {"aa", "", "", "", "", "", "", "", ""}},
+      {R"(^za*\%(aa\)\@>\(\1a\)\@<=.\1z$)", "zaaaaaabaaaaaaaaz", 0, 0, {}, false},
+      {R"(a*\%(a\)\@>\(\1a\)\@<=.)", "xaaaaaab", 1, 8,
+          {"xaaaaaa", "", "", "", "", "", "", "", ""}},
+      {R"(^a*\%(a\)\@>\(a\9\)\@<=b)", "aaab", 0, 4,
+          {"a", "", "", "", "", "", "", "", ""}},
+      {R"(^a*\%(a\)\@>\(\9a\)\@<=b)", "aaaab", 0, 0, {}, false},
+  };
+  for (size_t row_index = 0; row_index < std::size(rows); row_index++) {
+    const Row & row = rows[row_index];
+    SCOPED_TRACE(row.pattern);
+    const std::string subject = row.subject;
+    auto verify = [&](GRX_Match * match) {
+      if (!row.matches) return;
+      GRX_Capture whole;
+      ASSERT_EQ(grx_match_group(match, 0, &whole), GRX_OK);
+      EXPECT_EQ(whole.start, row.start);
+      EXPECT_EQ(whole.end, row.end);
+      for (size_t i = 0; i < row.groups.size(); i++) {
+        std::string text;
+        GRX_Capture capture;
+        GRX_Result result = grx_match_group(match, i + 1, &capture);
+        if (result == GRX_OK && capture.start != GRX_NPOS) {
+          ASSERT_LE(capture.start, capture.end);
+          ASSERT_LE(capture.end, subject.size());
+          text = subject.substr(capture.start, capture.end - capture.start);
+        }
+        EXPECT_EQ(text, row.groups[i]) << i + 1;
+      }
+    };
+    {
+      SCOPED_TRACE("moving allocator");
+      grxtest::MovingAllocator allocator;
+      GRX_Regex * raw_regex = nullptr;
+      ASSERT_EQ(grx_regex_compile_with_allocator(row.pattern,
+                    std::strlen(row.pattern), GetParam(), 0, nullptr,
+                    allocator.get(), nullptr, &raw_regex), GRX_OK);
+      std::unique_ptr<GRX_Regex, decltype(&grx_regex_free)> regex(
+          raw_regex, grx_regex_free);
+      GRX_Match * raw_match = nullptr;
+      ASSERT_EQ(grx_match_create(raw_regex, allocator.get(), &raw_match), GRX_OK);
+      std::unique_ptr<GRX_Match, decltype(&grx_match_destroy)> match(
+          raw_match, grx_match_destroy);
+      for (GRX_Engine engine : {GRX_ENGINE_AUTO, GRX_ENGINE_BACKTRACK}) {
+        for (size_t repeat = 0; repeat < 2; repeat++) {
+          int matched = 0;
+          ASSERT_EQ(grx_regex_search(raw_regex, subject.data(), subject.size(),
+                        0, engine, nullptr, raw_match, &matched), GRX_OK);
+          ASSERT_EQ(matched != 0, row.matches);
+          verify(raw_match);
+        }
+      }
+      match.reset();
+      regex.reset();
+      EXPECT_EQ(allocator.live(), 0);
+      EXPECT_GT(allocator.moves(), 0);
+      RecordProperty("frontier_pipeline_moves_" + std::to_string(row_index),
+          std::to_string(allocator.moves()));
+    }
+    long allocations = 0;
+    long search_faults = 0;
+    for (long fail = 0; fail <= allocations; fail++) {
+      SCOPED_TRACE("allocation " + std::to_string(fail));
+      grxtest::FailingAllocator allocator(fail);
+      GRX_Regex * raw_regex = nullptr;
+      GRX_Error error;
+      GRX_Result result = grx_regex_compile_with_allocator(row.pattern,
+          std::strlen(row.pattern), GetParam(), 0, nullptr, allocator.get(),
+          &error, &raw_regex);
+      if (result == GRX_ERR_OOM) {
+        EXPECT_EQ(error.diag, GRX_DIAG_OUT_OF_MEMORY);
+        EXPECT_EQ(raw_regex, nullptr);
+      }
+      SCOPED_TRACE("compile result " + std::to_string(result) +
+          " allocations " + std::to_string(allocator.requested()));
+      std::unique_ptr<GRX_Regex, decltype(&grx_regex_free)> regex(
+          raw_regex, grx_regex_free);
+      GRX_Match * raw_match = nullptr;
+      if (result == GRX_OK)
+        result = grx_match_create(regex.get(), allocator.get(), &raw_match);
+      std::unique_ptr<GRX_Match, decltype(&grx_match_destroy)> match(
+          raw_match, grx_match_destroy);
+      int matched = 0;
+      bool searching = result == GRX_OK;
+      if (searching)
+        result = grx_regex_search(regex.get(), subject.data(), subject.size(),
+            0, GRX_ENGINE_BACKTRACK, nullptr, match.get(), &matched);
+      if (!fail) {
+        ASSERT_EQ(result, GRX_OK);
+        ASSERT_EQ(matched != 0, row.matches);
+        allocations = allocator.requested();
+      }
+      else if (result != GRX_OK) {
+        EXPECT_EQ(result, GRX_ERR_OOM) << fail;
+        EXPECT_FALSE(matched) << fail;
+        if (searching)
+          search_faults++;
+      }
+      if (match) {
+        ASSERT_EQ(grx_regex_search(regex.get(), subject.data(), subject.size(),
+                      0, GRX_ENGINE_BACKTRACK, nullptr, match.get(), &matched),
+            GRX_OK) << fail;
+        ASSERT_EQ(matched != 0, row.matches) << fail;
+        verify(match.get());
+      }
+      match.reset();
+      regex.reset();
+      EXPECT_EQ(allocator.live(), 0) << fail;
+    }
+    EXPECT_GT(search_faults, 0);
+    RecordProperty("atomic_report_pipeline_faults_" + std::to_string(row_index),
+        std::to_string(allocations));
+    RecordProperty("atomic_report_search_faults_" + std::to_string(row_index),
+        std::to_string(search_faults));
+    GRX_Regex * raw_regex = nullptr;
+    ASSERT_EQ(grx_regex_compile(row.pattern, GetParam(), 0, &raw_regex), GRX_OK);
+    std::unique_ptr<GRX_Regex, decltype(&grx_regex_free)> regex(
+        raw_regex, grx_regex_free);
+    GRX_Match * raw_match = nullptr;
+    ASSERT_EQ(grx_match_create(regex.get(), nullptr, &raw_match), GRX_OK);
+    std::unique_ptr<GRX_Match, decltype(&grx_match_destroy)> match(
+        raw_match, grx_match_destroy);
+    size_t refusals = 0;
+    size_t successes = 0;
+    size_t first_sufficient = 0;
+    size_t sweep_end = 65536;
+    GRX_Limits normal;
+    grx_limits_default(&normal);
+    for (size_t cap = 64; cap <= sweep_end; cap += 64) {
+      SCOPED_TRACE("scratch cap " + std::to_string(cap));
+      GRX_Limits limits;
+      grx_limits_default(&limits);
+      limits.max_match_memory = cap;
+      int matched = 0;
+      GRX_Result result = grx_regex_search(regex.get(), subject.data(),
+          subject.size(), 0, GRX_ENGINE_BACKTRACK, &limits, match.get(), &matched);
+      ASSERT_TRUE(result == GRX_OK || result == GRX_ERR_LIMIT) << cap;
+      if (result == GRX_ERR_LIMIT) {
+        refusals++;
+        EXPECT_FALSE(matched);
+        EXPECT_EQ(grx_match_error(match.get())->diag, GRX_DIAG_LIMIT_MATCH_MEMORY);
+      }
+      else {
+        successes++;
+        if (!first_sufficient)
+          first_sufficient = cap;
+        ASSERT_EQ(matched != 0, row.matches);
+        verify(match.get());
+      }
+      ASSERT_EQ(grx_regex_search(regex.get(), subject.data(), subject.size(),
+                    0, GRX_ENGINE_BACKTRACK, nullptr, match.get(), &matched),
+          GRX_OK) << cap;
+      ASSERT_EQ(matched != 0, row.matches) << cap;
+      verify(match.get());
+      // Exercise all refusal phases until this real pipeline fits, within
+      // the unchanged normal budget. Existing small rows still stop at64KiB.
+      if (cap == sweep_end && !successes) {
+        ASSERT_LE(sweep_end, normal.max_match_memory / 2);
+        sweep_end *= 2;
+      }
+    }
+    EXPECT_GT(refusals, 0u);
+    EXPECT_GT(successes, 0u);
+    RecordProperty("frontier_first_sufficient_memory_" + std::to_string(row_index),
+        std::to_string(first_sufficient));
+  }
+}
+
+// Fresh paired candidate-column and anchor controls distinguish local inputs
+// from the selected path's reported captures.
+TEST_P(VimProfiles, LocalBodyInputHistoryRespectsActualSearchStartRestrictions) {
+  for (const char * body : {R"(\%2c\1a)", R"(\%2ca\1)"}) {
+    for (const char * prefix : {"", "^", R"(\%^)", R"(\%1c)"}) {
+      const std::string pattern = std::string(prefix) +
+          R"(a*\%(a\)\@>\()" + body + R"(\)\@<=.)";
+      for (GRX_Engine engine : {GRX_ENGINE_AUTO, GRX_ENGINE_BACKTRACK}) {
+        if (!old() && *prefix)
+          expect(pattern.c_str(), "aaaab", GRX_NPOS, GRX_NPOS, {}, engine);
+        else {
+          std::vector<std::string> groups(9);
+          groups[0] = old() ? "a" : "aa";
+          expect(pattern.c_str(), "aaaab", 0, old() ? 3 : 4, groups, engine);
+        }
+      }
+    }
+  }
+}
+
+TEST_P(VimProfiles, ExecutedLocalClosuresKeepInputAndReportOwnershipSeparate) {
+  const struct Row {
+    const char * pattern;
+    const char * subject;
+    size_t old_end, nfa_end;
+    const char * nfa_group;
+  } rows[] = {
+      {R"(a*\%(a\)\@>\(\1a\)\@<=.)", "aaaaab", 6, 6, "aaaaa"},
+      {R"(a*\%(a\ze\)\@>\(\1a\)\@<=.)", "aaaaab", 5, 6, "aaaaa"},
+      {R"(a\+\%(a\)\@>\(\1a\)\@<=.)", "aaaaaab", 7, 7, "aaaaaa"},
+      {R"(a\+\%(a\ze\)\@>\(\1a\)\@<=.)", "aaaaaab", 6, 7, "aaaaaa"},
+  };
+  for (const Row & row : rows) {
+    std::vector<std::string> groups(9);
+    groups[0] = old() ? "a" : row.nfa_group;
+    for (GRX_Engine engine : {GRX_ENGINE_AUTO, GRX_ENGINE_BACKTRACK})
+      expect(row.pattern, row.subject, 0, old() ? row.old_end : row.nfa_end,
+          groups, engine);
+  }
+}
+
+// The paired references keep the entire greedy continuation after this BODY.
+TEST_P(VimProfiles, GreedyContinuationsRetainTheirLogicalPendingInputOwner) {
+  const struct Row { const char * tail; size_t end; } rows[] = {
+      {".*", 7}, {"a*", 6}, {"[ab]*", 7},
+  };
+  std::vector<std::string> groups(9);
+  groups[0] = old() ? "a" : "aaaa";
+  for (const Row & row : rows) {
+    const std::string pattern = R"(^a\{3,4}\(a\1\)\@<=)" +
+        std::string(row.tail);
+    for (GRX_Engine engine : {GRX_ENGINE_AUTO, GRX_ENGINE_BACKTRACK})
+      expect(pattern.c_str(), "aaaaaab", 0, row.end, groups, engine);
+  }
+}
+
+
+// CURRENT reentry and NEXT's first arrival retain separate ownership.
+TEST_P(VimProfiles, ComparisonRetaggingPreservesFirstNextArrival) {
+  const struct Row { const char * pattern; const char * subject;
+    const char * nfa_group; } rows[] = {
+      {R"(^\(a\9\|aa\|a\9\)*b[@<=]\{0}$)", "aaab", "a"},
+      {R"(^\(a\9\|aa\|a\9\|aaa\)*b[@<=]\{0}$)", "aaaab", "aa"},
+      // Pending predicates continue to use their existing lifecycle scheduler.
+      {R"(^\(a\%(\%(\)\@=\|\%(\)\)\|aa\)*b[@<=]\{0}$)", "aaaab", "a"},
+  };
+  for (const Row & row : rows) {
+    std::vector<std::string> groups(9);
+    groups[0] = old() ? "a" : row.nfa_group;
+    for (GRX_Engine engine : {GRX_ENGINE_AUTO, GRX_ENGINE_BACKTRACK})
+      expect(row.pattern, row.subject, 0, std::strlen(row.subject), groups, engine);
+  }
+}
+
+
+// Eager BODY closures precede deferred consuming-frontier evaluation.
+TEST_P(VimProfiles, OwnedAheadPredicatesKeepInputAndOutputFrontiersSeparate) {
+  const struct Row { const char * pattern; const char * subject;
+    const char * old_group; const char * nfa_group; } rows[] = {
+      {R"(^\%(\(a\1\)\@=\)\{0,3}aaaab[@<=]\{0}$)", "aaaab", "aa", "aaaa"},
+      {R"(^\%(\(a\1\)\@=\)\{0,4}aaaab[@<=]\{0}$)", "aaaab", "aa", "aaa"},
+      {R"(^\%(\(a\1\)\@=\)\{1,4}aaaab[@<=]\{0}$)", "aaaab", "aa", "aaa"},
+      {R"(^\%(\(a\1\)\@=\)\{0,3}aaab[@<=]\{0}$)", "aaab", "aa", "aa"},
+      {R"(^\%(\(\1a\)\@=\)\{0,3}aaab[@<=]\{0}$)", "aaab", "aa", "aa"},
+      {R"(^\%(\(\1a\)\@=\)\{0,3}aaaab[@<=]\{0}$)", "aaaab", "aa", "aaaa"},
+      {R"(^\%(\(\1a\)\@=\)\{1,4}aaaab[@<=]\{0}$)", "aaaab", "aa", "aaa"},
+      {R"(^\%(\(a\1\)\@=\)\{0,3}\%(\)aaaab[@<=]\{0}$)", "aaaab", "aa", "aaa"},
+      {R"(^\%(\(\1a\)\@=\)\{0,3}\%(\)aaaab[@<=]\{0}$)", "aaaab", "aa", "aaa"},
+  };
+  for (const Row & row : rows) {
+    std::vector<std::string> groups(9);
+    groups[0] = old() ? row.old_group : row.nfa_group;
+    for (GRX_Engine engine : {GRX_ENGINE_AUTO, GRX_ENGINE_BACKTRACK})
+      expect(row.pattern, row.subject, 0, std::strlen(row.subject), groups, engine);
+  }
+}
+
+TEST_P(VimProfiles, OwnedBehindInputsPreserveSelectedProviderLifetime) {
+  const struct Row {
+    const char * pattern;
+    const char * subject;
+    size_t old_end, nfa_end;
+    const char * old_group;
+    const char * nfa_group;
+  } rows[] = {
+      {R"(a*\%(a\)\@>\(\1a\)\@<=.)", "aaaab", 5, 5, "a", "aa"},
+      {R"(a*\%(a\)\@>\(\1a\)\@<=.)", "aaaaaab", 7, 7, "a", "aaaaaa"},
+      {R"(a*\%(a\ze\)\@>\(\1a\)\@<=.)", "aaaab", 4, 5, "a", "aa"},
+      {R"(a*\%(a\ze\)\@>\(\1a\)\@<=.)", "aaaaaab", 6, 7, "a", "aaaaaa"},
+      {R"(a\+\%(a\)\@>\(\1a\)\@<=.)", "aaaaab", 6, 6, "a", "aa"},
+      {R"(a\+\%(a\ze\)\@>\(\1a\)\@<=.)", "aaaaab", 5, 6, "a", "aa"},
+      {R"(a*\%(aa\)\@>\(\1a\)\@<=.)", "aaaaaab", 7, 7, "a", "aa"},
+  };
+  for (const Row & row : rows) {
+    std::vector<std::string> groups(9);
+    groups[0] = old() ? row.old_group : row.nfa_group;
+    for (GRX_Engine engine : {GRX_ENGINE_AUTO, GRX_ENGINE_BACKTRACK})
+      expect(row.pattern, row.subject, 0, old() ? row.old_end : row.nfa_end, groups, engine);
+  }
+}
+
+TEST_P(VimProfiles, OwnedBehindDefinitionProofStartsAtEachIsolatedSearchOrigin) {
+  // Fresh paired later-origin controls, including a multibyte prefix and
+  // a capture whose text extends before the selected whole-match origin.
+  const struct Row {
+    const char * subject;
+    size_t start, end;
+    const char * nfa_group;
+  } rows[] = {
+      {"xaaaab", 1, 6, "aa"},
+      {"xaaaaaab", 1, 8, "xaaaaaa"},
+      {"xxaaaab", 2, 7, "aa"},
+      {"éaaaab", 2, 7, "aa"},
+  };
+  for (const Row & row : rows) {
+    std::vector<std::string> groups(9);
+    groups[0] = old() ? "a" : row.nfa_group;
+    for (GRX_Engine engine : {GRX_ENGINE_AUTO, GRX_ENGINE_BACKTRACK})
+      expect(R"(a*\%(a\)\@>\(\1a\)\@<=.)", row.subject,
+          row.start, row.end, groups, engine);
+  }
+}
+
+TEST_P(VimProfiles, NonexistentComparisonDoesNotReadAtomicIncomingCapture) {
+  // Fresh forced-profile anchor controls preserve the empty comparison but
+  // require ordinary atomic reservation when it has no capture input.
+  const char * patterns[] = {
+      R"(^a*\%(a\)\@>\(a\9\)\@<=b)",
+      R"(^a*\%(a\)\@>\(\9a\)\@<=b)",
+      R"(^a*\%(a\)\@>\%(a\9\)\@<=b)",
+      R"(^a*\%(a\)\@>\%(\9a\)\@<=b)",
+  };
+  for (size_t pattern = 0; pattern < 4; pattern++) {
+    for (size_t count : {3u, 4u, 6u}) {
+      const std::string subject = std::string(count, 'a') + 'b';
+      std::vector<std::string> groups(9);
+      if (pattern < 2) {
+        groups[0] = "a";
+      }
+      for (GRX_Engine engine : {GRX_ENGINE_AUTO, GRX_ENGINE_BACKTRACK}) {
+        const bool matched = old() || count == 3;
+        expect(patterns[pattern], subject, matched ? 0 : GRX_NPOS,
+            matched ? subject.size() : GRX_NPOS, groups, engine);
+      }
+    }
+  }
+}
+
+
+TEST_P(VimProfiles, RC02OnlyProvenAbsentEmptyComparisonsFollowContinuation) {
+  // Fresh paired controls retain comparison checkpoints and actual definitions.
+  // Spans are profile-specific; capture expectations use reference text only.
+  const struct Row {
+    const char * pattern;
+    const char * subject;
+    size_t old_start, old_end, nfa_start, nfa_end, captures;
+    const char * first_group;
+  } rows[] = {
+      {R"(^a*\%(a\)\@>\9b[@<=]\{0})", "aab", 0, 3, GRX_NPOS, GRX_NPOS, 0, ""},
+      {R"(^a*\%(a\)\@>\9b[@<=]\{0})", "aaab", 0, 4, 0, 4, 0, ""},
+      {R"(^a*\%(a\)\@>\9b[@<=]\{0})", "aaaab", 0, 5, GRX_NPOS, GRX_NPOS, 0, ""},
+      {R"(^a*\%(a\)\@>\9b[@<=]\{0})", "aaaaaab", 0, 7, GRX_NPOS, GRX_NPOS, 0, ""},
+      {R"(a*\%(a\)\@>\9b[@<=]\{0})", "aab", 0, 3, 1, 3, 0, ""},
+      {R"(^a*\%(a\)\@>\9a[@<=]\{0})", "aaab", 0, 3, 0, 2, 0, ""},
+      {R"(^a*\%(a\)\@>\(\9a\)\@!b[@<=]\{0})", "aaab", 0, 4, 0, 4, 1, ""},
+      {R"(^a*\%(a\)\@>\(\9a\)\@!b[@<=]\{0})", "aaaab", 0, 5, GRX_NPOS, GRX_NPOS, 1, ""},
+      {R"(\(\)a*\%(a\)\@>\1b[@<=]\{0})", "aaab", 0, 4, 0, 4, 1, ""},
+      {R"(a*\%(a\)\@>\1b\(\)[@<=]\{0})", "aaab", 0, 4, 0, 4, 1, ""},
+      {R"(^\(a\)a*\%(a\)\@>\1b[@<=]\{0})", "aab", GRX_NPOS, GRX_NPOS, GRX_NPOS, GRX_NPOS, 1, ""},
+      {R"(^\(a\)a*\%(a\)\@>\1b[@<=]\{0})", "aaab", 0, 4, 0, 4, 1, "a"},
+  };
+  for (const Row & row : rows) {
+    GRX_Regex * raw = nullptr;
+    ASSERT_EQ(grx_regex_compile(row.pattern, GetParam(), 0, &raw), GRX_OK);
+    std::unique_ptr<GRX_Regex, decltype(&grx_regex_free)> regex(raw, grx_regex_free);
+    EXPECT_EQ(grx_regex_capture_count(regex.get()), row.captures);
+    std::vector<std::string> groups(9);
+    groups[0] = row.first_group;
+    for (GRX_Engine engine : {GRX_ENGINE_AUTO, GRX_ENGINE_BACKTRACK})
+      expect(row.pattern, row.subject, old() ? row.old_start : row.nfa_start,
+          old() ? row.old_end : row.nfa_end, groups, engine);
+  }
+}
+
+TEST_P(VimProfiles, RC02AbsentEmptyContinuationRecoversFromFaults) {
+  const struct Row {
+    const char * pattern;
+    const char * subject;
+    size_t start, end;
+    std::vector<std::string> groups;
+    bool matches = true;
+  } rows[] = {
+      {R"(^a*\%(a\)\@>\9b[@<=]\{0})", "aaab", 0, 4, {}},
+      {R"(^a*\%(a\)\@>\9b[@<=]\{0})", "aaaab", 0, 5, {}, old()},
+  };
+  for (size_t row_index = 0; row_index < std::size(rows); row_index++) {
+    const Row & row = rows[row_index];
+    SCOPED_TRACE(row.pattern);
+    const std::string subject = row.subject;
+    auto verify = [&](GRX_Match * match) {
+      if (!row.matches) return;
+      GRX_Capture whole;
+      ASSERT_EQ(grx_match_group(match, 0, &whole), GRX_OK);
+      EXPECT_EQ(whole.start, row.start);
+      EXPECT_EQ(whole.end, row.end);
+      for (size_t i = 0; i < row.groups.size(); i++) {
+        std::string text;
+        GRX_Capture capture;
+        GRX_Result result = grx_match_group(match, i + 1, &capture);
+        if (result == GRX_OK && capture.start != GRX_NPOS) {
+          ASSERT_LE(capture.start, capture.end);
+          ASSERT_LE(capture.end, subject.size());
+          text = subject.substr(capture.start, capture.end - capture.start);
+        }
+        EXPECT_EQ(text, row.groups[i]) << i + 1;
+      }
+    };
+    {
+      SCOPED_TRACE("moving allocator");
+      grxtest::MovingAllocator allocator;
+      GRX_Regex * raw_regex = nullptr;
+      ASSERT_EQ(grx_regex_compile_with_allocator(row.pattern,
+                    std::strlen(row.pattern), GetParam(), 0, nullptr,
+                    allocator.get(), nullptr, &raw_regex), GRX_OK);
+      std::unique_ptr<GRX_Regex, decltype(&grx_regex_free)> regex(
+          raw_regex, grx_regex_free);
+      GRX_Match * raw_match = nullptr;
+      ASSERT_EQ(grx_match_create(raw_regex, allocator.get(), &raw_match), GRX_OK);
+      std::unique_ptr<GRX_Match, decltype(&grx_match_destroy)> match(
+          raw_match, grx_match_destroy);
+      for (GRX_Engine engine : {GRX_ENGINE_AUTO, GRX_ENGINE_BACKTRACK}) {
+        for (size_t repeat = 0; repeat < 2; repeat++) {
+          int matched = 0;
+          ASSERT_EQ(grx_regex_search(raw_regex, subject.data(), subject.size(),
+                        0, engine, nullptr, raw_match, &matched), GRX_OK);
+          ASSERT_EQ(matched != 0, row.matches);
+          verify(raw_match);
+        }
+      }
+      match.reset();
+      regex.reset();
+      EXPECT_EQ(allocator.live(), 0);
+      EXPECT_GT(allocator.moves(), 0);
+      RecordProperty("rc02_moves_" + std::to_string(row_index),
+          std::to_string(allocator.moves()));
+    }
+    long allocations = 0;
+    long search_faults = 0;
+    long compile_faults = 0;
+    for (long fail = 0; fail <= allocations; fail++) {
+      SCOPED_TRACE("allocation " + std::to_string(fail));
+      grxtest::FailingAllocator allocator(fail);
+      GRX_Regex * raw_regex = nullptr;
+      GRX_Error error;
+      GRX_Result result = grx_regex_compile_with_allocator(row.pattern,
+          std::strlen(row.pattern), GetParam(), 0, nullptr, allocator.get(),
+          &error, &raw_regex);
+      if (result == GRX_ERR_OOM) {
+        compile_faults++;
+        EXPECT_EQ(error.diag, GRX_DIAG_OUT_OF_MEMORY);
+        EXPECT_EQ(raw_regex, nullptr);
+      }
+      SCOPED_TRACE("compile result " + std::to_string(result) +
+          " allocations " + std::to_string(allocator.requested()));
+      std::unique_ptr<GRX_Regex, decltype(&grx_regex_free)> regex(
+          raw_regex, grx_regex_free);
+      GRX_Match * raw_match = nullptr;
+      if (result == GRX_OK)
+        result = grx_match_create(regex.get(), allocator.get(), &raw_match);
+      std::unique_ptr<GRX_Match, decltype(&grx_match_destroy)> match(
+          raw_match, grx_match_destroy);
+      int matched = 0;
+      bool searching = result == GRX_OK;
+      if (searching)
+        result = grx_regex_search(regex.get(), subject.data(), subject.size(),
+            0, GRX_ENGINE_BACKTRACK, nullptr, match.get(), &matched);
+      if (!fail) {
+        ASSERT_EQ(result, GRX_OK);
+        ASSERT_EQ(matched != 0, row.matches);
+        allocations = allocator.requested();
+      }
+      else if (result != GRX_OK) {
+        EXPECT_EQ(result, GRX_ERR_OOM) << fail;
+        EXPECT_FALSE(matched) << fail;
+        if (searching) {
+          search_faults++;
+          EXPECT_EQ(grx_match_error(match.get())->code, GRX_ERR_OOM);
+          EXPECT_EQ(grx_match_error(match.get())->diag, GRX_DIAG_OUT_OF_MEMORY);
+        }
+      }
+      // The allocator fails once. Recover every compile/create/search phase;
+      // an existing Match is reused after a failed search.
+      if (!regex) {
+        ASSERT_EQ(grx_regex_compile_with_allocator(row.pattern,
+                      std::strlen(row.pattern), GetParam(), 0, nullptr,
+                      allocator.get(), &error, &raw_regex), GRX_OK);
+        EXPECT_EQ(error.code, GRX_OK);
+        EXPECT_EQ(error.diag, GRX_DIAG_NONE);
+        regex.reset(raw_regex);
+      }
+      if (!match) {
+        ASSERT_EQ(grx_match_create(regex.get(), allocator.get(), &raw_match), GRX_OK);
+        match.reset(raw_match);
+      }
+      if (match) {
+        ASSERT_EQ(grx_regex_search(regex.get(), subject.data(), subject.size(),
+                      0, GRX_ENGINE_BACKTRACK, nullptr, match.get(), &matched),
+            GRX_OK) << fail;
+        ASSERT_EQ(matched != 0, row.matches) << fail;
+        verify(match.get());
+        EXPECT_EQ(grx_match_error(match.get())->code, GRX_OK);
+        EXPECT_EQ(grx_match_error(match.get())->diag, GRX_DIAG_NONE);
+      }
+      match.reset();
+      regex.reset();
+      EXPECT_EQ(allocator.live(), 0) << fail;
+    }
+    EXPECT_GT(compile_faults, 0);
+    EXPECT_GT(search_faults, 0);
+    RecordProperty("rc02_compile_faults_" + std::to_string(row_index),
+        std::to_string(compile_faults));
+    RecordProperty("rc02_pipeline_faults_" + std::to_string(row_index),
+        std::to_string(allocations));
+    RecordProperty("rc02_search_faults_" + std::to_string(row_index),
+        std::to_string(search_faults));
+    GRX_Regex * raw_regex = nullptr;
+    ASSERT_EQ(grx_regex_compile(row.pattern, GetParam(), 0, &raw_regex), GRX_OK);
+    std::unique_ptr<GRX_Regex, decltype(&grx_regex_free)> regex(
+        raw_regex, grx_regex_free);
+    GRX_Match * raw_match = nullptr;
+    ASSERT_EQ(grx_match_create(regex.get(), nullptr, &raw_match), GRX_OK);
+    std::unique_ptr<GRX_Match, decltype(&grx_match_destroy)> match(
+        raw_match, grx_match_destroy);
+    size_t refusals = 0;
+    size_t successes = 0;
+    size_t first_sufficient = 0;
+    size_t sweep_end = 65536;
+    GRX_Limits normal;
+    grx_limits_default(&normal);
+    for (size_t cap = 1; cap <= sweep_end; cap = cap == 1 ? 64 : cap + 64) {
+      SCOPED_TRACE("scratch cap " + std::to_string(cap));
+      GRX_Limits limits;
+      grx_limits_default(&limits);
+      limits.max_match_memory = cap;
+      int matched = 0;
+      GRX_Result result = grx_regex_search(regex.get(), subject.data(),
+          subject.size(), 0, GRX_ENGINE_BACKTRACK, &limits, match.get(), &matched);
+      ASSERT_TRUE(result == GRX_OK || result == GRX_ERR_LIMIT) << cap;
+      if (result == GRX_ERR_LIMIT) {
+        refusals++;
+        EXPECT_FALSE(matched);
+        EXPECT_EQ(grx_match_error(match.get())->diag, GRX_DIAG_LIMIT_MATCH_MEMORY);
+      }
+      else {
+        successes++;
+        if (!first_sufficient)
+          first_sufficient = cap;
+        ASSERT_EQ(matched != 0, row.matches);
+        verify(match.get());
+      }
+      ASSERT_EQ(grx_regex_search(regex.get(), subject.data(), subject.size(),
+                    0, GRX_ENGINE_BACKTRACK, nullptr, match.get(), &matched),
+          GRX_OK) << cap;
+      ASSERT_EQ(matched != 0, row.matches) << cap;
+      verify(match.get());
+      EXPECT_EQ(grx_match_error(match.get())->code, GRX_OK);
+      EXPECT_EQ(grx_match_error(match.get())->diag, GRX_DIAG_NONE);
+      // Exercise all refusal phases until this real pipeline fits, within
+      // the unchanged normal budget. Existing small rows still stop at64KiB.
+      if (cap == sweep_end && !successes) {
+        ASSERT_LE(sweep_end, normal.max_match_memory / 2);
+        sweep_end *= 2;
+      }
+    }
+    EXPECT_GT(refusals, 0u);
+    EXPECT_GT(successes, 0u);
+    RecordProperty("rc02_first_sufficient_memory_" + std::to_string(row_index),
+        std::to_string(first_sufficient));
+  }
+}
+

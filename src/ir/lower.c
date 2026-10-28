@@ -2025,8 +2025,60 @@ static GRX_Result lower_anchor(
 }
 
 /** Lower a group: a capture, or nothing at all. */
+/** Expand flat optional-prefix members without native recursion per member. */
+static GRX_Result lower_optional_sequence(
+    Lowering * low, const GRX_Node * node, uint32_t * out_node) {
+  uint32_t tail = GRX_INDEX_NONE;
+  *out_node = GRX_INDEX_NONE;
+  for (uint32_t child = node->first_child; child != GRX_INDEX_NONE;) {
+    const GRX_Node * member = grx_pattern_node(low->pattern, child);
+    if (!member) {
+      return fail(low, GRX_DIAG_INTERNAL, node);
+    }
+    uint32_t body = GRX_INDEX_NONE;
+    GRX_Result result = lower_node(low, child, &body);
+    uint32_t concat = GRX_INDEX_NONE;
+    uint32_t empty = GRX_INDEX_NONE;
+    uint32_t optional = GRX_INDEX_NONE;
+    if (result == GRX_OK) {
+      result = add(low, GRX_IR_CONCAT, node, &concat);
+    }
+    if (result == GRX_OK) {
+      result = add(low, GRX_IR_EMPTY, node, &empty);
+    }
+    if (result == GRX_OK) {
+      result = add(low, GRX_IR_ALTERNATE, node, &optional);
+    }
+    if (result == GRX_OK) {
+      result = attach(low, concat, body);
+    }
+    if (result == GRX_OK) {
+      result = attach(low, optional, concat);
+    }
+    if (result == GRX_OK) {
+      result = attach(low, optional, empty);
+    }
+    if (result == GRX_OK && tail != GRX_INDEX_NONE) {
+      result = attach(low, tail, optional);
+    }
+    if (result != GRX_OK) {
+      return result;
+    }
+    if (*out_node == GRX_INDEX_NONE) {
+      *out_node = optional;
+    }
+    tail = concat;
+    child = member->next_sibling;
+  }
+  return *out_node == GRX_INDEX_NONE
+      ? fail(low, GRX_DIAG_INTERNAL, node) : GRX_OK;
+}
+
 static GRX_Result lower_group(
     Lowering * low, const GRX_Node * node, uint32_t * out_node) {
+  if (node->flags & GRX_NODE_OPTIONAL_SEQUENCE) {
+    return lower_optional_sequence(low, node, out_node);
+  }
   uint32_t body = GRX_INDEX_NONE;
   GRX_Result result = GRX_OK;
 
@@ -2820,11 +2872,26 @@ static GRX_Result lower_backref(
 
   GRX_IRNode * backref = grx_ir_node(low->ir, *out_node);
   backref->a = group;
+  if (node->flags & GRX_NODE_UNSET_REFERENCE) {
+    backref->flags |= GRX_IR_BACKREF_UNSET;
+    low->ir->flags |= GRX_PROGRAM_EMPTY_COMPARISONS | GRX_PROGRAM_LOOK_CONTEXT;
+  }
   if (ambiguous) {
     backref->flags |= GRX_IR_AMBIGUOUS_REF;
     backref->b = list;
   }
   backref->backref_unset = (uint8_t)low->profile.backref_unset;
+  if (low->profile.assertion_context_from_continuation)
+    low->ir->flags |= GRX_PROGRAM_CAPTURE_COHORTS;
+  if (low->profile.backref_live_span) {
+    backref->flags |= GRX_IR_BACKREF_LIVE;
+    if (node->flags & GRX_NODE_OPEN_REFERENCE) {
+      backref->flags |= GRX_IR_BACKREF_OPEN;
+      low->ir->flags |= GRX_PROGRAM_OPEN_REFERENCES;
+      if (low->profile.assertion_context_from_continuation)
+        low->ir->flags |= GRX_PROGRAM_LOOK_CONTEXT;
+    }
+  }
   if (low->fold != GRX_FOLD_NONE) {
     // The engine compares folded code points rather than bytes. It is the one
     // place folding survives lowering, because what a backreference matches
@@ -2923,6 +2990,7 @@ static GRX_Result lower_repeat(
                 ? ((atom->flags & GRX_NODE_COLLECTION) ? 2 : 3)
                 : 0)
       : 0;
+  size_t body_nodes_begin = low->ir->nodes.count;
   GRX_Result result = lower_node(low, node->first_child, &body);
   low->scalar_direct = outer_scalar;
   if (result != GRX_OK) {
@@ -2935,6 +3003,18 @@ static GRX_Result lower_repeat(
   }
 
   GRX_IRNode * repeat = grx_ir_node(low->ir, *out_node);
+  if (low->profile.bounded_repeat_serial)
+    repeat->flags |= GRX_IR_REPEAT_SERIAL_OPTIONALS;
+  if (low->profile.assertion_context_from_continuation) {
+    for (size_t i = body_nodes_begin; i < low->ir->nodes.count; i++) {
+      const GRX_IRNode * part = grx_ir_node(low->ir, (uint32_t)i);
+      if (part->kind == GRX_IR_BACKREF &&
+          (part->flags & GRX_IR_BACKREF_OPEN)) {
+        repeat->flags |= GRX_IR_REPEAT_CAPTURE_PROGRESS;
+        break;
+      }
+    }
+  }
   if (low->profile.complex_repeat_counter && !simple_counter_atom &&
       node->max != 0 &&
       !(node->min == 0 && node->max == 1)) {
@@ -3259,6 +3339,9 @@ static GRX_Result lower_sequence(Lowering * low, const GRX_Node * node,
   if (result != GRX_OK) {
     return result;
   }
+
+  if (kind == GRX_IR_ALTERNATE && node->kind == GRX_NODE_ALTERNATE)
+    grx_ir_node(low->ir, *out_node)->flags |= GRX_IR_SOURCE_ALTERNATE;
 
   // A run whose plan says it needs no fold run is cleared as a whole, up to
   // the sibling that ended it: see where these are set for why one answer
@@ -4444,6 +4527,9 @@ static GRX_Result lower_node(
 
   switch (node->kind) {
     case GRX_NODE_EMPTY:
+      if ((node->flags & GRX_NODE_UNSET_REFERENCE) &&
+          low->profile.assertion_context_from_continuation)
+        return lower_backref(low, node, out_node);
       return add(low, GRX_IR_EMPTY, node, out_node);
 
     case GRX_NODE_LITERAL:
@@ -4873,6 +4959,61 @@ static GRX_Result lower_terminal_candidate(Lowering * low, uint32_t root) {
   return storage_failed(low, result, NULL);
 }
 
+/** Identify assertion reads whose capture producer belongs to another branch. */
+static GRX_Result capture_frontier_dependencies(Lowering * low) {
+  if (!(low->ir->flags & GRX_PROGRAM_CAPTURE_COHORTS) ||
+      (low->ir->flags & GRX_PROGRAM_OPEN_REFERENCES))
+    return GRX_OK;
+  size_t count = low->ir->nodes.count;
+  size_t groups = low->ir->capture_count + 1;
+  if (count > SIZE_MAX / sizeof(uint32_t) - groups)
+    return fail(low, GRX_DIAG_OUT_OF_MEMORY, NULL);
+  uint32_t * parents = gcu_allocator_malloc(low->ir->allocator,
+      (count + groups) * sizeof(uint32_t));
+  if (!parents)
+    return fail(low, GRX_DIAG_OUT_OF_MEMORY, NULL);
+  uint32_t * captures = parents + count;
+  for (size_t i = 0; i < count + groups; i++)
+    parents[i] = GRX_INDEX_NONE;
+  for (size_t i = 0; i < count; i++) {
+    const GRX_IRNode * node = grx_ir_node(low->ir, (uint32_t)i);
+    if (node->kind == GRX_IR_CAPTURE && node->a < groups)
+      captures[node->a] = (uint32_t)i;
+    for (uint32_t child = node->first_child; child != GRX_INDEX_NONE;
+        child = grx_ir_node(low->ir, child)->next_sibling)
+      parents[child] = (uint32_t)i;
+  }
+  for (size_t i = 0; i < count; i++) {
+    const GRX_IRNode * read = grx_ir_node(low->ir, (uint32_t)i);
+    if (read->kind != GRX_IR_BACKREF || read->a >= groups ||
+        captures[read->a] == GRX_INDEX_NONE)
+      continue;
+    int assertion = 0;
+    for (uint32_t at = parents[i]; at != GRX_INDEX_NONE; at = parents[at])
+      if (grx_ir_node(low->ir, at)->kind == GRX_IR_LOOK)
+        assertion = 1;
+    if (!assertion)
+      continue;
+    uint32_t child = captures[read->a];
+    for (uint32_t at = parents[child]; at != GRX_INDEX_NONE;
+        child = at, at = parents[at]) {
+      const GRX_IRNode * alternate = grx_ir_node(low->ir, at);
+      if (alternate->kind != GRX_IR_ALTERNATE ||
+          !(alternate->flags & GRX_IR_SOURCE_ALTERNATE))
+        continue;
+      uint32_t arm = (uint32_t)i;
+      while (parents[arm] != GRX_INDEX_NONE && parents[arm] != at)
+        arm = parents[arm];
+      if (parents[arm] != at || arm != child) {
+        low->ir->flags |= GRX_PROGRAM_INCOMING_LOOK_COHORTS;
+        break;
+      }
+    }
+  }
+  gcu_allocator_free(low->ir->allocator, parents);
+  return GRX_OK;
+}
+
 GRX_Result grx_lower_pattern(const GRX_Pattern * pattern,
     const GRX_Limits * limits, const GRX_Allocator * allocator,
     GRX_Error * out_error, GRX_IR ** out_ir) {
@@ -5047,6 +5188,8 @@ GRX_Result grx_lower_pattern(const GRX_Pattern * pattern,
     root = guarded;
   }
 
+  if (result == GRX_OK)
+    result = capture_frontier_dependencies(&low);
   if (result != GRX_OK) {
     grx_ir_free(low.ir);
     return result;

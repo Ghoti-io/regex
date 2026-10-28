@@ -903,12 +903,40 @@ def injected_answer_controls():
                 written = source.read()
             require(count == len(cases), (syntax, count))
             for pattern in postfix:
-                require(make_vim_vectors.artifact_shape(pattern) is None, pattern)
                 # Independent expected records, including capture text and each
                 # forced engine's distinct answer, must survive actual emission.
                 record = "pattern: %s\nsubject: a\nexpect: %s\ngroups: a\n" % (
                     pattern.replace("\\", "\\\\"), span.replace(":", "-"))
                 require(record in written, (syntax, record, written))
+                checked += 1
+
+        # Exercise the actual generation path: every previously omitted shape
+        # must reach the forced reference and the emitted records, refusals too.
+        shapes = [r"\%23l*", r"\v\_^*", r"^\m*", r"\%(*\)"]
+        generated_calls = []
+        def generated_reference(cases, engine=2):
+            generated_calls.append((engine, list(cases)))
+            return ["compile"] * len(cases)
+        root = os.path.join(work, "all-generated-shapes")
+        with patch.object(vim_diff, "make_pattern", side_effect=shapes), \
+                patch.object(vim_diff, "composing_cases", return_value=[]), \
+                patch.object(vim_diff, "combining_grammar_cases", return_value=[]), \
+                patch.object(vim_diff, "vim_encoding", return_value="utf-8"), \
+                patch.object(vim_diff, "vim_version", return_value="test"), \
+                patch.object(vim_diff, "ask_vim", side_effect=generated_reference), \
+                contextlib.redirect_stderr(io.StringIO()):
+            require(make_vim_vectors.main(["make_vim_vectors", "--out", root,
+                "--patterns", "4", "--subjects", "1"]) == 0, "generation failed")
+        for syntax, engine in vim_diff.PROFILES.items():
+            generated = [rows for selected, rows in generated_calls
+                         if selected == engine and len(rows) == len(shapes)]
+            require(len(generated) == 1, generated_calls)
+            require(sorted(p for p, _ in generated[0]) == sorted(shapes), generated)
+            with open(os.path.join(root, syntax, "generated.rxt")) as source:
+                written = source.read()
+            for pattern, subject in generated[0]:
+                require(make_vim_vectors.record_for(pattern, subject, "compile") in written,
+                        (syntax, pattern, written))
                 checked += 1
 
     for fields in (["0:0"] + [""] * 9, ["0:1", "a"] + [""] * 8):

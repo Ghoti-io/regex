@@ -1143,6 +1143,10 @@ static WalkAction walk_step(
     case GRX_IR_BACKREF:
       analysis->has_backreference = 1;
       analysis->is_regular = 0;
+      if (node->flags & GRX_IR_BACKREF_UNSET) {
+        frame->span = (Span) {0, 0, 0, 0, 0, 0};
+        return WALK_POP;
+      }
       // A backreference matches whatever its group did, so its length is
       // that group's - measured here rather than given up on, because that
       // is the difference between the lookbehind pcre2test accepts and the
@@ -1405,6 +1409,7 @@ GRX_Result grx_analyze_ir(GRX_IR * ir, GRX_Facts * out_facts) {
  */
 struct GRX_IRMemo {
   Analysis analysis;
+  GRX_Result failure; ///< Storage failures persist across subsequent questions.
 };
 
 GRX_IRMemo * grx_ir_memo_create(const GRX_IR * ir) {
@@ -1420,6 +1425,10 @@ GRX_IRMemo * grx_ir_memo_create(const GRX_IR * ir) {
   // subtree must not disturb what the full pass recorded.
   analysis_init(&memo->analysis, ir, NULL);
   return memo;
+}
+
+GRX_Result grx_ir_memo_result(const GRX_IRMemo * memo) {
+  return memo ? memo->failure : GRX_ERR_OOM;
 }
 
 void grx_ir_memo_destroy(GRX_IRMemo * memo) {
@@ -1452,7 +1461,10 @@ int grx_ir_memo_span(GRX_IRMemo * memo, uint32_t node_index, size_t * out_min,
     return 0;
   }
   analysis_restart(&memo->analysis);
-  return span_of_node(&memo->analysis, node_index, out_min, out_max);
+  int answer = span_of_node(&memo->analysis, node_index, out_min, out_max);
+  if (memo->failure == GRX_OK && memo->analysis.failure != GRX_OK)
+    memo->failure = memo->analysis.failure;
+  return answer;
 }
 
 int grx_ir_memo_can_match_empty(GRX_IRMemo * memo, uint32_t node_index) {
@@ -1460,7 +1472,10 @@ int grx_ir_memo_can_match_empty(GRX_IRMemo * memo, uint32_t node_index) {
     return 1;
   }
   analysis_restart(&memo->analysis);
-  return walk(&memo->analysis, node_index).min_length == 0;
+  int answer = walk(&memo->analysis, node_index).min_length == 0;
+  if (memo->failure == GRX_OK && memo->analysis.failure != GRX_OK)
+    memo->failure = memo->analysis.failure;
+  return answer;
 }
 
 int grx_ir_span(const GRX_IR * ir, uint32_t node_index, size_t * out_min,

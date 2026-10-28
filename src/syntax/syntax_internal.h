@@ -737,6 +737,7 @@ typedef struct GRX_Profile {
   GRX_EmptyLoopMode empty_loop;     ///< An iteration that consumed nothing.
   GRX_CaptureResetMode capture_reset; ///< Captures between iterations.
   GRX_BackrefUnsetMode backref_unset; ///< A reference to an unset group.
+  int backref_live_span; ///< Read the current endpoints, including open groups.
   GRX_LookbehindLimit lookbehind;   ///< How long a lookbehind may be.
   GRX_NegativeLookCaptures negative_look; ///< Captures a failed body made.
   int assertion_captures_persist; ///< Captures survive abandoned successful assertions.
@@ -756,6 +757,9 @@ typedef struct GRX_Profile {
   int provisional_assertion_end; ///< Assertion end markers track continuation
                                  ///< ownership.
   int atomic_ignores_markers; ///< Markers inside atomic bodies are inert.
+  int bounded_repeat_serial; ///< Each optional copy skips to the next copy.
+  int optional_sequence_groups; ///< Grouped and nested optional members.
+  int line_star_initial_literal; ///< Very-magic first simple token retains star.
   int optional_tail_omits_newline; ///< Final optional class loses added LF.
   GRX_SplitRule split;              ///< How grx_regex_split() divides.
   GRX_IterationRule iteration;      ///< Search-all after an empty match.

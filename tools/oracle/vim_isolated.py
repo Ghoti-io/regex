@@ -99,8 +99,27 @@ def _ask_in_work(inputs, script, input_variable, output_variable,
                 try:
                     stdout, stderr = process.communicate(timeout=timeout)
                 except BaseException as error:
-                    os.killpg(process.pid, signal.SIGKILL)
-                    remaining_stdout, remaining_stderr = process.communicate()
+                    evidence['interruption_channels'] = vim_protocol.channels(
+                        getattr(error, 'stdout', b''), getattr(error, 'stderr', b''))
+                    try:
+                        os.killpg(process.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    try:
+                        remaining_stdout, remaining_stderr = process.communicate(timeout=10)
+                    except (OSError, subprocess.TimeoutExpired) as drain_error:
+                        evidence['post_kill_error'] = str(drain_error)
+                        remaining_stdout = getattr(drain_error, 'stdout', None)
+                        remaining_stderr = getattr(drain_error, 'stderr', None)
+                    if remaining_stdout is None:
+                        remaining_stdout = getattr(error, 'stdout', b'')
+                    if remaining_stderr is None:
+                        remaining_stderr = getattr(error, 'stderr', b'')
+                    evidence['post_kill_channels'] = vim_protocol.channels(
+                        remaining_stdout, remaining_stderr)
+                    if isinstance(error, subprocess.TimeoutExpired):
+                        raise subprocess.TimeoutExpired(error.cmd, error.timeout,
+                            output=remaining_stdout, stderr=remaining_stderr) from error
                     if not isinstance(error, KeyboardInterrupt):
                         raise
                     stdout, stderr = remaining_stdout, remaining_stderr
@@ -113,17 +132,40 @@ def _ask_in_work(inputs, script, input_variable, output_variable,
         # Preserve all completed and partial process evidence before validating.
         for index, case in enumerate(inputs):
             prefix = work / str(index)
-            status = Path(str(prefix)+'.status')
-            output = Path(str(prefix)+'.out')
-            stdout = Path(str(prefix)+'.stdout')
-            stderr = Path(str(prefix)+'.stderr')
-            raw = output.read_bytes() if output.exists() else b''
+            read_errors = {}
+            def saved(suffix):
+                path = Path(str(prefix) + '.' + suffix)
+                try:
+                    return path.read_bytes()
+                except FileNotFoundError:
+                    return None
+                except OSError as error:
+                    read_errors[suffix] = str(error)
+                    return None
+            status = saved('status')
+            raw = saved('out')
+            stdout = saved('stdout') or b''
+            stderr = saved('stderr') or b''
+            returncode = None
+            status_error = None
+            if status is not None:
+                try:
+                    returncode = int(status)
+                    if not 0 <= returncode <= 255:
+                        raise ValueError('status outside shell exit range')
+                except ValueError as error:
+                    status_error = str(error)
+                    returncode = None
             detail = dict(command=commands[index], inputs=[case], complete=False,
-                returncode=int(status.read_text()) if status.exists() else None,
-                **vim_protocol.channels(stdout.read_bytes() if stdout.exists() else b'',
-                                        stderr.read_bytes() if stderr.exists() else b''),
-                raw_answers=raw.decode('utf-8', 'replace'), raw_answers_hex=raw.hex(),
-                output_exists=output.exists())
+                returncode=returncode,
+                status_raw=vim_protocol.text(status),
+                status_hex=status.hex() if status is not None else '',
+                **vim_protocol.channels(stdout, stderr),
+                raw_answers=(raw or b'').decode('utf-8', 'replace'),
+                raw_answers_hex=(raw or b'').hex(), output_exists=raw is not None)
+            if status_error or read_errors:
+                detail.update(error=status_error or 'process evidence read failed',
+                              read_errors=read_errors, status_error=status_error)
             evidence['processes'].append(detail)
         if (evidence.get('error') or evidence['returncode'] != 0 or
                 evidence['stdout'] or vim_protocol.diagnostics(evidence['stderr'])):

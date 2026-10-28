@@ -654,6 +654,11 @@ static GRX_Result exec(const GRX_Regex * regex, const char * subject,
       : grx_exec_backtrack(&request, out_matched);
   gcu_allocator_free(regex->allocator, columns);
 
+  // Allocation failures can arrive before a backend supplies a diagnostic.
+  if (result == GRX_ERR_OOM && diag == GRX_DIAG_NONE) {
+    diag = GRX_DIAG_OUT_OF_MEMORY;
+  }
+
   if (match) {
     match->steps = steps;
     if (result == GRX_OK) {

@@ -478,6 +478,23 @@ inline std::vector<std::string> python_string_list(
   return out;
 }
 
+/**
+ * Record elapsed time and whether its native timing bound applies.
+ *
+ * Follow test_stack's header-free Valgrind detection. Instrumentation distorts
+ * wall time, so callers still run all work and functional checks there, but
+ * apply the original timing bound only outside Valgrind (including ASan).
+ */
+inline bool record_native_wall_clock(double seconds, double bound) {
+  const char * preload = std::getenv("LD_PRELOAD");
+  const bool applied = preload == nullptr ||
+      std::strstr(preload, "vgpreload") == nullptr;
+  ::testing::Test::RecordProperty("wall_clock_seconds", std::to_string(seconds));
+  ::testing::Test::RecordProperty("wall_clock_bound_seconds", std::to_string(bound));
+  ::testing::Test::RecordProperty("wall_clock_bound_applied", applied ? 1 : 0);
+  return applied;
+}
+
 } // namespace grxtest
 
 #endif // GHOTI_IO_GRX_TEST_HELPERS_H

@@ -9,7 +9,7 @@
 # contents. `-` is a group that did not participate or matched empty, which
 # vim spells the same way.
 #
-# population: 183 reference answers, 183 records, 0 duplicate refusal rows
+# population: 263 reference answers, 253 records, 10 duplicate refusal rows
 dialect: vim-backtrack
 
 pattern: \\(a\\)\\@!\\|a\\%[\\_s]
@@ -403,6 +403,320 @@ pattern: \\~
 subject: ~
 expect: 0-1
 groups: - - - - - - - - -
+
+pattern: a\\%[\\(b\\)c]
+expect: refused
+
+pattern: a\\%[b\\%[cd]]
+expect: refused
+
+pattern: a\\%[\\(b\\|c\\)d]
+expect: refused
+
+pattern: a\\%[\\(b\\c\\)d]
+expect: refused
+
+pattern: a\\%[b\\cd]
+subject: aB
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: a\\%[b\\cd]
+subject: abc
+expect: 0-3
+groups: - - - - - - - - -
+
+pattern: a\\%[b\\cd]
+subject: abcd
+expect: 0-4
+groups: - - - - - - - - -
+
+pattern: \\9[@<=]
+subject:
+expect: nomatch
+
+pattern: \\9[@<=]
+subject: @
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: \\9[@<=]
+subject: <
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: \\9[@<=]
+subject: =
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: \\9[@1<=]
+expect: refused
+
+pattern: [@<=]\\9
+expect: refused
+
+pattern: \\1\\(a\\)\\@<=
+subject:
+expect: nomatch
+
+pattern: \\1\\(a\\)\\@<=
+subject: a
+expect: 1-1
+groups: a - - - - - - - -
+
+pattern: \\1\\(a\\)\\@<=
+subject: aa
+expect: 1-1
+groups: a - - - - - - - -
+
+pattern: \\(a\\1\\)\\@<=
+subject:
+expect: nomatch
+
+pattern: \\(a\\1\\)\\@<=
+subject: a
+expect: 1-1
+groups: a - - - - - - - -
+
+pattern: \\(a\\1\\)\\@<=
+subject: aa
+expect: 1-1
+groups: a - - - - - - - -
+
+pattern: [[:foo:]]
+subject: [[:foo:]]
+expect: 6-8
+groups: - - - - - - - - -
+
+pattern: [[:foo:]]
+subject: :]
+expect: 0-2
+groups: - - - - - - - - -
+
+pattern: [[:foo:]]
+subject: f]
+expect: 0-2
+groups: - - - - - - - - -
+
+pattern: [[:foo:]]
+subject: []
+expect: 0-2
+groups: - - - - - - - - -
+
+pattern: [[:foo:]]
+subject: a
+expect: nomatch
+
+pattern: [a[:foo:]]*a
+subject: a
+expect: nomatch
+
+pattern: [a[:foo:]]*a
+subject: aa
+expect: 0-2
+groups: - - - - - - - - -
+
+pattern: [a[:foo:]]*a
+subject: a]a
+expect: 0-3
+groups: - - - - - - - - -
+
+pattern: \\_^*
+subject:
+expect: 0-0
+groups: - - - - - - - - -
+
+pattern: \\_^*
+subject: *
+expect: 0-0
+groups: - - - - - - - - -
+
+pattern: \\v\\_^*
+subject:
+expect: nomatch
+
+pattern: \\v\\_^*
+subject: *
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: \\%23l*
+subject:
+expect: nomatch
+
+pattern: \\%23l*
+subject: a
+expect: nomatch
+
+pattern: \\%23l\\m*
+subject:
+expect: nomatch
+
+pattern: \\%23l\\m*
+subject: a
+expect: nomatch
+
+pattern: a\\%23l*
+subject:
+expect: nomatch
+
+pattern: a\\%23l*
+subject: a
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: a\\%23l*
+subject: ab
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: a\\|\\%23l*
+subject:
+expect: 0-0
+groups: - - - - - - - - -
+
+pattern: a\\|\\%23l*
+subject: b
+expect: 0-0
+groups: - - - - - - - - -
+
+pattern: a\\%23l**
+expect: refused
+
+pattern: \\v%23l*
+subject:
+expect: 0-0
+groups: - - - - - - - - -
+
+pattern: \\v%23l*
+subject: a
+expect: 0-0
+groups: - - - - - - - - -
+
+pattern: \\va%23l*
+subject: a
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: \\va%23l*
+subject: ab
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: \\v[ab]%23l*
+subject: a
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: \\v[ab]%23l*
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: \\v.%23l*
+subject: a
+expect: nomatch
+
+pattern: \\v.%23l*
+subject: b
+expect: nomatch
+
+pattern: \\vx.%23l*
+subject: xa
+expect: 0-2
+groups: - - - - - - - - -
+
+pattern: \\vx.%23l*
+subject: xb
+expect: 0-2
+groups: - - - - - - - - -
+
+pattern: \\v\\w%23l*
+subject: a
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: \\v\\w%23l*
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: \\v(a%23l*)
+subject: a
+expect: 0-1
+groups: a - - - - - - - -
+
+pattern: \\va\\c%23l*
+subject: a
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: \\va%23l{0,}
+subject: a
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: \\c\u0301\\?bb
+subject: a\u0301b
+expect: 0-3
+groups: - - - - - - - - -
+
+pattern: \\c\u0301\\?bb
+subject: a\u0301bcd
+expect: nomatch
+
+pattern: \\c\u0301\\?bb
+subject: a\u0301bbcd
+expect: 0-3
+groups: - - - - - - - - -
+
+pattern: \\c\u0301\\?\u00E9\u0302b
+subject: a\u0301\u00E9
+expect: nomatch
+
+pattern: \\c\u0301\\?\u00E9\u0302b
+subject: a\u0301\u00E9\u0302
+expect: 0-3
+groups: - - - - - - - - -
+
+pattern: \\c\u0301\\?\u00E9\u0302b
+subject: a\u0301\u00E9\u0302b
+expect: 0-3
+groups: - - - - - - - - -
+
+pattern: \\c\\Z\u0301\\?\u00E9\u0302b
+subject: a\u0301\u00E9
+expect: nomatch
+
+pattern: \\c\\Z\u0301\\?\u00E9\u0302b
+subject: a\u0301\u00E9\u0302
+expect: 0-3
+groups: - - - - - - - - -
+
+pattern: \\c\\Z\u0301\\?\u00E9\u0302b
+subject: a\u0301\u00E9\u0302b
+expect: 0-3
+groups: - - - - - - - - -
+
+pattern: \\_%
+expect: refused
+
+pattern: ^\\m*
+expect: refused
+
+pattern: \\%(*\\)
+expect: refused
+
+pattern: ^\\(\\1a\\)*b[@<=]\\{0}$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\%(\\(a\\1\\)\\)\\{2}aab[@<=]\\{0}$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
 
 pattern: \\(a\\)\\@>\\1
 subject: a\u0301a\u0301

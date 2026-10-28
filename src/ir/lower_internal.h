@@ -249,6 +249,9 @@ GRX_IRMemo * grx_ir_memo_create(const GRX_IR * ir);
 /** @brief Release a memo. NULL is ignored. */
 void grx_ir_memo_destroy(GRX_IRMemo * memo);
 
+/** Storage failure across all memo questions; NULL reports GRX_ERR_OOM. */
+GRX_Result grx_ir_memo_result(const GRX_IRMemo * memo);
+
 /**
  * @brief grx_ir_span(), sharing `memo`'s cache.
  *

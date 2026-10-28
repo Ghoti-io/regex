@@ -329,11 +329,15 @@ GRX_Result grx_regex_compile_with_allocator(const char * pattern,
   GRX_Result result = grx_pattern_parse_with_allocator(pattern, length, syntax,
       options, limits, allocator, out_error, &parsed);
   if (result != GRX_OK) {
+    if (result == GRX_ERR_OOM && (!out_error || out_error->diag == GRX_DIAG_NONE))
+      grx_error_set(out_error, result, GRX_DIAG_OUT_OF_MEMORY, GRX_NPOS, 0);
     return result;
   }
 
   result = grx_compile_program(parsed, limits, allocator, out_error, out_regex);
   grx_pattern_free(parsed);
+  if (result == GRX_ERR_OOM && (!out_error || out_error->diag == GRX_DIAG_NONE))
+    grx_error_set(out_error, result, GRX_DIAG_OUT_OF_MEMORY, GRX_NPOS, 0);
   return result;
 }
 

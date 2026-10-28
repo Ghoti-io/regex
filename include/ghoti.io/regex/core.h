@@ -240,6 +240,12 @@ typedef enum {
    */
   GRX_DIAG_OPTION_NOT_SUPPORTED,
 
+  /** Vim's previous-substitute operator needs session state a string API lacks.
+   * Appended to preserve every existing diagnostic value. Its category stays
+   * GRX_ERR_UNSUPPORTED, distinct from malformed syntax and unbuilt features.
+   */
+  GRX_DIAG_PREVIOUS_SUBSTITUTE_UNAVAILABLE,
+
   GRX_DIAG_COUNT ///< Closes the enum; not a diagnostic.
 } GRX_Diag;
 
@@ -325,7 +331,7 @@ typedef struct GRX_Limits {
   size_t max_recursion_depth; ///< Cap on nested recursion and subroutine calls.
   size_t max_steps;          ///< Cap on engine steps for one match attempt.
   size_t max_backtrack;      ///< Cap on backtracking stack depth.
-  size_t max_match_memory;   ///< Cap on a match object's scratch, in bytes.
+  size_t max_match_memory;   ///< Cap on live engine scratch payload bytes; 0 is unlimited.
   size_t max_subject_length; ///< Longest accepted subject, in bytes.
 } GRX_Limits;
 

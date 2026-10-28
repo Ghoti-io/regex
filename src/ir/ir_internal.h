@@ -161,11 +161,24 @@ typedef enum {
   GRX_IR_COUNT       ///< Closes the enum; not a node kind.
 } GRX_IRKind;
 
+/** ALTERNATE: source branches, distinct from lowering's scalar wrappers. */
+#define GRX_IR_SOURCE_ALTERNATE GRX_BIT(22)
+
 /** A counted loop has lexical count and backedge-position history. */
 #define GRX_IR_REPEAT_LEXICAL_COUNTER GRX_BIT(18)
+/** REPEAT: a local self-read can change capture input without consuming. */
+#define GRX_IR_REPEAT_CAPTURE_PROGRESS GRX_BIT(19)
+/** REPEAT: bounded optional copies are serial choices rather than nested exits. */
+#define GRX_IR_REPEAT_SERIAL_OPTIONALS GRX_BIT(24)
 
 /** @brief BACKREF: compare case-insensitively, using the folded code points. */
 #define GRX_IR_CASELESS GRX_BIT(0)
+/** BACKREF: read live endpoints; an inverted span fails. */
+#define GRX_IR_BACKREF_LIVE GRX_BIT(1)
+/** BACKREF: its capture opening lexically encloses this reference. */
+#define GRX_IR_BACKREF_OPEN GRX_BIT(10)
+/** BACKREF: its numeric target is finally absent; comparison remains observable. */
+#define GRX_IR_BACKREF_UNSET GRX_BIT(23)
 /** @brief COND: an else branch is present. */
 #define GRX_IR_HAS_ELSE GRX_BIT(1)
 /**

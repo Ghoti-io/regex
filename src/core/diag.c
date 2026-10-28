@@ -212,6 +212,8 @@ static const DiagRow diag_table[GRX_DIAG_COUNT] = {
   // sets GRX_ERR_INVALID explicitly at its own site.
   [GRX_DIAG_OPTION_NOT_SUPPORTED]
       = {"this dialect does not support that option", GRX_ERR_UNSUPPORTED},
+  [GRX_DIAG_PREVIOUS_SUBSTITUTE_UNAVAILABLE]
+      = {"previous substitute state is unavailable", GRX_ERR_UNSUPPORTED},
 };
 
 const char * grx_diag_string(GRX_Diag diag) {

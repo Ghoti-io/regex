@@ -510,12 +510,21 @@ int main(int argc, char ** argv) {
 
       GRX_Error error;
       grx_error_clear(&error);
-      if (grx_regex_compile_with_allocator(pattern, pattern_length, syntax,
-              options, NULL, NULL, &error, &regex)
-          != GRX_OK) {
+      GRX_Result compile_result = grx_regex_compile_with_allocator(pattern,
+          pattern_length, syntax, options, NULL, NULL, &error, &regex);
+      if (compile_result != GRX_OK) {
         cached_valid = 0;
         regex = NULL;
-        printf("compile %d\n", (int)error.diag);
+        if (compile_result == GRX_ERR_SYNTAX) {
+          printf("compile %d\n", (int)error.diag);
+        }
+        else if (compile_result == GRX_ERR_UNSUPPORTED &&
+            error.diag == GRX_DIAG_PREVIOUS_SUBSTITUTE_UNAVAILABLE) {
+          printf("unavailable %d\n", (int)error.diag);
+        }
+        else {
+          printf("error %s\n", grx_result_string(compile_result));
+        }
         continue;
       }
       memcpy(cached_pattern, pattern, pattern_length);

@@ -95,7 +95,7 @@ sys.exit(7 if mode=='nonzero' else 0)
             if json.loads(detail['processes'][0]['raw_answers'])['id'] != 0:
                 raise AssertionError('cleanup changed local raw identity')
             checked += 1
-    return checked + scratch_controls() + portable_deadline_controls() + cancellation_controls() + outer_cancellation_controls()
+    return checked + scratch_controls() + portable_deadline_controls() + cancellation_controls() + outer_cancellation_controls() + retained_failure_channels()
 
 
 def scratch_controls():
@@ -277,6 +277,102 @@ def outer_cancellation_controls():
             raise AssertionError('outer cancellation lost evidence or scratch cleanup')
         if phase == 'validation' and not evidence['processes'][0]['raw_answers']:
             raise AssertionError('validation cancellation discarded retained raw envelope')
+        checked += 1
+    return checked
+
+
+def retained_failure_channels():
+    checked = 0
+    for status in (b'bad', b'', b'\xff', b'256'):
+        def command(name, argv, scratch=None):
+            work = Path(scratch)
+            (work / '0.status').write_bytes(status)
+            (work / '0.out').write_bytes(b'partial raw answer')
+            (work / '0.stderr').write_bytes(b'partial diagnostic\xff')
+            return ['fixture', 'sh', argv[-1]]
+        class Process:
+            returncode = 0
+            def __enter__(self):return self
+            def __exit__(self, *args):pass
+            def communicate(self, timeout=None):return b'', b''
+        with patch.object(vim_isolated.oracle_env, 'MODE', 'host'), \
+             patch.object(vim_isolated.oracle_env, 'command', side_effect=command), \
+             patch.object(vim_isolated.subprocess, 'Popen', return_value=Process()):
+            try:vim_isolated.ask([['a', 'a']], 'fixture', 'input', 'output')
+            except vim_protocol.Failure as error:detail = error.evidence
+            else:raise AssertionError('malformed process status accepted')
+        if len(detail['processes']) != 1 or detail['complete']:
+            raise AssertionError('malformed status discarded raw process')
+        process = detail['processes'][0]
+        if (process['raw_answers_hex'] != b'partial raw answer'.hex() or
+                process['stderr_hex'] != b'partial diagnostic\xff'.hex() or
+                process['status_hex'] != status.hex() or process['returncode'] is not None):
+            raise AssertionError('malformed status lost channels')
+        checked += 1
+
+    for unreadable in ('status', 'stdout'):
+        def command(name, argv, scratch=None):
+            work = Path(scratch)
+            (work / '0.status').write_text('0')
+            (work / '0.out').write_bytes(b'partial raw answer')
+            (work / '0.stdout').write_bytes(b'partial stdout')
+            (work / '0.stderr').write_bytes(b'partial stderr')
+            return ['fixture', 'sh', argv[-1]]
+        original = Path.read_bytes
+        def read(path):
+            if path.name == '0.' + unreadable:
+                raise OSError('injected channel read failure')
+            return original(path)
+        with patch.object(vim_isolated.oracle_env, 'MODE', 'host'), \
+             patch.object(vim_isolated.oracle_env, 'command', side_effect=command), \
+             patch.object(vim_isolated.subprocess, 'Popen', return_value=Process()), \
+             patch.object(Path, 'read_bytes', read):
+            try:vim_isolated.ask([['a', 'a']], 'fixture', 'input', 'output')
+            except vim_protocol.Failure as error:detail = error.evidence
+            else:raise AssertionError('unreadable process channel accepted')
+        process = detail['processes'][0]
+        if (process['raw_answers_hex'] != b'partial raw answer'.hex() or
+                process['stderr_hex'] != b'partial stderr'.hex() or
+                unreadable not in process['read_errors']):
+            raise AssertionError('unreadable channel discarded other evidence')
+        checked += 1
+
+    for drain_failure in (False, True):
+        def command(name, argv, scratch=None):return ['fixture', 'sh', argv[-1]]
+        class TimedProcess:
+            pid = 12345
+            returncode = None
+            calls = 0
+            timeouts = []
+            def __enter__(self):return self
+            def __exit__(self, *args):pass
+            def communicate(self, timeout=None):
+                self.calls += 1
+                self.timeouts.append(timeout)
+                if self.calls == 1:
+                    raise subprocess.TimeoutExpired(['fixture'], timeout,
+                        output=b'initial\xff', stderr=b'early')
+                if drain_failure:
+                    raise subprocess.TimeoutExpired(['fixture'], timeout,
+                        output=b'full supervisor output\xfe', stderr=b'late\xfd')
+                return b'full supervisor output\xfe', b'late\xfd'
+        process = TimedProcess()
+        process.timeouts = []
+        with patch.object(vim_isolated.oracle_env, 'MODE', 'host'), \
+             patch.object(vim_isolated.oracle_env, 'command', side_effect=command), \
+             patch.object(vim_isolated.subprocess, 'Popen', return_value=process), \
+             patch.object(vim_isolated.os, 'killpg'):
+            try:vim_isolated.ask([['a', 'a']], 'fixture', 'input', 'output', timeout=1)
+            except vim_protocol.Failure as error:detail = error.evidence
+            else:raise AssertionError('supervisor timeout accepted')
+        if (detail['stdout_hex'] != b'full supervisor output\xfe'.hex() or
+                detail['stderr_hex'] != b'late\xfd'.hex() or
+                detail['interruption_channels']['stdout_hex'] != b'initial\xff'.hex() or
+                detail['post_kill_channels']['stdout_hex'] != b'full supervisor output\xfe'.hex() or
+                process.timeouts != [1, 10]):
+            raise AssertionError('post-kill diagnostics lost or drain unbounded')
+        if drain_failure and not detail.get('post_kill_error'):
+            raise AssertionError('failed output drain not recorded')
         checked += 1
     return checked
 

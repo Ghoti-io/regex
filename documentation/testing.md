@@ -53,7 +53,7 @@ observation of this machine - see §2.1.
 | musl v1.2.6 `regcomp` | POSIX BRE/ERE, with glibc | `tools/oracle/musl_match.c`: musl's own regex sources, fetched by `tools/corpus/fetch.sh musl`, compiled into the driver **against the image's glibc** - so it declines a NUL (musl has no `REG_STARTEND`) and any byte >= 0x80 (that glibc's `mbtowc`). Never decides alone - see below |
 | GNU sed 4.9 | the POSIX and GNU replacement templates | `tools/oracle/sed_match.py`, which runs sed's per-case loop *inside* the image: sed's `s` command takes one script and one subject, so it is the one reference here with no batch protocol of its own |
 | GNU grep 3.11 | the `gnu-ere` probe column | `tools/oracle/probe.py`. Only "did a line match", which is all `grep -c` can answer |
-| vim 9.2, patches 1-1129 | Vim | `tools/oracle/vim_diff.py`: **one** `vim -es` for a whole run, reading a file of cases and writing a file of answers, through `matchstrpos()` and `matchlist()`. Each run forces the engine named by the selected profile: `regexpengine=1` for `vim-backtrack`, `regexpengine=2` for `vim-nfa`. It compares complete answers against that engine. `vim_runner.py` is the one place its command line is spelled |
+| vim 9.2, patches 1-1129 | Vim | `tools/oracle/vim_diff.py`: fresh bounded `vim -es` processes for each span and capture operation, through `matchstrpos()` and `matchlist()` separately. Matching results are joined only after agreement. Each run forces the engine named by the selected profile: `regexpengine=1` for `vim-backtrack`, `regexpengine=2` for `vim-nfa`. It compares complete answers against that engine. `vim_runner.py` is the one place its command line is spelled |
 | .NET 10.0.13 (SDK 10.0.402) | .NET | `tools/oracle/DotNetOracle.cs`, compiled **inside** the image at run time by Roslyn - `csc.dll` directly, against the reference assemblies already there, because `dotnet run DotNetOracle.cs` synthesises a project and restores from api.nuget.org, which a container with no network cannot do. Speaks JavaOracle.java's protocol byte for byte, `w:` WTF-8 mode included, since both are UTF-16 engines. `dotnet_runner.py` is the one place its command line is spelled |
 | Temurin JDK 25.0.4.1+1, and JDK 27+35 beside it | Java | `tools/oracle/JavaOracle.java`, run from source by `java tools/oracle/JavaOracle.java` - the JDK launches a single file without a build step, which is what .NET's row above tried and could not have. **Two pins, and only one of them gates**: `java25` is the baseline every vector was taken against and `java27` is the forward check, the `python-next` mechanism under a different name. Its `w:` mode reads WTF-8 so that an unpaired surrogate can be asked about at all, a `Matcher` answering 62 of the JDK corpus's 101 such cases with a match; `check_java_driver.py` holds the controls and `java_probe.py` the 494 pinned cases |
 | go1.25.14 (Unicode 15.0.0) | RE2 | `tools/oracle/go_match.go`, built inside the image by `go_runner.py`. **`regexp` is in the standard library**, so unlike the Rust row there is no crate to vendor and no lock file: the digest pins the compiler and the compiler carries the implementation, which is why this is a stock image where `rust`'s is built here. Three environment variables point the build cache, the module cache and GOPATH at `/tmp`, because `go build` wants all three writable and the tree is mounted read-only. **The largest Unicode skew of any pin here**: two releases behind `tools/unicode/UCD_VERSION`, so a `\p{...}` or case-fold disagreement about a code point that moved between 15.0.0 and 17.0.0 is a fact about the two versions and not a defect, and has to be excluded by name |
@@ -906,9 +906,14 @@ not an exclusion category for either profile.
 `tools/oracle/vim_diff.py` compares each named compatibility profile with
 its corresponding forced pinned Vim engine: `vim-backtrack` with
 `regexpengine=1`, `vim-nfa` with `regexpengine=2`. `make check-oracle-vim`
-runs both in strict mode. Each normative matching, replacement, or vector
-acquisition uses one fresh reference process per input case, with a per-process
-timeout and an independent deadline around the container supervisor. The
+runs both in strict mode, including live history-dependence controls. Normative
+matching and vector acquisitions run span and capture queries in separate fresh
+processes, even for the same input. A matching span must have a matching capture
+reply before they can be joined. Replacement uses one fresh process per input.
+This checks agreement on the match outcome. The capture query supplies group
+texts; it does not independently check the whole-match span from the span query.
+Each process has a timeout, and the container supervisor has an independent
+deadline. The
 evidence retains each raw process-local answer, exact Vim and supervisor
 scripts, and the explicit input-to-process aggregation map before removing
 that acquisition's scratch directory. Setup and execution failures retain their
@@ -917,6 +922,33 @@ timeout, diagnostic, incomplete population, or invalid envelope fails the run
 and preserves incomplete evidence. Batch acquisition is explicitly diagnostic
 and cannot override isolated results. Each run prints the profile, engine and
 disagreement counts. `--syntax` selects one profile for a focused run.
+
+NFA process history can change a second operation for the same pattern and
+subject. For `^\(\1a\)*b[@<=]\{0}$` on `aab`, a fresh capture query
+reports group `a`; a prior span query can change it to `aa`. Another repeated
+self-reference returns a match to either fresh API and no match to a second
+query in that process. `check_vim_coherent.py` checks fresh results and proves
+an injected prior query changes these witnesses. Hermetic protocol controls
+reject short, incomplete, malformed and disagreeing operation results while
+preserving both populations and raw failure evidence. Historical two-query and
+batch runs remain diagnostics; their answers cannot override fresh operations.
+
+The match and replacement drivers report `compile <diagnostic>` only for
+`GRX_ERR_SYNTAX`. Allocation, limit and generic unsupported results retain their
+error protocol and cannot count as syntax-refusal agreement. Unavailable Vim
+previous-substitute state has its own appended diagnostic and keeps the public
+`GRX_ERR_UNSUPPORTED` result. Only that exact result/diagnostic pair emits
+`unavailable <diagnostic>`; the raw context classification remains visible.
+For the fresh string-subject operation, Vim reports E33 for this unavailable
+state, so the Vim comparers map this typed context outcome to the existing
+refused equivalence. Unbuilt features and dialects remain errors.
+
+The default `check-oracle-driver-results` gate includes each actual driver in a
+test-only fixture. Its 96 checks cover six injected cases (syntax, unavailable
+previous-substitute state, allocation, limit, unbuilt dialect and unbuilt
+construct), healthy recovery, literal tilde behavior and strict parsing in both
+profiles. The fixture uses a C function substitution and does not require linker
+wrapping.
 
 The original engine-split rows are fixed regression cases. The missing
 `\f`, `\F`, `\I`, `\K` and collection escapes are in the generating
@@ -956,6 +988,12 @@ returns a different answer. Shared Vim tests run for both profiles, and
 `tests/unit/test_vim_profiles.cpp` pins divergent behavior, capture rollback,
 UTF-8 bounds, public selection, and bounded execution separately.
 
+Offset-bearing controls compare the corresponding API operation explicitly:
+Vim's start argument uses a subject suffix, while the library's search window
+keeps the full subject context. `tests/unit/test_vim_context.cpp` checks caret,
+byte/screen columns, lookbehind visibility and multibyte capture text under both
+profiles, preserving the window API contract alongside suffix equivalence.
+
 **Both of the rules its subjects used to leave out are built**, and the
 subjects say so in two different ways. Characters outside Latin's word class
 are in the ordinary list - six of vim's nine classes, each beside Latin and
@@ -973,12 +1011,11 @@ branch-priority and physical versus reporting-boundary distinctions.
 
 **The vocabulary carries what vim refuses**, at one row in eight - `\z(`,
 `\z1`, `\1` with no group, `a\{2`, `\(a`, `a**`, `\v+a`, `\v@a` and
-more. It is spliced *between atoms* rather than at a random byte offset,
-which is a narrowing with a reason: a byte offset lands inside a construct
-as often as not, and vim compiles a collection with a corrupted
-`[[:name:]]` into a pattern that can never match anything at all -
-`[[:foo:]]*a` does not match "a". Thousands of those would put a floor under
-the disagreement count and hide the next real one under it.
+more. It is spliced *between atoms* so the selected construct survives as
+rejection coverage. Unknown POSIX names use ordinary collection fallback and
+are included in the generated atom vocabulary, alongside grouped/nested
+optional sequences and lexical forward-reference controls.
+
 
 **Committed vectors require no live reference.**
 `tools/oracle/make_vim_vectors.py` writes independent expectations under
@@ -991,8 +1028,10 @@ Vim gives whole-match byte offsets but only group text. The `groups:` field
 therefore compares each group's contents, folding unset and empty together;
 no expected capture offsets are borrowed from this library. Generated positive
 and negative assertions, lookbehind and atomic groups are retained, as are
-literal `@` characters. Remaining syntax-shape omissions are named and counted in the generated headers. They measure
-coverage limits and cannot establish complete compatibility.
+literal `@` characters. Exceptional stars and line-number repetitions also
+reach the reference and emitted vectors, including syntax refusals. No syntax
+shape is discarded during generation. Protocol controls exercise the actual
+generation and record emission path so restored omissions fail the gate.
 
 Exposed failures remain oracle-authored vectors. Exact temporary entries in
 `known-gaps.txt` name each outstanding input and reason; these count as gaps,
@@ -2764,6 +2803,13 @@ write below the stack pointer as an invalid one; the verdicts those runs
 check - that nesting past the cap is a `GRX_ERR_LIMIT` and not a crash - are
 checked in every build.
 
+Compiler and search performance tests retain their original wall-clock bounds
+in ordinary and sanitizer runs. Under Valgrind they execute every input and
+functional assertion, while leaving the instrumented elapsed time outside those
+bounds. Test properties record the observed seconds, original bound and whether
+it applied. Memory checking therefore covers the same work without treating
+instrumentation overhead as a performance regression.
+
 Corpus seeds come from the vectors: `make fuzz-seed` writes every vector's
 pattern (and subject) as a corpus file, so the fuzzers start from real
 syntax.
@@ -3198,7 +3244,9 @@ syntax errors (and E33, unavailable previous-substitute state in a fresh string
 oracle) count as refusals. After a replacement failure, the oracle independently
 checks the outer pattern before classifying a refusal: nested replacement
 expressions can raise the same syntax-shaped errors at runtime. Ambiguous
-expression failures invalidate the run. The reports retain exact exceptions, raw answers,
+expression failures invalidate the run. E877 requires the measured invalid
+character-class message; its numeric code alone is not a syntax classification.
+The reports retain exact exceptions, raw answers,
 process diagnostics and incomplete status; a failed reference execution never
 supplies a compatibility expectation. Successful replacement text is carried
 separately from status, including empty text and literal `syntax`, `compile`

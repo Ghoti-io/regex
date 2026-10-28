@@ -14,11 +14,13 @@ from pathlib import Path
 # Resource exhaustion (including E363), internal and unknown errors stay errors.
 REFUSAL_CATEGORIES = {
     33: 'previous substitute state unavailable in fresh string contract',
+    51: 'more than nine capturing groups',
     53: 'unmatched noncapturing opening group',
     54: 'unmatched opening group',
     55: 'unmatched closing group',
     61: 'nested star',
     62: 'nested assertion operator',
+    63: 'invalid newline-inclusive atom escape',
     64: 'postfix operator without an atom',
     65: 'illegal back reference',
     66: 'syntax-file opening group unavailable in string contract',
@@ -30,6 +32,7 @@ REFUSAL_CATEGORIES = {
     866: 'misplaced NFA operator',
     867: 'unknown NFA pattern operator',
     871: 'NFA postfix operator following another postfix operator',
+    872: 'more than nine NFA capturing groups',
     888: 'forbidden marker repetition',
 }
 REFUSALS = frozenset(REFUSAL_CATEGORIES)
@@ -53,8 +56,16 @@ def classify_exception(exception, phase='pattern'):
     # that a syntax-shaped exception actually refuses the pattern under test.
     if phase != 'pattern' or not isinstance(exception, str):
         return 'error'
-    found = re.fullmatch(r'Vim(?:\([^\n()]*\))?:E([0-9]+): [^\n]+', exception)
-    return 'refused' if found and int(found[1]) in REFUSALS else 'error'
+    found = re.fullmatch(r'Vim(?:\([^\n()]*\))?:E([0-9]+): ([^\n]+)', exception)
+    if found and int(found[1]) in REFUSALS:
+        return 'refused'
+    # E877 belongs to the manual's broader NFA debugging/unimplemented group.
+    # Qualify only the measured malformed \_ character-class refusal; another
+    # E877 message must not silently become a pattern refusal.
+    if (found and int(found[1]) == 877 and re.fullmatch(
+            r'\(NFA regexp\) Invalid character class: [0-9]+', found[2])):
+        return 'refused'
+    return 'error'
 
 
 # The catch is deliberately unclassified. Python validates the envelope and

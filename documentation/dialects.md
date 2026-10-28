@@ -541,8 +541,10 @@ scans retain the ordinary execution resource limits.
 
 `GRX_SYNTAX_VIM_BACKTRACK` (`vim-backtrack`) targets forced
 `regexpengine=1`; `GRX_SYNTAX_VIM_NFA` (`vim-nfa`) targets forced
-`regexpengine=2`. They share Vim's grammar. The reference is Vim 9.2,
-patches 1–1129, matching strings through `matchstrpos()` and `matchlist()`,
+`regexpengine=2`. Grammar and behavior follow the selected engine, including
+grouped optional-sequence members accepted only by NFA. The reference is Vim 9.2,
+patches 1–1129, matching strings through independent fresh `matchstrpos()`
+and `matchlist()` operations,
 with UTF-8, magic enabled and `iskeyword=@,48-57,_,192-255`. The invocation
 keeps Vi-compatible `cpoptions`. Buffer matching, automatic engine selection,
 and other option settings are outside these contracts. A pattern-local
@@ -564,6 +566,50 @@ The independently measured profile axes are:
 | Nonzero-minimum repeat after consuming iterations | Keep the trailing empty iteration (`BREAK_ON_EMPTY`) | Keep the trailing empty iteration (`BREAK_ON_EMPTY`) |
 | Match markers in atomic groups | Honor `\zs` and `\ze` | Suppress direct marker writes; a completed BODY end context can remain visible through a later atomic continuation |
 | Added newline in the final atom of an optional sequence | Retain the newline member | Drop the added newline member in the measured final-atom cases |
+
+Optional sequences (`\%[...]`) prefer the longest available prefix of their
+members. Both profiles refuse direct alternation/intersection members and
+postfix operators on direct members. The NFA profile accepts capturing and
+noncapturing grouped members, including their ordinary inner alternation,
+repetition, directives and nested optional sequences; backtracking refuses
+these grouped/nested members. Direct `\c`, `\C`, `\Z` and magic-mode markers
+inside optional brackets remain literal member letters. Inside a grouped
+member they resume their ordinary directive meaning.
+
+Numeric references normally require a previously closed capture. Both profiles
+also accept a forward, open or nonexistent reference when a later raw source
+substring `@<=` or `@<!` follows that individual reference. This is lexical:
+text in a collection or literal context qualifies, but decoded numeric escapes,
+earlier behind text and numeric bounds such as `@1<=` do not. References to
+finally nonexistent groups match empty without adding public captures. References
+to actual groups retain their capture identity; the read policy for an open
+group follows the selected Vim profile.
+
+Unknown POSIX class names use ordinary collection fallback. `[[:foo:]]` is a
+collection of literal `[`, `:`, `f`, `o`, followed by a literal `]`; over the
+literal subject `[[:foo:]]`, it matches `:]` at bytes 6:8. Known class names
+retain their profile-specific character membership.
+
+Star grammar retains the spelling and active magic mode. `^*` means an
+anchored literal star. `\_^*` repeats the assertion in default magic, while
+`\v\_^*` requires an anchored literal star. Default-magic `\%(*\)` is a
+syntax error even though capturing `\(*\)` accepts a literal star; very-magic
+`\v%(*)` and nomagic forms accept it. Positional-assertion repetition also
+retains initial-atom and magic-mode context. Standalone `\%23l*` remains
+unsatisfiable over a string, while `a\%23l*` matches `a` and `\v%23l*`
+matches empty. On `a`, `\va%23l*` matches in the backtracking profile and
+fails in the NFA profile; grouping the preceding atom as `\v(a)%23l*`
+allows both profiles to match. These lexical distinctions also determine
+whether another postfix operator is misplaced.
+
+A Vim `matchstrpos(subject, pattern, start)` start argument changes the subject
+context: caret and columns begin there, and lookbehind cannot read its prefix.
+To reproduce it, pass the UTF-8 suffix beginning at `start` as the subject to
+`grx_regex_search`, with search start zero; add `start` to returned participating
+spans to recover original-buffer offsets. `GRX_SearchOptions.begin` instead
+preserves the original subject origin and preceding lookbehind visibility,
+as its public contract states. These are different operations even in a Vim
+profile.
 
 Complex counted repeats also retain count and loop-progress history under the
 backtracking profile. For `\%(aa\|a\)\{2}aab` on `aaab`, it reports 0:4;
@@ -2227,9 +2273,6 @@ answer.
 | Emacs | Syntax classes (`\s-`, `\w`) use fixed Unicode definitions, not a syntax table | no syntax table | - |
 | Vim | The subject is a string, not a buffer | vim's help describes matching against a *buffer*, where `.` refuses the line break. `matchstrpos()` over a string is what this library can be, and what its differential asks: there `a.b` matches "a\nb", `[^x]` matches the break, and `^`, `$`, `\_^` and `\_$` hold at the two ends only. The `\_` forms are still distinct, because `\s` refuses a break and `\_s` accepts one | - |
 | Vim | `\i`, `\k`, `\f` and `\p` are vim's *defaults* | those four are the options 'isident', 'iskeyword', 'isfname' and 'isprint', and a user who has changed one has a dialect this library does not read. Measured at the defaults, and measured by enumeration: every one of the 1,114,112 code points put to vim for each of the 52 class spellings, which is what a set whose members are decided one at a time needs. They had been *sampled* instead, and three of the four were wrong - `\i` and `\k` both missed U+00B5, and `\k` took in 5,463 code points vim excludes. **That correction went two code points too far**, fixed 2026-09-24: U+00D7 and U+00F7 are the only members of 192-255 that vim's `@` does not cover, so the explicit range is the whole reason they are keyword characters, and vim matches both with `\k`. The enumeration ran `vim -u NONE`, which leaves vim *Vi-compatible*, and 'iskeyword' is one of exactly two regex-visible options whose default differs between the two modes - `@,48-57,_` there against the `@,48-57,_,192-255` vim's help calls the Vim default. 'isident' does not differ, which is why `\i` had `{0xC0, 0xFF}` whole while `\k` had a hole in the same range: one numeric range, measured twice, under two different defaults. `tools/oracle/vim_diff.py` pins the option now, beside the encoding pin, rather than the mode - the mode would also flip 'cpoptions', which is the other difference and not the one in question | - |
-| Vim | An unknown `[:name:]` is refused | vim compiles a collection holding one into a pattern that can never match anything at all - `[[:foo:]]*a` does not match "a" - which is a degenerate answer rather than a rule | `GRX_ERR_SYNTAX` |
-| Both Vim profiles | Remaining parser limitations | Forward backreferences that Vim accepts only before lookbehind are refused. Parser artifacts include `\v\_^*`, a bare `*` after a line-number assertion, and the exceptional leading-star spellings `^\m*` and `\%(*\)`. Every grammar disagreement remains visible in the matching differential. | - |
-| Both Vim profiles | Groups and nested sequences inside `\%[...]` are refused | Backtracking Vim refuses these with E54; NFA Vim accepts them. The shared grammar keeps the refusal explicit instead of interpreting their contents as ordinary atoms. Classes, collections, numeric atoms, markers and backreferences remain supported members. | `GRX_ERR_SYNTAX` |
 
 ### 6.1 ECMAScript and the unit of a subject
 

@@ -119,67 +119,6 @@ static char byte_at(const GRX_Parser * parser, size_t ahead) {
 }
 
 /**
- * The magic level in force at `offset`, read from the text.
- *
- * The level the parser carries is the level *here*; this answers the same
- * question about somewhere else, which the anchor rules need: whether a `^`
- * is at the start of a branch depends on how the opener before it was
- * spelled, and that spelling depends on the level *there*.
- *
- * A forward scan from the start, because the level is not a stack and
- * cannot be recovered from any smaller window. Only the anchor rules call
- * it, and only for a `^` or `$` that is not already settled, so the cost is
- * a scan per literal caret rather than per character.
- */
-static VimMagic level_at(const GRX_Parser * parser, size_t offset) {
-  VimMagic level = VIM_MAGIC;
-  int in_class = 0;
-  int first_in_class = 0;
-  for (size_t i = 0; i < offset && i < parser->length; i++) {
-    char c = parser->text[i];
-    if (c == '\\' && i + 1 < parser->length) {
-      char next = parser->text[i + 1];
-      if (!in_class) {
-        switch (next) {
-          case 'v': level = VIM_VERY_MAGIC; break;
-          case 'm': level = VIM_MAGIC; break;
-          case 'M': level = VIM_NOMAGIC; break;
-          case 'V': level = VIM_VERY_NOMAGIC; break;
-          default: break;
-        }
-      }
-      // An escape inside a collection is a *member* of it, so the `]`
-      // after it is no longer the one that may be a literal. Without this
-      // the flag stayed set across `[^\n]`, the closing bracket was read
-      // as a member, the collection never ended, and a `\c` after it was
-      // read as being inside one - which left `\_[^\n]\%o101\c` matching
-      // case-sensitively. The shared prescan carried the same defect until
-      // WP-30; this is it written a second time, in a second scan.
-      first_in_class = 0;
-      i++;
-      continue;
-    }
-    if (in_class) {
-      // A `]` immediately after the `[` is a member, not the close, which
-      // is how a collection holds one: `[]a]` matches "]" and "a".
-      if (c == ']' && !first_in_class) {
-        in_class = 0;
-      }
-      first_in_class = 0;
-      continue;
-    }
-    if (c == '[' && (level == VIM_MAGIC || level == VIM_VERY_MAGIC)) {
-      in_class = 1;
-      first_in_class = 1;
-      if (i + 1 < parser->length && parser->text[i + 1] == '^') {
-        i++;
-      }
-    }
-  }
-  return level;
-}
-
-/**
  * Whether `op` is written with a leading backslash at this position.
  *
  * The whole of the magic table, and the reason this dialect needed a hook:
@@ -242,67 +181,46 @@ static int escape_is_transparent(char c) {
  * `\|` and `\&` - measured, `\(^a\)` and `x\|^a` both anchor - and an
  * ordinary character anywhere else, which is why `a^b` matches "a^b".
  *
- * The openers are asked for in the spelling the level *there* gives them,
- * which is what makes `\v(\m^a)` come out right: the `(` was bare because
- * the level was very magic when it was read, and the `^` is positional
- * because the level is magic by the time it is.
+ * The shared grammar supplies the branch's source start. Only an initial
+ * run of transparent directives may stand between that start and this caret;
+ * nested grouped optional members therefore need no second lexical reader.
  */
 static int at_branch_start(const GRX_Parser * parser, size_t offset) {
-  size_t i = offset;
-  for (;;) {
-    if (i == 0) {
-      return 1;
-    }
-    if (i >= 2 && parser->text[i - 2] == '\\') {
-      char c = parser->text[i - 1];
-      if (c == '(' || c == '|' || c == '&') {
-        return 1;
-      }
-      if (escape_is_transparent(c)) {
-        i -= 2;
-        continue;
-      }
+  size_t at = parser->branch_start;
+  while (at < offset) {
+    if (offset - at < 2 || parser->text[at] != '\\'
+        || !escape_is_transparent(parser->text[at + 1])) {
       return 0;
     }
-    // `\%(`, the non-capturing opener, at every level.
-    if (i >= 3 && parser->text[i - 3] == '\\' && parser->text[i - 2] == '%'
-        && parser->text[i - 1] == '(') {
-      return 1;
-    }
-    char bare = parser->text[i - 1];
-    if ((bare == '(' || bare == '|' || bare == '&')
-        && level_at(parser, i - 1) == VIM_VERY_MAGIC) {
-      return 1;
-    }
-    return 0;
+    at += 2;
   }
+  return at == offset;
 }
 
-/** The mirror: whether a branch ends at `at`, so that a `$` before it anchors. */
+/** A branch ends only at an operator in the mode active at that position. */
 static int at_branch_end(const GRX_Parser * parser, size_t at) {
-  size_t i = at;
-  for (;;) {
-    if (i >= parser->length) {
-      return 1;
-    }
-    if (parser->text[i] == '\\' && i + 1 < parser->length) {
-      char c = parser->text[i + 1];
-      if (c == ')' || c == '|' || c == '&') {
-        return 1;
-      }
-      if (escape_is_transparent(c)) {
-        i += 2;
+  VimMagic level = magic_level(parser);
+  while (at < parser->length) {
+    char c = parser->text[at];
+    if (c == '\\' && at + 1 < parser->length) {
+      char next = parser->text[at + 1];
+      if (escape_is_transparent(next)) {
+        switch (next) {
+          case 'v': level = VIM_VERY_MAGIC; break;
+          case 'm': level = VIM_MAGIC; break;
+          case 'M': level = VIM_NOMAGIC; break;
+          case 'V': level = VIM_VERY_NOMAGIC; break;
+          default: break;
+        }
+        at += 2;
         continue;
       }
-      return 0;
+      return level != VIM_VERY_MAGIC
+          && (next == ')' || next == '|' || next == '&');
     }
-    char bare = parser->text[i];
-    if ((bare == ')' || bare == '|' || bare == '&')
-        && level_at(parser, i) == VIM_VERY_MAGIC) {
-      return 1;
-    }
-    return 0;
+    return level == VIM_VERY_MAGIC && (c == ')' || c == '|' || c == '&');
   }
+  return 1;
 }
 
 // --------------------------------------------------------------------------
@@ -676,23 +594,6 @@ static const VimRange * vim_named_set(char c, size_t * out_count,
 // --------------------------------------------------------------------------
 
 /**
- * Whether the `[` before `at` opens a collection that closes.
- *
- * Vim reads a `[` that opens nothing as the character, so this is the
- * difference between `[]a` - three literals - and `[]a]`, a collection.
- * A `]` first is a member and not the close, and an escape takes the
- * character after it whatever that is.
- *
- * Text and offsets rather than a GRX_Parser, because **two scans ask this
- * question and only one of them has a parser**. vim_initial_options()
- * runs before parsing to find a `\c` anywhere in the pattern, and it had
- * its own copy of the rule with this clause missing: `[]a\cb` left it
- * inside a collection for the rest of the pattern and the `\c` was never
- * seen, so the pattern matched case-sensitively. That is the third defect
- * in that one function and all three are the same defect - a second
- * reader of a grammar, written from memory. There is one reader now.
- */
-/**
  * Whether a code point is one of the composing characters.
  *
  * Vim reads a base character and the composing characters after it as one
@@ -705,6 +606,7 @@ static int vim_is_composing(uint32_t codepoint) {
   return grx_display_cell_width(codepoint, 0) == 0;
 }
 
+/** A first ']' is a member; only a later unescaped ']' closes a collection. */
 static int collection_closes(const char * text, size_t length, size_t at) {
   size_t i = at;
   if (i < length && text[i] == '^') {
@@ -725,89 +627,13 @@ static int collection_closes(const char * text, size_t length, size_t at) {
   return 0;
 }
 
-/**
- * Settle caseless matching before anything is read.
- *
- * `\c` and `\C` are not scoped and not positional: either one anywhere in
- * the pattern decides the whole of it. Measured, and the precedence is not
- * "last one wins" - `\Ca\cb` matches "AB" and `\ca\Cb` matches "aB", so a
- * `\c` anywhere beats a `\C` anywhere, whichever came first.
- *
- * Inside a bracket expression both are ordinary characters, so the scan
- * tracks classes; and because whether `[` opens one depends on the magic
- * level, it tracks that too. A scan that did not would read `[\c]` as
- * turning caseless matching on for a pattern that only wanted the letter.
- */
-static uint32_t vim_initial_options(
-    const char * text, size_t length, uint32_t options) {
-  int caseless = 0;
-  int forced = 0;
-  int ignore_combining = 0;
-  VimMagic level = VIM_MAGIC;
-  int in_class = 0;
-  int first_in_class = 0;
-
-  for (size_t i = 0; i < length; i++) {
-    char c = text[i];
-    if (c == '\\' && i + 1 < length) {
-      char next = text[i + 1];
-      if (!in_class) {
-        switch (next) {
-          case 'c': caseless = 1; break;
-          case 'C': forced = 1; break;
-          case 'Z': ignore_combining = 1; break;
-          case 'v': level = VIM_VERY_MAGIC; break;
-          case 'm': level = VIM_MAGIC; break;
-          case 'M': level = VIM_NOMAGIC; break;
-          case 'V': level = VIM_VERY_NOMAGIC; break;
-          default: break;
-        }
-      }
-      // An escape inside a collection is a *member* of it, so the `]`
-      // after it is no longer the one that may be a literal. Without this
-      // the flag stayed set across `[^\n]`, the closing bracket was read
-      // as a member, the collection never ended, and a `\c` after it was
-      // read as being inside one - which left `\_[^\n]\%o101\c` matching
-      // case-sensitively. The shared prescan carried the same defect until
-      // WP-30; this is it written a second time, in a second scan.
-      first_in_class = 0;
-      i++;
-      continue;
-    }
-    if (in_class) {
-      if (c == ']' && !first_in_class) {
-        in_class = 0;
-      }
-      first_in_class = 0;
-      continue;
-    }
-    if (c == '[' && (level == VIM_MAGIC || level == VIM_VERY_MAGIC)
-        && collection_closes(text, length, i + 1)) {
-      // The same predicate the reader uses, and not a second copy of it:
-      // a `[` that opens nothing is the character, so `[]a\cb` is five
-      // literals and a case marker rather than an unterminated collection
-      // that swallows the marker.
-      in_class = 1;
-      first_in_class = 1;
-      if (i + 1 < length && text[i + 1] == '^') {
-        i++;
-      }
-    }
-  }
-
-  if (ignore_combining) {
-    // `\Z`, which has no counterpart to turn it off: one anywhere in the
-    // pattern makes the whole of it ignore composing characters.
-    options |= GRX_OPT_IGNORE_COMBINING;
-  }
-  if (caseless) {
-    return options | GRX_OPT_CASELESS;
-  }
-  if (forced) {
-    return options & ~(uint32_t)GRX_OPT_CASELESS;
-  }
-  return options;
-}
+/* Global directives are recorded by the real grammar in vim_skip_ignorable().
+ * Applying them in validation reaches earlier atoms without a second lexical
+ * reader that mistakes grouped optional members for collection contents. */
+#define VIM_CASELESS 1u
+#define VIM_CASE_SENSITIVE 2u
+#define VIM_IGNORE_COMBINING 4u
+#define VIM_SCANNED_BEHIND 8u
 
 // --------------------------------------------------------------------------
 // Bracket expressions
@@ -829,9 +655,8 @@ static const char * const posix_class_names[] = {
  * U+200B is not, so the shared ASCII definition would be a wrong answer.
  *
  * `[:word:]` is *not* among them, which is worth saying because every other
- * regex dialect here has it: vim compiles `[[:word:]]` into a collection
- * that matches nothing at all, which is what it does with any name it does
- * not know.
+ * regex dialect here has it. Unknown names fall back to ordinary collection
+ * members; the first ']' closes the collection and the final ']' is literal.
  */
 static const VimRange * vim_own_class(
     const char * name, size_t length, size_t * out_count) {
@@ -1124,27 +949,33 @@ static GRX_Result read_collection(GRX_Parser * parser, size_t start,
         }
       }
       if (!known) {
-        return grx_parse_fail(
-            parser, GRX_DIAG_UNKNOWN_POSIX_CLASS, item_start, end + 2);
+        // Leave the apparent [:name:] untouched. Its opening '[' is an
+        // ordinary member and the first ']' closes this collection.
+        GRX_Result read = read_class_item(parser, &item);
+        if (read != GRX_OK) {
+          return read;
+        }
       }
-      uint32_t offset = GRX_INDEX_NONE;
-      if (grx_pattern_add_name(parser->pattern, name, name_length, &offset)
-          != GRX_OK) {
-        return grx_parse_fail(parser, GRX_DIAG_OUT_OF_MEMORY, item_start, 0);
+      else {
+        uint32_t offset = GRX_INDEX_NONE;
+        if (grx_pattern_add_name(parser->pattern, name, name_length, &offset)
+            != GRX_OK) {
+          return grx_parse_fail(parser, GRX_DIAG_OUT_OF_MEMORY, item_start, 0);
+        }
+        parser->position += end + 2;
+        int fold_case_class = parser->profile.posix_case_classes_latin1
+            && ((name_length == 5 && memcmp(name, "lower", 5) == 0)
+                || (name_length == 5 && memcmp(name, "upper", 5) == 0));
+        item = (GRX_ClassItem) {
+          // Not folded, for the reason range_class() gives: `\c[[:lower:]]`
+          // does not match "A" in vim and `\c[a-z]` does.
+          .kind = GRX_CLASS_ITEM_POSIX,
+          .flags = fold_case_class ? 0u : GRX_CLASS_ITEM_NO_FOLD,
+          .lo = 0, .hi = 0,
+          .a = offset, .offset = item_start,
+          .length = parser->position - item_start,
+        };
       }
-      parser->position += end + 2;
-      int fold_case_class = parser->profile.posix_case_classes_latin1
-          && ((name_length == 5 && memcmp(name, "lower", 5) == 0)
-              || (name_length == 5 && memcmp(name, "upper", 5) == 0));
-      item = (GRX_ClassItem) {
-        // Not folded, for the reason range_class() gives: `\c[[:lower:]]`
-        // does not match "A" in vim and `\c[a-z]` does.
-        .kind = GRX_CLASS_ITEM_POSIX,
-        .flags = fold_case_class ? 0u : GRX_CLASS_ITEM_NO_FOLD,
-        .lo = 0, .hi = 0,
-        .a = offset, .offset = item_start,
-        .length = parser->position - item_start,
-      };
     }
     else {
       GRX_Result read = read_class_item(parser, &item);
@@ -1272,6 +1103,8 @@ static int eat_close_paren(GRX_Parser * parser) {
  * gives it - which need not be the spelling the opener had, since
  * `\%(a\v)` closes with a bare `)`.
  */
+static GRX_Result vim_skip_ignorable(GRX_Parser * parser);
+
 static GRX_Result read_noncapturing(
     GRX_Parser * parser, size_t start, uint32_t * out_node) {
   GRX_Result result = add_plain(parser, GRX_NODE_GROUP, start, out_node);
@@ -1286,6 +1119,21 @@ static GRX_Result read_noncapturing(
   }
   parser->depth++;
   parser->group_depth++;
+  GRX_Result skipped = vim_skip_ignorable(parser);
+  if (skipped != GRX_OK) {
+    parser->depth--;
+    parser->group_depth--;
+    return skipped;
+  }
+  if (parser->text[start] == '\\'
+      && (magic_level(parser) == VIM_MAGIC
+          || magic_level(parser) == VIM_VERY_MAGIC)
+      && byte_at(parser, 0) == '*') {
+    parser->depth--;
+    parser->group_depth--;
+    return grx_parse_fail(parser, GRX_DIAG_NOTHING_TO_REPEAT,
+        parser->position, 1);
+  }
   uint32_t body = GRX_INDEX_NONE;
   result = grx_parse_alternation(parser, &body);
   parser->depth--;
@@ -1309,8 +1157,8 @@ static GRX_Result read_noncapturing(
  * absent, as long as what is present is a prefix.
  *
  * `r\%[ead]` matches "r", "re", "rea" and "read" and nothing else, so it is
- * exactly `r\(e\(a\(d\)\=\)\=\)\=` and is built as that - a nest of optional
- * repeats, innermost first. Nothing below the AST learns a new node kind.
+ * represented by flat optional-prefix members. Lowering expands the prefix
+ * choices iteratively, preserving zero-width members without empty-loop rules.
  *
  * Vim's help calls the members "atoms" and means it: a class, a
  * collection, `\%d98`, `\zs`, `\<` and a backreference are all members,
@@ -1321,11 +1169,9 @@ static GRX_Result read_noncapturing(
  * **No multi.** `a\%[b*]`, `a\%[b\+]`, `a\%[b\=]`, `a\%[b\{2}]` and
  * `a\%[\(b\)\@=]` are all errors in vim, in both of its engines.
  *
- * **No alternation and no group.** `a\%[b\|c]` is an error in both.
- * `a\%[\(bc\)]`, `a\%[\%(bc\)]` and a nested `a\%[b\%[cd]]` are
- * errors under `set re=1` and accepted under the default engine, which is
- * the same split the marks are in; the engine that can be written down is
- * the one followed, and dialects.md section 6 records it.
+ * **No direct alternation/intersection.** Groups and nested optional
+ * sequences are accepted only by the NFA grammar policy; grouped contents
+ * resume the full grammar, including inner multis and directives.
  *
  * **Not empty.** `a\%[]` is an error, where a collection's `[]` is not.
  *
@@ -1347,7 +1193,13 @@ static int member_opener_is_refused(const GRX_Parser * parser) {
     return 0;
   }
   char c = byte_at(parser, lead);
-  if (c == '(' || c == '|' || c == '&') {
+  if (c == '|' || c == '&') {
+    return 1;
+  }
+  if (parser->profile.optional_sequence_groups) {
+    return 0;
+  }
+  if (c == '(') {
     return 1;
   }
   return c == '%'
@@ -1376,126 +1228,85 @@ static int multi_stands_here(const GRX_Parser * parser) {
     return 0;
   }
   char c = byte_at(parser, 1);
-  return c == '*' || c == '+' || c == '=' || c == '?' || c == '{' || c == '@';
+  return (c == '*' && level != VIM_MAGIC) || c == '+' || c == '='
+      || c == '?' || c == '{' || c == '@';
 }
 
 static GRX_Result read_optional_sequence(
     GRX_Parser * parser, size_t start, uint32_t * out_node) {
-  uint32_t members[64];
-  size_t count = 0;
+  if (parser->limits->max_nesting_depth
+      && parser->depth + 1 > parser->limits->max_nesting_depth) {
+    return grx_parse_fail(parser, GRX_DIAG_LIMIT_NESTING_DEPTH, start, 3);
+  }
+  parser->depth++;
   int outer_state = parser->dialect_state;
   parser->dialect_state = VIM_IN_OPTIONAL;
-
+  GRX_Result result = add_plain(parser, GRX_NODE_GROUP, start, out_node);
+  if (result != GRX_OK) {
+    parser->dialect_state = outer_state;
+    parser->depth--;
+    return result;
+  }
+  GRX_Node * sequence = grx_pattern_node(parser->pattern, *out_node);
+  sequence->flags |= GRX_NODE_OPTIONAL_SEQUENCE;
+  sequence->b = GRX_INDEX_NONE;
+  size_t count = 0;
+  result = GRX_OK;
   for (;;) {
     if (grx_parse_at_end(parser)) {
-      parser->dialect_state = outer_state;
-      return grx_parse_fail(parser, GRX_DIAG_UNMATCHED_OPEN_BRACKET, start,
+      result = grx_parse_fail(parser, GRX_DIAG_UNMATCHED_OPEN_BRACKET, start,
           parser->position - start);
+      break;
     }
     if (byte_at(parser, 0) == ']') {
       parser->position++;
+      if (!count) {
+        result = grx_parse_fail(parser, GRX_DIAG_EMPTY_CLASS, start,
+            parser->position - start);
+      }
       break;
     }
     if (member_opener_is_refused(parser)) {
-      parser->dialect_state = outer_state;
-      // GRX_DIAG_NOT_IN_DIALECT and not CONSTRUCT_NOT_IMPLEMENTED, which is
-      // what this said. The comment above already records that
-      // `a\%[b\|c]`, `a\%[\(bc\)]` and `a\%[\%(bc\)]` are errors in
-      // *vim*, in both of its engines - so there is nothing here for this
-      // library to build, and "not implemented yet" promised a construct the
-      // dialect will never have. `\z(` and `\z1` in this dialect already
-      // answer the same way, and the difference is visible to a caller: one
-      // is a pattern that will never be valid and the other is a promise.
-      return grx_parse_fail(parser, GRX_DIAG_NOT_IN_DIALECT,
+      result = grx_parse_fail(parser, GRX_DIAG_NOT_IN_DIALECT,
           parser->position, 2);
+      break;
     }
-    if (count == sizeof(members) / sizeof(*members)) {
-      parser->dialect_state = outer_state;
-      return grx_parse_fail(parser, GRX_DIAG_LIMIT_NODES, start,
-          parser->position - start);
+    // A group member resumes the complete grammar. Nested optional readers
+    // install their own direct-member context and restore this one on return.
+    uint32_t member = GRX_INDEX_NONE;
+    parser->dialect_state = 0;
+    int bare = magic_level(parser) == VIM_VERY_MAGIC;
+    size_t lead = bare ? 0u : 1u;
+    int group = (bare || byte_at(parser, 0) == '\\')
+        && (byte_at(parser, lead) == '('
+            || (byte_at(parser, lead) == '%'
+                && byte_at(parser, lead + 1) == '('));
+    if (!group) {
+      parser->dialect_state = VIM_IN_OPTIONAL;
     }
-    GRX_Result result = grx_parse_atom(parser, &members[count]);
+    result = grx_parse_atom(parser, &member);
+    parser->dialect_state = VIM_IN_OPTIONAL;
     if (result != GRX_OK) {
-      parser->dialect_state = outer_state;
-      return result;
+      break;
     }
     if (multi_stands_here(parser)) {
-      size_t where = parser->position;
-      parser->dialect_state = outer_state;
-      return grx_parse_fail(parser, GRX_DIAG_NOTHING_TO_REPEAT, where, 1);
+      result = grx_parse_fail(parser, GRX_DIAG_NOTHING_TO_REPEAT,
+          parser->position, 1);
+      break;
+    }
+    if (grx_pattern_add_child(parser->pattern, *out_node, member) != GRX_OK) {
+      result = grx_parse_fail(parser, GRX_DIAG_OUT_OF_MEMORY, start, 0);
+      break;
     }
     count++;
   }
   parser->dialect_state = outer_state;
-
-  if (!count) {
-    // vim refuses `\%[]`, where a collection's `[]` is the two characters.
-    return grx_parse_fail(parser, GRX_DIAG_EMPTY_CLASS, start,
-        parser->position - start);
+  parser->depth--;
+  if (result != GRX_OK) {
+    return result;
   }
-
-  // From the inside out: the last member alone, then each earlier one
-  // concatenated with what follows it, each made optional. *Every* member,
-  // the first one included - vim's `\%[abc]` matches the empty string, and
-  // `r\%[ead]` requires the "r" only because the "r" is written outside
-  // the brackets.
-  //
-  // "Optional" is `X\|` and not `X\=`, and the difference is not
-  // cosmetic. A repeat here discards an iteration that consumed nothing -
-  // ECMA-262 22.2.2.4's rule, which this library follows everywhere - and a
-  // member may be zero-width: `a\%[\zsb]` against "rea" is 3-3 in vim,
-  // the `\zs` having counted, and was 2-3 here while the expansion used a
-  // repeat. An alternation asks the same question with no iteration to
-  // discard, and the empty branch written second is what keeps the longest
-  // prefix preferred.
-  uint32_t built = GRX_INDEX_NONE;
-  for (size_t i = count; i-- > 0;) {
-    uint32_t inner = GRX_INDEX_NONE;
-    if (built == GRX_INDEX_NONE) {
-      inner = members[i];
-    }
-    else {
-      uint32_t concat = GRX_INDEX_NONE;
-      GRX_Result result = add_plain(parser, GRX_NODE_CONCAT, start, &concat);
-      if (result != GRX_OK) {
-        return result;
-      }
-      if (grx_pattern_add_child(parser->pattern, concat, members[i]) != GRX_OK
-          || grx_pattern_add_child(parser->pattern, concat, built) != GRX_OK) {
-        return grx_parse_fail(parser, GRX_DIAG_OUT_OF_MEMORY, start, 0);
-      }
-      inner = concat;
-    }
-    uint32_t empty = GRX_INDEX_NONE;
-    GRX_Result result = add_plain(parser, GRX_NODE_EMPTY, start, &empty);
-    if (result != GRX_OK) {
-      return result;
-    }
-    uint32_t optional = GRX_INDEX_NONE;
-    result = add_plain(parser, GRX_NODE_ALTERNATE, start, &optional);
-    if (result != GRX_OK) {
-      return result;
-    }
-    if (grx_pattern_add_child(parser->pattern, optional, inner) != GRX_OK
-        || grx_pattern_add_child(parser->pattern, optional, empty) != GRX_OK) {
-      return grx_parse_fail(parser, GRX_DIAG_OUT_OF_MEMORY, start, 0);
-    }
-    built = optional;
-  }
-
-  // Wrapped, because `\%[abc]*` is a legal pattern in vim and the
-  // expansion has to be one atom for the `*` to repeat: without the group
-  // the quantifier would land on the outermost alternation's last branch.
-  uint32_t group = GRX_INDEX_NONE;
-  GRX_Result wrap = add_plain(parser, GRX_NODE_GROUP, start, &group);
-  if (wrap != GRX_OK) {
-    return wrap;
-  }
-  grx_pattern_node(parser->pattern, group)->b = GRX_INDEX_NONE;
-  if (grx_pattern_add_child(parser->pattern, group, built) != GRX_OK) {
-    return grx_parse_fail(parser, GRX_DIAG_OUT_OF_MEMORY, start, 0);
-  }
-  *out_node = group;
+  grx_pattern_node(parser->pattern, *out_node)->length
+      = parser->position - start;
   return GRX_OK;
 }
 
@@ -1514,7 +1325,9 @@ static GRX_Result vim_group_open(GRX_Parser * parser, GRX_GroupOpen * out_open) 
   if (parser->options & GRX_OPT_NO_CAPTURE) {
     return GRX_OK;
   }
-  if (parser->groups_opened >= 9) {
+  if (parser->groups_opened >= 9
+      || (parser->limits->max_captures
+          && parser->groups_opened >= parser->limits->max_captures)) {
     return grx_parse_fail(parser, GRX_DIAG_LIMIT_CAPTURES,
         parser->position - 1, 1);
   }
@@ -1554,14 +1367,45 @@ static int group_has_closed(const GRX_Parser * parser, uint32_t group) {
  *   is bytes and not characters. `\%<23c` is "fewer than 23", so offsets 0
  *   to 21; `\%>23c` is offsets 23 upwards; and `\%0c` and `\%<1c` are
  *   ranges with nothing in them, which vim answers as no match.
- * - **`v` is the *screen* column** and is refused. It counts display cells:
- *   a tab reaches the next multiple of 'tabstop', a wide character takes
- *   two and a combining one takes none, so `\%3v` holds after U+65E5 where
- *   `\%3c` does not. That is a window's measure rather than the text's -
- *   it needs an option and a cell-width table that are vim's own and not
- *   Unicode's - and it is the one member of this family left unbuilt.
- *   documentation/dialects.md section 6.
+ * - **`v` is the screen column**, measured in display cells with the pinned
+ *   tab width. Wide characters take two cells and combining marks take none.
  */
+/** The initial lexical operand can leave a line assertion's star literal. */
+static int line_star_is_literal(const GRX_Parser * parser, size_t start) {
+  size_t count = parser->pattern->nodes.count;
+  if (parser->group_depth) {
+    size_t branch = parser->branch_start;
+    const GRX_Node * opener = count
+        ? grx_pattern_node(parser->pattern, (uint32_t)count - 1) : NULL;
+    return magic_level(parser) == VIM_VERY_MAGIC && opener &&
+        opener->kind == GRX_NODE_GROUP &&
+        (opener->flags & GRX_NODE_CAPTURING) && opener->length == 0 && branch &&
+        parser->text[branch - 1] == '(' &&
+        (branch < 2 || parser->text[branch - 2] != '%');
+  }
+  if (magic_level(parser) != VIM_VERY_MAGIC)
+    return count == 0;
+  if (count != 1)
+    return 0;
+  const GRX_Node * previous = grx_pattern_node(parser->pattern, 0);
+  if (!previous || previous->offset + previous->length != start)
+    return 0;
+  if ((previous->kind == GRX_NODE_ANY && previous->length == 1 &&
+          parser->text[previous->offset] == '.') ||
+      (previous->kind == GRX_NODE_ANCHOR &&
+          previous->a == (uint32_t)GRX_ANCHOR_CARET))
+    return 1;
+  if (!parser->profile.line_star_initial_literal)
+    return 0;
+  return (previous->kind == GRX_NODE_CLASS &&
+             parser->text[previous->offset] == '[') ||
+      (previous->kind == GRX_NODE_LITERAL &&
+          ((parser->text[previous->offset] != '\\' &&
+               parser->text[previous->offset] != '%') ||
+              (previous->length == 2 &&
+                  parser->text[previous->offset + 1] == 't')));
+}
+
 static GRX_Result read_position(
     GRX_Parser * parser, size_t start, uint32_t * out_node) {
   size_t scan = 1;
@@ -1591,7 +1435,14 @@ static GRX_Result read_position(
   }
   parser->position += scan + 1;
   if (which == 'l') {
-    return anchor_node(parser, GRX_ANCHOR_NEVER, start, out_node);
+    int literal_star = line_star_is_literal(parser, start);
+    GRX_Result result = anchor_node(parser, GRX_ANCHOR_NEVER, start, out_node);
+    if (result == GRX_OK) {
+      grx_pattern_node(parser->pattern, *out_node)->flags
+          |= GRX_NODE_LINE_ASSERTION |
+              (literal_star ? GRX_NODE_LINE_STAR_LITERAL : 0);
+    }
+    return result;
   }
 
   // The node's bounds are 32 bits wide, so an unbounded high end is
@@ -1804,10 +1655,22 @@ static GRX_Result vim_atom_escape(GRX_Parser * parser, uint32_t * out_node) {
   if (c >= '1' && c <= '9') {
     uint32_t group = (uint32_t)(c - '0');
     parser->position++;
-    if (!group_has_closed(parser, group)) {
-      // "E65: Illegal back reference", which vim reports for a forward
-      // reference and for a reference to the group it is inside alike:
-      // `\1\(a\)` and `\(a\1\)` are both refused.
+    if (!group_has_closed(parser, group)
+        && !(parser->dialect_flags & VIM_SCANNED_BEHIND)) {
+      // The last raw occurrence answers every later forward-reference
+      // permission query. Scan once, rather than once per numeric escape.
+      parser->dialect_flags |= VIM_SCANNED_BEHIND;
+      for (size_t i = parser->position; i + 2 < parser->length; i++) {
+        if (parser->text[i] == '@' && parser->text[i + 1] == '<'
+            && (parser->text[i + 2] == '=' || parser->text[i + 2] == '!')) {
+          parser->dialect_offset = i + 1;
+        }
+      }
+    }
+    int later_behind = parser->dialect_offset > parser->position;
+    if (!group_has_closed(parser, group) && !later_behind) {
+      // Forward/open references require later raw unbounded behind text,
+      // including text inside collections or literal contexts.
       return grx_parse_fail(parser, GRX_DIAG_INVALID_BACKREFERENCE, start,
           parser->position - start);
     }
@@ -1816,6 +1679,9 @@ static GRX_Result vim_atom_escape(GRX_Parser * parser, uint32_t * out_node) {
       return result;
     }
     GRX_Node * node = grx_pattern_node(parser->pattern, *out_node);
+    if (group <= parser->groups_opened && !group_has_closed(parser, group)) {
+      node->flags |= GRX_NODE_OPEN_REFERENCE;
+    }
     node->a = group;
     node->b = GRX_INDEX_NONE;
     return GRX_OK;
@@ -1871,7 +1737,7 @@ static GRX_Result vim_atom_escape(GRX_Parser * parser, uint32_t * out_node) {
     return read_collection(parser, start, 0, out_node);
   }
   if (nomagic && c == '~') {
-    return grx_parse_fail(parser, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, start, 2);
+    return grx_parse_fail(parser, GRX_DIAG_PREVIOUS_SUBSTITUTE_UNAVAILABLE, start, 2);
   }
   if (nomagic && c == '*') {
     return grx_parse_fail(parser, GRX_DIAG_NOTHING_TO_REPEAT, start, 2);
@@ -2071,24 +1937,27 @@ static GRX_Result vim_read_repeat(GRX_Parser * parser, GRX_Quantifier * out) {
 /**
  * Whether the repeat standing here applies to this atom.
  *
- * One rule, and it is a POSIX basic RE's: a `*` directly after `^` is a
- * literal asterisk. `^*a` matches "*a" and not "a", at every magic level,
- * and `\v^*` matches nothing at all because there is no asterisk in the
- * subject to find. Only after `^` - `\v$*a` matches "a", so there the `*`
- * really is a repeat of an assertion that can hold zero times - and only
- * the bare spelling, which is the only one measured.
+ * A bare caret keeps an adjacent bare star literal. Very magic extends
+ * that lexical rule to the underscore caret. An intervening directive leaves
+ * the repeat misplaced. Line-number assertions keep their impossible verdict
+ * across a bare star and directives, rather than disappearing under zero repeats.
  */
 static int vim_quantifier_applies(GRX_Parser * parser, uint32_t node) {
   if (byte_at(parser, 0) != '*') {
     return 1;
   }
   const GRX_Node * atom = grx_pattern_node(parser->pattern, node);
-  // The *bare* caret, which is what its length of one says. `\_^*` is a
-  // repeat of the assertion and matches the empty string, where `^*` is an
-  // assertion and a literal asterisk - so the rule is about the spelling
-  // and not about what the atom means.
-  return !(atom && atom->kind == GRX_NODE_ANCHOR
-      && atom->a == (uint32_t)GRX_ANCHOR_CARET && atom->length == 1);
+  if (!atom || atom->kind != GRX_NODE_ANCHOR) {
+    return 1;
+  }
+  // A line-number assertion remains impossible even when followed by '*'
+  // across directives. Caret's literal-star rule instead requires adjacency.
+  if (atom->flags & GRX_NODE_LINE_ASSERTION) {
+    return !(atom->flags & GRX_NODE_LINE_STAR_LITERAL);
+  }
+  return !(atom->a == (uint32_t)GRX_ANCHOR_CARET
+      && atom->offset + atom->length == parser->position
+      && (atom->length == 1 || magic_level(parser) == VIM_VERY_MAGIC));
 }
 
 /**
@@ -2117,22 +1986,17 @@ static GRX_Result vim_skip_ignorable(GRX_Parser * parser) {
     char c = byte_at(parser, 1);
     switch (c) {
       case 'Z':
-        // "Ignore differences in Unicode combining characters", which is
-        // this dialect's composing-cluster model with the marks made
-        // optional rather than a rule of its own. Read by
-        // vim_initial_options() before the parse began, like `\c`: one
-        // anywhere decides the whole pattern. Nothing left to do but step
-        // over it.
+        parser->dialect_flags |= VIM_IGNORE_COMBINING;
         break;
       case 'v': parser->dialect_mode = VIM_VERY_MAGIC; break;
       case 'm': parser->dialect_mode = VIM_MAGIC; break;
       case 'M': parser->dialect_mode = VIM_NOMAGIC; break;
       case 'V': parser->dialect_mode = VIM_VERY_NOMAGIC; break;
       case 'c':
+        parser->dialect_flags |= VIM_CASELESS;
+        break;
       case 'C':
-        // Read by vim_initial_options() before the parse began, because
-        // either one decides the whole pattern's caseless matching from
-        // wherever it stands. Nothing left to do but step over it.
+        parser->dialect_flags |= VIM_CASE_SENSITIVE;
         break;
       default:
         return GRX_OK;
@@ -2436,7 +2300,7 @@ static GRX_Result vim_literal_atom(GRX_Parser * parser, uint32_t codepoint,
     // vim says so itself - "E33: No previous substitute regular expression"
     // - so the construct is not one a library can offer.
     return grx_parse_fail(
-        parser, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, offset, length);
+        parser, GRX_DIAG_PREVIOUS_SUBSTITUTE_UNAVAILABLE, offset, length);
   }
   return grx_parse_literal_node(parser, codepoint, offset, length, out_node);
 }
@@ -2459,9 +2323,9 @@ static GRX_Result vim_literal_atom(GRX_Parser * parser, uint32_t codepoint,
  * spelling is the whole of its rule and `quantifier_is_optional()` is what
  * has already applied it.
  */
-static void absorb_marker_optional(GRX_Parser * parser, uint32_t index) {
+static void absorb_marker_optional(GRX_Parser * parser) {
   GRX_Pattern * pattern = parser->pattern;
-  while (index != GRX_INDEX_NONE) {
+  for (uint32_t index = 0; index < pattern->nodes.count; index++) {
     GRX_Node * node = grx_pattern_node(pattern, index);
     if (!node) {
       return;
@@ -2489,41 +2353,30 @@ static void absorb_marker_optional(GRX_Parser * parser, uint32_t index) {
         node->flags |= GRX_NODE_SHORT_OPTIONAL;
       }
     }
-    absorb_marker_optional(parser, node->first_child);
-    node = grx_pattern_node(pattern, index);
-    index = node ? node->next_sibling : GRX_INDEX_NONE;
   }
 }
 
-/**
- * The one tree rewrite this dialect needs.
- *
- * It used to hold a second one, which made a `\zs` inside an assertion
- * inert, because vim's *default* engine answers `\(a\zsb\)\@=ab` from 0
- * where `a\zsb` answers from 1. Measuring the family rather than that one
- * case took it out again: over 140 patterns putting each of `\zs`, `\ze`,
- * `\zea` and `a\zs` inside each of `\@=`, `\@!`, `\@<=`, `\@<!`, `\@>`
- * and `\&`, with five different tails, vim's old engine (`set re=1`)
- * answers every row the way a single mark register does, and the new one
- * agrees with it on 110.
- *
- * The 30 it does not agree on have no rule behind them. `\(ab\zec\)\@=a`
- * against "abc" answers 0-2 on the old engine and 0-1 on the new, and
- * `x\(ab\zec\)\@=` against "xabc" answers 0-3 on *both* - the same one
- * character consumed outside the same assertion, and the answer turns on
- * which side of it the character was written. `a\zeb` answers 0-1
- * everywhere, so it is not that later text overwrites the mark either. And
- * the new engine treats the two marks differently from each other:
- * `\(a\zsb\)\@=` loses its `\zs` outright while `\(a\zeb\)\@=`
- * keeps its `\ze`.
- *
- * So this is the sixth class documentation/testing.md describes - vim
- * shipping two answers - and the engine picked is the one that can be
- * written down. `tools/oracle/vim_diff.py` counts every such row rather
- * than dropping it, by asking `set re=1` about each.
- */
+/** Apply global directives and final reference resolution before lowering. */
 static GRX_Result vim_validate(GRX_Parser * parser) {
-  absorb_marker_optional(parser, parser->pattern->root);
+  if (parser->dialect_flags & VIM_IGNORE_COMBINING) {
+    parser->pattern->options |= GRX_OPT_IGNORE_COMBINING;
+  }
+  if (parser->dialect_flags & VIM_CASELESS) {
+    parser->pattern->options |= GRX_OPT_CASELESS;
+  }
+  else if (parser->dialect_flags & VIM_CASE_SENSITIVE) {
+    parser->pattern->options &= ~(uint32_t)GRX_OPT_CASELESS;
+  }
+  for (size_t i = 0; i < parser->pattern->nodes.count; i++) {
+    GRX_Node * node = grx_pattern_node(parser->pattern, (uint32_t)i);
+    if (node->kind == GRX_NODE_BACKREF && node->a > parser->groups_opened) {
+      // Only finally absent references are empty. A forward or open actual
+      // capture retains its actual number and runtime endpoint policy.
+      node->kind = GRX_NODE_EMPTY;
+      node->flags |= GRX_NODE_UNSET_REFERENCE;
+    }
+  }
+  absorb_marker_optional(parser);
   if (parser->profile.scalar_collections) {
     for (size_t i = 0; i < parser->pattern->nodes.count; i++) {
       const GRX_Node * sequence =
@@ -2596,6 +2449,5 @@ const GRX_Frontend grx_frontend_vim = {
   .operator_is_escaped = vim_operator_is_escaped,
   .read_repeat = vim_read_repeat,
   .postfix_atom = vim_postfix_atom,
-  .initial_options = vim_initial_options,
   .validate = vim_validate,
 };

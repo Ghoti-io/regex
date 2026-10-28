@@ -448,11 +448,13 @@ TEST(UnicodeSets, ASetIsBuiltInTimeProportionalToItsMembersNotTheirSquare) {
   auto seconds
       = std::chrono::duration_cast<std::chrono::duration<double>>(elapsed)
             .count();
-  EXPECT_LT(seconds, 1.0)
-      << pattern.size() << "-byte pattern, the emoji set intersected with "
-      << "itself 32 times, took " << seconds
-      << " s to compile. class_set_holds() answers from an index; a figure "
-         "this large means it is comparing against every member again";
+  if (grxtest::record_native_wall_clock(seconds, 1.0)) {
+    EXPECT_LT(seconds, 1.0)
+        << pattern.size() << "-byte pattern, the emoji set intersected with "
+        << "itself 32 times, took " << seconds
+        << " s to compile. class_set_holds() answers from an index; a figure "
+           "this large means it is comparing against every member again";
+  }
 }
 
 int main(int argc, char ** argv) {
