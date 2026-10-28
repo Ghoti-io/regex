@@ -685,6 +685,14 @@ For the braced form:
   backtracking. This is why `\%(\%(a\)\{1,2}\)\{2}` finds no match over `aa`,
   which the reference does not either.
 
+Two shapes the rules do not yet reproduce, both with a back reference after the
+repeat: a minimum of three over a body that can be empty
+(`\(a*\)\{3}\1b`, `\(\%(a\)\=\)\{3}\1b`), where the reference finds no
+match over `aab` and this library does; and a bare `*` over a parenthesised
+atom inside a braced repeat (`\(\%(a\)*\)\{2}\1b`), where the reference
+matches `aab` and this library does not. Without the back reference the same
+patterns agree. They are the known edge of the rules above.
+
 The NFA profile has no such rules. `\(a*\)\{2,}\(\1\)` is stopped by the
 backtracking reference with E363 on every subject and is not among the
 vectors. The rules were fitted on probes and then checked on others; the

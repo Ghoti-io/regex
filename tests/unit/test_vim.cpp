@@ -1502,6 +1502,15 @@ TEST(VimBacktrack, ABracedRepeatRemembersWhereItsIterationsEndedAcrossBacktracki
   EXPECT_EQ(span("\\%(\\%(a\\)\\{1,2}\\)\\{2}", "aa"), "nomatch");
   EXPECT_EQ(span("\\%(\\%(a\\)\\{1,2}\\)\\{2}b", "aab"), "nomatch");
   EXPECT_EQ(span("\\%(\\%(a\\)\\{2}\\)\\{2}b", "aaaab"), "0-5");
+  // The same end reached by the same numbered iteration of another turn of
+  // the outer loop is not a revisit: an inner loop that may be empty lets the
+  // outer one start with nothing and take its text second.
+  EXPECT_EQ(span("\\%(\\%(a\\)\\{0,2}\\)\\{2}b", "ab"), "0-2");
+  EXPECT_EQ(span("\\%(\\%(a\\)\\{0,3}\\)\\{2,}b", "ab"), "0-2");
+  EXPECT_EQ(span("\\%(\\%(aa\\)\\{0,2}\\)\\{2}b", "aab"), "0-3");
+  EXPECT_EQ(span("\\%(\\%(a\\)\\{1,2}\\)\\{2}b", "aab"), "nomatch");
+  EXPECT_EQ(captured("\\(\\%(a\\)\\{0,2}\\)\\{2}b", "ab", 1), "a");
+  EXPECT_EQ(span("\\(\\%(a\\)\\{0,2}\\)\\{2}\\1b", "ab"), "nomatch");
 }
 
 TEST(VimBacktrack, OnlyTheBracedSpellingFollowsTheBracedRepeatRules) {

@@ -1163,13 +1163,13 @@ static GRX_Result gen_repeat_step(Codegen * codegen, GenFrame * frame,
         if (!memo) {
           return fail(codegen, GRX_DIAG_OUT_OF_MEMORY, node);
         }
-        if (codegen->registers > UINT32_MAX - 8 ||
+        if (codegen->registers > UINT32_MAX - 9 ||
             codegen->program->look_spans.count > GRX_INDEX_NONE - 4u) {
           return fail(codegen, GRX_DIAG_LIMIT_PROGRAM_SIZE, node);
         }
         if (!memo->counted_register) {
           memo->counted_register = codegen->registers + 1;
-          codegen->registers += 8;
+          codegen->registers += 9;
         }
         size_t metadata[] = {node->min, node->max, memo->counted_register - 1,
             (node->flags & GRX_IR_REPEAT_BRACE_FORM) ? 1u : 0u};

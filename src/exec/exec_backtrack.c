@@ -5045,7 +5045,7 @@ static int run_path(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
         }
         const size_t * metadata =
             GRX_ARENA_AT(const size_t, &bt->program->look_spans, inst->x);
-        if (bt->registers < 8 || metadata[2] > bt->registers - 8) {
+        if (bt->registers < 9 || metadata[2] > bt->registers - 9) {
           bt->failure = GRX_ERR_INTERNAL;
           return 0;
         }
@@ -5124,6 +5124,7 @@ static int run_path(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
           bt->slots[state + 7] = 1;
           if (bt->slots[state + 4] == position) {
             bt->slots[state + 2] = position;
+            bt->slots[state + 8] = bt->slots[state];
             if (again) {
               pc = bt->slots[state] < metadata[0] ? inst->y : step->y;
               continue;
@@ -5166,13 +5167,18 @@ static int run_path(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
             return 0;
           }
           bt->slots[state + 3] = 1;
+          // The end an earlier iteration reached is a revisit for this one
+          // unless both are the first of their invocation, or the same
+          // numbered iteration of two invocations.
           if (bt->slots[state + 2] == position &&
               (bt->slots[state] != 1 || bt->slots[state + 1] ||
-                  bt->slots[state + 6] != 1)) {
+                  (bt->slots[state + 6] != 1 &&
+                      bt->slots[state + 8] != bt->slots[state]))) {
             ok = 0;
             break;
           }
           bt->slots[state + 2] = position;
+          bt->slots[state + 8] = bt->slots[state];
           pc = inst->y;
           continue;
         }
