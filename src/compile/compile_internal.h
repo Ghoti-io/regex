@@ -315,6 +315,8 @@ typedef enum {
 #define GRX_POLICY_LOOK_HAS_CAPTURES GRX_BIT(5)
 /** ATOMIC_BEGIN: every successful body path consumes. */
 #define GRX_POLICY_ATOMIC_REQUIRED GRX_BIT(6)
+/** ATOMIC_BEGIN: the next thing in its sequence is a repeat that may be skipped. */
+#define GRX_POLICY_ATOMIC_SKIPPABLE GRX_BIT(5)
 /** ATOMIC_BEGIN: accepting exits displace competing entries at their frontier.
  */
 #define GRX_POLICY_ATOMIC_FRONTIER GRX_BIT(0)

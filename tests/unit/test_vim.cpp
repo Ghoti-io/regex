@@ -1523,3 +1523,23 @@ TEST(VimBacktrack, OnlyTheBracedSpellingFollowsTheBracedRepeatRules) {
   EXPECT_EQ(span("\\%(a\\|\\zs\\)\\{2,3}", "aa"), "0-2");
   EXPECT_EQ(span("\\%(\\zs\\|a\\)\\{1,3}", "aa"), "0-2");
 }
+
+TEST_F(VimNfa, AnAtomicGroupIsEnteredWhereAnotherEndedOnlyBeforeASkippableRepeat) {
+  // `a*\%(a\)\@>b` over "aab" finds nothing: the group cannot be entered at 1,
+  // where the one entered at 0 has just ended. A tail that starts with a repeat
+  // which may match nothing, or with an underscore class, lets it be entered.
+  EXPECT_EQ(span("a*\\%(a\\)\\@>b", "aab"), "nomatch");
+  EXPECT_EQ(span("a*\\%(a\\)\\@>b", "aaab"), "0-4");
+  EXPECT_EQ(span("a*\\%(a\\)\\@>x*b", "aab"), "0-3");
+  EXPECT_EQ(span("a*\\%(a\\)\\@>x\\=b", "aab"), "0-3");
+  EXPECT_EQ(span("a*\\%(a\\)\\@>\\%(x\\)*b", "aab"), "0-3");
+  EXPECT_EQ(span("a*\\%(a\\)\\@>\\(x\\)\\{0,}b", "aab"), "0-3");
+  EXPECT_EQ(span("a*\\%(a\\)\\@>\\_[b]", "aab"), "0-3");
+  EXPECT_EQ(span("a*\\%(a\\)\\@>\\_.b", "aaab"), "0-4");
+  // Wrapping the repeat, or putting anything else first, takes that away.
+  EXPECT_EQ(span("a*\\%(a\\)\\@>\\%(x*\\)b", "aab"), "nomatch");
+  EXPECT_EQ(span("a*\\%(a\\)\\@>\\%(x\\|\\)b", "aab"), "nomatch");
+  EXPECT_EQ(span("a*\\%(a\\)\\@>\\(\\)b", "aab"), "nomatch");
+  EXPECT_EQ(span("a*\\%(a\\)\\@>x\\+b", "aab"), "nomatch");
+  EXPECT_EQ(span("a*\\%(a\\)\\@>\\%(\\n\\|b\\)", "aab"), "nomatch");
+}

@@ -4605,7 +4605,9 @@ static int atomic_entry_allowed(Backtrack * bt, uint32_t pc, size_t position) {
         }
         if (arrival->input_owner == later->input_owner &&
             atomic_context_equal(bt, pc, arrival->context, later->context) &&
-            (later->start == arrival->end ||
+            (((grx_program_at(bt->program, pc)->policy &
+                  GRX_POLICY_ATOMIC_SKIPPABLE) == 0 &&
+                 later->start == arrival->end) ||
                 arrival->priority < later->priority)) {
           later->displaced = 1;
         }

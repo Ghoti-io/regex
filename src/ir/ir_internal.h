@@ -259,6 +259,8 @@ typedef enum {
 #define GRX_IR_FINAL_BOUNDARY GRX_BIT(26)
 /** CLASS: the loop of a composing skip, which takes deferred marks itself. */
 #define GRX_IR_SKIP_MARKS GRX_BIT(27)
+/** ATOMIC: the next thing in its sequence is a repeat that may be skipped. */
+#define GRX_IR_ATOMIC_SKIPPABLE GRX_BIT(28)
 
 /**
  * @brief LOOK: a negative one keeps what its body captured before failing.

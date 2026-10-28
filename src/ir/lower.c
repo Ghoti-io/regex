@@ -66,6 +66,7 @@ typedef struct {
   int scalar_direct;          ///< Direct literal quantifier consumes scalars.
   int skip_composing_prefix;  ///< Adjacent literals may skip intervening marks.
   int composing_skip_follows; ///< `\%C` is written right after this literal.
+  int atomic_skippable;       ///< A repeat that may be skipped follows this node.
   int composing_skip_defers;  ///< This `\%C` is a bare optional repeat's body.
   unsigned atomic_end_depth;   ///< End markers suppressed by atomic bodies.
   uint32_t frontier_scope;
@@ -1149,6 +1150,24 @@ static int skip_follows(const Lowering * low, uint32_t sibling) {
   return body && body->kind == GRX_NODE_COMPOSING_SKIP;
 }
 
+/** Is the next sibling a repeat that may match zero times, written as such? */
+static int skippable_follows(const Lowering * low, uint32_t sibling) {
+  const GRX_Node * next = sibling == GRX_INDEX_NONE
+      ? NULL : grx_pattern_node(low->pattern, sibling);
+  if (!next) {
+    return 0;
+  }
+  // `\_x` is a group around an alternation with a line break, which the
+  // reference does not treat as a state of its own either.
+  if (next->kind == GRX_NODE_GROUP && (next->flags & GRX_NODE_ADDED_NEWLINE)) {
+    return 1;
+  }
+  if (next->kind == GRX_NODE_ANY && next->length == 3) {
+    return 1; // `\_.`, which `.` is not
+  }
+  return next->kind == GRX_NODE_REPEAT && next->min == 0 && next->max != 0;
+}
+
 /**
  * Vim's `\%C`: every composing character at this position, or none.
  *
@@ -2181,6 +2200,9 @@ static GRX_Result lower_group(
       return result;
     }
     grx_ir_node(low->ir, atomic)->scope = body_frontier_scope;
+    if (low->atomic_skippable) {
+      grx_ir_node(low->ir, atomic)->flags |= GRX_IR_ATOMIC_SKIPPABLE;
+    }
     if (low->profile.assertion_context_from_continuation) {
       low->ir->flags |=
           GRX_PROGRAM_LOOK_CONTEXT | GRX_PROGRAM_PROVISIONAL_LOOK_END;
@@ -3586,7 +3608,10 @@ static GRX_Result lower_sequence(Lowering * low, const GRX_Node * node,
     low->composing_skip_follows = kind == GRX_IR_CONCAT
         && child_node->kind == GRX_NODE_LITERAL
         && skip_follows(low, next);
+    int outer_skippable = low->atomic_skippable;
+    low->atomic_skippable = kind == GRX_IR_CONCAT && skippable_follows(low, next);
     result = lower_node(low, child, &lowered);
+    low->atomic_skippable = outer_skippable;
     low->composing_skip_follows = outer_follows;
     low->adjacent_literal = outer_adjacent;
     previous_literal = child_node->kind == GRX_NODE_LITERAL;

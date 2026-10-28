@@ -2464,6 +2464,10 @@ static GRX_Result gen_step(Codegen * codegen, GenFrame * frame,
           grx_program_at(codegen->program, begin)->policy |=
               GRX_POLICY_ATOMIC_REQUIRED;
         }
+        if (node->flags & GRX_IR_ATOMIC_SKIPPABLE) {
+          grx_program_at(codegen->program, begin)->policy |=
+              GRX_POLICY_ATOMIC_SKIPPABLE;
+        }
         frame->u.one.slot = begin;
         frame->stage = 1;
         *action = GEN_DESCEND;

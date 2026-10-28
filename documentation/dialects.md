@@ -693,11 +693,20 @@ atom inside a braced repeat (`\(\%(a\)*\)\{2}\1b`), where the reference
 matches `aab` and this library does not. Without the back reference the same
 patterns agree. They are the known edge of the rules above.
 
-The NFA profile has no such rules. `\(a*\)\{2,}\(\1\)` is stopped by the
+The NFA profile has no such rules for repeats. `\(a*\)\{2,}\(\1\)` is stopped by the
 backtracking reference with E363 on every subject and is not among the
 vectors. The rules were fitted on probes and then checked on others; the
 counted-repeat block of `make_vim_vectors.py` asks every pattern of subjects
 that most of them were not fitted on.
+
+On the NFA profile an atomic group `\%(..\)\@>`
+is refused at a position where another atomic group of the same pattern has
+just ended (`a*\%(a\)\@>b` finds no match over `aab`), unless the next thing
+in the pattern is a repeat that may match nothing (`x*`, `\=`, `\{0,}`, the
+same around a group) or an underscore class or `\_.`, in which case it is not
+(`a*\%(a\)\@>x*b` matches `aab`). A repeat inside an extra group, an
+alternation with an empty branch, an empty group or any other item first
+leaves the refusal in place.
 
 Assertion and atomic capture ownership is context-sensitive. An atomic BODY can
 read an incoming capture while a following lookbehind reads a later closed
