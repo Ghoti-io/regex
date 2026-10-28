@@ -18,6 +18,7 @@ REFUSAL_CATEGORIES = {
     53: 'unmatched noncapturing opening group',
     54: 'unmatched opening group',
     55: 'unmatched closing group',
+    59: 'invalid character after backslash-at',
     61: 'nested star',
     62: 'nested assertion operator',
     63: 'invalid newline-inclusive atom escape',
@@ -27,6 +28,7 @@ REFUSAL_CATEGORIES = {
     67: 'syntax-file back reference unavailable in string contract',
     68: 'invalid character after backslash-z',
     70: 'empty optional sequence',
+    71: 'invalid character after backslash-percent',
     369: 'invalid optional sequence item',
     554: 'malformed counted repeat',
     866: 'misplaced NFA operator',
@@ -34,6 +36,9 @@ REFUSAL_CATEGORIES = {
     871: 'NFA postfix operator following another postfix operator',
     872: 'more than nine NFA capturing groups',
     888: 'forbidden marker repetition',
+    1204: 'number after backslash-percent-dot',
+    1273: 'NFA backslash-percent-c without a value',
+    1281: 'engine selector not at the start of the pattern',
 }
 REFUSALS = frozenset(REFUSAL_CATEGORIES)
 

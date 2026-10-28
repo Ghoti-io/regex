@@ -9,7 +9,7 @@
 # contents. `-` is a group that did not participate or matched empty, which
 # vim spells the same way.
 #
-# population: 276 reference answers, 274 records, 2 duplicate refusal rows
+# population: 303 reference answers, 300 records, 3 duplicate refusal rows
 dialect: vim-nfa
 
 pattern: \\(a\\)\\@!\\|a\\%[\\_s]
@@ -1295,4 +1295,112 @@ pattern: \\z\\_s
 expect: refused
 
 pattern: \\z\\s\\+
+expect: refused
+
+pattern: a\\
+subject: a\\
+expect: 0-2
+groups: - - - - - - - - -
+
+pattern: a\\
+subject: ab
+expect: nomatch
+
+pattern: a\\
+subject:
+expect: nomatch
+
+pattern: \\
+subject: a\\b
+expect: 1-2
+groups: - - - - - - - - -
+
+pattern: \\
+subject: ab
+expect: nomatch
+
+pattern: \\v\\
+subject: a\\b
+expect: 1-2
+groups: - - - - - - - - -
+
+pattern: \\M\\
+subject: a\\b
+expect: 1-2
+groups: - - - - - - - - -
+
+pattern: \\V\\
+subject: a\\b
+expect: 1-2
+groups: - - - - - - - - -
+
+pattern: \\(a\\)\\
+subject: a\\
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: \\(a\\)\\
+subject: a
+expect: nomatch
+
+pattern: a\\|\\
+subject: x\\
+expect: 1-2
+groups: - - - - - - - - -
+
+pattern: a\\|\\
+subject: a
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: a*\\
+subject: aa\\
+expect: 0-3
+groups: - - - - - - - - -
+
+pattern: a*\\
+subject: a
+expect: nomatch
+
+pattern: \\%\\(a\\)
+subject: xab 1
+expect: 1-2
+groups: - - - - - - - - -
+
+pattern: \\%\\(a\\)
+subject: a
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: \\%\\1l
+subject: a
+expect: nomatch
+
+pattern: \\%[*]
+expect: refused
+
+pattern: \\M\\%[*]
+subject: *
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: \\%
+expect: refused
+
+pattern: \\%\x20
+expect: refused
+
+pattern: \\%0
+expect: refused
+
+pattern: \\%1
+expect: refused
+
+pattern: \\%c
+expect: refused
+
+pattern: \\%<
+expect: refused
+
+pattern: \\%\\a
 expect: refused

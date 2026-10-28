@@ -402,6 +402,32 @@ NAMED_CASES.extend([
 ])
 
 
+# The `\%` family, the trailing backslash and `\%[*]`, found by sweeping every
+# printable character after each escape prefix in all five magic levels against
+# both engines. `\%C` and the mark atoms stay unsupported and are not rows.
+NAMED_CASES.extend([
+    ("", "a\\", ["a\\", "ab", ""]),
+    ("", "\\", ["a\\b", "ab"]),
+    ("\\v", "\\", ["a\\b"]),
+    ("\\M", "\\", ["a\\b"]),
+    ("\\V", "\\", ["a\\b"]),
+    ("", "\\(a\\)\\", ["a\\", "a"]),
+    ("", "a\\|\\", ["x\\", "a"]),
+    ("", "a*\\", ["aa\\", "a"]),
+    ("", "\\%\\(a\\)", ["xab 1", "a"]),
+    ("", "\\%\\1l", ["a"]),
+    ("", "\\%[*]", ["a", ""]),
+    ("\\M", "\\%[*]", ["*"]),
+    ("", "\\%", ["a"]),
+    ("", "\\% ", ["a"]),
+    ("", "\\%0", ["a"]),
+    ("", "\\%1", ["a"]),
+    ("", "\\%c", ["a"]),
+    ("", "\\%<", ["a"]),
+    ("", "\\%\\a", ["a"]),
+])
+
+
 def collect(cases, dropped, syntax):
     """Ask precisely the engine named by this profile, retaining every split."""
     raw = vim_diff.ask_vim(cases, engine=vim_diff.PROFILES[syntax])

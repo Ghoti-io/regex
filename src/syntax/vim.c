@@ -1271,6 +1271,13 @@ static GRX_Result read_optional_sequence(
           parser->position, 2);
       break;
     }
+    if (multi_stands_here(parser)) {
+      // `\%[*]`: vim refuses a repeat with nothing before it, here as
+      // anywhere, where a bare `*` first in a pattern is a literal.
+      result = grx_parse_fail(parser, GRX_DIAG_NOTHING_TO_REPEAT,
+          parser->position, 1);
+      break;
+    }
     // A group member resumes the complete grammar. Nested optional readers
     // install their own direct-member context and restore this one on return.
     uint32_t member = GRX_INDEX_NONE;
@@ -1417,7 +1424,20 @@ static GRX_Result read_position(
     compare = '=';
   }
   if (byte_at(parser, scan) < '0' || byte_at(parser, scan) > '9') {
-    return grx_parse_fail(parser, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, start, 3);
+    // What vim accepts without a column number is a mark (`\%'m`) or the
+    // cursor (`\%.l`, `.c`, `.v`), and `\%C` skips composing characters:
+    // all four need a buffer or are not modelled, so they stay unsupported.
+    // Every other spelling is vim's "E71: Invalid character after \%" (or
+    // "E1273" for a bare `\%c`), which is a malformed pattern and not a
+    // feature this library lacks.
+    char after = byte_at(parser, scan);
+    char kind = byte_at(parser, scan + 1);
+    if (after == '\'' || (compare == '=' && after == 'C')
+        || (after == '.' && (kind == 'l' || kind == 'c' || kind == 'v'))) {
+      return grx_parse_fail(
+          parser, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, start, 3);
+    }
+    return grx_parse_fail(parser, GRX_DIAG_INVALID_ESCAPE, start, 3);
   }
   // Saturating, because the number is a column and a column past the end of
   // any subject is one no offset can reach - which is the answer an
@@ -1431,7 +1451,7 @@ static GRX_Result read_position(
   }
   char which = byte_at(parser, scan);
   if (which != 'l' && which != 'c' && which != 'v') {
-    return grx_parse_fail(parser, GRX_DIAG_CONSTRUCT_NOT_IMPLEMENTED, start, 3);
+    return grx_parse_fail(parser, GRX_DIAG_INVALID_ESCAPE, start, 3);
   }
   parser->position += scan + 1;
   if (which == 'l') {
@@ -1481,7 +1501,27 @@ static GRX_Result read_position(
   return GRX_OK;
 }
 
+static GRX_Result read_percent_body(
+    GRX_Parser * parser, size_t start, uint32_t * out_node);
+
+/**
+ * Read the `\%` family. vim reads the character after the `%` as a token, so
+ * a backslash before it changes nothing: `\%\(a\)` is `\%(a\)` and `\%\1l`
+ * is `\%1l`, and a spelling that is refused bare is refused with it
+ * (measured on 9.2, both engines). One backslash only: `\%\\` is refused.
+ */
 static GRX_Result read_percent(
+    GRX_Parser * parser, size_t start, uint32_t * out_node) {
+  if (byte_at(parser, 1) == '\\' && byte_at(parser, 2) != '\\'
+      && byte_at(parser, 2) != '\0') {
+    // Position stands in for the `%`, one byte on, so every offset the body
+    // reads is relative to the character that matters.
+    parser->position++;
+  }
+  return read_percent_body(parser, start, out_node);
+}
+
+static GRX_Result read_percent_body(
     GRX_Parser * parser, size_t start, uint32_t * out_node) {
   char c = byte_at(parser, 1);
 

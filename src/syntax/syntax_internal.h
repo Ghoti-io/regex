@@ -761,6 +761,7 @@ typedef struct GRX_Profile {
   int optional_sequence_groups; ///< Grouped and nested optional members.
   int line_star_initial_literal; ///< Very-magic first simple token retains star.
   int optional_tail_omits_newline; ///< Final optional class loses added LF.
+  int trailing_backslash_literal; ///< A final lone backslash is itself.
   GRX_SplitRule split;              ///< How grx_regex_split() divides.
   GRX_IterationRule iteration;      ///< Search-all after an empty match.
   GRX_SearchStartRule search_start; ///< What `\G` asserts while iterating.

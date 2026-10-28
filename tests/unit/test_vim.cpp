@@ -643,6 +643,60 @@ TEST_P(Vim, KeepMovesTheReportedStart) {
   EXPECT_EQ(span("a\\zsb", "ab"), "1-2");
 }
 
+TEST_P(Vim, AFinalLoneBackslashIsALiteralBackslash) {
+  // vim 9.2, both engines, every magic level: a pattern that ends in a lone
+  // backslash matches that backslash. The same text was refused here.
+  EXPECT_EQ(span("a\\", "a\\"), "0-2");
+  EXPECT_EQ(span("a\\", "ab"), "nomatch");
+  EXPECT_EQ(span("\\", "a\\b"), "1-2");
+  EXPECT_EQ(span("\\v\\", "a\\b"), "1-2");
+  EXPECT_EQ(span("\\M\\", "a\\b"), "1-2");
+  EXPECT_EQ(span("\\V\\", "a\\b"), "1-2");
+  EXPECT_EQ(span("\\(a\\)\\", "a\\"), "0-2");
+  EXPECT_EQ(span("a\\|\\", "x\\"), "1-2");
+  EXPECT_EQ(span("a*\\", "aa\\"), "0-3");
+  // A backslash that is not alone still escapes.
+  EXPECT_EQ(compile("a\\{", GRX_SYNTAX_VIM_BACKTRACK).result, GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile("a\\_", GRX_SYNTAX_VIM_NFA).result, GRX_ERR_SYNTAX);
+}
+
+TEST_P(Vim, APercentEscapeIsEitherValidOutOfContractOrASyntaxError) {
+  // What vim accepts but needs a buffer for, or composing handling this
+  // library does not model, is unsupported. Every other spelling is vim's
+  // "E71: Invalid character after \%" and is a malformed pattern.
+  for (const char * unsupported : {"\\%C", "\\%Cb", "\\%'a", "\\%<'a", "\\%.l",
+           "\\%<.c", "\\%>.v"}) {
+    EXPECT_EQ(compile(unsupported, GRX_SYNTAX_VIM_BACKTRACK).result,
+        GRX_ERR_UNSUPPORTED) << unsupported;
+    EXPECT_EQ(compile(unsupported, GRX_SYNTAX_VIM_NFA).result,
+        GRX_ERR_UNSUPPORTED) << unsupported;
+  }
+  for (const char * malformed : {"\\%", "\\% ", "\\%0", "\\%1", "\\%23", "\\%c",
+           "\\%l", "\\%v", "\\%<", "\\%>3", "\\%<x", "\\%a", "\\%\\a",
+           "\\%\\\\", "\\%%"}) {
+    EXPECT_EQ(compile(malformed, GRX_SYNTAX_VIM_BACKTRACK).result,
+        GRX_ERR_SYNTAX) << malformed;
+    EXPECT_EQ(compile(malformed, GRX_SYNTAX_VIM_NFA).result, GRX_ERR_SYNTAX)
+        << malformed;
+  }
+}
+
+TEST_P(Vim, ABackslashAfterPercentChangesNothing) {
+  // vim reads the character after `\%` as a token: `\%\(a\)` is `\%(a\)`.
+  EXPECT_EQ(span("\\%\\(a\\)", "xab 1"), span("\\%(a\\)", "xab 1"));
+  EXPECT_EQ(span("\\%\\(a\\)", "xab 1"), "1-2");
+  EXPECT_EQ(span("\\%\\^a", "ab"), span("\\%^a", "ab"));
+  EXPECT_EQ(span("\\%\\1l", "a"), span("\\%1l", "a"));
+  EXPECT_EQ(span("\\%\\1l", "a"), "nomatch");
+}
+
+TEST_P(Vim, ARepeatCannotOpenAnOptionalSequence) {
+  EXPECT_EQ(compile("\\%[*]", GRX_SYNTAX_VIM_BACKTRACK).result, GRX_ERR_SYNTAX);
+  EXPECT_EQ(compile("\\%[*]", GRX_SYNTAX_VIM_NFA).result, GRX_ERR_SYNTAX);
+  EXPECT_EQ(span("\\%[a]", "ab"), "0-1");
+  EXPECT_EQ(span("\\M\\%[*]", "*"), "0-1");
+}
+
 TEST_P(Vim, TheWhitespaceClassAfterZIsKeep) {
   // vim 9.2 reads `\z\s` as `\zs` under both engines and at every magic
   // level; no other `\z\X` compiles. The near misses stay refused.

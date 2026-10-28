@@ -939,6 +939,13 @@ GRX_Result grx_parse_atom(GRX_Parser * parser, uint32_t * out_node) {
   if (c == '\\') {
     parser->position++;
     if (grx_parse_at_end(parser)) {
+      // vim answers a pattern that ends in a lone backslash with that
+      // backslash as a literal, under both engines and at every magic level
+      // (`a\` matches "a\", `\(a\)\`, `a\|\` and `a*\` likewise).
+      if (parser->profile.trailing_backslash_literal) {
+        return grx_parse_literal_node(
+            parser, (uint32_t)'\\', start, 1, out_node);
+      }
       return grx_parse_fail(parser, GRX_DIAG_TRAILING_BACKSLASH, start, 1);
     }
     return parser->frontend->atom_escape(parser, out_node);

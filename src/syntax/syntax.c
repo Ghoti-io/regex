@@ -454,6 +454,7 @@ static const char * const spec_names[GRX_SYNTAX_COUNT] = {
  */
 // Shared string-matching contract; the differing policies stay explicit below.
 #define VIM_PROFILE_COMMON \
+  .trailing_backslash_literal = 1, \
   .capture_reset = GRX_CAPTURE_KEEP_LAST_SET, \
   .backref_unset = GRX_BACKREF_UNSET_EMPTY, \
   .backref_live_span = 1, \

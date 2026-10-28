@@ -553,6 +553,15 @@ pattern-local engine selectors with `GRX_ERR_UNSUPPORTED`; compatibility is
 selected by the caller's syntax identity, and automatic selection is not
 modeled.
 
+Two spellings that earlier read as "unsupported" or as errors follow the
+reference on both engines and at every magic level. A pattern that ends in a
+lone backslash matches that backslash (`a\`, `\(a\)\`, `a*\`). A `\%` that
+vim does not accept (`\%`, `\%0`, `\%c`, a column number with no `l`, `c` or
+`v`) is a syntax error, and a backslash before the character after `\%` changes
+nothing (`\%\(a\)` is `\%(a\)`). Only what vim accepts but a string cannot
+supply, a mark (`\%'m`) or the cursor (`\%.l`), and `\%C`, which skips
+composing characters, stay `GRX_ERR_UNSUPPORTED`. A repeat cannot open `\%[...]`.
+
 The independently measured profile axes are:
 
 | Behavior | `vim-backtrack` | `vim-nfa` |
