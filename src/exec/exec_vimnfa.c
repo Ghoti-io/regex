@@ -58,6 +58,7 @@
 #include <string.h>
 
 #include "../compile/compile_internal.h"
+#include "../unicode/unicode_internal.h"
 #include "exec_internal.h"
 #include "vimnfa_internal.h"
 
@@ -503,6 +504,9 @@ static int run_assertion(Run * run, uint32_t state, int32_t pos, Subs * got) {
   if (state_before) {
     begin = assertion->width <= 0 ? 0
         : (pos > assertion->width ? pos - assertion->width : 0);
+    while (begin > 0 && (run->text[begin] & 0xC0u) == 0x80u) {
+      begin--;
+    }
   }
   run->body_depth++;
   int r = exec_body(run, start_state, begin, &seed, state_before ? 2 : 0,
@@ -581,9 +585,53 @@ static int resolve_pim(Run * run, Pim * pim, const Subs * subs, Subs * out) {
 
 /* ---- the walk ---- */
 
-static int bit(const GRX_VimNfaState * s, int c) {
-  return (s->set[c >> 3] >> (c & 7)) & 1;
+/**
+ * Decode the character at `pos`: its code point, and how many bytes it takes.
+ * The text is valid UTF-8, which grx_vimnfa_applies() checked.
+ */
+static int32_t decode_at(const Run * run, int32_t pos, int * out_cp) {
+  const unsigned char * t = run->text + pos;
+  int32_t left = run->len - pos;
+  if (left <= 0) {
+    *out_cp = 0;
+    return 0;
+  }
+  if (t[0] < 0x80u) {
+    *out_cp = t[0];
+    return 1;
+  }
+  if (t[0] < 0xE0u && left >= 2) {
+    *out_cp = (int)(((t[0] & 0x1Fu) << 6) | (t[1] & 0x3Fu));
+    return 2;
+  }
+  if (t[0] < 0xF0u && left >= 3) {
+    *out_cp = (int)(((t[0] & 0x0Fu) << 12) | ((t[1] & 0x3Fu) << 6)
+        | (t[2] & 0x3Fu));
+    return 3;
+  }
+  if (left >= 4) {
+    *out_cp = (int)(((t[0] & 0x07u) << 18) | ((t[1] & 0x3Fu) << 12)
+        | ((t[2] & 0x3Fu) << 6) | (t[3] & 0x3Fu));
+    return 4;
+  }
+  *out_cp = t[0];
+  return 1;
 }
+
+/** Whether a class state accepts a code point. */
+static int member_of(
+    const GRX_VimNfa * nfa, const GRX_VimNfaState * s, int cp) {
+  if (cp < 128) {
+    return (s->set[cp >> 3] >> (cp & 7)) & 1;
+  }
+  int found = 0;
+  for (uint32_t k = 0; k < s->nranges && !found; k++) {
+    const GRX_VimNfaRange * r = &nfa->ranges[s->ranges + k];
+    found = (uint32_t)cp >= r->low && (uint32_t)cp <= r->high;
+  }
+  return s->invert ? !found : found;
+}
+
 
 static int charge(Run * run) {
   run->steps++;
@@ -615,7 +663,11 @@ static int exec_body(Run * run, uint32_t start, int32_t pos0, const Subs * seed,
   List * cur = &lists[0];
   cur->id = ++run->listid;
   int32_t pos = pos0;
-  run->curc = pos < run->len ? run->text[pos] : 0;
+  {
+    int first_cp = 0;
+    decode_at(run, pos, &first_cp);
+    run->curc = first_cp;
+  }
   Subs first;
   subs_copy(&first, seed);
   if (!addstate(run, cur, start, &first, NULL, pos, 0, -1, 0)) {
@@ -624,9 +676,9 @@ static int exec_body(Run * run, uint32_t start, int32_t pos0, const Subs * seed,
   }
 
   for (;;) {
-    int curc = pos < run->len ? run->text[pos] : 0;
+    int curc = 0;
+    int32_t clen = decode_at(run, pos, &curc);
     run->curc = curc;
-    int32_t clen = pos < run->len ? 1 : 0;
     List * nxt = &lists[flag ^ 1];
     nxt->n = 0;
     nxt->has_pim = 0;
@@ -769,7 +821,7 @@ static int exec_body(Run * run, uint32_t start, int32_t pos0, const Subs * seed,
           break;
         case GRX_VN_SET:
         case GRX_VN_ANY:
-          if (curc != 0 && bit(s, curc)) {
+          if (curc != 0 && member_of(nfa, s, curc)) {
             add = s->out;
           }
           break;
@@ -908,10 +960,35 @@ int grx_vimnfa_applies(
     return 0;
   }
   const unsigned char * text = (const unsigned char *)request->subject;
-  for (size_t i = 0; i < request->length; i++) {
-    if (text[i] == 0 || text[i] >= 128u) {
+  size_t i = 0;
+  while (i < request->length) {
+    unsigned char c = text[i];
+    if (c == 0) {
       return 0;
     }
+    if (c < 0x80u) {
+      i++;
+      continue;
+    }
+    // A multi-byte character must be complete and must not be a composing
+    // one: the automaton steps a character at a time and does not model the
+    // marks that Vim attaches to the character before them.
+    size_t bytes = c >= 0xF0u ? 4u : c >= 0xE0u ? 3u : c >= 0xC0u ? 2u : 0u;
+    if (bytes == 0 || i + bytes > request->length) {
+      return 0;
+    }
+    uint32_t cp = bytes == 2 ? (c & 0x1Fu) : bytes == 3 ? (c & 0x0Fu)
+                                                        : (c & 0x07u);
+    for (size_t k = 1; k < bytes; k++) {
+      if ((text[i + k] & 0xC0u) != 0x80u) {
+        return 0;
+      }
+      cp = (cp << 6) | (text[i + k] & 0x3Fu);
+    }
+    if (grx_display_cell_width(cp, 0) == 0) {
+      return 0;
+    }
+    i += bytes;
   }
   return 1;
 }

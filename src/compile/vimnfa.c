@@ -51,6 +51,7 @@
 #include "../core/core_internal.h"
 #include "../exec/vimnfa_internal.h"
 #include "../ir/ir_internal.h"
+#include "../unicode/unicode_internal.h"
 
 /** Deepest IR nesting the builder follows before it declines the pattern. */
 #define BUILD_DEPTH_LIMIT 64u
@@ -91,7 +92,9 @@ static int32_t max_width(const GRX_VimNfa * nfa, uint32_t index, int depth) {
     }
     case GRX_VN_CHAR: {
       int32_t rest = max_width(nfa, s->out, depth);
-      return rest == INT32_MIN ? INT32_MIN : (rest < 0 ? -1 : rest + 1);
+      int32_t bytes = s->ch < 0x80u ? 1 : s->ch < 0x800u ? 2
+          : s->ch < 0x10000u ? 3 : 4;
+      return rest == INT32_MIN ? INT32_MIN : (rest < 0 ? -1 : rest + bytes);
     }
     case GRX_VN_SET:
     case GRX_VN_ANY:
@@ -109,6 +112,7 @@ static int32_t max_width(const GRX_VimNfa * nfa, uint32_t index, int depth) {
 static uint32_t build_node(Builder * b, uint32_t index, uint32_t next);
 static uint32_t build_class(Builder * b, uint32_t class_index, int any, uint32_t next);
 static uint32_t build_character(Builder * b, const GRX_IRNode * node, uint32_t next);
+static int add_range(Builder * b, uint32_t low, uint32_t high);
 
 /** Add a state; the index, or GRX_VIMNFA_NONE after marking the builder. */
 static uint32_t add_state(Builder * b, GRX_VimNfaKind kind, uint32_t out) {
@@ -255,16 +259,25 @@ static uint32_t build_concat(Builder * b, const GRX_IRNode * node,
   }
   if (is_single_collection(b, node)) {
     const GRX_IRNode * c = grx_ir_node(b->ir, node->first_child);
-    if (c->a == 0 || c->a >= 128u) {
+    if (c->a == 0 || c->a > 0x10FFFFu) {
       b->declined = 1;
       return GRX_VIMNFA_NONE;
     }
     uint32_t state = add_state(b, GRX_VN_SET, next);
-    if (!failed(b)) {
-      b->nfa->states[state].set[c->a >> 3]
-          = (uint8_t)(1u << (c->a & 7u));
+    if (failed(b)) {
+      return GRX_VIMNFA_NONE;
     }
-    return failed(b) ? GRX_VIMNFA_NONE : state;
+    if (c->a < 128u) {
+      b->nfa->states[state].set[c->a >> 3] = (uint8_t)(1u << (c->a & 7u));
+    }
+    else {
+      b->nfa->states[state].ranges = b->nfa->range_count;
+      if (!add_range(b, c->a, c->a)) {
+        return GRX_VIMNFA_NONE;
+      }
+      b->nfa->states[state].nranges = 1;
+    }
+    return state;
   }
   size_t count = 0;
   uint32_t * list = children_of(b, node, &count);
@@ -408,11 +421,48 @@ static uint32_t build_repeat(Builder * b, const GRX_IRNode * node,
   return failed(b) ? GRX_VIMNFA_NONE : current;
 }
 
+static int add_range(Builder * b, uint32_t low, uint32_t high) {
+  GRX_VimNfa * nfa = b->nfa;
+  if (nfa->range_count == nfa->range_capacity) {
+    uint32_t capacity = nfa->range_capacity ? nfa->range_capacity * 2u : 16u;
+    GRX_VimNfaRange * ranges = gcu_allocator_realloc(
+        nfa->allocator, nfa->ranges, capacity * sizeof(*ranges));
+    if (!ranges) {
+      b->oom = 1;
+      return 0;
+    }
+    nfa->ranges = ranges;
+    nfa->range_capacity = capacity;
+  }
+  nfa->ranges[nfa->range_count].low = low;
+  nfa->ranges[nfa->range_count].high = high;
+  nfa->range_count++;
+  return 1;
+}
+
 static uint32_t build_class(Builder * b, uint32_t class_index, int any,
     uint32_t next) {
   uint32_t state = add_state(b, any ? GRX_VN_ANY : GRX_VN_SET, next);
   if (failed(b)) {
     return GRX_VIMNFA_NONE;
+  }
+  // `any` names a set of what is refused (or nothing, for everything); a
+  // class names what it accepts. Above ASCII that is a list of ranges and a
+  // flag, below it a bitmap.
+  b->nfa->states[state].invert = any ? 1u : 0u;
+  b->nfa->states[state].ranges = b->nfa->range_count;
+  size_t count = 0;
+  const GRX_CharRange * ranges = class_index == GRX_INDEX_NONE
+      ? NULL : grx_class_table_get(&b->ir->classes, class_index, &count);
+  for (size_t i = 0; i < count; i++) {
+    if (ranges[i].high < 128u) {
+      continue;
+    }
+    uint32_t low = ranges[i].low < 128u ? 128u : ranges[i].low;
+    if (!add_range(b, low, ranges[i].high)) {
+      return GRX_VIMNFA_NONE;
+    }
+    b->nfa->states[state].nranges++;
   }
   GRX_VimNfaState * s = &b->nfa->states[state];
   for (uint32_t c = 1; c < 128u; c++) {
@@ -473,7 +523,8 @@ static uint32_t build_node(Builder * b, uint32_t index, uint32_t next) {
       result = add_state(b, GRX_VN_EMPTY, next);
       break;
     case GRX_IR_CHAR:
-      if (node->a == 0 || node->a >= 128u) {
+      if (node->a == 0 || node->a > 0x10FFFFu
+          || grx_display_cell_width(node->a, 0) == 0) {
         b->declined = 1;
         break;
       }
@@ -818,5 +869,6 @@ void grx_vimnfa_free(GRX_VimNfa * nfa) {
   }
   const GRX_Allocator * allocator = nfa->allocator;
   gcu_allocator_free(allocator, nfa->states);
+  gcu_allocator_free(allocator, nfa->ranges);
   gcu_allocator_free(allocator, nfa);
 }

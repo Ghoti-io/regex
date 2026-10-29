@@ -1113,10 +1113,11 @@ TEST(Limits, AtomicDiscoveryIncludesCallerFramesInBacktrackLimit) {
   ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
   GRX_Limits limits;
   grx_limits_default(&limits);
-  // A subject with a non-ASCII character is the backtracking engine's: the
-  // thread-list automaton behind this profile runs ASCII subjects only, and
-  // what is measured here is the backtracker's own frame accounting.
-  const std::string subject = std::string(100, 'a') + "b\xc3\xa9";
+  // A subject with a composing character is the backtracking engine's: the
+  // thread-list automaton behind this profile does not model the marks Vim
+  // attaches to the character before them, and what is measured here is the
+  // backtracker's own frame accounting.
+  const std::string subject = std::string(100, 'a') + "b\xcc\x81";
   // Each interpreter fits 200 frames independently; simultaneous caller and
   // discovery frames require 224. Zeroing the probe's caller-depth base makes
   // the 200-frame search incorrectly succeed (its independent peak is 151).
@@ -1148,8 +1149,8 @@ TEST(Limits, AtomicCandidateLateFailureKeepsTheDefaultStepCeiling) {
   for (const char * tail : {"abx", "abxx"}) {
     std::string subject(600, 'a');
     subject += tail;
-    // Non-ASCII, so that the backtracker and not the automaton runs it.
-    subject += "\xc3\xa9";
+    // A composing mark, so that the backtracker and not the automaton runs it.
+    subject += "\xcc\x81";
     int matched = 1;
     EXPECT_EQ(grx_regex_search(regex, subject.data(), subject.size(), 0,
                   GRX_ENGINE_BACKTRACK, nullptr, match, &matched),
@@ -1184,9 +1185,9 @@ TEST(Limits,
   GRX_Match * match = nullptr;
   ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
   // `ab` is present so the required-literal prefilter cannot skip the search.
-  // The trailing non-ASCII character is what leaves the search to the
-  // backtracker; the automaton runs ASCII subjects only.
-  std::string subject = std::string(600, 'a') + "abx\xc3\xa9";
+  // The trailing composing mark is what leaves the search to the backtracker;
+  // the automaton does not model marks.
+  std::string subject = std::string(600, 'a') + "abx\xcc\x81";
   int matched = 1;
   EXPECT_EQ(grx_regex_search(regex, subject.data(), subject.size(), 0,
                 GRX_ENGINE_BACKTRACK, nullptr, match, &matched),

@@ -57,6 +57,12 @@ extern "C" {
 struct GRX_IR;
 struct GRX_ExecRequest;
 
+/** One inclusive range of code points a class holds above ASCII. */
+typedef struct GRX_VimNfaRange {
+  uint32_t low;  ///< The first code point.
+  uint32_t high; ///< The last.
+} GRX_VimNfaRange;
+
 /** The highest numbered group Vim keeps. */
 #define GRX_VIMNFA_GROUPS 9u
 
@@ -99,12 +105,18 @@ typedef struct GRX_VimNfaState {
   uint32_t ch;      ///< CHAR: the character.
   int32_t width;    ///< INV, look-behind: how far back it starts; <= 0 for any.
   uint8_t set[16];  ///< SET: one bit for each ASCII character it accepts.
+  uint8_t invert;   ///< SET, ANY: the ranges name what it refuses.
+  uint32_t ranges;  ///< SET, ANY: the first range above ASCII.
+  uint32_t nranges; ///< SET, ANY: how many.
 } GRX_VimNfaState;
 
 /** @brief A built automaton. */
 typedef struct GRX_VimNfa {
   const GRX_Allocator * allocator; ///< Where it came from.
   GRX_VimNfaState * states;        ///< All states.
+  GRX_VimNfaRange * ranges;        ///< The ranges of every class above ASCII.
+  uint32_t range_count;            ///< How many.
+  uint32_t range_capacity;         ///< How many fit.
   uint32_t count;                  ///< How many there are.
   uint32_t capacity;               ///< How many fit.
   uint32_t start;                  ///< The first state of the pattern.
@@ -146,8 +158,8 @@ void grx_vimnfa_free(GRX_VimNfa * nfa);
 /**
  * @brief Whether the automaton may answer this search.
  *
- * The automaton works on ASCII subjects and on whole-subject searches; the
- * backtracking engine answers the rest.
+ * The automaton works on whole-subject searches over text that has no NUL and
+ * no composing character; the backtracking engine answers the rest.
  *
  * @param nfa The automaton.
  * @param request The search.

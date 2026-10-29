@@ -821,6 +821,30 @@ NAMED_CASES.extend([
     )
 ])
 
+# The same automaton over text with characters of two and four bytes: the
+# offsets and the widths of a look-behind are in bytes, the classes are asked
+# about the whole character, and a character is stepped over as one.
+_UTF8_SUBJECTS = ["éa", "aé", "ééb", "éééb", "ééééb", "aéab", "a😀b", "😀😀b",
+                  "😀😀😀b", "b"]
+NAMED_CASES.extend([
+    ("", pattern, _UTF8_SUBJECTS) for pattern in (
+        "^\\(é\\%(\\)\\@=\\|éé\\)*b$",
+        "^\\(\\w\\%(\\)\\@=\\|\\w\\w\\)*b$",
+        "^\\(.\\%(\\)\\@=\\|..\\)*b$",
+        "^\\([^a]\\%(\\)\\@=\\|[^a][^a]\\)*b$",
+        "é*\\%(é\\)\\@>b",
+        "é*\\%(é\\)\\@>\\_.",
+        "\\(é\\)\\@<=a",
+        "\\(é\\)\\@<=\\(é\\)\\@<=b",
+        "\\(😀\\)\\@<=b",
+        "^\\(😀\\%(\\)\\@=\\|😀😀\\)*b$",
+        "\\(é\\+\\)\\(éé\\)\\@>",
+        "\\%(é\\|a\\)\\{2}\\%(b\\)\\@=",
+        "\\(é\\|a\\)\\1",
+
+    )
+])
+
 def main(argv):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", default=None, metavar="VECTOR_ROOT",
