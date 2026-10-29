@@ -150,7 +150,11 @@ static void * scratch_alloc(Run * run, size_t size) {
 /** Grow a block from `old_size` to `new_size`; the old block survives a refusal. */
 static void * scratch_grow(
     Run * run, void * block, size_t old_size, size_t new_size) {
-  if (run->cap && (new_size > run->cap || run->live > run->cap - new_size)) {
+  // The replacement counts as the difference: the old block is released as
+  // the new one is taken, and the cap is on what is live, not on the copy
+  // space an allocator needs to move it.
+  size_t others = run->live - old_size;
+  if (run->cap && (new_size > run->cap || others > run->cap - new_size)) {
     run->failure = GRX_ERR_LIMIT;
     run->diag = GRX_DIAG_LIMIT_MATCH_MEMORY;
     return NULL;
@@ -243,6 +247,9 @@ static int stored(GRX_VimNfaKind kind) {
     case GRX_VN_ENDINV:
     case GRX_VN_BREF:
     case GRX_VN_SKIP:
+    case GRX_VN_PAT:
+    case GRX_VN_ENDPAT:
+    case GRX_VN_ZSTART:
       return 1;
     default:
       return 0;
@@ -268,6 +275,23 @@ static int key_equal(const Run * run, const Subs * a, const Subs * b) {
     }
   }
   return 1;
+}
+
+/** Whether a state is in a list already, with groups that start alike. */
+static int state_in_list(
+    const Run * run, const List * list, uint32_t index, const Subs * subs) {
+  if (index == NONE || run->stamp[index] != list->id) {
+    return 0;
+  }
+  if (!run->bref) {
+    return 1;
+  }
+  for (size_t k = 0; k < list->n; k++) {
+    if (list->t[k].state == index && key_equal(run, subs, &list->t[k].subs)) {
+      return 1;
+    }
+  }
+  return 0;
 }
 
 /**
@@ -342,9 +366,10 @@ static int addstate(Run * run, List * list, uint32_t index, Subs * subs,
       th.pim.state = NONE;
     }
     th.cnt = cnt;
-    if (s->kind != GRX_VN_SKIP) {
-      run->stamp[index] = list->id;
-    }
+    // A run of skipped characters is stamped like any other state - the
+    // check for an atomic group looks for it - though it is never refused
+    // for being there already.
+    run->stamp[index] = list->id;
     if (!list_push(run, list, &th)) {
       run->closure_depth--;
       return 0;
@@ -370,11 +395,27 @@ static int addstate(Run * run, List * list, uint32_t index, Subs * subs,
       subs->n = saved_n;
       break;
     }
+    case GRX_VN_ZSTART: {
+      int32_t saved_start = subs->st[0];
+      subs->st[0] = pos + off;
+      ok = addstate(run, list, s->out, subs, pim, pos, off, here, 0);
+      subs->st[0] = saved_start;
+      break;
+    }
+    case GRX_VN_ZEND: {
+      int32_t saved_end = subs->en[0];
+      subs->en[0] = pos + off;
+      ok = addstate(run, list, s->out, subs, pim, pos, off, here, 0);
+      subs->en[0] = saved_end;
+      break;
+    }
     case GRX_VN_MCLOSE: {
       int g = s->group;
       int32_t saved_end = subs->en[g];
       int32_t saved_n = subs->n;
-      subs->en[g] = pos + off;
+      if (g != 0 || !run->nfa->has_ze || subs->en[0] < 0) {
+        subs->en[g] = pos + off;
+      }
       subs->n = max32(subs->n, g + 1);
       ok = addstate(run, list, s->out, subs, pim, pos, off, here, 0);
       subs->en[g] = saved_end;
@@ -426,11 +467,11 @@ static ptrdiff_t addstate_here(Run * run, List * list, uint32_t index,
 /* ---- assertions ---- */
 
 static int exec_body(Run * run, uint32_t start, int32_t pos0, const Subs * seed,
-    int top, Subs * match_out, int32_t * end_out);
+    int mode, int32_t endpos, Subs * match_out, int32_t * end_out);
 
 /** Hand the thread's groups to the scratch. */
 static void preload(Run * run, const Subs * subs) {
-  for (int k = 1; k < 10; k++) {
+  for (int k = 1; k < subs->n; k++) {
     run->m.st[k] = subs->st[k];
     run->m.en[k] = subs->en[k];
   }
@@ -448,8 +489,17 @@ static int run_assertion(Run * run, uint32_t state, int32_t pos, Subs * got) {
   Subs seed;
   subs_copy(&seed, &run->m);
   int32_t end = 0;
+  const GRX_VimNfaState * assertion = &run->nfa->states[state];
+  int state_before = assertion->before;
+  uint32_t start_state = assertion->out;
+  int32_t begin = pos;
+  if (state_before) {
+    begin = assertion->width <= 0 ? 0
+        : (pos > assertion->width ? pos - assertion->width : 0);
+  }
   run->body_depth++;
-  int r = exec_body(run, run->nfa->states[state].out, pos, &seed, 0, got, &end);
+  int r = exec_body(run, start_state, begin, &seed, state_before ? 2 : 0,
+      state_before ? pos : -1, got, &end);
   run->body_depth--;
   run->curc = saved;
   return r;
@@ -483,6 +533,9 @@ static int eval_direct(Run * run, uint32_t state, int32_t pos,
     out->en[k] = run->m.en[k];
   }
   out->n = max32(out->n, run->m.n);
+  if (run->nfa->has_ze && run->m.en[0] >= 0) {
+    out->en[0] = run->m.en[0];
+  }
   run->m.n = saved_n;
   return 1;
 }
@@ -546,7 +599,7 @@ static int charge(Run * run) {
  * 0 when there was none, -1 on failure.
  */
 static int exec_body(Run * run, uint32_t start, int32_t pos0, const Subs * seed,
-    int top, Subs * match_out, int32_t * end_out) {
+    int mode, int32_t endpos, Subs * match_out, int32_t * end_out) {
   const GRX_VimNfa * nfa = run->nfa;
   List lists[2] = {{0}, {0}};
   int flag = 0;
@@ -594,6 +647,10 @@ static int exec_body(Run * run, uint32_t start, int32_t pos0, const Subs * seed,
       switch ((GRX_VimNfaKind)s->kind) {
         case GRX_VN_MATCH:
         case GRX_VN_ENDINV:
+        case GRX_VN_ENDPAT:
+          if (endpos >= 0 && pos != endpos) {
+            break;
+          }
           *match_out = th.subs;
           *end_out = pos;
           run->lastend = pos;
@@ -635,6 +692,57 @@ static int exec_body(Run * run, uint32_t start, int32_t pos0, const Subs * seed,
             }
           }
           break;
+        case GRX_VN_PAT: {
+          uint32_t end_state = s->out1;
+          uint32_t skip_state = nfa->states[end_state].out;
+          uint32_t follow = nfa->states[skip_state].out;
+          if (state_in_list(run, nxt, skip_state, &th.subs)
+              || state_in_list(run, nxt, follow, &th.subs)
+              || state_in_list(run, cur, follow, &th.subs)) {
+            break;
+          }
+          if (run->body_depth >= BODY_DEPTH) {
+            run->failure = GRX_ERR_LIMIT;
+            run->diag = GRX_DIAG_LIMIT_STEPS;
+            status = -1;
+            goto done;
+          }
+          preload(run, &th.subs);
+          Subs seed;
+          subs_copy(&seed, &run->m);
+          Subs got;
+          int32_t body_end = 0;
+          run->body_depth++;
+          int r = exec_body(run, s->out, pos, &seed, 0, -1, &got, &body_end);
+          run->body_depth--;
+          run->curc = curc;
+          if (r < 0) {
+            status = -1;
+            goto done;
+          }
+          if (r) {
+            subs_assign(&run->m, &got);
+            for (int k = 1; k < 10; k++) {
+              addsub.st[k] = got.st[k];
+              addsub.en[k] = got.en[k];
+            }
+            addsub.n = max32(addsub.n, got.n);
+            int32_t length = body_end - pos;
+            if (length == 0) {
+              add = follow;
+              here = 1;
+            }
+            else if (length <= clen) {
+              add = follow;
+            }
+            else {
+              add = skip_state;
+              skipcnt = length - clen;
+              has_skip = 1;
+            }
+          }
+          break;
+        }
         case GRX_VN_BOL:
           if (pos == 0) {
             add = s->out;
@@ -750,12 +858,18 @@ static int exec_body(Run * run, uint32_t start, int32_t pos0, const Subs * seed,
       i++;
     }
 
-    if (!hit && !matched && top && !run->anchored && clen != 0) {
+    if (!hit && !matched && clen != 0
+        && ((mode == 1 && !run->anchored)
+            || (mode == 2 && pos + clen <= endpos))) {
+      // The new thread starts from the scratch, groups and all: whatever
+      // an earlier assertion left in it is what the thread begins with.
       Subs again;
-      subs_init(&again);
-      again.st[0] = pos + clen;
-      again.n = 1;
-      if (!addstate(run, nxt, nfa->start, &again, NULL, pos, clen, -1, 0)) {
+      subs_copy(&again, &run->m);
+      if (mode == 1) {
+        again.st[0] = pos + clen;
+      }
+      again.n = max32(again.n, 1);
+      if (!addstate(run, nxt, start, &again, NULL, pos, clen, -1, 0)) {
         status = -1;
         goto done;
       }
@@ -841,8 +955,8 @@ GRX_Result grx_exec_vimnfa(const GRX_ExecRequest * request, int * out_matched) {
   Subs result;
   int32_t end = 0;
   int status
-      = exec_body(&run, nfa->start, (int32_t)request->start, &seed, 1, &result,
-          &end);
+      = exec_body(&run, nfa->start, (int32_t)request->start, &seed, 1, -1,
+          &result, &end);
 
   if (status > 0 && request->match) {
     GRX_Match * match = request->match;

@@ -81,6 +81,10 @@ typedef enum {
   GRX_VN_ENDINV, ///< The end of an assertion body; `out` is what follows.
   GRX_VN_BREF,   ///< Match what group `group` holds; `out` is a SKIP.
   GRX_VN_SKIP,   ///< Consume the rest of a counted run of characters.
+  GRX_VN_PAT,    ///< An atomic group; `out` is its body, `out1` its end state.
+  GRX_VN_ENDPAT, ///< The end of an atomic body; `out` is a SKIP.
+  GRX_VN_ZSTART, ///< `\zs`. Stored, as a marker.
+  GRX_VN_ZEND,   ///< `\ze`. Never stored.
 } GRX_VimNfaKind;
 
 /** @brief One state of the automaton. */
@@ -88,10 +92,12 @@ typedef struct GRX_VimNfaState {
   uint8_t kind;     ///< A @ref GRX_VimNfaKind.
   uint8_t neg;      ///< INV: a negative assertion.
   uint8_t post;     ///< INV: the postponed form, decided at compile time.
+  uint8_t before;   ///< INV: a look-behind.
   uint8_t group;    ///< MOPEN, MCLOSE, BREF: the group number.
   uint32_t out;     ///< The state that follows.
   uint32_t out1;    ///< SPLIT: the second arm. INV: its end state.
   uint32_t ch;      ///< CHAR: the character.
+  int32_t width;    ///< INV, look-behind: how far back it starts; <= 0 for any.
   uint8_t set[16];  ///< SET: one bit for each ASCII character it accepts.
 } GRX_VimNfaState;
 
@@ -103,6 +109,7 @@ typedef struct GRX_VimNfa {
   uint32_t capacity;               ///< How many fit.
   uint32_t start;                  ///< The first state of the pattern.
   uint32_t groups;                 ///< The highest group number used.
+  int has_ze;                      ///< The pattern uses `\ze`.
 } GRX_VimNfa;
 
 /**

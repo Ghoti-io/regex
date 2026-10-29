@@ -65,6 +65,47 @@ typedef struct Builder {
   uint32_t depth;
 } Builder;
 
+/**
+ * The most bytes a look-behind body can span, as Vim estimates it: the sum
+ * along the body, the larger arm of a split, unknown (-1, meaning "from the
+ * start of the line") for a loop or a back-reference. INT32_MIN says the
+ * estimate depends on something this automaton does not carry.
+ */
+static int32_t max_width(const GRX_VimNfa * nfa, uint32_t index, int depth) {
+  if (index == GRX_VIMNFA_NONE || depth > 4) {
+    return -1;
+  }
+  const GRX_VimNfaState * s = &nfa->states[index];
+  switch (s->kind) {
+    case GRX_VN_ENDINV:
+    case GRX_VN_ENDPAT:
+    case GRX_VN_MATCH:
+      return 0;
+    case GRX_VN_SPLIT: {
+      int32_t x = max_width(nfa, s->out, depth + 1);
+      int32_t y = max_width(nfa, s->out1, depth + 1);
+      if (x == INT32_MIN || y == INT32_MIN) {
+        return INT32_MIN;
+      }
+      return x < 0 || y < 0 ? -1 : (x > y ? x : y);
+    }
+    case GRX_VN_CHAR: {
+      int32_t rest = max_width(nfa, s->out, depth);
+      return rest == INT32_MIN ? INT32_MIN : (rest < 0 ? -1 : rest + 1);
+    }
+    case GRX_VN_SET:
+    case GRX_VN_ANY:
+      return INT32_MIN;
+    case GRX_VN_BREF:
+    case GRX_VN_PAT:
+      return -1;
+    case GRX_VN_INV:
+      return max_width(nfa, nfa->states[s->out1].out, depth);
+    default:
+      return max_width(nfa, s->out, depth);
+  }
+}
+
 static uint32_t build_node(Builder * b, uint32_t index, uint32_t next);
 
 /** Add a state; the index, or GRX_VIMNFA_NONE after marking the builder. */
@@ -121,8 +162,42 @@ static uint32_t * children_of(
   return list;
 }
 
+/**
+ * A one-character collection, `[a]`, lowers to the character followed by a
+ * check that no mark comes after it. To Vim it is a collection and not a
+ * literal, and the two differ in how likely the text after them is to fail,
+ * so it is built as a class of one.
+ */
+static int is_single_collection(const Builder * b, const GRX_IRNode * node) {
+  uint32_t first = node->first_child;
+  if (first == GRX_INDEX_NONE) {
+    return 0;
+  }
+  const GRX_IRNode * c = grx_ir_node(b->ir, first);
+  if (c->kind != GRX_IR_CHAR || c->next_sibling == GRX_INDEX_NONE) {
+    return 0;
+  }
+  const GRX_IRNode * guard = grx_ir_node(b->ir, c->next_sibling);
+  return guard->kind == GRX_IR_ASSERT
+      && guard->mode == GRX_ASSERT_NOT_COMPOSING
+      && guard->next_sibling == GRX_INDEX_NONE;
+}
+
 static uint32_t build_concat(Builder * b, const GRX_IRNode * node,
     uint32_t next) {
+  if (is_single_collection(b, node)) {
+    const GRX_IRNode * c = grx_ir_node(b->ir, node->first_child);
+    if (c->a == 0 || c->a >= 128u) {
+      b->declined = 1;
+      return GRX_VIMNFA_NONE;
+    }
+    uint32_t state = add_state(b, GRX_VN_SET, next);
+    if (!failed(b)) {
+      b->nfa->states[state].set[c->a >> 3]
+          = (uint8_t)(1u << (c->a & 7u));
+    }
+    return failed(b) ? GRX_VIMNFA_NONE : state;
+  }
   size_t count = 0;
   uint32_t * list = children_of(b, node, &count);
   if (!list) {
@@ -396,20 +471,57 @@ static uint32_t build_node(Builder * b, uint32_t index, uint32_t next) {
       else if (node->mode == GRX_ASSERT_END_SUBJECT) {
         result = add_state(b, GRX_VN_EOL, next);
       }
-      else if (node->mode == GRX_ASSERT_CLUSTER_BOUNDARY) {
+      else if (node->mode == GRX_ASSERT_CLUSTER_BOUNDARY
+          || node->mode == GRX_ASSERT_NOT_COMPOSING) {
         // The automaton runs only on subjects without a composing
-        // character, where every position is a cluster boundary. `\%C` is
-        // a different node and is not modelled: it consumes a mark when
-        // there is one, and nothing otherwise.
+        // character, where every position is a cluster boundary and none
+        // is in front of a mark.
         result = next;
       }
       else {
         b->declined = 1;
       }
       break;
+    case GRX_IR_KEEP:
+      result = add_state(b, GRX_VN_ZSTART, next);
+      break;
+    case GRX_IR_KEEP_END:
+      if (node->flags & GRX_IR_END_CONTEXT_ONLY) {
+        b->declined = 1;
+        break;
+      }
+      b->nfa->has_ze = 1;
+      result = add_state(b, GRX_VN_ZEND, next);
+      break;
+    case GRX_IR_ATOMIC: {
+      if (node->first_child == GRX_INDEX_NONE) {
+        b->declined = 1;
+        break;
+      }
+      uint32_t skip = add_state(b, GRX_VN_SKIP, next);
+      if (failed(b)) {
+        break;
+      }
+      uint32_t end = add_state(b, GRX_VN_ENDPAT, skip);
+      if (failed(b)) {
+        break;
+      }
+      uint32_t body = build_node(b, node->first_child, end);
+      if (failed(b)) {
+        break;
+      }
+      result = add_state(b, GRX_VN_PAT, body);
+      if (!failed(b)) {
+        b->nfa->states[result].out1 = end;
+      }
+      break;
+    }
     case GRX_IR_LOOK: {
-      if ((node->mode != GRX_LOOK_AHEAD_POSITIVE
-              && node->mode != GRX_LOOK_AHEAD_NEGATIVE)
+      int behind = node->mode == GRX_LOOK_BEHIND_POSITIVE
+          || node->mode == GRX_LOOK_BEHIND_NEGATIVE;
+      int negative = node->mode == GRX_LOOK_AHEAD_NEGATIVE
+          || node->mode == GRX_LOOK_BEHIND_NEGATIVE;
+      if ((!behind && node->mode != GRX_LOOK_AHEAD_POSITIVE && !negative)
           || (node->flags & GRX_IR_LOOK_CONDITION)
           || node->first_child == GRX_INDEX_NONE) {
         b->declined = 1;
@@ -425,9 +537,22 @@ static uint32_t build_node(Builder * b, uint32_t index, uint32_t next) {
       }
       result = add_state(b, GRX_VN_INV, body);
       if (!failed(b)) {
-        b->nfa->states[result].out1 = end;
-        b->nfa->states[result].neg
-            = node->mode == GRX_LOOK_AHEAD_NEGATIVE ? 1u : 0u;
+        GRX_VimNfaState * state = &b->nfa->states[result];
+        state->out1 = end;
+        state->neg = negative ? 1u : 0u;
+        state->before = behind ? 1u : 0u;
+        if (behind) {
+          // An explicit bound is the width; without one it is estimated from
+          // the body, and a body whose width cannot be told - a class or a
+          // collection, which Vim sizes by what they could match in UTF-8 -
+          // is not modelled.
+          int32_t width = node->b > 0 ? (int32_t)node->b
+                                      : max_width(b->nfa, body, 0);
+          if (width == INT32_MIN) {
+            b->declined = 1;
+          }
+          state->width = width;
+        }
       }
       break;
     }
@@ -472,6 +597,7 @@ static int failure_chance(const GRX_VimNfa * nfa, uint32_t index, int depth) {
     case GRX_VN_MATCH:
       return 0;
     case GRX_VN_INV:
+    case GRX_VN_PAT:
       return 5;
     case GRX_VN_BOL:
     case GRX_VN_EOL:
@@ -502,6 +628,7 @@ int grx_vimnfa_match_follows(
           || grx_vimnfa_match_follows(nfa, s->out1, depth + 1);
     case GRX_VN_MATCH:
     case GRX_VN_ENDINV:
+    case GRX_VN_ENDPAT:
       return 1;
     case GRX_VN_INV:
       return grx_vimnfa_match_follows(nfa, nfa->states[s->out1].out, depth + 1);
@@ -528,6 +655,15 @@ static void decide_postponement(GRX_VimNfa * nfa) {
     }
     int inside = failure_chance(nfa, s->out, 0);
     int after = failure_chance(nfa, follow, 0);
+    if (s->before) {
+      if (s->width <= 0 && after > 0) {
+        s->post = 1;
+      }
+      else {
+        s->post = after * 10 < inside ? 0u : 1u;
+      }
+      continue;
+    }
     s->post = after < inside ? 0u : 1u;
   }
 }
@@ -550,7 +686,15 @@ GRX_Result grx_vimnfa_build(const GRX_IR * ir, const GRX_Allocator * allocator,
 
   Builder b = {.ir = ir, .nfa = nfa};
   uint32_t match = add_state(&b, GRX_VN_MATCH, GRX_VIMNFA_NONE);
-  uint32_t start = failed(&b) ? GRX_VIMNFA_NONE : build_node(&b, ir->root, match);
+  // Vim closes the whole match's group before it reaches the end. That state
+  // is not stored in a list, so it is also what an atomic group at the end of
+  // the pattern finds after it: nothing a list could already hold.
+  uint32_t close = failed(&b) ? GRX_VIMNFA_NONE
+                              : add_state(&b, GRX_VN_MCLOSE, match);
+  if (!failed(&b)) {
+    nfa->states[close].group = 0;
+  }
+  uint32_t start = failed(&b) ? GRX_VIMNFA_NONE : build_node(&b, ir->root, close);
   if (b.oom) {
     grx_vimnfa_free(nfa);
     return GRX_ERR_OOM;

@@ -2241,7 +2241,7 @@ static GRX_Result lower_group(
         grx_ir_node(low->ir, body)->kind == GRX_IR_EMPTY) {
       grx_ir_node(low->ir, body)->flags |= GRX_IR_EMPTY_FRONTIER;
     }
-    if (low->profile.nfa_group_markers && !low->atomic_depth) {
+    if (low->profile.nfa_group_markers) {
       uint32_t wrap = GRX_INDEX_NONE;
       result = add(low, GRX_IR_CONCAT, node, &wrap);
       if (result != GRX_OK) {

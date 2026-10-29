@@ -730,10 +730,21 @@ automaton instead (`src/exec/exec_vimnfa.c`, built by `src/compile/vimnfa.c`).
 
 What the automaton models today: literals, classes, `.`, groups, alternation,
 `*`, `\+`, `\=`, counted repeats (copied as Vim copies them), back-references,
-`^`, `$`, and positive and negative look-ahead; on subjects that are ASCII
-and a search from any start. Anything else - an atomic group, a look-behind,
-`\zs`, `\ze`, `\%[`, a lazy repeat, a non-ASCII subject, a back-reference to
-a group that encloses it - keeps the backtracking engine and its fitted rules.
+`^`, `$`, positive and negative look-ahead, look-behind (with an explicit
+width, or a body of literal characters), atomic groups, `\zs` and `\ze`; on
+subjects that are ASCII and a search from any start. An atomic group is a state
+of its own that runs its body as a separate match and then skips the characters
+it consumed, one position at a time, and it is not tried when the state after
+it, or its own skip, is already waiting in the list - which is where the rule
+that an atomic group is refused at a position another one has just ended comes
+from. Anything else - a look-behind whose width depends on a class or a
+collection, `\%[`, `\%C`, a lazy repeat, a loop whose body can match nothing
+and holds no marker, a non-ASCII subject, a back-reference to a group that
+encloses it - keeps the backtracking engine and its fitted rules.
+
+A match found by a thread that started after the first position starts from
+the scratch the earlier assertions left behind, so what an assertion captured
+can appear in the groups of a later, unrelated alternative.
 
 A back-reference to a group that encloses it, as in `\(a\1\)\@=`, reads
 storage Vim never initialised when the group is opened again, so what it holds
