@@ -107,6 +107,8 @@ static int32_t max_width(const GRX_VimNfa * nfa, uint32_t index, int depth) {
 }
 
 static uint32_t build_node(Builder * b, uint32_t index, uint32_t next);
+static uint32_t build_class(Builder * b, uint32_t class_index, int any, uint32_t next);
+static uint32_t build_character(Builder * b, const GRX_IRNode * node, uint32_t next);
 
 /** Add a state; the index, or GRX_VIMNFA_NONE after marking the builder. */
 static uint32_t add_state(Builder * b, GRX_VimNfaKind kind, uint32_t out) {
@@ -183,8 +185,74 @@ static int is_single_collection(const Builder * b, const GRX_IRNode * node) {
       && guard->next_sibling == GRX_INDEX_NONE;
 }
 
+/** The `index`th child of a node, or NULL. */
+static const GRX_IRNode * child_at(
+    const Builder * b, const GRX_IRNode * node, unsigned index) {
+  uint32_t c = node->first_child;
+  while (c != GRX_INDEX_NONE && index--) {
+    c = grx_ir_node(b->ir, c)->next_sibling;
+  }
+  return c == GRX_INDEX_NONE ? NULL : grx_ir_node(b->ir, c);
+}
+
+static unsigned child_count(const Builder * b, const GRX_IRNode * node) {
+  unsigned n = 0;
+  for (uint32_t c = node->first_child; c != GRX_INDEX_NONE;
+      c = grx_ir_node(b->ir, c)->next_sibling) {
+    n++;
+  }
+  return n;
+}
+
+/**
+ * A class, a collection or `.` is lowered as the character followed by a choice
+ * about the composing marks after it: skip them and require that none follow,
+ * or require a boundary. On a subject without marks neither choice consumes
+ * anything, and Vim sees one state of the character's kind, so that is what is
+ * built. Returns the node that holds the character, or NULL for any other
+ * shape.
+ */
+static const GRX_IRNode * cluster_consumer(
+    const Builder * b, const GRX_IRNode * node) {
+  if (node->kind != GRX_IR_CONCAT || child_count(b, node) != 2) {
+    return NULL;
+  }
+  const GRX_IRNode * first = child_at(b, node, 0);
+  const GRX_IRNode * tail = child_at(b, node, 1);
+  if (first->kind == GRX_IR_CONCAT && child_count(b, first) == 2) {
+    const GRX_IRNode * guard = child_at(b, first, 0);
+    const GRX_IRNode * body = child_at(b, first, 1);
+    if (guard->kind != GRX_IR_ASSERT || (body->kind != GRX_IR_CLASS
+            && body->kind != GRX_IR_ANY)) {
+      return NULL;
+    }
+    first = body;
+  }
+  if ((first->kind != GRX_IR_CLASS && first->kind != GRX_IR_ANY)
+      || tail->kind != GRX_IR_ALTERNATE || child_count(b, tail) != 2) {
+    return NULL;
+  }
+  const GRX_IRNode * skip = child_at(b, tail, 0);
+  const GRX_IRNode * stop = child_at(b, tail, 1);
+  if (skip->kind != GRX_IR_CONCAT || child_count(b, skip) != 3
+      || stop->kind != GRX_IR_CONCAT || child_count(b, stop) != 2) {
+    return NULL;
+  }
+  const GRX_IRNode * loop = child_at(b, skip, 1);
+  const GRX_IRNode * end = child_at(b, skip, 2);
+  if (loop->kind != GRX_IR_REPEAT || end->kind != GRX_IR_ASSERT
+      || end->mode != GRX_ASSERT_NOT_COMPOSING) {
+    return NULL;
+  }
+  return first;
+}
+
 static uint32_t build_concat(Builder * b, const GRX_IRNode * node,
     uint32_t next) {
+  const GRX_IRNode * character = cluster_consumer(b, node);
+  if (character) {
+    return build_character(b, character, next);
+  }
   if (is_single_collection(b, node)) {
     const GRX_IRNode * c = grx_ir_node(b->ir, node->first_child);
     if (c->a == 0 || c->a >= 128u) {
@@ -365,6 +433,30 @@ static uint32_t build_class(Builder * b, uint32_t class_index, int any,
   return state;
 }
 
+/**
+ * One class, collection or `.`. Written `\_.` it is two states, the character
+ * or a line break, which is what makes an atomic group in front of it enterable
+ * where another has just ended: what follows the group is a choice, which no
+ * list holds.
+ */
+static uint32_t build_character(
+    Builder * b, const GRX_IRNode * node, uint32_t next) {
+  uint32_t any = build_class(b, node->a, node->kind == GRX_IR_ANY, next);
+  if (failed(b) || !(node->flags & GRX_IR_ANY_OR_NEWLINE)) {
+    return any;
+  }
+  uint32_t newline = add_state(b, GRX_VN_SET, next);
+  if (failed(b)) {
+    return GRX_VIMNFA_NONE;
+  }
+  b->nfa->states[newline].set[1] = 0x04;
+  uint32_t split = add_state(b, GRX_VN_SPLIT, any);
+  if (!failed(b)) {
+    b->nfa->states[split].out1 = newline;
+  }
+  return failed(b) ? GRX_VIMNFA_NONE : split;
+}
+
 static uint32_t build_node(Builder * b, uint32_t index, uint32_t next) {
   if (failed(b)) {
     return GRX_VIMNFA_NONE;
@@ -394,7 +486,7 @@ static uint32_t build_node(Builder * b, uint32_t index, uint32_t next) {
       result = build_class(b, node->a, 0, next);
       break;
     case GRX_IR_ANY:
-      result = build_class(b, node->a, 1, next);
+      result = build_character(b, node, next);
       break;
     case GRX_IR_CONCAT:
       if (node->flags & GRX_IR_NFA_GROUP) {
@@ -606,6 +698,17 @@ static int failure_chance(const GRX_VimNfa * nfa, uint32_t index, int depth) {
       return 94;
     case GRX_VN_CHAR:
       return 95;
+    case GRX_VN_SET: {
+      // A set holding only the line break is Vim's NEWL, which it rates as it
+      // does the anchors.
+      int only_newline = (s->set[1] == 0x04);
+      for (int k = 0; k < 16 && only_newline; k++) {
+        if (k != 1 && s->set[k]) {
+          only_newline = 0;
+        }
+      }
+      return only_newline ? 99 : 50;
+    }
     case GRX_VN_MOPEN:
     case GRX_VN_NOPEN:
     case GRX_VN_MCLOSE:

@@ -272,6 +272,8 @@ typedef enum {
 #define GRX_IR_NFA_GROUP GRX_BIT(29)
 /** ALTERNATE: one member of a `\%[...]` sequence; its NFA shape differs. */
 #define GRX_IR_OPTIONAL_MEMBER GRX_BIT(30)
+/** ANY: written `\_.`, which Vim builds as `.` or a line break. */
+#define GRX_IR_ANY_OR_NEWLINE GRX_BIT(31)
 
 /**
  * @brief LOOK: a negative one keeps what its body captured before failing.

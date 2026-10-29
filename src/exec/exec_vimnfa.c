@@ -909,7 +909,7 @@ int grx_vimnfa_applies(
   }
   const unsigned char * text = (const unsigned char *)request->subject;
   for (size_t i = 0; i < request->length; i++) {
-    if (text[i] == 0 || text[i] >= 128u) {
+    if (text[i] == 0 || text[i] == '\n' || text[i] >= 128u) {
       return 0;
     }
   }

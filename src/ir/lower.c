@@ -1914,6 +1914,10 @@ static GRX_Result lower_any(
     return result;
   }
   grx_ir_node(low->ir, *out_node)->a = excluded;
+  if (low->profile.nfa_group_markers && node->length == 3) {
+    // `\_.`: the one spelling of three bytes that reaches here.
+    grx_ir_node(low->ir, *out_node)->flags |= GRX_IR_ANY_OR_NEWLINE;
+  }
   // A CR LF pair is a line terminator that *begins* at the CR, and `.`
   // refuses the place a terminator begins. Only when something is being
   // excluded at all: `(?s).` matches the CR of a pair in pcre2test, and a
@@ -2241,7 +2245,8 @@ static GRX_Result lower_group(
         grx_ir_node(low->ir, body)->kind == GRX_IR_EMPTY) {
       grx_ir_node(low->ir, body)->flags |= GRX_IR_EMPTY_FRONTIER;
     }
-    if (low->profile.nfa_group_markers) {
+    if (low->profile.nfa_group_markers
+        && !(node->flags & GRX_NODE_ADDED_NEWLINE)) {
       uint32_t wrap = GRX_INDEX_NONE;
       result = add(low, GRX_IR_CONCAT, node, &wrap);
       if (result != GRX_OK) {
