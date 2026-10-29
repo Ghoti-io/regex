@@ -659,6 +659,13 @@ struct GRX_Regex {
   size_t mark_count;               ///< Distinct `(*MARK:NAME)` names.
   char ** mark_names;              ///< One per mark, indexed as the program.
   GRX_PatternLimits limits;        ///< What `(*LIMIT_MATCH=d)` and kin asked.
+  /**
+   * The thread-list automaton of the `vim-nfa` profile, or NULL.
+   *
+   * NULL for every other dialect, and for a `vim-nfa` pattern that uses a
+   * construct the automaton does not model, which the program runs as before.
+   */
+  struct GRX_VimNfa * vimnfa;
 };
 
 /**

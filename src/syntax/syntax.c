@@ -1292,6 +1292,7 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     .lookbehind = GRX_LOOKBEHIND_FORWARD_FURTHEST,
     .lookbehind_round_bound = 1,
     .atomic_ignores_markers = 1,
+    .nfa_group_markers = 1,
     .provisional_assertion_end = 1,
     .assertion_context_from_continuation = 1,
     .match_end_cluster_boundary = 1,

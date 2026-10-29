@@ -44,6 +44,7 @@
 
 #include "../core/core_internal.h"
 #include "../ir/lower_internal.h"
+#include "../exec/vimnfa_internal.h"
 #include "compile_internal.h"
 
 /**
@@ -189,6 +190,17 @@ GRX_Result grx_compile_program(const GRX_Pattern * pattern,
   }
   if (result == GRX_OK) {
     result = grx_codegen_program(ir, limits, out_error, &regex->program);
+  }
+  if (result == GRX_OK && regex->syntax == GRX_SYNTAX_VIM_NFA) {
+    // Vim's second engine is a different algorithm and not a different
+    // reading of the same program, so a pattern it can run is also built as
+    // the automaton it runs on. One it cannot model gets no automaton and
+    // keeps the program.
+    result = grx_vimnfa_build(ir, allocator, &regex->vimnfa);
+    if (result != GRX_OK) {
+      result = grx_error_set(
+          out_error, result, GRX_DIAG_OUT_OF_MEMORY, GRX_NPOS, 0);
+    }
   }
   if (result == GRX_OK) {
     result = copy_capture_names(regex, ir);
@@ -436,6 +448,7 @@ void grx_regex_free(GRX_Regex * regex) {
     }
     gcu_allocator_free(allocator, regex->mark_names);
   }
+  grx_vimnfa_free(regex->vimnfa);
   grx_program_clear(&regex->program);
   gcu_allocator_free(allocator, regex);
 }

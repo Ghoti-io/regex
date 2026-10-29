@@ -757,6 +757,7 @@ typedef struct GRX_Profile {
   int provisional_assertion_end; ///< Assertion end markers track continuation
                                  ///< ownership.
   int atomic_ignores_markers; ///< Markers inside atomic bodies are inert.
+  int nfa_group_markers; ///< A non-capturing group stays in the IR as a node.
   int bounded_repeat_serial; ///< Each optional copy skips to the next copy.
   int optional_sequence_groups; ///< Grouped and nested optional members.
   int line_star_initial_literal; ///< Very-magic first simple token retains star.

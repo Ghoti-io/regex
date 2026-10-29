@@ -2137,6 +2137,7 @@ static GRX_Result lower_optional_sequence(
       result = add(low, GRX_IR_ALTERNATE, node, &optional);
     }
     if (result == GRX_OK) {
+      grx_ir_node(low->ir, optional)->flags |= GRX_IR_OPTIONAL_MEMBER;
       result = attach(low, concat, body);
     }
     if (result == GRX_OK) {
@@ -2239,6 +2240,16 @@ static GRX_Result lower_group(
     if (low->profile.assertion_context_from_continuation &&
         grx_ir_node(low->ir, body)->kind == GRX_IR_EMPTY) {
       grx_ir_node(low->ir, body)->flags |= GRX_IR_EMPTY_FRONTIER;
+    }
+    if (low->profile.nfa_group_markers && !low->atomic_depth) {
+      uint32_t wrap = GRX_INDEX_NONE;
+      result = add(low, GRX_IR_CONCAT, node, &wrap);
+      if (result != GRX_OK) {
+        return result;
+      }
+      grx_ir_node(low->ir, wrap)->flags |= GRX_IR_NFA_GROUP;
+      *out_node = wrap;
+      return attach(low, wrap, body);
     }
     // A non-capturing group has no representation: it grouped the text, and
     // the tree already says how the text grouped.

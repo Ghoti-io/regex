@@ -9,7 +9,7 @@
 # contents. `-` is a group that did not participate or matched empty, which
 # vim spells the same way.
 #
-# population: 5146 reference answers, 5143 records, 3 duplicate refusal rows
+# population: 6001 reference answers, 5998 records, 3 duplicate refusal rows
 dialect: vim-nfa
 
 pattern: \\(a\\)\\@!\\|a\\%[\\_s]
@@ -23992,3 +23992,4236 @@ pattern: [a]*\\%(a\\)\\@>b
 subject: ababc
 expect: 0-2
 groups: - - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aa\\|a\\%(a\\)\\@=\\)*b$
+subject: ab
+expect: nomatch
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aa\\|a\\%(a\\)\\@=\\)*b$
+subject: aab
+expect: 0-3
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aa\\|a\\%(a\\)\\@=\\)*b$
+subject: aaab
+expect: 0-4
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aa\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaab
+expect: 0-5
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aa\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aa\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aa\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aa\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aa\\|a\\%(a\\)\\@=\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|\\%(\\)\\@=a\\|a\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|\\%(\\)\\@=a\\|a\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|\\%(\\)\\@=a\\|a\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|\\%(\\)\\@=a\\|a\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|\\%(\\)\\@=a\\|a\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|\\%(\\)\\@=a\\|a\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|\\%(\\)\\@=a\\|a\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|\\%(\\)\\@=a\\|a\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|\\%(\\)\\@=a\\|a\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|a\\|aa\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|a\\|aa\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|a\\|aa\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|a\\|aa\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|a\\|aa\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|a\\|aa\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|a\\|aa\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|a\\|aa\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|a\\|aa\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\|a\\%(a\\)\\@=\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\|a\\%(a\\)\\@=\\)*b$
+subject: aab
+expect: 0-3
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\|a\\%(a\\)\\@=\\)*b$
+subject: aaab
+expect: 0-4
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaab
+expect: 0-5
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\|a\\%(a\\)\\@=\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\)*b$
+subject: ab
+expect: nomatch
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\)*b$
+subject: aab
+expect: 0-3
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\)*b$
+subject: aaab
+expect: 0-4
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaab
+expect: 0-5
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(a\\|\\%(\\)\\@=a\\|aa\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|\\%(\\)\\@=a\\|aa\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|\\%(\\)\\@=a\\|aa\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|\\%(\\)\\@=a\\|aa\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|\\%(\\)\\@=a\\|aa\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|\\%(\\)\\@=a\\|aa\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|\\%(\\)\\@=a\\|aa\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|\\%(\\)\\@=a\\|aa\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|\\%(\\)\\@=a\\|aa\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(a\\|a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aa\\)*b$
+subject: ab
+expect: nomatch
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aa\\)*b$
+subject: aab
+expect: 0-3
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aa\\)*b$
+subject: aaab
+expect: nomatch
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aa\\)*b$
+subject: aaaab
+expect: 0-5
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aa\\)*b$
+subject: aaaaab
+expect: nomatch
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aa\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aa\\)*b$
+subject: aaaaaaab
+expect: nomatch
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aa\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aa\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(a\\|aa\\|a\\%(a\\)\\@=\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aa\\|a\\%(a\\)\\@=\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aa\\|a\\%(a\\)\\@=\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aa\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aa\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aa\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aa\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aa\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aa\\|a\\%(a\\)\\@=\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aaa\\|\\%(\\)\\@=a\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aaa\\|\\%(\\)\\@=a\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aaa\\|\\%(\\)\\@=a\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aaa\\|\\%(\\)\\@=a\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aaa\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: aaa - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aaa\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aaa\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aaa\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: aaa - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aaa\\|\\%(\\)\\@=a\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(a\\|\\%(\\)\\@=a\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|\\%(\\)\\@=a\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|\\%(\\)\\@=a\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|\\%(\\)\\@=a\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|\\%(\\)\\@=a\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aa\\|\\%(\\)\\@=a\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aa\\|\\%(\\)\\@=a\\)*b$
+subject: aab
+expect: 0-3
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aa\\|\\%(\\)\\@=a\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aa\\|\\%(\\)\\@=a\\)*b$
+subject: aaaab
+expect: 0-5
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aa\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aa\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aa\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aa\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aa\\|\\%(\\)\\@=a\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\|aaa\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\|aaa\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\|aaa\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\|aaa\\)*b$
+subject: aaaab
+expect: 0-5
+groups: aaa - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\|aaa\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: aaa - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\|aaa\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\|aaa\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: aaa - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\|aaa\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: aaa - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\|aaa\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: aaab
+expect: 0-4
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(aaa\\|aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: ab
+expect: nomatch
+
+pattern: ^\\(aaa\\|aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: aab
+expect: 0-3
+groups: aa - - - - - - - -
+
+pattern: ^\\(aaa\\|aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: aaab
+expect: 0-4
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aaa\\|aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaab
+expect: 0-5
+groups: aa - - - - - - - -
+
+pattern: ^\\(aaa\\|aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: aa - - - - - - - -
+
+pattern: ^\\(aaa\\|aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aaa\\|aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: aa - - - - - - - -
+
+pattern: ^\\(aaa\\|aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: aa - - - - - - - -
+
+pattern: ^\\(aaa\\|aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|z\\)*b$
+subject: ab
+expect: nomatch
+
+pattern: ^\\(aa\\%(\\)\\@=\\|z\\)*b$
+subject: aab
+expect: 0-3
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|z\\)*b$
+subject: aaab
+expect: nomatch
+
+pattern: ^\\(aa\\%(\\)\\@=\\|z\\)*b$
+subject: aaaab
+expect: 0-5
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|z\\)*b$
+subject: aaaaab
+expect: nomatch
+
+pattern: ^\\(aa\\%(\\)\\@=\\|z\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|z\\)*b$
+subject: aaaaaaab
+expect: nomatch
+
+pattern: ^\\(aa\\%(\\)\\@=\\|z\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|z\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\|a\\%(a\\)\\@=\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\|a\\%(a\\)\\@=\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\|a\\%(a\\)\\@=\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\|a\\%(a\\)\\@=\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(aa\\|\\%(\\)\\@=a\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\|\\%(\\)\\@=a\\)*b$
+subject: aab
+expect: 0-3
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\|\\%(\\)\\@=a\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\|\\%(\\)\\@=a\\)*b$
+subject: aaaab
+expect: 0-5
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\|\\%(\\)\\@=a\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|a\\|aaa\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|a\\|aaa\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|a\\|aaa\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|a\\|aaa\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|a\\|aaa\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|a\\|aaa\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|a\\|aaa\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|a\\|aaa\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|a\\|aaa\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(\\)\\@=\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(\\)\\@=\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(\\)\\@=\\)*b$
+subject: aaab
+expect: 0-4
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(\\)\\@=\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(\\)\\@=\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\|aaa\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\|aaa\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\|aaa\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\|aaa\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\|aaa\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\|aaa\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\|aaa\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\|aaa\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\|aaa\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aaa\\|a\\%(a\\)\\@=\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aaa\\|a\\%(a\\)\\@=\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aaa\\|a\\%(a\\)\\@=\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aaa\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaab
+expect: 0-5
+groups: aaa - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aaa\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: aaa - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aaa\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aaa\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: aaa - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aaa\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: aaa - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aaa\\|a\\%(a\\)\\@=\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aab
+expect: 0-3
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aaaab
+expect: 0-5
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|\\%(\\)\\@=a\\|a\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|\\%(\\)\\@=a\\|a\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|\\%(\\)\\@=a\\|a\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|\\%(\\)\\@=a\\|a\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|\\%(\\)\\@=a\\|a\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|\\%(\\)\\@=a\\|a\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|\\%(\\)\\@=a\\|a\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|\\%(\\)\\@=a\\|a\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|\\%(\\)\\@=a\\|a\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aaa\\|aa\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aaa\\|aa\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aaa\\|aa\\)*b$
+subject: aaab
+expect: 0-4
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aaa\\|aa\\)*b$
+subject: aaaab
+expect: 0-5
+groups: aaa - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aaa\\|aa\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aaa\\|aa\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aaa\\|aa\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: aaa - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aaa\\|aa\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aaa\\|aa\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\%(\\)\\@=\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\%(\\)\\@=\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\%(\\)\\@=\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\%(\\)\\@=\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aaab
+expect: 0-4
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(aa\\|aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\|aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: aab
+expect: 0-3
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\|aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\|aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: aaaab
+expect: 0-5
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\|aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\|aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\|aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\|aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\|aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\|aa\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\|aa\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\|aa\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\|aa\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\|aa\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\|aa\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\|aa\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\|aa\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\|aa\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(aa\\|a\\|aa\\%(\\)\\@=\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\|a\\|aa\\%(\\)\\@=\\)*b$
+subject: aab
+expect: 0-3
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\|a\\|aa\\%(\\)\\@=\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\|a\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaab
+expect: 0-5
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\|a\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\|a\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\|a\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\|a\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\|a\\|aa\\%(\\)\\@=\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: aab
+expect: 0-3
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: aaaab
+expect: 0-5
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(aaa\\|aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aab
+expect: 0-3
+groups: aa - - - - - - - -
+
+pattern: ^\\(aaa\\|aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aaab
+expect: 0-4
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aaa\\|aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: aa - - - - - - - -
+
+pattern: ^\\(aaa\\|aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aaa\\|aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: aa - - - - - - - -
+
+pattern: ^\\(aaa\\|aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(aaa\\|\\%(\\)\\@=a\\|aa\\%(\\)\\@=\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|\\%(\\)\\@=a\\|aa\\%(\\)\\@=\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|\\%(\\)\\@=a\\|aa\\%(\\)\\@=\\)*b$
+subject: aaab
+expect: 0-4
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aaa\\|\\%(\\)\\@=a\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|\\%(\\)\\@=a\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|\\%(\\)\\@=a\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aaa\\|\\%(\\)\\@=a\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|\\%(\\)\\@=a\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|\\%(\\)\\@=a\\|aa\\%(\\)\\@=\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(a\\|aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\|aa\\)*b$
+subject: ab
+expect: nomatch
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\|aa\\)*b$
+subject: aab
+expect: 0-3
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\|aa\\)*b$
+subject: aaab
+expect: 0-4
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\|aa\\)*b$
+subject: aaaab
+expect: 0-5
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\|aa\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\|aa\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\|aa\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\|aa\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\|aa\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(a\\|aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aaa\\|aa\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aaa\\|aa\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aaa\\|aa\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aaa\\|aa\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aaa\\|aa\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aaa\\|aa\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aaa\\|aa\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aaa\\|aa\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aaa\\|aa\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aaa\\|a\\%(\\)\\@=\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aaa\\|a\\%(\\)\\@=\\)*b$
+subject: aab
+expect: 0-3
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aaa\\|a\\%(\\)\\@=\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aaa\\|a\\%(\\)\\@=\\)*b$
+subject: aaaab
+expect: 0-5
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aaa\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aaa\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aaa\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aaa\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aaa\\|a\\%(\\)\\@=\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(aaa\\|aa\\|a\\%(a\\)\\@=\\)*b$
+subject: ab
+expect: nomatch
+
+pattern: ^\\(aaa\\|aa\\|a\\%(a\\)\\@=\\)*b$
+subject: aab
+expect: 0-3
+groups: aa - - - - - - - -
+
+pattern: ^\\(aaa\\|aa\\|a\\%(a\\)\\@=\\)*b$
+subject: aaab
+expect: 0-4
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aaa\\|aa\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaab
+expect: 0-5
+groups: aa - - - - - - - -
+
+pattern: ^\\(aaa\\|aa\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: aa - - - - - - - -
+
+pattern: ^\\(aaa\\|aa\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aaa\\|aa\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: aa - - - - - - - -
+
+pattern: ^\\(aaa\\|aa\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: aa - - - - - - - -
+
+pattern: ^\\(aaa\\|aa\\|a\\%(a\\)\\@=\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aaa\\|a\\%(a\\)\\@=\\)*b$
+subject: ab
+expect: nomatch
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aaa\\|a\\%(a\\)\\@=\\)*b$
+subject: aab
+expect: 0-3
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aaa\\|a\\%(a\\)\\@=\\)*b$
+subject: aaab
+expect: 0-4
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aaa\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaab
+expect: 0-5
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aaa\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aaa\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aaa\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aaa\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aaa\\|a\\%(a\\)\\@=\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\|aa\\%(\\)\\@=\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\|aa\\%(\\)\\@=\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\|aa\\%(\\)\\@=\\)*b$
+subject: aaab
+expect: 0-4
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\|aa\\%(\\)\\@=\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(aaa\\|aa\\%(\\)\\@=\\|a\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|aa\\%(\\)\\@=\\|a\\)*b$
+subject: aab
+expect: 0-3
+groups: aa - - - - - - - -
+
+pattern: ^\\(aaa\\|aa\\%(\\)\\@=\\|a\\)*b$
+subject: aaab
+expect: 0-4
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aaa\\|aa\\%(\\)\\@=\\|a\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|aa\\%(\\)\\@=\\|a\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: aa - - - - - - - -
+
+pattern: ^\\(aaa\\|aa\\%(\\)\\@=\\|a\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aaa\\|aa\\%(\\)\\@=\\|a\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|aa\\%(\\)\\@=\\|a\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: aa - - - - - - - -
+
+pattern: ^\\(aaa\\|aa\\%(\\)\\@=\\|a\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(aaa\\|\\%(\\)\\@=a\\|a\\%(\\)\\@=\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|\\%(\\)\\@=a\\|a\\%(\\)\\@=\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|\\%(\\)\\@=a\\|a\\%(\\)\\@=\\)*b$
+subject: aaab
+expect: 0-4
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aaa\\|\\%(\\)\\@=a\\|a\\%(\\)\\@=\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|\\%(\\)\\@=a\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|\\%(\\)\\@=a\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aaa\\|\\%(\\)\\@=a\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|\\%(\\)\\@=a\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|\\%(\\)\\@=a\\|a\\%(\\)\\@=\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(a\\|aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\)*b$
+subject: ab
+expect: nomatch
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\)*b$
+subject: aab
+expect: 0-3
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\)*b$
+subject: aaab
+expect: 0-4
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\)*b$
+subject: aaaab
+expect: 0-5
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(a\\|aaa\\|\\%(\\)\\@=a\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aaa\\|\\%(\\)\\@=a\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aaa\\|\\%(\\)\\@=a\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aaa\\|\\%(\\)\\@=a\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aaa\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aaa\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aaa\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aaa\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aaa\\|\\%(\\)\\@=a\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\|a\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\|a\\)*b$
+subject: aab
+expect: 0-3
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\|a\\)*b$
+subject: aaab
+expect: 0-4
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\|a\\)*b$
+subject: aaaab
+expect: 0-5
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\|a\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\|a\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\|a\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\|a\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\|a\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|z\\)*b$
+subject: ab
+expect: nomatch
+
+pattern: ^\\(a\\%(a\\)\\@=\\|z\\)*b$
+subject: aab
+expect: nomatch
+
+pattern: ^\\(a\\%(a\\)\\@=\\|z\\)*b$
+subject: aaab
+expect: nomatch
+
+pattern: ^\\(a\\%(a\\)\\@=\\|z\\)*b$
+subject: aaaab
+expect: nomatch
+
+pattern: ^\\(a\\%(a\\)\\@=\\|z\\)*b$
+subject: aaaaab
+expect: nomatch
+
+pattern: ^\\(a\\%(a\\)\\@=\\|z\\)*b$
+subject: aaaaaab
+expect: nomatch
+
+pattern: ^\\(a\\%(a\\)\\@=\\|z\\)*b$
+subject: aaaaaaab
+expect: nomatch
+
+pattern: ^\\(a\\%(a\\)\\@=\\|z\\)*b$
+subject: aaaaaaaab
+expect: nomatch
+
+pattern: ^\\(a\\%(a\\)\\@=\\|z\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\%(\\)\\@=\\|a\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\%(\\)\\@=\\|a\\)*b$
+subject: aab
+expect: 0-3
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\%(\\)\\@=\\|a\\)*b$
+subject: aaab
+expect: 0-4
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\%(\\)\\@=\\|a\\)*b$
+subject: aaaab
+expect: 0-5
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\%(\\)\\@=\\|a\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\%(\\)\\@=\\|a\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\%(\\)\\@=\\|a\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\%(\\)\\@=\\|a\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\%(\\)\\@=\\|a\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(\\)\\@=\\|aa\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(\\)\\@=\\|aa\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(\\)\\@=\\|aa\\)*b$
+subject: aaab
+expect: 0-4
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(\\)\\@=\\|aa\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(\\)\\@=\\|aa\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: aa - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(\\)\\@=\\|aa\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(\\)\\@=\\|aa\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(\\)\\@=\\|aa\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: aa - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(\\)\\@=\\|aa\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|\\%(\\)\\@=a\\|aa\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|\\%(\\)\\@=a\\|aa\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|\\%(\\)\\@=a\\|aa\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|\\%(\\)\\@=a\\|aa\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|\\%(\\)\\@=a\\|aa\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|\\%(\\)\\@=a\\|aa\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|\\%(\\)\\@=a\\|aa\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|\\%(\\)\\@=a\\|aa\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|\\%(\\)\\@=a\\|aa\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\%(\\)\\@=\\|a\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\%(\\)\\@=\\|a\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\%(\\)\\@=\\|a\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\%(\\)\\@=\\|a\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\%(\\)\\@=\\|a\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\%(\\)\\@=\\|a\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\%(\\)\\@=\\|a\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\%(\\)\\@=\\|a\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\%(\\)\\@=\\|a\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(a\\)\\@=\\)*b$
+subject: ab
+expect: nomatch
+
+pattern: ^\\(aaa\\|a\\%(a\\)\\@=\\)*b$
+subject: aab
+expect: nomatch
+
+pattern: ^\\(aaa\\|a\\%(a\\)\\@=\\)*b$
+subject: aaab
+expect: 0-4
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaab
+expect: 0-5
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(a\\)\\@=\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(a\\)\\@=\\|aa\\)*b$
+subject: ab
+expect: nomatch
+
+pattern: ^\\(aaa\\|a\\%(a\\)\\@=\\|aa\\)*b$
+subject: aab
+expect: 0-3
+groups: aa - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(a\\)\\@=\\|aa\\)*b$
+subject: aaab
+expect: 0-4
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(a\\)\\@=\\|aa\\)*b$
+subject: aaaab
+expect: 0-5
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(a\\)\\@=\\|aa\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: aa - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(a\\)\\@=\\|aa\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(a\\)\\@=\\|aa\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: aa - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(a\\)\\@=\\|aa\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: aa - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(a\\)\\@=\\|aa\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(aa\\|aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: ab
+expect: nomatch
+
+pattern: ^\\(aa\\|aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: aab
+expect: 0-3
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\|aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: aaab
+expect: 0-4
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\|aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaab
+expect: 0-5
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\|aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\|aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\|aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\|aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\|aa\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\|aa\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\|aa\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\|aa\\)*b$
+subject: aaab
+expect: 0-4
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\|aa\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\|aa\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\|aa\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\|aa\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\|aa\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\|aa\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\|aa\\%(\\)\\@=\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\|aa\\%(\\)\\@=\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\|aa\\%(\\)\\@=\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\|aa\\%(\\)\\@=\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\|a\\%(a\\)\\@=\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\|a\\%(a\\)\\@=\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\|a\\%(a\\)\\@=\\)*b$
+subject: aaab
+expect: 0-4
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\|a\\%(a\\)\\@=\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|a\\%(a\\)\\@=\\|aaa\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|a\\%(a\\)\\@=\\|aaa\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|a\\%(a\\)\\@=\\|aaa\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|a\\%(a\\)\\@=\\|aaa\\)*b$
+subject: aaaab
+expect: 0-5
+groups: aaa - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|a\\%(a\\)\\@=\\|aaa\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: aaa - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|a\\%(a\\)\\@=\\|aaa\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|a\\%(a\\)\\@=\\|aaa\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: aaa - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|a\\%(a\\)\\@=\\|aaa\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: aaa - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|a\\%(a\\)\\@=\\|aaa\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\|a\\%(\\)\\@=\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\|a\\%(\\)\\@=\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\|a\\%(\\)\\@=\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\|a\\%(\\)\\@=\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\|a\\%(\\)\\@=\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(a\\|a\\%(a\\)\\@=\\|aaa\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|a\\%(a\\)\\@=\\|aaa\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|a\\%(a\\)\\@=\\|aaa\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|a\\%(a\\)\\@=\\|aaa\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|a\\%(a\\)\\@=\\|aaa\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|a\\%(a\\)\\@=\\|aaa\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|a\\%(a\\)\\@=\\|aaa\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|a\\%(a\\)\\@=\\|aaa\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|a\\%(a\\)\\@=\\|aaa\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\|a\\%(\\)\\@=\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\|a\\%(\\)\\@=\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\|a\\%(\\)\\@=\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\|a\\%(\\)\\@=\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\|a\\%(\\)\\@=\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aaa\\|aa\\%(\\)\\@=\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aaa\\|aa\\%(\\)\\@=\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aaa\\|aa\\%(\\)\\@=\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aaa\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aaa\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aaa\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aaa\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aaa\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aaa\\|aa\\%(\\)\\@=\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|a\\|aa\\%(\\)\\@=\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|a\\|aa\\%(\\)\\@=\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|a\\|aa\\%(\\)\\@=\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|a\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|a\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|a\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|a\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|a\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|a\\|aa\\%(\\)\\@=\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(aa\\|aaa\\|a\\%(a\\)\\@=\\)*b$
+subject: ab
+expect: nomatch
+
+pattern: ^\\(aa\\|aaa\\|a\\%(a\\)\\@=\\)*b$
+subject: aab
+expect: 0-3
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\|aaa\\|a\\%(a\\)\\@=\\)*b$
+subject: aaab
+expect: 0-4
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aa\\|aaa\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaab
+expect: 0-5
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\|aaa\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aa\\|aaa\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\|aaa\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aa\\|aaa\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\|aaa\\|a\\%(a\\)\\@=\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\%(a\\)\\@=\\|aa\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\%(a\\)\\@=\\|aa\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\%(a\\)\\@=\\|aa\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\%(a\\)\\@=\\|aa\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\%(a\\)\\@=\\|aa\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\%(a\\)\\@=\\|aa\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\%(a\\)\\@=\\|aa\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\%(a\\)\\@=\\|aa\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\%(a\\)\\@=\\|aa\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\%(\\)\\@=\\|a\\%(a\\)\\@=\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|\\%(\\)\\@=a\\|aaa\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|\\%(\\)\\@=a\\|aaa\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|\\%(\\)\\@=a\\|aaa\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|\\%(\\)\\@=a\\|aaa\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|\\%(\\)\\@=a\\|aaa\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|\\%(\\)\\@=a\\|aaa\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|\\%(\\)\\@=a\\|aaa\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|\\%(\\)\\@=a\\|aaa\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|\\%(\\)\\@=a\\|aaa\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(z\\|a\\%(a\\)\\@=\\)*b$
+subject: ab
+expect: nomatch
+
+pattern: ^\\(z\\|a\\%(a\\)\\@=\\)*b$
+subject: aab
+expect: nomatch
+
+pattern: ^\\(z\\|a\\%(a\\)\\@=\\)*b$
+subject: aaab
+expect: nomatch
+
+pattern: ^\\(z\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaab
+expect: nomatch
+
+pattern: ^\\(z\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaab
+expect: nomatch
+
+pattern: ^\\(z\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaab
+expect: nomatch
+
+pattern: ^\\(z\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaaab
+expect: nomatch
+
+pattern: ^\\(z\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaaaab
+expect: nomatch
+
+pattern: ^\\(z\\|a\\%(a\\)\\@=\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\|aa\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\|aa\\)*b$
+subject: aab
+expect: 0-3
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\|aa\\)*b$
+subject: aaab
+expect: 0-4
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\|aa\\)*b$
+subject: aaaab
+expect: 0-5
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\|aa\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\|aa\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\|aa\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\|aa\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\|aa\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\|aaa\\)*b$
+subject: ab
+expect: nomatch
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\|aaa\\)*b$
+subject: aab
+expect: 0-3
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\|aaa\\)*b$
+subject: aaab
+expect: 0-4
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\|aaa\\)*b$
+subject: aaaab
+expect: 0-5
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\|aaa\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: aaa - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\|aaa\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\|aaa\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\|aaa\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: aaa - - - - - - - -
+
+pattern: ^\\(a\\%(a\\)\\@=\\|aa\\%(\\)\\@=\\|aaa\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\|aaa\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\|aaa\\)*b$
+subject: aab
+expect: 0-3
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\|aaa\\)*b$
+subject: aaab
+expect: 0-4
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\|aaa\\)*b$
+subject: aaaab
+expect: 0-5
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\|aaa\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\|aaa\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\|aaa\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\|aaa\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\|aaa\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\|aa\\%(\\)\\@=\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\|aa\\%(\\)\\@=\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\|aa\\%(\\)\\@=\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|aa\\|aa\\%(\\)\\@=\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\|aaa\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\|aaa\\)*b$
+subject: aab
+expect: 0-3
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\|aaa\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\|aaa\\)*b$
+subject: aaaab
+expect: 0-5
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\|aaa\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\|aaa\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\|aaa\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\|aaa\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\|aaa\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(\\%(\\)\\@=a\\|a\\%(a\\)\\@=\\|a\\%(\\)\\@=\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\|aa\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\|aa\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\|aa\\)*b$
+subject: aaab
+expect: 0-4
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\|aa\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\|aa\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\|aa\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\|aa\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\|aa\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|a\\%(\\)\\@=\\|aa\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: aaab
+expect: 0-4
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(aaa\\|a\\%(\\)\\@=\\|\\%(\\)\\@=a\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(aa\\|a\\|a\\%(a\\)\\@=\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\|a\\|a\\%(a\\)\\@=\\)*b$
+subject: aab
+expect: 0-3
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\|a\\|a\\%(a\\)\\@=\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\|a\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaab
+expect: 0-5
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\|a\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\|a\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\|a\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\|a\\|a\\%(a\\)\\@=\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\|a\\|a\\%(a\\)\\@=\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aaa\\|a\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aaa\\|a\\)*b$
+subject: aab
+expect: 0-3
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aaa\\|a\\)*b$
+subject: aaab
+expect: 0-4
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aaa\\|a\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aaa\\|a\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aaa\\|a\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: aaa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aaa\\|a\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aaa\\|a\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\%(\\)\\@=\\|aaa\\|a\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(a\\|a\\%(a\\)\\@=\\|aa\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|a\\%(a\\)\\@=\\|aa\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|a\\%(a\\)\\@=\\|aa\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|a\\%(a\\)\\@=\\|aa\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|a\\%(a\\)\\@=\\|aa\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|a\\%(a\\)\\@=\\|aa\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|a\\%(a\\)\\@=\\|aa\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|a\\%(a\\)\\@=\\|aa\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|a\\%(a\\)\\@=\\|aa\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(a\\|aa\\%(\\)\\@=\\|aaa\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aa\\%(\\)\\@=\\|aaa\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aa\\%(\\)\\@=\\|aaa\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aa\\%(\\)\\@=\\|aaa\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aa\\%(\\)\\@=\\|aaa\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aa\\%(\\)\\@=\\|aaa\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aa\\%(\\)\\@=\\|aaa\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aa\\%(\\)\\@=\\|aaa\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\|aa\\%(\\)\\@=\\|aaa\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(aa\\|aaa\\|a\\%(\\)\\@=\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\|aaa\\|a\\%(\\)\\@=\\)*b$
+subject: aab
+expect: 0-3
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\|aaa\\|a\\%(\\)\\@=\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\|aaa\\|a\\%(\\)\\@=\\)*b$
+subject: aaaab
+expect: 0-5
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\|aaa\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\|aaa\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\|aaa\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(aa\\|aaa\\|a\\%(\\)\\@=\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: aa - - - - - - - -
+
+pattern: ^\\(aa\\|aaa\\|a\\%(\\)\\@=\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aaa\\|aa\\%(\\)\\@=\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aaa\\|aa\\%(\\)\\@=\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aaa\\|aa\\%(\\)\\@=\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aaa\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aaa\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aaa\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aaa\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aaa\\|aa\\%(\\)\\@=\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aaa\\|aa\\%(\\)\\@=\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\)*b$
+subject: ab
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\)*b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\)*b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\)*b$
+subject: aaaab
+expect: 0-5
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\)*b$
+subject: aaaaab
+expect: 0-6
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\)*b$
+subject: aaaaaab
+expect: 0-7
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\)*b$
+subject: aaaaaaab
+expect: 0-8
+groups: a - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\)*b$
+subject: aaaaaaaab
+expect: 0-9
+groups: aa - - - - - - - -
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\%(a\\%(\\)\\@=\\|aa\\)*\\(a*\\)b$
+subject: ab
+expect: 0-2
+groups: - - - - - - - - -
+
+pattern: ^\\%(a\\%(\\)\\@=\\|aa\\)*\\(a*\\)b$
+subject: aab
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: ^\\%(a\\%(\\)\\@=\\|aa\\)*\\(a*\\)b$
+subject: aaab
+expect: 0-4
+groups: - - - - - - - - -
+
+pattern: ^\\%(a\\%(\\)\\@=\\|aa\\)*\\(a*\\)b$
+subject: aaaab
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: ^\\%(a\\%(\\)\\@=\\|aa\\)*\\(a*\\)b$
+subject: aaaaab
+expect: 0-6
+groups: - - - - - - - - -
+
+pattern: ^\\%(a\\%(\\)\\@=\\|aa\\)*\\(a*\\)b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\%(a\\%(\\)\\@=\\|aa\\)*\\(a*\\)b$
+subject: aaaaaaab
+expect: 0-8
+groups: - - - - - - - - -
+
+pattern: ^\\%(a\\%(\\)\\@=\\|aa\\)*\\(a*\\)b$
+subject: aaaaaaaab
+expect: 0-9
+groups: a - - - - - - - -
+
+pattern: ^\\%(a\\%(\\)\\@=\\|aa\\)*\\(a*\\)b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\%(a\\%(\\)\\@=\\|aaa\\)*\\(a*\\)b$
+subject: ab
+expect: 0-2
+groups: - - - - - - - - -
+
+pattern: ^\\%(a\\%(\\)\\@=\\|aaa\\)*\\(a*\\)b$
+subject: aab
+expect: 0-3
+groups: - - - - - - - - -
+
+pattern: ^\\%(a\\%(\\)\\@=\\|aaa\\)*\\(a*\\)b$
+subject: aaab
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: ^\\%(a\\%(\\)\\@=\\|aaa\\)*\\(a*\\)b$
+subject: aaaab
+expect: 0-5
+groups: aa - - - - - - - -
+
+pattern: ^\\%(a\\%(\\)\\@=\\|aaa\\)*\\(a*\\)b$
+subject: aaaaab
+expect: 0-6
+groups: - - - - - - - - -
+
+pattern: ^\\%(a\\%(\\)\\@=\\|aaa\\)*\\(a*\\)b$
+subject: aaaaaab
+expect: 0-7
+groups: a - - - - - - - -
+
+pattern: ^\\%(a\\%(\\)\\@=\\|aaa\\)*\\(a*\\)b$
+subject: aaaaaaab
+expect: 0-8
+groups: aa - - - - - - - -
+
+pattern: ^\\%(a\\%(\\)\\@=\\|aaa\\)*\\(a*\\)b$
+subject: aaaaaaaab
+expect: 0-9
+groups: - - - - - - - - -
+
+pattern: ^\\%(a\\%(\\)\\@=\\|aaa\\)*\\(a*\\)b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\%(a\\%(\\)\\@=\\|aa\\)\\{1,}b$
+subject: ab
+expect: 0-2
+groups: - - - - - - - - -
+
+pattern: ^\\%(a\\%(\\)\\@=\\|aa\\)\\{1,}b$
+subject: aab
+expect: 0-3
+groups: - - - - - - - - -
+
+pattern: ^\\%(a\\%(\\)\\@=\\|aa\\)\\{1,}b$
+subject: aaab
+expect: 0-4
+groups: - - - - - - - - -
+
+pattern: ^\\%(a\\%(\\)\\@=\\|aa\\)\\{1,}b$
+subject: aaaab
+expect: 0-5
+groups: - - - - - - - - -
+
+pattern: ^\\%(a\\%(\\)\\@=\\|aa\\)\\{1,}b$
+subject: aaaaab
+expect: 0-6
+groups: - - - - - - - - -
+
+pattern: ^\\%(a\\%(\\)\\@=\\|aa\\)\\{1,}b$
+subject: aaaaaab
+expect: 0-7
+groups: - - - - - - - - -
+
+pattern: ^\\%(a\\%(\\)\\@=\\|aa\\)\\{1,}b$
+subject: aaaaaaab
+expect: 0-8
+groups: - - - - - - - - -
+
+pattern: ^\\%(a\\%(\\)\\@=\\|aa\\)\\{1,}b$
+subject: aaaaaaaab
+expect: 0-9
+groups: - - - - - - - - -
+
+pattern: ^\\%(a\\%(\\)\\@=\\|aa\\)\\{1,}b$
+subject: b
+expect: nomatch
+
+pattern: ^\\%(a\\%(\\)\\@=\\|aa\\)\\{2,3}b$
+subject: ab
+expect: nomatch
+
+pattern: ^\\%(a\\%(\\)\\@=\\|aa\\)\\{2,3}b$
+subject: aab
+expect: 0-3
+groups: - - - - - - - - -
+
+pattern: ^\\%(a\\%(\\)\\@=\\|aa\\)\\{2,3}b$
+subject: aaab
+expect: 0-4
+groups: - - - - - - - - -
+
+pattern: ^\\%(a\\%(\\)\\@=\\|aa\\)\\{2,3}b$
+subject: aaaab
+expect: 0-5
+groups: - - - - - - - - -
+
+pattern: ^\\%(a\\%(\\)\\@=\\|aa\\)\\{2,3}b$
+subject: aaaaab
+expect: 0-6
+groups: - - - - - - - - -
+
+pattern: ^\\%(a\\%(\\)\\@=\\|aa\\)\\{2,3}b$
+subject: aaaaaab
+expect: 0-7
+groups: - - - - - - - - -
+
+pattern: ^\\%(a\\%(\\)\\@=\\|aa\\)\\{2,3}b$
+subject: aaaaaaab
+expect: nomatch
+
+pattern: ^\\%(a\\%(\\)\\@=\\|aa\\)\\{2,3}b$
+subject: aaaaaaaab
+expect: nomatch
+
+pattern: ^\\%(a\\%(\\)\\@=\\|aa\\)\\{2,3}b$
+subject: b
+expect: nomatch

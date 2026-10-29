@@ -1543,3 +1543,50 @@ TEST_F(VimNfa, AnAtomicGroupIsEnteredWhereAnotherEndedOnlyBeforeASkippableRepeat
   EXPECT_EQ(span("a*\\%(a\\)\\@>x\\+b", "aab"), "nomatch");
   EXPECT_EQ(span("a*\\%(a\\)\\@>\\%(\\n\\|b\\)", "aab"), "nomatch");
 }
+
+/** The text group 1 holds after matching `a`^n `b`, for n = 1 to count. */
+static std::string lastIterations(const std::string & pattern, size_t count) {
+  std::string lengths;
+  for (size_t n = 1; n <= count; n++) {
+    std::string text = captured(pattern, std::string(n, 'a') + "b", 1);
+    lengths += std::to_string(text.size());
+  }
+  return lengths;
+}
+
+TEST_F(VimNfa, AnAssertionInAnArmDecidesWhichIterationIsLast) {
+  // The second engine keeps one thread per state and walks its list in order.
+  // A thread that passes `\%(\)\@=` is replaced by what follows it, ahead of
+  // those still waiting, so which arm holds the last iteration depends on that
+  // order and on no count: `a` and `aa` alternate with the length of the run.
+  EXPECT_EQ(lastIterations("^\\(a\\%(\\)\\@=\\|aa\\)*b$", 8), "11121212");
+  // Without the assertion, or with it in front of the `a`, the answer is the
+  // plain one.
+  EXPECT_EQ(lastIterations("^\\(a\\|aa\\)*b$", 8), "11111111");
+  EXPECT_EQ(lastIterations("^\\(\\%(\\)\\@=a\\|aa\\)*b$", 8), "11111111");
+  // And the position of the arm that carries it matters: put last, the arm
+  // with the assertion gives the ordinary answer.
+  EXPECT_EQ(lastIterations("^\\(aa\\|a\\%(\\)\\@=\\)*b$", 8), "12121212");
+}
+
+TEST_F(VimNfa, MoreArmsOrMoreAssertionsMoveTheirOwnPoints) {
+  // A third arm moves the pattern's period, and a second assertion moves
+  // which iteration the first one reaches. None of these is a function of the
+  // pattern with the count taken out.
+  EXPECT_EQ(lastIterations(
+                "^\\(a\\%(\\)\\@=\\|aa\\|aa\\%(\\)\\@=\\)*b$", 8), "11212121");
+  EXPECT_EQ(lastIterations("^\\(a\\%(\\)\\@=\\|aaa\\|aa\\)*b$", 8), "11231231");
+}
+
+TEST_F(VimNfa, WhatFollowsALoopDecidesWhereItMayEnd) {
+  // The loop of `\%(a\%(\)\@=\|aa\)*` can hand over to what follows it at the
+  // start and at every odd position, and nowhere else, so the `a*` after it
+  // takes a run of one character or none depending on how many there are.
+  const char * pattern = "^\\%(a\\%(\\)\\@=\\|aa\\)*\\(a*\\)b$";
+  std::string runs;
+  for (size_t n = 1; n <= 8; n++) {
+    runs += std::to_string(
+        captured(pattern, std::string(n, 'a') + "b", 1).size());
+  }
+  EXPECT_EQ(runs, "01010101");
+}

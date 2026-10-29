@@ -699,6 +699,47 @@ vectors. The rules were fitted on probes and then checked on others; the
 counted-repeat block of `make_vim_vectors.py` asks every pattern of subjects
 that most of them were not fitted on.
 
+### The NFA profile runs Vim's thread list
+
+Vim's second engine does not backtrack. It advances a list of threads over the
+subject one position at a time, and the order of that list decides which of
+several matches it reports. Three rules make the order what it is:
+
+- A state is kept once per list. A second thread that reaches it is dropped
+  unless it started its groups somewhere else or carries a different
+  postponed assertion. A group's open marker is a state of its own, and a
+  marker that is dropped takes everything behind it. `\%(` is such a marker
+  too, which is why a non-capturing group is kept in the IR for this profile.
+- An assertion that passes puts what follows it *ahead of* the threads still
+  waiting in the same list. So an assertion in an early arm of an alternation
+  reorders the arms behind it.
+- Whether an assertion is postponed is decided when the pattern is compiled,
+  from an estimate of how likely the text after it is to fail against how
+  likely its own body is to. A postponed assertion travels with its thread and
+  is tested where a match could end, from the position it was met at; a thread
+  carries at most one, and a second is tested at once.
+
+The consequences are not functions of a repeat count. In
+`^\(a\%(\)\@=\|aa\)*b$` the last iteration is `a`, `a`, `a`, `aa`, `a`,
+`aa`, ... over one more `a` each time; a third arm, or a second assertion,
+moves the period; an assertion in front of the character, or in the last arm,
+gives the ordinary answer. A loop followed by `\(a*\)` can end only at some
+positions, for the same reason. Fitting rules to these made each pattern shape
+a new rule, and the rules failed on the next shape, so this profile runs the
+automaton instead (`src/exec/exec_vimnfa.c`, built by `src/compile/vimnfa.c`).
+
+What the automaton models today: literals, classes, `.`, groups, alternation,
+`*`, `\+`, `\=`, counted repeats (copied as Vim copies them), back-references,
+`^`, `$`, and positive and negative look-ahead; on subjects that are ASCII
+and a search from any start. Anything else - an atomic group, a look-behind,
+`\zs`, `\ze`, `\%[`, a lazy repeat, a non-ASCII subject, a back-reference to
+a group that encloses it - keeps the backtracking engine and its fitted rules.
+
+A back-reference to a group that encloses it, as in `\(a\1\)\@=`, reads
+storage Vim never initialised when the group is opened again, so what it holds
+depends on what its thread storage held before; that shape stays with the
+fitted rules for that reason.
+
 On the NFA profile an atomic group `\%(..\)\@>`
 is refused at a position where another atomic group of the same pattern has
 just ended (`a*\%(a\)\@>b` finds no match over `aab`), unless the next thing

@@ -261,6 +261,17 @@ typedef enum {
 #define GRX_IR_SKIP_MARKS GRX_BIT(27)
 /** ATOMIC: the next thing in its sequence is a repeat that may be skipped. */
 #define GRX_IR_ATOMIC_SKIPPABLE GRX_BIT(28)
+/**
+ * CONCAT: the body of a non-capturing group, kept as a node of its own.
+ *
+ * Vim's second engine stores a marker state for `\%(` that is shut out of a
+ * list like any other state, which changes the order of its threads; a group
+ * that lowers to nothing would take that marker with it. Set only for the
+ * profile that asks for it, on a concatenation of the group's one child.
+ */
+#define GRX_IR_NFA_GROUP GRX_BIT(29)
+/** ALTERNATE: one member of a `\%[...]` sequence; its NFA shape differs. */
+#define GRX_IR_OPTIONAL_MEMBER GRX_BIT(30)
 
 /**
  * @brief LOOK: a negative one keeps what its body captured before failing.

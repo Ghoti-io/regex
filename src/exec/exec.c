@@ -43,6 +43,7 @@
 #include "../core/core_internal.h"
 #include "../unicode/unicode_internal.h"
 #include "exec_internal.h"
+#include "vimnfa_internal.h"
 
 void grx_search_options_default(GRX_SearchOptions * out_options) {
   if (!out_options) {
@@ -649,9 +650,22 @@ static GRX_Result exec(const GRX_Regex * regex, const char * subject,
     }
   }
 
-  GRX_Result result = engine == GRX_ENGINE_PIKE
-      ? grx_exec_pike(&request, out_matched)
-      : grx_exec_backtrack(&request, out_matched);
+  GRX_Result result;
+  if (regex->vimnfa && grx_vimnfa_applies(regex->vimnfa, &request)) {
+    // Whichever engine was asked for, the profile's answer is the automaton's:
+    // the engines are alternative ways to run one program, and this profile's
+    // answer was never that program's.
+    //
+    // Vim's second engine, run as the algorithm it is. Its order of threads
+    // decides which of several matches it reports, and no rule about the
+    // pattern's shape reproduces that order; running it does.
+    result = grx_exec_vimnfa(&request, out_matched);
+  }
+  else {
+    result = engine == GRX_ENGINE_PIKE
+        ? grx_exec_pike(&request, out_matched)
+        : grx_exec_backtrack(&request, out_matched);
+  }
   gcu_allocator_free(regex->allocator, columns);
 
   // Allocation failures can arrive before a backend supplies a diagnostic.
