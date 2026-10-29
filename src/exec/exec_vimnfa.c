@@ -251,6 +251,7 @@ static int stored(GRX_VimNfaKind kind) {
     case GRX_VN_PAT:
     case GRX_VN_ENDPAT:
     case GRX_VN_ZSTART:
+    case GRX_VN_NEWL:
       return 1;
     default:
       return 0;
@@ -618,6 +619,30 @@ static int32_t decode_at(const Run * run, int32_t pos, int * out_cp) {
   return 1;
 }
 
+/**
+ * The length of the step at `pos`: the character there and the composing
+ * characters that follow it, which Vim takes together. `*out_base` receives the
+ * bytes of the first character alone, which is what a literal consumes.
+ */
+static int32_t decode_cluster(
+    const Run * run, int32_t pos, int * out_cp, int32_t * out_base) {
+  int32_t base = decode_at(run, pos, out_cp);
+  *out_base = base;
+  if (base == 0) {
+    return 0;
+  }
+  int32_t total = base;
+  while (pos + total < run->len) {
+    int next = 0;
+    int32_t bytes = decode_at(run, pos + total, &next);
+    if (bytes == 0 || next < 0x300 || grx_display_cell_width((uint32_t)next, 0) != 0) {
+      break;
+    }
+    total += bytes;
+  }
+  return total;
+}
+
 /** Whether a class state accepts a code point. */
 static int member_of(
     const GRX_VimNfa * nfa, const GRX_VimNfaState * s, int cp) {
@@ -677,7 +702,8 @@ static int exec_body(Run * run, uint32_t start, int32_t pos0, const Subs * seed,
 
   for (;;) {
     int curc = 0;
-    int32_t clen = decode_at(run, pos, &curc);
+    int32_t base_len = 0;
+    int32_t clen = decode_cluster(run, pos, &curc, &base_len);
     run->curc = curc;
     List * nxt = &lists[flag ^ 1];
     nxt->n = 0;
@@ -696,6 +722,7 @@ static int exec_body(Run * run, uint32_t start, int32_t pos0, const Subs * seed,
       Thread th = cur->t[i];
       const GRX_VimNfaState * s = &nfa->states[th.state];
       uint32_t add = NONE;
+      int32_t add_off = -1;
       int here = 0;
       int32_t skipcnt = 0;
       int has_skip = 0;
@@ -708,6 +735,13 @@ static int exec_body(Run * run, uint32_t start, int32_t pos0, const Subs * seed,
         case GRX_VN_ENDINV:
         case GRX_VN_ENDPAT:
           if (endpos >= 0 && pos != endpos) {
+            break;
+          }
+          // A match is refused where the next character is a composing one
+          // and the text is not at its start; the end of an assertion body
+          // is not a match.
+          if (s->kind == GRX_VN_MATCH && pos > 0 && curc >= 0x300
+              && grx_display_cell_width((uint32_t)curc, 0) == 0) {
             break;
           }
           *match_out = th.subs;
@@ -817,12 +851,25 @@ static int exec_body(Run * run, uint32_t start, int32_t pos0, const Subs * seed,
         case GRX_VN_CHAR:
           if ((int)s->ch == curc) {
             add = s->out;
+            // A literal consumes the character alone, leaving its marks to
+            // the next step, and the step is shortened for every thread
+            // still to be walked.
+            clen = base_len;
           }
           break;
         case GRX_VN_SET:
         case GRX_VN_ANY:
           if (curc != 0 && member_of(nfa, s, curc)) {
             add = s->out;
+          }
+          break;
+        case GRX_VN_NEWL:
+          // The line break alone, whatever marks follow it: the step still
+          // advances by the whole cluster, but this thread's position is
+          // one byte on.
+          if (curc == '\n') {
+            add = s->out;
+            add_off = 1;
           }
           break;
         case GRX_VN_BREF: {
@@ -879,6 +926,9 @@ static int exec_body(Run * run, uint32_t start, int32_t pos0, const Subs * seed,
         break;
       }
 
+      if (add_off < 0) {
+        add_off = clen;
+      }
       if (add != NONE) {
         Pim * live = pim.state != NONE ? &pim : NULL;
         int dead = 0;
@@ -905,7 +955,7 @@ static int exec_body(Run * run, uint32_t start, int32_t pos0, const Subs * seed,
             ok = i != -2;
           }
           else {
-            ok = addstate(run, nxt, add, &addsub, live, pos, clen, -1,
+            ok = addstate(run, nxt, add, &addsub, live, pos, add_off, -1,
                 has_skip ? skipcnt : 0);
           }
           if (!ok) {
@@ -970,9 +1020,7 @@ int grx_vimnfa_applies(
       i++;
       continue;
     }
-    // A multi-byte character must be complete and must not be a composing
-    // one: the automaton steps a character at a time and does not model the
-    // marks that Vim attaches to the character before them.
+    // A multi-byte character must be complete.
     size_t bytes = c >= 0xF0u ? 4u : c >= 0xE0u ? 3u : c >= 0xC0u ? 2u : 0u;
     if (bytes == 0 || i + bytes > request->length) {
       return 0;
@@ -985,8 +1033,16 @@ int grx_vimnfa_applies(
       }
       cp = (cp << 6) | (text[i + k] & 0x3Fu);
     }
-    if (grx_display_cell_width(cp, 0) == 0) {
-      return 0;
+    // Text with a composing character is run only when the marks are plain:
+    // the rules for a mark after a line break, and the width of a look-behind
+    // that reaches back over marks, are not modelled.
+    if (cp >= 0x300u && grx_display_cell_width(cp, 0) == 0) {
+      if (i > 0 && text[i - 1] == '\n') {
+        return 0;
+      }
+      if (nfa->has_behind) {
+        return 0;
+      }
     }
     i += bytes;
   }

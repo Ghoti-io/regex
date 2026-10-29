@@ -9,7 +9,7 @@
 # contents. `-` is a group that did not participate or matched empty, which
 # vim spells the same way.
 #
-# population: 6473 reference answers, 6462 records, 11 duplicate refusal rows
+# population: 6569 reference answers, 6558 records, 11 duplicate refusal rows
 dialect: vim-backtrack
 
 pattern: \\(a\\)\\@!\\|a\\%[\\_s]
@@ -30035,3 +30035,439 @@ expect: nomatch
 pattern: \\(\u00E9\\|a\\)\\1
 subject: b
 expect: nomatch
+
+pattern: \\%(\\w*\\|a\\)
+subject: a\u0301b
+expect: 0-0
+groups: - - - - - - - - -
+
+pattern: \\%(\\w*\\|a\\)
+subject: aa\u0301b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: \\%(\\w*\\|a\\)
+subject: a\u0301\u0302b
+expect: 0-0
+groups: - - - - - - - - -
+
+pattern: \\%(\\w*\\|a\\)
+subject: a\u0301
+expect: 0-0
+groups: - - - - - - - - -
+
+pattern: \\%(\\w*\\|a\\)
+subject: ab\u0301
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: \\%(\\w*\\|a\\)
+subject: e\u0301e\u0301b
+expect: 0-0
+groups: - - - - - - - - -
+
+pattern: \\%(\\w*\\|a\\)
+subject: a\u0301a\u0301b
+expect: 0-0
+groups: - - - - - - - - -
+
+pattern: \\%(\\w*\\|a\\)
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: \\(\\w\\=\\)\\+\\|a
+subject: a\u0301b
+expect: 0-4
+groups: - - - - - - - - -
+
+pattern: \\(\\w\\=\\)\\+\\|a
+subject: aa\u0301b
+expect: 0-5
+groups: - - - - - - - - -
+
+pattern: \\(\\w\\=\\)\\+\\|a
+subject: a\u0301\u0302b
+expect: 0-6
+groups: - - - - - - - - -
+
+pattern: \\(\\w\\=\\)\\+\\|a
+subject: a\u0301
+expect: 0-3
+groups: - - - - - - - - -
+
+pattern: \\(\\w\\=\\)\\+\\|a
+subject: ab\u0301
+expect: 0-4
+groups: - - - - - - - - -
+
+pattern: \\(\\w\\=\\)\\+\\|a
+subject: e\u0301e\u0301b
+expect: 0-7
+groups: - - - - - - - - -
+
+pattern: \\(\\w\\=\\)\\+\\|a
+subject: a\u0301a\u0301b
+expect: 0-7
+groups: - - - - - - - - -
+
+pattern: \\(\\w\\=\\)\\+\\|a
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(\\w\\%(\\)\\@=\\|\\w\\w\\)*b$
+subject: a\u0301b
+expect: 0-4
+groups: a\u0301 - - - - - - - -
+
+pattern: ^\\(\\w\\%(\\)\\@=\\|\\w\\w\\)*b$
+subject: aa\u0301b
+expect: 0-5
+groups: a\u0301 - - - - - - - -
+
+pattern: ^\\(\\w\\%(\\)\\@=\\|\\w\\w\\)*b$
+subject: a\u0301\u0302b
+expect: 0-6
+groups: a\u0301\u0302 - - - - - - - -
+
+pattern: ^\\(\\w\\%(\\)\\@=\\|\\w\\w\\)*b$
+subject: a\u0301
+expect: nomatch
+
+pattern: ^\\(\\w\\%(\\)\\@=\\|\\w\\w\\)*b$
+subject: ab\u0301
+expect: nomatch
+
+pattern: ^\\(\\w\\%(\\)\\@=\\|\\w\\w\\)*b$
+subject: e\u0301e\u0301b
+expect: 0-7
+groups: e\u0301 - - - - - - - -
+
+pattern: ^\\(\\w\\%(\\)\\@=\\|\\w\\w\\)*b$
+subject: a\u0301a\u0301b
+expect: 0-7
+groups: a\u0301 - - - - - - - -
+
+pattern: ^\\(\\w\\%(\\)\\@=\\|\\w\\w\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: ^\\(.\\%(\\)\\@=\\|..\\)*b$
+subject: a\u0301b
+expect: 0-4
+groups: a\u0301 - - - - - - - -
+
+pattern: ^\\(.\\%(\\)\\@=\\|..\\)*b$
+subject: aa\u0301b
+expect: 0-5
+groups: a\u0301 - - - - - - - -
+
+pattern: ^\\(.\\%(\\)\\@=\\|..\\)*b$
+subject: a\u0301\u0302b
+expect: 0-6
+groups: a\u0301\u0302 - - - - - - - -
+
+pattern: ^\\(.\\%(\\)\\@=\\|..\\)*b$
+subject: a\u0301
+expect: nomatch
+
+pattern: ^\\(.\\%(\\)\\@=\\|..\\)*b$
+subject: ab\u0301
+expect: nomatch
+
+pattern: ^\\(.\\%(\\)\\@=\\|..\\)*b$
+subject: e\u0301e\u0301b
+expect: 0-7
+groups: e\u0301 - - - - - - - -
+
+pattern: ^\\(.\\%(\\)\\@=\\|..\\)*b$
+subject: a\u0301a\u0301b
+expect: 0-7
+groups: a\u0301 - - - - - - - -
+
+pattern: ^\\(.\\%(\\)\\@=\\|..\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: \\(a\\)\\@=.
+subject: a\u0301b
+expect: nomatch
+
+pattern: \\(a\\)\\@=.
+subject: aa\u0301b
+expect: 0-1
+groups: a - - - - - - - -
+
+pattern: \\(a\\)\\@=.
+subject: a\u0301\u0302b
+expect: nomatch
+
+pattern: \\(a\\)\\@=.
+subject: a\u0301
+expect: nomatch
+
+pattern: \\(a\\)\\@=.
+subject: ab\u0301
+expect: 0-1
+groups: a - - - - - - - -
+
+pattern: \\(a\\)\\@=.
+subject: e\u0301e\u0301b
+expect: nomatch
+
+pattern: \\(a\\)\\@=.
+subject: a\u0301a\u0301b
+expect: nomatch
+
+pattern: \\(a\\)\\@=.
+subject: b
+expect: nomatch
+
+pattern: \\(a\\|[ab]\\)\\@=.
+subject: a\u0301b
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: \\(a\\|[ab]\\)\\@=.
+subject: aa\u0301b
+expect: 0-1
+groups: a - - - - - - - -
+
+pattern: \\(a\\|[ab]\\)\\@=.
+subject: a\u0301\u0302b
+expect: 0-5
+groups: a - - - - - - - -
+
+pattern: \\(a\\|[ab]\\)\\@=.
+subject: a\u0301
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: \\(a\\|[ab]\\)\\@=.
+subject: ab\u0301
+expect: 0-1
+groups: a - - - - - - - -
+
+pattern: \\(a\\|[ab]\\)\\@=.
+subject: e\u0301e\u0301b
+expect: 6-7
+groups: b - - - - - - - -
+
+pattern: \\(a\\|[ab]\\)\\@=.
+subject: a\u0301a\u0301b
+expect: 0-3
+groups: a - - - - - - - -
+
+pattern: \\(a\\|[ab]\\)\\@=.
+subject: b
+expect: 0-1
+groups: b - - - - - - - -
+
+pattern: \\(a\\)\\@>\\(x\\)
+subject: a\u0301b
+expect: nomatch
+
+pattern: \\(a\\)\\@>\\(x\\)
+subject: aa\u0301b
+expect: nomatch
+
+pattern: \\(a\\)\\@>\\(x\\)
+subject: a\u0301\u0302b
+expect: nomatch
+
+pattern: \\(a\\)\\@>\\(x\\)
+subject: a\u0301
+expect: nomatch
+
+pattern: \\(a\\)\\@>\\(x\\)
+subject: ab\u0301
+expect: nomatch
+
+pattern: \\(a\\)\\@>\\(x\\)
+subject: e\u0301e\u0301b
+expect: nomatch
+
+pattern: \\(a\\)\\@>\\(x\\)
+subject: a\u0301a\u0301b
+expect: nomatch
+
+pattern: \\(a\\)\\@>\\(x\\)
+subject: b
+expect: nomatch
+
+pattern: a*\\%(a\\)\\@>.
+subject: a\u0301b
+expect: nomatch
+
+pattern: a*\\%(a\\)\\@>.
+subject: aa\u0301b
+expect: 0-4
+groups: - - - - - - - - -
+
+pattern: a*\\%(a\\)\\@>.
+subject: a\u0301\u0302b
+expect: nomatch
+
+pattern: a*\\%(a\\)\\@>.
+subject: a\u0301
+expect: nomatch
+
+pattern: a*\\%(a\\)\\@>.
+subject: ab\u0301
+expect: 0-4
+groups: - - - - - - - - -
+
+pattern: a*\\%(a\\)\\@>.
+subject: e\u0301e\u0301b
+expect: nomatch
+
+pattern: a*\\%(a\\)\\@>.
+subject: a\u0301a\u0301b
+expect: nomatch
+
+pattern: a*\\%(a\\)\\@>.
+subject: b
+expect: nomatch
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\)*b$
+subject: a\u0301b
+expect: nomatch
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\)*b$
+subject: aa\u0301b
+expect: nomatch
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\)*b$
+subject: a\u0301\u0302b
+expect: nomatch
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\)*b$
+subject: a\u0301
+expect: nomatch
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\)*b$
+subject: ab\u0301
+expect: nomatch
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\)*b$
+subject: e\u0301e\u0301b
+expect: nomatch
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\)*b$
+subject: a\u0301a\u0301b
+expect: nomatch
+
+pattern: ^\\(a\\%(\\)\\@=\\|aa\\)*b$
+subject: b
+expect: 0-1
+groups: - - - - - - - - -
+
+pattern: \\(.\\+\\)\\@>b
+subject: a\u0301b
+expect: nomatch
+
+pattern: \\(.\\+\\)\\@>b
+subject: aa\u0301b
+expect: nomatch
+
+pattern: \\(.\\+\\)\\@>b
+subject: a\u0301\u0302b
+expect: nomatch
+
+pattern: \\(.\\+\\)\\@>b
+subject: a\u0301
+expect: nomatch
+
+pattern: \\(.\\+\\)\\@>b
+subject: ab\u0301
+expect: nomatch
+
+pattern: \\(.\\+\\)\\@>b
+subject: e\u0301e\u0301b
+expect: nomatch
+
+pattern: \\(.\\+\\)\\@>b
+subject: a\u0301a\u0301b
+expect: nomatch
+
+pattern: \\(.\\+\\)\\@>b
+subject: b
+expect: nomatch
+
+pattern: \\(\\w\\)\\1
+subject: a\u0301b
+expect: nomatch
+
+pattern: \\(\\w\\)\\1
+subject: aa\u0301b
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: \\(\\w\\)\\1
+subject: a\u0301\u0302b
+expect: nomatch
+
+pattern: \\(\\w\\)\\1
+subject: a\u0301
+expect: nomatch
+
+pattern: \\(\\w\\)\\1
+subject: ab\u0301
+expect: nomatch
+
+pattern: \\(\\w\\)\\1
+subject: e\u0301e\u0301b
+expect: 0-6
+groups: e\u0301 - - - - - - - -
+
+pattern: \\(\\w\\)\\1
+subject: a\u0301a\u0301b
+expect: 0-6
+groups: a\u0301 - - - - - - - -
+
+pattern: \\(\\w\\)\\1
+subject: b
+expect: nomatch
+
+pattern: \\w\\([ab]\\=\\)
+subject: a\u0301b
+expect: 0-4
+groups: b - - - - - - - -
+
+pattern: \\w\\([ab]\\=\\)
+subject: aa\u0301b
+expect: 0-2
+groups: a - - - - - - - -
+
+pattern: \\w\\([ab]\\=\\)
+subject: a\u0301\u0302b
+expect: 0-6
+groups: b - - - - - - - -
+
+pattern: \\w\\([ab]\\=\\)
+subject: a\u0301
+expect: 0-3
+groups: - - - - - - - - -
+
+pattern: \\w\\([ab]\\=\\)
+subject: ab\u0301
+expect: 0-2
+groups: b - - - - - - - -
+
+pattern: \\w\\([ab]\\=\\)
+subject: e\u0301e\u0301b
+expect: 0-3
+groups: - - - - - - - - -
+
+pattern: \\w\\([ab]\\=\\)
+subject: a\u0301a\u0301b
+expect: 0-4
+groups: a - - - - - - - -
+
+pattern: \\w\\([ab]\\=\\)
+subject: b
+expect: 0-1
+groups: - - - - - - - - -

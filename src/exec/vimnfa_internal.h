@@ -89,6 +89,7 @@ typedef enum {
   GRX_VN_SKIP,   ///< Consume the rest of a counted run of characters.
   GRX_VN_PAT,    ///< An atomic group; `out` is its body, `out1` its end state.
   GRX_VN_ENDPAT, ///< The end of an atomic body; `out` is a SKIP.
+  GRX_VN_NEWL,   ///< A line break, consumed alone: the second arm of `\_x`.
   GRX_VN_ZSTART, ///< `\zs`. Stored, as a marker.
   GRX_VN_ZEND,   ///< `\ze`. Never stored.
 } GRX_VimNfaKind;
@@ -122,6 +123,7 @@ typedef struct GRX_VimNfa {
   uint32_t start;                  ///< The first state of the pattern.
   uint32_t groups;                 ///< The highest group number used.
   int has_ze;                      ///< The pattern uses `\ze`.
+  int has_behind;                  ///< The pattern has a look-behind.
 } GRX_VimNfa;
 
 /**

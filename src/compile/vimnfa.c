@@ -101,6 +101,7 @@ static int32_t max_width(const GRX_VimNfa * nfa, uint32_t index, int depth) {
       return INT32_MIN;
     case GRX_VN_BREF:
     case GRX_VN_PAT:
+    case GRX_VN_NEWL:
       return -1;
     case GRX_VN_INV:
       return max_width(nfa, nfa->states[s->out1].out, depth);
@@ -535,6 +536,20 @@ static uint32_t build_node(Builder * b, uint32_t index, uint32_t next) {
       break;
     case GRX_IR_CLASS:
       result = build_class(b, node->a, 0, next);
+      if (!failed(b) && result != GRX_VIMNFA_NONE) {
+        // A bare class of the line break alone is the second arm of `\_x`,
+        // which Vim builds as its own state that consumes one byte.
+        GRX_VimNfaState * state = &b->nfa->states[result];
+        int only_newline = state->nranges == 0 && state->set[1] == 0x04;
+        for (int k = 0; k < 16 && only_newline; k++) {
+          if (k != 1 && state->set[k]) {
+            only_newline = 0;
+          }
+        }
+        if (only_newline) {
+          state->kind = GRX_VN_NEWL;
+        }
+      }
       break;
     case GRX_IR_ANY:
       result = build_character(b, node, next);
@@ -685,6 +700,9 @@ static uint32_t build_node(Builder * b, uint32_t index, uint32_t next) {
         state->neg = negative ? 1u : 0u;
         state->before = behind ? 1u : 0u;
         if (behind) {
+          b->nfa->has_behind = 1;
+        }
+        if (behind) {
           // An explicit bound is the width; without one it is estimated from
           // the body, and a body whose width cannot be told - a class or a
           // collection, which Vim sizes by what they could match in UTF-8 -
@@ -749,17 +767,8 @@ static int failure_chance(const GRX_VimNfa * nfa, uint32_t index, int depth) {
       return 94;
     case GRX_VN_CHAR:
       return 95;
-    case GRX_VN_SET: {
-      // A set holding only the line break is Vim's NEWL, which it rates as it
-      // does the anchors.
-      int only_newline = (s->set[1] == 0x04);
-      for (int k = 0; k < 16 && only_newline; k++) {
-        if (k != 1 && s->set[k]) {
-          only_newline = 0;
-        }
-      }
-      return only_newline ? 99 : 50;
-    }
+    case GRX_VN_NEWL:
+      return 99;
     case GRX_VN_MOPEN:
     case GRX_VN_NOPEN:
     case GRX_VN_MCLOSE:
@@ -789,6 +798,7 @@ int grx_vimnfa_match_follows(
     case GRX_VN_CHAR:
     case GRX_VN_SET:
     case GRX_VN_ANY:
+    case GRX_VN_NEWL:
       return 0;
     default:
       return grx_vimnfa_match_follows(nfa, s->out, depth + 1);

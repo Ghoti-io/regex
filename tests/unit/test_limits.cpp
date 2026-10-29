@@ -1105,6 +1105,13 @@ TEST(Limits, AtomicDiscoveryStackChargeUsesAnAbiSizedBudget) {
   EXPECT_EQ(meter.live(), 0u);
 }
 
+/**
+ * An empty lazy repeat, which matches nothing and which the thread-list
+ * automaton behind the vim-nfa profile does not model. Ending a pattern with it
+ * leaves the search to the backtracker, whose limits these tests measure.
+ */
+static const std::string kBacktracker = R"(\%(\)\{-})";
+
 TEST(Limits, AtomicDiscoveryIncludesCallerFramesInBacktrackLimit) {
   GRX_Regex * regex = nullptr;
   ASSERT_EQ(grx_regex_compile(R"(a\+\(a\)\@>\(a\)\@<=)",
@@ -1138,7 +1145,9 @@ TEST(Limits, AtomicDiscoveryIncludesCallerFramesInBacktrackLimit) {
 TEST(Limits, AtomicCandidateLateFailureKeepsTheDefaultStepCeiling) {
   GRX_Regex * regex = nullptr;
   ASSERT_EQ(grx_regex_compile(
-                R"(\%(\%(\(a\)\@=a\)\@>\)*ab$)", GRX_SYNTAX_VIM_NFA, 0, &regex),
+                (std::string(R"(\%(\%(\(a\)\@=a\)\@>\)*ab)") + kBacktracker + "$")
+                    .c_str(),
+                GRX_SYNTAX_VIM_NFA, 0, &regex),
       GRX_OK);
   GRX_Match * match = nullptr;
   ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
@@ -1149,7 +1158,7 @@ TEST(Limits, AtomicCandidateLateFailureKeepsTheDefaultStepCeiling) {
   for (const char * tail : {"abx", "abxx"}) {
     std::string subject(600, 'a');
     subject += tail;
-    // A composing mark, so that the backtracker and not the automaton runs it.
+    // A composing mark, so that the subject is not plain text.
     subject += "\xcc\x81";
     int matched = 1;
     EXPECT_EQ(grx_regex_search(regex, subject.data(), subject.size(), 0,
@@ -1356,8 +1365,9 @@ TEST(Limits, CombiningFrontiersBoundLongMarkRunsAndRecoverAfterLimit) {
           R"(\(a\)\@=\1)"}) {
     SCOPED_TRACE(pattern);
     GRX_Regex * regex = nullptr;
+    const std::string kept = std::string(pattern) + kBacktracker;
     ASSERT_EQ(
-        grx_regex_compile(pattern, GRX_SYNTAX_VIM_NFA, 0, &regex), GRX_OK);
+        grx_regex_compile(kept.c_str(), GRX_SYNTAX_VIM_NFA, 0, &regex), GRX_OK);
     GRX_Match * match = nullptr;
     ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
     for (size_t count : {64u, 2048u}) {

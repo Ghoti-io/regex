@@ -732,8 +732,12 @@ What the automaton models today: literals, classes, `.`, groups, alternation,
 `*`, `\+`, `\=`, counted repeats (copied as Vim copies them), back-references,
 `^`, `$`, positive and negative look-ahead, look-behind (with an explicit
 width, or a body of literal characters), atomic groups, `\zs` and `\ze`; on
-subjects without a composing character, whatever else they hold, and a
-search from any start. An atomic group is a state
+subjects, whatever they hold, and a search from any start. A subject with
+composing characters is stepped as Vim steps it: the character and its marks are
+one step, a class or `.` takes all of them, a literal takes the character alone
+and leaves its marks to the next step, a line break is taken alone, and a match
+is refused in front of a mark. A subject with a mark after a line break, or a
+look-behind over marks, stays with the backtracker. An atomic group is a state
 of its own that runs its body as a separate match and then skips the characters
 it consumed, one position at a time, and it is not tried when the state after
 it, or its own skip, is already waiting in the list - which is where the rule

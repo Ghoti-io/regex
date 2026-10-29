@@ -845,6 +845,30 @@ NAMED_CASES.extend([
     )
 ])
 
+# Composing characters in the subject: a character and the marks after it are one
+# step, a class or `.` takes them all, a literal takes the character alone, and a
+# match is refused in front of a mark. Subjects are written with explicit escapes
+# so the marks cannot be normalised away.
+_MARK_SUBJECTS = ["a\u0301b", "aa\u0301b", "a\u0301\u0302b", "a\u0301",
+                  "ab\u0301", "e\u0301e\u0301b", "a\u0301a\u0301b", "b"]
+NAMED_CASES.extend([
+    ("", pattern, _MARK_SUBJECTS) for pattern in (
+        "\\%(\\w*\\|a\\)",
+        "\\(\\w\\=\\)\\+\\|a",
+        "^\\(\\w\\%(\\)\\@=\\|\\w\\w\\)*b$",
+        "^\\(.\\%(\\)\\@=\\|..\\)*b$",
+        "\\(a\\)\\@=.",
+        "\\(a\\|[ab]\\)\\@=.",
+        "\\(a\\)\\@>\\(x\\)",
+        "a*\\%(a\\)\\@>.",
+        "^\\(a\\%(\\)\\@=\\|aa\\)*b$",
+        "\\(.\\+\\)\\@>b",
+        "\\(\\w\\)\\1",
+        "\\w\\([ab]\\=\\)",
+
+    )
+])
+
 def main(argv):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", default=None, metavar="VECTOR_ROOT",
