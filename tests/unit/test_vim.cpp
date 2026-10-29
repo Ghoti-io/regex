@@ -1590,3 +1590,15 @@ TEST_F(VimNfa, WhatFollowsALoopDecidesWhereItMayEnd) {
   }
   EXPECT_EQ(runs, "01010101");
 }
+
+TEST_F(VimNfa, AnAssertionAfterALoopBodyThatCanBeEmptyEndsTheLoopOnTheLastRealIteration) {
+  // When a thread is replaced by what follows an assertion, the walk compares
+  // every state it adds with the thread it started from, using that thread's
+  // own groups. A loop whose body can match nothing therefore never starts a
+  // second, empty, iteration after an assertion; without the assertion, the
+  // marker in front of the body is what stops it.
+  EXPECT_EQ(captured("\\(a\\=\\%(\\)\\@=\\)*", "a", 1), "a");
+  EXPECT_EQ(captured("\\(a\\=\\%(\\)\\@>\\)*", "a", 1), "a");
+  EXPECT_EQ(captured("\\(\\%(ab\\)*\\%(\\)\\@=\\)*", "ab", 1), "ab");
+  EXPECT_EQ(captured("\\(a\\=\\%(\\)\\)*", "a", 1), "a");
+}

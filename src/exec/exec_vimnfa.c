@@ -343,8 +343,15 @@ static int addstate(Run * run, List * list, uint32_t index, Subs * subs,
         continue;
       }
       Pim none = {.state = NONE};
-      if (pim_equal(&th->pim, pim ? pim : &none)
-          && key_equal(run, subs, &th->subs)) {
+      if (!pim_equal(&th->pim, pim ? pim : &none)) {
+        continue;
+      }
+      // The thread being replaced is still in the list, and the groups being
+      // walked are its own: Vim hands the add a pointer into the list, so a
+      // state the walk comes back to is compared with the thread it came from
+      // and found equal to it. That is what stops a loop whose body can match
+      // nothing from taking a second, empty, iteration after an assertion.
+      if ((ptrdiff_t)k == here || key_equal(run, subs, &th->subs)) {
         run->closure_depth--;
         return 1;
       }
