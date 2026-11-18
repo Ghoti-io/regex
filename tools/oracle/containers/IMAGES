@@ -82,6 +82,17 @@ perl	docker.io/library/perl:5.44.0-slim@sha256:76d5a0d6f19a3841668e44a67ecb680fc
 # is its own commit with its own triage.
 node	docker.io/library/node:24-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6	V8 13.6.233.17-node.53, Unicode 17.0	The ECMAScript dialect, and every Unicode property table
 
+# JavaScriptCore, for the ECMAScript dialect, as the second opinion. **Built
+# here**: the shell comes from Debian's WebKitGTK package and there is no
+# official image. It exists because V8 and SpiderMonkey are not two opinions -
+# SpiderMonkey runs V8's irregexp - so only JavaScriptCore can say that a
+# behaviour of V8 is V8's. The first thing it did was split the two on
+# `/[\q{a}]/iv` against "A": JavaScriptCore matches, as ECMA-262 says; V8 does
+# not (https://issues.chromium.org/issues/587130867). The version field names
+# the package, which is what decides an answer; the run-time check is the
+# guarantee.
+jsc	localhost/ghoti-regex-oracle-jsc:2.54.0	JavaScriptCore (WebKitGTK 2.54.0-1~deb13u3)	The ECMAScript dialect's second opinion: accept/reject and match spans, through tools/oracle/jsc_match.js
+
 # vim, for the Vim dialect and for two whole-plane tables. **Built here: there
 # is no official vim image**, which makes it the other kind of pin. What is pinned is everything the build reads -
 # the base by digest, vim's source by tag - and the run-time check below is

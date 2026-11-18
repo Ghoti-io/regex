@@ -106,6 +106,12 @@ PROBE = {
                 " | head -1)\""
                 " \"$(dotnet --version)\""],
                ".NET 10.", None),
+    # JavaScriptCore has no `--version`; the package is what decides an
+    # answer, so the probe asks the package database.
+    "jsc": (["sh", "-c",
+             "dpkg-query -W -f='JavaScriptCore (WebKitGTK ${Version})\\n'"
+             " libjavascriptcoregtk-bin"],
+            "JavaScriptCore (WebKitGTK ", None),
     "perl": (["perl", "-e", "print \"perl $^V\\n\""], "perl v", None),
     # V8's version, not node's, because the reference here is the regular
     # expression engine rather than the runtime around it - and because the

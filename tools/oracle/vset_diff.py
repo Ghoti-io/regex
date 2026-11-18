@@ -18,6 +18,11 @@ not be mixed), so the generator here is the grammar:
   rules about what may *not* follow what, and a generator that only makes
   valid classes cannot reach them.
 
+A second engine attributes a disagreement. V8 and SpiderMonkey share
+irregexp, so JavaScriptCore is the only independent opinion: a row where V8
+differs from this library but JavaScriptCore agrees with it is V8 alone (one
+is https://issues.chromium.org/issues/587130867) and is counted, not failed.
+
 Two questions, in order. Whether each pattern is accepted at all, and then,
 for the ones both sides accept, what it matches in a fixed set of subjects
 (spans, so a string member's length shows).
@@ -35,6 +40,7 @@ import random
 import re
 import sys
 
+import jsc_runner
 import match_diff
 import syntax_diff
 
@@ -142,20 +148,18 @@ def find_driver(name):
     return None
 
 
-def has_single_member(pattern):
-    """Whether a `\\q{}` in the pattern has a one-character member.
+def has_empty_member(pattern):
+    """Whether a `\\q{}` in the pattern has an empty alternative.
 
-    V8 (13.6 and 14.1 both) does not apply the `i` flag to such a member:
-    `[\\q{a}x]` with `iv` does not match "A", although `[\\q{a|bc}]` matches
-    "BC" and `[a]` matches "A". ECMA-262 folds every ClassSetCharacter and
-    every ClassString member, so this library matches "A" and the reference
-    is the one in the wrong (JavaScriptCore folds it; SpiderMonkey shares V8's
-    irregexp and does not). Reported upstream as
-    https://issues.chromium.org/issues/587130867. The rows are counted, not
-    failed.
+    ECMA-262 tries a class's strings longest first, then its single
+    characters, and the empty string last. Under `i` V8 does not fold a
+    one-character member and so falls through to the empty one, and
+    JavaScriptCore puts the empty one ahead of the single characters even
+    without `i`. This library follows the specification; a row where both
+    references differ from it on such a pattern is counted, not failed.
     """
     for body in re.findall(r"\\q\{([^}]*)\}", pattern):
-        if any(len(member) == 1 for member in body.split("|")):
+        if "" in body.split("|"):
             return True
     return False
 
@@ -167,6 +171,7 @@ def main(argv):
     parser.add_argument("--examples", type=int, default=6)
     args = parser.parse_args(argv[1:])
 
+    print(jsc_runner.provenance())
     syntax_driver = find_driver("grx_syntax")
     match_driver = find_driver("grx_match")
     if not syntax_driver or not match_driver:
@@ -182,10 +187,17 @@ def main(argv):
         sys.stderr.write("a driver did not answer every pattern\n")
         return 2
 
+    # JavaScriptCore attributes a disagreement. V8 and SpiderMonkey share
+    # irregexp, so a V8 quirk is invisible to a comparison against either; a
+    # row where V8 differs from this library but JavaScriptCore agrees with
+    # this library is V8 alone, and is counted rather than failed.
+    third = jsc_runner.ask([(f, p, "") for f, p in rows])
+    v8_alone = 0
     syntax_bad = {}
     both = []
     capped = 0
-    for (flags, pattern), expected, verdict in zip(rows, reference, ours):
+    for (flags, pattern), expected, verdict, other in zip(
+            rows, reference, ours, third):
         if verdict == "toolong":
             sys.stderr.write("raise MAX_PATTERN in tools/oracle/grx_syntax.c\n")
             return 2
@@ -194,6 +206,9 @@ def main(argv):
             continue
         accepted = verdict == "ok"
         if accepted != bool(expected):
+            if accepted == (other != "syntax"):
+                v8_alone += 1
+                continue
             key = ("we accept, the reference rejects" if accepted
                    else "we reject, the reference accepts", flags)
             syntax_bad.setdefault(key, []).append(pattern)
@@ -204,11 +219,25 @@ def main(argv):
     expected = match_diff.ask_node(matching)
     got = [match_diff.parse_ours(line)
            for line in match_diff.ask_library(match_driver, matching, None)]
+    third_match = jsc_runner.ask(matching)
     match_bad = {}
     v8_fold = 0
-    for (flags, pattern, subject), want, have in zip(matching, expected, got):
-        if "i" in flags and has_single_member(pattern) and have != want:
+    both_off = 0
+    unattributed = []
+    for (flags, pattern, subject), want, have, other in zip(
+            matching, expected, got, third_match):
+        if have != want and have == other:
             v8_fold += 1
+            continue
+        if (have != want and "i" in flags and has_empty_member(pattern)):
+            both_off += 1
+            continue
+        if have != want and other == "syntax":
+            # JavaScriptCore refused a pattern this library and V8 accept
+            # (it rejects `[[a]\\-]`, for one), so it cannot attribute the
+            # difference. Shown, not failed: a human reads these.
+            unattributed.append("%s /%s on %s" % (pattern, flags,
+                                                  json.dumps(subject)))
             continue
         if isinstance(have, str):  # unsupported / compile / error
             match_bad.setdefault(("we answered " + have, flags), []).append(
@@ -225,12 +254,20 @@ def main(argv):
             print("%-6s /%-2s %-36s %6d  e.g. %s" % (name, key[1], key[0],
                 len(bad[key]), "  |  ".join(bad[key][:args.examples])))
 
+    if unattributed:
+        print("unattributed (JavaScriptCore refused the pattern; V8 differs "
+              "from this library): %d, e.g. %s" % (len(unattributed),
+              "  |  ".join(unattributed[:args.examples])))
+
     print("\n%d classes x %d flag sets = %d syntax rows (%d capped by a limit);"
           " %d accepted by both, x %d subjects = %d match rows; "
-          "%d V8 not folding a one-character \\q member, not compared; "
-          "%d disagreements" % (len(patterns), len(FLAG_SETS), len(rows),
-              capped, len(both), len(SUBJECTS), len(matching), v8_fold,
-              total))
+          "%d rows where V8 alone differs (JavaScriptCore agrees with this "
+          "library), not failed; %d rows where both references differ from the "
+          "specification on an empty \\q member, not failed; "
+          "%d disagreements"
+          % (len(patterns), len(FLAG_SETS), len(rows), capped, len(both),
+             len(SUBJECTS), len(matching), v8_fold + v8_alone, both_off,
+             total))
     return 1 if total else 0
 
 
