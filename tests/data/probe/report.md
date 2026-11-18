@@ -7,12 +7,13 @@ section 5; each column is a reference implementation, pinned in
 
 | Column | Reference |
 | --- | --- |
-| ecmascript | node 24.21.0, V8 13.6.233.17-node.53, Unicode 17.0 |
+| ecmascript | node 26.13.1, V8 14.6.202.34-node.40, Unicode 17.0 |
 | gnu-ere | grep (GNU grep) 3.11 |
 | pcre2 | PCRE2 version 10.46 2025-08-27 |
 | perl | perl v5.44.0 |
 | python | python 3.14.7, UCD 16.0.0 |
-| vim | vim 9.2, Included patches: 1-1129 |
+| vim-backtrack | vim 9.2, Included patches: 1-1129 |
+| vim-nfa | vim 9.2, Included patches: 1-1129 |
 
 ## `(a*)*` against "b"
 
@@ -25,7 +26,8 @@ section 5; each column is a reference implementation, pinned in
 | pcre2 | `"" ""` |
 | perl | `0-0 0-0` |
 | python | `0-0 0-0` |
-| vim | `nomatch` |
+| vim-backtrack | `nomatch` |
+| vim-nfa | `nomatch` |
 
 ## `(a*)+` against "b"
 
@@ -38,7 +40,8 @@ section 5; each column is a reference implementation, pinned in
 | pcre2 | `"" ""` |
 | perl | `0-0 0-0` |
 | python | `0-0 0-0` |
-| vim | `nomatch` |
+| vim-backtrack | `nomatch` |
+| vim-nfa | `nomatch` |
 
 ## `((a)|b)+` against "ab"
 
@@ -51,7 +54,8 @@ section 5; each column is a reference implementation, pinned in
 | pcre2 | `"ab" "b" "a"` |
 | perl | `0-2 1-2 -` |
 | python | `0-2 1-2 0-1` |
-| vim | `nomatch` |
+| vim-backtrack | `nomatch` |
+| vim-nfa | `nomatch` |
 
 ## `(?:(a)|b){2}` against "ab"
 
@@ -64,7 +68,8 @@ section 5; each column is a reference implementation, pinned in
 | pcre2 | `"ab" "a"` |
 | perl | `0-2 -` |
 | python | `0-2 0-1` |
-| vim | `nomatch` |
+| vim-backtrack | `nomatch` |
+| vim-nfa | `nomatch` |
 
 ## `(a)?b\1` against "b"
 
@@ -77,7 +82,8 @@ section 5; each column is a reference implementation, pinned in
 | pcre2 | `nomatch` |
 | perl | `nomatch` |
 | python | `nomatch` |
-| vim | `error` |
+| vim-backtrack | `error` |
+| vim-nfa | `error` |
 
 ## `\2(a)(b)` against "ab"
 
@@ -90,7 +96,8 @@ section 5; each column is a reference implementation, pinned in
 | pcre2 | `nomatch` |
 | perl | `nomatch` |
 | python | `error` |
-| vim | `error` |
+| vim-backtrack | `error` |
+| vim-nfa | `error` |
 
 ## `(a\1)` against "a"
 
@@ -103,7 +110,8 @@ section 5; each column is a reference implementation, pinned in
 | pcre2 | `nomatch` |
 | perl | `nomatch` |
 | python | `error` |
-| vim | `error` |
+| vim-backtrack | `error` |
+| vim-nfa | `error` |
 
 ## `a$` against "a\n"
 
@@ -116,7 +124,8 @@ section 5; each column is a reference implementation, pinned in
 | pcre2 | `"a"` |
 | perl | `0-1` |
 | python | `0-1` |
-| vim | `nomatch` |
+| vim-backtrack | `nomatch` |
+| vim-nfa | `nomatch` |
 
 ## `^b` against "a\nb"
 
@@ -129,7 +138,8 @@ section 5; each column is a reference implementation, pinned in
 | pcre2 | `nomatch` |
 | perl | `nomatch` |
 | python | `nomatch` |
-| vim | `nomatch` |
+| vim-backtrack | `nomatch` |
+| vim-nfa | `nomatch` |
 
 ## `.` against "\r"
 
@@ -142,7 +152,8 @@ section 5; each column is a reference implementation, pinned in
 | pcre2 | `"\\x{0d}"` |
 | perl | `0-1` |
 | python | `0-1` |
-| vim | `match at 0` |
+| vim-backtrack | `match at 0` |
+| vim-nfa | `match at 0` |
 
 ## `[a-z]`/i against "\u017f"
 
@@ -155,7 +166,8 @@ section 5; each column is a reference implementation, pinned in
 | pcre2 | `"\\x{17f}"` |
 | perl | `0-1` |
 | python | `0-1` |
-| vim | `nomatch` |
+| vim-backtrack | `nomatch` |
+| vim-nfa | `nomatch` |
 
 ## `k`/i against "\u212a"
 
@@ -168,7 +180,8 @@ section 5; each column is a reference implementation, pinned in
 | pcre2 | `"\\x{212a}"` |
 | perl | `0-1` |
 | python | `0-1` |
-| vim | `nomatch` |
+| vim-backtrack | `nomatch` |
+| vim-nfa | `nomatch` |
 
 ## `\w` against "\u00e9"
 
@@ -181,7 +194,8 @@ section 5; each column is a reference implementation, pinned in
 | pcre2 | `nomatch` |
 | perl | `0-1` |
 | python | `0-1` |
-| vim | `nomatch` |
+| vim-backtrack | `nomatch` |
+| vim-nfa | `nomatch` |
 
 ## `\d` against "\u0661"
 
@@ -194,7 +208,8 @@ section 5; each column is a reference implementation, pinned in
 | pcre2 | `nomatch` |
 | perl | `0-1` |
 | python | `0-1` |
-| vim | `nomatch` |
+| vim-backtrack | `nomatch` |
+| vim-nfa | `nomatch` |
 
 ## `\s` against "\u00a0"
 
@@ -207,7 +222,8 @@ section 5; each column is a reference implementation, pinned in
 | pcre2 | `nomatch` |
 | perl | `0-1` |
 | python | `0-1` |
-| vim | `nomatch` |
+| vim-backtrack | `nomatch` |
+| vim-nfa | `nomatch` |
 
 ## `[]]` against "]"
 
@@ -220,7 +236,8 @@ section 5; each column is a reference implementation, pinned in
 | pcre2 | `"]"` |
 | perl | `0-1` |
 | python | `0-1` |
-| vim | `match at 0` |
+| vim-backtrack | `match at 0` |
+| vim-nfa | `match at 0` |
 
 ## `[\d-z]` against "-"
 
@@ -233,7 +250,8 @@ section 5; each column is a reference implementation, pinned in
 | pcre2 | `error` |
 | perl | `0-1` |
 | python | `error` |
-| vim | `nomatch` |
+| vim-backtrack | `nomatch` |
+| vim-nfa | `nomatch` |
 
 ## `a{,3}` against "a{,3}"
 
@@ -246,7 +264,8 @@ section 5; each column is a reference implementation, pinned in
 | pcre2 | `"a"` |
 | perl | `0-1` |
 | python | `0-1` |
-| vim | `match at 0` |
+| vim-backtrack | `match at 0` |
+| vim-nfa | `match at 0` |
 
 ## `a**` against "aa"
 
@@ -259,7 +278,8 @@ section 5; each column is a reference implementation, pinned in
 | pcre2 | `error` |
 | perl | `error` |
 | python | `error` |
-| vim | `error` |
+| vim-backtrack | `error` |
+| vim-nfa | `error` |
 
 ## `(?=a)*` against "a"
 
@@ -272,7 +292,8 @@ section 5; each column is a reference implementation, pinned in
 | pcre2 | `""` |
 | perl | `0-0` |
 | python | `0-0` |
-| vim | `nomatch` |
+| vim-backtrack | `nomatch` |
+| vim-nfa | `nomatch` |
 
 ## `\0` against "\u0000"
 
@@ -285,7 +306,8 @@ section 5; each column is a reference implementation, pinned in
 | pcre2 | `"\\x{00}"` |
 | perl | `0-1` |
 | python | `0-1` |
-| vim | `nomatch` |
+| vim-backtrack | `nomatch` |
+| vim-nfa | `nomatch` |
 
 ## `\1` against "\u0001"
 
@@ -298,5 +320,6 @@ section 5; each column is a reference implementation, pinned in
 | pcre2 | `error` |
 | perl | `error` |
 | python | `error` |
-| vim | `error` |
+| vim-backtrack | `error` |
+| vim-nfa | `error` |
 

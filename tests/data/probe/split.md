@@ -5,7 +5,7 @@ between two values of one row of [dialects.md](../../documentation/dialects.md)
 section 5.16; each column is a reference implementation, pinned in
 [tools/oracle/containers/IMAGES](../../tools/oracle/containers/IMAGES):
 
-- **ecmascript (node)** - node 24.21.0, V8 13.6.233.17-node.53, Unicode 17.0
+- **ecmascript (node)** - node 26.13.1, V8 14.6.202.34-node.40, Unicode 17.0
 - **perl** - perl v5.44.0
 - **python** - python 3.14.7, UCD 16.0.0
 

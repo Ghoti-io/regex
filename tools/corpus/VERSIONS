@@ -214,6 +214,17 @@ glibc glibc-2.41
 # stops being true, the MIT notice has to travel with it.
 musl v1.2.6
 
+# **Raised again, to node 26.13.1 / V8 14.6.202.34, on 2026-11-18.** The newest
+# node image there is; the reason was a divergence found by differential
+# testing that turned out to need a newer V8 than any node ships (see
+# containers/IMAGES). Triage, every node-backed gate asked of node 26 beside the
+# node 24 baseline: determinism, syntax_diff (960,000 cases), match_diff,
+# vset_diff, string_property_diff, property_diff and iterate_diff all report 0
+# disagreements; split_diff and replace_diff exit 2 on both versions with
+# logs identical line for line (U+000B in `\s` against Go and another
+# reference, nothing to do with node). The reproducer below still gives 1-4
+# every time without the flag. ICU 78.3 and Unicode 17.0, unchanged.
+#
 # **Raised to node 24.21.0 / V8 13.6.233.17 on 2026-09-25, and the defect
 # below is gone with it.** The reproducer run 40 times in a fresh process
 # gives 1-4 every time on V8 13.6 and on V8 14.1 (node 25) *without*
@@ -294,7 +305,7 @@ musl v1.2.6
 #           against a version number it does not state.
 #   CPython 3.13.5, and `unicodedata` reports UCD **15.1.0** - two releases
 #           behind the 17.0.0 in tools/unicode/UCD_VERSION.
-#   Node    24.21.0 / V8 13.6.233.17, ICU 78.3, Unicode **17.0** - an exact
+#   Node    26.13.1 / V8 14.6.202.34, ICU 78.3, Unicode **17.0** - an exact
 #           match with ours, which is why check-oracle-properties can compare
 #           whole property tables against it and check-oracle-python cannot.
 #           (22.23.2 / V8 12.4.254.21 until 2026-09-25; the ICU release moved
@@ -319,7 +330,7 @@ musl v1.2.6
 # than in this file, which they are not.
 vim 9.1.1244
 cpython 3.13.5
-node v24.21.0
+node v26.13.1
 
 # openjdk/jdk25u. The three data files under test/jdk/java/util/regex that
 # RegExTest.java's processFile() reads - TestCases.txt, BMPTestCases.txt and

@@ -332,8 +332,8 @@ CLAIMS = [
 # would compare the row against the wrong thing, which is worse than not
 # checking it.
 ORACLE_TABLE_ROWS = [
-    ("node", "| node 24 (V8 13.6.233.17-node.53, Unicode 17.0) | ECMAScript |",
-     ["13.6.233.17-node.53", "Unicode 17.0"]),
+    ("node", "| node 26 (V8 14.6.202.34-node.40, Unicode 17.0) | ECMAScript |",
+     ["14.6.202.34-node.40", "Unicode 17.0"]),
     ("perl", "| perl v5.44.0 | Perl |", "v5.44.0"),
     ("pcre2", "| PCRE2 10.46 | PCRE2 |", "10.46"),
     ("python", "| python 3.14.7 (UCD 16.0.0) | Python |",
