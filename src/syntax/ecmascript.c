@@ -1311,6 +1311,12 @@ static GRX_Result class_set_operator_list(GRX_Parser * parser, size_t start,
 
   while (at_operator(parser, operator_char)) {
     parser->position += 2;
+    // ClassIntersection is `ClassSetOperand && [lookahead != &]
+    // ClassSetOperand`: a third ampersand is not an operand.
+    if (operator_char == '&' && byte_at(parser, 0) == '&') {
+      return grx_parse_fail(
+          parser, GRX_DIAG_INVALID_CLASS_ITEM, parser->position, 1);
+    }
     SetOperand operand;
     result = class_set_operand(parser, &operand);
     if (result != GRX_OK) {

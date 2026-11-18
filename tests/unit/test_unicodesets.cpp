@@ -278,6 +278,24 @@ TEST(UnicodeSets, ReservedDoublePunctuatorsMustBeEscaped) {
            "[,,]", "[..]", "[;;]", "[``]"}) {
     EXPECT_TRUE(rejects(pattern)) << pattern;
   }
+  // The same pairs after an operand, where a reader might take them for an
+  // operator or a continuation. `^^` is a pair there; only a leading `^`
+  // negates.
+  for (const char * punct : {"&", "!", "#", "$", "%", "*", "+", ",", ".", ":",
+           ";", "<", "=", ">", "?", "@", "^", "`", "~"}) {
+    std::string pair = std::string(punct) + punct;
+    EXPECT_TRUE(rejects(("[a" + pair + "]").c_str())) << pair;
+    if (pair != "&&") {  // `[a&&b]` is an intersection, and legal.
+      EXPECT_TRUE(rejects(("[a" + pair + "b]").c_str())) << pair;
+    }
+  }
+  // `&&&` is an intersection whose right operand would begin with `&`, which
+  // the production forbids by lookahead, and `---` likewise reads as `--`
+  // then a reserved start.
+  EXPECT_TRUE(rejects("[a&&&]"));
+  EXPECT_TRUE(rejects("[a&&&b]"));
+  EXPECT_TRUE(rejects("[[a]&&&[b]]"));
+  EXPECT_FALSE(rejects("[a&&b]"));
   // One of them is fine, and so is an escaped pair.
   EXPECT_EQ(finds("[!]", "a!"), "!");
   EXPECT_EQ(finds("[&]", "a&"), "&");
