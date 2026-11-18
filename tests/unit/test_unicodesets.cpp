@@ -155,6 +155,25 @@ TEST(UnicodeSets, SubtractionAndIntersection) {
   EXPECT_EQ(finds("[a&&b]", "a"), "none");
 }
 
+TEST(UnicodeSets, ANestedClassNegatedAgainIsTheOriginalSet) {
+  // A class whose only member is a nested class reuses that node, and the
+  // outer `^` must toggle its negation rather than be absorbed by it.
+  EXPECT_EQ(finds("[^[^y]]", "by"), "y");
+  EXPECT_EQ(finds("[^[^[^y]]]", "by"), "b");
+  EXPECT_EQ(finds("[[^y]]", "yb"), "b");
+  EXPECT_EQ(finds("[^[^y]a]", "ya"), "y");
+}
+
+TEST(UnicodeSets, StringDisjunctionMembersAreClassSetCharacters) {
+  // ClassSetCharacter excludes the syntax characters and the doubled
+  // punctuators, in a `\q{}` member as anywhere else in the class.
+  for (const char * pattern : {"[\\q{a[b}]", "[\\q{]}]", "[\\q{{a}]",
+           "[\\q{(a}]", "[\\q{a-b}]", "[\\q{a&&b}]", "[\\q{!!}]", "[\\q{a/}]"}) {
+    EXPECT_TRUE(rejects(pattern)) << pattern;
+  }
+  EXPECT_FALSE(rejects("[\\q{a\\[b|c\\-d|&|!}]"));
+}
+
 TEST(UnicodeSets, NestedClassesUnion) {
   EXPECT_EQ(finds("[[a-c][x-z]]", "by"), "b");
   EXPECT_EQ(finds("[[a-c]x[y-z]]", "x"), "x");

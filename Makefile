@@ -560,6 +560,9 @@ REQUIRE_PYTHON3 = if ! command -v python3 >/dev/null 2>&1; then \
 # seed (documentation/testing.md).
 ORACLE_SEED ?= 1
 ORACLE_COUNT ?= 120000
+# The `v`-class diff makes sixteen match rows per accepted class, so its count
+# is its own.
+ORACLE_VSET_COUNT ?= 20000
 ORACLE_PATTERNS ?= 600
 
 # Valgrind flags (exclude "still reachable" as it's not a leak)
@@ -913,7 +916,7 @@ $(APP_DIR)/tools/%$(EXE_EXTENSION): tools/jsonschema/%.c \
 .PHONY: check-oracle-soak
 .PHONY: check-oracle-dotnet check-oracle-dotnet-driver check-oracle-dotnet-probe check-dotnet-syntax-diff check-dotnet-match-diff check-dotnet-replace-diff check-dotnet-split-diff check-dotnet-flags-diff check-dotnet-search-diff check-dotnet-coverage check-dotnet-names-diff check-dotnet-wtf8-diff
 .PHONY: check-oracle-java check-java-jdk-corpus check-java-syntax-diff check-java-match-diff check-java-search-diff check-java-replace-diff check-java-split-diff check-oracle-java-properties
-.PHONY: check-oracle-exclusions clean cloc docs docs-pdf examples tools coverage check-layout-page check-work-packages check-citations check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-unicode-agreement check-dump-names check-readme-example check-tables check-status-line check-corpus-seeds check-makefile-hash check-generated-header-deps check-oracle-env check-oracle-syntax check-oracle-match check-oracle-soak check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-linear check-oracle-perl-syntax check-oracle-script-runs check-doc-claims check-wide-classes check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
+.PHONY: check-oracle-exclusions clean cloc docs docs-pdf examples tools coverage check-layout-page check-work-packages check-citations check-symbols check-layering check-aliasing check-diagnostics check-unicode-tables check-unicode-agreement check-dump-names check-readme-example check-tables check-status-line check-corpus-seeds check-makefile-hash check-generated-header-deps check-oracle-env check-oracle-syntax check-oracle-vset check-oracle-match check-oracle-soak check-engine-equivalence check-oracle-perl check-oracle-vim check-oracle-linear check-oracle-perl-syntax check-oracle-script-runs check-doc-claims check-wide-classes check-oracle-newlines check-oracle-replace check-oracle-split check-oracle-window check-oracle-iterate \
 	check-programs \
 	check-oracle-properties check-oracle-numeric-properties \
 	check-oracle-folds \
@@ -1151,7 +1154,7 @@ oracle-clean:
 	printf "same bytes. Rebuild what this removed with \"make oracle-images\".\n"
 
 check-oracles: ## Run every differential check against the reference implementation
-check-oracles: check-oracle-syntax check-oracle-match check-oracle-properties \
+check-oracles: check-oracle-syntax check-oracle-vset check-oracle-match check-oracle-properties \
 	check-oracle-numeric-properties check-oracle-string-properties \
 	check-oracle-folds \
 	check-vim-widths check-vim-classes check-vim-sets \
@@ -1933,6 +1936,12 @@ check-oracle-match: $(TOOLS)
 	@$(REQUIRE_PYTHON3)
 	$(call run-oracle,node,python3 tools/oracle/match_diff.py --seed $(ORACLE_SEED) \
 		--patterns $(ORACLE_PATTERNS) --driver $(APP_DIR)/tools/grx_match$(EXE_EXTENSION))
+
+check-oracle-vset: ## Compare generated v-mode classes against the reference implementation
+check-oracle-vset: $(TOOLS)
+	@$(REQUIRE_PYTHON3)
+	$(call run-oracle,node,python3 tools/oracle/vset_diff.py --seed $(ORACLE_SEED) \
+		--count $(ORACLE_VSET_COUNT))
 
 check-oracle-syntax: ## Compare accept/reject against the reference implementation
 check-oracle-syntax: $(TOOLS)

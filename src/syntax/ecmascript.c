@@ -1033,6 +1033,18 @@ static GRX_Result class_string_disjunction(
     size_t length = 0;
     while (!grx_parse_at_end(parser) && byte_at(parser, 0) != '|'
         && byte_at(parser, 0) != '}') {
+      // The members are `ClassSetCharacter`s, which are not the characters
+      // of a `u`-mode class: a bare syntax character (`[`, `]`, `{`, `(`,
+      // `-` ...) and a reserved doubled punctuator must be escaped here, as
+      // they must anywhere else in a `v`-mode class.
+      if (byte_at(parser, 0) != '\\') {
+        char c = byte_at(parser, 0);
+        if ((c && is_reserved_double(c) && byte_at(parser, 1) == c)
+            || is_class_set_syntax_character((unsigned char)c)) {
+          return grx_parse_fail(
+              parser, GRX_DIAG_INVALID_CLASS_ITEM, parser->position, 1);
+        }
+      }
       GRX_ClassItem character;
       result = read_class_atom(parser, &character);
       if (result != GRX_OK) {
@@ -1528,7 +1540,10 @@ static GRX_Result class_set_contents(GRX_Parser * parser, size_t start,
           parser->position - start);
       goto done;
     }
-    grx_pattern_node(parser->pattern, node)->flags |= GRX_NODE_NEGATED;
+    // A class whose only member is a nested class reuses that node, so the
+    // node may already be negated: `[^[^y]]` is the complement of the
+    // complement, which a plain OR would leave as one complement.
+    grx_pattern_node(parser->pattern, node)->flags ^= GRX_NODE_NEGATED;
   }
 
   grx_pattern_node(parser->pattern, node)->length = parser->position - start;
