@@ -150,7 +150,9 @@ def has_single_member(pattern):
     "BC" and `[a]` matches "A". ECMA-262 folds every ClassSetCharacter and
     every ClassString member, so this library matches "A" and the reference
     is the one in the wrong (JavaScriptCore folds it; SpiderMonkey shares V8's
-    irregexp and does not). The rows are counted, not failed.
+    irregexp and does not). Reported upstream as
+    https://issues.chromium.org/issues/587130867. The rows are counted, not
+    failed.
     """
     for body in re.findall(r"\\q\{([^}]*)\}", pattern):
         if any(len(member) == 1 for member in body.split("|")):
