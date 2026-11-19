@@ -181,3 +181,50 @@ int grx_byte_ranges_from_set(
   out_ranges->count = runs;
   return 1;
 }
+
+size_t grx_prefix_set_next(const GRX_PrefixSet * set, const char * subject,
+    size_t from, size_t length) {
+  const GRX_PrefixNode * nodes = set->nodes;
+  const size_t reach = set->max_length;
+  size_t best = (size_t)-1;
+  uint32_t state = 0;
+  for (size_t i = from; i < length; i++) {
+    // A string ending here starts no earlier than `i + 1 - max_length`, so
+    // once that is not before the best start found nothing can improve it.
+    if (best != (size_t)-1 && i + 1 >= best + reach) {
+      break;
+    }
+    unsigned char byte = (unsigned char)subject[i];
+    for (;;) {
+      uint32_t next = 0;
+      if (state == 0) {
+        next = set->root_next[byte];
+      }
+      else {
+        for (uint32_t c = nodes[state].child; c; c = nodes[c].sibling) {
+          if (nodes[c].label == byte) {
+            next = c;
+            break;
+          }
+        }
+      }
+      if (next) {
+        state = next;
+        break;
+      }
+      if (state == 0) {
+        break;
+      }
+      state = nodes[state].fail;
+    }
+    // The longest string ending here begins earliest.
+    uint32_t hit = nodes[state].terminal ? state : nodes[state].out;
+    if (hit) {
+      size_t start = i + 1 - nodes[hit].depth;
+      if (start < best) {
+        best = start;
+      }
+    }
+  }
+  return best == (size_t)-1 ? length : best;
+}

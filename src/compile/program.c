@@ -184,6 +184,7 @@ void grx_program_init(GRX_Program * program, const GRX_Allocator * allocator,
   program->required_literal_length = 0;
   program->required_offset_min = 0;
   program->required_offset_max = GRX_NPOS;
+  program->prefix_set = NULL;
   program->preference = GRX_PREFER_LEFTMOST_FIRST;
   program->submatch = GRX_SUBMATCH_FIRST_PATH;
   program->iteration = GRX_ITERATE_RETRY_THEN_ADVANCE;
@@ -609,5 +610,7 @@ void grx_program_clear(GRX_Program * program) {
   grx_arena_clear(&program->scalar_scopes);
   grx_arena_clear(&program->callouts);
   grx_arena_clear(&program->callout_strings);
+  grx_prefix_set_free(program->prefix_set);
+  program->prefix_set = NULL;
   program->register_count = 0;
 }

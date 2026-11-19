@@ -683,6 +683,236 @@ TEST(Match, StepsAreReportedAndReset) {
   EXPECT_LT(grx_match_steps(match.get()), many);
 }
 
+namespace {
+
+/** Steps a search under `syntax` costs, and whether it found `needle`. */
+size_t stepsToFind(GRX_Syntax syntax, const char * pattern,
+    const std::string & subject, size_t * out_start) {
+  GRX_Regex * regex = nullptr;
+  EXPECT_EQ(grx_regex_compile(pattern, syntax, GRX_OPT_UTF, &regex), GRX_OK);
+  GRX_Match * match = nullptr;
+  EXPECT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+  int matched = 0;
+  EXPECT_EQ(grx_regex_search(regex, subject.data(), subject.size(), 0,
+                GRX_ENGINE_AUTO, nullptr, match, &matched),
+      GRX_OK);
+  EXPECT_TRUE(matched);
+  GRX_Capture span;
+  EXPECT_EQ(grx_match_span(match, &span), GRX_OK);
+  *out_start = span.start;
+  size_t steps = grx_match_steps(match);
+  grx_match_destroy(match);
+  grx_regex_free(regex);
+  return steps;
+}
+
+} // namespace
+
+TEST(Match, ALiteralIsFoundWithoutScanningUnderTheCrlfConvention) {
+  // Java treats CRLF as one line terminator for every pattern, and the
+  // start-position skip was given up whenever that rule was live, so the
+  // dialect scanned byte by byte for a literal the others find with one
+  // search: 10,000,000 steps and GRX_ERR_LIMIT on a 16 MB subject that costs
+  // 33 anywhere else. The rule and the skip contend only where a match can
+  // begin with LF, and `needle` cannot.
+  std::string subject(1 << 20, 'a');
+  subject += "needle";
+  size_t java_start = 0, perl_start = 0;
+  size_t java_steps = stepsToFind(GRX_SYNTAX_JAVA, "needle", subject,
+      &java_start);
+  size_t perl_steps = stepsToFind(GRX_SYNTAX_PERL, "needle", subject,
+      &perl_start);
+  EXPECT_EQ(java_start, subject.size() - 6);
+  EXPECT_EQ(java_start, perl_start);
+  EXPECT_LT(java_steps, 1000u);
+  EXPECT_LT(perl_steps, 1000u);
+}
+
+TEST(Match, TheCrlfRuleStillAppliesWhereALineFeedCanStartAMatch) {
+  // The other half: `[\n]x` can begin with LF, so the skip must still defer
+  // to the rule, and an attempt between the CR and the LF of a pair is still
+  // not made. Under Java `\r\nx` is found as a whole and the LF alone is not
+  // a place a search may resume.
+  GRX_Regex * regex = nullptr;
+  ASSERT_EQ(grx_regex_compile("[\\n]x", GRX_SYNTAX_JAVA, GRX_OPT_UTF, &regex),
+      GRX_OK);
+  GRX_Match * match = nullptr;
+  ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+  const std::string subject = "aaaa\r\nxaaa";
+  int matched = 0;
+  ASSERT_EQ(grx_regex_search(regex, subject.data(), subject.size(), 0,
+                GRX_ENGINE_AUTO, nullptr, match, &matched),
+      GRX_OK);
+  // Whatever the rule decides, it decides it the same way with the skip as
+  // without: compare against the engine that never skips.
+  GRX_Capture with_skip;
+  ASSERT_EQ(grx_match_span(match, &with_skip), GRX_OK);
+  int matched_bt = 0;
+  GRX_Match * reference = nullptr;
+  ASSERT_EQ(grx_match_create(regex, nullptr, &reference), GRX_OK);
+  ASSERT_EQ(grx_regex_search(regex, subject.data(), subject.size(), 0,
+                GRX_ENGINE_BACKTRACK, nullptr, reference, &matched_bt),
+      GRX_OK);
+  EXPECT_EQ(matched, matched_bt);
+  if (matched && matched_bt) {
+    GRX_Capture other;
+    ASSERT_EQ(grx_match_span(reference, &other), GRX_OK);
+    EXPECT_EQ(with_skip.start, other.start);
+    EXPECT_EQ(with_skip.end, other.end);
+  }
+  grx_match_destroy(reference);
+  grx_match_destroy(match);
+  grx_regex_free(regex);
+}
+
+namespace {
+
+/** A small deterministic generator, so a failure names its seed. */
+struct Lcg {
+  uint64_t state;
+  explicit Lcg(uint64_t seed) : state(seed * 6364136223846793005ull + 1442695040888963407ull) {}
+  uint32_t next(uint32_t bound) {
+    state = state * 6364136223846793005ull + 1442695040888963407ull;
+    return (uint32_t)((state >> 33) % bound);
+  }
+};
+
+/**
+ * The leftmost match by the definition: try an anchored match at every
+ * position and take the first that succeeds. It never reaches the skip that
+ * the prefix set is part of, which is what makes it a reference.
+ */
+bool referenceSearch(const GRX_Regex * regex, const std::string & subject,
+    size_t * out_start, size_t * out_end) {
+  GRX_Match * match = nullptr;
+  EXPECT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+  bool found = false;
+  for (size_t at = 0; at <= subject.size() && !found; at++) {
+    int matched = 0;
+    GRX_Result result = grx_regex_match(regex, subject.data(),
+        subject.size(), at, GRX_ENGINE_BACKTRACK, nullptr, match, &matched);
+    EXPECT_EQ(result, GRX_OK);
+    if (result == GRX_OK && matched) {
+      GRX_Capture span;
+      EXPECT_EQ(grx_match_span(match, &span), GRX_OK);
+      *out_start = span.start;
+      *out_end = span.end;
+      found = true;
+    }
+  }
+  grx_match_destroy(match);
+  return found;
+}
+
+} // namespace
+
+TEST(PrefixSet, SearchesAgreeWithTryingEveryPosition) {
+  // An alternation of several different words has no single literal prefix,
+  // so a search used to run the thread set at every position the first byte
+  // allowed. A set of the words' beginnings finds the next position at which
+  // any of them occurs; this checks that it never finds a later one than the
+  // definition does, over words that share prefixes, nest inside each other,
+  // and repeat in the subject.
+  const GRX_Syntax syntaxes[] = {GRX_SYNTAX_PERL, GRX_SYNTAX_ECMASCRIPT,
+      GRX_SYNTAX_JAVA, GRX_SYNTAX_PYTHON, GRX_SYNTAX_RE2};
+  const char * alphabet = "abc";
+  size_t with_set = 0;
+  for (uint64_t seed = 1; seed <= 400; seed++) {
+    Lcg rng(seed);
+    // Words of two to five letters over a three-letter alphabet, so that
+    // they overlap heavily: one is often a prefix, a suffix or an infix of
+    // another.
+    std::string pattern;
+    const uint32_t words = 2 + rng.next(7);
+    for (uint32_t w = 0; w < words; w++) {
+      if (w) pattern += '|';
+      const uint32_t len = 2 + rng.next(4);
+      for (uint32_t i = 0; i < len; i++) pattern += alphabet[rng.next(3)];
+    }
+    // Wrap some of them so the alternation is not the whole pattern.
+    switch (rng.next(4)) {
+      case 0: pattern = "(?:" + pattern + ")x"; break;
+      case 1: pattern = "(" + pattern + ")+c"; break;
+      case 2: pattern = "(?:" + pattern + ")[ab]*"; break;
+      default: break;
+    }
+    std::string subject;
+    const uint32_t length = rng.next(60);
+    for (uint32_t i = 0; i < length; i++) {
+      subject += (rng.next(8) == 0) ? 'x' : alphabet[rng.next(3)];
+    }
+    for (GRX_Syntax syntax : syntaxes) {
+      GRX_Regex * regex = nullptr;
+      if (grx_regex_compile(pattern.c_str(), syntax, GRX_OPT_UTF, &regex)
+          != GRX_OK) {
+        continue;  // a dialect that does not spell this; not what is tested
+      }
+      if (regex->program.prefix_set) {
+        with_set++;
+      }
+      size_t want_start = 0, want_end = 0;
+      bool want = referenceSearch(regex, subject, &want_start, &want_end);
+
+      GRX_Match * match = nullptr;
+      ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+      int matched = 0;
+      ASSERT_EQ(grx_regex_search(regex, subject.data(), subject.size(), 0,
+                    GRX_ENGINE_AUTO, nullptr, match, &matched),
+          GRX_OK)
+          << pattern << " on " << subject;
+      EXPECT_EQ(matched != 0, want)
+          << "seed " << seed << " /" << pattern << "/ on \"" << subject << "\"";
+      if (matched && want) {
+        GRX_Capture span;
+        ASSERT_EQ(grx_match_span(match, &span), GRX_OK);
+        EXPECT_EQ(span.start, want_start)
+            << "seed " << seed << " /" << pattern << "/ on \"" << subject << "\"";
+        EXPECT_EQ(span.end, want_end)
+            << "seed " << seed << " /" << pattern << "/ on \"" << subject << "\"";
+      }
+      grx_match_destroy(match);
+      grx_regex_free(regex);
+    }
+  }
+  // The control: a differential that never reached the thing it checks would
+  // pass for the wrong reason.
+  EXPECT_GT(with_set, 500u);
+}
+
+TEST(PrefixSet, AListOfWordsCostsAboutAsMuchAsTheTextItIsSearchedFor) {
+  // The cost this exists to remove: a thousand words searched for in a
+  // megabyte that contains none of them used to run a thousand threads at
+  // every position - three billion steps. It is now the scan and nothing
+  // else.
+  std::string pattern = "(?:";
+  for (int i = 0; i < 1000; i++) {
+    if (i) pattern += '|';
+    pattern += "word" + std::to_string(i * 7919 % 100003) + "z";
+  }
+  pattern += ")";
+  std::string subject;
+  Lcg rng(3);
+  while (subject.size() < (1u << 20)) {
+    subject += "wor";
+    subject += (char)('a' + rng.next(26));
+    subject += ' ';
+  }
+  GRX_Regex * regex = nullptr;
+  ASSERT_EQ(grx_regex_compile(pattern.c_str(), GRX_SYNTAX_PERL, GRX_OPT_UTF,
+                &regex),
+      GRX_OK);
+  GRX_Match * match = nullptr;
+  ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+  int matched = 1;
+  ASSERT_EQ(grx_regex_search(regex, subject.data(), subject.size(), 0,
+                GRX_ENGINE_AUTO, nullptr, match, &matched),
+      GRX_OK);
+  EXPECT_FALSE(matched);
+  EXPECT_LT(grx_match_steps(match), subject.size());
+  grx_match_destroy(match);
+  grx_regex_free(regex);
+}
+
 TEST(Match, StepsAreReportedEvenWhenTheLimitIsHit) {
   // The count is what max_steps counts, so it has to survive the failure
   // that max_steps causes - otherwise a caller measuring a limit learns

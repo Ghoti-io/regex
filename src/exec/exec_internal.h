@@ -355,8 +355,23 @@ static inline size_t grx_exec_skip_to_first_byte_unaligned(
       && program->required_offset_max != GRX_NPOS
       && program->required_offset_max - program->required_offset_min
           <= GRX_REQUIRED_WINDOW_MAX;
+  // `(*CRLF)` keeps both engines from *beginning* an attempt between a CR and
+  // its LF, which is to say at an LF that follows a CR. A skip can only land
+  // there if a match is able to begin with LF, so the rule and the skip
+  // contend only for a start set that holds LF - and a start set that does
+  // not is the common case, which is why this is worth saying precisely.
+  // Java sets the rule for every pattern, so a guard that gave up the skip
+  // whenever the rule was live left that dialect scanning byte by byte for a
+  // literal the others find with one search. The window is given up while the
+  // rule is live regardless: it moves `from` to an arbitrary position and so
+  // can land on the one the rule forbids.
+  int crlf_live = (program->flags & GRX_PROGRAM_NEWLINE_CRLF)
+      && !(program->flags & GRX_PROGRAM_HAS_CR_OR_LF);
+  if (crlf_live) {
+    windowed = 0;
+  }
   if (!program->first_bytes_known && !program->literal_prefix_length
-      && !windowed) {
+      && !program->prefix_set && !windowed) {
     return from;
   }
   // A callout is a side effect of *trying* a position, not of matching at one:
@@ -375,13 +390,18 @@ static inline size_t grx_exec_skip_to_first_byte_unaligned(
   }
   // `(*CRLF)` keeps both engines from *beginning* an attempt between a CR and
   // its LF, and this would step straight onto one. The rule is off whenever
-  // the pattern names CR or LF itself, and that is the only case where the
-  // skip and the rule could contend - so the skip simply does not apply when
-  // the rule is live. A pattern under `(*CRLF)` that cannot start with either
-  // character is the whole of what this gives up.
-  if ((program->flags & GRX_PROGRAM_NEWLINE_CRLF)
-      && !(program->flags & GRX_PROGRAM_HAS_CR_OR_LF)) {
-    return from;
+  // the pattern names CR or LF itself, and the skip contends with it only
+  // where a match can begin with LF - so the skip does not apply when the
+  // rule is live and LF is a possible first byte.
+  if (crlf_live) {
+    int lf_can_start = program->prefix_set
+        ? program->prefix_set->lf_can_start
+        : program->literal_prefix_length
+        ? program->literal_prefix[0] == '\n'
+        : (program->first_bytes['\n' >> 3] & (1u << ('\n' & 7u))) != 0;
+    if (lf_can_start) {
+      return from;
+    }
   }
   // A whole string beats a byte wherever there is one. `aaaaaaaaab` is the
   // case the byte set cannot help with at all - every position in a subject
@@ -401,7 +421,16 @@ static inline size_t grx_exec_skip_to_first_byte_unaligned(
   for (;;) {
     size_t before = from;
 
-    if (program->literal_prefix_length) {
+    if (program->prefix_set) {
+      if (from >= length) {
+        return from;
+      }
+      from = grx_prefix_set_next(program->prefix_set, subject, from, length);
+      if (from >= length) {
+        return length;
+      }
+    }
+    else if (program->literal_prefix_length) {
       if (from >= length) {
         return from;
       }

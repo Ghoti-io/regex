@@ -1050,3 +1050,285 @@ size_t grx_program_required_literal(const GRX_Program * program, char * out,
   }
   return best;
 }
+
+/* ------------------------------------------------------------------ */
+/* The set of strings every match begins with                         */
+/* ------------------------------------------------------------------ */
+
+/** Longest string kept, in bytes; a longer path is cut here. */
+#define PREFIX_STRING_MAX 32u
+/** The most trie nodes a set may have. */
+#define PREFIX_NODE_MAX (1u << 20)
+/** The most path steps the walk may take before it gives up. */
+#define PREFIX_WORK_MAX (1u << 23)
+
+typedef struct {
+  uint32_t pc;
+  uint32_t node;
+  uint32_t depth;
+} PrefixPath;
+
+void grx_prefix_set_free(GRX_PrefixSet * set) {
+  if (!set) {
+    return;
+  }
+  const GRX_Allocator * allocator = set->allocator;
+  gcu_allocator_free(allocator, set->nodes);
+  gcu_allocator_free(allocator, set);
+}
+
+/** The child of `node` on `byte`, creating it when `create`; 0 on failure. */
+static uint32_t prefix_child(
+    GRX_PrefixSet * set, uint32_t node, unsigned char byte, int create) {
+  for (uint32_t c = set->nodes[node].child; c; c = set->nodes[c].sibling) {
+    if (set->nodes[c].label == byte) {
+      return c;
+    }
+  }
+  if (!create) {
+    return 0;
+  }
+  if (set->count >= PREFIX_NODE_MAX) {
+    return 0;
+  }
+  if (set->count == set->capacity) {
+    uint32_t grown = set->capacity ? set->capacity * 2u : 64u;
+    GRX_PrefixNode * nodes = gcu_allocator_realloc(
+        set->allocator, set->nodes, (size_t)grown * sizeof *nodes);
+    if (!nodes) {
+      return 0;
+    }
+    set->nodes = nodes;
+    set->capacity = grown;
+  }
+  uint32_t index = set->count++;
+  GRX_PrefixNode * fresh = &set->nodes[index];
+  memset(fresh, 0, sizeof *fresh);
+  fresh->label = byte;
+  fresh->depth = (uint16_t)(set->nodes[node].depth + 1u);
+  fresh->sibling = set->nodes[node].child;
+  set->nodes[node].child = index;
+  return index;
+}
+
+GRX_PrefixSet * grx_program_prefix_set(const GRX_Program * program) {
+  if (!program || program->literal_prefix_length >= 2
+      || (program->flags & GRX_PROGRAM_HAS_CALLOUT)) {
+    return NULL;
+  }
+  size_t count = program->insts.count;
+  if (count < 3 || start_or_end_moves(program)) {
+    return NULL;
+  }
+  int utf = (program->flags & GRX_PROGRAM_UTF) != 0;
+  int wtf8 = (program->flags & GRX_PROGRAM_WTF8) != 0;
+  const GRX_Allocator * allocator = program->insts.allocator;
+
+  GRX_PrefixSet * set = gcu_allocator_calloc(allocator, 1, sizeof *set);
+  if (!set) {
+    return NULL;
+  }
+  set->allocator = allocator;
+  // The root is node 0, and it has no label and no depth.
+  set->nodes = gcu_allocator_calloc(allocator, 64, sizeof *set->nodes);
+  if (!set->nodes) {
+    gcu_allocator_free(allocator, set);
+    return NULL;
+  }
+  set->capacity = 64;
+  set->count = 1;
+
+  size_t stack_capacity = 64;
+  size_t depth = 0;
+  PrefixPath * stack = gcu_allocator_calloc(
+      allocator, stack_capacity, sizeof *stack);
+  int ok = stack != NULL;
+  size_t work = 0;
+  size_t strings = 0;
+  if (ok) {
+    stack[depth++] = (PrefixPath){0, 0, 0};
+  }
+
+  while (ok && depth) {
+    PrefixPath path = stack[--depth];
+    uint32_t pc = path.pc;
+    uint32_t node = path.node;
+    uint32_t used = path.depth;
+    // Each branch walks at most the program's length before it is cut: a
+    // path longer than that has gone round something.
+    for (size_t step = 0;; step++) {
+      if (++work > PREFIX_WORK_MAX) {
+        ok = 0;
+        break;
+      }
+      const GRX_Inst * inst = pc < count
+          ? GRX_ARENA_AT(const GRX_Inst, &program->insts, pc) : NULL;
+      int stop = !inst || (inst->flags & GRX_INST_REVERSE)
+          || step > count;
+      if (!stop) {
+        switch (inst->op) {
+          case GRX_OP_CHAR: {
+            char encoded[8];
+            size_t width = 0;
+            if (!literal_append(encoded, sizeof encoded, &width, inst->x, utf,
+                    wtf8)
+                || used + width > PREFIX_STRING_MAX) {
+              stop = 1;
+              break;
+            }
+            for (size_t i = 0; i < width && !stop; i++) {
+              uint32_t next = prefix_child(
+                  set, node, (unsigned char)encoded[i], 1);
+              if (!next) {
+                ok = 0;
+                stop = 1;
+                break;
+              }
+              node = next;
+            }
+            if (stop) {
+              break;
+            }
+            used += (uint32_t)width;
+            pc++;
+            continue;
+          }
+          case GRX_OP_SAVE:
+          case GRX_OP_ASSERT:
+          case GRX_OP_PROGRESS_SET:
+          case GRX_OP_RESET:
+          case GRX_OP_RESET_STALE:
+          case GRX_OP_ATOMIC_BEGIN:
+          case GRX_OP_CALLOUT:
+            pc++;
+            continue;
+          case GRX_OP_ATOMIC_END:
+            if (inst->policy & GRX_POLICY_COMPLETE_COMPOSING) {
+              stop = 1;
+              break;
+            }
+            pc++;
+            continue;
+          case GRX_OP_JMP:
+            // A jump backwards is a loop; the string so far is what the
+            // path is known to begin with.
+            if (inst->x <= pc) {
+              stop = 1;
+              break;
+            }
+            pc = inst->x;
+            continue;
+          case GRX_OP_SPLIT:
+            if (inst->y <= pc || inst->x <= pc) {
+              stop = 1;
+              break;
+            }
+            if (depth == stack_capacity) {
+              size_t grown = stack_capacity * 2u;
+              PrefixPath * bigger = gcu_allocator_realloc(
+                  allocator, stack, grown * sizeof *stack);
+              if (!bigger) {
+                ok = 0;
+                stop = 1;
+                break;
+              }
+              stack = bigger;
+              stack_capacity = grown;
+            }
+            stack[depth++] = (PrefixPath){inst->y, node, used};
+            pc = inst->x;
+            continue;
+          case GRX_OP_LOOK:
+            if (!(inst->flags & GRX_INST_COND_ELSE)) {
+              pc = inst->y;
+              continue;
+            }
+            stop = 1;
+            break;
+          default:
+            stop = 1;
+            break;
+        }
+      }
+      // The path ends here. A path that has consumed nothing has no string
+      // to offer, and one such path means a match can begin anywhere: no set.
+      if (ok) {
+        if (node == 0) {
+          ok = 0;
+        }
+        else if (!set->nodes[node].terminal) {
+          set->nodes[node].terminal = 1;
+          strings++;
+        }
+      }
+      break;
+    }
+  }
+  gcu_allocator_free(allocator, stack);
+
+  if (!ok || strings < 2) {
+    grx_prefix_set_free(set);
+    return NULL;
+  }
+
+  // Lengths, and whether a line feed can begin one.
+  set->min_length = (size_t)-1;
+  for (uint32_t n = 1; n < set->count; n++) {
+    if (set->nodes[n].terminal) {
+      if (set->nodes[n].depth < set->min_length) {
+        set->min_length = set->nodes[n].depth;
+      }
+      if (set->nodes[n].depth > set->max_length) {
+        set->max_length = set->nodes[n].depth;
+      }
+    }
+  }
+  // One-byte strings select nothing a byte set does not, and the scan here
+  // costs more per byte than the vectorised one.
+  if (set->min_length < 2) {
+    grx_prefix_set_free(set);
+    return NULL;
+  }
+
+  // Failure links, breadth first. A queue of node indexes, the nodes being
+  // numbered in creation order and not in depth order.
+  uint32_t * queue = gcu_allocator_calloc(allocator, set->count, sizeof *queue);
+  if (!queue) {
+    grx_prefix_set_free(set);
+    return NULL;
+  }
+  size_t head = 0, tail = 0;
+  for (uint32_t c = set->nodes[0].child; c; c = set->nodes[c].sibling) {
+    set->nodes[c].fail = 0;
+    queue[tail++] = c;
+    set->root_next[set->nodes[c].label] = c;
+    if (set->nodes[c].label == '\n') {
+      set->lf_can_start = 1;
+    }
+  }
+  while (head < tail) {
+    uint32_t v = queue[head++];
+    for (uint32_t c = set->nodes[v].child; c; c = set->nodes[c].sibling) {
+      unsigned char label = set->nodes[c].label;
+      uint32_t f = set->nodes[v].fail;
+      for (;;) {
+        uint32_t g = f == 0 ? set->root_next[label]
+                            : prefix_child(set, f, label, 0);
+        if (g && g != c) {
+          set->nodes[c].fail = g;
+          break;
+        }
+        if (f == 0) {
+          set->nodes[c].fail = 0;
+          break;
+        }
+        f = set->nodes[f].fail;
+      }
+      uint32_t fc = set->nodes[c].fail;
+      set->nodes[c].out = set->nodes[fc].terminal ? fc : set->nodes[fc].out;
+      queue[tail++] = c;
+    }
+  }
+  gcu_allocator_free(allocator, queue);
+  return set;
+}

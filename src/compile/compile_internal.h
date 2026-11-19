@@ -517,6 +517,44 @@ typedef struct GRX_ProgramCallout {
 } GRX_ProgramCallout;
 
 /**
+ * @brief A set of strings every match is known to begin with, as an
+ *   Aho-Corasick automaton over bytes.
+ *
+ * The single literal prefix covers a pattern like `needle[a-z]*`; it cannot
+ * cover `(?:alpha|beta|gamma|...)`, whose matches begin with one of many
+ * different strings, and which is therefore left with the byte set - a test
+ * that almost every position passes for a list of words. This is the same
+ * question asked of a set: where does the next position begin at which *any*
+ * of the strings occurs. Everything in between cannot start a match, so no
+ * engine has to be started there.
+ *
+ * Each string is a prefix of every match that follows its path through the
+ * program, cut where the path stops being a known literal; cutting is always
+ * safe for a prefilter and only loses selectivity. A path that is known to
+ * be empty at its start leaves nothing to filter on, and then there is no set.
+ */
+typedef struct GRX_PrefixNode {
+  uint32_t child;   ///< First child, or 0.
+  uint32_t sibling; ///< Next child of the same parent, or 0.
+  uint32_t fail;    ///< Longest proper suffix that is also a path.
+  uint32_t out;     ///< Nearest string ending on the failure chain, or 0.
+  uint16_t depth;   ///< Bytes from the root.
+  unsigned char label;    ///< The byte on the edge into this node.
+  unsigned char terminal; ///< A string ends here.
+} GRX_PrefixNode;
+
+typedef struct GRX_PrefixSet {
+  const GRX_Allocator * allocator;
+  GRX_PrefixNode * nodes; ///< Node 0 is the root.
+  uint32_t count;
+  uint32_t capacity;
+  uint32_t root_next[256]; ///< The root's transition on each byte, 0 for none.
+  size_t min_length;       ///< The shortest string.
+  size_t max_length;       ///< The longest.
+  int lf_can_start;        ///< Some string begins with a line feed.
+} GRX_PrefixSet;
+
+/**
  * @brief A compiled program: instructions, the classes they name, and the
  * two properties that belong to the whole of it rather than to any node.
  */
@@ -628,6 +666,12 @@ typedef struct GRX_Program {
    */
   size_t required_offset_min;
   size_t required_offset_max;
+  /**
+   * Strings every match begins with, when there are several; see
+   * GRX_PrefixSet. NULL when there is one literal prefix or none worth
+   * having. Owned by the program.
+   */
+  GRX_PrefixSet * prefix_set;
 } GRX_Program;
 
 /**
@@ -883,6 +927,33 @@ size_t grx_program_literal_prefix(
  */
 size_t grx_program_required_literal(const GRX_Program * program, char * out,
     size_t cap, size_t * out_offset_min, size_t * out_offset_max);
+
+/**
+ * @brief Build the set of strings every match begins with.
+ *
+ * Offered only where it earns its place: at least two strings, none empty,
+ * none of them under two bytes, and no single literal prefix already doing
+ * the job. Everything else is "no set", which is the answer a search has
+ * always been able to run without.
+ *
+ * @param program The compiled program, with `literal_prefix` already set.
+ * @return The set, or NULL when there is none to use or storage ran out. The
+ *   caller owns it; release it with grx_prefix_set_free().
+ */
+GRX_PrefixSet * grx_program_prefix_set(const GRX_Program * program);
+
+/** @brief Release a prefix set. NULL is ignored. */
+void grx_prefix_set_free(GRX_PrefixSet * set);
+
+/**
+ * @brief The first position at or after `from` where one of the strings
+ *   occurs.
+ *
+ * @return That position, or `length` when none does - which means no match
+ *   begins at or after `from`.
+ */
+size_t grx_prefix_set_next(const GRX_PrefixSet * set, const char * subject,
+    size_t from, size_t length);
 
 #ifdef __cplusplus
 }
