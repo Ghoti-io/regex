@@ -36,6 +36,7 @@ REFUSAL_CATEGORIES = {
     871: 'NFA postfix operator following another postfix operator',
     872: 'more than nine NFA capturing groups',
     888: 'forbidden marker repetition',
+    944: 'reverse range in a character class',
     1204: 'number after backslash-percent-dot',
     1273: 'NFA backslash-percent-c without a value',
     1281: 'engine selector not at the start of the pattern',
