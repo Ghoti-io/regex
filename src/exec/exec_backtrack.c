@@ -391,6 +391,8 @@ typedef struct {
   uint32_t discovery_atomic;
   size_t discovery_depth;
   int discovery_prefix_only;
+  /** comparison_frontiers_eligible(), once per search: 0 not yet asked, 1 yes, 2 no. */
+  int frontiers_verdict;
   size_t discovery_bound;
   uint32_t body_pc;
   size_t body_position;
@@ -4662,10 +4664,10 @@ static int run_body(Backtrack * bt, uint32_t pc, size_t position, size_t floor,
     return comparison_body_candidates(bt, pc, position, floor, toplevel, out_end);
   if (!bt->cohorts && toplevel && bt->run_depth == 1 &&
       !bt->request->scalar_query && !bt->discovery_depth &&
+      (bt->program->flags & GRX_PROGRAM_LOOK_CONTEXT) &&
       ((bt->program->flags &
           (GRX_PROGRAM_OPEN_REFERENCES | GRX_PROGRAM_INCOMING_LOOK_COHORTS |
-              GRX_PROGRAM_EMPTY_COMPARISONS)) || comparison_frontiers_eligible(bt)) &&
-      (bt->program->flags & GRX_PROGRAM_LOOK_CONTEXT))
+              GRX_PROGRAM_EMPTY_COMPARISONS)) || comparison_frontiers_eligible(bt)))
     return cohort_run(bt, pc, position, floor, toplevel, out_end);
   return run_path(bt, pc, position, floor, toplevel, out_end);
 }
@@ -7785,11 +7787,21 @@ static void cohort_return_report(Backtrack * bt) {
       cohort_save_report(bt, (uint32_t)group + 1);
 }
 
-/** Opaque BODY invocations keep the deferred owner scheduler. */
-static int comparison_frontiers_eligible(Backtrack * bt) {
+/**
+ * Whether every instruction of the program is one the deferred owner
+ * scheduler can run. A walk over the whole program, so it is charged to the
+ * step budget as the other such walks are and does not report an answer it
+ * did not finish finding: `*complete` is zero when the budget ran out.
+ */
+static int comparison_frontiers_scan(Backtrack * bt, int * complete) {
+  *complete = 1;
   if (bt->captures >= sizeof(size_t) * 8)
     return 0;
   for (size_t pc = 0; pc < bt->program->insts.count; pc++) {
+    if (!pending_step(bt)) {
+      *complete = 0;
+      return 0;
+    }
     const GRX_Inst * inst = grx_program_at(bt->program, (uint32_t)pc);
     switch (inst->op) {
       case GRX_OP_LOOK:
@@ -7810,6 +7822,26 @@ static int comparison_frontiers_eligible(Backtrack * bt) {
     }
   }
   return 1;
+}
+
+/**
+ * Opaque BODY invocations keep the deferred owner scheduler.
+ *
+ * Asked at the start of every attempt, and the answer is a property of the
+ * program, so it is worked out once per search. Asked afresh each time it was
+ * a pass over the whole program per start position, uncharged: a 48 KB
+ * pattern over a 48 KB subject ran for more than thirty seconds inside it.
+ */
+static int comparison_frontiers_eligible(Backtrack * bt) {
+  if (bt->frontiers_verdict) {
+    return bt->frontiers_verdict == 1;
+  }
+  int complete = 1;
+  int verdict = comparison_frontiers_scan(bt, &complete);
+  if (complete) {
+    bt->frontiers_verdict = verdict ? 1 : 2;
+  }
+  return verdict;
 }
 
 static int cohort_scope_active(const Backtrack * bt) {

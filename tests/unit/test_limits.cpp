@@ -1530,3 +1530,47 @@ TEST(Limits, AChainOfStackedQuantifiersCountsAsNesting) {
       GRX_OK);
   grx_regex_free(regex);
 }
+
+#include <chrono>
+
+TEST(Limits, ASearchDoesNotWalkTheWholeProgramAtEveryStartPosition) {
+  // The backtracker asked, at the start of every attempt, whether every
+  // instruction of the program was one its deferred scheduler could run, and
+  // answered by walking the whole program without charging a step. A 48 KB
+  // pattern searched over its own 48 KB text therefore did a program's worth
+  // of work per position - more than thirty seconds, found by the pattern
+  // fuzzer, against a step limit meant to bound exactly this. The walk is now
+  // charged, made once per search, and tried only for a program that has the
+  // context that needs it.
+  std::ifstream in("tests/fuzz/corpus/pattern/backtrack-frontier-scan.seed",
+      std::ios::binary);
+  ASSERT_TRUE(in.good()) << "the seed is committed beside the fuzzers";
+  std::string bytes((std::istreambuf_iterator<char>(in)),
+      std::istreambuf_iterator<char>());
+  ASSERT_GT(bytes.size(), 1000u);
+  bytes.erase(0, 1);  // the fuzzer's selector byte
+
+  const auto begin = std::chrono::steady_clock::now();
+  for (int syntax = 0; syntax < (int)GRX_SYNTAX_COUNT; syntax++) {
+    for (uint32_t options : {(uint32_t)GRX_OPT_NONE, (uint32_t)GRX_OPT_UTF}) {
+      GRX_Regex * regex = nullptr;
+      if (grx_regex_compile_with_allocator(bytes.data(), bytes.size(),
+              (GRX_Syntax)syntax, options, nullptr, nullptr, nullptr, &regex)
+          != GRX_OK) {
+        continue;
+      }
+      GRX_Match * match = nullptr;
+      ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+      int matched = 0;
+      (void)grx_regex_search(regex, bytes.data(), bytes.size(), 0,
+          GRX_ENGINE_AUTO, nullptr, match, &matched);
+      grx_match_destroy(match);
+      grx_regex_free(regex);
+    }
+  }
+  const double seconds = std::chrono::duration<double>(
+      std::chrono::steady_clock::now() - begin).count();
+  // 30 ms with the walk charged and cached; 2.6 s without it in a release
+  // build and far more under a sanitizer.
+  EXPECT_LT(seconds, 1.5);
+}
