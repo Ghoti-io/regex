@@ -189,7 +189,10 @@ def main(argv):
     disagreements = []
     known = []
     for pattern, us, them in zip(CONSTRUCTS, mine, yours):
-        we_refuse = us.startswith("compile")
+        # A construct the front end refuses without approximating it (`\\C`,
+        # the code blocks) is a refusal too; the driver spells it as an error.
+        we_refuse = (us.startswith("compile")
+                     or us == "error Unsupported feature")
         they_refuse = them.startswith("compile")
         if we_refuse == they_refuse:
             continue
