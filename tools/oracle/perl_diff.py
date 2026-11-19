@@ -648,8 +648,16 @@ def compare(dialect, ours, seed, patterns, examples):
         # `\C` on 2026-09-26, arrived as 5,760 disagreements rather than as a
         # count. A bucket that cannot see the answer it is named for is worse
         # than no bucket: it is a green line over an unasked question.
-        if us.startswith("unsupported") or (not_implemented is not None
-                and us == "compile %d" % not_implemented):
+        #
+        # **A third spelling.** A construct the front end refuses with
+        # GRX_ERR_UNSUPPORTED rather than as a syntax error - `\C`, which this
+        # library does not approximate - is printed by the driver as
+        # `error Unsupported feature`, because it is a compile result that is
+        # neither a syntax diagnostic nor a program no engine can run. It
+        # arrived as 5,760 disagreements, the same way the second did.
+        if us.startswith("unsupported") or us == "error Unsupported feature" \
+                or (not_implemented is not None
+                    and us == "compile %d" % not_implemented):
             unsupported += 1
             continue
         compared += 1
