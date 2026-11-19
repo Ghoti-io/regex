@@ -113,6 +113,13 @@ typedef struct Run {
   int curc;        ///< The character at the position being walked; 0 at end.
   int bref;        ///< The pattern uses a back-reference.
   int anchored;    ///< Do not start a match anywhere but where asked.
+  /**
+   * The program whose facts say where a match can begin, when the automaton
+   * is simple enough to be skipped along: no assertion, atomic group or
+   * back-reference, so that a thread started at a position it cannot match
+   * at dies without leaving anything behind. NULL otherwise.
+   */
+  const GRX_Program * skip_program;
   size_t steps;
   size_t max_steps;
   uint32_t body_depth;
@@ -658,6 +665,24 @@ static int member_of(
 }
 
 
+/**
+ * The first cluster boundary at or after `at`: a composing character belongs
+ * to the character before it, and a match is never begun in the middle of one.
+ * A skip lands on whatever byte a match could start with, and a mark is such a
+ * byte for a set that holds everything but a few letters.
+ */
+static size_t align_to_cluster(const Run * run, size_t at) {
+  while (at < (size_t)run->len) {
+    int cp = 0;
+    int32_t bytes = decode_at(run, (int32_t)at, &cp);
+    if (bytes == 0 || cp < 0x300 || grx_display_cell_width((uint32_t)cp, 0) != 0) {
+      break;
+    }
+    at += (size_t)bytes;
+  }
+  return at;
+}
+
 static int charge(Run * run) {
   run->steps++;
   if (run->max_steps && run->steps > run->max_steps) {
@@ -688,13 +713,26 @@ static int exec_body(Run * run, uint32_t start, int32_t pos0, const Subs * seed,
   List * cur = &lists[0];
   cur->id = ++run->listid;
   int32_t pos = pos0;
+  Subs first;
+  subs_copy(&first, seed);
+  if (mode == 1 && !run->anchored && run->skip_program) {
+    // Nothing is in flight yet, so the first position a match could begin at
+    // is where the first thread goes.
+    size_t at = grx_exec_skip_to_first_byte(run->skip_program,
+        (const char *)run->text, (size_t)run->len, (size_t)pos);
+    if (at > (size_t)pos) {
+      at = align_to_cluster(run, at);
+    }
+    if (at > (size_t)pos && at <= (size_t)run->len) {
+      pos = (int32_t)at;
+      first.st[0] = pos;
+    }
+  }
   {
     int first_cp = 0;
     decode_at(run, pos, &first_cp);
     run->curc = first_cp;
   }
-  Subs first;
-  subs_copy(&first, seed);
   if (!addstate(run, cur, start, &first, NULL, pos, 0, -1, 0)) {
     status = -1;
     goto done;
@@ -974,14 +1012,30 @@ static int exec_body(Run * run, uint32_t start, int32_t pos0, const Subs * seed,
       // an earlier assertion left in it is what the thread begins with.
       Subs again;
       subs_copy(&again, &run->m);
+      // With nothing else in flight the thread about to be added is the
+      // only one, and it can only come to anything at a position a match
+      // can begin at: the next such position is where it goes, and the
+      // positions between cost nothing.
+      int32_t step = clen;
+      if (mode == 1 && run->skip_program && nxt->n == 0) {
+        size_t at = grx_exec_skip_to_first_byte(run->skip_program,
+            (const char *)run->text, (size_t)run->len, (size_t)(pos + clen));
+        if (at > (size_t)(pos + clen)) {
+          at = align_to_cluster(run, at);
+        }
+        if (at > (size_t)(pos + clen) && at <= (size_t)run->len) {
+          step = (int32_t)at - pos;
+        }
+      }
       if (mode == 1) {
-        again.st[0] = pos + clen;
+        again.st[0] = pos + step;
       }
       again.n = max32(again.n, 1);
-      if (!addstate(run, nxt, start, &again, NULL, pos, clen, -1, 0)) {
+      if (!addstate(run, nxt, start, &again, NULL, pos, step, -1, 0)) {
         status = -1;
         goto done;
       }
+      clen = step;
     }
     if (clen == 0) {
       break;
@@ -1000,18 +1054,11 @@ done:
 
 /* ---- entry points ---- */
 
-int grx_vimnfa_applies(
-    const GRX_VimNfa * nfa, const GRX_ExecRequest * request) {
-  if (!nfa || !request || request->not_bol || request->not_eol
-      || request->empty_rule != GRX_EMPTY_OK || request->callout
-      || request->search_start != request->start
-      || request->length >= (size_t)INT32_MAX / 4u
-      || request->start > request->length) {
-    return 0;
-  }
-  const unsigned char * text = (const unsigned char *)request->subject;
+/** Whether the bytes are text the automaton can read; see its header. */
+static int text_is_readable(
+    const GRX_VimNfa * nfa, const unsigned char * text, size_t length) {
   size_t i = 0;
-  while (i < request->length) {
+  while (i < length) {
     unsigned char c = text[i];
     if (c == 0) {
       return 0;
@@ -1022,7 +1069,7 @@ int grx_vimnfa_applies(
     }
     // A multi-byte character must be complete.
     size_t bytes = c >= 0xF0u ? 4u : c >= 0xE0u ? 3u : c >= 0xC0u ? 2u : 0u;
-    if (bytes == 0 || i + bytes > request->length) {
+    if (bytes == 0 || i + bytes > length) {
       return 0;
     }
     uint32_t cp = bytes == 2 ? (c & 0x1Fu) : bytes == 3 ? (c & 0x0Fu)
@@ -1047,6 +1094,31 @@ int grx_vimnfa_applies(
     i += bytes;
   }
   return 1;
+}
+
+int grx_vimnfa_applies(
+    const GRX_VimNfa * nfa, const GRX_ExecRequest * request) {
+  if (!nfa || !request || request->not_bol || request->not_eol
+      || request->empty_rule != GRX_EMPTY_OK || request->callout
+      || request->search_start != request->start
+      || request->length >= (size_t)INT32_MAX / 4u
+      || request->start > request->length) {
+    return 0;
+  }
+  GRX_Match * match = request->match;
+  if (match && match->continuing && match->vimnfa_verdict
+      && match->vimnfa_subject == request->subject
+      && match->vimnfa_length == request->length) {
+    return match->vimnfa_verdict == 1;
+  }
+  int readable = text_is_readable(
+      nfa, (const unsigned char *)request->subject, request->length);
+  if (match) {
+    match->vimnfa_subject = request->subject;
+    match->vimnfa_length = request->length;
+    match->vimnfa_verdict = readable ? 1 : 2;
+  }
+  return readable;
 }
 
 GRX_Result grx_exec_vimnfa(const GRX_ExecRequest * request, int * out_matched) {
@@ -1079,6 +1151,24 @@ GRX_Result grx_exec_vimnfa(const GRX_ExecRequest * request, int * out_matched) {
     }
   }
   run.cap = request->limits->max_match_memory;
+  {
+    int simple = !nfa->has_behind;
+    for (uint32_t i = 0; i < nfa->count && simple; i++) {
+      switch ((GRX_VimNfaKind)nfa->states[i].kind) {
+        case GRX_VN_INV:
+        case GRX_VN_ENDINV:
+        case GRX_VN_BREF:
+        case GRX_VN_SKIP:
+        case GRX_VN_PAT:
+        case GRX_VN_ENDPAT:
+          simple = 0;
+          break;
+        default:
+          break;
+      }
+    }
+    run.skip_program = simple ? &regex->program : NULL;
+  }
   size_t stamp_bytes = (nfa->count ? nfa->count : 1u) * sizeof(*run.stamp);
   run.stamp = scratch_alloc(&run, stamp_bytes);
   if (!run.stamp) {

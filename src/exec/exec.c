@@ -765,7 +765,23 @@ static GRX_Result no_further_match(GRX_Match * match, int * out_matched) {
   return GRX_OK;
 }
 
+static GRX_Result search_next_continuing(const GRX_Regex * regex,
+    const char * subject, size_t length, const GRX_SearchOptions * options,
+    GRX_Match * match, int * out_matched);
+
 GRX_Result grx_regex_search_next(const GRX_Regex * regex,
+    const char * subject, size_t length, const GRX_SearchOptions * options,
+    GRX_Match * match, int * out_matched) {
+  GRX_Result result
+      = search_next_continuing(regex, subject, length, options, match,
+          out_matched);
+  if (match) {
+    match->continuing = 0;
+  }
+  return result;
+}
+
+static GRX_Result search_next_continuing(const GRX_Regex * regex,
     const char * subject, size_t length, const GRX_SearchOptions * options,
     GRX_Match * match, int * out_matched) {
   if (!regex || !match || !out_matched) {
@@ -796,6 +812,9 @@ GRX_Result grx_regex_search_next(const GRX_Regex * regex,
   }
   GRX_Capture previous = match->captures[0];
   int was_empty = previous.start == previous.end;
+  // From here this call is the next step of a loop that began with a search
+  // of the same bytes; see GRX_Match::continuing.
+  match->continuing = 1;
 
   // The subject was validated by the search that produced the previous
   // match, and this call is documented to run against the same bytes. Paying

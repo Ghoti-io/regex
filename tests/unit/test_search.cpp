@@ -817,6 +817,7 @@ TEST(PrefixSet, SearchesAgreeWithTryingEveryPosition) {
       GRX_SYNTAX_JAVA, GRX_SYNTAX_PYTHON, GRX_SYNTAX_RE2};
   const char * alphabet = "abc";
   size_t with_set = 0;
+  size_t caseless_with_set = 0;
   for (uint64_t seed = 1; seed <= 400; seed++) {
     Lcg rng(seed);
     // Words of two to five letters over a three-letter alphabet, so that
@@ -836,19 +837,46 @@ TEST(PrefixSet, SearchesAgreeWithTryingEveryPosition) {
       case 2: pattern = "(?:" + pattern + ")[ab]*"; break;
       default: break;
     }
+    // Half of the cases are caseless, over words that use the two letters
+    // whose Unicode folds reach outside ASCII (`k` and Kelvin, `s` and long
+    // s), and over a subject in mixed case with those characters in it.
+    const bool caseless = rng.next(2) == 0;
+    if (caseless) {
+      for (char & c : pattern) {
+        if (c == 'c') c = rng.next(2) ? 'k' : 's';
+      }
+    }
     std::string subject;
     const uint32_t length = rng.next(60);
     for (uint32_t i = 0; i < length; i++) {
-      subject += (rng.next(8) == 0) ? 'x' : alphabet[rng.next(3)];
+      char c = (rng.next(8) == 0) ? 'x' : alphabet[rng.next(3)];
+      if (caseless) {
+        if (c == 'c') c = rng.next(2) ? 'k' : 's';
+        if (rng.next(2)) c = (char)(c - 32);
+        const uint32_t odd = rng.next(12);
+        if (odd == 0) {
+          subject += "\xE2\x84\xAA";  // KELVIN SIGN
+          continue;
+        }
+        if (odd == 1) {
+          subject += "\xC5\xBF";  // LATIN SMALL LETTER LONG S
+          continue;
+        }
+      }
+      subject += c;
     }
     for (GRX_Syntax syntax : syntaxes) {
       GRX_Regex * regex = nullptr;
-      if (grx_regex_compile(pattern.c_str(), syntax, GRX_OPT_UTF, &regex)
+      const uint32_t options = (uint32_t)GRX_OPT_UTF | (caseless ? (uint32_t)GRX_OPT_CASELESS : 0u);
+      if (grx_regex_compile(pattern.c_str(), syntax, options, &regex)
           != GRX_OK) {
         continue;  // a dialect that does not spell this; not what is tested
       }
       if (regex->program.prefix_set) {
         with_set++;
+        if (caseless) {
+          caseless_with_set++;
+        }
       }
       size_t want_start = 0, want_end = 0;
       bool want = referenceSearch(regex, subject, &want_start, &want_end);
@@ -877,6 +905,7 @@ TEST(PrefixSet, SearchesAgreeWithTryingEveryPosition) {
   // The control: a differential that never reached the thing it checks would
   // pass for the wrong reason.
   EXPECT_GT(with_set, 500u);
+  EXPECT_GT(caseless_with_set, 200u);
 }
 
 TEST(PrefixSet, AListOfWordsCostsAboutAsMuchAsTheTextItIsSearchedFor) {

@@ -552,6 +552,12 @@ typedef struct GRX_PrefixSet {
   size_t min_length;       ///< The shortest string.
   size_t max_length;       ///< The longest.
   int lf_can_start;        ///< Some string begins with a line feed.
+  /**
+   * ASCII letters are held in lowercase and the subject's are lowercased as
+   * they are read, so a caseless pattern's `[kK]` is one edge. Folding the
+   * exact letters too only ever admits extra positions, which a prefilter may.
+   */
+  int fold;
 } GRX_PrefixSet;
 
 /**

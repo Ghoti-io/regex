@@ -195,6 +195,9 @@ size_t grx_prefix_set_next(const GRX_PrefixSet * set, const char * subject,
       break;
     }
     unsigned char byte = (unsigned char)subject[i];
+    if (set->fold && byte >= 'A' && byte <= 'Z') {
+      byte = (unsigned char)(byte + 32u);
+    }
     for (;;) {
       uint32_t next = 0;
       if (state == 0) {

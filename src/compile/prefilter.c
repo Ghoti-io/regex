@@ -1111,6 +1111,43 @@ static uint32_t prefix_child(
   return index;
 }
 
+/** The most members of a class that are expanded into branches. */
+#define PREFIX_CLASS_MEMBERS 8u
+
+/**
+ * The code points of a small class, or 0 when it is not small or not
+ * enumerable.
+ */
+static size_t prefix_class_members(const GRX_Program * program,
+    const GRX_Inst * inst, uint32_t * out) {
+  if (inst->policy & GRX_POLICY_CLASS_TAIL) {
+    return 0;
+  }
+  size_t ranges = 0;
+  const GRX_CharRange * range
+      = grx_class_table_get(&program->classes, inst->x, &ranges);
+  if (!range || !ranges) {
+    return 0;
+  }
+  size_t n = 0;
+  for (size_t i = 0; i < ranges; i++) {
+    for (uint32_t cp = range[i].low; cp <= range[i].high; cp++) {
+      if (n == PREFIX_CLASS_MEMBERS) {
+        return 0;
+      }
+      out[n++] = cp;
+      if (cp == UINT32_MAX) {
+        break;
+      }
+    }
+  }
+  return n;
+}
+
+static unsigned char prefix_fold(const GRX_PrefixSet * set, unsigned char b) {
+  return set->fold && b >= 'A' && b <= 'Z' ? (unsigned char)(b + 32u) : b;
+}
+
 GRX_PrefixSet * grx_program_prefix_set(const GRX_Program * program) {
   if (!program || program->literal_prefix_length >= 2
       || (program->flags & GRX_PROGRAM_HAS_CALLOUT)) {
@@ -1137,6 +1174,25 @@ GRX_PrefixSet * grx_program_prefix_set(const GRX_Program * program) {
   }
   set->capacity = 64;
   set->count = 1;
+  // Case folding is a property of the whole set: a class holding both cases
+  // of some ASCII letter is what a caseless letter compiles to.
+  for (size_t i = 0; i < count && !set->fold; i++) {
+    const GRX_Inst * probe = GRX_ARENA_AT(const GRX_Inst, &program->insts, i);
+    uint32_t members[PREFIX_CLASS_MEMBERS];
+    if (!probe || probe->op != GRX_OP_CLASS) {
+      continue;
+    }
+    size_t n = prefix_class_members(program, probe, members);
+    for (size_t a = 0; a < n && !set->fold; a++) {
+      for (size_t b = 0; b < n; b++) {
+        if (members[a] >= 'a' && members[a] <= 'z'
+            && members[b] == members[a] - 32u) {
+          set->fold = 1;
+          break;
+        }
+      }
+    }
+  }
 
   size_t stack_capacity = 64;
   size_t depth = 0;
@@ -1153,7 +1209,6 @@ GRX_PrefixSet * grx_program_prefix_set(const GRX_Program * program) {
     PrefixPath path = stack[--depth];
     uint32_t pc = path.pc;
     uint32_t node = path.node;
-    uint32_t used = path.depth;
     // Each branch walks at most the program's length before it is cut: a
     // path longer than that has gone round something.
     for (size_t step = 0;; step++) {
@@ -1172,13 +1227,13 @@ GRX_PrefixSet * grx_program_prefix_set(const GRX_Program * program) {
             size_t width = 0;
             if (!literal_append(encoded, sizeof encoded, &width, inst->x, utf,
                     wtf8)
-                || used + width > PREFIX_STRING_MAX) {
+                || set->nodes[node].depth + width > PREFIX_STRING_MAX) {
               stop = 1;
               break;
             }
             for (size_t i = 0; i < width && !stop; i++) {
               uint32_t next = prefix_child(
-                  set, node, (unsigned char)encoded[i], 1);
+                  set, node, prefix_fold(set, (unsigned char)encoded[i]), 1);
               if (!next) {
                 ok = 0;
                 stop = 1;
@@ -1189,7 +1244,77 @@ GRX_PrefixSet * grx_program_prefix_set(const GRX_Program * program) {
             if (stop) {
               break;
             }
-            used += (uint32_t)width;
+            pc++;
+            continue;
+          }
+          case GRX_OP_CLASS: {
+            // A small class is a handful of alternatives: each member is an
+            // edge, and the path goes on from each place they lead. A larger
+            // one ends the path, which is always safe.
+            uint32_t members[PREFIX_CLASS_MEMBERS];
+            size_t n = prefix_class_members(program, inst, members);
+            if (!n) {
+              stop = 1;
+              break;
+            }
+            uint32_t ends[PREFIX_CLASS_MEMBERS];
+            size_t ends_count = 0;
+            for (size_t m = 0; m < n && !stop; m++) {
+              char encoded[8];
+              size_t width = 0;
+              if (!literal_append(encoded, sizeof encoded, &width, members[m],
+                      utf, wtf8)) {
+                // Not a byte this program can read; no match uses it.
+                continue;
+              }
+              if (set->nodes[node].depth + width > PREFIX_STRING_MAX) {
+                stop = 1;
+                break;
+              }
+              uint32_t at = node;
+              for (size_t i = 0; i < width; i++) {
+                at = prefix_child(
+                    set, at, prefix_fold(set, (unsigned char)encoded[i]), 1);
+                if (!at) {
+                  ok = 0;
+                  stop = 1;
+                  break;
+                }
+              }
+              if (stop) {
+                break;
+              }
+              int seen_end = 0;
+              for (size_t e = 0; e < ends_count; e++) {
+                seen_end = seen_end || ends[e] == at;
+              }
+              if (!seen_end) {
+                ends[ends_count++] = at;
+              }
+            }
+            if (stop || !ends_count) {
+              stop = 1;
+              break;
+            }
+            for (size_t e = 1; e < ends_count; e++) {
+              if (depth == stack_capacity) {
+                size_t grown = stack_capacity * 2u;
+                PrefixPath * bigger = gcu_allocator_realloc(
+                    allocator, stack, grown * sizeof *stack);
+                if (!bigger) {
+                  ok = 0;
+                  stop = 1;
+                  break;
+                }
+                stack = bigger;
+                stack_capacity = grown;
+              }
+              stack[depth++] = (PrefixPath){pc + 1, ends[e], 0};
+            }
+            if (stop) {
+              break;
+            }
+            node = ends[0];
             pc++;
             continue;
           }
@@ -1235,7 +1360,7 @@ GRX_PrefixSet * grx_program_prefix_set(const GRX_Program * program) {
               stack = bigger;
               stack_capacity = grown;
             }
-            stack[depth++] = (PrefixPath){inst->y, node, used};
+            stack[depth++] = (PrefixPath){inst->y, node, 0};
             pc = inst->x;
             continue;
           case GRX_OP_LOOK:

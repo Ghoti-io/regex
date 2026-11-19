@@ -117,6 +117,25 @@ struct GRX_Match {
   int dfa_refused;
 
   /**
+   * What the Vim automaton found out about the last subject it was offered.
+   *
+   * Whether it may run on a subject depends on the whole of the subject - a
+   * NUL, a malformed sequence, a mark after a line break - and finding out
+   * takes a pass over all of it. A search-all loop asks about the same bytes
+   * once per match, so without this the loop costs the square of the
+   * subject: a million bytes and a hundred and sixty thousand matches did not
+   * finish in a minute. The answer is reused only while the loop is
+   * continuing (`continuing`, which grx_regex_search_next() holds for the
+   * length of one call, after it has found a previous match) and only for the
+   * same pointer and length, which is what that call is documented to be
+   * given. Any other search looks again.
+   */
+  const char * vimnfa_subject;
+  size_t vimnfa_length;
+  int vimnfa_verdict; ///< 0 not known, 1 the automaton may run, 2 it may not.
+  int continuing;
+
+  /**
    * The one-pass table for this match's regex, built on first use.
    *
    * Beside the DFA rather than inside it because the two are answering

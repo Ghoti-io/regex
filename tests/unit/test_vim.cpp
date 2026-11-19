@@ -1602,3 +1602,82 @@ TEST_F(VimNfa, AnAssertionAfterALoopBodyThatCanBeEmptyEndsTheLoopOnTheLastRealIt
   EXPECT_EQ(captured("\\(\\%(ab\\)*\\%(\\)\\@=\\)*", "ab", 1), "ab");
   EXPECT_EQ(captured("\\(a\\=\\%(\\)\\)*", "a", 1), "a");
 }
+
+#include <chrono>
+
+namespace {
+
+/** Matches of `pattern` over `subject` under a Vim profile, by iteration. */
+size_t vimMatchCount(GRX_Syntax syntax, const char * pattern,
+    const std::string & subject) {
+  GRX_Regex * regex = nullptr;
+  EXPECT_EQ(grx_regex_compile(pattern, syntax, GRX_OPT_NONE, &regex), GRX_OK);
+  GRX_Match * match = nullptr;
+  EXPECT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+  GRX_SearchOptions options;
+  grx_search_options_default(&options);
+  GRX_Limits limits;
+  grx_limits_default(&limits);
+  limits.max_steps = 0;
+  options.limits = &limits;
+  int matched = 0;
+  size_t count = 0;
+  GRX_Result result = grx_regex_search_ex(
+      regex, subject.data(), subject.size(), &options, match, &matched);
+  while (result == GRX_OK && matched) {
+    count++;
+    result = grx_regex_search_next(regex, subject.data(), subject.size(),
+        &options, match, &matched);
+  }
+  EXPECT_EQ(result, GRX_OK);
+  grx_match_destroy(match);
+  grx_regex_free(regex);
+  return count;
+}
+
+} // namespace
+
+TEST_F(VimNfa, IteratingOverALongSubjectDoesNotReadItAgainForEveryMatch) {
+  // Whether the automaton may run depends on the whole subject (a NUL, a
+  // malformed sequence, a mark after a line break), and each step of a
+  // search-all loop used to ask again by reading all of it: a million bytes
+  // and 160,000 matches did not finish in a minute. The loop is now one pass,
+  // and agrees with the backtracking profile on how many matches there are.
+  std::string subject;
+  while (subject.size() < (1u << 20)) {
+    subject += "word other ";
+  }
+  const auto begin = std::chrono::steady_clock::now();
+  const size_t nfa = vimMatchCount(GRX_SYNTAX_VIM_NFA, "\\w\\+", subject);
+  const double seconds = std::chrono::duration<double>(
+      std::chrono::steady_clock::now() - begin).count();
+  EXPECT_EQ(nfa, vimMatchCount(GRX_SYNTAX_VIM_BACKTRACK, "\\w\\+", subject));
+  EXPECT_GT(nfa, 150000u);
+  EXPECT_LT(seconds, 5.0);
+}
+
+TEST_F(VimNfa, ALiteralIsFoundWithoutRunningAThreadAtEveryPosition) {
+  // A literal at the end of a long subject cost one thread per position, which
+  // is more than the default step limit allows from about ten megabytes. The
+  // positions a match cannot begin at are skipped, on the facts the other
+  // engines use.
+  std::string subject(1u << 22, 'a');
+  subject += "needle";
+  GRX_Regex * regex = nullptr;
+  ASSERT_EQ(grx_regex_compile("needle", GRX_SYNTAX_VIM_NFA, GRX_OPT_NONE,
+                &regex),
+      GRX_OK);
+  GRX_Match * match = nullptr;
+  ASSERT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+  int matched = 0;
+  ASSERT_EQ(grx_regex_search(regex, subject.data(), subject.size(), 0,
+                GRX_ENGINE_AUTO, nullptr, match, &matched),
+      GRX_OK);
+  EXPECT_TRUE(matched);
+  GRX_Capture span;
+  ASSERT_EQ(grx_match_span(match, &span), GRX_OK);
+  EXPECT_EQ(span.start, subject.size() - 6);
+  EXPECT_LT(grx_match_steps(match), 1000u);
+  grx_match_destroy(match);
+  grx_regex_free(regex);
+}
