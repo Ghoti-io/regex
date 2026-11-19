@@ -905,6 +905,17 @@ typedef struct GRX_Profile {
    */
   int mongolian_separator_is_space;
   /**
+   * `\s` is `[\t\n\f\r ]`, without the vertical tab.
+   *
+   * RE2's and Go's, by the RE2 syntax page ("\s whitespace (== [\t\n\f\r ])")
+   * and by `regexp.MustCompile(`\s`).MatchString("\v")`, which is false. Every
+   * other dialect here that reads `\s` as ASCII includes U+000B - Perl since
+   * 5.18, CPython, ECMAScript, the Rust crate - and POSIX's `[[:space:]]`
+   * includes it in RE2 as well, so this is `\s` and `\S` and not the class
+   * named space.
+   */
+  int space_excludes_vertical_tab;
+  /**
    * GRX_OPT_ASCII_CLASSES makes the folding ASCII-only as well.
    *
    * Python's `(?a)` against Perl's `/a`, which is the whole of the

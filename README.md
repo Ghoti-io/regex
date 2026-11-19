@@ -252,8 +252,8 @@ engine and no network.
 | `perl` | 11,705 | 100.00% | perl 5.44's `re_tests`, plus generated: full folds, `\N{}` names, boundaries, and property names with more than one reading; 8 excluded |
 | `vim-backtrack` | 15,701 | 100.00% | forced Vim 9.2.1129 engine 1 |
 | `vim-nfa` | 15,854 | 100.00% | forced Vim 9.2.1129 engine 2 |
-| `re2` | 2,947 | 100.00% | generated from Go 1.25.14's `regexp`, which carries Unicode 15.0.0 |
-| `rust` | 2,817 | 100.00% | generated from the `regex` crate 1.13.1, which carries UCD 16.0.0; 1 excluded |
+| `re2` | 2,958 | 100.00% | generated from Go 1.25.14's `regexp`, which carries Unicode 15.0.0 |
+| `rust` | 2,820 | 100.00% | generated from the `regex` crate 1.13.1, which carries UCD 16.0.0; 1 excluded |
 | `python` | 2,177 | 100.00% | generated from CPython 3.14.7 |
 | `pcre` | 1,869 | 100.00% | PCRE2 10.46's `testinput` |
 | `dotnet` | 523 | 97.51% | generated from .NET 10.0.13; 8 of them hold an unpaired UTF-16 surrogate and carry `options: wtf8`, 186 are the escape alphabet swept letter by letter in both contexts after seven of them turned out to be read here and refused there, and 27 are the quantified zero-width assertions .NET accepts and this library refused. **The 13 known gaps are in this denominator and counted as failures**, which is why the rate is not 100%: two balancing-group spellings and two explicit group numbers are refused, `\p{Is...}` wants .NET's own block list, and caseless matching follows a fold orbit where .NET follows the lowercase mapping (WP-50). `\w` used to be here too and is not: its word set was measured by category and is now `GRX_WORD_LETTER_MARK_DIGIT`. Each is named in `known-gaps.txt` and excluded by its own gate |

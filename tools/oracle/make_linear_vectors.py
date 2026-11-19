@@ -100,6 +100,14 @@ NAMED_CASES = {
         ("", "\\w", ["\\u00e9", "a"]),
         ("", "\\d", ["\\u0663", "0"]),
         ("", "\\s", ["\\u00a0", " "]),
+        # RE2's `\s` is `[\t\n\f\r ]`: no vertical tab. The class named
+        # space has it, and so does every other dialect's `\s`, which is why
+        # this went unasked while the corpus had no U+000B in it.
+        ("", "\\s", ["\\u000b", "\\u000c", "\\u0009"]),
+        ("", "\\S", ["\\u000b", "a"]),
+        ("", "[\\s]", ["\\u000b", "\\u000a"]),
+        ("", "[^\\s]", ["\\u000b", "a"]),
+        ("", "[[:space:]]", ["\\u000b", " "]),
         ("", "[[:alpha:]]", ["\\u00e9", "a"]),
         # `$` is the end of the subject and nothing else; `^` under `m`
         # matches after a newline that ends it.
@@ -158,6 +166,10 @@ NAMED_CASES = {
         ("U", "(a+)+b", ["aab"]),
         ("", "(a*?)+b", ["aab", "aaab"]),
         ("", "(a*?)*?b", ["aab"]),
+        # The crate's `\s` is White_Space, vertical tab included, which is
+        # where it differs from RE2's.
+        ("", "\\s", ["\\u000b", " "]),
+        ("", "[[:space:]]", ["\\u000b"]),
         ("U", "((a)*)+b", ["aab"]),
         ("U", "(a*b*)+?b", ["abab", "aabb"]),
         ("U", "(a|b*)+?", ["aabb"]),

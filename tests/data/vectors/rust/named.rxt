@@ -80,6 +80,18 @@ pattern: (a*?)*?b
 subject: aab
 expect: 0-3 0-2
 
+pattern: \\s
+subject: \x0B
+expect: 0-1
+
+pattern: \\s
+subject: \x20
+expect: 0-1
+
+pattern: [[:space:]]
+subject: \x0B
+expect: 0-1
+
 pattern: ((a)*)+b
 flags: U
 subject: aab

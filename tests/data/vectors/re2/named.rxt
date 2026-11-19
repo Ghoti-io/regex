@@ -229,6 +229,50 @@ pattern: \\s
 subject: \x20
 expect: 0-1
 
+pattern: \\s
+subject: \x0B
+expect: nomatch
+
+pattern: \\s
+subject: \x0C
+expect: 0-1
+
+pattern: \\s
+subject: \t
+expect: 0-1
+
+pattern: \\S
+subject: \x0B
+expect: 0-1
+
+pattern: \\S
+subject: a
+expect: 0-1
+
+pattern: [\\s]
+subject: \x0B
+expect: nomatch
+
+pattern: [\\s]
+subject: \n
+expect: 0-1
+
+pattern: [^\\s]
+subject: \x0B
+expect: 0-1
+
+pattern: [^\\s]
+subject: a
+expect: 0-1
+
+pattern: [[:space:]]
+subject: \x0B
+expect: 0-1
+
+pattern: [[:space:]]
+subject: \x20
+expect: 0-1
+
 pattern: [[:alpha:]]
 subject: \u00E9
 expect: nomatch

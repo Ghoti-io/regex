@@ -904,3 +904,35 @@ int main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
+
+TEST(Linear, Re2SpaceShorthandHasNoVerticalTabAndRustsDoes) {
+  // RE2's `\s` is `[\t\n\f\r ]` and Go's regexp agrees: U+000B is not in it,
+  // though it is in the class named space, and in every other dialect's `\s`
+  // - which is why the vectors, whose subjects held no vertical tab, passed
+  // for as long as they did. The Rust crate's `\s` is White_Space and has it.
+  auto matches = [](GRX_Syntax syntax, const char * pattern, const char * subject,
+                     size_t length) {
+    GRX_Regex * regex = nullptr;
+    EXPECT_EQ(grx_regex_compile(pattern, syntax, GRX_OPT_UTF, &regex), GRX_OK)
+        << pattern;
+    GRX_Match * match = nullptr;
+    EXPECT_EQ(grx_match_create(regex, nullptr, &match), GRX_OK);
+    int matched = 0;
+    EXPECT_EQ(grx_regex_search(regex, subject, length, 0, GRX_ENGINE_AUTO,
+                  nullptr, match, &matched),
+        GRX_OK);
+    grx_match_destroy(match);
+    grx_regex_free(regex);
+    return matched != 0;
+  };
+  const char vt[] = "\x0b";
+  EXPECT_FALSE(matches(GRX_SYNTAX_RE2, "\\s", vt, 1));
+  EXPECT_TRUE(matches(GRX_SYNTAX_RE2, "\\S", vt, 1));
+  EXPECT_FALSE(matches(GRX_SYNTAX_RE2, "[\\s]", vt, 1));
+  EXPECT_TRUE(matches(GRX_SYNTAX_RE2, "[^\\s]", vt, 1));
+  EXPECT_TRUE(matches(GRX_SYNTAX_RE2, "[[:space:]]", vt, 1));
+  EXPECT_TRUE(matches(GRX_SYNTAX_RE2, "\\s", "\x0c", 1));
+  EXPECT_TRUE(matches(GRX_SYNTAX_RUST, "\\s", vt, 1));
+  EXPECT_FALSE(matches(GRX_SYNTAX_RUST, "\\S", vt, 1));
+  EXPECT_TRUE(matches(GRX_SYNTAX_PERL, "\\s", vt, 1));
+}

@@ -654,6 +654,24 @@ static GRX_Result item_base_set(Lowering * low, const GRX_ClassItem * item,
       if (result != GRX_OK) {
         return result;
       }
+      // RE2's `\s` is one member short of the ASCII whitespace every other
+      // dialect has: no vertical tab. The set is taken out of `\s` and put
+      // into `\S`, which is what a complement of the shorter set is.
+      if (low->profile.space_excludes_vertical_tab
+          && (kind == GRX_SHORTHAND_SPACE || kind == GRX_SHORTHAND_NOT_SPACE)) {
+        GRX_CharClass tab;
+        grx_charclass_init(&tab, out->allocator);
+        result = grx_charclass_add_range(&tab, 0x0B, 0x0B, low->limits);
+        if (result == GRX_OK) {
+          result = kind == GRX_SHORTHAND_SPACE
+              ? grx_charclass_subtract(out, &tab, low->limits)
+              : grx_charclass_union(out, &tab, low->limits);
+        }
+        grx_charclass_clear(&tab);
+        if (result != GRX_OK) {
+          return result;
+        }
+      }
       // The widening is part of the *set*, not of the negation. ECMA-262
       // 22.2.2.9.3 defines WordCharacters(rer) as the basic word characters
       // plus every character that canonicalises to one - which under `iu` is

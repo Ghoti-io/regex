@@ -1194,6 +1194,7 @@ static const GRX_Profile profiles[GRX_SYNTAX_COUNT] = {
     // the whole Perl family answers no match to both. `x\b` over "x"
     // U+212A still reports a boundary, which is what separates this row
     // from the crate's and is why there are two fields rather than one.
+    .space_excludes_vertical_tab = 1,
     .caseless_widens_shorthands = 1,
     .caseless_leaves_boundary_narrow = 1,
     .posix_classes_fold = 1,
