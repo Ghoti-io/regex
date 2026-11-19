@@ -832,6 +832,7 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples,
         theirs = ask_pcre2(reference, rows)
     mine, raw_mine = ask_library(driver, dialect, rows)
     not_implemented = perl_diff.construct_not_implemented()
+    unsupported_code = perl_diff.unsupported_result_code()
     marker_quirk = False
     if dialect == "perl":
         marker_quirk = perl_marker_adjacency_quirk()
@@ -918,8 +919,16 @@ def compare(dialect, driver, seed, patterns, templates, subjects, examples,
         # `rejected` control, which exists precisely to prove the run rejected
         # something. A gap is "the reference answered and this library would
         # not", so the reference's acceptance has to be established first.
-        if (dialect not in vim_diff.PROFILES and not_implemented is not None
-                and raw == "compile %d" % not_implemented):
+        #
+        # **A second spelling**, for a construct refused with
+        # GRX_ERR_UNSUPPORTED rather than as a syntax error - `\C`, again -
+        # which the driver prints as `error <code>`. The same reference
+        # acceptance rule applies: it is below the refusal arm.
+        if (dialect not in vim_diff.PROFILES
+                and ((not_implemented is not None
+                        and raw == "compile %d" % not_implemented)
+                    or (unsupported_code is not None
+                        and raw == "error %d" % unsupported_code))):
             unimplemented += 1
             continue
         if (dialect == "perl" and them == "template" and us != "template"

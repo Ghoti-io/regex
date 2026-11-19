@@ -512,6 +512,22 @@ def construct_not_implemented():
         return None
 
 
+def unsupported_result_code():
+    r"""The number `GRX_ERR_UNSUPPORTED` has in this build, read out of core.h.
+
+    A driver that prints a failed compile as `error <code>` prints this for a
+    construct the front end refuses without approximating it, `\C` among
+    them. Read from the enum for the reason construct_not_implemented() is.
+    """
+    path = os.path.join(ROOT, "include", "ghoti.io", "regex", "core.h")
+    with open(path, encoding="utf-8") as handle:
+        text = handle.read()
+    body = text[text.index("typedef enum {\n  GRX_OK = 0"):]
+    body = body[:body.index("} GRX_Result;")]
+    names = re.findall(r"^\s*(GRX_(?:OK|ERR_[A-Z]+))", body, re.M)
+    return names.index("GRX_ERR_UNSUPPORTED") if "GRX_ERR_UNSUPPORTED" in names else None
+
+
 def reference_defect(dialect, pattern, them, subject=None, ours=None):
     r"""Rows where the *reference* is known to be wrong.
 
