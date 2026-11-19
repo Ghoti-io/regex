@@ -2693,6 +2693,61 @@ list is keyed on the instruction and a nested loop revisits instructions
 rather than multiplying them. It is the stacked spelling that costs, and only
 where the grammar allows it.
 
+### Large subjects and large patterns, measured
+
+The limits above are defaults for patterns of unknown origin. A caller
+scanning large text it trusts raises `max_steps`, and what follows is what
+that costs, from a stress run over subjects of 1 to 256 MB and patterns of up
+to a million bytes, each case in its own process under a memory cap.
+
+**Memory follows the subject and nothing else.** Resident size was the
+subject plus under 40 MB for every search, at every size and for every
+dialect, with the Pike VM, the backtracker and the lazy DFA alike; no search
+over a 256 MB subject held more than the subject and that overhead. (Replace
+and split also hold their output.)
+
+**Time is linear in the subject once the limit is lifted.** A search-all loop
+over 64 MB of prose with ten million matches takes about 6 seconds under any
+Perl-family dialect (0.6 microseconds a match), and 0.7 seconds on the DFA
+for a leftmost-longest dialect. `grx_regex_replace()` and `grx_regex_split()`
+over the same subject take 6 seconds for ten million replacements or pieces
+and 0.1 second for a literal that occurs once. Splitting on a pattern that
+matches empty at every byte of 64 MB produces 65 million pieces, 1 GB of
+spans, in 27 seconds.
+
+**With the default limit, a scan stops being possible at about the size
+the table above says.** `[a-z]+ing\b`, `.*needle` and `(\w+) (\w+)$` hit
+`GRX_ERR_LIMIT` somewhere between 1 and 16 MB, and a pattern that restarts at
+every position (`a*$` over a subject of `a`) at about 1.4 MB. A literal, a
+required literal, a first-byte set and a set of word prefixes (below) are
+answered before an engine starts and cost nothing against the limit.
+
+**An alternation of many words is searched for its prefixes.** A pattern
+whose matches begin with one of many different strings has no single
+literal prefix, and the byte set it falls back on passes nearly every
+position of ordinary text. The strings are kept as an Aho-Corasick
+automaton, and a search skips to the next position at which one of them
+occurs. Over a megabyte of prose with no match, a thousand words cost 65 ms
+(16 seconds before), ten thousand 160 ms (more than a minute before), and a
+hundred thousand under a second. It applies to caseless lists as well, where
+ASCII letters are folded and a class of up to eight members is expanded.
+
+**Large patterns are refused before they are expensive.** At the default
+limits a pattern of 1,000 words compiles in 5 ms and one of 10,000 is refused
+(`max_nodes`), a counted repeat above 65,536 is refused, 1,000 groups
+compile and 10,000 are refused, and nesting above 128 is refused. With the
+limits lifted, compile time and memory stay linear in the pattern for
+alternations, literals, groups and repeated groups: two million bytes of
+literal compile in 2.3 seconds and 360 MB, a hundred thousand words in half a
+second and 200 MB. A class written as a long list of characters was
+quadratic until the union of a small set into a large one stopped rewriting
+the large one: 100,000 ranges in ascending order compile in 18 ms.
+
+**Two things stay a caller's to size.** Nesting beyond about sixteen thousand
+levels overflows an 8 MB stack when `max_nesting_depth` is lifted (roughly
+525 bytes a level), and 10,000 capture groups with the memory cap lifted use
+1.5 GB, because every thread carries its own capture slots.
+
 `max_steps` stays at 10,000,000, and the numbers above are why rather than a
 preference. Lowering it to a million would refuse a still-pathological pair
 in about 15 ms instead of 130 - but would also cap a legitimate scan at 333 KB,
