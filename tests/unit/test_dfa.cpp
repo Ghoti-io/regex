@@ -479,3 +479,48 @@ int main(int argc, char ** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
+
+TEST(Dfa, MoreStatesThanItsCacheHoldsAreFlushedAndNotLoopedOn) {
+  // `a` then eleven positions of `a|b` needs 2^11 states, twice what the
+  // cache holds. The state table was exactly as large as the state limit, so
+  // it filled completely on the 1024th state and the next lookup of a state it
+  // did not hold probed for an empty slot for ever: a thirty-two-byte input
+  // from the pattern fuzzer ran for twenty-eight minutes. The table now has
+  // room to spare and a bounded probe, and a full cache is flushed.
+  GRX_Regex * regex = nullptr;
+  ASSERT_EQ(grx_regex_compile("(a|b)*a(a|b)(a|b)(a|b)(a|b)(a|b)(a|b)(a|b)(a|b)"
+                              "(a|b)(a|b)(a|b)c",
+                GRX_SYNTAX_POSIX_ERE, GRX_OPT_NONE, &regex),
+      GRX_OK);
+  std::string subject;
+  for (int i = 0; i < 40000; i++) {
+    subject += (rnd(2) ? 'a' : 'b');
+  }
+  subject += "c";
+
+  GRX_Match * dfa = nullptr;
+  GRX_Match * pike = nullptr;
+  ASSERT_EQ(grx_match_create(regex, nullptr, &dfa), GRX_OK);
+  ASSERT_EQ(grx_match_create(regex, nullptr, &pike), GRX_OK);
+  GRX_Limits limits;
+  grx_limits_default(&limits);
+  limits.max_steps = 0;
+  int by_dfa = 0, by_pike = 0;
+  ASSERT_EQ(grx_regex_search(regex, subject.data(), subject.size(), 0,
+                GRX_ENGINE_DFA, &limits, dfa, &by_dfa),
+      GRX_OK);
+  ASSERT_EQ(grx_regex_search(regex, subject.data(), subject.size(), 0,
+                GRX_ENGINE_PIKE, &limits, pike, &by_pike),
+      GRX_OK);
+  EXPECT_EQ(by_dfa, by_pike);
+  if (by_dfa && by_pike) {
+    GRX_Capture a, b;
+    ASSERT_EQ(grx_match_span(dfa, &a), GRX_OK);
+    ASSERT_EQ(grx_match_span(pike, &b), GRX_OK);
+    EXPECT_EQ(a.start, b.start);
+    EXPECT_EQ(a.end, b.end);
+  }
+  grx_match_destroy(dfa);
+  grx_match_destroy(pike);
+  grx_regex_free(regex);
+}

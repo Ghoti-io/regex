@@ -389,7 +389,15 @@ static uint32_t intern(GRX_Dfa * dfa, Cache * cache) {
   sort_core(dfa->build, dfa->build_count);
   uint32_t h = hash_core(dfa->build, dfa->build_count, dfa->build_flag);
   size_t slot = h & cache->mask;
+  // Bounded by the table's size: the probe ends at an empty slot, and a table
+  // with none would otherwise be walked for ever. The table is sized so that
+  // it never fills (see grx_dfa_create), and this is what says so if it ever
+  // does.
+  size_t probes = 0;
   while (cache->table[slot] != STATE_NONE) {
+    if (++probes > cache->mask) {
+      return STATE_NONE;
+    }
     State * state = &cache->states[cache->table[slot]];
     if (state->count == dfa->build_count
         && cache->flag[cache->table[slot]] == dfa->build_flag
@@ -785,9 +793,17 @@ GRX_Dfa * grx_dfa_create(const GRX_Allocator * allocator,
   dfa->build = gcu_allocator_malloc(
       allocator, (dfa->node_count + 1) * sizeof *dfa->build);
   dfa->seen = gcu_allocator_malloc(allocator, dfa->node_count + 1);
+  // At least twice as many slots as states, so that the open-addressed table
+  // always has an empty slot to end a probe at. Sized equal to the state limit
+  // it filled completely on the thousand-and-twenty-fourth state and the next
+  // lookup of a state it did not hold never returned.
+  size_t slots = 1024;
+  while (slots < dfa->max_states * 2) {
+    slots *= 2;
+  }
   if (!dfa->work || !dfa->build || !dfa->seen
-      || !cache_init(allocator, &dfa->forward, 1024)
-      || !cache_init(allocator, &dfa->unanchored, 1024)) {
+      || !cache_init(allocator, &dfa->forward, slots)
+      || !cache_init(allocator, &dfa->unanchored, slots)) {
     grx_dfa_free(dfa);
     return NULL;
   }
