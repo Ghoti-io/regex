@@ -790,6 +790,26 @@ static GRX_Result parse_quantifier(
     mode = mode == GRX_REPEAT_GREEDY ? GRX_REPEAT_LAZY : GRX_REPEAT_GREEDY;
   }
 
+  // A repeat of a repeat is one level deeper in the tree, and the dialects
+  // that stack quantifiers (`a*+*+*+`, POSIX and GNU) can say that as many
+  // times as they have bytes, with nothing for the group-and-alternation
+  // count to see. Every pass over the tree recurses once per level, so a
+  // thousand bytes of `*` was a thousand frames: enough to overflow the
+  // 256 KB stack the nesting limit is sized for, and under a sanitizer enough
+  // to overflow an ordinary one. It counts against the same limit.
+  if (parser->limits->max_nesting_depth) {
+    size_t chain = 0;
+    const GRX_Node * link = grx_pattern_node(parser->pattern, *node);
+    while (link && link->kind == GRX_NODE_REPEAT
+        && chain <= parser->limits->max_nesting_depth) {
+      chain++;
+      link = grx_pattern_node(parser->pattern, link->first_child);
+    }
+    if (parser->depth + chain + 1 > parser->limits->max_nesting_depth) {
+      return grx_parse_fail(parser, GRX_DIAG_LIMIT_NESTING_DEPTH, start, 1);
+    }
+  }
+
   uint32_t repeat = GRX_INDEX_NONE;
   const GRX_Node * atom = grx_pattern_node(parser->pattern, *node);
   size_t atom_offset = atom ? atom->offset : start;

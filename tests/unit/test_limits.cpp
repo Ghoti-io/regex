@@ -1490,3 +1490,43 @@ TEST(Limits, NonliteralMarkedCollectionsRecoverAfterLowBudgetsAndLongMarks) {
     }
   }
 }
+
+TEST(Limits, AChainOfStackedQuantifiersCountsAsNesting) {
+  // POSIX and GNU stack quantifiers: `a**********` is a repeat of a repeat of
+  // a repeat. The nesting limit counted groups and alternations and not
+  // these, so a pattern of a few thousand bytes was a tree thousands deep, and
+  // every pass over it recursed once per level: a stack overflow under a
+  // sanitizer on the first run of the pattern fuzzer to try it, and on the
+  // 256 KB stack the limit is sized for at about a thousand.
+  GRX_Limits limits;
+  grx_limits_default(&limits);
+
+  GRX_Regex * regex = nullptr;
+  const std::string within = "a" + std::string(limits.max_nesting_depth - 1, '*');
+  EXPECT_EQ(grx_regex_compile_with_allocator(within.c_str(), within.size(),
+                GRX_SYNTAX_POSIX_ERE, GRX_OPT_NONE, &limits, nullptr, nullptr,
+                &regex),
+      GRX_OK);
+  grx_regex_free(regex);
+
+  regex = nullptr;
+  const std::string beyond = "a" + std::string(limits.max_nesting_depth + 1, '*');
+  GRX_Error error;
+  grx_error_clear(&error);
+  EXPECT_EQ(grx_regex_compile_with_allocator(beyond.c_str(), beyond.size(),
+                GRX_SYNTAX_POSIX_ERE, GRX_OPT_NONE, &limits, nullptr, &error,
+                &regex),
+      GRX_ERR_LIMIT);
+  EXPECT_EQ(error.diag, GRX_DIAG_LIMIT_NESTING_DEPTH);
+  EXPECT_EQ(regex, nullptr);
+
+  // A repeat inside a group is still one level for the group and one for it.
+  const std::string grouped = "(" + std::string("a") + std::string(60, '*')
+      + ")" + std::string(60, '*');
+  regex = nullptr;
+  EXPECT_EQ(grx_regex_compile_with_allocator(grouped.c_str(), grouped.size(),
+                GRX_SYNTAX_POSIX_ERE, GRX_OPT_NONE, &limits, nullptr, nullptr,
+                &regex),
+      GRX_OK);
+  grx_regex_free(regex);
+}
