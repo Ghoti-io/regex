@@ -377,11 +377,16 @@ CLAIMS.append({
 CLAIMS.append({
     "id": "v8-over-accepts-a-duplicate-name",
     "doc": "documentation/dialects.md",
-    "quote": "`(?<n>a)(?:b|(?<n>c))` is accepted by V8 13.6 and over \"ac\" "
-             "it fills both - group 1 `\"a\"`, group 2 `\"c\"`, `groups.n` "
-             "`\"c\"` - which is a single match using the name twice.",
-    "labels": {"node": "13.6"},
-    "probes": [],
+    "quote": "`(?<n>a)(?:b|(?<n>c))` was accepted by V8 13.6 and over \"ac\" "
+             "it filled both - group 1 `\"a\"`, group 2 `\"c\"`, `groups.n` "
+             "`\"c\"` - which is a single match using the name twice; V8 14.6 "
+             "refuses it, as this library does.",
+    "labels": {"node": "14.6"},
+    "probes": [
+        {"kind": "node-match", "flags": "", "pattern": "(?<n>a)(?:b|(?<n>c))",
+         "subject": "ac", "label": "the family V8 13.6 accepted",
+         "node": "error"},
+    ],
     "why": "The probe for this lives in syntax_diff.py, which asks node "
            "whether the defect is still present before it excuses a single "
            "row, and fails the gate if it cannot ask. What is held here is "
@@ -392,10 +397,13 @@ CLAIMS.append({
 CLAIMS.append({
     "id": "v-mode-one-character-q",
     "doc": "documentation/dialects.md",
-    "quote": "Under `iv`, Node does not apply case folding to a class-set "
-             "operand that is a\none-character `\\q{}`. Until V8 13.6 the "
-             "same was true of an operand that was\na bare character:",
-    "labels": {"node": "13.6"},
+    "quote": "Under `iv`, Node 26 / V8 14.6 does not apply case folding to a "
+             "class-set operand that is a\none-character `\\q{}`: a regression "
+             "between V8 11.3 and 11.8, still present in Chromium\n156 and "
+             "fixed in Chrome 157 (https://issues.chromium.org/issues/"
+             "587130867). Until V8 13.6 the same was true of an operand that "
+             "was\na bare character:",
+    "labels": {"node": "14.6"},
     "probes": [
         {"kind": "node-match", "flags": "iv", "pattern": "[\\q{a}]",
          "subject": "A", "label": "the row that survives", "node": False},
@@ -419,10 +427,10 @@ CLAIMS.append({
 CLAIMS.append({
     "id": "lone-script-value-is-a-syntax-error",
     "doc": "documentation/unicode.md",
-    "quote": "said otherwise; node was asked, and node 24 / V8 13.6 rejects "
+    "quote": "said otherwise; node was asked, and node 26 / V8 14.6 rejects "
              "`\\p{Greek}`\n  under both `u` and `v` - as Node 22 did when "
              "the claim was first taken.",
-    "labels": {"node": "13.6"},
+    "labels": {"node": "14.6"},
     "probes": [
         {"kind": "node-match", "flags": "u", "pattern": "\\p{Greek}",
          "subject": "a", "label": "a lone script value, u", "node": "error"},

@@ -344,7 +344,7 @@ Two resolvers over the same alias tables:
   (`\p{Lu}`, `\p{Uppercase_Letter}`, `\p{L}`), and `name=value` for `gc`,
   `sc` and `scx`. A **lone script value is a `SyntaxError`**: `\p{Greek}`
   is rejected and `\p{Script=Greek}` accepted. An earlier draft of this page
-  said otherwise; node was asked, and node 24 / V8 13.6 rejects `\p{Greek}`
+  said otherwise; node was asked, and node 26 / V8 14.6 rejects `\p{Greek}`
   under both `u` and `v` - as Node 22 did when the claim was first taken.
   Anything else is `GRX_ERR_SYNTAX` here.
 
